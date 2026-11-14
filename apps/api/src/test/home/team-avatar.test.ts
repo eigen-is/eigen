@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
+import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { addMember, authedRequest, createTeam, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -39,6 +42,23 @@ describe('Team Avatar', () => {
         expect(avatarRes.status).toBe(200);
         expect(avatarRes.headers.get('Content-Type')).toBe('image/webp');
         expect((await avatarRes.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    });
+
+    // A write into the file keeps its inode, and a reader then sees it half-written. A rename brings a new one.
+    test('a new avatar replaces the file by a rename and leaves no side file', async () => {
+        const upload = () =>
+            authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/avatar`, {
+                method: 'POST',
+                body: avatarForm(),
+            });
+        const avatarPath = path.join(getAvatarsDir(), `${teamOwnerId(teamId)}.webp`);
+        expect((await upload()).status).toBe(200);
+        const before = fs.statSync(avatarPath).ino;
+
+        expect((await upload()).status).toBe(200);
+        expect(fs.statSync(avatarPath).ino).not.toBe(before);
+        expect(fs.statSync(avatarPath).size).toBeGreaterThan(0);
+        expect(fs.readdirSync(getAvatarsDir()).filter((name) => name.startsWith('.'))).toEqual([]);
     });
 
     test('plain team member cannot upload avatar', async () => {

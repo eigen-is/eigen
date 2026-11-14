@@ -131,7 +131,7 @@ describe('Drive.create is atomic under degraded storage', () => {
             const dataDb = (await localMount.getChildByName(doc.id, 'data.db'))!;
             await settleContainer(localMount, doc.id);
 
-            rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
+            rmSync(join(localMount.dataDir, await localMount.getStorageKey(dataDb.id)));
             const missing = await localMount
                 .withDatabase(COLLAB_DB_CONFIG, dataDb.id, async () => {})
                 .catch((e: unknown) => e);

@@ -87,16 +87,12 @@ describe('LocalStorage', () => {
         expect(() => storage.read('subfolder/../../etc/passwd')).toThrow('path traversal');
     });
 
-    test('path traversal via resolve is rejected', () => {
-        expect(() => storage.getPath('../../secret')).toThrow('path traversal');
-    });
-
     test('valid nested paths are allowed', () => {
         expect(() => storage.read('folder/sub/file.txt')).not.toThrow();
     });
 
-    test('getPath returns correct path', () => {
-        const p = storage.getPath('my-key');
+    test('a key resolves to a file under the data folder', () => {
+        const p = storage.read('my-key').name;
         expect(p).toContain('my-key');
         expect(p).toContain('data');
     });

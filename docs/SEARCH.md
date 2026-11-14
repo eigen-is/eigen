@@ -71,7 +71,7 @@ An `.eml` is not searchable under any of its mimes. Its raw body is headers, bou
 
 `paths.contentDirty` is the queue, with no side table and no staged copy: a reindex reads live state, and the bit folds many edits into one extract. The producers set it:
 
-- a container's `data.db` sync, through the `onSync` callback in `mount/document-db.ts`. It fires for every storage backend, where a hook on the S3 upload queue would skip local mounts. `markContainerContentDirty` marks the parent container, and only for `data.db`, so a `comments.db` sync doesn't re-extract.
+- a container's `data.db` sync, through the `onSync` callback in `mount/document-db.ts`. It fires for every storage backend, where a hook on the S3 upload queue would skip local mounts. `markContainerContentDirty` marks the parent container, and only for `data.db`, so a `comments.db` sync doesn't re-extract. The flush that stores a new document's empty schema marks nothing, because indexing that empty body would hold off the first real index by the cap.
 - a plain-text or code file write, in `mount.ts`
 - `copyPath`, because a byte-copied container fires no `onSync`
 - the v6 migration, which marks every existing container and text file

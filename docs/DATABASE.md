@@ -20,7 +20,7 @@ test.eigendoc/          (pathId: abc123)
 └── comments.db         (pathId: def456, comment index)
 ```
 
-On a temp-copy backend (`s3`, `local`) the mount downloads the object to a temp file and the database works on that copy. On `local-key` it opens the stored file itself.
+On every backend the open copies the stored object to a working copy in the mount's `tmp/` folder, and the database works on that copy. Each sync writes the copy back whole: `s3` queues a frozen copy of it ([SYNC.md](SYNC.md)), and `local` and `local-key` write it through a side file and a rename ([STORAGE.md](STORAGE.md#a-local-write-lands-whole-by-a-rename-out-of-tmp)). So a stored object is always a whole database, on a local mount at most one sync behind, and the server never opens it with SQLite where it is stored: no `-wal` sits beside it, and an open reads its bytes alone. A crash leaves the newest bytes in `tmp/`, which the next open adopts ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)).
 
 drizzle's bun-sqlite driver types `.run()` as void, so a write that must count the rows it matched uses `.returning().all()`.
 
@@ -42,7 +42,7 @@ A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration
 
 ## The dirty watermark moves only after `onSync` returns
 
-A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)). A dirty one runs `PRAGMA wal_checkpoint(PASSIVE)` before `onSync`, so the main file holds the committed frames, without waiting on another connection. `uploadFromTemp` on `local` uploads that file, and on `local-key` it is the stored object a byte copy reads. An `s3` sync and a tick's snapshot read a staged copy or `VACUUM INTO`, which need no checkpoint.
+A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)). A dirty one runs `PRAGMA wal_checkpoint(PASSIVE)` before `onSync`, so the main file holds the committed frames, without waiting on another connection. On `local` and `local-key`, `uploadFromTemp` copies that file to storage. An `s3` sync and a tick's snapshot read a staged copy or `VACUUM INTO`, which need no checkpoint.
 
 The sync's checkpoint is the only one such a database gets while open. `open` sets `PRAGMA wal_autocheckpoint = 0` when there is an `onSync`, because `onSync` may copy the main file off the JS thread while commits go on. A checkpoint SQLite ran by itself on one of those commits would rewrite pages under that copy. A database without an `onSync` keeps SQLite's own checkpoint.
 
@@ -52,15 +52,15 @@ A tick, a flush and a close run one at a time under one lock. So two syncs can't
 
 ## The database triggers snapshots, the mount takes them
 
-A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls `onSnapshot` once `writesPerSnapshot` writes have piled up, and once more at close for any change left. `onSnapshot` answers `'skipped'` when the container lock is held, and a skip stays due, so the next tick tries again. A close whose final sync failed takes no snapshot, because a snapshot on `local` copies storage, which lacks the tail. Where versions live and why the close path try-locks is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
+A config with a `snapshot` key opts into file versioning. `snapshotIfDue` calls `onSnapshot` once `writesPerSnapshot` writes have piled up, and once more at close for any change left. `onSnapshot` answers `'skipped'` when the container lock is held, and a skip stays due, so the next tick tries again. A close whose final sync failed takes no snapshot, because storage lacks the tail a snapshot would copy. Where versions live and why the close path try-locks is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
 
 ## SQLite removes its own WAL and shared-memory files
 
-`close()` syncs, runs `PRAGMA wal_checkpoint(TRUNCATE)` and closes strictly. On `local-key` the file is the stored object a close-time snapshot copies, so the checkpoint makes that copy complete. Drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The last connection to close removes the `-wal` and `-shm` files, after an exclusive lock proves no connection in any process still has the file. `open` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close.
+`close()` syncs and closes strictly. Drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The last connection to close removes the `-wal` and `-shm` files, after an exclusive lock proves no connection in any process still has the file. `open` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close.
 
 **Never unlink them by hand.** A connection in another process keeps writing into the unlinked WAL, and its writes are lost or corrupt the file.
 
-The one exception is a file with no connection on it that is being thrown away or replaced: a temp, or a restore's old `data.db` on `local-key`. Its `-wal` and `-shm` go with it (`Mount.cleanupTemp`, `replaceContainerDataDb`), because SQLite replays a leftover `-wal` into whatever main file next appears at that path. A download or a staged-copy recovery runs it before writing the fresh main file, and a download refuses to write while a `-wal` it could not remove is still there.
+The one exception is a file with no connection on it that is being thrown away or replaced: a working copy in `tmp/`. Its `-wal` and `-shm` go with it (`Mount.cleanupTemp`), because SQLite replays a leftover `-wal` into whatever main file next appears at that path. A download or a staged-copy recovery runs it before writing the fresh main file, and a download refuses to write while a `-wal` it could not remove is still there.
 
 ## A database that holds the truth runs synchronous FULL
 
@@ -78,7 +78,7 @@ Once `closeAllDatabases` starts its sweep, after the downloads abort, the reinde
 
 A slot counts its holders. A reader, such as the content reindex, an export's `captureCollabSource`, a chat request or a comment route, runs its queries inside `withDatabase`, which opens the database, counts the reader in, and counts it out when the callback ends. A hold's `release` counts out once, so a second call does nothing. An open collab document is a holder for its whole life (`holdDatabase`), because its `DbProvider` writes every edit to `data.db`. It lets go in its own close, right before the registry closes the database. Without that hold, a reader of an open document would start the idle close under the provider.
 
-When the last holder lets go, the database stays open for `IDLE_CLOSE_MS`, five minutes, and then closes, unless a new holder came in. It is five minutes whatever the Home's own idle, which is 30 minutes for a team. A close takes a version snapshot, and on `s3`, and on a `local` mount that works on a temp copy, an open is a download and a close an upload. So a chat that gets a message now and then must not pay that per message. The content reindex reads a changed container again two minutes later (`CONTENT_REINDEX_CAP_SECONDS`), and a shorter wait would close a busy document just before that read opens it again.
+When the last holder lets go, the database stays open for `IDLE_CLOSE_MS`, five minutes, and then closes, unless a new holder came in. It is five minutes whatever the Home's own idle, which is 30 minutes for a team. A close takes a version snapshot, and on every backend an open copies the stored object and a close writes it back. So a chat that gets a message now and then must not pay that per message. The content reindex reads a changed container again two minutes later (`CONTENT_REINDEX_CAP_SECONDS`), and a shorter wait would close a busy document just before that read opens it again.
 
 A database that `createDatabase` makes has no holder, so the create arms the same idle close. A new document that nobody opens closes its `data.db` and `comments.db` after the idle window, instead of keeping them open until the mount closes. A collab document's `comments.db` is opened early the same way as a reader's, and closes after the idle window too.
 

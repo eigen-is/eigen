@@ -74,7 +74,7 @@ describe('process death mid-drain', () => {
         await m1.mount.init();
         const { dataDbId } = await provisionDoc(m1.mount);
 
-        // Ack the create-time schema PUT first (createDatabase flushes on a temp-copy mount), so
+        // Ack the create-time schema PUT first (createDatabase flushes the new schema), so
         // the one parked write below is exactly the {1,2} upload under test.
         const managed = await m1.mount.createDatabase(docConfig, dataDbId);
         await m1.mount.uploadQueue?.drain({ flushNow: true });

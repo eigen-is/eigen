@@ -1,6 +1,4 @@
-import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import * as fs from 'node:fs';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -94,77 +92,35 @@ describe('a container restored after an unclean shutdown', () => {
         await drive.restoreContainer(M, doc.id, await preRestoreVersion(doc.id, saved.name), owner);
         expect(await marker()).toBe('v2');
     });
-});
-
-// On local-key the stored object is the live database, so a kill leaves it with its -wal beside it.
-describe('a local-key chat restored after an unclean shutdown', () => {
-    type Message = { content: string };
-
-    async function chatWithTailInWal() {
-        const owner = await createTestUserOnStorage('local-id', 'Stray wal');
-        const t = owner.sessionToken;
-        const home = (await getHome(owner.id)).drive;
-        const root = (await home.getRootFolder(M))!.id;
-        const chat = await drivePost(t, owner.id, M, `folder/${root}/create/chat`, { fileName: 'Talk' });
-        await chatPost(t, owner.id, M, `${chat.id}/messages`, { content: 'saved' });
-        const saved = await home.saveVersion(M, chat.id);
-        await chatPost(t, owner.id, M, `${chat.id}/messages`, { content: 'tail' });
-        const { mount } = await home.resolveFile(M, chat.id);
-        const dataDb = (await mount.getChildByName(chat.id, 'data.db'))!;
-        const key = await mount.getStorageKey(dataDb.id);
-        const file = mount.storage.getPath!(key);
-        const main = fs.readFileSync(file);
-        const wal = fs.readFileSync(`${file}-wal`);
-        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-        // The close's own search reindex would open the database again and fold the -wal in.
-        mount.clearContentDirty(chat.id);
-        fs.writeFileSync(file, main);
-        fs.writeFileSync(`${file}-wal`, wal);
-        const restore = (name: string) =>
-            authedRequest(t, `/drive/${owner.id}/${M}/file/${chat.id}/versions/${name}/restore`, { method: 'POST' });
-        const messages = async () =>
-            (await chatGet<Message[]>(t, owner.id, M, `${chat.id}/messages`)).map((m) => m.content);
-        return { owner, chat, saved, mount, key, file, restore, messages };
-    }
-
-    test('the pre-restore version keeps the -wal tail and the restored bytes stay intact', async () => {
-        const { owner, chat, saved, file, restore, messages } = await chatWithTailInWal();
-
-        expect((await restore(saved.name)).status).toBe(200);
-        expect(await messages()).toEqual(['saved']);
-        const db = new Database(file, { readwrite: true, create: false });
-        expect(db.query('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' });
-        db.close();
-
-        const versions = await driveGet<Snapshot[]>(owner.sessionToken, owner.id, M, `file/${chat.id}/versions`);
-        const preRestore = findOrFail(versions, (version) => version.name !== saved.name);
-        expect((await restore(preRestore.name)).status).toBe(200);
-        expect(await messages()).toEqual(['saved', 'tail']);
-    });
-
-    test('a restore over a lost main file does not replay the -wal left beside it', async () => {
-        const { saved, file, restore, messages } = await chatWithTailInWal();
-        fs.rmSync(file);
-
-        expect((await restore(saved.name)).status).toBe(200);
-        expect(fs.existsSync(`${file}-wal`)).toBe(false);
-        expect(await messages()).toEqual(['saved']);
-    });
 
     test('a restore whose write fails leaves the previous data.db at its key', async () => {
-        const { saved, mount, key: dataDbKey, file, restore, messages } = await chatWithTailInWal();
+        const t = user.sessionToken;
+        const chat = await drivePost(t, user.id, M, `folder/${rootId}/create/chat`, { fileName: 'Kept' });
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'saved' });
+        const saved = await drive.saveVersion(M, chat.id);
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'tail' });
+        const { mount } = await drive.resolveFile(M, chat.id);
+        const dataDb = (await mount.getChildByName(chat.id, 'data.db'))!;
+        // Closed first, so the only write to the key is the restore's own.
+        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        const dataDbKey = await mount.getStorageKey(dataDb.id);
         const write = mount.storage.write.bind(mount.storage);
         const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
             if (key === dataDbKey) throw new Error('disk full');
             return write(key, data);
         });
         try {
-            expect((await restore(saved.name)).status).toBe(500);
+            const restored = await authedRequest(
+                t,
+                `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`,
+                { method: 'POST' },
+            );
+            expect(restored.status).toBe(500);
         } finally {
             spy.mockRestore();
         }
-        expect(fs.existsSync(file)).toBe(true);
-        expect(await messages()).toEqual(['saved', 'tail']);
+        const messages = await chatGet<{ content: string }[]>(t, user.id, M, `${chat.id}/messages`);
+        expect(messages.map((message) => message.content)).toEqual(['saved', 'tail']);
     });
 });
 

@@ -305,9 +305,9 @@ describe('Backup capture modes', () => {
         deliver(early);
         const kept = `home/mounts/${defaultMountId}/data/kept.png`;
         const capture = captureModule.captureFile;
-        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath, yields) => {
+        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath) => {
             if (relPath === kept) deliver(late);
-            return capture(bytes, destPath, relPath, yields);
+            return capture(bytes, destPath, relPath);
         });
         try {
             const { manifest, folder } = await snapshotInto(home, 'full');

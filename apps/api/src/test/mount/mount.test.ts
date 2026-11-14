@@ -6,7 +6,7 @@ import type { SQL } from 'drizzle-orm';
 import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
-import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
+import { ApiError, eventLoopTurn, isEnoent, storageGone } from '../../lib/core';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
@@ -90,26 +90,6 @@ describe('downloadToTemp', () => {
         expect(existsSync(tempPath)).toBe(false);
     });
 
-    test('works on backends without a local path (S3-style: no getPath)', async () => {
-        // The version-restore read path must not depend on storage.getPath — that
-        // was the original S3 bug. downloadToTemp goes through storage.read, which
-        // every backend implements.
-        const data = Buffer.from('snapshot-bytes-no-getpath');
-        const fileId = await seedFile(mount, rootId, 'snap2.db', 'application/octet-stream', data.length, data);
-
-        const storage = (mount as unknown as { storage: { getPath?: (key: string) => string } }).storage;
-        const originalGetPath = storage.getPath;
-        storage.getPath = undefined;
-        try {
-            const tempId = crypto.randomUUID();
-            const tempPath = await mount.downloadToTemp(fileId, tempId);
-            expect(readFileSync(tempPath).toString()).toBe('snapshot-bytes-no-getpath');
-            await mount.cleanupTemp(tempId);
-        } finally {
-            storage.getPath = originalGetPath;
-        }
-    });
-
     // handleApiError answers a raw error 500; a 503 would read as a storage outage.
     test('a local tmp/ failure is no storage outage, and leaves no side file behind', async () => {
         const data = Buffer.from('snapshot-bytes-local-failure');
@@ -160,6 +140,18 @@ describe('snapshotContainerDataDb concurrency', () => {
         for (const s of snaps) expect(parseSnapshotTimestamp(s.name)).not.toBeNull();
         // Every call returned a usable snapshot path.
         for (const r of results) expect(parseSnapshotTimestamp(r.name)).not.toBeNull();
+    });
+
+    test('a version copied from the stored object carries the size and hash of its bytes', async () => {
+        const container = await mount.createFolder(rootId, 'snap-hash');
+        const data = Buffer.from('stored-data-db-bytes');
+        await seedFile(mount, container, 'data.db', 'application/octet-stream', data.length, data);
+
+        const version = await mount.snapshotContainerDataDb(container, DEFAULT_RETENTION);
+
+        expect(await (await mount.readFile(version.id))?.text()).toBe('stored-data-db-bytes');
+        expect(version.size).toBe(data.length);
+        expect(version.hash).toBe(sha256('stored-data-db-bytes'));
     });
 });
 
@@ -2403,14 +2395,7 @@ describe('Managed-db open vs create', () => {
         await mount.createDatabase(minimalConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
 
-        // After close, syncDocumentDbSize stats the now-populated storage
-        // object and writes the size into the metadata row. A non-zero size
-        // proves a real SQLite file was created and persisted — i.e. that
-        // an open of the same path from a fresh process (after a restart)
-        // would find a real object. We don't reopen in-process because Bun +
-        // Drizzle's cached prepared statements keep file refs alive past
-        // rawDb.close() and trip SQLITE_IOERR_VNODE; production doesn't hit
-        // this since a real restart drops all handles.
+        // The sync wrote the object's size into the row, so a non-zero size means a real SQLite file was stored.
         const dataRow = await mount.getPath(dataDbId);
         expect(dataRow!.size).toBeGreaterThan(0);
     });
@@ -2560,6 +2545,21 @@ describe('content index dirty marks', () => {
         const dirtyIds = mount.getContentDirtyPaths(-1, 100).map((p) => p.id);
         expect(dirtyIds).toContain(txt);
         expect(dirtyIds).not.toContain(png);
+    });
+
+    test('a write from a missing temp file fails, and an overwrite keeps the stored bytes and the row', async () => {
+        const kept = await seedFile(mount, rootId, 'kept.txt', 'text/plain', 4, Buffer.from('good'));
+
+        const overwrite = await mount.writeFileFromTemp(kept, 'never-written', 0, 'hash-c').catch((e: unknown) => e);
+        expect(isEnoent(overwrite)).toBe(true);
+        expect(await (await mount.readFile(kept))?.text()).toBe('good');
+        expect((await mount.getPath(kept))?.size).toBe(4);
+
+        const create = await mount
+            .createFileFromTemp(rootId, 'never.txt', 'text/plain', 0, 'hash-d', 'never-written')
+            .catch((e: unknown) => e);
+        expect(isEnoent(create)).toBe(true);
+        expect(await mount.getChildByName(rootId, 'never.txt')).toBeNull();
     });
 });
 

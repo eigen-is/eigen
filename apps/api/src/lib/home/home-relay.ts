@@ -478,14 +478,9 @@ export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null):
     await writeAvatar(teamOwnerId(teamId), avatarWebP);
 }
 
+// The picture lands by a rename, so the avatar route and a backup read it whole.
 async function writeAvatar(ownerId: string, avatarWebP: Buffer | null): Promise<void> {
-    const avatarPath = path.join(getAvatarsDir(), `${ownerId}.webp`);
-    if (avatarWebP) {
-        await Bun.write(avatarPath, avatarWebP);
-    } else {
-        // There may be no avatar to delete.
-        await Bun.file(avatarPath)
-            .delete()
-            .catch(() => {});
-    }
+    const avatars = new LocalFilesystem(getAvatarsDir());
+    if (avatarWebP) await avatars.writeAtomic(`${ownerId}.webp`, avatarWebP);
+    else await avatars.delete(`${ownerId}.webp`);
 }

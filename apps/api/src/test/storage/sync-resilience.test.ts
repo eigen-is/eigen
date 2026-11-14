@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import {
     copyFileSync,
     existsSync,
@@ -94,42 +94,68 @@ afterAll(() => {
 });
 
 describe('crash-recovery durability', () => {
-    test('a temp surviving an unclean shutdown re-syncs its unsynced bytes on the next open+close', async () => {
+    test.each(['local', 'local-key'] as const)(
+        'on %s a temp surviving an unclean shutdown re-syncs its unsynced bytes on the next open+close',
+        async (storageType) => {
+            const mount = new Mount(
+                OWNER_ID,
+                TEST_DIR,
+                createTestMountConfig(`crash-recovery-${storageType}`, storageType),
+                createGetLocalDatabase(TEST_DIR),
+            );
+            await mount.init();
+            const rootId = (await mount.getRootFolder())!.id;
+
+            const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
+            const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
+            await mount.closeDatabase(dataDbId);
+            expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
+
+            // Simulate a crash: rebuild the temp from the backing store, add an UNSYNCED row, and
+            // leave it behind exactly as an unclean shutdown would (no clean close ran).
+            const tempPath = mount.getTempPath(dataDbId);
+            await Bun.write(tempPath, await (await mount.readFile(dataDbId))!.arrayBuffer());
+            const crashTemp = new Database(tempPath);
+            crashTemp.run('PRAGMA journal_mode = WAL;');
+            crashTemp.run("INSERT INTO items (id, data) VALUES (2, 'unsynced')");
+            crashTemp.run('PRAGMA wal_checkpoint(TRUNCATE);');
+            crashTemp.close();
+            for (const j of [`${tempPath}-wal`, `${tempPath}-shm`]) {
+                if (existsSync(j)) unlinkSync(j);
+            }
+
+            await mount.withDatabase(docConfig, dataDbId, async () => {});
+            await mount.closeDatabase(dataDbId);
+
+            // The adopted temp counts as dirty, so the close syncs row 2 before it drops the temp.
+            expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
+        },
+    );
+
+    test('while a document is open on local-key, the file at its key is the last synced state and has no -wal beside it', async () => {
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createTestMountConfig('crash-recovery', 'local'),
+            createTestMountConfig('open-local-key', 'local-key'),
             createGetLocalDatabase(TEST_DIR),
         );
         await mount.init();
+        createdMounts.push(mount);
         const rootId = (await mount.getRootFolder())!.id;
-
         const containerId = await mount.createFolder(rootId, 'DocContainer', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
-        await mount.closeDatabase(dataDbId);
+        await managed.flush();
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'unsynced' }).run();
+
+        const storedFile = join(mount.dataDir, await mount.getStorageKey(dataDbId));
+        expect(existsSync(`${storedFile}-wal`)).toBe(false);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
-
-        // Simulate a crash: rebuild the temp from the backing store, add an UNSYNCED row, and
-        // leave it behind exactly as an unclean shutdown would (no clean close ran).
-        const tempPath = mount.getTempPath(dataDbId);
-        await Bun.write(tempPath, await (await mount.readFile(dataDbId))!.arrayBuffer());
-        const crashTemp = new Database(tempPath);
-        crashTemp.run('PRAGMA journal_mode = WAL;');
-        crashTemp.run("INSERT INTO items (id, data) VALUES (2, 'unsynced')");
-        crashTemp.run('PRAGMA wal_checkpoint(TRUNCATE);');
-        crashTemp.close();
-        for (const j of [`${tempPath}-wal`, `${tempPath}-shm`]) {
-            if (existsSync(j)) unlinkSync(j);
-        }
-
-        await mount.withDatabase(docConfig, dataDbId, async () => {});
-        await mount.closeDatabase(dataDbId);
-
-        // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
-        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
     });
 });
 
@@ -649,10 +675,8 @@ describe('per-destination upload concurrency', () => {
     });
 });
 
-// The 2026-06-08 incident: an S3 read hiccup during a redeploy left an empty/0-byte temp, which
-// crash recovery adopted and re-uploaded OVER the good stored object — wiping two live
-// stickies docs, then re-wiping on every later redeploy. Recovery must refuse an empty/invalid/
-// collapsed temp and re-fetch the authoritative object, never overwrite real data with an empty db.
+// A failed GET leaves an empty temp. Recovery refuses an empty, invalid or collapsed temp and fetches the
+// stored object again, so an empty database never overwrites real data.
 describe('data-loss guard — crash recovery must not overwrite a good object with an empty temp', () => {
     test('a 0-byte crash temp is discarded; the stored object is re-fetched, not wiped', async () => {
         const { mount } = createS3Mount('empty-temp-guard');
@@ -702,9 +726,8 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500);
         await mount.closeDatabase(dataDbId);
 
-        // Poison temp: a VALID but freshly-initialized (0-row) SQLite — passes a header check but is
-        // a tiny fraction of the stored object. This is the shape that reached S3 in the incident, so
-        // build it exactly the way the code creates a fresh db (schema + migrations, then 0 rows).
+        // Poison temp: a valid but freshly initialized (0-row) SQLite, which passes a header check but is a
+        // tiny fraction of the stored object. Built the way the code creates a fresh db.
         const emptyTemp = new ManagedDatabase(docConfigNoSnap, mount.getTempPath(dataDbId));
         await emptyTemp.open(0);
         await emptyTemp.close({ skipFinalSnapshot: true });
@@ -848,6 +871,32 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         ]);
         fault.failNextWrites = 0;
     });
+
+    test('an open whose staged copy the ack unlinks before the read opens from the stored object', async () => {
+        const { mount, fault } = createS3Mount('staged-acked-open');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        fault.failNextWrites = 9999;
+        await mount.withDatabase(docConfigNoSnap, dataDbId, async (managed) => {
+            managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        });
+        await mount.closeDatabase(dataDbId);
+        await mount.uploadQueue?.drain({ flushNow: true });
+        expect(pendingUploadCount(mount)).toBeGreaterThan(0);
+        fault.failNextWrites = 0;
+
+        // The retry lands and unlinks the staged copy after the open picked it.
+        const replaceTempFrom = mount.replaceTempFrom.bind(mount);
+        const spy = spyOn(mount, 'replaceTempFrom').mockImplementationOnce(async (tempId, source) => {
+            await mount.uploadQueue?.drain({ flushNow: true });
+            return replaceTempFrom(tempId, source);
+        });
+        try {
+            expect(await readItems(mount, docConfigNoSnap, dataDbId)).toHaveLength(4);
+        } finally {
+            spy.mockRestore();
+        }
+    });
 });
 
 describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
@@ -892,8 +941,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
 
         const documentDbs = mount.documentDbs;
 
-        // Tear down while the extract is mid-flight, THEN let it open its DB. Pre-fix: teardown returns
-        // before the open, which lands in the cleared cache and leaks. Post-fix: teardown awaits the
+        // Tear down while the extract is mid-flight, then let it open its DB. The teardown awaits the
         // drain, so the opened DB lands in the cache and the close pass closes it.
         const closing = mount.closeAllDatabases();
         releaseExtract();
@@ -923,8 +971,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         );
         await closed;
 
-        // Pre-fix: storage.write never resolves → this drain never returns (the test times out).
-        // Post-fix: the PUT deadline fires, performUpload treats it as a failure and backs off.
+        // The PUT deadline fired, so performUpload treats it as a failure and backs off, and this drain returns.
         await mount.uploadQueue?.drain();
 
         expect(fault.writeCount).toBeGreaterThan(writesBefore); // the PUT was attempted…
@@ -961,8 +1008,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         await seedFile(mount, rootId, 'note.txt', 'text/plain', 5, Buffer.from('hello'));
         await entered;
 
-        // The close waits out its real deadline on fake time. Pre-fix it awaited the parked drain unboundedly, so
-        // this never returned (test times out).
+        // The close waits out its real deadline on fake time, not the parked drain.
         jest.useFakeTimers();
         try {
             const closed = mount.closeAllDatabases();

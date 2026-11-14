@@ -15,19 +15,23 @@ export function getTempPath(mount: Mount, pathId: string): string {
     return path.join(mount.tmpDir, pathId.replace(/\//g, '_'));
 }
 
-// tempId must be new for each call, such as a randomUUID: two downloads of one file would overwrite each other, and
-// an open document's working copy is the temp path named after its data.db path id.
+// tempId is new for each call, such as a randomUUID, or two downloads of one file would overwrite each other. Only
+// a document open passes the path id, which names its working copy.
 export async function downloadToTemp(mount: Mount, pathId: string, tempId: string): Promise<string> {
-    // Under the tree lock, like a document open, because on `local` an ancestor rename during the
-    // read would make the file look gone.
+    // Under the tree lock, because on `local` an ancestor rename during the read would make the file look gone.
     return mount.withTreeShared(async () => {
         const storageKey = await mount.getStorageKey(pathId);
-        // Freshest first, like readKey: a version saved during an outage exists only as its staged copy.
+        const tempPath = mount.getTempPath(tempId);
+        await mount.cleanupTemp(tempId);
+        // A -wal that survived the cleanup would be replayed into the fresh main file.
+        if (fs.existsSync(`${tempPath}-wal`))
+            throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
+        // Freshest first, like readKey: bytes saved during an outage exist only as their staged copy.
         const staged = mount.pendingStagedCopy(storageKey);
         if (staged) {
             try {
                 await mount.replaceTempFrom(tempId, Bun.file(staged));
-                return mount.getTempPath(tempId);
+                return tempPath;
             } catch (err) {
                 // The queue unlinks a staged copy once its upload landed, which may happen during the
                 // read. The bytes are in the bucket by then, so the download below gets them.
@@ -37,31 +41,21 @@ export async function downloadToTemp(mount: Mount, pathId: string, tempId: strin
                 }
             }
         }
-        return mount.downloadKeyToTemp(storageKey, tempId);
+        const start = Bun.nanoseconds();
+        let size: number;
+        try {
+            size = await mount.replaceTempFrom(tempId, mount.storage.read(storageKey));
+        } catch (err) {
+            console.error(`[Mount] download ${storageKey} failed:`, err);
+            // Only a missing object in the GET body is a 410. A raw error is local, such as the tmp/ write, so
+            // it stays a 500 even as an ENOENT.
+            if (isMissingObjectCause(err)) throw storageGone(err.cause);
+            throw err;
+        }
+        const ms = (Bun.nanoseconds() - start) / 1_000_000;
+        console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+        return tempPath;
     });
-}
-
-// The plain download, with no look at the staged copy, which a caller looks at first.
-export async function downloadKeyToTemp(mount: Mount, storageKey: string, tempId: string): Promise<string> {
-    const start = Bun.nanoseconds();
-    const tempPath = mount.getTempPath(tempId);
-    await mount.cleanupTemp(tempId);
-    // A -wal that survived the cleanup would be replayed into the fresh main file.
-    if (fs.existsSync(`${tempPath}-wal`))
-        throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
-    let size: number;
-    try {
-        size = await mount.replaceTempFrom(tempId, mount.storage.read(storageKey));
-    } catch (err) {
-        console.error(`[Mount] download ${storageKey} failed:`, err);
-        // Only a missing object in the GET body is a 410. A raw error is local, such as the tmp/ write, so
-        // it stays a 500 even as an ENOENT.
-        if (isMissingObjectCause(err)) throw storageGone(err.cause);
-        throw err;
-    }
-    const ms = (Bun.nanoseconds() - start) / 1_000_000;
-    console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
-    return tempPath;
 }
 
 // Through a side file, because the next open would adopt a truncated file at the temp path as crash recovery.
@@ -79,17 +73,10 @@ export async function replaceTempFrom(mount: Mount, tempId: string, source: Stor
 }
 
 export async function uploadFromTemp(mount: Mount, storageKey: string, tempId: string): Promise<void> {
-    const tempPath = mount.getTempPath(tempId);
-    const tempFile = Bun.file(tempPath);
-    if (!(await tempFile.exists())) {
-        // The caller writes the temp file first. A missing one throws instead of doing nothing, so
-        // a failed sync at close is loud and never drops unflushed writes in silence.
-        throw new Error(`[Mount] uploadFromTemp ${storageKey}: tempfile missing at ${tempPath}`);
-    }
     const start = Bun.nanoseconds();
-    await mount.storage.write(storageKey, tempFile);
+    const size = await mount.storage.write(storageKey, Bun.file(mount.getTempPath(tempId)));
     const ms = (Bun.nanoseconds() - start) / 1_000_000;
-    console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+    console.log(`[timing] Mount.upload ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
 }
 
 export async function cleanupTemp(mount: Mount, tempId: string): Promise<void> {
@@ -115,7 +102,7 @@ export function cleanupStaleFiles(mount: Mount, dir: string, maxAgeMs: number, p
                       .select({ id: paths.id })
                       .from(paths)
                       .all()
-                      .map((r) => r.id),
+                      .map((row) => row.id),
               )
             : null;
         for (const entry of fs.readdirSync(dir)) {

@@ -159,12 +159,6 @@ export class Mount {
         return this.config.storageType === 'local';
     }
 
-    // A document database is opened from a temp copy, except on `local-key`, where the stored file is
-    // opened in place.
-    public get needsTempCopy(): boolean {
-        return this.isRemote || this.isPathBased;
-    }
-
     // ---- Lifecycle ----
 
     // `passive` reads a mount the home does not serve, such as a disabled one a backup archives, and changes
@@ -1025,10 +1019,6 @@ export class Mount {
 
     public async downloadToTemp(pathId: string, tempId: string): Promise<string> {
         return tempFiles.downloadToTemp(this, pathId, tempId);
-    }
-
-    public async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
-        return tempFiles.downloadKeyToTemp(this, storageKey, tempId);
     }
 
     public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
