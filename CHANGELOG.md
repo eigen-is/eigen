@@ -45,6 +45,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Shared and Recent in Drive** — **Shared by me**, **Shared with me**, **Recent** and **Watched** show a renamed, moved or deleted item right away, not minutes later
 - **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
 - **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
+- **New in a shared folder** — in a folder someone shared with you to view only, **New** in the Drive sidebar is greyed out instead of failing with "No write permission"
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 - **Merged cells and row or column changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, as does a column inserted right of one a column wide, and a merge that a delete leaves with one cell becomes a plain cell
 - **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
