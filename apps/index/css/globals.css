@@ -179,13 +179,12 @@
         display: contents;
     }
 
-    /* A carousel's strip runs from a little left of the column to the right edge of the page, the scroll area and
+    /* A carousel's strip starts at the column's left edge and runs to the right edge of the page, the scroll area and
        a size container, so the next slide peeks in. The column's width follows the site grid: --site-col at most,
        less the gutters on a narrow page. */
     .media-carousel {
         --carousel-column: min(var(--site-col), 100cqw - 2 * var(--app-gutter-x));
         --carousel-bleed: calc((100cqw - var(--carousel-column)) / 2);
-        --carousel-inset: min(2rem, var(--carousel-bleed));
     }
 
     /* The end padding is the bleed, so the last slide can snap to the start too. */
@@ -193,7 +192,6 @@
         display: flex;
         align-items: flex-start;
         gap: 1rem;
-        margin-left: calc(-1 * var(--carousel-inset));
         margin-right: calc(-1 * var(--carousel-bleed));
         padding-right: var(--carousel-bleed);
         overflow-x: auto;
@@ -207,7 +205,7 @@
     }
 
     .media-carousel-slide {
-        flex: 0 0 calc(var(--carousel-column) + var(--carousel-inset));
+        flex: 0 0 var(--carousel-column);
         margin: 0;
         scroll-snap-align: start;
 
