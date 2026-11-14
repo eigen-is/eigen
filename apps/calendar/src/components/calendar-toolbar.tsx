@@ -51,7 +51,7 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
         return `${startOfWeek.getDate()} – ${endOfWeek.getDate()} ${startMonth} ${endYear}`;
     }
-    // Across a year boundary, stamp both years (e.g. "29 Dec 2026 – 4 Jan 2027").
+    // A week across New Year names both years.
     if (startYear !== endYear) {
         return `${startOfWeek.getDate()} ${startMonth} ${startYear} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
     }
@@ -87,7 +87,6 @@ export function CalendarToolbar({
                 <ToolbarTitle className="text-lg">{formatTitle(currentDate, viewMode)}</ToolbarTitle>
             </div>
 
-            {/* Mobile folds Today + the view select into a kebab. */}
             {isMobile ? (
                 <DropdownMenu>
                     <KebabTrigger title="View options" />

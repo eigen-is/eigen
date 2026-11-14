@@ -27,9 +27,9 @@ import { isSelfContact, useContactMenu } from './contact-menu';
 type ContactsListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    // Absent → no sort toggle (team members carry a single display name, nothing to sort by).
+    // Without it there is no sort toggle: a team member has one display name.
     onSortChange?: (sort: 'firstName' | 'lastName') => void;
-    // Absent → no import/export kebab (team members aren't cards this book owns).
+    // Without it there is no import or export menu: team members are no cards this book owns.
     onImportClick?: () => void;
 };
 
@@ -146,7 +146,7 @@ export function ContactsList({
                         className="flex-1"
                     />
                 )}
-                // Delete/Backspace on the list, minus the card that is you — the menu hides Delete there too.
+                // Delete and Backspace skip your own card, as the menu does.
                 onDelete={
                     onDelete
                         ? (selected) => {
@@ -155,7 +155,7 @@ export function ContactsList({
                         : undefined
                 }
                 renderMenuItems={(contextItems, close) =>
-                    // Print is detail-only (it clones the on-screen detail pane), so showPrint stays off here.
+                    // Print copies the open detail pane, so the list has none.
                     contactMenu.renderItems(contextItems, close, {
                         labels,
                         onEdit,

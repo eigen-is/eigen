@@ -16,9 +16,7 @@ export function SignatureSection() {
     const [html, setHtml] = useState('');
     const seededRef = useRef<string | null>(null);
 
-    // Seed the editor from server data once per signature id. Subsequent settings refetches
-    // (e.g., after a save) keep the user's in-progress text — they only re-seed when the
-    // identity of the signature changes (first load, or signature absent → present).
+    // Seed the editor once per signature, so a refetch after a save keeps what the user is typing.
     useEffect(() => {
         const id = existing?.id ?? null;
         if (id !== seededRef.current) {
@@ -32,9 +30,8 @@ export function SignatureSection() {
     const isDirty = html !== (existing?.html ?? '');
 
     const handleSave = () => {
-        // Claim the signature id before the mutation flies so the post-save refetch (where
-        // existing.id flips from undefined → new uuid on first save) doesn't trigger the
-        // seed effect and clobber edits the user makes during the in-flight request.
+        // Claim the id before the save, so the refetch that gives a new signature its id doesn't seed the editor
+        // again and drop what is typed meanwhile.
         const id = existing?.id ?? crypto.randomUUID();
         seededRef.current = id;
         update.mutate({
