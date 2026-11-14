@@ -33,6 +33,7 @@ import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
 import { clearHomeDeleting, getHome, markHomeDeleting } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
+import * as serverJobs from '../../lib/home/server-jobs';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { seedFile } from '../mount-test-helpers';
 import type { TestContext } from '../setup';
@@ -51,7 +52,7 @@ import {
 
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
-const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
+const pullHomeSnapshot = serverJobs.pullHomeSnapshot;
 const snapshotHome = snapshotModule.snapshotHome;
 const waitForHomeSlot = jobs.waitForHomeSlot;
 const packFolder = archive.packFolder;
@@ -167,7 +168,7 @@ describe('Server backup job', () => {
             let perHomeStateAtCapture: BackupJob['state'] | undefined;
             let refusedWhileHeld: unknown = null;
             spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                spyOn(serverJobs, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
                     if (ownerId === target) perHomeStateAtCapture = getBackupJob(perHome.id)?.state;
                     if (ownerId === held) {
                         refusedWhileHeld = await withHomeSlot(held, async () => {}).catch((error) => error);
@@ -218,7 +219,7 @@ describe('Server backup job', () => {
             const relay = quietRelay();
             const broken = ctx.bob.user.id;
             spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                spyOn(serverJobs, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
                     if (ownerId === broken) throw new Error('bucket unreachable');
                     return pullHomeSnapshot(ownerId, dir, options);
                 }),
@@ -409,7 +410,7 @@ describe('Server backup job', () => {
             quietRelay();
             const broken = ctx.bob.user.id;
             spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                spyOn(serverJobs, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
                     if (ownerId === broken) throw new ApiError(404, 'Object not found');
                     return pullHomeSnapshot(ownerId, dir, options);
                 }),
@@ -470,7 +471,7 @@ describe('Server backup job', () => {
         'a .env.production replaced under its mount fails the job before it captures a home',
         async () => {
             quietRelay();
-            const capture = spyOn(homeRelay, 'pullHomeSnapshot');
+            const capture = spyOn(serverJobs, 'pullHomeSnapshot');
             spies.push(capture);
             // Docker Desktop's view of a one-file mount whose host file got a new inode: the read fails ENOENT.
             process.env['EIGEN_ENV_FILE'] = join(getBackupsDir(), 'replaced.env.production');
@@ -545,7 +546,7 @@ describe('Server backup job', () => {
 
     test('refuses with 507 when the backups disk has no room, writes no archive and leaves a failed record', async () => {
         const relay = quietRelay();
-        spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(2 ** 50));
+        spies.push(spyOn(serverJobs, 'pullHomeBackupBytes').mockResolvedValue(2 ** 50));
         const before = new Set(readdirSync(getBackupsDir()));
 
         const refused = await startServerBackup({ level: 'full', reason: 'manual' }).catch((e) => e);
@@ -568,9 +569,9 @@ describe('Server backup job', () => {
         async () => {
             quietRelay();
             const unsized = ctx.bob.user.id;
-            const sized = homeRelay.pullHomeBackupBytes;
+            const sized = serverJobs.pullHomeBackupBytes;
             spies.push(
-                spyOn(homeRelay, 'pullHomeBackupBytes').mockImplementation((ownerId, level) =>
+                spyOn(serverJobs, 'pullHomeBackupBytes').mockImplementation((ownerId, level) =>
                     ownerId === unsized ? Promise.reject(new Error('ENOENT: renamed mid-walk')) : sized(ownerId, level),
                 ),
             );
@@ -588,7 +589,7 @@ describe('Server backup job', () => {
         'sizes only what the server member takes: a stray file in server/ does not count against the room',
         async () => {
             quietRelay();
-            spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(0));
+            spies.push(spyOn(serverJobs, 'pullHomeBackupBytes').mockResolvedValue(0));
             // Sparse: 8 TiB on paper, no disk behind it. ext4 refuses a file of 16 TiB.
             const stray = getServerDataPath('stray.bin');
             writeFileSync(stray, '');

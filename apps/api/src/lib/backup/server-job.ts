@@ -22,7 +22,7 @@ import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { isHomeDeleting } from '../home/get-home';
-import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
+import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/server-jobs';
 import { getOwnerExists } from '../user';
 import { alertOwner } from '../user/alert-owner';
 import type { ServerArchiveWriter } from './archive';

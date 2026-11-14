@@ -15,7 +15,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getPublicConfig } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { evictHome, getHome, getTeamHome } from '../../lib/home/get-home';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { pullHomeSnapshot } from '../../lib/home/server-jobs';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';

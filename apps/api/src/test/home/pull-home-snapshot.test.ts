@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
 import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { pullHomeSnapshot } from '../../lib/home/server-jobs';
 import { createTestUser, getTestContext } from '../setup';
 
 const snapshotHome = snapshotModule.snapshotHome;

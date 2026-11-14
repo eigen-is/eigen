@@ -3,6 +3,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
+import { getUserById, updateUser } from '../../lib/user';
 import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 describe('Contacts', () => {
@@ -607,6 +608,35 @@ describe('Contacts', () => {
 
             expect(deleteRes.status).toBe(400);
             expect(await deleteRes.text()).toContain('You cannot delete yourself');
+        });
+
+        test('editing her own card renames Alice across the org', async () => {
+            const meRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
+            const me = await assertJson<Contact>(meRes);
+            const before = await getUserById(ctx.alice.user.id);
+            if (!before) throw new Error('Alice has no user row');
+
+            try {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/contacts/${ctx.alice.user.id}/contacts/${me.id}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            firstName: 'Alicia',
+                            lastName: 'Renamed',
+                            email: me.email,
+                            phone: me.phone,
+                            etag: me.etag,
+                        }),
+                    },
+                );
+                expect(res.status).toBe(200);
+                expect((await getUserById(ctx.alice.user.id))?.name).toBe('Alicia Renamed');
+            } finally {
+                await updateUser(before.id, before.name, before.image ?? '');
+            }
         });
     });
 });

@@ -56,7 +56,7 @@ No one signs in as a team, so a notification addressed to a team id goes to ever
 
 ## A team avatar is one file, and the admin page busts its cache
 
-Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by `requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`, written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth: no settings pointer, no schema column. Deleting the team removes the file (`afterDeleteTeam`). Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG, with the same 24h public `Cache-Control` as user avatars.
+Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by `requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`, written via `pushTeamAvatar` in `lib/user/avatars.ts`. File existence is the only source of truth: no settings pointer, no schema column. Deleting the team removes the file (`afterDeleteTeam`). Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG, with the same 24h public `Cache-Control` as user avatars.
 
 The team filename is stable, unlike the per-upload UUID of a user avatar, so the editing surface would show the browser-cached copy. The admin team detail page appends a client-generated `?v={timestamp}` on mount, on team switch, and after upload or remove. A `?v` value must never repeat across page loads, because a repeated value serves the stale cache entry: never use a counter. Other surfaces accept up to 24h of staleness.
 

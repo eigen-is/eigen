@@ -1,11 +1,9 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
 // another home, each pull reads one answer from one, such as the paths shared with a user, and pullFromEach runs a
-// pull against many homes at once. A few calls write server-wide data instead, such as a user's avatar. Today every
-// call runs in this process. When homes live in several processes, only this file has to change.
+// pull against many homes at once. Today every call runs in this process. When homes live in several processes, only
+// this file has to change.
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import type { BackupLevel, BackupManifest, BackupProgress } from '@workspace/lib/types/backup';
 import type {
     Attendee,
     CalendarEvent,
@@ -16,32 +14,17 @@ import type {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
-import type { HomeSizeResponse, MyTeam, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
+import type { MyTeam, TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { settlesWithin } from '../../utils/timing';
-import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import type { Calendar } from '../calendar/calendar';
-import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationRequest } from '../calendar/types';
-import {
-    getAvatarsDir,
-    getDataRoot,
-    getUserHomePath,
-    homeDirUnder,
-    PATHS,
-    SERVER_DIR,
-    SERVER_FILES,
-} from '../config/paths';
-import { readContactsTotalSize } from '../contacts/card-store';
-import { LocalFilesystem } from '../core';
+import { getDataRoot, homeDirUnder } from '../config/paths';
 import type { VisiblePath } from '../drive/drive';
 import type { EventPatch } from '../ical/ical-component';
-import { readMailTotalSize } from '../mail/maildir-store';
 import type { Memberships, User } from '../user';
-import { getMemberships, getOwnerExists, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
-import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
-import { homeSize, userHomeSize } from './home';
+import { getOwnerExists, getUsersByEmails } from '../user';
+import { getHome, getTeamHome, loadedHome } from './get-home';
 import { TeamHome } from './team-home';
 
 // --- Pushes ---
@@ -421,66 +404,4 @@ export async function pullMimeContents(ownerId: string, mimeType: string): Promi
 export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
     return home.drive.search(opts);
-}
-
-// --- Size and backup ---
-
-// Reads the home's files instead of opening the Home. The admin Users page sizes every user at once,
-// and opening each home would take seconds.
-export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
-    // Sizing reads the folders and quotas of a user home. Other homes, such as a team's, have neither.
-    if (parseOwnerId(ownerUserId).type !== 'user') {
-        throw new Error(`pullHomeSize expects a user owner id, got ${ownerUserId}`);
-    }
-    // A guest's home has no folders or quotas of its own, so it answers what the guest home answers.
-    if (isGuest(await getUserById(ownerUserId))) return homeSize();
-    const homeDir = getUserHomePath(ownerUserId);
-    // A user who has never signed in has no home folder yet, and sizing must not create one.
-    const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [contacts, mail, calendars] = homeFs
-        ? await Promise.all([readContactsTotalSize(homeFs), readMailTotalSize(homeFs), readCalendarTotalSize(homeFs)])
-        : [0, 0, 0];
-    const settingsFile = Bun.file(path.join(homeDir, PATHS.SETTINGS));
-    const settings: UserSettings = (await settingsFile.exists()) ? await settingsFile.json() : {};
-    const { teamIds } = await getMemberships(ownerUserId);
-    return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
-}
-
-// Opened without counting as a request, so a nightly backup keeps open only the homes somebody uses. It never closes
-// the home, which a user may have opened during the capture, and a home that closed meanwhile fails the capture.
-export async function pullHomeSnapshot(
-    ownerId: string,
-    targetDir: string,
-    options: { level?: BackupLevel; onProgress?: BackupProgress },
-): Promise<BackupManifest> {
-    const home = await openHome(ownerId);
-    const manifest = await home.withHomeHeld(() => snapshotHome(home, targetDir, options));
-    if (home.closing) throw new Error('the home closed during the capture');
-    return manifest;
-}
-
-// The server backup sizes every home through here before it starts, to check that there is room.
-export async function pullHomeBackupBytes(ownerId: string, level: BackupLevel): Promise<number> {
-    return captureBytes(homeDirUnder(getDataRoot(), ownerId), level);
-}
-
-// --- Server-wide data ---
-
-// A user's name and avatar are server-wide data, not part of a home. When homes live in several
-// processes, this becomes a call to the central server.
-export async function pushUserProfile(userId: string, name: string, avatarWebP: Buffer | null): Promise<void> {
-    await writeAvatar(userId, avatarWebP);
-    await updateUser(userId, name, avatarWebP ? `${SERVER_DIR}/${SERVER_FILES.avatars}/${userId}.webp` : '');
-}
-
-// A team has no row in the auth database to update, so its avatar file is all there is.
-export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
-    await writeAvatar(teamOwnerId(teamId), avatarWebP);
-}
-
-// The picture lands by a rename, so the avatar route and a backup read it whole.
-async function writeAvatar(ownerId: string, avatarWebP: Buffer | null): Promise<void> {
-    const avatars = new LocalFilesystem(getAvatarsDir());
-    if (avatarWebP) await avatars.writeAtomic(`${ownerId}.webp`, avatarWebP);
-    else await avatars.delete(`${ownerId}.webp`);
 }

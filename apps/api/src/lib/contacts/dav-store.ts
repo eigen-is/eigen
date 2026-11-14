@@ -6,7 +6,7 @@
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { pushUserProfile } from '../home/home-relay';
+import { pushUserProfile } from '../user/avatars';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';

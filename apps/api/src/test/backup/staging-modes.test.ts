@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getBackupStagingDir, wipeBackupStagingDir } from '../../lib/backup/paths';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { pullHomeSnapshot } from '../../lib/home/server-jobs';
 import type { TestContext } from '../setup';
 import { getTestContext, TEST_DATA_DIR } from '../setup';
 
