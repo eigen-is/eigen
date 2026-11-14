@@ -10,7 +10,7 @@ import { VERDICTS } from './correctness';
 import type { Partner } from './coverage';
 import type { EngineVerdicts, Results, SpeedCell, SpeedRow, SpeedRun } from './run';
 import type { EngineName } from './speed';
-import { ENGINES } from './speed';
+import { ENGINES, LONG_RUN } from './speed';
 
 const HERE = import.meta.dir;
 // Our engine's display name; in a table cell its bar is escaped.
@@ -68,7 +68,8 @@ function shownCell(found: SpeedCell, memory: boolean): string {
     if (found.status === 'too slow') return `too slow: ${found.note}; see the row at a tenth of the size`;
     if (found.status !== 'measured' || found.min === undefined || found.median === undefined)
         return `${found.status}${found.note ? `: ${cell(found.note)}` : ''}`;
-    return memory ? `${found.median.toFixed(1)} MB` : `${time(found.min)} / ${time(found.median)}`;
+    const rounds = found.rounds === undefined ? '' : ` (${found.rounds} rounds)`;
+    return `${memory ? `${found.median.toFixed(1)} MB` : `${time(found.min)} / ${time(found.median)}`}${rounds}`;
 }
 
 function ratioCell(row: SpeedRow, engine: EngineName): string {
@@ -303,6 +304,8 @@ export function marks(results: Results): Record<string, string> {
         ours: OURS,
         generated: results.generated,
         'full-minutes': number(Math.round(results.seconds / 60)),
+        'long-seconds': String(LONG_RUN.ms / 1000),
+        'long-rounds': String(LONG_RUN.rounds),
         machine: `${machine.cpu}, ${machine.cores} cores, ${machine.memoryGb} GB, ${machine.os}`,
         versions: `Bun ${versions.bun}, Node ${versions.node.replace(/^v/, '')}, HyperFormula ${versions.hyperformula}, IronCalc ${versions.ironcalc}, Univer ${versions.univer}`,
         workloads: (first?.rows ?? [])

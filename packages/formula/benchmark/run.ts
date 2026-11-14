@@ -18,7 +18,7 @@ import { HYPERFORMULA_CONFIG } from './engines';
 import { marks } from './readme';
 import { readData } from './rows';
 import type { EngineName, Measured, Workload } from './speed';
-import { ENGINES, workloads } from './speed';
+import { ENGINES, LONG_RUN, workloads } from './speed';
 
 // A quick run's sizes and sample: a look in a few minutes, not the published numbers.
 const QUICK = { scale: 10, rounds: 3, reps: 1, every: 100 } as const;
@@ -28,7 +28,8 @@ const USAGE = `bun run.ts [options], from packages/formula/benchmark after bun i
                       (so no warm-up run), Bun only, every ${QUICK.every}th correctness row; prints its tables and
                       never touches results.json or the README
   --only <parts>      speed, correctness, coverage, comma-separated (default all); the others keep their results
-  --rounds <n>        rounds per speed row, each a fresh process per engine (default 5)
+  --rounds <n>        rounds per speed row, each a fresh process per engine (default 5); an engine whose first run
+                      of a workload takes over ${LONG_RUN.ms / 1000} s gets at most ${LONG_RUN.rounds} rounds of it
   --runtimes <list>   bun, node (default both)
   --filter <regex>    only the speed workloads whose name matches
   --max-load <n>      wait before each round until the 1-minute load is below this (default 6)`;
@@ -52,6 +53,8 @@ export type SpeedCell = {
     readonly median?: number;
     // The median time spent in the load or the edit itself, before the engine's recalc call.
     readonly step?: number;
+    // Set when the figure has fewer rounds than its run, as a long run gets.
+    readonly rounds?: number;
     readonly note?: string;
 };
 export type SpeedRow = {
@@ -155,12 +158,14 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
         const values = new Map<string, readonly string[]>();
         const failures = new Map<string, string>();
         const slow = new Map<string, string>();
+        const long = new Set<string>();
         for (let round = 0; round < rounds; round += 1) {
             for (const [w, workload] of chosen.entries()) {
                 const shift = (round + w) % engines.length;
                 for (const engine of [...engines.slice(shift), ...engines.slice(0, shift)]) {
                     const key = `${workload.name}\t${engine}`;
                     if (failures.has(key) || slow.has(key)) continue;
+                    if (long.has(key) && (times.get(key)?.length ?? 0) >= LONG_RUN.rounds) continue;
                     const [file, ...args] = command;
                     const spawned = () =>
                         spawnSync(
@@ -209,7 +214,9 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
                         continue;
                     }
                     times.set(key, [...(times.get(key) ?? []), measured]);
-                    if (!values.has(key)) values.set(key, measured.values);
+                    if (values.has(key)) continue;
+                    values.set(key, measured.values);
+                    if (measured.ms > LONG_RUN.ms && !workload.memory) long.add(key);
                 }
             }
         }
@@ -231,7 +238,13 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
                 if (!same)
                     return { status: 'wrong values', note: `cell ${at}: ${own[at]} where ours is ${ours?.[at]}` };
                 const steps = runs.map((run) => run.step).sort((a, b) => a - b);
-                return { status: 'measured', min: measured[0], median: median(measured), step: median(steps) };
+                const found: SpeedCell = {
+                    status: 'measured',
+                    min: measured[0],
+                    median: median(measured),
+                    step: median(steps),
+                };
+                return runs.length < rounds ? { ...found, rounds: runs.length } : found;
             };
             return {
                 workload: workload.name,

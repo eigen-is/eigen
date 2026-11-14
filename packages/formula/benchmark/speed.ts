@@ -2,7 +2,7 @@
 // workload on one engine. A child builds a fresh engine per run, does the run up to three times and reports its
 // fastest, so the first run warms the runtime up; it also reports the values of a sample of cells, which the run
 // compares across engines before a time counts. A workload without an edit times the load and first compute; one
-// with an edit times the edit and the recompute after it.
+// with an edit times the edit and the recompute after it. How many rounds a long run gets is set here too.
 
 import { parseArgs } from 'node:util';
 import type { ConfigParams } from 'hyperformula';
@@ -31,6 +31,9 @@ export type Measured = { readonly ms: number; readonly step: number; readonly va
 
 // A child stops repeating a run once its runs took this long, so a slow engine is timed fewer times per process.
 const ENOUGH_MS = 20_000;
+// An engine whose first timed run of a workload took longer than `ms` is timed in at most `rounds` rounds of it. Such
+// a run moves a few percent between rounds, and five of them would take most of a full run.
+export const LONG_RUN = { ms: 5000, rounds: 2 } as const;
 const LOOKUP_INDEX: Partial<ConfigParams> = { useColumnIndex: true };
 
 function grid(count: number, row: (r: number) => Input[]): SheetInput[] {
