@@ -235,7 +235,8 @@ async function main(): Promise<void> {
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
-    const { drainHomeDeliveries, pushTeamAvatar } = await import('../lib/home/home-relay');
+    const { drainHomeDeliveries } = await import('../lib/home/home-relay');
+    const { pushTeamAvatar } = await import('../lib/user/avatars');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');

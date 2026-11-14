@@ -10,9 +10,9 @@ import { requireTeamAccess, requireTeamAdmin } from '../lib/auth/access';
 import { enforceMaxUploadSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core/errors';
 import { getTeamHome } from '../lib/home';
-import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
+import { pushTeamAvatar } from '../lib/user/avatars';
 import { betterAuth } from './auth';
 import { optionalEnum, s3ConfigBody, toS3Config } from './shared-schemas';
 

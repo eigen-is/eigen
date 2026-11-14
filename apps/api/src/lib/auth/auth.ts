@@ -31,6 +31,7 @@ import { sendMail } from '../mailer/mailer';
 import { reconcileShares } from '../share';
 import { getTeamExists } from '../team';
 import { getOrgRole, getUserById, isGuest } from '../user';
+import { pushTeamAvatar } from '../user/avatars';
 import { ensureAuthSchemaColumns } from './auth-schema-columns';
 
 // The columns better-auth needs are added before it first reads the database.
@@ -218,10 +219,9 @@ export const auth = betterAuth({
                     await busyHomeAsConflict(() => teardownTeamData(team.id));
                 },
                 afterDeleteTeam: async ({ team }) => {
-                    // Lazy imports to avoid the static cycle (home-relay → get-home → team → auth).
+                    // Lazy import to avoid the static cycle (get-home → team → auth).
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(teamOwnerId(team.id));
-                    const { pushTeamAvatar } = await import('../home/home-relay');
                     await pushTeamAvatar(team.id, null);
                 },
             },

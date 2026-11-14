@@ -23,7 +23,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { homeSize } from '../../lib/home/home';
-import { pullHomeSize } from '../../lib/home/home-relay';
+import { pullHomeSize } from '../../lib/home/server-jobs';
 import type { TeamHome } from '../../lib/home/team-home';
 import * as s3Storage from '../../lib/storage/s3-storage';
 import {

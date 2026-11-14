@@ -21,6 +21,7 @@ import { updateServerSettings } from '../../lib/config/server-settings';
 import { getServerStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
+import * as serverJobs from '../../lib/home/server-jobs';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
@@ -452,8 +453,8 @@ describe('Upload of server archives', () => {
             'an archive with a home that failed still goes, since it verified',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const pull = homeRelay.pullHomeSnapshot;
-                const broken = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(
+                const pull = serverJobs.pullHomeSnapshot;
+                const broken = spyOn(serverJobs, 'pullHomeSnapshot').mockImplementation(
                     async (ownerId, dir, options) => {
                         if (ownerId === ctx.alice.user.id) throw new Error('bucket unreachable');
                         return pull(ownerId, dir, options);

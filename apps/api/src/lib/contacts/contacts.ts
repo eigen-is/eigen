@@ -18,8 +18,8 @@ import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '
 import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
-import { pushUserProfile } from '../home/home-relay';
 import { getOrgOwner } from '../user';
+import { pushUserProfile } from '../user/avatars';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';

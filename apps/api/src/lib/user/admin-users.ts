@@ -11,7 +11,7 @@ import { member, session, team, teamMember, user } from '../../../auth-schema';
 import { Semaphore } from '../../utils/semaphore';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
-import { pullHomeSize } from '../home/home-relay';
+import { pullHomeSize } from '../home/server-jobs';
 import { GUEST_ROLE } from './guest';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
