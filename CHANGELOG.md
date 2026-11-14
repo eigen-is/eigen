@@ -52,6 +52,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode
 - **Guest count in Calendar** — the organizer counts as an accepted guest, so the replies add up to the number of guests
 - **Guest names in Calendar** — a guest you add by typing an address takes the name from your contacts, or shows the address, not the part before the @
+- **New chats** — a chat you start with a contact by typing their address is named after the contact, not the part before the @
 - **Keyboard in Drive's grid** — the item under the keyboard cursor gets the stripe a list row shows, so it no longer looks selected
 - **Team drives on a phone** — **Move to**, **Copy to** and **Save to Drive** have a drive picker above the folders on a phone, so a file can go to a team drive
 
