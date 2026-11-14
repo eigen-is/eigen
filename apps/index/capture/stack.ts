@@ -11,7 +11,9 @@ import { join } from 'node:path';
 import { APP_PORTS } from '../../../vite.shared.config';
 import { DEMO_MAIL_DOMAIN } from '../../api/src/scripts/demo/content';
 import type { Stack } from './lib/scene';
-import { CAPTURE_ROOT } from './record';
+
+// The tool's scratch folder, which every run starts by wiping: the seeded data root, the logs, the frames.
+export const CAPTURE_ROOT = '/tmp/eigen-capture';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const DATA_ROOT = join(CAPTURE_ROOT, 'data');

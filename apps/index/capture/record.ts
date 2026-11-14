@@ -10,17 +10,14 @@ import type { Page } from 'playwright-core';
 import type { Frame, Output } from './lib/ffmpeg';
 import { concatList, encodeArgs, startingAt } from './lib/ffmpeg';
 import type { Scene } from './lib/scene';
-
-// The tool's scratch folder, which every run starts by wiping: the seeded data root, the logs, the frames.
-export const CAPTURE_ROOT = '/tmp/eigen-capture';
+import { CAPTURE_ROOT } from './stack';
 
 const MEDIA_DIR = join(import.meta.dir, '..', 'public', 'data', 'about', 'media');
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
 
 // A quiet grey seam, so two pages in one theme don't run into each other.
-const GAP_COLOR: Record<Scene['theme'], string> = { light: '#d4d4d4', dark: '#3a3a3a' };
-const GAP = 24;
+const SEAM_COLOR: Record<Scene['theme'], string> = { light: '#d4d4d4', dark: '#3a3a3a' };
 
 // The first page, or every page side by side when the scene asks for it.
 export async function recordVideo(pages: readonly Page[], scene: Scene, run: () => Promise<void>): Promise<void> {
@@ -28,7 +25,8 @@ export async function recordVideo(pages: readonly Page[], scene: Scene, run: () 
     rmSync(sceneDir, { recursive: true, force: true });
     mkdirSync(OUT_DIR, { recursive: true });
 
-    const filmed = scene.composite === 'side-by-side' ? pages : pages.slice(0, 1);
+    const sideBySide = scene.composite === 'side-by-side';
+    const filmed = sideBySide ? pages : pages.slice(0, 1);
     const recordings = await Promise.all(
         filmed.map((page, i) => startScreencast(page, scene, join(sceneDir, String(i)))),
     );
@@ -43,7 +41,9 @@ export async function recordVideo(pages: readonly Page[], scene: Scene, run: () 
         writeFileSync(listPath, concatList(startingAt(frames, start), stopTime));
         return listPath;
     });
-    const layout = { height: scene.viewport.height * 2, gap: GAP, color: GAP_COLOR[scene.theme] };
+    // Pages side by side stay at 1x, since two at double density pass the AV1 level the site declares for its videos.
+    const height = sideBySide ? scene.viewport.height : scene.viewport.height * 2;
+    const layout = { height, color: SEAM_COLOR[scene.theme] };
     const encode = (output: Output, file: string) => exec('ffmpeg', encodeArgs(output, listPaths, layout, file));
     const outputs = [`${scene.name}.av1.mp4`, `${scene.name}.h264.mp4`, `${scene.name}.webp`];
     const posterPng = join(sceneDir, 'poster.png');
