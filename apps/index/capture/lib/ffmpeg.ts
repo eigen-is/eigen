@@ -1,12 +1,14 @@
 // The ffmpeg side of the capture recorder: the concat list that times one page's screencast frames, and the arguments
 // that turn one list or more into an AV1 or H.264 mp4 at a steady 30 fps, or a png of the first frame for the poster.
-// More than one page stand side by side, with a gap in the theme's background between them. It imports nothing from
-// the browser, so its tests run without the capture tool's own install.
+// More than one page stand side by side, with a quiet grey seam between them. It imports nothing from the browser, so
+// its tests run without the capture tool's own install.
 
 export type Frame = { file: string; time: number };
 export type Output = 'av1' | 'h264' | 'poster';
-// Every page is scaled to one height, and a gap that wide in that color separates two pages, both in pixels.
-export type Layout = { height: number; gap: number; color: string };
+// Every page is scaled to one height in pixels, and a seam in that color separates two pages.
+export type Layout = { height: number; color: string };
+
+const SEAM_WIDTH = 24;
 
 // A screen recording barely changes from frame to frame, so one keyframe per loop (600 frames, 20 s) halves the
 // files. At these settings AV1 comes out at about two thirds of H.264's size and still looks sharper.
@@ -27,19 +29,20 @@ export function startingAt(frames: readonly Frame[], start: number): Frame[] {
 
 // The concat demuxer gives each file the duration under it, and needs the last file again to honor the last one.
 export function concatList(frames: readonly Frame[], stopTime: number): string {
+    const shown = frames.filter((frame) => frame.time < stopTime);
     const lines = ['ffconcat version 1.0'];
-    for (const [i, frame] of frames.entries()) {
-        const until = frames[i + 1]?.time ?? stopTime;
+    for (const [i, frame] of shown.entries()) {
+        const until = shown[i + 1]?.time ?? stopTime;
         lines.push(`file '${frame.file}'`, `duration ${(until - frame.time).toFixed(3)}`);
     }
-    lines.push(`file '${frames[frames.length - 1].file}'`, '');
+    lines.push(`file '${shown[shown.length - 1].file}'`, '');
     return lines.join('\n');
 }
 
 export function encodeArgs(output: Output, listPaths: readonly string[], layout: Layout, outPath: string): string[] {
     const last = listPaths.length - 1;
-    const gap = `,pad=iw+${layout.gap}:ih:0:0:color=${layout.color}`;
-    const pages = listPaths.map((_, i) => `[${i}:v]fps=30,scale=-2:${layout.height}${i < last ? gap : ''}[p${i}]`);
+    const seam = `,pad=iw+${SEAM_WIDTH}:ih:0:0:color=${layout.color}`;
+    const pages = listPaths.map((_, i) => `[${i}:v]fps=30,scale=-2:${layout.height}${i < last ? seam : ''}[p${i}]`);
     const inputs = listPaths.map((_, i) => `[p${i}]`).join('');
     const stack = last > 0 ? `hstack=inputs=${listPaths.length},` : '';
     return [

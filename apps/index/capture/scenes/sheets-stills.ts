@@ -24,9 +24,9 @@ export const sheetsStillChart = {
     ...still,
     name: 'sheets-still-chart',
     theme: 'dark',
-    run: async ({ pages: [page], stack, hold }) => {
+    run: async ({ pages: [page], stack }) => {
         await openBudget(page, stack);
         await page.locator('text="Charts"').dispatchEvent('click');
-        await hold(3000);
+        await Bun.sleep(3000);
     },
 } satisfies Scene;

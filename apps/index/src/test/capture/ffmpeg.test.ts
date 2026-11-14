@@ -1,6 +1,3 @@
-// Tests the ffmpeg side of the capture tool's recorder: the concat list that times each screencast frame, the cut that
-// lines pages up on one start, and the encoder arguments, side by side included.
-
 import { describe, expect, test } from 'bun:test';
 import { concatList, encodeArgs, startingAt } from '../../../capture/lib/ffmpeg';
 
@@ -20,6 +17,23 @@ describe('concatList', () => {
             "file '/f/2.jpg'",
             'duration 0.750',
             "file '/f/2.jpg'",
+            '',
+        ]);
+    });
+
+    test('a frame sent after stop is dropped, so no duration is negative', () => {
+        const frames = [
+            { file: '/f/0.jpg', time: 0 },
+            { file: '/f/1.jpg', time: 0.5 },
+            { file: '/f/2.jpg', time: 1.2 },
+        ];
+        expect(concatList(frames, 1).split('\n')).toEqual([
+            'ffconcat version 1.0',
+            "file '/f/0.jpg'",
+            'duration 0.500',
+            "file '/f/1.jpg'",
+            'duration 0.500',
+            "file '/f/1.jpg'",
             '',
         ]);
     });
@@ -45,7 +59,7 @@ describe('startingAt', () => {
 });
 
 describe('encodeArgs', () => {
-    const layout = { height: 1600, gap: 24, color: '#ffffff' };
+    const layout = { height: 800, color: '#d4d4d4' };
 
     test('av1 uses SVT-AV1 at 30 fps and ends with the output', () => {
         const args = encodeArgs('av1', ['/f/list.txt'], layout, '/out/x.av1.mp4');
@@ -69,14 +83,14 @@ describe('encodeArgs', () => {
 
     test('one page is scaled to the height and stacks nothing', () => {
         const args = encodeArgs('h264', ['/f/list.txt'], layout, '/out/x.h264.mp4');
-        expect(args[args.indexOf('-filter_complex') + 1]).toBe('[0:v]fps=30,scale=-2:1600[p0];[p0]format=yuv420p[out]');
+        expect(args[args.indexOf('-filter_complex') + 1]).toBe('[0:v]fps=30,scale=-2:800[p0];[p0]format=yuv420p[out]');
     });
 
-    test('two pages stand side by side, the first padded with the gap in the background color', () => {
+    test('two pages stand side by side, the first padded with the seam', () => {
         const args = encodeArgs('av1', ['/f/0.txt', '/f/1.txt'], layout, '/out/x.av1.mp4');
         expect(args.filter((arg) => arg === '-i')).toHaveLength(2);
         expect(args[args.indexOf('-filter_complex') + 1]).toBe(
-            '[0:v]fps=30,scale=-2:1600,pad=iw+24:ih:0:0:color=#ffffff[p0];[1:v]fps=30,scale=-2:1600[p1];' +
+            '[0:v]fps=30,scale=-2:800,pad=iw+24:ih:0:0:color=#d4d4d4[p0];[1:v]fps=30,scale=-2:800[p1];' +
                 '[p0][p1]hstack=inputs=2,format=yuv420p[out]',
         );
         expect(args.slice(args.indexOf('-map'), args.indexOf('-map') + 2)).toEqual(['-map', '[out]']);

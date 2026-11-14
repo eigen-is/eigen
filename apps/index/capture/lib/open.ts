@@ -4,31 +4,27 @@
 
 import type { Page } from 'playwright-core';
 import type { DrivePath } from '../../../../packages/lib/src/types/drive';
-import {
-    DRIVE_MIME_DOC,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
-    DRIVE_MIME_VECTOR,
-} from '../../../../packages/lib/src/types/drive';
+import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '../../../../packages/lib/src/types/drive';
 import type { Stack } from './scene';
 
-const EDITORS = {
-    [DRIVE_MIME_DOC]: { app: 'docs', route: '/doc' },
-    [DRIVE_MIME_SHEETS]: { app: 'sheets', route: '/sheet' },
-    [DRIVE_MIME_SLIDES]: { app: 'slides', route: '/slide' },
-    [DRIVE_MIME_VECTOR]: { app: 'vector', route: '/vector' },
-    [DRIVE_MIME_STICKIES]: { app: 'stickies', route: '/board' },
-};
+// The editor's route under its app, for each type a scene opens.
+const EDITOR_ROUTES = { doc: '/doc', sheets: '/sheet', slides: '/slide', vector: '/vector', stickies: '/board' };
 
-export async function openFile(page: Page, stack: Stack, mimeType: keyof typeof EDITORS, name: string): Promise<void> {
+export async function openFile(
+    page: Page,
+    stack: Stack,
+    type: keyof typeof EDITOR_ROUTES,
+    name: string,
+): Promise<void> {
+    const { urlSlug, appName } = EIGEN_DOC_TYPE_INFO[type];
+    // Lib's typed clients are the browser's, so this script reads the API's JSON as the routes return it.
     const { user }: { user: { id: string } } = await (
         await page.request.get(`${stack.apiUrl}/auth/get-session`)
     ).json();
-    const res = await page.request.get(`${stack.apiUrl}/drive/${user.id}/mime/${mimeType.replace('/', '-')}?teams=1`);
-    const paths: DrivePath[] = await res.json();
-    const file = paths.find((path) => path.name === `${name}.${mimeType.split('/')[1]}`);
-    if (!file) throw new Error(`No ${mimeType} named ${name}`);
-    const { app, route } = EDITORS[mimeType];
-    await page.goto(`${stack.appUrl(app)}${route}/${file.ownerId}/${file.mountId}/${file.id}`);
+    const paths: DrivePath[] = await (
+        await page.request.get(`${stack.apiUrl}/drive/${user.id}/mime/${urlSlug}?teams=1`)
+    ).json();
+    const file = paths.find((path) => path.name === withEigenExtension(name, type));
+    if (!file) throw new Error(`No ${type} named ${name}`);
+    await page.goto(`${stack.appUrl(appName)}${EDITOR_ROUTES[type]}/${file.ownerId}/${file.mountId}/${file.id}`);
 }

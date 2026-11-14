@@ -18,8 +18,6 @@ export type SceneContext = {
     // One per page, in the same order.
     cursors: Cursor[];
     stack: Stack;
-    type: (page: Page, text: string) => Promise<void>;
-    hold: (ms: number) => Promise<void>;
 };
 
 export type Scene = {

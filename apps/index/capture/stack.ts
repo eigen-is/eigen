@@ -9,11 +9,11 @@ import { randomBytes } from 'node:crypto';
 import { mkdirSync, openSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { APP_PORTS } from '../../../vite.shared.config';
+import { DEMO_MAIL_DOMAIN } from '../../api/src/scripts/demo/content';
 import type { Stack } from './lib/scene';
-import { CAPTURE_ROOT } from './record';
 
-// The seeder's own default, set here so the API and the persona emails agree with it.
-export const MAIL_DOMAIN = 'tuimel.example';
+// The tool's scratch folder, which every run starts by wiping: the seeded data root, the logs, the frames.
+export const CAPTURE_ROOT = '/tmp/eigen-capture';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const DATA_ROOT = join(CAPTURE_ROOT, 'data');
@@ -52,7 +52,12 @@ export async function startStack({ apps }: { apps: readonly string[] }): Promise
     try {
         rmSync(CAPTURE_ROOT, { recursive: true, force: true });
         mkdirSync(LOG_DIR, { recursive: true });
-        const env = { ...process.env, EIGEN_DATA_ROOT: DATA_ROOT, MAIL_DOMAIN, DOMAIN: MAIL_DOMAIN };
+        const env = {
+            ...process.env,
+            EIGEN_DATA_ROOT: DATA_ROOT,
+            MAIL_DOMAIN: DEMO_MAIL_DOMAIN,
+            DOMAIN: DEMO_MAIL_DOMAIN,
+        };
 
         console.log('Seeding the demo world…');
         const seeder = start('seed', ['bun', '--no-env-file', 'src/scripts/seed-demo.ts'], 'apps/api', {

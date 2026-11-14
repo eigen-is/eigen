@@ -64,6 +64,8 @@ export const PERSONAS: Persona[] = [
 
 export const ADMIN_NAME = 'Tuimel Admin';
 export const ADMIN_LOCALPART = 'office';
+// The mail domain the seeder uses when MAIL_DOMAIN is unset.
+export const DEMO_MAIL_DOMAIN = 'tuimel.example';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
@@ -1966,4 +1968,8 @@ export function personaByKey(key: string): Persona {
     const persona = PERSONAS.find((p) => p.key === key);
     if (!persona) throw new Error(`No persona for key ${key}`);
     return persona;
+}
+
+export function emailFor(localPart: string, mailDomain: string): string {
+    return `${localPart}@${mailDomain}`;
 }
