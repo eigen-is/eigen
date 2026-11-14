@@ -234,11 +234,6 @@ export async function pullSharedPaths(ownerId: string, user: User): Promise<Driv
     return home.drive.getAllSharedWith(user);
 }
 
-export async function pullDrivePath(ownerId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
-    const home = await getHome(ownerId);
-    return home.drive.getPath(mountId, pathId);
-}
-
 // The paths a user's own rows name, such as those of Recent, as far as the user may still see them: one read per
 // owner, who answers from the path as it is now.
 export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
@@ -308,12 +303,6 @@ export async function pullTeamMounts(ownerId: string): Promise<MyTeam['mounts']>
             return { id, name: mount.name || id, rootPathId: root?.id ?? null };
         }),
     );
-}
-
-// The mail about a team notification goes to the same members that the notification reaches.
-export async function pullTeamMembersToNotify(ownerId: string, actorEmail: string): Promise<User[]> {
-    const home = await getTeamHome(ownerId);
-    return home.membersToNotify(actorEmail);
 }
 
 // A team member may read the whole team drive, by design. So the caller's membership check is the

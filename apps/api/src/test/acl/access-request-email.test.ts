@@ -1,9 +1,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { orgOwnerId } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { assertJson, authedRequest, driveGet, drivePost, eventually, getTestContext } from '../setup';
+import { getServerConfig } from '../../lib/config/server-config';
+import { assertJson, authedRequest, driveDelete, driveGet, drivePost, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -122,11 +124,68 @@ describe('Access-request email', () => {
         spy.mockRestore();
     });
 
+    test('a missing or trashed path answers 200 and notifies and mails nobody', async () => {
+        const { spy, toAlice } = await catchMail();
+        const doc = await createDoc('access-request-trashed');
+        await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
+
+        expect((await requestAccess('no-such-path')).status).toBe(200);
+        expect((await requestAccess(doc.id)).status).toBe(200);
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(toAlice().length).toBe(0);
+        const notifs = await assertJson<Notification[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`),
+        );
+        expect(notifs.filter((n) => n.tag?.includes(`:${doc.id}:`))).toHaveLength(0);
+        spy.mockRestore();
+    });
+
+    test('an unknown mount, or the org, which has no drive, answers 404 and mails nobody', async () => {
+        const { spy } = await catchMail();
+        const doc = await createDoc('access-request-unknown-mount');
+        const unknownMount = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/no-such-mount/path/${doc.id}/request-access`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        );
+        const org = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${orgOwnerId(getServerConfig()!.orgId)}/${aliceMountId}/path/${doc.id}/request-access`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        );
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(unknownMount.status).toBe(404);
+        expect(org.status).toBe(404);
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+    });
+
     // Finding #15: the route accepted an unbounded message and any authenticated caller.
     test('rejects an oversized message with 422', async () => {
         const doc = await createDoc('access-request-huge');
         const res = await requestAccess(doc.id, { message: 'x'.repeat(100_000) });
         expect(res.status).toBe(422);
+    });
+
+    test('mails the address the owner has now, not the one their open Home started with', async () => {
+        const { spy } = await catchMail();
+        const doc = await createDoc('access-request-new-address');
+        const newEmail = `renamed-${crypto.randomUUID()}@example.com`;
+        const db = getAuthDrizzleDb();
+        db.update(userSchema).set({ email: newEmail }).where(eq(userSchema.id, ctx.alice.user.id)).run();
+        try {
+            await requestAccess(doc.id);
+            const toNew = () => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === newEmail));
+            expect(await eventually(async () => (toNew().length ? toNew() : undefined), 'the mail')).toHaveLength(1);
+        } finally {
+            db.update(userSchema)
+                .set({ email: ctx.alice.user.email })
+                .where(eq(userSchema.id, ctx.alice.user.id))
+                .run();
+            spy.mockRestore();
+        }
     });
 
     test('rejects a guest caller with 403', async () => {
