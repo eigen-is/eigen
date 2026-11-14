@@ -1,7 +1,7 @@
 // A markdown-it plugin for the media blocks the site's Markdown writes as fences, such as a looping video, a carousel
 // or a side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build
 // time, so a block with a mistake in it, or a video whose files are not under the public folder, fails the build
-// instead of shipping a broken page. The page wires up the carousel buttons.
+// instead of shipping a broken page. The page wires up the carousel buttons and starts the videos.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -55,14 +55,16 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
             if (name === 'video') {
                 const src = attrs.get('src');
                 if (!src) throw new Error(`${where} needs a src`);
+                if (!src.startsWith('/')) throw new Error(`${where} needs a src that starts with /`);
                 if (closeLine > startLine + 1) throw new Error(`${where} takes no body`);
                 for (const ext of VIDEO_FILES) {
                     const file = join(publicDir, `${src}${ext}`);
                     if (!existsSync(file)) throw new Error(`${where} has no file ${file}`);
                 }
                 const base = escapeHtml(src);
+                // Every video stays within level 4.0, about 2048×1152, so a browser that says yes to it can decode it.
                 html(
-                    `<figure class="media-video"><video autoplay muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
+                    `<figure class="media-video"><video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
                 );
             } else if (name === 'carousel') {
                 html(

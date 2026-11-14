@@ -19,10 +19,10 @@ afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
 const render = (markdown: string) => new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir }).render(markdown);
 
 describe('video', () => {
-    test('a video block plays a muted loop with both encodes and a poster', () => {
+    test('a video block is a muted loop with both encodes and a poster, which the page starts', () => {
         const html = render('::: video src="/data/about/media/a" caption="Two people at once"\n:::');
-        expect(html).toContain('<figure class="media-video">');
-        expect(html).toContain('autoplay muted loop playsinline');
+        expect(html).toContain('<figure class="media-video"><video muted loop playsinline preload="metadata"');
+        expect(html).not.toContain('autoplay');
         expect(html).toContain('poster="/data/about/media/a.webp"');
         expect(html).toContain('src="/data/about/media/a.av1.mp4"');
         expect(html).toContain('src="/data/about/media/a.h264.mp4"');
@@ -37,6 +37,10 @@ describe('video', () => {
 
     test('a video without src fails the build', () => {
         expect(() => render('::: video\n:::')).toThrow('src');
+    });
+
+    test('a video with a relative src fails the build with its line', () => {
+        expect(() => render('Intro\n\n::: video src="data/about/media/a"\n:::')).toThrow('line 3');
     });
 });
 

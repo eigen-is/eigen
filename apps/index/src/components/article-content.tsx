@@ -1,7 +1,7 @@
 // The rendered body of an article, a post or the changelog, in the site's prose style. The build leaves the HTML
 // and a marker for each media grid, so this draws the HTML as it is and each grid as a component. It lets a click
-// on a heading with a link icon copy the link and a carousel's buttons page its images, and stops looping videos
-// for a reader who asked for less motion. Every page of the public site that shows Markdown uses it.
+// on a heading with a link icon copy the link and a carousel's buttons page its images, and starts the looping
+// videos unless the reader asked for less motion. Every page of the public site that shows Markdown uses it.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { cn } from '@workspace/ui/lib/utils';
@@ -30,19 +30,19 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
 
     const ref = useRef<HTMLDivElement>(null);
 
-    // A looping video holds still for a reader who asked for less motion, with controls to start it by hand.
+    // The build writes no autoplay, so a loop never moves before hydration for a reader who asked for less motion.
     useEffect(() => {
         const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-        const holdVideos = () => {
-            if (!reduceMotion.matches) return;
-            for (const video of ref.current?.querySelectorAll<HTMLVideoElement>('video[autoplay]') ?? []) {
-                video.pause();
-                video.controls = true;
+        const startVideos = () => {
+            for (const video of ref.current?.querySelectorAll<HTMLVideoElement>('.media-video video') ?? []) {
+                video.controls = reduceMotion.matches;
+                if (reduceMotion.matches) video.pause();
+                else video.play().catch(() => {});
             }
         };
-        holdVideos();
-        reduceMotion.addEventListener('change', holdVideos);
-        return () => reduceMotion.removeEventListener('change', holdVideos);
+        startVideos();
+        reduceMotion.addEventListener('change', startVideos);
+        return () => reduceMotion.removeEventListener('change', startVideos);
     }, [body.html]);
 
     // A carousel button pages by the strip's own width, since each image fills it.
