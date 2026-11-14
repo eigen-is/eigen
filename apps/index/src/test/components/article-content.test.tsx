@@ -125,19 +125,23 @@ describe('autoplay carousel', () => {
         expect(strip.scrollLeft).toBe(0);
     });
 
-    test('waits while the pointer is over it', async () => {
+    test('waits while the pointer is over it or focus is inside it', async () => {
         stubReducedMotion(false);
         const { container, strip, wait } = await renderAutoplay();
         const carousel = container.querySelector('.media-carousel');
-        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseenter')));
+        // happy-dom matches neither :hover nor :focus-within, so the test says when the reader is there.
+        let readerThere = true;
+        Object.defineProperty(carousel, 'matches', {
+            value: (selector: string) => selector === ':hover, :focus-within' && readerThere,
+        });
         await wait(15000);
         expect(strip.scrollLeft).toBe(0);
-        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseleave')));
+        readerThere = false;
         await wait(7500);
         expect(strip.scrollLeft).toBe(600);
     });
 
-    test('stops for good once the reader uses it', async () => {
+    test('stops for good once the reader moved it', async () => {
         stubReducedMotion(false);
         const { strip, next, wait } = await renderAutoplay();
         await act(async () => next.click());
@@ -145,16 +149,13 @@ describe('autoplay carousel', () => {
         expect(strip.scrollLeft).toBe(600);
     });
 
-    test('stops for a sideways wheel, but not for an upright one that scrolls the page past', async () => {
+    test('stops for good after a swipe to another slide', async () => {
         stubReducedMotion(false);
-        const { container, strip, wait } = await renderAutoplay();
-        const carousel = container.querySelector('.media-carousel');
-        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 })));
+        const { strip, scrollTo, wait } = await renderAutoplay();
         await wait(7500);
-        expect(strip.scrollLeft).toBe(600);
-        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaX: 100 })));
-        await wait(15000);
-        expect(strip.scrollLeft).toBe(600);
+        await scrollTo(1200);
+        await wait(30000);
+        expect(strip.scrollLeft).toBe(1200);
     });
 
     test('never moves for a reader who asked for less motion', async () => {

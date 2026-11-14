@@ -24,61 +24,12 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
     });
 
     // The build writes no autoplay, so a loop never moves before hydration for a reader who asked for less motion.
-    useEffect(() => {
-        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-        const startVideos = () => {
-            if (ref.current) playVideosInView(ref.current);
-        };
-        startVideos();
-        reduceMotion.addEventListener('change', startVideos);
-        return () => reduceMotion.removeEventListener('change', startVideos);
-    }, [body.html]);
-
-    // An autoplay carousel waits while the reader points at it or is inside it, or the tab is hidden, and stops for
-    // good once they use it: a click, a key, or a sideways wheel or swipe. An upright one only scrolls the page past.
-    useEffect(() => {
-        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-        const done = new AbortController();
-        const timers: ReturnType<typeof setInterval>[] = [];
-        for (const carousel of ref.current?.querySelectorAll<HTMLElement>('.media-carousel[data-autoplay]') ?? []) {
-            const strip = carousel.querySelector('.media-carousel-strip');
-            if (!strip) continue;
-            let pointedAt = false;
-            const timer = setInterval(() => {
-                if (reduceMotion.matches || document.hidden || pointedAt || carousel.contains(document.activeElement)) {
-                    return;
-                }
-                const { pitch, current } = carouselPosition(strip);
-                strip.scrollTo({ left: ((current + 1) % strip.children.length) * pitch });
-            }, AUTOPLAY_MS);
-            timers.push(timer);
-            const { signal } = done;
-            carousel.addEventListener('mouseenter', () => (pointedAt = true), { signal });
-            carousel.addEventListener('mouseleave', () => (pointedAt = false), { signal });
-            const stop = () => clearInterval(timer);
-            carousel.addEventListener('click', stop, { signal });
-            carousel.addEventListener('keydown', stop, { signal });
-            const sideways = (x: number, y: number) => Math.abs(x) > Math.abs(y);
-            carousel.addEventListener('wheel', (e) => sideways(e.deltaX, e.deltaY) && stop(), { signal });
-            let touchStart = { clientX: 0, clientY: 0 };
-            carousel.addEventListener('touchstart', (e) => (touchStart = e.touches[0]), { signal });
-            carousel.addEventListener(
-                'touchmove',
-                (e) =>
-                    sideways(e.touches[0].clientX - touchStart.clientX, e.touches[0].clientY - touchStart.clientY) &&
-                    stop(),
-                { signal },
-            );
-        }
-        return () => {
-            done.abort();
-            for (const timer of timers) clearInterval(timer);
-        };
-    }, [body.html]);
-
     // Scroll does not bubble, so the root hears each carousel strip's in the capture phase.
     useEffect(() => {
         const root = ref.current;
+        if (!root) return;
+        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+        const playVideos = () => playVideosInView(root, reduceMotion.matches);
         const onScroll = (e: Event) => {
             const strip = e.target;
             if (!(strip instanceof Element) || !strip.matches('.media-carousel-strip')) return;
@@ -93,11 +44,33 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             for (const button of carousel.querySelectorAll<HTMLButtonElement>('.media-carousel-steps button')) {
                 button.disabled = button.matches('.media-carousel-prev') ? current <= 0 : current >= dots.length - 1;
             }
-            playVideosInView(carousel);
+            playVideosInView(carousel, reduceMotion.matches);
         };
-        root?.addEventListener('scroll', onScroll, true);
-        return () => root?.removeEventListener('scroll', onScroll, true);
-    }, []);
+        // An autoplay carousel waits while the reader points at it or is inside it. It remembers the slide it scrolled
+        // to, so a strip on any other slide is the reader's doing, and it stops for good.
+        const timers: ReturnType<typeof setInterval>[] = [];
+        for (const carousel of root.querySelectorAll('.media-carousel[data-autoplay]')) {
+            const strip = carousel.querySelector('.media-carousel-strip');
+            if (!strip) continue;
+            let shown = 0;
+            const timer = setInterval(() => {
+                if (reduceMotion.matches || document.hidden || carousel.matches(':hover, :focus-within')) return;
+                const { pitch, current } = carouselPosition(strip);
+                if (current !== shown) return clearInterval(timer);
+                shown = (current + 1) % strip.children.length;
+                strip.scrollTo({ left: shown * pitch });
+            }, AUTOPLAY_MS);
+            timers.push(timer);
+        }
+        playVideos();
+        reduceMotion.addEventListener('change', playVideos);
+        root.addEventListener('scroll', onScroll, true);
+        return () => {
+            reduceMotion.removeEventListener('change', playVideos);
+            root.removeEventListener('scroll', onScroll, true);
+            for (const timer of timers) clearInterval(timer);
+        };
+    }, [body.html]);
 
     // A heading copies its link only where its icon shows, as touch screens hide it, and never over a selection.
     const onClick = (e: MouseEvent) => {
@@ -186,8 +159,7 @@ function carouselPosition(strip: Element) {
 
 // A looping video plays while it is in view, which in a carousel means on the slide its dots mark, and holds still
 // with controls for a reader who asked for less motion.
-function playVideosInView(scope: Element) {
-    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function playVideosInView(scope: Element, reduceMotion: boolean) {
     for (const video of scope.querySelectorAll<HTMLVideoElement>('figure video')) {
         const carousel = video.closest('.media-carousel');
         const dots = Array.from(carousel?.querySelectorAll('.media-carousel-dot') ?? []);
