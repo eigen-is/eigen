@@ -20,8 +20,9 @@ function aboutMeta(slug: string): ArticleMeta {
     };
 }
 
-async function renderPage(previous?: ArticleMeta, next?: ArticleMeta): Promise<string> {
-    const [app] = aboutApps;
+async function renderPage(previous?: ArticleMeta, next?: ArticleMeta, slug = 'mail'): Promise<string> {
+    const app = aboutApps.find((entry) => entry.slug === slug);
+    if (!app) throw new Error(`No app ${slug}`);
     const router = createRouter({
         routeTree: createRootRoute({
             component: () => (
@@ -29,7 +30,7 @@ async function renderPage(previous?: ArticleMeta, next?: ArticleMeta): Promise<s
                     <AboutPage
                         app={app}
                         page={aboutMeta(app.slug)}
-                        body={{ html: '<p>Body</p>', mediaGrids: [] }}
+                        body={{ html: '<p>Body</p><p>[BLOCK:formats]</p>', mediaGrids: [] }}
                         previous={previous}
                         next={next}
                     />
@@ -49,5 +50,16 @@ describe('AboutPage', () => {
 
     test('a page with a next page links it', async () => {
         expect(await renderPage(undefined, aboutMeta('docs'))).toContain('href="/about/docs"');
+    });
+
+    test('an app that opens and saves open formats shows them in a panel, with the article that explains it', async () => {
+        const html = await renderPage(undefined, undefined, 'sheets');
+        expect(html).toContain('Open, and yours to take');
+        expect(html).toContain('>.xlsx</span>');
+        expect(html).toContain('href="/support/sheets/import-excel"');
+    });
+
+    test('an app with nothing to take out shows no such panel', async () => {
+        expect(await renderPage(undefined, undefined, 'chat')).not.toContain('Open, and yours to take');
     });
 });

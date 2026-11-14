@@ -1,9 +1,12 @@
 // An app's About page: the headline your own|sheets⟩ with the page's description and the admin's links, then the
-// body, which ends with the block for the reader's technical person, and a pager to the previous and the next app.
-// It reads like a blog post, in the reading column with the table of contents in the gutter.
+// body, which ends with a panel on the files and protocols the app speaks, if any, and one for the reader's technical
+// person, and a pager to the previous and the next app. It reads like a blog post, in the reading column with the
+// table of contents in the gutter.
 
+import { Badge } from '@workspace/ui/components/badge';
 import type { AboutApp } from '../content/about-apps';
 import type { ArticleBody, ArticleMeta } from '../content/manifest';
+import { getSupportArticles } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
 import { ArticleBreadcrumb } from './article-breadcrumb';
 import { ArticleContent } from './article-content';
@@ -33,7 +36,7 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                     <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
                         <LandingLinks />
                     </div>
-                    <ArticleContent body={body} className="mt-8" />
+                    <ArticleContent body={body} blocks={{ formats: <FormatsPanel app={app} /> }} className="mt-8" />
                 </article>
                 {(previous || next) && (
                     <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
@@ -60,5 +63,27 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                 )}
             </ReadingLayout>
         </SitePage>
+    );
+}
+
+// Drawn in the body's prose, so it reads like the technical panel under it.
+function FormatsPanel({ app }: { app: AboutApp }) {
+    if (!app.formats) return null;
+    const { files, protocols, text, article } = app.formats;
+    const title = getSupportArticles().find((entry) => entry.slug === article)?.title;
+    return (
+        <aside className="site-panel">
+            <h2>Open, and yours to take</h2>
+            <p>
+                {text} More in <a href={`/support/${article}`}>{title}</a>.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+                {[...files, ...protocols].map((tag) => (
+                    <Badge key={tag} variant="outline">
+                        {tag}
+                    </Badge>
+                ))}
+            </div>
+        </aside>
     );
 }
