@@ -5,7 +5,6 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
-    contactFullName,
     useContacts,
     useDeleteContact,
     useImportContacts,
@@ -15,6 +14,7 @@ import {
 } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
@@ -86,7 +86,7 @@ function ContactsRoute() {
         });
     };
 
-    // Shared by the list context menu and the detail kebab — toggle one label across the batch.
+    // A label already on every selected contact comes off them all; otherwise it goes on the ones without it.
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
         const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
         await Promise.allSettled(
@@ -111,7 +111,7 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            // Team members carry a single display name — no first/last sort to offer, and the
+            // Team members carry a single display name, so there is no first or last name to sort by, and the
             // member list holds no cards to import into or export.
             onSortChange={filterType === 'team' ? undefined : setSortBy}
             onImportClick={filterType === 'team' ? undefined : () => setImportOpen(true)}

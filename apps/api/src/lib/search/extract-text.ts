@@ -1,5 +1,10 @@
+// The text the search index stores for one Drive file. The search drain calls extractText when a file is dirty.
+// Documents such as a doc or a sheet extract in the transform process, stickies and chats are read here, a .vcf
+// indexes by the names and addresses on its cards, and a plain text file by its first bytes.
+
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT, DRIVE_MIME_STICKIES, isDocumentType } from '@workspace/lib/types/drive';
 import { isVCardFile } from '@workspace/lib/types/file-kinds';
@@ -13,28 +18,8 @@ import type { Mount } from '../mount';
 import { parseVCardPreview } from '../preview/vcard-preview';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
-export function collectStickiesText(content: StickiesContent, cap: number): string {
-    const parts: string[] = [];
-    let total = 0;
-    const push = (s?: string) => {
-        if (s && total < cap) {
-            parts.push(s);
-            total += s.length;
-        }
-    };
-    for (const column of content.columns) push(column.title);
-    for (const task of content.tasks) {
-        push(task.title);
-        push(task.description);
-    }
-    return parts.join(' ');
-}
-
-// Body text for one indexable path, capped at ~100 KB. Dispatch by container mime: the heavy
-// collab types extract inside the transform process (extract-render.ts, at background
-// priority — nobody waits on a reindex), stickies/chat/plain files are light reads that stay
-// here. The drain loop catches and logs, so a refused or failed extract just leaves the row
-// dirty for a later drain — there is deliberately no main-thread fallback.
+// Nobody waits on a reindex, so the heavy extracts run at background priority. A failed one leaves the row dirty
+// for a later drain; there is no main-thread fallback.
 export async function extractText(mount: Mount, path: DrivePath): Promise<string> {
     // The container TYPE gates every document branch: mimeType is caller-controlled on upload, so a
     // plain file wearing an eigen mime keeps the raw-bytes read its content deserves instead of
@@ -67,10 +52,26 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     return bytes ? new TextDecoder().decode(bytes, { stream: true }) : '';
 }
 
-// A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across
-// physical lines isn't there to be matched. The cards come from the same transform job the preview runs
-// (PREVIEWS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
-// decoder refuses, index as nothing rather than staying dirty for every later drain.
+export function collectStickiesText(content: StickiesContent, cap: number): string {
+    const parts: string[] = [];
+    let total = 0;
+    const push = (s?: string) => {
+        if (s && total < cap) {
+            parts.push(s);
+            total += s.length;
+        }
+    };
+    for (const column of content.columns) push(column.title);
+    for (const task of content.tasks) {
+        push(task.title);
+        push(task.description);
+    }
+    return parts.join(' ');
+}
+
+// A .vcf's raw body is mostly base64 photo, and a name folded across lines isn't there to match, so it indexes by
+// its cards. A file over the import ceiling, or one the decoder refuses, indexes as nothing rather than staying
+// dirty for every later drain.
 async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> {
     if (path.size > VCARD_MAX_BYTES) return '';
 
@@ -92,12 +93,7 @@ async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> 
     let total = 0;
     for (const { contact } of parseVCardPreview(body).cards) {
         if (total >= CONTENT_INDEX_MAX_BYTES) break;
-        const line = [
-            `${contact.firstName} ${contact.lastName}`.trim(),
-            ...contact.email,
-            contact.company,
-            contact.jobTitle,
-        ]
+        const line = [contactFullName(contact), ...contact.email, contact.company, contact.jobTitle]
             .filter(Boolean)
             .join(' ');
         parts.push(line);

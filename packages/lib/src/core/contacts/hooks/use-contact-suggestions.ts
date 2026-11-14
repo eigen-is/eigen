@@ -5,8 +5,8 @@
 import { useMyTeams } from '@workspace/lib/home';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { useMemo } from 'react';
-import { contactFullName } from '../contact-names';
 import { useContacts } from './use-contacts';
 
 type TeamMemberSuggestion = { email: string; name: string; teamId: string };

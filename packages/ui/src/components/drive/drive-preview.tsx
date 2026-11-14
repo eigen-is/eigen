@@ -9,7 +9,6 @@ import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from 
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { contactFullName } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
@@ -22,6 +21,7 @@ import {
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { LucideIcon } from 'lucide-react';

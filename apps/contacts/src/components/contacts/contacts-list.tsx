@@ -4,8 +4,9 @@
 // the sort and the menu.
 
 import { useAuth } from '@workspace/lib/auth';
-import { contactFullName, useContacts, useExportContacts } from '@workspace/lib/contacts';
+import { useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { Button } from '@workspace/ui/components/button';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';

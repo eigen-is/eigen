@@ -3,8 +3,9 @@
 // for it, if there is one. Inviting yourself is refused with a note. The dialog owns the list and saves it with the
 // event.
 
-import { contactFullName, findContactByEmail, useContacts } from '@workspace/lib/contacts';
+import { useContacts } from '@workspace/lib/contacts';
 import type { Attendee } from '@workspace/lib/types/calendar';
+import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import { Badge } from '@workspace/ui/components/badge';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';

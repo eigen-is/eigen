@@ -5,6 +5,7 @@
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
@@ -367,7 +368,7 @@ export class Contacts {
 
             // A self-card edit renames the user org-wide, so its inputs are read before the write swaps the staged URL and pushed after the commit.
             const isSelf = row.eigenId === this.home.user.id;
-            const selfName = `${contact.firstName} ${contact.lastName}`;
+            const selfName = contactFullName(contact);
             let selfAvatarBuffer: Buffer | null = null;
             if (isSelf) {
                 if (contact.avatar) {

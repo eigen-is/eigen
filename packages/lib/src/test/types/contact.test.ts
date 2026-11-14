@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { contactFullName, findContactByEmail } from '../../../core/contacts/contact-names';
-import type { Contact } from '../../../types/contact';
+import type { Contact } from '../../types/contact';
+import { contactFullName, findContactByEmail } from '../../types/contact';
 
 const grace: Contact = {
     id: 'c1',
@@ -18,8 +18,9 @@ describe('contact names', () => {
         expect(findContactByEmail([grace], 'ada@example.com')).toBeUndefined();
     });
 
-    test('a full name leaves out an empty part', () => {
+    test('a full name leaves out an empty part and the padding of a part', () => {
         expect(contactFullName(grace)).toBe('Grace Hopper');
         expect(contactFullName({ ...grace, lastName: '' })).toBe('Grace');
+        expect(contactFullName({ ...grace, firstName: 'Grace ' })).toBe('Grace Hopper');
     });
 });

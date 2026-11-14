@@ -3,10 +3,10 @@
 
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { readableTextColor } from '@workspace/lib/constants/colors';
-import { contactFullName } from '@workspace/lib/contacts';
 import { formatDateOnly } from '@workspace/lib/date';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { Address, Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
 import { Badge } from '../badge';
