@@ -97,7 +97,7 @@ export function markdownBlocks(
                 );
                 const nextDisabled = slides.length < 2 ? ' disabled' : '';
                 html(
-                    `<figure class="media-carousel"${attrs.has('autoplay') ? ' data-autoplay' : ''}><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous image" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
+                    `<figure class="media-carousel"${attrs.has('autoplay') ? ' data-autoplay' : ''}><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Slides')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous slide" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next slide"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
                 );
             } else {
                 html('<figure class="media-side-by-side">\n');

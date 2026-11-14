@@ -58,8 +58,8 @@ describe('carousel and side by side', () => {
             '<button type="button" class="media-carousel-dot" aria-label="Slide 1 of 2" aria-current="true"></button>',
         );
         expect(html).toContain('<button type="button" class="media-carousel-dot" aria-label="Slide 2 of 2"></button>');
-        expect(html).toContain('class="media-carousel-prev" aria-label="Previous image" disabled>');
-        expect(html).toContain('class="media-carousel-next" aria-label="Next image">');
+        expect(html).toContain('class="media-carousel-prev" aria-label="Previous slide" disabled>');
+        expect(html).toContain('class="media-carousel-next" aria-label="Next slide">');
         expect(html.match(/<img /g)?.length).toBe(2);
         expect(html).toContain('<figcaption>The budget</figcaption></figure>');
     });
@@ -91,8 +91,8 @@ describe('carousel and side by side', () => {
 
     test('a carousel of one image has both buttons off', () => {
         const html = render('::: carousel\n![a](/a.webp)\n:::');
-        expect(html).toContain('aria-label="Images"');
-        expect(html).toContain('class="media-carousel-next" aria-label="Next image" disabled>');
+        expect(html).toContain('aria-label="Slides"');
+        expect(html).toContain('class="media-carousel-next" aria-label="Next slide" disabled>');
     });
 
     test('a carousel line that is not one image fails the build', () => {
