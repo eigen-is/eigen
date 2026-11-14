@@ -1,7 +1,7 @@
 // A block of code, a shell command or a log, such as Admin's restore steps: shadcn's Code Block, without its Shiki
 // highlighter. CodeBlockActions as a direct child floats in the top corner, shown on hover and taking no clicks while
-// hidden. Content scrolls or wraps, with optional line numbers. A
-// line can mark itself added, removed or highlighted. The copy button goes through copyToClipboard, as CopyInput does.
+// hidden. Content scrolls or wraps, with optional line numbers, and a line can mark itself added, removed or
+// highlighted. The copy button goes through copyToClipboard, as CopyInput does.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { cn } from '@workspace/ui/lib/utils';
@@ -104,7 +104,7 @@ function CodeBlockContent({
             tabIndex={0}
             style={{ counterReset: `line ${startLine - 1}`, ...style }}
             className={cn(
-                'min-h-0 min-w-0 overflow-auto px-3 py-3 text-start font-mono leading-relaxed outline-none group-has-data-[slot=code-block-footer]/code-block:pb-2 group-has-data-[slot=code-block-header]/code-block:pt-2 group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:py-2.5 group-data-[size=sm]/code-block:group-has-data-[slot=code-block-header]/code-block:pt-1.5 data-wrap:wrap-break-word data-wrap:whitespace-pre-wrap',
+                'min-h-0 min-w-0 overflow-auto px-3 py-3 text-start font-mono leading-relaxed outline-none group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:py-2.5 data-wrap:wrap-break-word data-wrap:whitespace-pre-wrap',
                 className,
             )}
             {...props}
