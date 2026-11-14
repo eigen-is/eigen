@@ -11,7 +11,11 @@ describe('LandingApps', () => {
         });
         await router.load();
         const html = renderToStaticMarkup(<RouterProvider router={router} />);
-        expect(html.match(/href="[^"]+"/g)).toEqual(['href="/about/docs"', 'href="/about/sheets"']);
+        expect(html.match(/href="[^"]+"/g)).toEqual([
+            'href="/about/docs"',
+            'href="/about/sheets"',
+            'href="/about/slides"',
+        ]);
         expect(html.replace(/<[^>]+>/g, '')).toBe(
             'Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.',
         );
