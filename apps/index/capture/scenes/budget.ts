@@ -2,16 +2,17 @@
 // tab, worked out from the column widths the seeder gives the tab.
 
 import type { Page } from 'playwright-core';
-import { SHEET_DEFAULT_ROW_HEIGHT } from '../../../../packages/lib/src/sheets';
+import {
+    SHEET_COLUMN_HEADER_HEIGHT,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    SHEET_ROW_HEADER_WIDTH,
+} from '../../../../packages/lib/src/sheets';
 import { DRIVE_MIME_SHEETS } from '../../../../packages/lib/src/types/drive';
 import { BUDGET } from '../../../api/src/scripts/demo/content';
 import type { Point } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Stack } from '../lib/scene';
 
-// The grid's row headers are this wide and its column headers this tall, in CSS pixels.
-const ROW_HEADER_WIDTH = 46;
-const COLUMN_HEADER_HEIGHT = 20;
 const COLUMN_WIDTHS = BUDGET.sheets[0].columns.map((column) => column.width);
 
 export async function openBudget(page: Page, stack: Stack): Promise<void> {
@@ -29,7 +30,7 @@ export async function cellPoint(page: Page, ref: string): Promise<Point> {
     if (!grid) throw new Error('The budget is not on the page');
     const left = COLUMN_WIDTHS.slice(0, column).reduce((sum, width) => sum + width, 0);
     return {
-        x: grid.x + ROW_HEADER_WIDTH + left + COLUMN_WIDTHS[column] / 2,
-        y: grid.y + COLUMN_HEADER_HEIGHT + (row + 0.5) * SHEET_DEFAULT_ROW_HEIGHT,
+        x: grid.x + SHEET_ROW_HEADER_WIDTH + left + COLUMN_WIDTHS[column] / 2,
+        y: grid.y + SHEET_COLUMN_HEADER_HEIGHT + (row + 0.5) * SHEET_DEFAULT_ROW_HEIGHT,
     };
 }
