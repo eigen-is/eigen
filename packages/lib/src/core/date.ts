@@ -3,9 +3,7 @@
 
 // "09:05" on a 24-hour clock, in the local zone or in the given one.
 export function formatTime(date: Date | string | number, timeZone?: string): string {
-    const d = new Date(date);
-    if (timeZone) return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(d);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(date));
 }
 
 // Constructing an Intl.DateTimeFormat costs about as much as formatting a thousand dates, and a Drive
