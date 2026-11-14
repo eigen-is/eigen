@@ -141,6 +141,18 @@ describe('snapshotContainerDataDb concurrency', () => {
         // Every call returned a usable snapshot path.
         for (const r of results) expect(parseSnapshotTimestamp(r.name)).not.toBeNull();
     });
+
+    test('a version copied from the stored object carries the size and hash of its bytes', async () => {
+        const container = await mount.createFolder(rootId, 'snap-hash');
+        const data = Buffer.from('stored-data-db-bytes');
+        await seedFile(mount, container, 'data.db', 'application/octet-stream', data.length, data);
+
+        const version = await mount.snapshotContainerDataDb(container, DEFAULT_RETENTION);
+
+        expect(await (await mount.readFile(version.id))?.text()).toBe('stored-data-db-bytes');
+        expect(version.size).toBe(data.length);
+        expect(version.hash).toBe(sha256('stored-data-db-bytes'));
+    });
 });
 
 describe('replaceContainerDataDb', () => {

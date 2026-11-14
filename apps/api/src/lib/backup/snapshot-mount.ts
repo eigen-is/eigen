@@ -119,7 +119,7 @@ export async function snapshotMountData(
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
                 held.add(row.id);
-                if (source === 'stored') stored++;
+                if (source !== 'local') stored++;
                 databases++;
             } else {
                 const live = await mount.getPath(row.id);

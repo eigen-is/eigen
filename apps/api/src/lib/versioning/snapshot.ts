@@ -86,7 +86,7 @@ async function takeSnapshot(
     // The new copy stays out of the prune. Retention keeps the newest version of each hour, and a second
     // snapshot in the same hour would otherwise drop the first before the hour is over.
     const toPrune = selectSnapshotsToPrune(
-        (await mount.listFolder(versions.id)).filter((e) => e.id !== copy.id).map((e) => ({ id: e.id, name: e.name })),
+        (await mount.listFolder(versions.id)).filter((version) => version.id !== copy.id),
         policy,
     );
     for (const item of toPrune) await mount.deletePath(item.id);
@@ -131,22 +131,23 @@ async function snapshotDataDbToVersionLocal(
     const tempId = crypto.randomUUID();
     try {
         const tempPath = mount.getTempPath(tempId);
-        if (!(await stageManagedDbCopy(mount, dataDb.id, tempPath, order))) throw storageGone();
-        const { size, hash } = await hashFile(tempPath);
+        const staged = await stageManagedDbCopy(mount, dataDb.id, tempPath, order);
+        if (!staged) throw storageGone();
+        const { size, hash } = staged === 'local' ? await hashFile(tempPath) : staged;
         return await mount.createFileFromTemp(versionsId, snapshotName, dataDb.mimeType, size, hash, tempId);
     } finally {
         await mount.cleanupTemp(tempId);
     }
 }
 
-// Copies the current bytes of a container's managed database to destPath, and says where they came from. Only a
-// copy of the stored object shows that storage answers. Null: nothing is left to copy, and a version answers 410.
+// Copies the current bytes of a container's managed database to destPath. A copy of the stored object answers its size
+// and hash, and only that one shows that storage answers. Null: nothing is left to copy, and a version answers 410.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,
     destPath: string,
     order: CopyOrder,
-): Promise<'local' | 'stored' | null> {
+): Promise<'local' | { size: number; hash: string } | null> {
     // 'staged-first' never reads the crash temp. It runs inside a close that holds the slot and removes that temp.
     if (order === 'open-handle-first') {
         const staged = await withDocumentDb(mount, pathId, async (slot) => {
@@ -196,8 +197,7 @@ export async function stageManagedDbCopy(
         }
         // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and null here is terminal.
         try {
-            await writeTempWithHash(destPath, mount.storage.read(storageKey));
-            return 'stored';
+            return await writeTempWithHash(destPath, mount.storage.read(storageKey));
         } catch (error) {
             if (!isMissingObjectCause(error)) throw error;
             fs.rmSync(destPath, { force: true });
