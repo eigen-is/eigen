@@ -1,9 +1,11 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { orgOwnerId } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { assertJson, authedRequest, driveGet, drivePost, eventually, getTestContext } from '../setup';
+import { getServerConfig } from '../../lib/config/server-config';
+import { assertJson, authedRequest, driveDelete, driveGet, drivePost, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -119,6 +121,44 @@ describe('Access-request email', () => {
         await new Promise((r) => setTimeout(r, 100));
 
         expect(toAlice().length).toBe(0);
+        spy.mockRestore();
+    });
+
+    test('a missing or trashed path answers 200 and notifies and mails nobody', async () => {
+        const { spy, toAlice } = await catchMail();
+        const doc = await createDoc('access-request-trashed');
+        await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}`);
+
+        expect((await requestAccess('no-such-path')).status).toBe(200);
+        expect((await requestAccess(doc.id)).status).toBe(200);
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(toAlice().length).toBe(0);
+        const notifs = await assertJson<Notification[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`),
+        );
+        expect(notifs.filter((n) => n.tag?.includes(`:${doc.id}:`))).toHaveLength(0);
+        spy.mockRestore();
+    });
+
+    test('an unknown mount, or the org, which has no drive, answers 404 and mails nobody', async () => {
+        const { spy } = await catchMail();
+        const doc = await createDoc('access-request-unknown-mount');
+        const unknownMount = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/no-such-mount/path/${doc.id}/request-access`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        );
+        const org = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${orgOwnerId(getServerConfig()!.orgId)}/${aliceMountId}/path/${doc.id}/request-access`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        );
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(unknownMount.status).toBe(404);
+        expect(org.status).toBe(404);
+        expect(spy).not.toHaveBeenCalled();
         spy.mockRestore();
     });
 
