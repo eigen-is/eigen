@@ -6,7 +6,7 @@ Uploads come from Drive's upload dialog and drag and drop, from an image an edit
 
 ## Elysia never reads the upload body
 
-The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once by XHR (`uploadFiles` in `packages/lib/src/core/drive/upload.ts`), which reports progress and can be cancelled. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
+The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once by XHR (`uploadFiles` in `packages/lib/src/core/drive/upload.ts`), which reports progress and can be cancelled. Before any byte is read, the route asks `getUploadRoom` what is left of the mount ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
 
 Mail draft attachments (`Mail.uploadDraftAttachment`, `apps/api/src/lib/mail/mail-domain.ts`) use the same parser.
 
@@ -20,9 +20,9 @@ Then `finalizeUpload` (`apps/api/src/lib/drive/upload.ts`) moves each temp into 
 
 ## The size limit holds per file and cuts the request off mid-stream
 
-The parser's `maxFileSize` throws before it yields the chunk that would cross the limit, so no more of the body is read. The request answers 413 and every temp of that request is removed. It answers 413 even when the limit came from the remaining quota rather than the server's cap.
+The parser's `maxFileSize`, the server's cap, throws before it yields the chunk that would cross it, so no more of the body is read, and the request answers 413. `streamFilesToTemp` counts each part's chunks against the room left in the mount and stops at the chunk that would cross it, a 507. Either way every temp of that request is removed.
 
-The limit is per file part. Every part of a multi-file upload may use the whole remaining quota, so a batch can end past the mount's quota: quotas are a soft limit ([QUOTA.md](QUOTA.md)). The server's own `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` (1 GiB, `packages/lib/src/constants/mount.ts`), a backstop under the parser.
+Both limits are per file part. Every part of a multi-file upload may use the whole remaining quota, so a batch can end past the mount's quota: quotas are a soft limit ([QUOTA.md](QUOTA.md)). The server's own `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` (1 GiB, `packages/lib/src/constants/mount.ts`), a backstop under the parser.
 
 An upload is not resumable. A dropped connection starts over.
 

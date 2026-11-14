@@ -256,10 +256,10 @@ export abstract class Home {
         return opening as Promise<ManagedDatabase<S>>;
     }
 
-    // The one answer to work that comes too late, such as a hold, a new mount or a settings save: the
-    // client retries and reaches the next home.
+    // The one answer to work that comes too late, such as a hold, a new mount or a settings save. Nothing
+    // retries a save, so the person tries again and reaches the next home.
     public refuseIfClosing(): void {
-        if (this._closing) throw new ApiError(503, 'Home is closing');
+        if (this._closing) throw new ApiError(503, 'Reloading. Try again in a moment.');
     }
 
     public subscribeSSE(listener: (event: SSEvent) => void): void {

@@ -34,4 +34,11 @@ describe('parseEmlBytes', () => {
 
         expect(mail.textShort).toBe('Hello there');
     });
+
+    test('a message whose Date header does not parse is dated now', () => {
+        const bytes = Buffer.from(['From: a@example.com', 'Date: not a real date at all', '', 'Body.'].join('\r\n'));
+        const mail = parseEmlBytes('m3', 'INBOX', bytes);
+
+        expect(Math.abs(Date.now() - mail.date.getTime())).toBeLessThan(5000);
+    });
 });

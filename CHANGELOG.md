@@ -14,6 +14,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Times on a 24-hour clock** — Calendar, Mail, Drive, chat, comments, version history and the admin pages write times as 09:00 and 14:30, not 9 AM and 2:30 PM. So does an invitation email
+- **Forwarded mail** — the details above a message forwarded inside another give its date as 14 Nov 2026, 15:42 UTC instead of Sat, 14 Nov 2026 15:42:11 GMT, and no date at all when the original's can't be read
 - **Error messages** — an error that says why, such as "Folders can be nested at most 256 levels deep", no longer ends in a code like (400). The code shows only when the server gave no reason
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
 - **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
@@ -26,6 +27,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
 - **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
+- **Uploading to a full drive** — a file larger than the space left in the drive fails with "Insufficient Storage" instead of "Upload too large"
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a "shared with you" or "removed your access" notification
 - **Sharing with your own team** — a file you share with a team you are in stays out of your own **Shared with me** and sends you no notice. A team drive's file shared with a member shows only in the team drive

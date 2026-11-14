@@ -61,7 +61,7 @@ for (const name of emls) {
     });
 }
 
-test('unparseable Date header falls back to ~now', () => {
+test('an unparseable Date header reads as no date', () => {
     const eml = [
         'From: sender@example.com',
         'To: recipient@example.com',
@@ -72,6 +72,5 @@ test('unparseable Date header falls back to ~now', () => {
         'Body.',
     ].join('\r\n');
     const mail = parseMail(Buffer.from(eml));
-    expect(mail.date).toBeInstanceOf(Date);
-    expect(Math.abs(Date.now() - (mail.date?.getTime() ?? 0))).toBeLessThan(5000);
+    expect(mail.date).toBeUndefined();
 });
