@@ -1,3 +1,7 @@
+// Who can reach a Drive item, as the share dialog and the detail panel show it: the owner and the item's own
+// ACL entries first, then what each parent folder grants, each person once. The rest of the file answers
+// smaller questions, such as whether the user owns an item directly or through a team, or had it shared.
+
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ParsedOwnerId, PublicUser } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
@@ -51,21 +55,14 @@ export function useDriveAccess(
             return [];
         }
 
-        if (path.acl && path.acl.length > 0) {
-            for (const access of path.acl) {
-                if (!isGroupOwned && owner.data?.email && access.id.toLowerCase() === owner.data.email.toLowerCase()) {
-                    continue;
-                }
-                if (isGroupOwned && access.id.toLowerCase() === path.ownerId.toLowerCase()) {
-                    continue;
-                }
-                list.push({
-                    id: access.id,
-                    read: access.read,
-                    write: access.write,
-                    owner: false,
-                });
+        for (const access of path.acl ?? []) {
+            if (!isGroupOwned && owner.data?.email && access.id.toLowerCase() === owner.data.email.toLowerCase()) {
+                continue;
             }
+            if (isGroupOwned && access.id.toLowerCase() === path.ownerId.toLowerCase()) {
+                continue;
+            }
+            list.push({ id: access.id, read: access.read, write: access.write, owner: false });
         }
 
         return list;

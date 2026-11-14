@@ -183,7 +183,7 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
 
 // Contacts' "start a chat". It prefers the address of a registered account, as the first one may be an alias and
 // rooms match on the account's. One writable match opens; otherwise the caller opens the wizard with that address.
-export function useStartChatWith() {
+export function useStartChatWith(): (emails: string[]) => Promise<'opened' | { email: string }> {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';

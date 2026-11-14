@@ -1,3 +1,7 @@
+// Matches what the user types in an address field against the members of their teams and their own contacts,
+// for pickers such as the mail and calendar guest fields and the command palette. Team members come first, and
+// an address that both lists hold shows once.
+
 import { useMyTeams } from '@workspace/lib/home';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
@@ -7,10 +11,6 @@ import { useContacts } from './use-contacts';
 
 type TeamMemberSuggestion = { email: string; name: string; teamId: string };
 
-// Single source for "match a typed string against personal contacts + team members
-// the user can reach." Consumed by ContactAutosuggest (mail/calendar/drive-share),
-// ChatPlayerSuggest, and the command palette providers. Team members are merged in
-// first (higher priority), personal contacts second; dedup is by lowercased email.
 export function useContactSuggestions(
     query: string,
     onlyInternalMails: boolean = false,
@@ -47,7 +47,6 @@ export function useContactSuggestions(
         const results: ContactSuggestion[] = [];
         const seenEmails = new Set<string>();
 
-        // Team members first (higher priority) — filter by name or email
         for (const [emailKey, member] of teamMembers) {
             if (excludeSet.has(emailKey)) continue;
             const name = (member.name || '').toLowerCase();
@@ -65,7 +64,6 @@ export function useContactSuggestions(
             });
         }
 
-        // Personal contacts (skip duplicates by email)
         if (contacts) {
             for (const contact of contacts) {
                 const fullName = contactFullName(contact);

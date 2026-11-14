@@ -23,7 +23,10 @@ export function isTransferableCalendarHome(ownerId: string, viewerId: string): b
 }
 
 // The export answers with the file itself, so it takes raw fetch over Eden and reports its own failures.
-export function useExportCalendar() {
+export function useExportCalendar(): {
+    exportCalendar: (ownerId: string, calendarId: string, ids?: string[]) => Promise<Headers | null>;
+    isExporting: boolean;
+} {
     const { download, isDownloading } = useFileDownload();
 
     const exportCalendar = useCallback(

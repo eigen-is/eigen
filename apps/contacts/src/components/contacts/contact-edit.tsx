@@ -5,7 +5,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { readableTextColor } from '@workspace/lib/constants/colors';
-import { useLabels } from '@workspace/lib/contacts';
+import { contactFullName, useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
@@ -129,7 +129,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                         <form onSubmit={handleSubmit} className="space-y-8">
                             <div className="flex justify-center mb-8">
                                 <AvatarEditor
-                                    name={`${contact.firstName} ${contact.lastName}`}
+                                    name={contactFullName(contact)}
                                     email={contact.email[0]}
                                     imageUrl={avatar ?? ''}
                                     onRemove={avatar ? () => setAvatar(null) : undefined}
