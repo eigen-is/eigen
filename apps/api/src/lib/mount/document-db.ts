@@ -201,6 +201,9 @@ async function buildDocumentDb<S extends SchemaType>(
     // Set when onOpen adopts a temp that an unclean shutdown left. Those bytes never synced, so the
     // database is marked dirty after the open.
     let recoveredFromCrash = false;
+    // A create's own flush stores an empty schema. Marked dirty, it would index nothing and hold off
+    // the document's first real index by the reindex cap.
+    let syncMarksContent = mode === 'open';
 
     const managed = new ManagedDatabase(
         config,
@@ -248,7 +251,7 @@ async function buildDocumentDb<S extends SchemaType>(
                     const size = fs.statSync(written).size;
                     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
                     await mount.invalidateAncestorsOf(pathId);
-                    await markContainerContentDirty(mount, pathId);
+                    if (syncMarksContent) await markContainerContentDirty(mount, pathId);
                 }),
             // After a failed final sync the temp is the only copy of the newest writes. It
             // stays as the crash temp, which the next open adopts and syncs again.
@@ -278,6 +281,7 @@ async function buildDocumentDb<S extends SchemaType>(
             await managed.close({ skipFinalSnapshot: true }).catch(() => {});
             throw err;
         }
+        syncMarksContent = true;
     }
 
     return managed;
