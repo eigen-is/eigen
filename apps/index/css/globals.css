@@ -146,6 +146,12 @@
         border-radius: 0.5rem;
     }
 
+    /* A drawing made for paper, such as a chart with a clear background, keeps its white sheet in dark mode. */
+    img.eigen-paper {
+        padding: 0.75rem;
+        background-color: var(--background);
+    }
+
     /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
     .media-video,
     .media-carousel,

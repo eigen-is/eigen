@@ -43,11 +43,15 @@ Select a table and insert a chart: column, bar, line or pie. The chart reads its
 
 </div>
 
-I wrote a new formula engine for Sheets, eigen|formula⟩, and compared it with three other formula engines that run in JavaScript: HyperFormula, IronCalc and Univer.
+Sheets comes with the fastest\* open-source formula engine for the web, eigen|formula⟩. We compared it with three other formula engines that run in JavaScript: HyperFormula, IronCalc and Univer.
 
 - **Speed**: it was faster than HyperFormula in 15 of 17 workloads, and faster than IronCalc and Univer in 17 of 17.
 - **Correctness**: of 17,584 answers recorded in Excel, it gave Excel's answer on 92.0%. HyperFormula did on 55.4%, IronCalc on 74.3% and Univer on 82.6%.
 - **Coverage**: this is the weak spot. It has 219 of Excel's 524 functions. HyperFormula has 384, IronCalc 492 and Univer 495.
+
+<img class="eigen-paper" src="/data/about/media/formula-speed.svg" alt="Each engine's time per workload divided by ours, on a log scale. Lower is faster; a bar below the 1× line is faster than eigen|formula⟩.">
+
+*Each engine's time per workload divided by ours, on a log scale. Lower is faster; a bar below the 1× line beats us.*
 
 The method, every workload and every number are in the [benchmark README](https://github.com/eigen-is/eigen/blob/main/packages/formula/benchmark/README.md).
 
