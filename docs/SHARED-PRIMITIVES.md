@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2363 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2365 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1160,7 +1160,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1239)
+## Utilities & constants (1241)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1578,6 +1578,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseUnicodeRange` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `sliceStyle` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `contactFullName` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/contact-names.ts |
+| `findContactByEmail` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/contact-names.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `foldLine` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |

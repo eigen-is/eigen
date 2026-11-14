@@ -1,5 +1,5 @@
 import { API_HOST, getPublicAvatarUrl } from '@workspace/lib/api';
-import { useContacts } from '@workspace/lib/contacts';
+import { contactFullName, findContactByEmail, useContacts } from '@workspace/lib/contacts';
 import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types';
 import { usePublicUser } from './use-public';
 
@@ -20,13 +20,12 @@ export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUs
     // The public endpoint resolves teams too, so a non-member still gets a name.
     const { data: dataPublic, isLoading: isLoadingPublic } = usePublicUser(userId || email || '');
 
-    const contact =
-        !isLoadingContacts && email && dataContacts ? dataContacts.find((c) => c.email.includes(email)) : null;
+    const contact = !isLoadingContacts && email && dataContacts ? findContactByEmail(dataContacts, email) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
     const url = imageUrl !== undefined ? imageUrl || null : contact?.avatar || publicUser?.avatar || null;
     const displayName =
-        (contact && `${contact.firstName} ${contact.lastName}`.trim()) ||
+        (contact && contactFullName(contact)) ||
         publicUser?.name?.trim() ||
         name ||
         // An email reads fine as a last resort; a `team_<id>` doesn't, so teams stop here.

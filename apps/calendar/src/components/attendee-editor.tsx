@@ -3,7 +3,7 @@
 // for it, if there is one. Inviting yourself is refused with a note. The dialog owns the list and saves it with the
 // event.
 
-import { useContacts } from '@workspace/lib/contacts';
+import { contactFullName, findContactByEmail, useContacts } from '@workspace/lib/contacts';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Badge } from '@workspace/ui/components/badge';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
@@ -29,8 +29,8 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
             if (currentUserEmail && email === currentUserEmail.toLowerCase()) {
                 toast.info('You cannot invite yourself');
             } else {
-                const known = contacts?.find((c) => c.email.some((address) => address.toLowerCase() === email));
-                const name = contact.displayName ?? (known && `${known.firstName} ${known.lastName}`.trim());
+                const known = contacts && findContactByEmail(contacts, email);
+                const name = contact.displayName ?? (known && contactFullName(known));
                 onChange([...attendees, { email, name: name || undefined, status: 'pending', role: 'required' }]);
             }
         }
