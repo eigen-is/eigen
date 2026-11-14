@@ -1,23 +1,33 @@
 # {{ours}} compared with HyperFormula, IronCalc and Univer
 
-This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's {{excel-functions}} functions. The numbers below come from one run on {{generated}}. A script wrote them into `results.json`, and a second script wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
+This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's {{excel-functions}} functions. The numbers below come from one run on {{generated}}. A script wrote them into `results.json`, a second drew the chart from that file, and a third wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
 
 ```sh
 cd packages/formula/benchmark
 bun install            # installs the other engines into this folder only, at the versions in its package.json
 bun run quick          # a first look in a few minutes at reduced sizes; prints its tables, changes no file here
-bun run.ts && bun readme.ts   # the full run, {{full-minutes}} minutes last time: writes results.json, then this README
+bun run.ts             # the full run, {{full-minutes}} minutes last time: writes results.json
+bun ../../../apps/api/src/scripts/benchmark-charts.ts   # draws speed.svg from results.json
+bun readme.ts          # writes this README from results.json and notes.md
 ```
 
 `bun run.ts --help` lists the options. A quick run divides every count by 10 (100,000 rows become 10,000), takes 3 rounds of one run each on Bun only, so no run warms the runtime up first, and judges every 100th recorded row. Its numbers are for a first look and are not the ones below; ratios at a tenth of the size can differ from the full ones, since index and setup costs do not grow in a straight line with the size.
 
-`bun rows.ts <oracle folder>` rebuilds `excel-rows.jsonl`, the file of Excel's recorded answers, from the local recording files. It reuses the oracle's own reader in `scripts/oracle-rows.ts`. To regenerate everything after a change to the engine or to the recordings, run `bun rows.ts <oracle folder> && bun run.ts && bun readme.ts`.
+`bun rows.ts <oracle folder>` rebuilds `excel-rows.jsonl`, the file of Excel's recorded answers, from the local recording files. It reuses the oracle's own reader in `scripts/oracle-rows.ts`. To regenerate everything after a change to the engine or to the recordings, run `bun rows.ts <oracle folder>`, then the last three commands above.
 
 ## The results in three lines
 
 - {{summary-speed-bun}}
 - {{summary-correctness}}
 - {{summary-coverage}}
+
+## Speed at a glance
+
+![Relative calculation time of HyperFormula, IronCalc and Univer, with ours as 1×](speed.svg)
+
+Each bar is an engine's median time on one workload divided by ours, on a log scale: every gridline is 16 times the one below it, starting at 1×, and a bar below the 1× line means that engine was faster than us. Lower is faster. T17 compares memory, not time. The chart and its key show the run on Bun only; the tables below have Node too. {{chart-gaps}}
+
+{{chart-key}}
 
 ## Words used in this README
 
@@ -32,7 +42,7 @@ bun run.ts && bun readme.ts   # the full run, {{full-minutes}} minutes last time
 
 ## How to read the tables
 
-Each speed row is one workload. A workload is a workbook built in code, so anyone can run it again with nothing but the repo. A cell shows two times in milliseconds: the fastest round and the median round, as `fastest / median`. Lower is better. Each runtime has one table with every engine. The ratio columns divide the other engine's median by ours. A ratio of 5× means the other engine took five times as long as {{ours}}. A ratio below 1× means the other engine was faster. The memory row shows megabytes instead of times, and its ratio works the same way.
+Each speed row is one workload. A workload is a workbook built in code, so anyone can run it again with nothing but the repo. A cell shows two times in milliseconds: the fastest round and the median round, as `fastest / median`. Lower is better. Each runtime has one table with every engine, and the ratio column after an engine divides its median by ours. A ratio of 5× means the other engine took five times as long as {{ours}}. A ratio below 1× means the other engine was faster. The memory row shows megabytes instead of times, and its ratio works the same way.
 
 "not supported" means the engine cannot run that workload. "wrong values" means the engine ran it, but its values were not the same as ours, so its time does not count. "too slow" means one run of the engine took more than two minutes. Its time is then not taken again in later rounds, and the workload comes back in a row of its own at a tenth of the size, marked "a tenth of the size for" that engine, run only by that engine and {{ours}}. Times at the two sizes are never compared or scaled to each other.
 

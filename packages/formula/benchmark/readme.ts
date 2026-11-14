@@ -79,7 +79,7 @@ function ratioCell(row: SpeedRow, engine: EngineName): string {
 
 function speedTable(run: SpeedRun): string {
     const lines = [
-        `| workload | ${cell(OURS)} | ${PARTNERS.map((engine) => `${LABELS[engine]} | ${LABELS[engine]} ÷ ${cell(OURS)}`).join(' | ')} |`,
+        `| workload | ${cell(OURS)} | ${PARTNERS.map((engine) => `${LABELS[engine]} | ratio`).join(' | ')} |`,
         `|---|---|${PARTNERS.map(() => '---|---|').join('')}`,
     ];
     for (const row of run.rows) {
@@ -88,6 +88,36 @@ function speedTable(run: SpeedRun): string {
         lines.push(`| ${label(row)} | ${shown('ours')} | ${theirs.join(' | ')} |`);
     }
     return lines.join('\n');
+}
+
+// The key under the speed chart, which draws the Bun run: a label per full-size workload, as the chart names its
+// bars, and every engine's ratio. run.ts appends the rows at a tenth of the size in the order of the rows they repeat.
+function chartKey(run: SpeedRun): { readonly table: string; readonly gaps: string } {
+    const full = run.rows.filter((row) => row.smallerFor === undefined);
+    const smaller = run.rows.filter((row) => row.smallerFor !== undefined);
+    const repeated = full.filter((row) => PARTNERS.some((engine) => row.engines[engine].status === 'too slow'));
+    const gaps = new Map<Partner, string[]>();
+    const lines = full.map((row, i) => {
+        const cells = PARTNERS.map((engine) => {
+            const found = row.engines[engine];
+            if (found.status === 'measured') return ratioCell(row, engine);
+            if (found.status !== 'too slow') return found.status;
+            gaps.set(engine, [...(gaps.get(engine) ?? []), `T${i + 1}`]);
+            const again = smaller[repeated.indexOf(row)];
+            return `${ratioCell(again, engine)} at 1/10 size`;
+        });
+        return `| T${i + 1} | ${row.workload} | ${ratio(1, 1)} | ${cells.join(' | ')} |`;
+    });
+    const table = [
+        `| | workload | ${cell(OURS)} | ${PARTNERS.map((engine) => LABELS[engine]).join(' | ')} |`,
+        `|---|---|---:|${PARTNERS.map(() => '---:|').join('')}`,
+        ...lines,
+    ].join('\n');
+    const missing = [...gaps].map(
+        ([engine, labels]) =>
+            `${LABELS[engine]} has no bar at ${labels.slice(0, -1).join(', ')}${labels.length > 1 ? ' and ' : ''}${labels.at(-1)}: one of its runs took more than two minutes at the full size, so it ran again at a tenth of the size, and the key gives its ratio there.`,
+    );
+    return { table, gaps: missing.join(' ') };
 }
 
 // Per engine, the median time in the load or the edit itself out of the median time of the whole run.
@@ -258,6 +288,12 @@ export function marks(results: Results): Record<string, string> {
         speed[`steps-${runtime}`] = stepTable(run);
         speed[`setup-${runtime}`] = speedSetup(run, results);
         speed[`summary-speed-${runtime}`] = speedSummary(run);
+    }
+    const bun = results.speed.bun;
+    if (bun !== undefined) {
+        const { table, gaps } = chartKey(bun);
+        speed['chart-key'] = table;
+        speed['chart-gaps'] = gaps;
     }
     const { machine, versions } = results;
     return {
