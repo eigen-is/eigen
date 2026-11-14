@@ -91,6 +91,9 @@ function buildBlog(): ArticleMeta[] {
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
+// The blocks the About pages draw themselves, such as the overview's app rows. No other collection has any.
+const ABOUT_BLOCKS = new Set(['apps', 'principles', 'formats']);
+
 // The overview first, then one page per app in the registry's order. An app page ends with the block its page fills
 // with the app's open formats, and every page with the shared note for the technical reader in a panel, appended
 // after the render so its heading stays out of the table of contents.
@@ -106,7 +109,7 @@ function buildAbout(): ArticleMeta[] {
         const { content, mediaGrids } = parseMediaGrids(
             slug === 'index' ? body : `${body.trimEnd()}\n\n::: formats\n:::\n`,
         );
-        const { html, toc } = renderMarkdown(content);
+        const { html, toc } = renderMarkdown(content, ABOUT_BLOCKS);
         writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, mediaGrids });
         const article: ArticleMeta = {
             slug,

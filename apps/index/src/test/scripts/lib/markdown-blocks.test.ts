@@ -16,7 +16,8 @@ beforeAll(() => {
 
 afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
 
-const render = (markdown: string) => new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir }).render(markdown);
+const render = (markdown: string, pageBlocks: ReadonlySet<string> = new Set()) =>
+    new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir, pageBlocks }).render(markdown);
 
 describe('video', () => {
     test('a video block is a muted loop with both encodes and a poster, which the page starts', () => {
@@ -111,9 +112,10 @@ describe('carousel and side by side', () => {
     });
 
     test('a block the page draws leaves a marker with its name', () => {
-        expect(render('Intro\n\n::: apps\n:::\n\nAfter')).toContain('<p>[BLOCK:apps]</p>');
-        expect(render('::: principles\n:::')).toContain('<p>[BLOCK:principles]</p>');
-        expect(() => render('::: apps\n![a](/a.webp)\n:::')).toThrow('takes no body');
+        const pageBlocks = new Set(['apps', 'principles']);
+        expect(render('Intro\n\n::: apps\n:::\n\nAfter', pageBlocks)).toContain('<p>[BLOCK:apps]</p>');
+        expect(render('::: principles\n:::', pageBlocks)).toContain('<p>[BLOCK:principles]</p>');
+        expect(() => render('::: apps\n![a](/a.webp)\n:::', pageBlocks)).toThrow('takes no body');
     });
 
     test('text after a block renders as usual', () => {
@@ -124,6 +126,11 @@ describe('carousel and side by side', () => {
 describe('mistakes fail the build', () => {
     test('an unknown block name', () => {
         expect(() => render('::: nope\n:::')).toThrow('nope');
+    });
+
+    test('a block of a page that draws none, such as a blog post', () => {
+        expect(() => render('Intro\n\n::: apps\n:::')).toThrow('::: apps on line 3');
+        expect(() => render('::: formats\n:::', new Set(['apps']))).toThrow('::: formats on line 1');
     });
 
     test('a block opener right after a paragraph still opens a block', () => {

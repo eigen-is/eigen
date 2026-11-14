@@ -168,7 +168,10 @@ describe('autoplay carousel', () => {
 
 describe('page blocks', () => {
     test('each draws what the page gives for it where the Markdown put it', async () => {
-        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter');
+        const { html } = renderMarkdown(
+            'Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter',
+            new Set(['apps', 'principles']),
+        );
         const { container } = await renderInDocument(
             <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
         );
@@ -176,7 +179,7 @@ describe('page blocks', () => {
     });
 
     test('draw outside the prose, which holds the Markdown around them', async () => {
-        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter');
+        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter', new Set(['apps']));
         const { container } = await renderInDocument(
             <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
         );

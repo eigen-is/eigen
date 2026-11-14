@@ -3,7 +3,7 @@
 // block with a mistake in it, or a video whose files are not under the public folder, fails the build instead of
 // shipping a broken page. A carousel comes out whole, its slides, dots and buttons included, and the page wires them
 // up and starts the videos. A block the page draws itself, such as the About overview's app rows, leaves a marker
-// with its name.
+// with its name, on the pages that draw it.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,10 +17,14 @@ const NEXT_ICON = chevron('m9 18 6-6-6-6');
 
 const VIDEO_FILES = ['.av1.mp4', '.h264.mp4', '.webp'];
 
-// The blocks a page draws itself where the Markdown puts them, such as the About pages' app rows and panels.
-const PAGE_BLOCKS = new Set(['apps', 'principles', 'formats']);
+const MEDIA_BLOCKS = new Set(['video', 'carousel', 'side-by-side']);
 
-export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: string }): void {
+// `pageBlocks` names the blocks the page draws itself where the Markdown puts them, such as the About overview's
+// `apps`. A page that draws none passes none, so such a block there fails the build as an unknown one.
+export function markdownBlocks(
+    md: MarkdownIt,
+    { publicDir, pageBlocks }: { publicDir: string; pageBlocks: ReadonlySet<string> },
+): void {
     const { escapeHtml } = md.utils;
     // Inline rendering runs the caption through the text rule, so app names in it are set like the prose around it.
     const figcaption = (caption?: string) => (caption ? `<figcaption>${md.renderInline(caption)}</figcaption>` : '');
@@ -37,10 +41,8 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
 
             const [, name, rest] = opener;
             const where = `::: ${name} on line ${startLine + 1}`;
-            const pageBlock = PAGE_BLOCKS.has(name);
-            if (name !== 'video' && name !== 'carousel' && name !== 'side-by-side' && !pageBlock) {
-                throw new Error(`Unknown Markdown block ${where}`);
-            }
+            const pageBlock = pageBlocks.has(name);
+            if (!MEDIA_BLOCKS.has(name) && !pageBlock) throw new Error(`Unknown Markdown block ${where}`);
             let closeLine = startLine + 1;
             while (closeLine < state.lineMax && lineText(closeLine) !== ':::') closeLine++;
             if (closeLine >= state.lineMax) throw new Error(`${where} has no closing :::`);
