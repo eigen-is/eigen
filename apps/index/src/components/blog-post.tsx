@@ -29,27 +29,29 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
                     {post.cover && <BlogCover src={post.cover} className="mt-7" />}
                     <ArticleContent body={body} className="mt-8" />
                 </article>
-                <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
-                    {older ? (
-                        <PagerLink
-                            label="Older"
-                            title={older.title}
-                            link={{ to: '/blog/$id', params: { id: older.slug } }}
-                        />
-                    ) : (
-                        <span />
-                    )}
-                    {newer ? (
-                        <PagerLink
-                            label="Newer"
-                            title={newer.title}
-                            link={{ to: '/blog/$id', params: { id: newer.slug } }}
-                            className="text-right"
-                        />
-                    ) : (
-                        <span />
-                    )}
-                </nav>
+                {(older || newer) && (
+                    <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
+                        {older ? (
+                            <PagerLink
+                                label="Older"
+                                title={older.title}
+                                link={{ to: '/blog/$id', params: { id: older.slug } }}
+                            />
+                        ) : (
+                            <span />
+                        )}
+                        {newer ? (
+                            <PagerLink
+                                label="Newer"
+                                title={newer.title}
+                                link={{ to: '/blog/$id', params: { id: newer.slug } }}
+                                className="text-right"
+                            />
+                        ) : (
+                            <span />
+                        )}
+                    </nav>
+                )}
             </ReadingLayout>
         </SitePage>
     );
