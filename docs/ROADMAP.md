@@ -21,7 +21,6 @@ The page holds only open work: when work ships, its row or its done part goes in
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
 | **A per-home restore's database checks run on the API's event loop** | `verifyFolder`, `redateTrash` and `materializeMount` (`apps/api/src/lib/backup/materialize-mount.ts`) run synchronous SQLite work on the API's loop, so one large `quick_check` blocks every request for seconds. | M | No | Run the judge step in a transform process, with the job slot held. A new seam, so a short spec first. |
-| **`test-cli` runs in no CI workflow, so its Linux-only checks never ran** | `docker/test-cli.sh` skips three checks on Docker Desktop, and nothing checks on Linux that the dev overlay runs the API as uid 1000. | S | No | Add `test-cli` as a CI job on a Linux runner, or run it on a Linux host before the next release. |
 
 ### Nothing typed or uploaded gets lost
 
