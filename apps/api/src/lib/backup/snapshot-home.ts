@@ -20,6 +20,7 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
+import { avatarFileName } from '../user/profile';
 import { HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
@@ -224,7 +225,7 @@ export async function snapshotHome(
             .all();
         entries.push(await captureJson(shares, ARCHIVE_SHARES_FILE));
 
-        const avatarName = `${ownerId}.webp`;
+        const avatarName = avatarFileName(ownerId);
         const avatar = Bun.file(path.join(getAvatarsDir(), avatarName));
         if (await avatar.exists()) {
             entries.push(

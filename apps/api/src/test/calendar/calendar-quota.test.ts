@@ -7,8 +7,8 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { getMailDomain, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getHome } from '../../lib/home/get-home';
+import { sizeUserHome } from '../../lib/home/home-jobs';
 import { sendToHome } from '../../lib/home/home-relay';
-import { pullHomeSize } from '../../lib/home/server-jobs';
 import { makeCalendar } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import type { TestUser } from '../setup';
@@ -622,7 +622,7 @@ describe('Calendar storage quota', () => {
             const parts = (await home.mail.size()) + (await home.contacts.size()) + calendarBytes;
             const booted = await home.size();
             expect(booted.homeData.used).toBe(parts);
-            expect((await pullHomeSize(user.id)).homeData.used).toBe(parts);
+            expect((await sizeUserHome(user.id)).homeData.used).toBe(parts);
             return calendarBytes;
         };
 

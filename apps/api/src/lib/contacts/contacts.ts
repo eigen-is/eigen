@@ -19,7 +19,7 @@ import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen } from '../c
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { getOrgOwner } from '../user';
-import { pushUserProfile } from '../user/avatars';
+import { writeUserProfile } from '../user/profile';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
@@ -431,7 +431,7 @@ export class Contacts {
             // Propagation is downstream of a settled mutation: reporting its failure hands back a stale etag, so the client's retry 412s on an edit that succeeded.
             if (isSelf) {
                 try {
-                    await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
+                    await writeUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
                 } catch (e) {
                     console.error(`contacts: failed to propagate the profile of ${this.home.user.id}:`, e);
                 }

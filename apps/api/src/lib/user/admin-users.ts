@@ -1,6 +1,6 @@
 // What the admin's Users and Guests pages list: one row per account with its org role, teams and last activity,
 // read from the server-wide users database, and the storage each user's home takes. A home is sized from its folder
-// and databases through pullHomeSize, without booting it. That is still disk work, so a few homes are sized at once
+// and databases through sizeUserHome, without booting it. That is still disk work, so a few homes are sized at once
 // and the result is cached for a few minutes.
 
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -11,7 +11,7 @@ import { member, session, team, teamMember, user } from '../../../auth-schema';
 import { Semaphore } from '../../utils/semaphore';
 import { getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
-import { pullHomeSize } from '../home/server-jobs';
+import { sizeUserHome } from '../home/home-jobs';
 import { GUEST_ROLE } from './guest';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -50,7 +50,7 @@ export async function getAllUsersUsage(): Promise<Record<string, HomeSizeRespons
             userIds.map((userId) =>
                 sem.run(async () => {
                     try {
-                        data[userId] = await pullHomeSize(userId);
+                        data[userId] = await sizeUserHome(userId);
                     } catch (error) {
                         console.error(`[admin-users] failed to size home ${userId}:`, error);
                     }

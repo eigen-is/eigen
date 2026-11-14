@@ -1,12 +1,13 @@
-// The way a calendar route gets at a Calendar. resolveCalendar gives the caller their own or their team's.
-// checkCalendarAccess opens the calendar of the owner in the URL, as a Drive route opens that owner's drive, and
-// answers it with the permission the caller has on it. routedCalendar opens it with no check on the caller.
-// syncTeamCalendars brings the caller's list of calendars shared with them up to date.
+// The way a calendar route gets at a Calendar. resolveCalendar gives the caller their own or their team's, and
+// variants such as resolveTransferCalendar add the rule of one kind of route. checkCalendarAccess opens the calendar
+// of the owner in the URL, as a Drive route opens that owner's drive, with the permission the caller has on it.
+// routedCalendar opens it with no check on the caller. syncTeamCalendars brings the caller's list of calendars
+// shared with them up to date.
 
 import * as fs from 'node:fs';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
-import { requireSelf } from '../auth/access';
+import { requireSelf, requireTeamAdmin } from '../auth/access';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core';
 import { getHome } from '../home';
@@ -54,6 +55,38 @@ export async function checkCalendarAccess(
     const permission = await calendar?.checkPermission(calendarId, user.email, memberships.teamIds);
     if (!calendar || !permission) throw new ApiError(403, 'No access to this calendar');
     return { calendar, permission };
+}
+
+// A team home is the only foreign Home a transfer may touch. Free-busy counts as no read here.
+export async function resolveTransferCalendar(
+    user: User,
+    ownerId: string,
+    calendarId: string,
+    need: 'read' | 'write',
+): Promise<Calendar> {
+    if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
+    const { calendar, permission } = await checkCalendarAccess(user, ownerId, calendarId);
+    if (permission === 'free-busy' || (need === 'write' && permission !== 'write')) {
+        throw new ApiError(403, need === 'write' ? 'Write permission required' : 'Read permission required');
+    }
+    return calendar;
+}
+
+// A team home's calendar collection is admin-only: a member's write share on a team calendar is event-level.
+export async function resolveAdministeredCalendar(user: User, ownerId: string): Promise<Calendar> {
+    const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
+    await requireTeamAdmin(user.id, parsed.id);
+    return (await getHome(ownerId)).calendar;
+}
+
+// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too. The events
+// stay on membership.
+export async function resolveListedCalendar(user: User, ownerId: string): Promise<Calendar> {
+    const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
+    const { teamIds } = await getMemberships(user.id);
+    return teamIds.includes(parsed.id) ? resolveCalendar(user, ownerId) : resolveAdministeredCalendar(user, ownerId);
 }
 
 // It does not check the caller, so a route may read from it only what the calendar's own shares give them.
