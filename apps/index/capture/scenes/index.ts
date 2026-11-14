@@ -2,6 +2,10 @@
 // object, such as a still of a drive or a video of two people in one document.
 
 import type { Scene } from '../lib/scene';
+import { adminBackup } from './admin-backup';
+import { adminHero } from './admin-hero';
+import { adminStillBackups } from './admin-still-backups';
+import { adminStillSettings } from './admin-still-settings';
 import { calendarHero } from './calendar-hero';
 import { calendarStillBuild, calendarStillWeek } from './calendar-stills';
 import { chatHero } from './chat-hero';
@@ -69,6 +73,10 @@ export const SCENES: Scene[] = [
     driveHero,
     driveShare,
     driveStillActivity,
+    adminHero,
+    adminBackup,
+    adminStillSettings,
+    adminStillBackups,
     suite,
     ...ROWS,
 ];

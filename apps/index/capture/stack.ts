@@ -32,6 +32,7 @@ export async function startStack({ apps }: { apps: readonly string[] }): Promise
         throw new Error(`Unknown app ${unknown.join(', ')}. Apps: ${Object.keys(APP_PORTS).join(', ')}`);
 
     const apiUrl = `http://localhost:${API_PORT}`;
+    const adminPassword = randomBytes(18).toString('base64url');
     const personaPassword = randomBytes(18).toString('base64url');
     const children: ChildProcess[] = [];
     const onSignal = () => {
@@ -62,7 +63,7 @@ export async function startStack({ apps }: { apps: readonly string[] }): Promise
         console.log('Seeding the demo world…');
         const seeder = start('seed', ['bun', '--no-env-file', 'src/scripts/seed-demo.ts'], 'apps/api', {
             ...env,
-            EIGEN_DEMO_ADMIN_PASSWORD: randomBytes(18).toString('base64url'),
+            EIGEN_DEMO_ADMIN_PASSWORD: adminPassword,
             EIGEN_DEMO_PERSONA_PASSWORD: personaPassword,
         });
         children.push(seeder);
@@ -96,7 +97,7 @@ export async function startStack({ apps }: { apps: readonly string[] }): Promise
         await stop();
         throw err;
     }
-    return { apiUrl, personaPassword, appUrl: appUrlFor, stop };
+    return { apiUrl, adminPassword, personaPassword, appUrl: appUrlFor, stop };
 }
 
 function start(name: string, cmd: string[], cwd: string, env: NodeJS.ProcessEnv): ChildProcess {

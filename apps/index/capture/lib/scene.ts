@@ -8,6 +8,7 @@ import type { Cursor } from './cursor';
 // The throwaway Eigen a scene films in, which startStack runs.
 export type Stack = {
     apiUrl: string;
+    adminPassword: string;
     personaPassword: string;
     appUrl(app: string): string;
     stop(): Promise<void>;
@@ -26,6 +27,7 @@ export type Scene = {
     theme: 'light' | 'dark';
     viewport: { width: number; height: number };
     apps: string[];
+    // Persona keys, such as `saar`, or the seeded admin's local part.
     personas: string[];
     // A video films only the first persona's page, or every page side by side.
     composite?: 'side-by-side';
