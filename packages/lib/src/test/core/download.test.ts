@@ -1,18 +1,38 @@
 // The name a download saves under comes from the response's Content-Disposition (RFC 6266), which
-// useFileDownload reads off the anchor it clicks.
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+// useFileDownload reads off the anchor it clicks. A failed download toasts what the server said, and a
+// proxy's HTML error page reads as its status rather than as markup.
+import { afterAll, afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { installHappyDom } from '../happy-dom';
 import { renderHook } from '../render-hook';
 
 const window = installHappyDom();
 
+const realSonnerModule = { ...(await import('sonner')) };
+const toasts: string[] = [];
+mock.module('sonner', () => ({ toast: { error: (message: string) => toasts.push(message) } }));
+afterAll(() => {
+    mock.module('sonner', () => realSonnerModule);
+});
+
 const { useFileDownload } = await import('../../core/download');
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
     globalThis.fetch = realFetch;
+    toasts.length = 0;
 });
+
+async function failedDownloadToast(response: Response): Promise<string | undefined> {
+    globalThis.fetch = Object.assign(async () => response, { preconnect: realFetch.preconnect });
+    const { latest, unmount } = await renderHook(() => useFileDownload(), new QueryClient());
+    const { act } = await import('react');
+    await act(async () => {
+        expect(await latest.download('/download', 'export.pdf')).toBeNull();
+    });
+    await unmount();
+    return toasts[0];
+}
 
 async function savedName(header: string | null, fallback: string): Promise<string> {
     const headers = new Headers(header ? [['Content-Disposition', header]] : []);
@@ -58,5 +78,19 @@ describe('useFileDownload', () => {
 
     test('a header without a filename parameter falls back', async () => {
         expect(await savedName('attachment', 'contacts.vcf')).toBe('contacts.vcf');
+    });
+});
+
+describe('useFileDownload failures', () => {
+    test("toasts the server's reason", async () => {
+        expect(await failedDownloadToast(new Response('No access to this file', { status: 403 }))).toBe(
+            'No access to this file',
+        );
+    });
+
+    test("a proxy's HTML error page reads as its status", async () => {
+        const page = '<html><body><h1>502 Bad Gateway</h1></body></html>';
+
+        expect(await failedDownloadToast(new Response(page, { status: 502 }))).toBe('Request failed (502)');
     });
 });
