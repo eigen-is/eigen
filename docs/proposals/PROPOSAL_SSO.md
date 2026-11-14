@@ -2,7 +2,7 @@
 
 This proposal lets an organization's people sign in to Eigen with the identity provider the organization already runs, instead of a separate Eigen password.
 
-**Status:** not built: `@better-auth/sso` is not installed. [ROADMAP.md](../ROADMAP.md) keeps its row, and [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) builds on it.
+**Status:** not built: `@better-auth/sso` is not installed. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row, waiting for demand, and [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) builds on it.
 
 > **TLDR**: Let an organization that already runs an identity provider (Keycloak, Authentik,
 > Microsoft Entra, Okta, Google Workspace, Zitadel…) log into Eigen with it, instead of a separate
