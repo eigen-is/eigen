@@ -17,6 +17,7 @@ import {
     useUpdateCalendar,
     useUpdateSharedCalendar,
 } from '@workspace/lib/calendar';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/file-kinds';
@@ -59,7 +60,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
                 onChange();
             }}
         >
-            {checked && <Check className="h-3 w-3 text-white" />}
+            {checked && <Check className="h-3 w-3" style={{ color: readableTextColor(color) }} />}
         </button>
     );
 }

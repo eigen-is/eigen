@@ -4,7 +4,7 @@
 // list now and then celebrates. Callers such as CardDialog fill in the card's own content and actions.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
@@ -116,7 +116,7 @@ export function NoteCardDialog({
                 color
                     ? {
                           '--note-bg': lightenColor(color, 0.5),
-                          '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
+                          '--note-fg': readableTextColor(lightenColor(color, 0.5)),
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                       }

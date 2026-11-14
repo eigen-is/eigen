@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2361 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2362 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1159,7 +1159,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1238)
+## Utilities & constants (1239)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1538,6 +1538,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PRINT_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `QUICK_LOOK_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `QUOTA_MIN_MB` | `@workspace/lib/constants` | packages/lib/src/constants/settings.ts |
+| `readableTextColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readHexColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
