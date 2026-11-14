@@ -66,24 +66,26 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
     );
 }
 
-// Drawn in the body's prose, so it reads like the technical panel under it.
+// In the site's prose of its own, so it reads like the technical panel under it.
 function FormatsPanel({ app }: { app: AboutApp }) {
     if (!app.formats) return null;
     const { files, protocols, text, article } = app.formats;
     const title = getSupportArticles().find((entry) => entry.slug === article)?.title;
     return (
-        <aside className="site-panel">
-            <h2>Open, and yours to take</h2>
-            <p>
-                {text} More in <a href={`/support/${article}`}>{title}</a>.
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-                {[...files, ...protocols].map((tag) => (
-                    <Badge key={tag} variant="outline">
-                        {tag}
-                    </Badge>
-                ))}
-            </div>
-        </aside>
+        <div className="eigen-prose site-prose">
+            <aside className="site-panel">
+                <h2>Open, and yours to take</h2>
+                <p>
+                    {text} More in <a href={`/support/${article}`}>{title}</a>.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                    {[...files, ...protocols].map((tag) => (
+                        <Badge key={tag} variant="outline">
+                            {tag}
+                        </Badge>
+                    ))}
+                </div>
+            </aside>
+        </div>
     );
 }

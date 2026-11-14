@@ -173,6 +173,16 @@ describe('page blocks', () => {
         );
         expect(container.textContent?.replace(/\s+/g, ' ').trim()).toBe('Before Rows Between Panels After');
     });
+
+    test('draw outside the prose, which holds the Markdown around them', async () => {
+        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter');
+        const { container } = await renderInDocument(
+            <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
+        );
+        const prose = Array.from(container.querySelectorAll('.eigen-prose.site-prose'), (div) => div.textContent);
+        expect(prose).toEqual(['Before\n', '\nAfter\n']);
+        expect(container.querySelector('.rows')?.closest('.eigen-prose')).toBeNull();
+    });
 });
 
 describe('ArticleContent', () => {

@@ -315,11 +315,6 @@
         }
     }
 
-    /* A block the page draws itself, such as the About overview's app rows, keeps the look its own classes give it. */
-    .not-prose :is(h2, p, a, img) {
-        all: revert-layer;
-    }
-
     .media-side-by-side {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -360,7 +355,7 @@
 
 /* The changelog: a release is a section with a thin rule above it, its h3 a small label and its entries a bold lead
    on a line of their own. */
-.site-prose.changelog {
+.changelog .site-prose {
     --release-text: color-mix(in oklab, var(--foreground) 82%, var(--background));
 
     .release {

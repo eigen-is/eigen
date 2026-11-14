@@ -1,13 +1,12 @@
-// The rendered body of an article, a post or the changelog, in the site's prose style, on every page that shows
-// Markdown. The build leaves the HTML with a marker for each media grid and each block the page draws itself, such as
-// the About overview's app rows, so this draws the HTML as it is and each marker as a component. It wires the heading
-// links, the carousels (buttons, dots, autoplay) and the lightbox, and plays the looping videos in view unless the
-// reader asked for less motion.
+// The rendered body of an article, a post or the changelog, on every page that shows Markdown. The build leaves the
+// HTML with a marker for each media grid and each block the page draws itself, such as the About overview's app rows,
+// so this draws the HTML in the site's prose style and each marker as a component, the page's own blocks outside the
+// prose. It wires the heading links, the carousels (buttons, dots, autoplay) and the lightbox, and plays the looping
+// videos in view unless the reader asked for less motion.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { cn } from '@workspace/ui/lib/utils';
 import type { MouseEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
 import type { LightboxItem } from './media-lightbox';
@@ -17,21 +16,6 @@ import { MediaLightbox } from './media-lightbox';
 type ArticleContentProps = { body: ArticleBody; blocks?: Readonly<Record<string, ReactNode>>; className?: string };
 
 export function ArticleContent({ body, blocks, className }: ArticleContentProps) {
-    const parts = useMemo(() => {
-        const segments: Array<{ html: string } | { grid: number } | { block: string }> = [];
-        const regex = /<p>\[(?:MEDIAGRID:(\d+)|BLOCK:([\w-]+))\]<\/p>/g;
-        let last = 0;
-        let match: RegExpExecArray | null = regex.exec(body.html);
-        while (match !== null) {
-            segments.push({ html: body.html.slice(last, match.index) });
-            segments.push(match[2] ? { block: match[2] } : { grid: Number(match[1]) });
-            last = match.index + match[0].length;
-            match = regex.exec(body.html);
-        }
-        segments.push({ html: body.html.slice(last) });
-        return segments;
-    }, [body.html]);
-
     const ref = useRef<HTMLDivElement>(null);
     const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number; open: boolean }>({
         items: [],
@@ -130,8 +114,8 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             strip.scrollTo({ left: slide * pitch });
             return;
         }
-        const media = e.target.closest('img, figure video');
-        if (media && !media.closest('a, button, .not-prose')) {
+        const media = e.target.closest('.site-prose :is(img, figure video)');
+        if (media && !media.closest('a, button')) {
             const group = Array.from(media.closest('.media-carousel-strip')?.querySelectorAll('img, video') ?? [media]);
             setLightbox({ items: group.map(lightboxItem), index: group.indexOf(media), open: true });
             return;
@@ -147,16 +131,20 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
     };
 
     return (
-        <div ref={ref} className={cn('eigen-prose site-prose', className)} onClick={onClick}>
-            {parts.map((part, i) => {
-                if ('block' in part) return <div key={i}>{blocks?.[part.block]}</div>;
-                if ('grid' in part) {
-                    const grid = body.mediaGrids[part.grid];
-                    return grid ? <MediaGrid key={i} columns={grid.columns} items={grid.items} /> : null;
-                }
-                if (!part.html) return null;
-                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
-                return <div key={i} dangerouslySetInnerHTML={{ __html: part.html }} />;
+        <div ref={ref} className={className} onClick={onClick}>
+            {body.html.split(BLOCK_MARKER).map((section, i) => {
+                if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
+                if (!section) return null;
+                return (
+                    <div key={i} className="eigen-prose site-prose">
+                        {section.split(GRID_MARKER).map((part, j) => {
+                            if (j % 2) return <MediaGrid key={j} {...body.mediaGrids[Number(part)]} />;
+                            if (!part) return null;
+                            // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
+                            return <div key={j} dangerouslySetInnerHTML={{ __html: part }} />;
+                        })}
+                    </div>
+                );
             })}
             <MediaLightbox
                 {...lightbox}
@@ -166,6 +154,11 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         </div>
     );
 }
+
+// The build's markers for a block the page draws, such as `apps`, and for a media grid, by its number. Split on
+// them, the pieces at odd places are the captured names and numbers.
+const BLOCK_MARKER = /<p>\[BLOCK:([\w-]+)\]<\/p>/;
+const GRID_MARKER = /<p>\[MEDIAGRID:(\d+)\]<\/p>/;
 
 const AUTOPLAY_MS = 7000;
 
