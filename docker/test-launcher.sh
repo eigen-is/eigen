@@ -9,7 +9,7 @@
 #     the files an unfinished update left; the backup it makes on the running API before it writes anything, and
 #     the handover, typed on a terminal too; --no-backup with Eigen stopped; a refusal while eigen-api reads a
 #     .env.production replaced since it started, or cannot be asked; an interrupt in the backup wait, which stops and
-#     restarts nothing;
+#     restarts nothing; a rollback pin that cannot be pulled back, which leaves every old image;
 #   - the restart notice: --in and its message, refused before anything runs when wrong; the notice after the pulls
 #     and the countdown before the backup, or before the stop of a rollback or restore; a TERM, a hangup and a failed
 #     backup each taking it back; a failed notice with and without a wait;
@@ -40,7 +40,8 @@ trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
 # info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail,
-# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled;
+# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled, and
+# STUB_GONE on that one image;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a
 # dovecot image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the
@@ -116,6 +117,7 @@ case $1 in
     image)
         for ref; do :; done
         if [ "$2" = inspect ] && [ "${STUB_IMAGE:-0}" = 1 ] && ! grep -qxF "pull $ref" "$STUB_LOG"; then exit 1; fi
+        if [ "$2" = inspect ] && [ "$ref" = "${STUB_GONE:-}" ]; then exit 1; fi
         revision=${STUB_LABEL_REVISION:-abc1234}
         if [ -n "${STUB_MOVED:-}" ] && [ "$(grep -c '^pull [^ ]*/api:' "$STUB_LOG")" -ge 2 ]; then revision=$STUB_MOVED; fi
         case $* in
@@ -242,7 +244,7 @@ launch() {
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_RUN_CODE \
         STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
-        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS; do
+        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS STUB_GONE; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -898,6 +900,20 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
     rm "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    reset_release
+    # On the containerd store a rollback pin not pulled back by digest is dangling, and any prune would remove it.
+    printf '%s\n' EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local \
+        EIGEN_FRONTEND_IMAGE=ghcr.io/eigen-is/eigen/frontend@sha256:fff >>"$FIX/release/.env.production"
+    STUB_GONE=ghcr.io/eigen-is/eigen/frontend@sha256:fff STUB_FAIL=ghcr.io/eigen-is/eigen/frontend@sha256:fff \
+        STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -qx 'pull ghcr.io/eigen-is/eigen/frontend@sha256:fff' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq '^image (rm|prune) ' &&
+        printf '%s\n' "$OUT" | grep -q '▲  No old image was removed, since one a rollback needs could not be downloaded again.'; then
+        ok "$SHELL_NAME: update removes no old image when it cannot pull back what a rollback pins, and says so"
+    else
+        fail "$SHELL_NAME: update past a failed pull-back: exit $CODE, '$OUT', '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     reset_release
 
     # --in: the notice goes out after every pull, the wait counts down in the launcher, and the backup follows it.

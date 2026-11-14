@@ -295,7 +295,7 @@ api_cli() {
 }
 
 # api_ask <command…>: api_cli for what the API answers at once, given up after 20 s, as an exec through a daemon that
-# stopped answering never returns. The job is docker itself, by exec, so the kill leaves nothing of the ask running.
+# stopped answering never returns. By exec the job is docker itself, which hands the kill on to its compose plugin.
 api_ask() {
     (docker() { exec docker "$@"; }; api_cli "$@") &
     asked=$! deadline=$(($(date +%s) + 20))
@@ -924,12 +924,12 @@ refresh_fail2ban() {
 
 # prune_images [pin…]: the images an update leaves behind. Keeps those pins, the rollback's, and the images PINS
 # names, and removes the rest by ID. On the containerd store a moved tag leaves an old build of main dangling, which
-# the prune at the end would take, so the pins are pulled back by digest first: only their manifests download. Best
-# effort.
+# the prune at the end would take, so the pins are pulled back by digest first: only their manifests download. A pin
+# that cannot be pulled back fails it before it removes anything; the rest is best effort.
 prune_images() {
     keep=' '
     for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
-    pull_refs $(printf '%s\n' "$@" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p') || :
+    pull_refs $(printf '%s\n' "$@" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p') || return 1
     for name in $IMAGES; do
         remove=$(docker image ls --all "$REGISTRY/$name" --digests \
             --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
@@ -1458,7 +1458,10 @@ update_apply() {
     if [ -n "$saved" ]; then printf '%s\n%s\n' "$saved" "$old_pins" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
-    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
+    STEP_GOES_ON=1
+    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins ||
+        say "$YELLOW" '▲' "No old image was removed, since one a rollback needs could not be downloaded again."
+    STEP_GOES_ON=''
     say "$GREEN" '◇' "Eigen $old → $new is running at https://$domain/"
     if [ -n "$saved" ]; then
         say "$GRAY" '│' "Saved before the update: backups/$saved"
