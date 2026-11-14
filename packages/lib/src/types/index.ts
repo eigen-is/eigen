@@ -1,4 +1,5 @@
 export * from './admin';
+export * from './auth';
 export * from './calendar';
 export * from './chat';
 export * from './clipboard';

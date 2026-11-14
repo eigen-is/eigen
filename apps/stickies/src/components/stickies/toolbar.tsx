@@ -4,13 +4,19 @@
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import type { useCommentFilter } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_COLORS, readableTextColor } from '@workspace/lib/constants/colors';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { AppBarMenu, CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu } from '@workspace/ui';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import {
+    AppBarMenu,
+    CenteredToolbar,
+    DocumentShareCluster,
+    EditMenu,
+    FileMenu,
+} from '@workspace/ui/components/layout/toolbar';
 import { Menubar } from '@workspace/ui/components/menubar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
@@ -100,7 +106,7 @@ export function Toolbar({
                                             {active && (
                                                 <Check
                                                     className="h-2 w-2"
-                                                    style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
+                                                    style={{ color: readableTextColor(c.value) }}
                                                 />
                                             )}
                                         </button>

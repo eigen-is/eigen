@@ -1,24 +1,20 @@
-import type { AuthUser } from '@workspace/lib/auth';
+// Who is on which card of a Stickies board, through the board's Yjs awareness. useStickiesPresence publishes the
+// user's name, color and the card they work on, such as the one whose dialog is open. useCardPresence turns the
+// other peers' states into a map from card to peer, which the board draws as outlines. The board calls both.
+
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { CursorPeerState } from '@workspace/ui/components/collab';
 import { useAwarenessIdentity, useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useEffect, useMemo, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
-// The stickies awareness shape: the shared identity + selection fields, no cursor — the board scrolls
-// per-user (each column vertically, the board horizontally) so there is no shared pixel space to
-// anchor a pointer to. Stickies publishes a subset of the documented CursorPeerState convention
-// (`user` + `selection`), so the shared type covers it without a redundant per-app alias.
+// No cursor: each person scrolls the board their own way, so a pointer has no shared place on it.
 export type StickiesPeerState = CursorPeerState;
 
 // A remote peer's presence on one card: the identity to tint its outline and label with.
 export type CardPeer = { name: string; color: string };
 
-// Publishes the local user's presence onto the board's Yjs awareness: identity (name + color) once,
-// and the card the user is "working on" on change. "Working on" = the card whose edit dialog is open,
-// else the card actively being dragged (the host computes it and hands over 0-or-1 ids). Mirrors
-// use-slides-presence (`userColor(user.id)` + `user.name`) minus the cursor field. Awareness is
-// ephemeral — this never touches the columns/tasks/columnOrder Yjs roots, so stickies stays BC-frozen.
-// Not gated on write access: a read-only viewer is a visible peer, exactly as in slides and vector.
+// A read-only viewer publishes too, so others see them, as in Slides and Vector.
 export function useStickiesPresence(
     provider: WebsocketProvider | null,
     user: AuthUser | null,
@@ -32,12 +28,8 @@ export function useStickiesPresence(
     }, [provider, selectedCardIds]);
 }
 
-// Projects the board's remote awareness into a card-id → peer map for the outline + name chip. Built
-// on the shared useAwarenessPeers (never a hand-rolled awareness subscription), memoized and
-// identity-preserving: an unchanged peer keeps its CardPeer object across ticks, so a card whose peer
-// didn't change never re-renders. Last-writer-wins if two peers claim the same card (a rare presence
-// collision — one outline can only carry one color).
-export function useCardPresence(provider: WebsocketProvider | null): Map<string, CardPeer> {
+// A peer that didn't change keeps its object, so a card whose peer is the same doesn't re-render.
+export function useCardPresence(provider: WebsocketProvider | null): ReadonlyMap<string, CardPeer> {
     const states = useAwarenessPeers<StickiesPeerState>(provider);
     const prevRef = useRef<Map<string, CardPeer>>(new Map());
 

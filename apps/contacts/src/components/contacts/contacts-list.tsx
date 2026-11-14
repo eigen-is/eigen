@@ -1,8 +1,13 @@
+// The contacts page's list of the address book, or of one label's contacts, and the toolbar above it: search,
+// sort by first or last name, and the import and export menu. A row opens its detail and has the shared contact
+// menu on right-click. The user's own card can't be deleted. A team's member list reuses the toolbar without
+// the sort and the menu.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { ProgressDialog } from '@workspace/ui/components/drive';
@@ -12,6 +17,9 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { EmptyState, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { KebabTrigger, Toolbar } from '@workspace/ui/components/layout/toolbar';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { PersonList, UserItem } from '@workspace/ui/components/user';
 import { ArrowUpDown, Download, Upload } from 'lucide-react';
 import { useMemo } from 'react';
@@ -20,9 +28,9 @@ import { isSelfContact, useContactMenu } from './contact-menu';
 type ContactsListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    // Absent → no sort toggle (team members carry a single display name, nothing to sort by).
+    // Without it there is no sort toggle: a team member has one display name.
     onSortChange?: (sort: 'firstName' | 'lastName') => void;
-    // Absent → no import/export kebab (team members aren't cards this book owns).
+    // Without it there is no import or export menu: team members are not cards this book owns.
     onImportClick?: () => void;
 };
 
@@ -122,7 +130,7 @@ export function ContactsList({
                 activeId={activeContactId}
                 getId={(c) => c.id}
                 getName={(c) => (sortBy === 'firstName' ? c.firstName : c.lastName)}
-                getSearchFields={(c) => [c.firstName, c.lastName, ...(c.email ?? [])]}
+                getSearchFields={(c) => [c.firstName, c.lastName, ...c.email]}
                 onRowClick={(id) => onRowClick?.(id)}
                 selectable
                 dragType="contact"
@@ -131,15 +139,15 @@ export function ContactsList({
                     <UserItem
                         name={
                             sortBy === 'firstName'
-                                ? `${contact.firstName} ${contact.lastName}`
+                                ? contactFullName(contact)
                                 : `${contact.lastName}, ${contact.firstName}`
                         }
-                        email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                        email={contact.email.length > 0 ? contact.email[0] : undefined}
                         imageUrl={contact.avatar}
                         className="flex-1"
                     />
                 )}
-                // Delete/Backspace on the list, minus the card that is you — the menu hides Delete there too.
+                // Delete and Backspace skip your own card, as the menu does.
                 onDelete={
                     onDelete
                         ? (selected) => {
@@ -148,7 +156,7 @@ export function ContactsList({
                         : undefined
                 }
                 renderMenuItems={(contextItems, close) =>
-                    // Print is detail-only (it clones the on-screen detail pane), so showPrint stays off here.
+                    // Print copies the open detail pane, so the list has none.
                     contactMenu.renderItems(contextItems, close, {
                         labels,
                         onEdit,

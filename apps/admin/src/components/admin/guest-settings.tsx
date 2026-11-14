@@ -1,8 +1,12 @@
+// The owner's Guest access settings: whether anyone may ask for a guest sign-in code, even with nothing shared to
+// them yet, and after how many idle days a guest account is deleted. Changes collect in a draft and save together
+// through the server-settings hooks. The Guest access route shows it.
+
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui/components/layout/app';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { useState } from 'react';

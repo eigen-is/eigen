@@ -2,7 +2,7 @@
 // the site's wide container and has no sidebar.
 
 import { Link } from '@tanstack/react-router';
-import { KetTile } from '@workspace/ui';
+import { KetTile } from '@workspace/ui/components/braket';
 import { SitePage } from '../site-page';
 import { SECTIONS } from './sections';
 import { SupportSearch } from './support-search';

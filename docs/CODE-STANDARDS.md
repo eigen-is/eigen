@@ -34,7 +34,7 @@ Types flow end to end: Elysia handler return type → Eden Treaty → hook → c
 - Eden responses keep their inferred type: the backend handler or domain method gets an explicit return type from `packages/lib/src/types/`
 - Shared types live in `packages/lib/src/types/[domain].ts`, never redefined; a missing one is added there. Only the leaves `@workspace/math` and `@workspace/formula` own their own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
-- Infer locally, annotate publicly: explicit return types on backend route handlers, domain methods and hooks, none where TypeScript infers
+- Infer locally, annotate publicly: explicit return types on backend route handlers, domain methods and hooks, none where TypeScript infers. A hook that returns its `useQuery`, `useInfiniteQuery` or `useMutation` call as it is takes none: the route's type already flows through it from Eden, and a written one would only repeat it
 - `import type` as its own statement beside the value import from the same module, so each import fits on one line
 - Drizzle `.$inferSelect` for row types, never hand-written column types
 - One type per concept: pass `User` or `DrivePath` even when a function reads two fields, never a narrower projection; convert a library's narrower shape where it enters. Test fixtures may keep their own

@@ -2,7 +2,7 @@
 // not built yet, so DownloadHome shows its button disabled with a line that says so.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { DownloadHome } from '../components/space/download-home';
 
 export const Route = createFileRoute('/_auth/data')({

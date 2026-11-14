@@ -260,6 +260,27 @@ describe('self-profile propagation', () => {
         expect((await contacts.getContactById(me.id))?.notes).toBe('propagation failed');
         expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
+
+    test('a self card with only a first name pushes that name without a trailing space', async () => {
+        const { instance: contacts, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+
+        const relay = await import('../../lib/home/home-relay');
+        const names: string[] = [];
+        const push = spyOn(relay, 'pushUserProfile').mockImplementation(async (_userId, name) => {
+            names.push(name);
+        });
+        try {
+            await contacts.updateContact(
+                me.id,
+                validContact({ firstName: 'Augusta', lastName: '', email: [user.email] }),
+            );
+        } finally {
+            push.mockRestore();
+        }
+
+        expect(names).toEqual(['Augusta']);
+    });
 });
 
 // Seeding the org owner into a fresh book is one-shot, latched in book.ownerSeeded once a real owner has been

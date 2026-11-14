@@ -1,6 +1,7 @@
-// An event's guests, read-only, with a button that copies their addresses. It also owns how a reply reads, its icon
-// and its label, for other views of the guests such as the editor that collects them. It shows wherever someone reads
-// an event's guests, such as its detail card.
+// An event's guests, read-only: the organizer first, then everyone else with their reply, under a count and a tally of
+// the replies, with a button that copies the addresses. It also owns how a reply reads, its icon and its label, for
+// other views of the guests such as the editor that collects them. It shows wherever someone reads an event's guests,
+// such as its detail card.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
@@ -31,16 +32,18 @@ type AttendeeListProps = {
     remaining?: number;
 };
 
-// The guests of an event, read-only: the organizer first, then everyone else with the reply they gave.
 export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeListProps) {
-    const filteredAttendees = organizer
-        ? attendees.filter((a) => a.email.toLowerCase() !== organizer.email.toLowerCase())
-        : attendees;
+    const organizerEmail = organizer?.email.toLowerCase();
+    const filteredAttendees = attendees.filter((a) => a.email.toLowerCase() !== organizerEmail);
+    // An organizer the file lists only as organizer has no reply of their own, and organizing is accepting.
+    const organizerReply = attendees.find((a) => a.email.toLowerCase() === organizerEmail)?.status ?? 'accepted';
 
     const count = filteredAttendees.length + (organizer ? 1 : 0) + remaining;
     const title = count === 1 ? '1 guest' : `${count} guests`;
     // The replies of the listed guests are the whole event's only when the payload carried them all.
-    const summary = remaining === 0 ? buildAttendeeSummary(attendees) : '';
+    const statuses = filteredAttendees.map((a) => a.status);
+    if (organizer) statuses.push(organizerReply);
+    const summary = remaining === 0 ? buildAttendeeSummary(statuses) : '';
 
     const handleCopyEmails = () => {
         const emails = filteredAttendees.map((a) => a.email);
@@ -88,10 +91,10 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
     );
 }
 
-function buildAttendeeSummary(attendees: readonly Attendee[]): string {
+function buildAttendeeSummary(statuses: readonly Attendee['status'][]): string {
     const counts: Partial<Record<Attendee['status'], number>> = {};
-    for (const a of attendees) {
-        counts[a.status] = (counts[a.status] ?? 0) + 1;
+    for (const status of statuses) {
+        counts[status] = (counts[status] ?? 0) + 1;
     }
     const parts: string[] = [];
     if (counts.accepted) parts.push(`${counts.accepted} accepted`);

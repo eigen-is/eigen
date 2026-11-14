@@ -40,14 +40,6 @@ export const driveListingsRouter = new Elysia({ name: 'drive-listings' })
         },
         { auth: true },
     )
-    .get(
-        '/drive/:ownerId/shared-with-me',
-        async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getSharedWith(user);
-        },
-        { auth: true },
-    )
     // The files of one MIME type in every mount of the drive. With ?teams=1 the caller's team drives
     // are searched too.
     .get(

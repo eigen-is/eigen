@@ -129,19 +129,10 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
     const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
-    const addPerson = (person: PickedPerson) => {
-        const email = person.email.toLowerCase();
-        if (email === myEmail) return;
-        setPicked((prev) =>
-            prev.some((pickedPerson) => pickedPerson.email === email)
-                ? prev
-                : [...prev, { email, displayName: person.displayName || email }],
-        );
-    };
-
-    // Typed input and picked suggestions join the picked set, as in the share dialog.
-    const contactInput = useContactInput((contact) => {
-        addPerson(contact);
+    // The chat's name falls back to an address's local part only for an address nobody knows.
+    const contactInput = useContactInput(({ email, displayName = email.split('@')[0] }) => {
+        if (email === myEmail) return true;
+        setPicked((prev) => (prev.some((person) => person.email === email) ? prev : [...prev, { email, displayName }]));
         return true;
     });
 

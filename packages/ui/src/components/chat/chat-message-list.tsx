@@ -29,7 +29,7 @@ import { InspectCard } from './inspect-card';
 import { RichContent } from './rich-content';
 
 type ChatMessageListProps = {
-    messages: ChatMessage[];
+    messages: readonly ChatMessage[];
     isLoading: boolean;
     currentUserEmail: string;
     ownerId?: string;

@@ -18,8 +18,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, isContainerType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { DraftUpdateOptions, EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
-import { ConfirmDialog, FileDropOverlay, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { ContactAutosuggest } from '@workspace/ui/components/contacts';
 import {
     Dialog,
@@ -31,7 +31,9 @@ import {
 } from '@workspace/ui/components/dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { LightEditor } from '@workspace/ui/components/editor';
+import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
 import { Input } from '@workspace/ui/components/input';
+import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
@@ -169,8 +171,8 @@ export function EmailDraft({
     const uploadFiles = async (files: FileList | File[] | null) => {
         if (!files) return;
         const list = files instanceof FileList ? Array.from(files) : files;
-        // Uploads run in parallel — multiple small attachments shouldn't block on each other.
-        // Errors toast via the mutation hook; any individual failure still lets the others proceed.
+        // Uploads run in parallel so small attachments don't wait on each other. The mutation hook reports each
+        // error, and one failed upload still lets the others finish.
         const results = await Promise.all(
             list.map(async (file) => {
                 const result = await uploadMutation.mutateAsync(file).catch(() => null);

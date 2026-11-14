@@ -11,7 +11,7 @@ import {
     viewerTimeZone,
 } from '@workspace/lib/calendar';
 import type { Attendee } from '@workspace/lib/types/calendar';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';

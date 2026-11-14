@@ -889,7 +889,7 @@ describe('Occurrence edits of an invited series', () => {
     // The ORGANIZER is the file's to keep. A body naming someone else would make the owner's own event an invitation
     // from that stranger.
     test("a save that names another organizer keeps the saver's ORGANIZER", async () => {
-        const organizer = { userId: '', email: 'mallory.organizer@example.org', name: 'Mallory' };
+        const organizer = { email: 'mallory.organizer@example.org', name: 'Mallory' };
         const created = await authedRequest(
             ctx.alice.user.sessionToken,
             `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,

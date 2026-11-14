@@ -5,10 +5,10 @@ import { useAuth } from '@workspace/lib/auth';
 import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { Attachment } from '@workspace/lib/types/mail';
-import { TooltipButton } from '@workspace/ui';
 import { AttachmentStrip, SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { FileActionMenuItems, useFileActionRunner } from '@workspace/ui/components/file-actions';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { usePreview } from '@workspace/ui/components/preview-provider';
 import { Download } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
@@ -23,9 +23,8 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const { openPreview } = usePreview();
     const ownerId = user?.id ?? '';
 
-    // Every part is a chip, a calendar part included: the invite widget above says what the invitation
-    // is, the chip is the file it rides in — quick look, save, Import to Calendar. Each subject keeps
-    // the raw part index the mail routes address.
+    // The invite widget above says what an invitation is, so a calendar part still gets a chip: the file to look
+    // at, save or import to Calendar. Each subject keeps the raw part index the mail routes address.
     const subjects = useMemo(
         () => (attachments ?? []).map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
         [attachments, emailId, ownerId],

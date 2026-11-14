@@ -24,8 +24,9 @@ import {
 } from '@workspace/lib/calendar';
 import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
-import { ConfirmDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { AttendeeList } from '@workspace/ui/components/calendar';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';

@@ -1,10 +1,24 @@
+// The edit and delete state of one chat room's composer: which message is being edited or is about to be
+// deleted, and the up arrow that opens the user's own last message for editing. It runs the room's own edit
+// and delete calls and hands the composer its focus back when an edit ends.
+
 import { useCallback, useState } from 'react';
 import type { ChatMessage } from '../../../types/chat';
-import type { useChatRoom } from './use-chat-room';
+import type { ChatRoomState } from './use-chat-room';
 
-type ChatRoom = ReturnType<typeof useChatRoom>;
+type ChatEditing = {
+    deleteTarget: ChatMessage | null;
+    setDeleteTarget: (message: ChatMessage | null) => void;
+    editingMessageId: string | null;
+    setEditingMessageId: (id: string | null) => void;
+    focusTrigger: number;
+    endEditing: () => void;
+    handleSaveEdit: (messageId: string, content: string) => Promise<void>;
+    handleDeleteConfirm: () => Promise<void>;
+    onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => true | undefined;
+};
 
-export function useChatEditing(chat: ChatRoom) {
+export function useChatEditing(chat: ChatRoomState): ChatEditing {
     const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
     const [focusTrigger, setFocusTrigger] = useState(0);

@@ -16,11 +16,11 @@ import {
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
-import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { LoadingState, RequestAccessView } from '@workspace/ui/components/layout/app';
 import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 

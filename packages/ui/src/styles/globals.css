@@ -1,3 +1,6 @@
+/* Every app's styles but the rules of the Chinese and Korean font faces: Tailwind, the theme, the font rules and the
+   shared classes. The website loads this alone; the apps load app.css, which adds those rules for what people type. */
+
 @import "tailwindcss";
 @import "./fonts.css";
 @import "./font-weights.css";
@@ -517,8 +520,8 @@
         box-shadow: inset 2px 0 0 0 var(--app-current-color);
     }
 
-    /* Grid tiles use a full app-color border on hover/active/selected — the row
-       stripe+wash above only covers a tile's label strip and reads as stray chrome. */
+    /* Grid tiles use a full app-color border on hover, open and selected, since the row wash would
+       only cover a tile's label strip. The keyboard cursor is the row cursor's stripe instead. */
     .eigen-tile {
         @apply bg-background select-none;
         border-color: var(--border);
@@ -531,6 +534,16 @@
     .eigen-tile-active,
     .eigen-tile-selected {
         border-color: var(--app-current-color);
+    }
+
+    /* An overlay, because the thumbnail's tint paints over an inset shadow on the tile itself. The
+       tile's overflow clip rounds the stripe's ends to its corners. */
+    .eigen-tile-cursor::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        box-shadow: inset 2px 0 0 0 var(--app-current-color);
+        pointer-events: none;
     }
 
     /* Launcher tile shaped like the wordmark's |name>: the body carries the top/bottom/left

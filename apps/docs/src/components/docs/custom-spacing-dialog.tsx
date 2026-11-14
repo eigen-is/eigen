@@ -4,8 +4,8 @@
 import type { Editor } from '@tiptap/react';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { PARAGRAPH_FORMAT_LIMITS, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 

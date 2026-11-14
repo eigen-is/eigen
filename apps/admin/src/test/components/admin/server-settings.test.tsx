@@ -77,15 +77,15 @@ const realStatus = { ...(await import('../../../components/admin/server-status-s
 mock.module('../../../components/admin/server-status-section', () => ({ ServerStatusSection: () => null }));
 const realPicker = { ...(await import('../../../components/admin/storage-type-picker')) };
 mock.module('../../../components/admin/storage-type-picker', () => ({ StorageTypePicker: () => null }));
-const realUi = { ...(await import('@workspace/ui')) };
-mock.module('@workspace/ui', () => ({ ...realUi, SettingsFooter: () => null }));
+const realUi = { ...(await import('@workspace/ui/components/layout/app')) };
+mock.module('@workspace/ui/components/layout/app', () => ({ ...realUi, SettingsFooter: () => null }));
 afterAll(() => {
     mock.module('@workspace/lib/settings', () => realSettings);
     mock.module('@workspace/lib/public', () => realPublic);
     mock.module('../../../components/admin/server-backup-section', () => realBackup);
     mock.module('../../../components/admin/server-status-section', () => realStatus);
     mock.module('../../../components/admin/storage-type-picker', () => realPicker);
-    mock.module('@workspace/ui', () => realUi);
+    mock.module('@workspace/ui/components/layout/app', () => realUi);
 });
 
 const { act, createElement } = await import('react');

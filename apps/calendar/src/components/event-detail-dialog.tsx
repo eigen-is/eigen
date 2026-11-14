@@ -16,9 +16,9 @@ import {
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { DeleteDialog, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import {
     Dialog,
     DialogContent,
@@ -28,6 +28,7 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { ProgressDialog } from '@workspace/ui/components/drive';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserName } from '@workspace/ui/components/user';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';

@@ -191,7 +191,7 @@ path if `atHome()`, else fetch through Caddy relay:
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
     if (atHome(ownerUserId) || !isClusterMode()) {
         const home = await getHome(ownerUserId);
-        return home.drive.getSharedWith(user);
+        return home.drive.getAllSharedWith(user);
     }
     return fetchFromRelay(ownerUserId, 'shared-paths', { user });
 }

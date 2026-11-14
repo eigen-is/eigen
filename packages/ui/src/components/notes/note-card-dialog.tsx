@@ -4,7 +4,7 @@
 // list now and then celebrates. Callers such as CardDialog fill in the card's own content and actions.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
@@ -37,11 +37,11 @@ type NoteCardDialogProps = {
     // Fires after a read-only task-list checkbox toggle inside `description`.
     // Receives the post-toggle HTML. Only wired when `canWrite` is true.
     onDescriptionChange?: (html: string) => void;
-    // Rendered between the description and the meta/actions footer — card content,
-    // above the separator, unlike `children` (the thread).
+    // Card content between the description and the footer, so it sits above the separator, unlike the thread
+    // in `children`.
     attachments?: ReactNode;
-    // In-place edit: when set, replaces the description/attachments/meta rows with an
-    // editing form. The colored header and the thread `children` stay visible.
+    // Replaces the description, attachments and meta rows with an editing form. The colored header and the
+    // thread in `children` stay visible.
     editForm?: ReactNode;
     children: ReactNode;
 };
@@ -116,7 +116,7 @@ export function NoteCardDialog({
                 color
                     ? {
                           '--note-bg': lightenColor(color, 0.5),
-                          '--note-fg': isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff',
+                          '--note-fg': readableTextColor(lightenColor(color, 0.5)),
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                       }

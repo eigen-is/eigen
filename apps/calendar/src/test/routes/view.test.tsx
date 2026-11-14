@@ -180,6 +180,23 @@ test('a day holds four events, all-day first, and counts the rest', async () => 
     expect(container.textContent).toContain('1 more');
 });
 
+test("an all-day pill's title is black on a light color and white on a dark one", async () => {
+    const allDay = (title: string, color: string) =>
+        event({
+            title,
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 20)),
+            endTime: new Date(Date.UTC(2026, 9, 21)),
+            data: { color },
+        });
+    ownEvents.data = [allDay('Pale', '#fef9c2'), allDay('Deep', '#193cb8')];
+    const { container } = await open();
+    expect([pill(container, 'Pale'), pill(container, 'Deep')].map((p) => p?.getAttribute('style'))).toEqual([
+        expect.stringMatching(/(^|; )color: #000;/),
+        expect.stringMatching(/(^|; )color: #fff;/),
+    ]);
+});
+
 test('while the events load the grid waits', async () => {
     ownEvents.isLoading = true;
     const { container } = await open();

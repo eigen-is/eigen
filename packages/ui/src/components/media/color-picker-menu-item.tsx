@@ -1,4 +1,9 @@
-import { isLightColor } from '@workspace/lib/constants';
+// A menu row that opens the shared color grid as a submenu, the menu's counterpart of the toolbar's color button,
+// in menus such as a doc's Format menu. Each swatch is a real menu item rather than a button, so hover-open, pointer
+// travel into the grid, keyboard roving and the mobile drill-in work as in any other submenu. The swatches copy
+// ColorPicker's look, so the two change together.
+
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import {
     DropdownMenuItem,
     DropdownMenuSub,
@@ -14,24 +19,15 @@ type ColorPickerMenuItemProps = {
     label: string;
     value: string;
     onChange: (color: string) => void;
-    // Leads the row in a menu whose items carry icons (docs' Format › Text).
+    // Leads the row in a menu whose items carry icons.
     icon?: LucideIcon;
     resetLabel?: string;
     showReset?: boolean;
-    // CustomBorder composes color + style + border type in one open menu, like its
-    // sibling style items; everything else closes on pick like a normal menu item.
+    // For a menu that sets several things in one go; any other menu closes on a pick.
     keepMenuOpen?: boolean;
-    // Extra class for the submenu content — sheets pass `sheet-mousedown-cancel`.
     contentClassName?: string;
 };
 
-// A menu row that opens the shared color grid as a real submenu — the menu-item
-// analogue of the toolbar's ColorPickerButton. Every swatch is a registered menu
-// item (not a raw button), so hover-open, pointer travel into the grid, menu
-// roving and the mobile drill-in all behave like every other submenu. Swatch
-// markup mirrors ColorPicker (menu items can't come out of its button grid,
-// and menu-item context needs size-* icons to dodge the [&_svg] default) —
-// keep the two visually in sync.
 export function ColorPickerMenuItem({
     label,
     value,
@@ -79,11 +75,9 @@ export function ColorPickerMenuItem({
                                     )}
                                     style={{ backgroundColor: color.value }}
                                 >
+                                    {/* A menu item sizes a bare svg itself, so the check names its size. */}
                                     {selected && (
-                                        <Check
-                                            className="size-2"
-                                            style={{ color: isLightColor(color.value) ? '#000' : '#fff' }}
-                                        />
+                                        <Check className="size-2" style={{ color: readableTextColor(color.value) }} />
                                     )}
                                 </DropdownMenuItem>
                             );

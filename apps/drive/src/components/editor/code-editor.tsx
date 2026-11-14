@@ -26,7 +26,9 @@ import {
     lineNumbers,
 } from '@codemirror/view';
 import { downloadBlob } from '@workspace/lib/download';
-import { Column, ConfirmDialog, TooltipButton } from '@workspace/ui';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
+import { Column } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';

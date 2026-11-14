@@ -37,7 +37,7 @@ type ChatMessageInputProps = {
     disabled: boolean;
     readOnly: boolean;
     placeholder: string;
-    roomMembers: RoomMember[];
+    roomMembers: readonly RoomMember[];
     currentUserEmail: string;
     messageCount: number;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;

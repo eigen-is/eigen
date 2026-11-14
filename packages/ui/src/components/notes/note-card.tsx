@@ -5,7 +5,7 @@
 // NoteCardDialog.
 
 import { useAuth } from '@workspace/lib/auth';
-import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
@@ -72,7 +72,7 @@ export function NoteCard({
                 ...(frameColor
                     ? {
                           '--note-bg': lightenColor(frameColor, 0.25),
-                          '--note-fg': isLightColor(lightenColor(frameColor, 0.25)) ? '#000' : '#fff',
+                          '--note-fg': readableTextColor(lightenColor(frameColor, 0.25)),
                           '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(frameColor) ?? frameColor,
                           '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
                       }

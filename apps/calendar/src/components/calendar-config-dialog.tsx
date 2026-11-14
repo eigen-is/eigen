@@ -8,9 +8,10 @@ import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@worksp
 import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
-import { DeleteDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';

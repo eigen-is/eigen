@@ -7,11 +7,14 @@ import { useNavigate } from '@tanstack/react-router';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
-import { AvatarEditor, ErrorState, LoadingState, useContactAvatarUpload } from '@workspace/ui';
+import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { useContactAvatarUpload } from '@workspace/ui/components/use-contact-avatar-upload';
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { InfoIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -75,7 +78,7 @@ export function ProfileEditor() {
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="flex justify-center mb-8">
                     <AvatarEditor
-                        name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
+                        name={contact ? contactFullName(contact) : ''}
                         email={contact?.email[0]}
                         imageUrl={avatar || ''}
                         onRemove={avatar ? () => setAvatar(null) : undefined}

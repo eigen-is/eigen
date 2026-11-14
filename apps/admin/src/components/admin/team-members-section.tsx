@@ -6,8 +6,9 @@
 import { useAddTeamMembers, useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMembers } from '@workspace/lib/team';
-import { EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { EmptyState } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserItem } from '@workspace/ui/components/user';
 import { UserRoundPlus, X } from 'lucide-react';
 import { useState } from 'react';

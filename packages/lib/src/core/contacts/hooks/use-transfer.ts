@@ -1,3 +1,7 @@
+// The hooks that move contacts in and out of the address book: the .vcf export, and imports from a file on the
+// device or from a Drive file, mail part or chat attachment. Each import refreshes the contact list and reports
+// its counts with the wording every counted import shares.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsExportUrl, getContactsImportUrl } from '@workspace/lib/api';
@@ -11,15 +15,18 @@ import { useFileDownload } from '../../download';
 import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../transfer';
 import { invalidateContactList } from './keys';
 
-// The export answers with the file itself, so it goes through raw fetch rather than Eden — same download
-// hook as useExportDocument, down to reporting its own failures (there is no mutation to carry them).
-export function useExportContacts() {
+// The export answers with the file itself, so it is a raw fetch download rather than an Eden call. With no
+// mutation to carry a failure, the download reports its own.
+export function useExportContacts(): {
+    exportContacts: (ids?: readonly string[]) => Promise<Headers | null>;
+    isExporting: boolean;
+} {
     const { user } = useAuth();
     const ownerId = user?.id || '';
     const { download, isDownloading } = useFileDownload();
 
     const exportContacts = useCallback(
-        (ids?: string[]) =>
+        (ids?: readonly string[]) =>
             download(getContactsExportUrl(ownerId), 'contacts.vcf', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },

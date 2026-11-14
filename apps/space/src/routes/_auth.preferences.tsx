@@ -2,7 +2,7 @@
 // which every app reads from the personal settings.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { PreferencesSection } from '../components/space/preferences-section';
 
 export const Route = createFileRoute('/_auth/preferences')({

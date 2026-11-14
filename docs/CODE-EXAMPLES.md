@@ -158,7 +158,7 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
 - **No `as Type` on Eden Treaty responses**: if `response.data` has the wrong type, add an explicit return type to the backend route handler or domain method using the shared type from `packages/lib/src/types/`. Don't paper over mismatches with `as` casts in hooks
 - **Shared types live in `packages/lib/src/types/[domain].ts`**: never redefine a type that already exists there. Import it. If the type doesn't exist yet, add it to the shared package so both FE and BE use it
 - **`type` over `interface`**, except when methods are needed
-- **Infer locally, annotate publicly**: don't annotate variables when TypeScript can infer (`const path = await drive.getPath(...)` not `const path: DrivePath = ...`). But always add explicit return types on backend route handlers, domain methods, and hooks: this is what powers Eden Treaty's end-to-end type flow
+- **Infer locally, annotate publicly**: don't annotate variables when TypeScript can infer (`const path = await drive.getPath(...)` not `const path: DrivePath = ...`). But always add explicit return types on backend route handlers, domain methods, and hooks: this is what powers Eden Treaty's end-to-end type flow. A hook that returns its `useQuery`, `useInfiniteQuery` or `useMutation` call as it is takes none, since Eden's type already flows through it
 - **`import type` for type-only imports**, separate from value imports: `import type { DrivePath } from '@workspace/lib/types/drive'`
 - **Drizzle `.$inferSelect` for DB row types**: use `typeof schema.messages.$inferSelect` for database row shapes, don't manually redefine column types
 
@@ -195,9 +195,9 @@ The rules are in [CODE-STANDARDS.md § Imports](CODE-STANDARDS.md#imports); this
 
 | Specifier | What you get |
 |---|---|
-| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar, not pages), generic leaf primitives |
+| `@workspace/ui/components/[name]` | One component, such as `@workspace/ui/components/confirm-dialog`. The package has no root entry, so every component, the everyday ones included ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), comes from its own sub-path |
 | `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
-| `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
+| `@workspace/ui/components/[area]/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
 | `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
 | `@workspace/ui/hooks/[hook]` | Shared DOM/interaction hooks (`@workspace/ui/hooks/use-long-press`) |
 | `@workspace/ui/lib/utils` | `cn()` utility |

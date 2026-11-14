@@ -6,10 +6,10 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { useMountLabel } from '@workspace/ui/components/drive';
 import { DriveBreadcrumb } from '@workspace/ui/components/drive/drive-breadcrumb';
+import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { FindInDocumentButton } from '@workspace/ui/components/search/find-in-document-button';
 import { ArrowLeft } from 'lucide-react';
 

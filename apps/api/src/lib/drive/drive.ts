@@ -957,12 +957,8 @@ export class Drive {
         return inviteToChat(this, mountId, chatId, email, actor, checkedTarget);
     }
 
-    // The paths of this owner whose own ACL lets the user read them, directly or through a team.
-    public async getSharedWith(user: User): Promise<DrivePath[]> {
-        return (await this.getAllSharedWith(user)).filter((path) => !path.trashedAt);
-    }
-
-    // Trashed paths included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
+    // The paths of this owner whose own ACL lets the user read them, directly or through a team. Trashed paths are
+    // included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
     public async getAllSharedWith(user: User): Promise<DrivePath[]> {
         const memberships = await getMemberships(user.id);
         return (await this.pathsWithACL()).filter(

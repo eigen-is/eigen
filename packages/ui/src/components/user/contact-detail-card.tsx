@@ -2,9 +2,11 @@
 // notes. Views such as Contacts' detail and the .vcf preview show it.
 
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { formatDateOnly } from '@workspace/lib/date';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { Address, Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
 import { Badge } from '../badge';
@@ -28,7 +30,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
         <div className={cn('flex flex-col md:flex-row gap-8', className)}>
             <UserDetailHero
                 layout="profile"
-                name={`${contact.firstName} ${contact.lastName}`}
+                name={contactFullName(contact)}
                 email={contact.email[0]}
                 imageUrl={contact.avatar}
                 subtitle={
@@ -39,8 +41,12 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                         ? labels.map((label, index) => (
                               <Badge
                                   key={index}
-                                  style={{ backgroundColor: label.color }}
-                                  className="px-2 py-1 text-primary-foreground"
+                                  style={
+                                      label.color
+                                          ? { backgroundColor: label.color, color: readableTextColor(label.color) }
+                                          : undefined
+                                  }
+                                  className="px-2 py-1"
                               >
                                   {label.name}
                               </Badge>

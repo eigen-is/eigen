@@ -1,5 +1,5 @@
-// A small Drive browser for picking a file or a folder: a mount list, a breadcrumb and a bare table
-// whose rows have no actions. Pickers and the location field draw it, for example the Copy to… picker.
+// A small Drive browser for picking a file or a folder: a mount list (a select on a phone), a breadcrumb and a bare
+// table whose rows have no actions. Pickers and the location field draw it, for example the Copy to… picker.
 // Its host holds the location: the browser shows the one it is given and asks for another through onChange.
 // A location with no folder id means the mount's root, which useResolvedDriveLocation fills in.
 
@@ -20,7 +20,7 @@ import { useMemo } from 'react';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveItemNameDialog } from './drive-item-name-dialog';
-import { DriveMountList, useMountLabel } from './drive-mount-list';
+import { DriveMountList, DriveMountSelect, useMountLabel } from './drive-mount-list';
 import type { DriveSortControl } from './drive-table';
 import { DriveTable, useDriveSort } from './drive-table';
 
@@ -79,6 +79,8 @@ export function DriveBrowser({
     const isItemDisabled = (item: DrivePath) =>
         !isFolderType(item.type) && (mode === 'folder' || canPick?.(item) === false);
     const openFolder = (folder: DrivePath) => onChange({ ownerId: folder.ownerId, mountId, folderId: folder.id });
+    const openMount = (mountOwnerId: string, pickedMountId: string) =>
+        onChange({ ownerId: mountOwnerId, mountId: pickedMountId, folderId: '' });
 
     const handleItemClick = (item: DrivePath) => {
         if (isItemDisabled(item)) return;
@@ -98,9 +100,7 @@ export function DriveBrowser({
                 <DriveMountList
                     activeMountId={mountId}
                     activeOwnerId={ownerId}
-                    onMountSelect={(mountOwnerId, pickedMountId) =>
-                        onChange({ ownerId: mountOwnerId, mountId: pickedMountId, folderId: '' })
-                    }
+                    onMountSelect={openMount}
                     ownMountsOnly={ownMountsOnly}
                 />
             </div>
@@ -108,6 +108,14 @@ export function DriveBrowser({
                 className="flex-1 flex flex-col min-w-0"
                 onContextMenu={newFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
             >
+                <div className="sm:hidden py-2 border-b shrink-0">
+                    <DriveMountSelect
+                        activeMountId={mountId}
+                        activeOwnerId={ownerId}
+                        onMountSelect={openMount}
+                        ownMountsOnly={ownMountsOnly}
+                    />
+                </div>
                 {!hideToolbar && (
                     <div className="flex items-center gap-2 h-10 app-gutter-x border-b shrink-0">
                         <DriveBreadcrumb

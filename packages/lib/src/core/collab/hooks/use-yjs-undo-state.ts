@@ -1,7 +1,13 @@
+// The undo and redo buttons of a collaborative editor, such as a canvas or a stickies board: whether its Yjs
+// UndoManager has a step to undo or redo, kept current as the stacks change. A reader without write access
+// gets both off.
+
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 
-export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boolean) {
+type YjsUndoState = { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
+
+export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boolean): YjsUndoState {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 

@@ -4,9 +4,9 @@
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupReason, ServerArchive } from '@workspace/lib/types/backup';
-import { TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { AlertTriangle, CloudUpload, Trash2 } from 'lucide-react';
 import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifact-row';
 

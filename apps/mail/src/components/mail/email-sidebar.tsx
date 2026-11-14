@@ -10,8 +10,13 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
-import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -97,8 +102,8 @@ export function EmailSidebar({
         return SIDEBAR_MAILBOXES.flatMap((box) => bySpecialPath.get(box.path) ?? []);
     }, [mailboxes, isLoading, error]);
 
-    // Everything else the Maildir holds — a folder the user made in an IMAP client. Labeled by its full
-    // hierarchy with `/` for the Maildir++ `.`, so a nested folder reads as the path it is.
+    // Every other folder in the Maildir is one the user made in an IMAP client. Its label is the full hierarchy
+    // with `/` for the Maildir++ `.`, so a nested folder reads as the path it is.
     const customMailboxList = useMemo(() => {
         if (isLoading || error) return [];
         return mailboxes

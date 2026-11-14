@@ -8,6 +8,7 @@ import {
     isLightColor,
     lightenColor,
     parseRgb,
+    readableTextColor,
     readHexColor,
 } from '../../constants/colors';
 
@@ -210,6 +211,16 @@ describe('isLightColor and lightenColor', () => {
     test('leave a color that is no #rrggbb as it is, and count it as dark', () => {
         expect(isLightColor('#fff')).toBe(false);
         expect(lightenColor('#fff', 0.5)).toBe('#fff');
+    });
+});
+
+describe('readableTextColor', () => {
+    test('is black on a light color and white on a dark one', () => {
+        expect([readableTextColor('#fef9c2'), readableTextColor('#193cb8'), readableTextColor('#fff')]).toEqual([
+            '#000',
+            '#fff',
+            '#fff',
+        ]);
     });
 });
 

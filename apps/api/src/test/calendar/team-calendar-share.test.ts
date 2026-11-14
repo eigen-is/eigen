@@ -467,7 +467,7 @@ describe('Team calendar administration', () => {
             endTime: new Date('2027-03-01T10:00:00Z'),
             allDay: false,
             data: {
-                organizer: { userId: '', email: ctx.bob.user.email, name: 'Bob' },
+                organizer: { email: ctx.bob.user.email, name: 'Bob' },
                 attendees: [{ email: ctx.charlie.user.email, status: 'pending', role: 'required' }],
             },
         });

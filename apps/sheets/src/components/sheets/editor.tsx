@@ -22,18 +22,14 @@ import type { ImageSize } from '@workspace/lib/vector';
 import { fitImageSize } from '@workspace/lib/vector';
 import type { ChartPanelState, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { ChartPanelSections, Workbook } from '@workspace/sheet';
-import {
-    CollabDocumentGate,
-    DocumentShareCluster,
-    FileDropOverlay,
-    UnsyncedEditsGuard,
-    useLayout,
-} from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
+import { CollabDocumentGate, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { readImageSizeFromUrl } from '@workspace/ui/components/media';
 import type { TransformFields } from '@workspace/ui/components/properties-panel';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';

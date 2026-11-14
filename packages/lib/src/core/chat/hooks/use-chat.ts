@@ -111,8 +111,8 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
     });
 }
 
-// Shared by the live query and useStartChatWith's one-shot fetch so both hit one cache entry.
-function byMembersQueryConfig(ownerId: string, emails: string[]) {
+// One config, so the live query and useStartChatWith's one-shot fetch share a cache entry.
+function byMembersQueryConfig(ownerId: string, emails: readonly string[]) {
     return {
         queryKey: chatKeys.byMembers(ownerId, emails),
         queryFn: async (): Promise<ChatMatch[]> => {
@@ -127,13 +127,14 @@ function byMembersQueryConfig(ownerId: string, emails: string[]) {
     };
 }
 
-// Open-don't-duplicate lookup (writable first, then updatedAt desc); disabled until someone is picked.
-export function useFindChatByMembers(ownerId: string, emails: string[]) {
+// The chats with exactly these members, writable ones first and then the newest, so the wizard can open one
+// instead of making a duplicate.
+export function useFindChatByMembers(ownerId: string, emails: readonly string[]) {
     return useQuery<ChatMatch[]>(byMembersQueryConfig(ownerId, emails));
 }
 
-// Create a chat pre-shared with the picked members (server-side create + ACL in one step). A create
-// that times out reconciles by name against the pre-create id snapshot.
+// The server creates the chat already shared with the members. A create that times out looks for its chat by name
+// among the chats that weren't there before it.
 export function useCreateChatRoom(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
@@ -166,14 +167,14 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                     );
                     return parentId ? chats.filter((chat) => chat.parentId === parentId) : chats;
                 },
-                // dedupeName lets the server suffix a colliding name (`Name (2)`), so no reconcile.
+                // With dedupeName the server may suffix a colliding name, such as `Name (2)`, so there is no name to find.
                 expectedName: dedupeName ? undefined : withEigenExtension(fileName, 'chat'),
             }),
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);
             invalidateChatMatches(queryClient, ownerId);
         },
-        // 409 = duplicate name, handled inline by the wizard — don't toast twice.
+        // The wizard shows a duplicate name's 409 beside the field, so a toast would say it twice.
         onError: (error) => {
             if (error instanceof AppError && error.status === 409) return;
             onMutationError(error);
@@ -181,17 +182,17 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
     });
 }
 
-// Contacts' "start a chat". It prefers the address of a registered account, as the first one may be an alias and
-// rooms match on the account's. One writable match opens; otherwise the caller opens the wizard with that address.
-export function useStartChatWith() {
+// It prefers the address of a registered account, as the first one may be an alias and rooms match on the account's.
+// One writable match opens; otherwise the caller opens the wizard with that address.
+export function useStartChatWith(): (emails: readonly string[]) => Promise<'opened' | { email: string }> {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
     const myEmail = (user?.email ?? '').toLowerCase();
 
-    return async (emails: string[]): Promise<'opened' | { email: string }> => {
+    return async (emails) => {
         const list = emails.map((e) => e.trim().toLowerCase()).filter((e) => e.length > 0);
-        // Registered-account lookups batch and cache misses as null (staleTime Infinity).
+        // The lookups batch into one request, and an address with no account stays cached as null.
         const resolved = await Promise.all(
             list.map((e) =>
                 queryClient
@@ -205,7 +206,7 @@ export function useStartChatWith() {
         );
         const account = resolved.find((u) => u);
         const email = account ? account.email.toLowerCase() : (list[0] ?? '');
-        // Self is never a counterpart — and every unshared solo chat would match a self-only target.
+        // The user is never their own counterpart, and a target of only themselves would match every unshared chat.
         if (!ownerId || !email || email === myEmail) return { email };
         // A failed lookup degrades to "no matches" so the caller falls through to opening the wizard.
         const matches = await queryClient

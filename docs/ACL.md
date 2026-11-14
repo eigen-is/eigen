@@ -147,7 +147,7 @@ Each trigger calls `reconcileShares(user, teamId?)` (`apps/api/src/lib/share/rec
 2. `pullCalendarShares()`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
 3. `pullPendingInvitations()`: calendar invites (creates linked event copies), without a `teamId` only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join pulls none: a pull would bring back an invitation the member had removed.
 
-The drive pull (`Drive.getAllSharedWith`) includes paths in the trash, because a restore pushes nothing: a newcomer who arrives while a shared path or a folder above it is in the trash gets the row and the notice then, and the path shows in **Shared with me** from the restore on. Every other reader of the owner's shared paths, such as `/shared/by-me` and `Drive.getSharedWith`, leaves trashed paths out.
+The drive pull (`Drive.getAllSharedWith`) includes paths in the trash, because a restore pushes nothing: a newcomer who arrives while a shared path or a folder above it is in the trash gets the row and the notice then, and the path shows in **Shared with me** from the restore on. Every other reader of the owner's shared paths, such as `/shared/by-me`, leaves trashed paths out.
 
 Every delivery goes through `sendToHome`, which opens the user's home for that one message. So a home that goes idle and closes during a slow pull reopens for the next delivery, and the run holds no Home of its own. A guest's home has no calendar, so a guest runs neither calendar pull: each scans the owner's calendar, and the relay would drop the result.
 
@@ -177,11 +177,10 @@ A deletion leaves the entries naming that person on other owners' paths on purpo
 
 ### Pull Routes
 
-Reconciliation reads through the home-relay pull functions. Two routes answer from the same reads, each returning only the caller's own shares on that owner, the drive one without the paths in the trash (`Drive.getSharedWith`):
+Reconciliation reads through the home-relay pull functions. One route answers from the same reads, returning only the caller's own calendar shares on that owner:
 
 ```
 GET /calendar/:ownerId/shared-with-me
-GET /drive/:ownerId/shared-with-me
 ```
 
 The fan-out runs only when a share changes, which is rare. The data stays in the owner's Home, and recipients read it on demand, so the cost stays small.

@@ -210,6 +210,8 @@ The calendar's owner organizes its events, and an editor with a write share acts
 
 When the organizer deletes or cancels an event, every copy gets a CANCEL, and a series' CANCEL reaches the guests of each of its dates too, since someone can be invited to one date only (`heldGuests`, `events.ts`). A cancelled series' later delete sends nothing more. When an attendee deletes, it is a decline, but only if their address is in the event's attendees. A file or a CalDAV client can hang any `ORGANIZER` on an event, and a decline would then reach a stranger. An organizer known only by address, as every organizer a PUT or a file names is, gets the decline as an iMIP REPLY.
 
+A guest the web form adds is named by a name typed as `Name <address>`, else by the user's contact for that address. An address nobody knows is stored with no name and so no `CN`, and every reader shows the address: its local part is no name the person chose. The guest list counts the organizer as a guest, in the total and in the tally of replies alike, as Google Calendar does, so the parts add up to the whole. The organizer's reply is their own when the attendees list them, and accepted when they are listed only as organizer, since organizing an event is accepting it (`AttendeeList`, `attendee-list.tsx`).
+
 ## An occurrence message names the series
 
 A guest holds one linked series, and an override on it inherits the series' link. So every message about one occurrence names the series' event id plus the occurrence key, never the override's own row id. The receiver attaches it as an exception of the guest's series, as it does an iMIP REQUEST with a `RECURRENCE-ID`. The `RECURRENCE-ID` names the original instant, which only the series knows once the override has moved.

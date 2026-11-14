@@ -3,31 +3,10 @@
 // beforeLoad can check it before anything renders.
 
 import { useQueryClient } from '@tanstack/react-query';
+import type { AuthContextType, AuthUser } from '@workspace/lib/types/auth';
 import type { ReactNode } from 'react';
 import React, { createContext, useEffect, useState } from 'react';
 import { authClient } from './hooks/use-auth-client';
-
-export type AuthUser = {
-    id: string;
-    email: string;
-    name: string;
-    image?: string | null;
-    role?: string | null;
-    emailVerified: boolean;
-    createdAt: Date;
-    updatedAt: Date;
-};
-
-type AuthContextType = {
-    isAuthenticated: boolean;
-    isLoading: boolean;
-    user: AuthUser | null;
-    login: (email: string, password: string) => Promise<{ success: boolean; error?: unknown }>;
-    logout: () => Promise<void>;
-};
-
-// Router context every app's createRootRouteWithContext shares.
-export type RouterAppContext = { auth: AuthContextType };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -109,7 +88,7 @@ export function AuthProvider({
     );
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
     const context = React.useContext(AuthContext);
     if (!context) {
         throw new Error('useAuth must be used within an AuthProvider');

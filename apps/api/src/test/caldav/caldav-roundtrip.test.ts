@@ -1084,7 +1084,7 @@ describe('CalDAV round-trip fidelity', () => {
                 storedEvents(home.calendar, calendarId),
                 (e) => e.uri === uri && !e.parentEventId,
             );
-            expect(stored.data?.organizer?.userId).toBe('');
+            expect(stored.data?.organizer?.userId).toBeUndefined();
             expect(stored.data?.organizerEventId).toBeUndefined();
             expect(stored.data?.color).toBeUndefined();
             expect(stored.id).not.toBe('victim-row');

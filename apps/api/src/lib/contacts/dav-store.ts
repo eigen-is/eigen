@@ -3,6 +3,7 @@
 // checks the client's preconditions, skips bytes already stored, and keeps the card's search index
 // and photo in step. The CardDAV server and the contact import call it.
 
+import { contactFullName } from '@workspace/lib/types/contact';
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
@@ -44,17 +45,17 @@ export async function getBook(contacts: Contacts): Promise<CardBook> {
         .get()!;
 }
 
-// Every resource in the book — group cards included, since DAV serves the whole book (the app list hides them).
+// DAV serves the whole book, so group cards are included even though the app's list hides them.
 export async function listCards(contacts: Contacts): Promise<CardRow[]> {
     return contacts.db.select(CARD_ROW).from(schema.contacts).all();
 }
 
-// The rows changed after book token N — the sync-collection delta (cardCtag is stamped on every change).
+// The sync-collection delta: every change stamps cardCtag, so a row stamped after the token changed since.
 export async function getChangedCardsSince(contacts: Contacts, sinceCtag: number): Promise<CardRow[]> {
     return contacts.db.select(CARD_ROW).from(schema.contacts).where(gt(schema.contacts.cardCtag, sinceCtag)).all();
 }
 
-// The uris removed after book token N — the sync-collection 404 rows (one row per uri, no duplicate hrefs).
+// The sync-collection 404 rows. The tombstone table keeps one row per uri, so no href repeats.
 export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number): Promise<{ uri: string }[]> {
     return contacts.db
         .select({ uri: schema.contactTombstones.uri })
@@ -201,11 +202,7 @@ export async function putCard(
                 if (data) avatarWebP = Buffer.from(data);
             }
             try {
-                await pushUserProfile(
-                    contacts.home.user.id,
-                    `${parsed.firstName.trim()} ${parsed.lastName.trim()}`.trim(),
-                    avatarWebP,
-                );
+                await pushUserProfile(contacts.home.user.id, contactFullName(parsed), avatarWebP);
             } catch (e) {
                 console.error(`contacts: failed to propagate the profile of ${contacts.home.user.id}:`, e);
             }

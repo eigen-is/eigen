@@ -21,6 +21,7 @@ import {
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { LucideIcon } from 'lucide-react';
@@ -212,7 +213,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
 // The card's own name and email, not the address book's: this previews a file.
 function VCardRow({ contact }: { contact: Contact }) {
     const email = contact.email[0];
-    const title = `${contact.firstName} ${contact.lastName}`.trim() || email;
+    const title = contactFullName(contact) || email;
 
     return (
         <div className="flex min-w-0 items-center gap-3">

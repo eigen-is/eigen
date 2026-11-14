@@ -2,7 +2,7 @@
 // each with its license. The build writes the lists, and the prerender has them, so the page reads without scripts.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { AppShell } from '@workspace/ui';
+import { AppShell } from '@workspace/ui/components/layout/app';
 import type { LicenseFont, LicensePackage, LicenseVendored } from '../../scripts/lib/content-types';
 import { SitePage } from '../components/site-page';
 

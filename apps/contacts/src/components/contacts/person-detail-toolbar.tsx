@@ -1,27 +1,28 @@
+// The toolbar above a person's detail in Contacts, a stored contact's or a team member's: the Edit and Delete
+// buttons where they apply, and the kebab with the shared contact menu. A team member's card is built on the fly,
+// so it has no Edit, Delete or Export, and nobody deletes their own card.
+
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
+import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Pencil, Trash2 } from 'lucide-react';
 import { isSelfContact, useContactMenu } from './contact-menu';
 
 type PersonDetailToolbarProps = {
-    // The person as a card (synthetic for team members). Feeds the shared kebab menu.
+    // A team member's card is built for the menu, not stored.
     contact: Contact;
-    // Contact rows are editable; team members aren't — absent editSearch/onDeleteClick hides
-    // Edit/Delete. Delete also hides on your own card (same guard as the list's context menu).
+    // Absent for team members, who can't be edited. Delete also hides on your own card.
     editSearch?: { filterType: string; filterId: string; contactId: string };
     onDeleteClick?: () => void;
-    // Contacts-only label wiring; absent for team members.
+    // Absent for team members, who have no labels.
     labels?: Label[];
     onToggleLabel?: (contacts: Contact[], labelId: string) => void;
 };
 
-// One toolbar for every person-detail surface (contact + team member): direct Edit/Delete buttons
-// plus the kebab menu, whose items are the same definition the contact list renders.
 export function PersonDetailToolbar({
     contact,
     editSearch,
@@ -67,8 +68,7 @@ export function PersonDetailToolbar({
                         <DropdownMenuContent align="end">
                             {contactMenu.renderItems([contact], () => {}, {
                                 showPrint: true,
-                                // Stored cards only: a team member's card is synthetic, so there is
-                                // nothing on the server to export by id.
+                                // A team member's card is not stored, so there is nothing to export by id.
                                 showExport: !!editSearch,
                                 labels,
                                 onEdit,

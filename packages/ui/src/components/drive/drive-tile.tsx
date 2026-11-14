@@ -14,7 +14,9 @@ import type { useDriveItemController } from './use-drive-item-controller';
 
 type DriveTileProps = {
     item: DrivePath;
+    // The open tile, such as the one whose details show beside the grid.
     isActive: boolean;
+    isCursor: boolean;
     isSelected: boolean;
     disabled: boolean;
     controller: ReturnType<typeof useDriveItemController>;
@@ -28,6 +30,7 @@ type DriveTileProps = {
 export function DriveTile({
     item,
     isActive,
+    isCursor,
     isSelected,
     disabled,
     controller,
@@ -63,6 +66,7 @@ export function DriveTile({
                 'group relative flex flex-col rounded-lg border overflow-hidden cursor-pointer transition-colors',
                 'eigen-tile',
                 isActive && 'eigen-tile-active',
+                isCursor && 'eigen-tile-cursor',
                 isSelected && 'eigen-tile-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'ring-2 ring-primary',
                 disabled && 'opacity-40 pointer-events-none',
