@@ -18,9 +18,12 @@ const MEDIA_DIR = join(import.meta.dir, '..', '..', 'apps', 'index', 'public', '
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
 
+// A screen recording barely changes from frame to frame, so one keyframe per loop (600 frames, 20 s) halves the
+// files. At these settings AV1 comes out at about two thirds of H.264's size and still looks sharper.
+const KEYFRAME_INTERVAL = '600';
 const CODEC_ARGS: Record<Codec, string[]> = {
-    av1: ['-c:v', 'libsvtav1', '-crf', '38', '-preset', '6'],
-    h264: ['-c:v', 'libx264', '-crf', '24', '-preset', 'slow', '-movflags', '+faststart'],
+    av1: ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '4', '-g', KEYFRAME_INTERVAL],
+    h264: ['-c:v', 'libx264', '-crf', '23', '-preset', 'slow', '-g', KEYFRAME_INTERVAL, '-movflags', '+faststart'],
 };
 
 // The concat demuxer gives each file the duration under it, and needs the last file again to honor the last one.

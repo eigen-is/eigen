@@ -401,8 +401,11 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 [{ row: [10, 15], column: [2, 2] }],
             ]);
             for (const { rule } of dropdowns) expect(rule.type).toBe('dropdown');
-            const charts = Object.values(chartsSheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
-            expect(charts.map((spec) => spec?.chart.type).sort()).toEqual(['column', 'pie']);
+            const chartsOf = (sheet: typeof budgetSheet) =>
+                Object.values(sheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
+            expect(chartsOf(budgetSheet).map((spec) => spec?.chart.type)).toEqual(['column']);
+            expect(chartsOf(chartsSheet).map((spec) => spec?.chart.type)).toEqual(['pie']);
+            const charts = [...chartsOf(budgetSheet), ...chartsOf(chartsSheet)];
             for (const spec of charts) {
                 if (spec?.data.source !== 'range') throw new Error('a budget chart holds no range data');
                 expect(spec.data.series[0].values?.sheetId).toBe(budgetSheet.id);
