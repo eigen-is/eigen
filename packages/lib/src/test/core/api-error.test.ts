@@ -1,14 +1,14 @@
-// Every error toast is one of these strings. The shapes below are the ones Eden hands us: an ApiError's
-// plain text, Elysia's validation body (which drops everything but `type`/`on`/`found` in production),
-// the untyped routes' empty bodies and a proxy's HTML page. Only a body with no message names its status.
 import { describe, expect, test } from 'bun:test';
 import { AppError, getErrorMessage, isRefusal } from '../../core/api-error';
 
 describe('AppError messages', () => {
     test('reads the message a body carries', () => {
-        const error = new AppError({ error: { status: 507, value: { message: 'Insufficient Storage' } }, status: 507 });
+        const error = new AppError({
+            error: { status: 507, value: { message: 'Not enough storage left' } },
+            status: 507,
+        });
 
-        expect(getErrorMessage(error)).toBe('Insufficient Storage');
+        expect(getErrorMessage(error)).toBe('Not enough storage left');
     });
 
     test('reads a plain string body — what every ApiError returns', () => {

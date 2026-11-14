@@ -31,6 +31,11 @@ export function payloadTooLarge(): ApiError {
     return new ApiError(413, 'Upload too large');
 }
 
+// The one 507 a full budget answers, a drive's or a home's data.
+export function insufficientStorage(): ApiError {
+    return new ApiError(507, 'Not enough storage left');
+}
+
 // JSC's words, with or without a detail, for an allocation it refused with a throw rather than an abort. The catches
 // that would turn it into a bad file, a dropped part or a skipped blob let it through, so the transform process answers
 // it. DOCUMENT-TRANSFORMS.md § Out of memory is the job's, not the server's, names them and why the rest may swallow it.

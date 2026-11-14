@@ -3,7 +3,7 @@
 // before they write, such as an upload, a copy, an editor save or a contact card.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { ApiError, payloadTooLarge } from '../core';
+import { insufficientStorage, payloadTooLarge } from '../core';
 import { getHome } from '../home';
 import { getMemberships } from '../user';
 import { resolveHomeDataMax, resolveUserQuotas } from './quota';
@@ -31,7 +31,7 @@ export async function enforceMountQuota(
     creditExisting = 0,
 ): Promise<void> {
     if (addBytes > (await getMountRoom(ownerId, mountId, creditExisting))) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }
 
@@ -39,16 +39,22 @@ export async function enforceMountQuota(
 export async function getUploadRoom(ownerId: string, mountId: string): Promise<number> {
     const room = await getMountRoom(ownerId, mountId);
     if (room <= 0) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
     return room;
 }
 
-export async function getUploadMaxSize(ownerId: string, mountId: string): Promise<number> {
-    return Math.min(getMaxUploadSize(), await getUploadRoom(ownerId, mountId));
+// A file past the per-file cap answers 413 and one past the room it may take 507, so the answer names the cap it hit.
+export function enforceUploadLimits(fileSize: number, room: number): void {
+    enforceMaxUploadSize(fileSize);
+    if (fileSize > room) throw insufficientStorage();
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+
+export function getMailAttachmentMaxSize(): number {
+    return Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
+}
 
 // Resolves no mount, so a team Home (which has none) meters its calendar here too; every part answers from an in-memory byte counter, so a device sync costs no query per write.
 async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; max: number }> {
@@ -57,14 +63,14 @@ async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; m
     return { used: await home.dataSize(), max: await resolveHomeDataMax(teamIds) };
 }
 
-export async function getMailUploadMaxSize(userId: string): Promise<number> {
-    const maxUpload = Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
+// What a draft attachment may add to its home's data, so a full budget is refused before any bytes move.
+export async function getMailUploadRoom(userId: string): Promise<number> {
     const { used, max } = await getHomeDataQuotaState(userId);
-    const remainingQuota = max - used;
-    if (remainingQuota <= 0) {
-        throw new ApiError(507, 'Insufficient Storage');
+    const room = max - used;
+    if (room <= 0) {
+        throw insufficientStorage();
     }
-    return Math.min(maxUpload, remainingQuota);
+    return room;
 }
 
 export function enforceMaxUploadSize(fileSize: number): void {
@@ -77,7 +83,7 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     enforceMaxUploadSize(fileSize);
     const { used, max } = await getHomeDataQuotaState(userId);
     if (used + fileSize > max) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }
 
@@ -92,6 +98,6 @@ export async function enforceHomeDataQuota(ownerId: string, addBytes: number, cr
     const withinGrace = creditBytes > 0 && addBytes - creditBytes <= HOME_DATA_EDIT_GRACE_BYTES;
     const ceiling = withinGrace ? max + HOME_DATA_EDIT_HEADROOM_BYTES : max;
     if (used + addBytes - creditBytes > ceiling) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }

@@ -449,7 +449,7 @@ describe('Eigendoc docx import/convert', () => {
         try {
             const res = await convertRequest(uploaded.id);
             expect(res.status).toBe(413);
-            expect(await res.text()).toBe('Source file too large');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
@@ -496,7 +496,7 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await importRequest(docPath.id, docx);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         expect(await readDocJson(docPath.id)).toEqual(before);
         expect(await mediaNames(docPath.id)).toEqual([]);
@@ -510,7 +510,7 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await importRequest(docPath.id, docx);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         expect(await readDocJson(docPath.id)).toEqual(before);
         expect(await mediaNames(docPath.id)).toEqual([await docImageName(docPath.id)]);
@@ -521,12 +521,30 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await convertRequest(uploaded.id);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         const home = await getHome(ctx.alice.user.id);
         const { mount } = await home.drive.resolveFile(mountId, rootId);
         expect(await mount.getChildByName(rootId, 'quota-convert.eigendoc')).toBeNull();
     }, 120_000);
+
+    test('a convert of a file larger than the room, under the upload limit, answers 507', async () => {
+        const uploaded = await upload('x'.repeat(IMAGE_BYTES), 'past-room.docx');
+        await withMountRoom(IMAGE_BYTES / 4, async () => {
+            const res = await convertRequest(uploaded.id);
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Not enough storage left');
+        });
+    }, 60_000);
+
+    test('an import of a body larger than the room, under the upload limit, answers 507', async () => {
+        const docPath = await createDoc('past-room-target');
+        await withMountRoom(IMAGE_BYTES / 4, async () => {
+            const res = await importRequest(docPath.id, new TextEncoder().encode('x'.repeat(IMAGE_BYTES)).buffer);
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Not enough storage left');
+        });
+    }, 60_000);
 });
 
 describe('docx import resource guards', () => {

@@ -99,7 +99,7 @@ describe('a refused write derives no avatar cache', () => {
                     phone: [],
                     avatar: staged,
                 }),
-            ).rejects.toThrow('Insufficient Storage');
+            ).rejects.toThrow('Not enough storage left');
 
             // Only the staged pair from the upload above: the promoted hash-named webp was never written.
             expect(readdirSync(avatarsDir).sort()).toEqual(filesBefore);

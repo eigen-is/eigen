@@ -27,7 +27,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
 - **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
-- **Uploading to a full drive** — a file larger than the space left in the drive fails with "Insufficient Storage" instead of "Upload too large"
+- **Uploading to a full drive** — a file larger than the space left fails with "Not enough storage left", not "Upload too large", also when you convert it, import it into a document or save it from a mail. So does a mail attachment past your mail storage
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a "shared with you" or "removed your access" notification
 - **Sharing with your own team** — a file you share with a team you are in stays out of your own **Shared with me** and sends you no notice. A team drive's file shared with a member shows only in the team drive
@@ -45,6 +45,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Shared and Recent in Drive** — **Shared by me**, **Shared with me**, **Recent** and **Watched** show a renamed, moved or deleted item right away, not minutes later
 - **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
 - **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
+- **New in a shared folder** — in a folder someone shared with you to view only, **New** in the Drive sidebar is greyed out instead of failing with "No write permission"
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 - **Merged cells and row or column changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, as does a column inserted right of one a column wide, and a merge that a delete leaves with one cell becomes a plain cell
 - **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
