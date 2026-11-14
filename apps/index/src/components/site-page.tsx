@@ -37,7 +37,8 @@ export function SitePage({ color, toolbar, children }: SitePageProps) {
                     )
                 }
             >
-                <div className="h-full overflow-y-auto scroll-smooth">
+                {/* A size container, so a carousel in the content can run to the page's right edge. */}
+                <div className="@container h-full overflow-y-auto scroll-smooth">
                     <div className="flex min-h-full flex-col">
                         <div className="flex flex-1 flex-col" style={style}>
                             {children}

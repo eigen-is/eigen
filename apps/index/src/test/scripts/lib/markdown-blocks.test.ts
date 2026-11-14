@@ -45,14 +45,32 @@ describe('video', () => {
 });
 
 describe('carousel and side by side', () => {
-    test('a carousel wraps its images', () => {
-        const html = render('::: carousel caption="The budget"\n![a](/a.webp)\n![b](/b.webp)\n:::');
+    test('a carousel sets each image on a slide captioned with its alt text, with dots and buttons below', () => {
+        const html = render('::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n:::');
         expect(html).toContain('<figure class="media-carousel">');
-        expect(html).toContain('tabindex="0"');
-        expect(html).toContain('class="media-carousel-prev"');
-        expect(html).toContain('class="media-carousel-next"');
+        expect(html).toContain('<div class="media-carousel-strip" tabindex="0" aria-label="The budget">');
+        expect(html).toContain(
+            '<figure class="media-carousel-slide"><img src="/a.webp" alt="a"><figcaption>a</figcaption></figure>',
+        );
+        expect(html).toContain('<img src="/b.webp" alt="b bold"><figcaption>b <em>bold</em></figcaption>');
+        expect(html).toContain(
+            '<button type="button" class="media-carousel-dot" aria-label="Image 1 of 2" aria-current="true"></button>',
+        );
+        expect(html).toContain('<button type="button" class="media-carousel-dot" aria-label="Image 2 of 2"></button>');
+        expect(html).toContain('class="media-carousel-prev" aria-label="Previous image" disabled>');
+        expect(html).toContain('class="media-carousel-next" aria-label="Next image">');
         expect(html.match(/<img /g)?.length).toBe(2);
-        expect(html).toContain('<figcaption>The budget</figcaption>');
+        expect(html).toContain('<figcaption>The budget</figcaption></figure>');
+    });
+
+    test('a carousel of one image has both buttons off', () => {
+        const html = render('::: carousel\n![a](/a.webp)\n:::');
+        expect(html).toContain('aria-label="Images"');
+        expect(html).toContain('class="media-carousel-next" aria-label="Next image" disabled>');
+    });
+
+    test('a carousel line that is not one image fails the build', () => {
+        expect(() => render('::: carousel\n![a](/a.webp) and text\n:::')).toThrow('one image per line');
     });
 
     test('an app name in a caption is set as a ket', () => {

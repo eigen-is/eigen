@@ -1,7 +1,8 @@
 // The rendered body of an article, a post or the changelog, in the site's prose style. The build leaves the HTML
 // and a marker for each media grid, so this draws the HTML as it is and each grid as a component. It lets a click
-// on a heading with a link icon copy the link and a carousel's buttons page its images, and starts the looping
-// videos unless the reader asked for less motion. Every page of the public site that shows Markdown uses it.
+// on a heading with a link icon copy the link and a carousel's buttons and dots page its images, keeps those in step
+// with the strip as it scrolls, and starts the looping videos unless the reader asked for less motion. Every page
+// of the public site that shows Markdown uses it.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { cn } from '@workspace/ui/lib/utils';
@@ -9,6 +10,13 @@ import type { MouseEvent } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
+
+// The slides of a strip lie one pitch apart, so its scroll offset over the pitch is the slide in view.
+function carouselPosition(strip: Element) {
+    const [first, second] = strip.querySelectorAll<HTMLElement>('.media-carousel-slide');
+    const pitch = second ? second.offsetLeft - first.offsetLeft : strip.clientWidth;
+    return { pitch, current: Math.round(strip.scrollLeft / pitch) };
+}
 
 type ArticleContentProps = { body: ArticleBody; className?: string };
 
@@ -48,16 +56,40 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
         return () => reduceMotion.removeEventListener('change', startVideos);
     }, [body.html]);
 
-    // A carousel button pages by the strip's own width, since each image fills it.
+    // Scroll does not bubble, so the root hears each carousel strip's in the capture phase.
+    useEffect(() => {
+        const root = ref.current;
+        const onScroll = (e: Event) => {
+            const strip = e.target;
+            if (!(strip instanceof Element) || !strip.matches('.media-carousel-strip')) return;
+            const carousel = strip.closest('.media-carousel');
+            if (!carousel) return;
+            const { current } = carouselPosition(strip);
+            const dots = carousel.querySelectorAll('.media-carousel-dot');
+            for (const [i, dot] of dots.entries()) {
+                if (i === current) dot.setAttribute('aria-current', 'true');
+                else dot.removeAttribute('aria-current');
+            }
+            for (const button of carousel.querySelectorAll<HTMLButtonElement>('.media-carousel-steps button')) {
+                button.disabled = button.matches('.media-carousel-prev') ? current <= 0 : current >= dots.length - 1;
+            }
+        };
+        root?.addEventListener('scroll', onScroll, true);
+        return () => root?.removeEventListener('scroll', onScroll, true);
+    }, []);
+
     // A heading copies its link only where its icon shows, as touch screens hide it, and never over a selection.
     const onClick = (e: MouseEvent<HTMLDivElement>) => {
         if (!(e.target instanceof Element)) return;
-        const step = e.target.closest('.media-carousel-prev, .media-carousel-next');
-        if (step) {
-            const strip = step.closest('figure')?.querySelector('.media-carousel-strip');
-            if (!strip) return;
-            const width = step.classList.contains('media-carousel-prev') ? -strip.clientWidth : strip.clientWidth;
-            strip.scrollBy({ left: width });
+        const control = e.target.closest('.media-carousel-nav button');
+        const carousel = control?.closest('.media-carousel');
+        const strip = carousel?.querySelector('.media-carousel-strip');
+        if (control && carousel && strip) {
+            const { pitch, current } = carouselPosition(strip);
+            let slide = Array.from(carousel.querySelectorAll('.media-carousel-dot')).indexOf(control);
+            if (control.matches('.media-carousel-prev')) slide = current - 1;
+            if (control.matches('.media-carousel-next')) slide = current + 1;
+            strip.scrollTo({ left: slide * pitch });
             return;
         }
         if (!window.getSelection()?.isCollapsed) return;
