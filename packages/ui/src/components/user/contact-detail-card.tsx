@@ -2,6 +2,7 @@
 // notes. Views such as Contacts' detail and the .vcf preview show it.
 
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { contactFullName } from '@workspace/lib/contacts';
 import { formatDateOnly } from '@workspace/lib/date';
 import { useMailEnabled } from '@workspace/lib/public';
@@ -40,8 +41,12 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
                         ? labels.map((label, index) => (
                               <Badge
                                   key={index}
-                                  style={{ backgroundColor: label.color }}
-                                  className="px-2 py-1 text-primary-foreground"
+                                  style={
+                                      label.color
+                                          ? { backgroundColor: label.color, color: readableTextColor(label.color) }
+                                          : undefined
+                                  }
+                                  className="px-2 py-1"
                               >
                                   {label.name}
                               </Badge>
