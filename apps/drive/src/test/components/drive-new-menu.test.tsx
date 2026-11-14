@@ -1,5 +1,3 @@
-// The sidebar's New creates into the folder that is open. In a folder shared with the viewer to view only, it is
-// greyed out, as every other write there is; a folder they may edit, or their own, keeps it.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
