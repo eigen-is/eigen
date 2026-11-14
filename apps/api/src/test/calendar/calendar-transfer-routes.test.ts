@@ -1170,8 +1170,7 @@ describe('Calendar transfer routes', () => {
     });
 
     // A team home is the one Home a transfer may run against that is not the caller's own, so every other
-    // owner shape is refused rather than resolved — an org or external id otherwise lands in the caller's
-    // own Home by way of resolveCalendar.
+    // owner shape is refused.
     test('an org or external ownerId is neither an import nor an export target', async () => {
         for (const ownerId of [`org_${'a'.repeat(32)}`, `external_${bob.email}`]) {
             const imported = await authedRequest(

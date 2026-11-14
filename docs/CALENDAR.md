@@ -172,13 +172,13 @@ A share grants `free-busy` (time blocks only), `read` or `write`. When shares ch
 
 A `TeamHome` starts with `{ calendar: { enabled: false } }`, and its `calendar` getter throws 404 until an admin enables it from the Admin app. Members get the team calendar in their `shared_calendars` at `read` on each `GET /calendar/:ownerId/shared`. A share on the team calendar upgrades them. While it is disabled, that sync removes the stale entries.
 
-Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating, changing and deleting one takes an org admin or the owner (`requireTeamAdmin`, since teams have no roles), because the admin sets a team calendar's shares. Any member may list them. Every event route takes the calendar share instead (`checkCalendarAccess`), so a member's `write` share is event-level. A non-team `ownerId` must be the caller's own.
+Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating, changing and deleting one takes an org admin or the owner (`requireTeamAdmin`, since teams have no roles), because the admin sets a team calendar's shares. Any member may list them. Every event route takes the calendar share instead (`checkCalendarAccess`), so a member's `write` share is event-level. The calendar list routes and the range read over all of an owner's calendars (`resolveCalendar`) answer 403 to a non-team `ownerId` that is not the caller's own.
 
 REST bounds are never tighter than what a PUT may store. The ids Eigen mints cap at 512 characters, and every field a client spells caps at `EVENT_MAX_BYTES`, or an event a CalDAV client stored would be uneditable in the web app.
 
 ## Asking about another owner's calendar never opens a home it would create
 
-Some reads take another owner's id before any permission exists: the share check behind every event route (`checkCalendarAccess`), `shared-with-me` and the signup reconciliation. They reach the owner through `calendarOf` in `home-relay.ts`, which checks that the owner's home folder exists before it opens the home. A user who never signed in has no folder yet. A guest's and an org's folders sit elsewhere, and their homes have no calendar. An id without a user has neither. All four answer as a calendar the caller may not see: 403 for an event or the access list, and `[]` for `shared-with-me`. So a caller can't tell which ids exist, and asking never creates a home folder that the backup would then pick up. A disabled team calendar still answers 404, because the team sync reads that 404 to remove stale entries.
+Some reads take another owner's id before any permission exists: the share check behind every event route (`checkCalendarAccess`), `shared-with-me` and the signup reconciliation. The two routed reads reach the owner through `routedCalendar` in `get-calendar.ts` and the reconciliation through `calendarOf` in `home-relay.ts`, and both check that the owner's home folder exists before they open the home. A user who never signed in has no folder yet. A guest's and an org's folders sit elsewhere, and their homes have no calendar. An id without a user has neither. All four answer as a calendar the caller may not see: 403 for an event or the access list, and `[]` for `shared-with-me`. So a caller can't tell which ids exist, and asking never creates a home folder that the backup would then pick up. A disabled team calendar still answers 404, because the team sync reads that 404 to remove stale entries.
 
 ## Calendar shares the home data budget
 
@@ -299,7 +299,7 @@ Each series is written as its own resource through `putResource`, the path a Cal
 
 ## An import needs a target calendar
 
-The file routes reach only the caller's own home and team homes, because only the home relay crosses into another user's Home. So a calendar another user shared is no target ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)). An export takes `read` and an import `write`, and `free-busy` is no read here.
+The file routes reach only the caller's own home and team homes: `resolveTransferCalendar` refuses every other owner. So a calendar another user shared is no target ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)). An export takes `read` and an import `write`, and `free-busy` is no read here.
 
 The "Import to Calendar" file action opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/`). It offers the viewer's own calendars, the team calendars they may write in, or a new one. `useImportToCalendar` deletes a new calendar again when it took no events. When that delete fails, the next try deletes it first, unless the user picks it from the list.
 

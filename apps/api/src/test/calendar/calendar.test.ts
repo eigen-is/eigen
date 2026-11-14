@@ -2339,6 +2339,59 @@ describe('Event move across calendars', () => {
         });
         expect(res.status).toBe(404);
     });
+
+    test('refuses a sharee who may write the source but only read the target', async () => {
+        const asAlice = (url: string, init?: RequestInit) => authedRequest(ctx.alice.user.sessionToken, url, init);
+        const sharedWith = async (name: string, permission: 'read' | 'write') => {
+            const created = await assertJson<CalendarItem>(
+                await asAlice(`/calendar/${ctx.alice.user.id}/calendars`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color: '#4285f4' }),
+                }),
+            );
+            const shared = await asAlice(`/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission }] }),
+            });
+            expect(shared.status).toBe(200);
+            return created.id;
+        };
+        const writable = await sharedWith('Bob Writes', 'write');
+        const readable = await sharedWith('Bob Reads', 'read');
+        const event = await assertJson<CalendarEvent>(
+            await asAlice(eventsUrl(writable), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Stays Put',
+                    startTime: '2026-12-10T09:00:00Z',
+                    endTime: '2026-12-10T10:00:00Z',
+                    allDay: false,
+                }),
+            }),
+        );
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, moveUrl(writable, event.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: readable }),
+        });
+        expect({ status: res.status, message: await res.text() }).toEqual({
+            status: 403,
+            message: 'Write permission required',
+        });
+
+        const idsIn = async (calId: string) =>
+            (
+                await assertJson<CalendarEventOccurrence[]>(
+                    await asAlice(rangeUrl(calId, '2026-12-10T00:00:00Z', '2026-12-11T00:00:00Z')),
+                )
+            ).map((e) => e.id);
+        expect(await idsIn(writable)).toEqual([event.id]);
+        expect(await idsIn(readable)).toEqual([]);
+    });
 });
 
 // Finding #2: intervals were never validated on any write path — an all-day event with reversed dates

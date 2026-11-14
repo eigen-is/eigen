@@ -16,11 +16,12 @@ Server-wide surfaces that act on no Home carry none, and `OWNER_ID_EXEMPT` lists
 
 ## Every cross-home call goes through the relay
 
-When one user's action touches another Home, it goes through `home-relay.ts`, in one of three shapes, all keyed by the target's `ownerId`:
+When one user's action touches another Home, it goes through `home-relay.ts`, in one of two shapes, both keyed by the target's `ownerId`:
 
 - **Pushes**: `sendToHome(targetUserId, message)` and `sendToUserHomes(userIds, message)` with a typed `HomeMessage` (ACL changes, Recent opens, calendar shares and invitations, RSVPs, SSE broadcasts, notifications). Most callers don't wait: an ACL fan-out, a chat notification or an event write's invitations are delivered after the request answered. A few callers await theirs, such as a calendar's share change (`propagateCalendarShare`), an assignment from a chat (`propagateAssignment`) and the pushes of share reconciliation at sign-in (`reconcileShares`).
-- **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`, and `pullFromEach` to run one against many homes ([§ Reads across many homes go through pullFromEach](#reads-across-many-homes-go-through-pullfromeach)). The calendar pulls that ask about calendars, `pullCalendars`, `pullCalendarPermission`, `pullCalendarShares` and `pullPendingInvitations`, never open a home that has no folder yet ([CALENDAR.md](CALENDAR.md#asking-about-another-owners-calendar-never-opens-a-home-it-would-create)). `pullCalendarById`, `pullEventsInRange` and `pullEventById` open the home as it is, since their route names its owner.
-- **Event writes**: `createEventAt`, `updateEventAt`, `deleteEventAt` and `moveEventAt`, which return a value and so are not pushes.
+- **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`, and `pullFromEach` to run one against many homes ([§ Reads across many homes go through pullFromEach](#reads-across-many-homes-go-through-pullfromeach)). The calendar pulls that ask about calendars, `pullCalendars`, `pullCalendarPermission`, `pullCalendarShares` and `pullPendingInvitations`, never open a home that has no folder yet ([CALENDAR.md](CALENDAR.md#asking-about-another-owners-calendar-never-opens-a-home-it-would-create)).
+
+A route whose URL names the owner opens that owner's Home itself and is no relay call: a Drive route through `getSharedDrive`, and a calendar event route through `checkCalendarAccess`, which answers the owner's `Calendar` with the caller's permission on it.
 
 Calls that no Home makes stay out of the relay. The server jobs in `lib/home/server-jobs.ts` work on one home's folder: `pullHomeSize` and `pullHomeBackupBytes` read it without booting the home, and `pullHomeSnapshot` captures it for a backup. `pushUserProfile` and `pushTeamAvatar` in `lib/user/avatars.ts` write server-wide data, a user's name and the avatar files.
 
