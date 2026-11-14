@@ -137,6 +137,106 @@
     .heading-anchor:focus-visible {
         opacity: 1;
     }
+
+    /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
+    .media-video,
+    .media-carousel,
+    .media-side-by-side {
+        margin: 2rem 0;
+    }
+
+    .media-video video,
+    .media-carousel img,
+    .media-side-by-side img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 0.5rem;
+        background-color: var(--muted);
+    }
+
+    /* The images sit in one paragraph inside the block, which steps aside so each image is a slide or a column. */
+    .media-carousel-strip > p,
+    .media-side-by-side > p {
+        display: contents;
+    }
+
+    /* The strip and its buttons share the first row, so the buttons sit over the strip's edges. */
+    .media-carousel {
+        display: grid;
+    }
+
+    .media-carousel-strip,
+    .media-carousel-prev,
+    .media-carousel-next {
+        grid-row: 1;
+        grid-column: 1;
+    }
+
+    .media-carousel-strip {
+        display: flex;
+        align-items: flex-start;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        border-radius: 0.5rem;
+    }
+
+    .media-carousel-strip:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+
+    .media-carousel-strip img {
+        flex: 0 0 100%;
+        scroll-snap-align: start;
+    }
+
+    .media-carousel-prev,
+    .media-carousel-next {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        align-self: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        margin: 0 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 9999px;
+        background-color: color-mix(in oklab, var(--background) 85%, transparent);
+        color: var(--foreground);
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.12s ease;
+    }
+
+    .media-carousel-prev {
+        justify-self: start;
+    }
+
+    .media-carousel-next {
+        justify-self: end;
+    }
+
+    .media-carousel:hover :is(.media-carousel-prev, .media-carousel-next),
+    .media-carousel-prev:focus-visible,
+    .media-carousel-next:focus-visible {
+        opacity: 1;
+    }
+
+    .media-side-by-side {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+
+        figcaption {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 40rem) {
+            grid-template-columns: 1fr;
+        }
+    }
 }
 
 /* An app name in prose or a caption, such as eigen|mail⟩: letters, bar and ket from one font. Not .site-prose only,
@@ -154,6 +254,10 @@
 @media (pointer: coarse) {
     .site-prose .heading-anchor {
         display: none;
+    }
+
+    .site-prose :is(.media-carousel-prev, .media-carousel-next) {
+        opacity: 1;
     }
 
     .site-prose h2:has(.heading-anchor),
