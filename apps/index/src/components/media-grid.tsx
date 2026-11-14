@@ -48,6 +48,7 @@ function MediaThumbnail({ src, type, caption, thumbnail, poster }: MediaItem) {
                         ) : (
                             <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
                         )}
+                        {/* Black and white, not theme tokens, on purpose: the mark sits on any photo, in either theme. */}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
                             <Play className="size-16 fill-current text-white opacity-80 group-hover:opacity-100 transition-opacity" />
                         </div>

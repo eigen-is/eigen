@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path';
 import { parseMediaGrids } from '../src/components/parse-media-grids';
 import { aboutApps } from '../src/content/about-apps';
-import { aboutPageSlug, checkAboutRows } from './lib/about-pages';
+import { aboutPageSlug, checkAboutRows, checkFormatArticles } from './lib/about-pages';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
 import { aboutFrontmatterSchema, blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
 import { parseContentFile } from './lib/frontmatter';
@@ -139,6 +139,7 @@ function main() {
     mkdirSync(OUT, { recursive: true });
     const blog = buildBlog();
     const support = buildSupport();
+    checkFormatArticles(new Set(support.map((article) => article.slug)));
     const about = buildAbout();
     writeManifest('blog', blog);
     writeManifest('support', support);

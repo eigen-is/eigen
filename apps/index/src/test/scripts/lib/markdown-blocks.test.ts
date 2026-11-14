@@ -55,9 +55,9 @@ describe('carousel and side by side', () => {
         );
         expect(html).toContain('<img src="/b.webp" alt="b bold"><figcaption>b <em>bold</em></figcaption>');
         expect(html).toContain(
-            '<button type="button" class="media-carousel-dot" aria-label="Image 1 of 2" aria-current="true"></button>',
+            '<button type="button" class="media-carousel-dot" aria-label="Slide 1 of 2" aria-current="true"></button>',
         );
-        expect(html).toContain('<button type="button" class="media-carousel-dot" aria-label="Image 2 of 2"></button>');
+        expect(html).toContain('<button type="button" class="media-carousel-dot" aria-label="Slide 2 of 2"></button>');
         expect(html).toContain('class="media-carousel-prev" aria-label="Previous image" disabled>');
         expect(html).toContain('class="media-carousel-next" aria-label="Next image">');
         expect(html.match(/<img /g)?.length).toBe(2);

@@ -93,7 +93,7 @@ export function markdownBlocks(
                 }
                 const dots = slides.map(
                     (_, i) =>
-                        `<button type="button" class="media-carousel-dot" aria-label="Image ${i + 1} of ${slides.length}"${i === 0 ? ' aria-current="true"' : ''}></button>`,
+                        `<button type="button" class="media-carousel-dot" aria-label="Slide ${i + 1} of ${slides.length}"${i === 0 ? ' aria-current="true"' : ''}></button>`,
                 );
                 const nextDisabled = slides.length < 2 ? ' disabled' : '';
                 html(
