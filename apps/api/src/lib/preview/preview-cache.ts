@@ -46,7 +46,7 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 export const TEXT_FORMAT = 'f8';
 export const VCARD_FORMAT = 'vcard-f1';
 // Bumped on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
-export const EML_FORMAT = 'eml-f5';
+export const EML_FORMAT = 'eml-f6';
 export const ICS_FORMAT = 'ics-f2';
 
 // The largest side of an image's screen preview.

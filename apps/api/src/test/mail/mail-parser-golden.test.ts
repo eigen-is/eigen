@@ -19,6 +19,7 @@ function projectAttachment(att: ParsedMail['attachments'][number]): unknown {
         contentType: att.contentType,
         filename: att.filename,
         calendarMethod: att.calendarMethod,
+        invitationBody: att.invitationBody,
         sha256: hasher.digest('hex'),
         size: att.size,
     };

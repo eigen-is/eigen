@@ -5,6 +5,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { subjectFromMailAttachment, subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { Attachment } from '@workspace/lib/types/mail';
+import { isListedFile } from '@workspace/lib/types/mail';
 import { AttachmentStrip, SimpleAttachmentChip, useAttachmentChipMenu } from '@workspace/ui/components/attachment';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { FileActionMenuItems, useFileActionRunner } from '@workspace/ui/components/file-actions';
@@ -23,10 +24,13 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const { openPreview } = usePreview();
     const ownerId = user?.id ?? '';
 
-    // The invite widget above says what an invitation is, so a calendar part still gets a chip: the file to look
-    // at, save or import to Calendar. Each subject keeps the raw part index the mail routes address.
+    // A calendar file still gets a chip beside the invite widget: the file to look at, save or import to Calendar.
+    // Each subject keeps the raw part index the mail routes address.
     const subjects = useMemo(
-        () => (attachments ?? []).map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
+        () =>
+            (attachments ?? [])
+                .filter(isListedFile)
+                .map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
         [attachments, emailId, ownerId],
     );
     // Each chip's derived facts once: the key a press resolves through, the name and the byte URL.

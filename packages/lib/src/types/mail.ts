@@ -41,6 +41,8 @@ export type Attachment = {
     // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
     charset?: string;
     calendarMethod?: ImipMethod;
+    // The invitation sent as the body, which a calendar file in the same message repeats. The invite card draws it.
+    invitationBody?: boolean;
     // Set on text/calendar attachments in the message-detail payload; null = unparseable or too large.
     calendarInvite?: CalendarInvite | null;
 };
@@ -51,9 +53,14 @@ export function mailAttachmentName(att: Pick<Attachment, 'filename'>, index: num
     return name || `attachment-${index + 1}`;
 }
 
-// The one test for "this part is an invitation": the reader's invite widget and the iMIP paths ask it.
+// The one test for "this part is an invitation", such as for the invite widget and the iMIP scan.
 export function isCalendarPart(att: Pick<Attachment, 'contentType'>): boolean {
     return isIcsMime(att.contentType);
+}
+
+// The one test for "a list of files shows this part", so a message's chips, its forward and its paperclip agree.
+export function isListedFile(att: Pick<Attachment, 'invitationBody'>): boolean {
+    return !att.invitationBody;
 }
 
 export type ParsedMail = {
