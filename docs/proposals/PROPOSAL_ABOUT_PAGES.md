@@ -1,6 +1,8 @@
 # About pages
 
-A proposal for step 2 of the public site: one About overview and one short page per app. Step 1, the landing page, top bar, footer, Support, changelog and blog, ships first because all its content exists. The pages and their build are in place with stub text; the real text and media are not written yet. The owner approved the look in a mock, and the text below is a first draft.
+**Status:** built: the overview, the Sheets page as a first draft and a row for each of the ten apps, the landing line's app words and the footer's About link, and the media filmed from the demo world ([HELP-CENTER.md § The About pages](../HELP-CENTER.md#the-about-pages), [§ Filming the demo](../HELP-CENTER.md#filming-the-demo)). It differs from this proposal in four ways. Every copy names `https://eigen.is/about…` as its canonical URL, since the pages say the same on every server. The pages show the admin's landing links under the title, so eigen.is links its demo there and these pages still never name it. The media are filmed from the seeded Tuimel world by a capture tool, not retaken by hand. Every page ends with a shared `_technical.md` block for the reader's technical person. The Support sections' "What is Sheets?" link is not built. The other nine app pages are a ROADMAP row.
+
+A proposal for step 2 of the public site: one About overview and one short page per app. Step 1, the landing page, top bar, footer, Support, changelog and blog, ships first because all its content exists. The owner approved the look in a mock, and the text below is a first draft.
 
 ## Why
 

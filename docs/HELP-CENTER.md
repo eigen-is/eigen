@@ -1,6 +1,6 @@
 # Help Center
 
-> **TLDR:** The public help center (`/support`) and the blog (`/blog`) are static pages built by `apps/index`, with no backend. Articles are Markdown with Zod-validated frontmatter under `apps/index/src/data/`. A prebuild renders them to JSON, and a postbuild prerenders every route to real HTML that hydrates in place, so the first client render must match the server's. Search is a Pagefind index built from the same JSON. A section is a folder and an article's URL is its file path, so renaming either breaks links.
+> **TLDR:** The public help center (`/support`), the blog (`/blog`) and the About pages (`/about`) are static pages built by `apps/index`, with no backend. Articles are Markdown with Zod-validated frontmatter under `apps/index/src/data/`. A prebuild renders them to JSON, and a postbuild prerenders every route to real HTML that hydrates in place, so the first client render must match the server's. Search is a Pagefind index built from the same JSON. A section is a folder and an article's URL is its file path, so renaming either breaks links.
 
 The help center is where users and the people who run a server read how Eigen works: a section for each app such as Mail or Drive, plus getting started, integrations, account, admin and self-hosting. Every app links to it, and the command palette searches it. Its pages are built with the apps, so every install serves its own copy. This doc covers how it is built and served. How an article is written is [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md) and the [support-article skill](../.claude/skills/support-article/SKILL.md).
 
@@ -121,9 +121,23 @@ The overview lists the posts newest first from the build-time manifest, so every
 
 `/about` is an overview and `/about/<app>` one page per app, a third collection beside the blog and Support, in `src/data/about/` ([proposals/PROPOSAL_ABOUT_PAGES.md](proposals/PROPOSAL_ABOUT_PAGES.md)). The apps are the shared `apps` registry without Space, and an app's slug is its name in lower case (`aboutApps`). An app page takes its app from its file name, so `sheets.md` is `/about/sheets`, and a file named after no app throws at build. `index.md` is the overview, and its `rows` frontmatter holds one line for each of the apps, no more and no fewer; an app page that sets `rows` throws. The frontmatter is strict: the order comes from the registry, so a field such as `order` or `draft` is refused.
 
-A file whose name starts with `_` is not a page. `_technical.md` is the block for the reader's technical person, appended to every About page's Markdown before the render, so its heading joins the table of contents. The overview lists every app in registry order, and a row links to its app's page only once that page exists. An app page ends with Previous and Next across the app pages. Both show the admin's landing links under the title, the same buttons as the landing page.
+A file whose name starts with `_` is not a page. `_technical.md` is the block for the reader's technical person, appended to the Markdown of the overview and of every app page before the render, so on an app page its heading joins the table of contents. The overview lists every app in registry order, and a row links to its app's page only once that page exists. An app page ends with Previous and Next across the app pages. Both show the admin's landing links under the title, the same buttons as the landing page.
 
 The About pages say the same on every server, so their `<link rel="canonical">` always names `https://eigen.is/about...`, whatever `DOMAIN` is. Their `og:url`, JSON-LD and sitemap entry use `DOMAIN` like every other page.
+
+## Filming the demo
+
+The videos and stills on the About pages are filmed, not drawn: the capture tool in `apps/index/capture/` seeds the Tuimel demo world ([DEMO_MODE.md](DEMO_MODE.md)) and records the personas' screens in it. So a retake after a design change is one command, and every picture shows the product as it is. The tool has its own `package.json` and `bun.lock` with `playwright-core`, like `packages/formula/benchmark`, so the workspace install never pulls it in. It runs on the owner's Mac, not in CI.
+
+```
+cd apps/index/capture && bun install && bun run capture [scene…]
+```
+
+With no names it films every scene. A run wipes `/tmp/eigen-capture`, seeds a fresh data root there with a known persona password (`EIGEN_DEMO_PERSONA_PASSWORD`), starts an API on 8690 and a vite on 36xx for each app the scenes need, beside a dev stack on the usual ports, and stops them all at the end, on Ctrl-C too. Start it outside the macOS sandbox, where the API's SQLite fails with `SQLITE_IOERR_VNODE`, and natively on Apple silicon (`arch -arm64`), since Chrome under Rosetta runs about ten times slower ([verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md)). It needs system Chrome, an ffmpeg with `libsvtav1` and `libx264`, and `cwebp`.
+
+A scene is one plain object in `capture/scenes/`, listed in `SCENES`: its output name, video or still, theme, viewport, the apps and personas it needs, a `setup` that runs before the camera rolls and a `run` that drives one page per persona. A take looks natural because each persona acts like a person: a drawn arrow follows an eased path of real mouse events, so hover states show on the way, text is typed one key at a time with an uneven rhythm, and `hold` leaves a pause to read. Setup opens the document first, so a film starts on a ready screen, and a loop ends where it began, such as with an undo of the edit it showed.
+
+A video records Chrome's screencast frames with their own timestamps and encodes them at a steady 30 fps into an AV1 and an H.264 mp4, the two files `::: video` reads, with the first frame as its webp poster. A scene with `composite: 'side-by-side'` films every persona's page and joins them with a thin grey seam, cut to one start. A still is one screenshot through `cwebp`. Everything is made under `/tmp/eigen-capture` and moves into `apps/index/public/data/about/media/` only once a scene's files are all done, so a failed take leaves the site's media as they were. The overview's rows read `row-<app>.webp` from there.
 
 ## See also
 

@@ -108,6 +108,22 @@ Every article is exactly **one** [Diátaxis](https://diataxis.fr) type, matching
   </media-grid>
   ```
 
+  A media grid suits screenshots a reader wants to see full size, since a click opens one in a dialog.
+- **A media block** shows media at the column's full width, with no dialog. It opens with `::: <name>` and closes with a `:::` line, and its optional `caption` is plain Markdown, so an app name in it is set like the prose. A misspelled block, a missing closing line or a missing video file fails the build. Pick by what the reader should see:
+  - `::: video` for a short muted loop that shows something happening, such as a total updating as a number is typed. Its `src` names the files without their endings: `clip.av1.mp4`, `clip.h264.mp4` and the poster `clip.webp` must all be under `apps/index/public/`. It takes no body. A reader who prefers less motion gets it paused, with controls.
+  - `::: carousel` for a few stills of one subject that the reader pages through, one at a time, such as a light and a dark view. Its body is the images, one per line.
+  - `::: side-by-side` for two images meant to be compared, such as before and after. They sit in two columns and stack on a phone.
+
+  ```markdown
+  ::: video src="/data/about/media/sheets-chart" caption="A cost changes, and its bar grows."
+  :::
+
+  ::: carousel caption="The budget, and its pie chart in dark mode."
+  ![The budget table](/data/about/media/sheets-still-budget.webp)
+  ![A pie chart in dark mode](/data/about/media/sheets-still-chart.webp)
+  :::
+  ```
+
 ## 6. Mechanics
 
 - **American English** (en-US): "color", "organize", "center", "canceled". Proper nouns, protocol names, HTTP reason phrases and third-party quotes stay verbatim (`401 Unauthorized`, WebDAV, Google Workspace).
