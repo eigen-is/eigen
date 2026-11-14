@@ -3,18 +3,9 @@
 
 import type { Scene } from '../lib/scene';
 import { ROWS } from './rows';
-import { sheetsChart } from './sheets-chart';
 import { sheetsCollabPair } from './sheets-collab';
 import { sheetsHero } from './sheets-hero';
 import { sheetsStillBudget, sheetsStillChart } from './sheets-stills';
 import { suite } from './suite';
 
-export const SCENES: Scene[] = [
-    sheetsHero,
-    sheetsCollabPair,
-    sheetsChart,
-    sheetsStillBudget,
-    sheetsStillChart,
-    suite,
-    ...ROWS,
-];
+export const SCENES: Scene[] = [sheetsHero, sheetsCollabPair, sheetsStillBudget, sheetsStillChart, suite, ...ROWS];

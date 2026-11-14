@@ -115,7 +115,7 @@ Every article is exactly **one** [Diátaxis](https://diataxis.fr) type, matching
   - `::: side-by-side` for two images meant to be compared, such as before and after. They sit in two columns and stack on a phone.
 
   ```markdown
-  ::: video src="/data/about/media/sheets-chart" caption="A cost changes, and its bar grows."
+  ::: video src="/data/about/media/sheets-hero" caption="A cost changes, and its bar grows."
   :::
 
   ::: carousel caption="The budget, and its pie chart in dark mode."
