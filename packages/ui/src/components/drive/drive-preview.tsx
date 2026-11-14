@@ -9,6 +9,7 @@ import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from 
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
+import { contactFullName } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
@@ -212,7 +213,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
 // The card's own name and email, not the address book's: this previews a file.
 function VCardRow({ contact }: { contact: Contact }) {
     const email = contact.email[0];
-    const title = `${contact.firstName} ${contact.lastName}`.trim() || email;
+    const title = contactFullName(contact) || email;
 
     return (
         <div className="flex min-w-0 items-center gap-3">

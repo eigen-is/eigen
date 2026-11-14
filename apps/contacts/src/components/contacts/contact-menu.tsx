@@ -4,7 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
-import { useExportContacts } from '@workspace/lib/contacts';
+import { contactFullName, useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { AuthUser } from '@workspace/lib/types/auth';
@@ -70,7 +70,7 @@ export function useContactMenu(): {
         );
         const eligiblePeople = eligible.map((contact) => ({
             email: contact.email.find((email) => email.trim().length > 0)?.trim() ?? '',
-            name: `${contact.firstName} ${contact.lastName}`.trim(),
+            name: contactFullName(contact),
         }));
         const canReach = eligible.length > 0;
         const canMail = canReach && mailEnabled;

@@ -2,6 +2,7 @@ import { useMyTeams } from '@workspace/lib/home';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { useMemo } from 'react';
+import { contactFullName } from '../contact-names';
 import { useContacts } from './use-contacts';
 
 type TeamMemberSuggestion = { email: string; name: string; teamId: string };
@@ -67,8 +68,8 @@ export function useContactSuggestions(
         // Personal contacts (skip duplicates by email)
         if (contacts) {
             for (const contact of contacts) {
-                const fullName = `${contact.firstName} ${contact.lastName}`.toLowerCase();
-                const nameMatch = fullName.includes(lowerQuery);
+                const fullName = contactFullName(contact);
+                const nameMatch = fullName.toLowerCase().includes(lowerQuery);
                 const emailMatch = contact.email.find((e) => e.toLowerCase().includes(lowerQuery));
 
                 if (!nameMatch && !emailMatch) continue;
@@ -85,7 +86,7 @@ export function useContactSuggestions(
                 results.push({
                     kind: 'personal',
                     id: contact.id,
-                    displayName: `${contact.firstName} ${contact.lastName}`,
+                    displayName: fullName,
                     email: bestEmail,
                 });
             }

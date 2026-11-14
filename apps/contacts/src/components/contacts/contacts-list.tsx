@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useContacts, useExportContacts } from '@workspace/lib/contacts';
+import { contactFullName, useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { Button } from '@workspace/ui/components/button';
@@ -133,7 +133,7 @@ export function ContactsList({
                     <UserItem
                         name={
                             sortBy === 'firstName'
-                                ? `${contact.firstName} ${contact.lastName}`
+                                ? contactFullName(contact)
                                 : `${contact.lastName}, ${contact.firstName}`
                         }
                         email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}

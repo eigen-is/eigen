@@ -2,6 +2,7 @@
 // notes. Views such as Contacts' detail and the .vcf preview show it.
 
 import { getMailComposeUrl } from '@workspace/lib/api';
+import { contactFullName } from '@workspace/lib/contacts';
 import { formatDateOnly } from '@workspace/lib/date';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { Address, Contact } from '@workspace/lib/types/contact';
@@ -28,7 +29,7 @@ export function ContactDetailCard({ contact, labels, className }: ContactDetailC
         <div className={cn('flex flex-col md:flex-row gap-8', className)}>
             <UserDetailHero
                 layout="profile"
-                name={`${contact.firstName} ${contact.lastName}`}
+                name={contactFullName(contact)}
                 email={contact.email[0]}
                 imageUrl={contact.avatar}
                 subtitle={

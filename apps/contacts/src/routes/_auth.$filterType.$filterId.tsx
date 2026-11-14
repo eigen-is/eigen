@@ -5,6 +5,7 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
+    contactFullName,
     useContacts,
     useDeleteContact,
     useImportContacts,
@@ -209,11 +210,7 @@ function ContactsRoute() {
                         ? `Are you sure you want to delete ${deleteTargets.length} contacts`
                         : 'Are you sure you want to delete'
                 }
-                itemName={
-                    deleteTargets.length === 1
-                        ? `${deleteTargets[0].firstName} ${deleteTargets[0].lastName}`
-                        : undefined
-                }
+                itemName={deleteTargets.length === 1 ? contactFullName(deleteTargets[0]) : undefined}
                 onDelete={handleConfirmDelete}
             />
 
