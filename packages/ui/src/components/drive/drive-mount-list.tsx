@@ -4,7 +4,8 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import {
     Select,
     SelectContent,
@@ -27,11 +28,12 @@ type DriveMountListProps = {
 
 type MountEntry = { ownerId: string; mountId: string; name: string };
 
-export function useMountLabel(activeOwnerId: string, activeMountId: string): string {
+const DRIVE_NAME = 'Drive';
+
+export function useMountLabel(ownerId: string, mountId: string): string {
     const teamMounts = useTeamMounts();
-    if (activeMountId === 'default') return 'Drive';
-    const mount = teamMounts.find((m) => m.mountId === activeMountId && m.ownerId === activeOwnerId);
-    return mount?.name || 'Drive';
+    if (mountId === DEFAULT_MOUNT_ID) return DRIVE_NAME;
+    return labelOf(teamMounts, ownerId, mountId);
 }
 
 export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect, ownMountsOnly }: DriveMountListProps) {
@@ -39,7 +41,7 @@ export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect, ow
 
     const activeClass = 'bg-muted text-primary font-medium';
     const baseClass = 'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left hover:bg-muted';
-    const isActive = (entry: MountEntry) => entry.ownerId === activeOwnerId && entry.mountId === activeMountId;
+    const isActive = (entry: MountEntry) => isMount(entry, activeOwnerId, activeMountId);
 
     return (
         <div className="flex flex-col gap-1">
@@ -75,9 +77,9 @@ export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect, ow
 
 export function DriveMountSelect({ activeMountId, activeOwnerId, onMountSelect, ownMountsOnly }: DriveMountListProps) {
     const { myDrive, teamMounts } = useMountEntries(ownMountsOnly);
-    const mountLabel = useMountLabel(activeOwnerId, activeMountId);
+    const entries = [myDrive, ...teamMounts];
     const pick = (key: string) => {
-        const entry = [myDrive, ...teamMounts].find((e) => mountKey(e.ownerId, e.mountId) === key);
+        const entry = entries.find((e) => mountKey(e.ownerId, e.mountId) === key);
         if (entry) onMountSelect(entry.ownerId, entry.mountId);
     };
     const item = (entry: MountEntry) => (
@@ -93,7 +95,7 @@ export function DriveMountSelect({ activeMountId, activeOwnerId, onMountSelect, 
     return (
         <Select value={mountKey(activeOwnerId, activeMountId)} onValueChange={pick}>
             <SelectTrigger aria-label="Drive" className="w-full data-[size=default]:h-11">
-                <SelectValue>{mountLabel}</SelectValue>
+                <SelectValue>{labelOf(entries, activeOwnerId, activeMountId)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
                 <SelectGroup>
@@ -114,7 +116,7 @@ export function DriveMountSelect({ activeMountId, activeOwnerId, onMountSelect, 
 function useMountEntries(ownMountsOnly: boolean | undefined) {
     const { user } = useAuth();
     const teamMounts = useTeamMounts();
-    const myDrive: MountEntry = { ownerId: user?.id ?? '', mountId: 'default', name: 'Drive' };
+    const myDrive: MountEntry = { ownerId: user?.id ?? '', mountId: DEFAULT_MOUNT_ID, name: DRIVE_NAME };
     return { myDrive, teamMounts: ownMountsOnly ? [] : teamMounts };
 }
 
@@ -124,6 +126,15 @@ function useTeamMounts(): MountEntry[] {
     return myTeams.flatMap((team) =>
         team.mounts.map((mount) => ({ ownerId: teamOwnerId(team.id), mountId: mount.id, name: mount.name })),
     );
+}
+
+// A drive missing from the list, such as one the teams haven't loaded yet, still gets a name.
+function labelOf(entries: readonly MountEntry[], ownerId: string, mountId: string): string {
+    return entries.find((entry) => isMount(entry, ownerId, mountId))?.name ?? DRIVE_NAME;
+}
+
+function isMount(entry: MountEntry, ownerId: string, mountId: string): boolean {
+    return entry.ownerId === ownerId && entry.mountId === mountId;
 }
 
 function mountKey(ownerId: string, mountId: string) {
