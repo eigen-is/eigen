@@ -1,5 +1,5 @@
 // Every Drive upload is one multipart POST. A refusal carries the server's status and reason to the toast, so the
-// user reads "Upload too large (413)" rather than a bare status. The upload reports its progress, a cancel aborts
+// user reads "Upload too large" rather than a bare status. The upload reports its progress, a cancel aborts
 // the request without a toast, and a batch refreshes its folder once.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../types/drive';
@@ -168,7 +168,7 @@ describe('useUploadFile', () => {
             await done.catch(() => {});
         });
         await unmount();
-        expect(toasts).toEqual(['error: Upload too large (413)']);
+        expect(toasts).toEqual(['error: Upload too large']);
     });
 
     test('resolves with the one path the server made', async () => {
@@ -210,7 +210,7 @@ describe('useUploadFiles', () => {
             await done.catch(() => {});
         });
         await unmount();
-        expect(toasts).toEqual(['error: Insufficient storage (507)']);
+        expect(toasts).toEqual(['error: Insufficient storage']);
     });
 
     test('a cancelled upload toasts nothing', async () => {

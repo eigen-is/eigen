@@ -134,9 +134,7 @@ describe('usePrintPdf', () => {
 
         expect(tab?.closed).toBe(true);
         expect(fallbacks).toBe(1);
-        expect(toasts).toEqual([
-            'info: Printing without headers and footers. WeasyPrint 68 or later is not installed (501)',
-        ]);
+        expect(toasts).toEqual(['info: Printing without headers and footers. WeasyPrint 68 or later is not installed']);
     });
 
     test('a bare server error names its status behind the one prefix', async () => {
@@ -146,7 +144,7 @@ describe('usePrintPdf', () => {
         await latest.printPdf('owner', 'mount', 'path', true);
         await unmount();
 
-        expect(toasts).toEqual(['info: Printing without headers and footers. Internal server error (500)']);
+        expect(toasts).toEqual(['info: Printing without headers and footers. Internal server error']);
     });
 
     test('an export too big to make says failed once', async () => {
@@ -157,7 +155,7 @@ describe('usePrintPdf', () => {
         await latest.printPdf('owner', 'mount', 'path', true);
         await unmount();
 
-        expect(toasts).toEqual([`info: Printing without headers and footers. ${tooBig} (413)`]);
+        expect(toasts).toEqual([`info: Printing without headers and footers. ${tooBig}`]);
     });
 
     test('a request that never reaches the server falls back too', async () => {

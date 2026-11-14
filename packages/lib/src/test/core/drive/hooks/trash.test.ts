@@ -260,7 +260,7 @@ test('restoring several items where one is refused says so in one message', asyn
     const { write, unmount } = await openTrash();
     server.failing.add(`/drive/${OWNER}/default/trash/b/restore`);
     await write(({ restore }) => restore(ONE_DRIVE));
-    expect(toasts).toEqual(['error: Failed to restore 1 of 3 items: Storage is gone (500)']);
+    expect(toasts).toEqual(['error: Failed to restore 1 of 3 items: Storage is gone']);
     await unmount();
 });
 
