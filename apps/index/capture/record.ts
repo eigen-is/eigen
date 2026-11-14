@@ -18,8 +18,8 @@ const MEDIA_DIR = join(import.meta.dir, '..', 'public', 'data', 'about', 'media'
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
 
-// The apps' background in each theme, which fills the gap between two pages filmed side by side.
-const BACKGROUND: Record<Scene['theme'], string> = { light: '#ffffff', dark: '#181818' };
+// A quiet grey seam, so two pages in one theme don't run into each other.
+const GAP_COLOR: Record<Scene['theme'], string> = { light: '#d4d4d4', dark: '#3a3a3a' };
 const GAP = 24;
 
 // The first page, or every page side by side when the scene asks for it.
@@ -43,7 +43,7 @@ export async function recordVideo(pages: readonly Page[], scene: Scene, run: () 
         writeFileSync(listPath, concatList(startingAt(frames, start), stopTime));
         return listPath;
     });
-    const layout = { height: scene.viewport.height * 2, gap: GAP, color: BACKGROUND[scene.theme] };
+    const layout = { height: scene.viewport.height * 2, gap: GAP, color: GAP_COLOR[scene.theme] };
     const encode = (output: Output, file: string) => exec('ffmpeg', encodeArgs(output, listPaths, layout, file));
     const outputs = [`${scene.name}.av1.mp4`, `${scene.name}.h264.mp4`, `${scene.name}.webp`];
     const posterPng = join(sceneDir, 'poster.png');
