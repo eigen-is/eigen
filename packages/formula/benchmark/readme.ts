@@ -52,6 +52,10 @@ function ratio(theirs: number, ours: number): string {
     return `${times >= 10 ? number(Math.round(times)) : times.toFixed(times >= 1 ? 1 : 2)}×`;
 }
 
+function and(items: readonly string[]): string {
+    return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+
 function percent(part: number, whole: number): string {
     return `${((100 * part) / whole).toFixed(1)}%`;
 }
@@ -59,7 +63,7 @@ function percent(part: number, whole: number): string {
 // A row an engine was too slow for comes again at a tenth of the size, for that engine and ours only.
 function label(row: SpeedRow): string {
     if (row.smallerFor === undefined) return row.workload;
-    return `${row.workload}, a tenth of the size for ${row.smallerFor.map((engine) => LABELS[engine]).join(' and ')}`;
+    return `${row.workload}, a tenth of the size for ${and(row.smallerFor.map((engine) => LABELS[engine]))}`;
 }
 
 function shownCell(found: SpeedCell, memory: boolean): string {
@@ -116,7 +120,7 @@ function chartKey(run: SpeedRun): { readonly table: string; readonly gaps: strin
     ].join('\n');
     const missing = [...gaps].map(
         ([engine, labels]) =>
-            `${LABELS[engine]} has no bar at ${labels.slice(0, -1).join(', ')}${labels.length > 1 ? ' and ' : ''}${labels.at(-1)}: one of its runs took more than two minutes at the full size, so it ran again at a tenth of the size, and the key gives its ratio there.`,
+            `${LABELS[engine]} has no bar at ${and(labels)}: one of its runs took more than two minutes at the full size, so it ran again at a tenth of the size, and the key gives its ratio there.`,
     );
     return { table, gaps: missing.join(' ') };
 }
@@ -177,6 +181,18 @@ function speedSummary(run: SpeedRun): string {
             : `${faster}; ${LABELS[engine]} was as fast or faster in: ${lost.map(label).join('; ')}`;
     });
     return `Speed on ${RUNTIMES[run.runtime]}: ${parts.join('. ')}.`;
+}
+
+// Where the numbers come from: one run, or a run that kept some engines' figures from earlier runs.
+function runDates(results: Results): string {
+    const kept = new Map<string, string[]>();
+    for (const engine of PARTNERS) {
+        const date = results.keptFrom?.[engine];
+        if (date !== undefined) kept.set(date, [...(kept.get(date) ?? []), LABELS[engine]]);
+    }
+    if (kept.size === 0) return `The numbers below come from one run on ${results.generated}.`;
+    const from = [...kept].map(([date, names]) => `those of ${and(names)} from the run on ${date}`);
+    return `The numbers below come from a run on ${results.generated}, apart from the speed and correctness figures it kept from earlier runs: ${and(from)}.`;
 }
 
 function lossList(results: Results): string {
@@ -302,8 +318,7 @@ export function marks(results: Results): Record<string, string> {
         ...correctness(results),
         ...coverage(results),
         ours: OURS,
-        generated: results.generated,
-        'full-minutes': number(Math.round(results.seconds / 60)),
+        'run-dates': runDates(results),
         'long-seconds': String(LONG_RUN.ms / 1000),
         'long-rounds': String(LONG_RUN.rounds),
         machine: `${machine.cpu}, ${machine.cores} cores, ${machine.memoryGb} GB, ${machine.os}`,

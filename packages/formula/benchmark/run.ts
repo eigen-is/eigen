@@ -1,9 +1,8 @@
 // The benchmark run: speed on Bun and on Node, correctness on every recorded row, and coverage, written to the
 // results file the README is rendered from. Every timed run is a fresh child process of one engine and one workload,
-// never two at once; the rounds interleave the engines, and a run starts on a quiet machine and is taken again when
-// the machine got busy during it. A time counts only when the engine's values match ours. A correctness child that
-// stops answering is killed, its row counted as crashed, and a new child goes on after it. A quick run does the same
-// at reduced sizes and prints its tables instead of writing the published results.
+// never two at once, on a quiet machine, and a time counts only when the engine's values match ours. A run can measure
+// some engines again and keep the others' figures from the results file, as after a change to our engine. A quick run
+// does the same at reduced sizes and prints its tables instead of writing the published results.
 
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -28,6 +27,8 @@ const USAGE = `bun run.ts [options], from packages/formula/benchmark after bun i
                       (so no warm-up run), Bun only, every ${QUICK.every}th correctness row; prints its tables and
                       never touches results.json or the README
   --only <parts>      speed, correctness, coverage, comma-separated (default all); the others keep their results
+  --engines <list>    ours, hyperformula, ironcalc, univer (default all); ours always runs, and the others keep their
+                      speed and correctness figures from results.json, which must come from this machine and runtimes
   --rounds <n>        rounds per speed row, each a fresh process per engine (default 5); an engine whose first run
                       of a workload takes over ${LONG_RUN.ms / 1000} s gets at most ${LONG_RUN.rounds} rounds of it
   --runtimes <list>   bun, node (default both)
@@ -91,7 +92,10 @@ export type Results = {
     // The wall time of the whole run, every part included.
     readonly seconds: number;
     readonly machine: { readonly cpu: string; readonly cores: number; readonly memoryGb: number; readonly os: string };
+    // The versions behind the figures: a kept engine keeps the version it was measured with.
     readonly versions: Readonly<Record<string, string>>;
+    // The date of the run each engine's speed and correctness figures were kept from, for an engine not measured again.
+    readonly keptFrom?: Readonly<Partial<Record<EngineName, string>>>;
     readonly hyperformulaConfig: unknown;
     readonly speed: Readonly<Record<string, SpeedRun>>;
     readonly correctness?: {
@@ -143,9 +147,15 @@ type Options = {
     readonly filter: RegExp;
     readonly limit: number;
     readonly scale: number;
+    readonly engines: readonly EngineName[];
 };
 
-function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale }: Options): SpeedRun {
+// The engines the options leave out keep their cells from the earlier run of this runtime, row by row.
+function speedRun(
+    runtime: 'bun' | 'node',
+    { rounds, reps, filter, limit, scale, engines: measured }: Options,
+    earlier: SpeedRun | undefined,
+): SpeedRun {
     const started = Date.now();
     const before = loadText();
     const command =
@@ -260,19 +270,28 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
             };
         });
     };
+    const kept = ENGINES.filter((engine) => !measured.includes(engine));
+    const earlierRows = new Map(earlier?.rows.map((row) => [row.workload, row]));
+    const keep = (row: SpeedRow, engines: readonly EngineName[]): SpeedRow => {
+        const cells: Record<EngineName, SpeedCell> = { ...row.engines };
+        for (const engine of engines)
+            cells[engine] = earlierRows.get(row.workload)?.engines[engine] ?? { status: 'not run' };
+        return { ...row, engines: cells };
+    };
     const all = workloads(scale);
     const smaller = workloads(scale * 10);
     const places = all.flatMap((workload, place) => (filter.test(workload.name) ? [place] : []));
-    const rows = timeRows(
-        places.map((place) => all[place]),
-        ENGINES,
-        scale,
-    );
+    const chosen = places.map((place) => all[place]);
+    const rows = timeRows(chosen, measured, scale).map((row) => keep(row, kept));
     const again = rows.flatMap((row, i): SpeedRow[] => {
         const slow = ENGINES.filter((engine) => row.engines[engine].status === 'too slow');
         if (slow.length === 0) return [];
-        return timeRows([smaller[places[i]]], ['ours', ...slow], scale * 10).map((found) => ({
-            ...found,
+        const timed = slow.filter((engine) => !kept.includes(engine));
+        return timeRows([smaller[places[i]]], ['ours', ...timed], scale * 10).map((found) => ({
+            ...keep(
+                found,
+                slow.filter((engine) => kept.includes(engine)),
+            ),
             smallerFor: slow,
         }));
     });
@@ -331,11 +350,20 @@ async function verdictsOf(
     return verdicts;
 }
 
-async function correctnessRun(every: number): Promise<NonNullable<Results['correctness']>> {
+// The engines not in `measured` keep their verdicts from the earlier run, which must have judged the same rows.
+async function correctnessRun(
+    every: number,
+    measured: readonly EngineName[],
+    earlier: Results['correctness'],
+): Promise<NonNullable<Results['correctness']>> {
     const { header, rows } = readData();
     const everyRow = rows.map((_, place) => place).filter((place) => sampled(place, every));
-    const engines: Partial<Record<EngineName, EngineVerdicts>> = {};
-    for (const engine of ENGINES) {
+    const keeps = measured.length < ENGINES.length;
+    const same = earlier?.source === header.source && earlier.rows === everyRow.length && earlier.every === every;
+    if (keeps && !same)
+        throw new Error('The recorded rows changed since the kept correctness results: run every engine');
+    const engines: Partial<Record<EngineName, EngineVerdicts>> = keeps ? { ...earlier?.engines } : {};
+    for (const engine of measured) {
         const verdicts = await verdictsOf(engine, everyRow, every);
         const zero = (): Record<Verdict, number> => ({ equal: 0, differs: 0, 'not supported': 0, crashed: 0 });
         const total = zero();
@@ -376,6 +404,7 @@ if (import.meta.main) {
             only: { type: 'string', default: 'speed,correctness,coverage' },
             rounds: { type: 'string' },
             runtimes: { type: 'string' },
+            engines: { type: 'string' },
             filter: { type: 'string', default: '' },
             'max-load': { type: 'string', default: '6' },
             help: { type: 'boolean', default: false },
@@ -388,44 +417,73 @@ if (import.meta.main) {
     const { quick } = options;
     const file = quick ? QUICK_FILE : RESULTS_FILE;
     const parts = new Set(options.only.split(','));
-    // A full run keeps the parts it does not measure again; a quick run starts afresh.
-    const earlier: Partial<Results> = !quick && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-    const speed: Record<string, SpeedRun> = { ...earlier.speed };
+    const listed = options.engines?.split(',') ?? [...ENGINES];
+    const unknown = listed.find((name) => !ENGINES.some((engine) => engine === name));
+    if (unknown !== undefined) throw new Error(`No engine ${unknown}`);
+    const measured = ENGINES.filter((engine) => engine === 'ours' || listed.includes(engine));
+    const kept = ENGINES.filter((engine) => !measured.includes(engine));
+    // A full run keeps the parts and engines it does not measure again; a quick run starts afresh.
+    const earlier: Results | undefined =
+        !quick && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
+    const machine = {
+        cpu: os.cpus()[0]?.model ?? 'unknown',
+        cores: os.cpus().length,
+        memoryGb: Math.round(os.totalmem() / 2 ** 30),
+        os: `${os.type()} ${os.release()} ${os.arch()}`,
+    };
+    const versions: Record<string, string> = {
+        bun: process.versions.bun ?? '',
+        node: spawnSync('node', ['--version'], { encoding: 'utf8' }).stdout.trim(),
+        hyperformula: packageVersion('hyperformula'),
+        ironcalc: packageVersion('@ironcalc/wasm'),
+        univer: packageVersion('@univerjs/core'),
+    };
+    let keptFrom: Partial<Record<EngineName, string>> | undefined;
+    if (kept.length > 0) {
+        if (quick) throw new Error('A quick run keeps nothing, so it runs every engine');
+        // A ratio across two machines or runtime versions would measure those, not the engines.
+        const sameRuntimes = earlier?.versions.bun === versions.bun && earlier?.versions.node === versions.node;
+        if (earlier === undefined || JSON.stringify(earlier.machine) !== JSON.stringify(machine) || !sameRuntimes)
+            throw new Error(`${file} comes from another machine or runtime version: run every engine`);
+        keptFrom = {};
+        for (const engine of kept) {
+            keptFrom[engine] = earlier.keptFrom?.[engine] ?? earlier.generated;
+            if (earlier.versions[engine] !== versions[engine])
+                process.stderr.write(
+                    `WARNING: ${engine} ${versions[engine]} is installed, but its kept figures are from ${earlier.versions[engine]}: run it again with --engines ${engine}\n`,
+                );
+            versions[engine] = earlier.versions[engine];
+        }
+    }
+    const speed: Record<string, SpeedRun> = { ...earlier?.speed };
     const run: Options = {
         rounds: Number(options.rounds ?? (quick ? QUICK.rounds : 5)),
         reps: quick ? QUICK.reps : 3,
         filter: new RegExp(options.filter),
         limit: Number(options['max-load']),
         scale: quick ? QUICK.scale : 1,
+        engines: measured,
     };
     const started = Date.now();
     if (parts.has('speed')) {
         for (const runtime of (options.runtimes ?? (quick ? 'bun' : 'bun,node')).split(',')) {
             if (runtime !== 'bun' && runtime !== 'node') throw new Error(`No runtime ${runtime}`);
-            speed[runtime] = speedRun(runtime, run);
+            speed[runtime] = speedRun(runtime, run, earlier?.speed[runtime]);
         }
     }
-    const node = spawnSync('node', ['--version'], { encoding: 'utf8' }).stdout.trim();
+    const every = quick ? QUICK.every : 1;
     const results: Results = {
         generated: new Date().toISOString().slice(0, 10),
         quick,
-        machine: {
-            cpu: os.cpus()[0]?.model ?? 'unknown',
-            cores: os.cpus().length,
-            memoryGb: Math.round(os.totalmem() / 2 ** 30),
-            os: `${os.type()} ${os.release()} ${os.arch()}`,
-        },
-        versions: {
-            bun: process.versions.bun ?? '',
-            node,
-            hyperformula: packageVersion('hyperformula'),
-            ironcalc: packageVersion('@ironcalc/wasm'),
-            univer: packageVersion('@univerjs/core'),
-        },
+        machine,
+        versions,
+        keptFrom,
         hyperformulaConfig: HYPERFORMULA_CONFIG,
         speed,
-        correctness: parts.has('correctness') ? await correctnessRun(quick ? QUICK.every : 1) : earlier.correctness,
-        coverage: parts.has('coverage') ? await coverage() : earlier.coverage,
+        correctness: parts.has('correctness')
+            ? await correctnessRun(every, measured, earlier?.correctness)
+            : earlier?.correctness,
+        coverage: parts.has('coverage') ? await coverage() : earlier?.coverage,
         seconds: Math.round((Date.now() - started) / 1000),
     };
     fs.writeFileSync(file, `${JSON.stringify(results, null, 2)}\n`);

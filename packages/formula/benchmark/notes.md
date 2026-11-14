@@ -1,19 +1,26 @@
 # {{ours}} compared with HyperFormula, IronCalc and Univer
 
-This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's {{excel-functions}} functions. The numbers below come from one run on {{generated}}. A script wrote them into `results.json`, a second drew the chart from that file, and a third wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
+This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's {{excel-functions}} functions. {{run-dates}} A script wrote them into `results.json`, a second drew the chart from that file, and a third wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
 
 ```sh
 cd packages/formula/benchmark
-bun install            # installs the other engines into this folder only, at the versions in its package.json
-bun run quick          # a first look in a few minutes at reduced sizes; prints its tables, changes no file here
-bun run.ts             # the full run, {{full-minutes}} minutes last time: writes results.json
+bun install                  # installs the other engines into this folder only, at the versions in its package.json
+bun run.ts --quick           # a first look in a few minutes at reduced sizes; prints its tables, changes no file here
+
+# After a change to the engine: measure ours again, keep the other engines' figures, about five minutes.
+bun run.ts --engines ours    # writes results.json
 bun ../../../apps/api/src/scripts/benchmark-charts.ts   # draws speed.svg from results.json
-bun readme.ts          # writes this README from results.json and notes.md
+bun readme.ts                # writes this README from results.json and notes.md
+
+# After a new version of another engine, and before a release: every engine, overnight.
+bun run.ts                   # about three hours; then the chart and README steps above
 ```
+
+A run with `--engines ours` measures speed on both runtimes and correctness for {{ours}} only. It keeps the speed and correctness figures of the other engines from `results.json`, with the version and date they were measured with, works out every ratio again, and this README then says which figures were kept from which run. It refuses to run when `results.json` comes from another machine or another version of Bun or Node, since a ratio across two machines measures the machines. It warns when another engine's installed version is not the one its figures came from: run that engine again with `--engines ours,<engine>`.
 
 `bun run.ts --help` lists the options. A quick run divides every count by 10 (100,000 rows become 10,000), takes 3 rounds of one run each on Bun only, so no run warms the runtime up first, and judges every 100th recorded row. Its numbers are for a first look and are not the ones below; ratios at a tenth of the size can differ from the full ones, since index and setup costs do not grow in a straight line with the size.
 
-`bun rows.ts <oracle folder>` rebuilds `excel-rows.jsonl`, the file of Excel's recorded answers, from the local recording files. It reuses the oracle's own reader in `scripts/oracle-rows.ts`. To regenerate everything after a change to the engine or to the recordings, run `bun rows.ts <oracle folder>`, then the last three commands above.
+`bun rows.ts <oracle folder>` rebuilds `excel-rows.jsonl`, the file of Excel's recorded answers, from the local recording files. It reuses the oracle's own reader in `scripts/oracle-rows.ts`. After a change to the recordings, run `bun rows.ts <oracle folder>`, then the full run and the chart and README steps.
 
 ## The results in three lines
 
