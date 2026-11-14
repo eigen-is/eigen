@@ -1031,7 +1031,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
                 dtstamp: null,
                 recurrenceDate: null,
                 recurrenceId: null,
-                data: { organizer: { userId: '', email: 'outlook@external.com', name: 'Outlook' } },
+                data: { organizer: { email: 'outlook@external.com', name: 'Outlook' } },
             },
             'outlook@external.com',
         );
@@ -2448,7 +2448,7 @@ describe('iMIP inbound self-addressed messages', () => {
                 dtstamp: null,
                 recurrenceDate: null,
                 recurrenceId: null,
-                data: { organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' } },
+                data: { organizer: { email: ctx.charlie.user.email, name: 'Charlie' } },
             },
             ctx.charlie.user.email,
         );

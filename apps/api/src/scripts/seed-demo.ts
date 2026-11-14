@@ -821,7 +821,7 @@ async function main(): Promise<void> {
             sequence: 0,
             etag: '',
             data: {
-                organizer: { userId: '', email: organizer.email, name: organizer.name },
+                organizer: { email: organizer.email, name: organizer.name },
                 attendees: [{ email: attendee.email, name: attendee.name, status: 'pending', role: 'required' }],
             },
             createByUserId: null,

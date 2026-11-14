@@ -32,7 +32,7 @@ const { useAllSharedCalendarEvents, useEvents, useIsInvitationFromOthers } = awa
     '../../../../core/calendar/hooks/use-calendar'
 );
 
-const organizedBy = (email: string): { data: EventData } => ({ data: { organizer: { userId: '', email } } });
+const organizedBy = (email: string): { data: EventData } => ({ data: { organizer: { email } } });
 
 describe('useIsInvitationFromOthers', () => {
     test("a shared calendar's event counts as an invitation until its owner's address arrives", async () => {

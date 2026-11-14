@@ -185,7 +185,7 @@ export async function rsvp(
     const scope = input.scope === 'this' && !event.rrule ? 'all' : (input.scope ?? 'all');
     const organizerUserId = event.data.organizer.userId;
     const organizerEventId = event.data.organizerEventId;
-    const isExternalOrganizer = isExternalOwnerId(organizerUserId);
+    const isExternalOrganizer = !!organizerUserId && isExternalOwnerId(organizerUserId);
     // A copy of one occurrence answers for that occurrence. The organizer keeps its guest list on their override.
     const ownOccurrence = answeredOccurrence(event);
 
@@ -199,9 +199,9 @@ export async function rsvp(
         const mail = composeRsvpReply(answered, user.email, user.name ?? user.email, status, recurrenceDate);
         sendMail(mail).catch(console.error);
     };
-    // An event a CalDAV client stored can name an organizer but link to no event on their Home. Nobody hears it then.
+    // An event a CalDAV client stored can name an organizer but link to no Home or event of theirs. Nobody hears it then.
     const relayRsvp = (status: Attendee['status'], recurrenceDate?: string) => {
-        if (!organizerEventId) return;
+        if (!organizerUserId || !organizerEventId) return;
         propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(console.error);
     };
 

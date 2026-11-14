@@ -106,7 +106,7 @@ describe('buildIcsPreviewPayload', () => {
         expect(invite?.location).toBe('Studio B');
         expect(invite?.timezone).toBe('America/New_York');
         expect(invite?.start).toBe('2026-04-20T18:00:00.000Z');
-        expect(invite?.organizer).toEqual({ userId: '', email: 'ada@external.com', name: 'Ada Lovelace' });
+        expect(invite?.organizer).toEqual({ email: 'ada@external.com', name: 'Ada Lovelace' });
         expect(invite?.attendees).toEqual([
             { email: 'bob@example.com', name: 'Bob', status: 'accepted', role: 'required' },
             { email: 'carol@example.com', status: 'pending', role: 'optional' },
@@ -129,7 +129,7 @@ describe('buildIcsPreviewPayload', () => {
             ),
         );
 
-        expect(payload.events[0]?.organizer).toEqual({ userId: '', email: 'ada@external.com', name: 'Ada Lovelace' });
+        expect(payload.events[0]?.organizer).toEqual({ email: 'ada@external.com', name: 'Ada Lovelace' });
     });
 
     // An override moves one occurrence of a series; it is not an event of its own in a quick look.
