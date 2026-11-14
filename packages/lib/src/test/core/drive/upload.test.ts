@@ -1,6 +1,7 @@
-// Every Drive upload is one multipart POST. A refusal carries the server's status and reason to the toast, so the
-// user reads "Upload too large" rather than a bare status. The upload reports its progress, a cancel aborts
-// the request without a toast, and a batch refreshes its folder once.
+// Every Drive upload is one multipart POST. A refusal carries the server's status and reason to the toast, so a
+// file past the upload limit reads "Upload too large" and one past the drive's free space reads the storage-full
+// reason, rather than a bare status. The upload reports its progress, a cancel aborts the request without a toast,
+// and a batch refreshes its folder once.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../types/drive';
 import { renderHook } from '../../render-hook';

@@ -76,8 +76,8 @@ export function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
-// Errors a toast has already been shown for, so a caller that also sees the rejection, such as CardForm, can swallow
-// exactly those and let anything else surface.
+// Errors a toast has already been shown for, so a caller that also sees the rejection can swallow exactly those and
+// let anything else surface, without telling the user twice.
 const toastedErrors = new WeakSet<object>();
 
 function markToasted(error: unknown): void {

@@ -22,6 +22,11 @@ describe('formatTime', () => {
         expect(formatTime(halfPastMidnightUtc, 'America/New_York')).toBe('19:30');
         expect(formatTime(new Date(Date.UTC(2026, 10, 14, 15, 42)), 'Asia/Kolkata')).toBe('21:12');
     });
+
+    test('a zone read first leaves the local clock local', () => {
+        formatTime(new Date(), 'Asia/Kolkata');
+        expect(formatTime(new Date(2026, 10, 14, 9, 5))).toBe('09:05');
+    });
 });
 
 describe('formatFullDateTime', () => {

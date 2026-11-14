@@ -137,7 +137,7 @@ describe('usePrintPdf', () => {
         expect(toasts).toEqual(['info: Printing without headers and footers. WeasyPrint 68 or later is not installed']);
     });
 
-    test('a bare server error names its status behind the one prefix', async () => {
+    test('a server error reads its message behind the one prefix', async () => {
         answer = async () => new Response('Internal server error', { status: 500 });
         const { latest, unmount } = await renderPrint();
 
