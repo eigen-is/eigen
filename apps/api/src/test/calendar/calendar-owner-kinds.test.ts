@@ -201,6 +201,61 @@ describe("A calendar route on the caller's own id", () => {
     });
 });
 
+describe("A calendar collection route on another user's id", () => {
+    const token = () => ctx.bob.user.sessionToken;
+    const RANGE = `event-range/${Date.UTC(2027, 0, 1) / 1000}/${Date.UTC(2027, 1, 1) / 1000}`;
+
+    async function calendarsOf(sessionToken: string, ownerId: string): Promise<CalendarItem[]> {
+        return assertJson<CalendarItem[]>(await authedRequest(sessionToken, `/calendar/${ownerId}/calendars`));
+    }
+
+    function writeCalendar(ownerId: string, method: string, path = '', body?: object): Promise<Response> {
+        return authedRequest(token(), `/calendar/${ownerId}/calendars${path}`, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body && JSON.stringify(body),
+        });
+    }
+
+    test('answers 403 and writes nothing, for another user, an organization and an id without a user', async () => {
+        const created = await writeCalendar(ctx.bob.user.id, 'POST', '', { name: 'Bob only' });
+        const bobCalendarId = (await assertJson<CalendarItem>(created)).id;
+        const bobBefore = await calendarsOf(token(), ctx.bob.user.id);
+        const aliceBefore = await calendarsOf(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        const foreign = [
+            ctx.alice.user.id,
+            orgOwnerId(getServerConfig()!.orgId),
+            crypto.randomUUID().replaceAll('-', ''),
+        ];
+        for (const ownerId of foreign) {
+            const answers = [
+                await authedRequest(token(), `/calendar/${ownerId}/calendars`),
+                await authedRequest(token(), `/calendar/${ownerId}/${RANGE}`),
+                await writeCalendar(ownerId, 'POST', '', { name: 'Not mine' }),
+                await writeCalendar(ownerId, 'PUT', `/${bobCalendarId}`, { name: 'Renamed' }),
+                await writeCalendar(ownerId, 'DELETE', `/${bobCalendarId}`),
+            ];
+            expect(answers.map((answer) => answer.status)).toEqual([403, 403, 403, 403, 403]);
+        }
+        expect(await calendarsOf(token(), ctx.bob.user.id)).toEqual(bobBefore);
+        expect(await calendarsOf(ctx.alice.user.sessionToken, ctx.alice.user.id)).toEqual(aliceBefore);
+    });
+
+    test("still answers the caller's own id and a team they are a member of", async () => {
+        const team = teamOwnerId(await createTeamFor('bob'));
+        const enabled = await authedRequest(ctx.alice.user.sessionToken, `/team/${team}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calendar: { enabled: true } }),
+        });
+        expect(enabled.status).toBe(200);
+        for (const ownerId of [ctx.bob.user.id, team]) {
+            expect((await authedRequest(token(), `/calendar/${ownerId}/calendars`)).status).toBe(200);
+            expect((await authedRequest(token(), `/calendar/${ownerId}/${RANGE}`)).status).toBe(200);
+        }
+    });
+});
+
 describe('A calendar message to a home without a calendar', () => {
     test('is ignored by a guest home', async () => {
         const guestId = await createUserWithoutSignIn('guest');

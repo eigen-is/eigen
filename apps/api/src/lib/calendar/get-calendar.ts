@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
+import { requireSelf } from '../auth/access';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core';
 import { getHome } from '../home';
@@ -21,8 +22,10 @@ export async function resolveCalendar(user: User, ownerId: string): Promise<Cale
         if (!memberships.teamIds.includes(parsed.id)) {
             throw new ApiError(403, 'Not a member of this team');
         }
+    } else {
+        requireSelf(ownerId, user.id);
     }
-    const home = await getHome(parsed.type === 'team' ? ownerId : user.id); // ownerId-routed (team) or own home (user)
+    const home = await getHome(ownerId);
     return home.calendar;
 }
 
