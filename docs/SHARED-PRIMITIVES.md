@@ -11,7 +11,7 @@ Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's que
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (322)
+## Components (323)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -130,6 +130,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveLocationField` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
 | `DriveLocationPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-picker.tsx |
 | `DriveMountList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
+| `DriveMountSelect` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `DrivePickerWithUpload` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-picker-with-upload.tsx |
 | `DrivePreview` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
