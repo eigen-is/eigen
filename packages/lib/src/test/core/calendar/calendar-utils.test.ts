@@ -152,6 +152,15 @@ describe('formatEventWhen', () => {
         }
     });
 
+    test('a timed event reads on a 24-hour clock, and one past midnight reads 00:00, not 24:00', () => {
+        expect(formatEventWhen(start, end, false, null, 'UTC')).toBe('Thursday, 10 Sep 2026 · 09:00 – 10:00');
+        const late = new Date('2026-09-10T23:00:00Z');
+        const pastMidnight = new Date('2026-09-11T00:30:00Z');
+        expect(formatEventWhen(late, pastMidnight, false, null, 'UTC')).toBe(
+            'Thursday, 10 Sep 2026, 23:00 – Friday, 11 Sep 2026, 00:30',
+        );
+    });
+
     test('an all-day event keeps its UTC date whatever the fallback is', () => {
         // Midnight-UTC bounds, exclusive end: one day, 10 Sept, for a viewer west of UTC too.
         const dayStart = new Date('2026-09-10T00:00:00Z');

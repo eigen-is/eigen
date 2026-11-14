@@ -2,7 +2,6 @@
 // the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
 // emits is charged before it is built: the ranges a format or a validation holds, and their text.
 
-import { formatInputDate } from '@workspace/lib/date';
 import type {
     ConditionalFormatConditionName,
     ConditionalFormatRule,
@@ -395,7 +394,7 @@ function mapDataValidation(
         if (type === 'date') {
             const serial = Number.parseFloat(text) + (date1904 ? DAYS_1904 : 0);
             const date = new Date(Math.round(serial * DAY_MS + EXCEL_EPOCH_MS));
-            return Number.isNaN(date.getTime()) ? null : formatInputDate(date);
+            return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
         }
         const value = type === 'number' ? Number.parseFloat(text) : Number.parseInt(text, 10);
         return Number.isNaN(value) ? null : String(value);
