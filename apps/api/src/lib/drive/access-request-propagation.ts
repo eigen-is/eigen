@@ -1,13 +1,14 @@
 // Tells the owner of a file or folder that someone asks for access. The owner gets a notification in their Home,
 // and, if the server settings allow it, an email (to every member for a team). A person who clicks again and again
-// does not send a second email within the hour.
+// does not send a second email within the hour. The access-request route opens the owner's Home and passes it in.
 
 import { accessRequestTag } from '@workspace/lib/notification/tags';
-import { parseOwnerId } from '@workspace/lib/types';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
-import { pullDrivePath, pullTeamMembersToNotify, sendToHome } from '../home/home-relay';
+import type { Home } from '../home';
+import { TeamHome } from '../home';
+import { sendToHome } from '../home/home-relay';
 import { composeAccessRequestEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -18,17 +19,18 @@ import { getUserById } from '../user';
 const mailWindow = new WindowLimiter(60 * 60 * 1000, 1);
 
 export async function propagateAccessRequest(
-    ownerId: string,
+    home: Home,
     mountId: string,
     pathId: string,
     requester: User,
     message: string | null,
 ): Promise<void> {
-    // The owner's Home is foreign to the caller, so its reads/writes go through the relay seam.
-    const path = await pullDrivePath(ownerId, mountId, pathId);
+    const path = await home.drive.getPath(mountId, pathId);
     if (!path || path.trashedAt) return;
+    const ownerId = home.user.id;
     const tag = accessRequestTag({ ownerId, mountId, pathId }, requester.email);
-    // Detached, so the answer doesn't wait on the team's size or tell whether the path exists.
+    // Detached, so the answer doesn't wait on the team's size or tell whether the path exists. It needs no hold on
+    // the Home: past this point it reads only memory and the auth database.
     (async () => {
         await sendToHome(ownerId, {
             type: 'notification',
@@ -43,9 +45,10 @@ export async function propagateAccessRequest(
         });
 
         if (!getServerSettings().notifications.email.ownerOnAccessRequest) return;
+        // Read again: the Home's user is the row as it was when the Home opened, and an org's is synthetic.
         const recipients =
-            parseOwnerId(ownerId).type === 'team'
-                ? await pullTeamMembersToNotify(ownerId, requester.email)
+            home instanceof TeamHome
+                ? await home.membersToNotify(requester.email)
                 : await getUserById(ownerId).then((owner) => (owner ? [owner] : []));
         // One after another: a team's worth of mails at once would open as many SMTP connections.
         for (const recipient of recipients) {
