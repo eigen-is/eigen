@@ -184,6 +184,23 @@ describe('JsonStore', () => {
         }
     });
 
+    test('a refused set writes nothing, and settled waits for the sets before it', async () => {
+        const dir = join(TEST_DIR, 'refused');
+        mkdirSync(dir, { recursive: true });
+        let late = false;
+        const store = new JsonStore<TestConfig>(new LocalFilesystem(dir), 'config.json', defaults, () => {
+            if (late) throw new Error('too late');
+        });
+
+        const first = store.set({ name: 'first' });
+        late = true;
+        await expect(store.set({ name: 'late' })).rejects.toThrow('too late');
+        await store.settled();
+
+        expect(await first).toMatchObject({ name: 'first' });
+        expect(JSON.parse(readFileSync(join(dir, 'config.json'), 'utf-8')).name).toBe('first');
+    });
+
     test('multiple sets accumulate changes', async () => {
         const { store } = createStore('multi-set');
         await store.load();

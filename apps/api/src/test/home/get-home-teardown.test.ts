@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
 import { auth } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
-import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome, getUserHome, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { getTestContext } from '../setup';
 
@@ -136,6 +136,74 @@ describe('getHome teardown race', () => {
         }
         expect(refusal).toMatchObject({ status: 503, message: 'Home is closing' });
         await closing;
+    });
+
+    // Saved through the old home, the file had the theme until the next home's first save wrote its own copy over it.
+    test('a closed home refuses a settings save, and the next home loses none', async () => {
+        const userId = await createHomeUser('closed-refuses-save@test.eigen.is');
+        const old = await getUserHome(userId);
+        await old.close();
+        const next = await getUserHome(userId);
+
+        await expect(old.settings.set({ theme: 'dark' })).rejects.toMatchObject({
+            status: 503,
+            message: 'Home is closing',
+        });
+        await next.settings.set({ celebrations: false });
+
+        expect(next.settings.get().theme).toBeUndefined();
+        const saved = JSON.parse(readFileSync(path.join(next.homeDir, PATHS.SETTINGS), 'utf8'));
+        expect(saved).toEqual(next.settings.get());
+        await evictHome(userId);
+    });
+
+    // A save still behind another when the close starts would otherwise be written under the next home.
+    test('a home that is closing refuses a settings save', async () => {
+        const userId = await createHomeUser('closing-refuses-save@test.eigen.is');
+        const home = await getUserHome(userId);
+
+        const first = home.settings.set({ celebrations: false });
+        const closing = home.close();
+        await expect(home.settings.set({ theme: 'dark' })).rejects.toMatchObject({
+            status: 503,
+            message: 'Home is closing',
+        });
+        await first;
+        await closing;
+
+        expect((await getUserHome(userId)).settings.get()).toMatchObject({ celebrations: false });
+        await evictHome(userId);
+    });
+
+    // The next home loads the file once, so a save that landed after that would be missing from every later save.
+    test('a close waits for the settings save being written, so the next home loads it', async () => {
+        const userId = await createHomeUser('close-waits-for-save@test.eigen.is');
+        const home = await getUserHome(userId);
+        const { promise: released, resolve: release } = Promise.withResolvers<void>();
+        const writeAtomic = home.fs.writeAtomic.bind(home.fs);
+        const write = spyOn(home.fs, 'writeAtomic').mockImplementation(async (...args) => {
+            await released;
+            return writeAtomic(...args);
+        });
+        try {
+            const saving = home.settings.set({ theme: 'dark' });
+            await Bun.sleep(0);
+            expect(write).toHaveBeenCalledTimes(1);
+            let closed = false;
+            const closing = home.close().then(() => {
+                closed = true;
+            });
+            await Bun.sleep(300);
+            expect(closed).toBe(false);
+
+            release();
+            await Promise.all([saving, closing]);
+            expect((await getUserHome(userId)).settings.get().theme).toBe('dark');
+        } finally {
+            release();
+            write.mockRestore();
+            await evictHome(userId);
+        }
     });
 
     // An event stream ends from here, so its tab reconnects to the next home before this one's databases close.
