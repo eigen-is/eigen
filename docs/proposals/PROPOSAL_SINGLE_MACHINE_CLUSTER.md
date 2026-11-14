@@ -148,8 +148,8 @@ single-process path.
 
 With the [outbox](PROPOSAL_HOME_RELAY.md#7-sharding-later) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
 
-The existing `sendToHome()` switch statement is extracted into `dispatchToLocalHome()` (exported,
-used by internal endpoints). `sendToHome()` wraps it with the cluster routing:
+The switch in the relay's private `deliver`, which every delivery passes, is extracted into
+`dispatchToLocalHome()` (exported, used by internal endpoints) and wrapped with the cluster routing:
 
 ```typescript
 export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
@@ -191,7 +191,7 @@ path if `atHome()`, else fetch through Caddy relay:
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
     if (atHome(ownerUserId) || !isClusterMode()) {
         const home = await getHome(ownerUserId);
-        return home.drive.getSharedWith(user);
+        return home.drive.getAllSharedWith(user);
     }
     return fetchFromRelay(ownerUserId, 'shared-paths', { user });
 }
@@ -209,9 +209,10 @@ New endpoints with `:ownerId` in the path (so Caddy can extract it for routing):
 - `POST /internal/pull/:ownerId/pending-invitations` — returns pending invitations
 - `POST /internal/pull/:ownerId/calendar-permission` — returns permission level
 - `POST /internal/pull/:ownerId/calendars` — returns calendars
-- `GET  /internal/pull/:ownerId/avatar/:filename` — streams avatar binary
 - `POST /internal/pull/:ownerId/team-quota-overrides` — returns team quota overrides
 - `POST /internal/pull/:ownerId/team-mounts` — returns team mounts
+
+Avatars need no pull route: they are server files under `getAvatarsDir()`, not Home data.
 
 All endpoints use `requireLocalhost(request, server)` for access control. This passes for
 Docker-internal traffic (Caddy's IP is in `TRUSTED_NETWORKS: 172.16.0.0/12`). External access
