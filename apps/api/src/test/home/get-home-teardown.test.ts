@@ -103,7 +103,9 @@ describe('getHome teardown race', () => {
         const home = await getHome(userId);
 
         await home.close();
-        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB)).rejects.toThrow('Home is closing');
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB)).rejects.toThrow(
+            'Reloading. Try again in a moment.',
+        );
     });
 
     // The close takes its list of databases to close part way through, so one opened meanwhile could be missed.
@@ -112,7 +114,9 @@ describe('getHome teardown race', () => {
         const home = await getHome(userId);
 
         const closing = home.close();
-        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, 'probe.db')).rejects.toThrow('Home is closing');
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, 'probe.db')).rejects.toThrow(
+            'Reloading. Try again in a moment.',
+        );
         await closing;
     });
 
@@ -134,7 +138,7 @@ describe('getHome teardown race', () => {
         } catch (err) {
             refusal = err;
         }
-        expect(refusal).toMatchObject({ status: 503, message: 'Home is closing' });
+        expect(refusal).toMatchObject({ status: 503, message: 'Reloading. Try again in a moment.' });
         await closing;
     });
 
@@ -147,7 +151,7 @@ describe('getHome teardown race', () => {
 
         await expect(old.settings.set({ theme: 'dark' })).rejects.toMatchObject({
             status: 503,
-            message: 'Home is closing',
+            message: 'Reloading. Try again in a moment.',
         });
         await next.settings.set({ celebrations: false });
 
@@ -166,7 +170,7 @@ describe('getHome teardown race', () => {
         const closing = home.close();
         await expect(home.settings.set({ theme: 'dark' })).rejects.toMatchObject({
             status: 503,
-            message: 'Home is closing',
+            message: 'Reloading. Try again in a moment.',
         });
         await first;
         await closing;
