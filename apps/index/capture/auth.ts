@@ -1,8 +1,8 @@
 // Signs demo personas in for the capture tool and opens a browser context as one of them, for a scene to film. A
 // persona, or the seeded admin who runs the server, signs in through the API's own email sign-in, from Node, because
-// the API trusts no capture port as an origin. The CLI signs each persona in once per run, since the API allows only a few sign-ins a minute. The session
-// token then goes into each context with the scene's viewport at double density, its theme set before any page loads,
-// and the visible cursor.
+// the API trusts no capture port as an origin. The CLI signs each persona in once per run, since the API allows only
+// a few sign-ins a minute. The session token then goes into each context with the scene's viewport at double density
+// and its theme set before any page loads, and a video's or a pointing still's context gets the visible cursor.
 
 import type { Browser, BrowserContext } from 'playwright-core';
 import { THEME_COPY_KEY } from '../../../packages/lib/src/constants/theme';
@@ -34,11 +34,11 @@ export async function signIn(stack: Stack, key: string): Promise<string> {
 export async function personaContext(
     browser: Browser,
     sessionToken: string,
-    { theme, viewport }: Pick<Scene, 'theme' | 'viewport'>,
+    { kind, theme, viewport, pointer }: Pick<Scene, 'kind' | 'theme' | 'viewport' | 'pointer'>,
 ): Promise<BrowserContext> {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
     await context.addCookies([{ name: SESSION_COOKIE, value: sessionToken, domain: 'localhost', path: '/' }]);
     await context.addInitScript(`localStorage.setItem(${JSON.stringify(THEME_COPY_KEY)}, ${JSON.stringify(theme)});`);
-    await context.addInitScript(CURSOR_SCRIPT);
+    if (kind === 'video' || pointer) await context.addInitScript(CURSOR_SCRIPT);
     return context;
 }

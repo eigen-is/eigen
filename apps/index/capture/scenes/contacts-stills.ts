@@ -29,10 +29,8 @@ export const contactsStillVCard = {
     run: async ({ pages: [page], stack }) => {
         await page.goto(stack.appUrl('mail'));
         await page.getByText('Re: Volunteers needed for build weekend').first().dispatchEvent('click');
-        await page.getByText('hanna groen.vcf').first().click();
+        await page.getByText('hanna groen.vcf').first().dispatchEvent('click');
         await page.getByRole('button', { name: 'Import to Contacts' }).waitFor();
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

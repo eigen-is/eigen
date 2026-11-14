@@ -1,5 +1,5 @@
 // The two stills of the Sheets page: the budget with its costs chart in light, and the income pie on its second tab
-// in dark, each as it opens, with nothing open. The tab is opened without the mouse, so no pointer shows.
+// in dark, each as it opens, with nothing open.
 
 import type { Scene } from '../lib/scene';
 import { openBudget } from './budget';

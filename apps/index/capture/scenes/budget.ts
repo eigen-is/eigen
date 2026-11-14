@@ -10,6 +10,7 @@ import {
 import { DRIVE_TYPE_SHEETS } from '../../../../packages/lib/src/types/drive';
 import { BUDGET } from '../../../api/src/scripts/demo/content';
 import type { Point } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Stack } from '../lib/scene';
 
@@ -35,9 +36,6 @@ export async function cellPoint(page: Page, ref: string): Promise<Point> {
     };
 }
 
-// A point on the costs chart, as fractions of its box across and down from its top left corner.
 export async function chartPoint(page: Page, across: number, down: number): Promise<Point> {
-    const box = await page.locator('[data-floating-id="chart-1"]').boundingBox();
-    if (!box) throw new Error('The costs chart is not on the page');
-    return { x: box.x + across * box.width, y: box.y + down * box.height };
+    return pointOn(page.locator('[data-floating-id="chart-1"]'), across, down);
 }

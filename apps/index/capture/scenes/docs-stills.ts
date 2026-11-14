@@ -1,5 +1,5 @@
 // The two stills of the Docs page: the equation in the scratch doc every crew member has, selected with its panel open
-// on the LaTeX, in dark; and the production plan's File menu open on Download, in light.
+// on the LaTeX, in dark; and the production plan's File menu open on Download, in light, the pointer resting on it.
 
 import { DRIVE_TYPE_DOC } from '../../../../packages/lib/src/types/drive';
 import { TRYING_EIGEN } from '../../../api/src/scripts/demo/content';
@@ -22,8 +22,6 @@ export const docsStillEquation = {
         await openFile(page, stack, DRIVE_TYPE_DOC, TRYING_EIGEN.name);
         await page.locator('math').first().click();
         await page.getByText('LaTeX').first().waitFor();
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2500);
     },
 } satisfies Scene;
@@ -32,6 +30,7 @@ export const docsStillDownload = {
     ...still,
     name: 'docs-still-download',
     theme: 'light',
+    pointer: true,
     run: async ({ pages: [page], stack }) => {
         await openProductionPlan(page, stack);
         await page.getByRole('menuitem', { name: 'File' }).click();

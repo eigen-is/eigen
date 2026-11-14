@@ -3,7 +3,7 @@
 // empty backup list it began on.
 
 import { ADMIN_LOCALPART, personaByKey } from '../../../api/src/scripts/demo/content';
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 
 // The sidebar's empty foot, so the resting pointer lights up no row.
@@ -27,18 +27,18 @@ export const adminBackup = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Create backup' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Create backup' })));
         await page.getByText('Backup created').waitFor({ timeout: 60_000 });
         await page.getByText('Verified').waitFor();
         await Bun.sleep(2500);
-        await cursor.moveTo(await centerOf(page.getByText('Verified')), { duration: 700 });
+        await cursor.moveTo(await pointOn(page.getByText('Verified')), { duration: 700 });
         await Bun.sleep(600);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Delete' }).first()));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Delete' })));
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(page.getByRole('dialog').getByRole('button', { name: 'Delete' })));
+        await cursor.click(await pointOn(page.getByRole('dialog').getByRole('button', { name: 'Delete' })));
         await page.getByText('No backups yet.').waitFor();
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Dismiss' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Dismiss' })));
         await Bun.sleep(800);
         await cursor.moveTo(REST, { duration: 900 });
         await Bun.sleep(800);

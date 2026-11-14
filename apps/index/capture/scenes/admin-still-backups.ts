@@ -22,7 +22,6 @@ export const adminStillBackups = {
         await page
             .getByRole('heading', { name: 'Backups', exact: true })
             .evaluate((heading) => heading.scrollIntoView());
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

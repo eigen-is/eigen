@@ -4,7 +4,7 @@
 
 import { DRIVE_TYPE_STICKIES } from '../../../../packages/lib/src/types/drive';
 import { KANBAN } from '../../../api/src/scripts/demo/content';
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
 
@@ -25,13 +25,13 @@ export const stickiesHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        const card = await centerOf(page.getByText('Print wristbands'));
+        const card = await pointOn(page.getByText('Print wristbands'));
         await cursor.moveTo(card);
         await Bun.sleep(400);
         await page.mouse.down();
         // The board starts a drag only after the pointer moves a few pixels, as a hand's would.
         await cursor.moveTo({ x: card.x + 12, y: card.y + 6 }, { duration: 150 });
-        const doing = await centerOf(page.getByText('Fix generator quote'));
+        const doing = await pointOn(page.getByText('Fix generator quote'));
         await cursor.moveTo({ x: doing.x, y: doing.y + 70 }, { duration: 1100 });
         await Bun.sleep(400);
         await page.mouse.up();

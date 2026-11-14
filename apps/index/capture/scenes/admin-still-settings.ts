@@ -14,7 +14,6 @@ export const adminStillSettings = {
     run: async ({ pages: [page], stack }) => {
         await page.goto(`${stack.appUrl('admin')}/settings`);
         await page.getByText('Version', { exact: true }).waitFor();
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

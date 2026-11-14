@@ -1,6 +1,6 @@
-// The stills of the About overview's app rows, one per app, each on that app's main view as a festival lead finds it,
-// such as an open mail thread or the kanban board, and Admin's as the person who runs the server finds it. Themes alternate down the list. Each still clicks without the mouse,
-// so no pointer shows in the picture.
+// The stills of the About overview's app rows, one per app, each on that app's main view as a festival lead finds
+// it, such as an open mail thread or the kanban board, and Admin's as the person who runs the server finds it. Themes
+// alternate down the list.
 
 import { basename } from 'node:path';
 import {
@@ -14,6 +14,7 @@ import { aboutRowStill } from '../../src/content/about-media';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
 import { openBudget } from './budget';
+import { openFestivalWeek } from './festival-week';
 
 const row = (app: string, theme: Scene['theme'], run: Scene['run']): Scene => ({
     name: basename(aboutRowStill(app), '.webp'),
@@ -44,13 +45,7 @@ export const ROWS: Scene[] = [
         await Bun.sleep(SETTLE_MS);
     }),
     row('calendar', 'light', async ({ pages: [page], stack }) => {
-        await page.goto(stack.appUrl('calendar'));
-        await page.getByText('View week').dispatchEvent('click');
-        const festival = page.getByText('Tuimel Festival weekend').first();
-        for (let week = 0; week < 8 && !(await festival.isVisible()); week++) {
-            await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
-            await Bun.sleep(800);
-        }
+        await openFestivalWeek(page, stack);
         await Bun.sleep(SETTLE_MS);
     }),
     row('docs', 'dark', async ({ pages: [page], stack }) => {

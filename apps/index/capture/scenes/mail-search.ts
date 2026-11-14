@@ -2,7 +2,7 @@
 // thread, and she opens its last reply. She clears the search and goes back to the director's all-hands mail, so the
 // loop ends where it began.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
@@ -25,17 +25,17 @@ export const mailSearch = {
     run: async ({ pages: [page], cursors: [cursor] }) => {
         const search = page.getByPlaceholder('Search emails...');
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(search));
+        await cursor.click(await pointOn(search));
         await Bun.sleep(400);
         await typeLikeAPerson(page, 'generator');
         await Bun.sleep(1500);
-        await cursor.click(await centerOf(page.getByText('Re: Generator quote')));
+        await cursor.click(await pointOn(page.getByText('Re: Generator quote')));
         await Bun.sleep(3000);
-        await cursor.click(await centerOf(search));
+        await cursor.click(await pointOn(search));
         await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.press('Backspace');
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(page.getByText('Three weeks out')));
+        await cursor.click(await pointOn(page.getByText('Three weeks out')));
         await Bun.sleep(800);
         await cursor.moveTo(REST, { duration: 900 });
         await Bun.sleep(800);

@@ -2,7 +2,7 @@
 // and adds the local paper's reporter, who asked him for the draft, as a viewer. He cancels before saving, so the loop
 // ends where it began and nothing is shared.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
@@ -28,20 +28,20 @@ export const driveShare = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Share' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Share' })));
         const dialog = page.getByRole('dialog');
         await dialog.waitFor();
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(dialog.locator('#new-contact')));
+        await cursor.click(await pointOn(dialog.locator('#new-contact')));
         await typeLikeAPerson(page, 'sanne@kustkrant.example');
         await Bun.sleep(600);
         await page.keyboard.press('Enter');
         await Bun.sleep(1500);
-        await cursor.click(await centerOf(dialog.getByRole('combobox').last()));
+        await cursor.click(await pointOn(dialog.getByRole('combobox').last()));
         await Bun.sleep(700);
-        await cursor.click(await centerOf(page.getByRole('option', { name: 'Viewer' })));
+        await cursor.click(await pointOn(page.getByRole('option', { name: 'Viewer' })));
         await Bun.sleep(2000);
-        await cursor.click(await centerOf(dialog.getByRole('button', { name: 'Cancel' })));
+        await cursor.click(await pointOn(dialog.getByRole('button', { name: 'Cancel' })));
         await dialog.waitFor({ state: 'detached' });
         await Bun.sleep(600);
         await cursor.moveTo(REST, { duration: 900 });

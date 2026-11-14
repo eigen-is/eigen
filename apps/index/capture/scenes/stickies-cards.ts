@@ -4,7 +4,7 @@
 
 import { DRIVE_TYPE_STICKIES } from '../../../../packages/lib/src/types/drive';
 import { KANBAN } from '../../../api/src/scripts/demo/content';
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
 
@@ -30,11 +30,11 @@ export const stickiesComment = {
     theme: 'dark',
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByText(CARD)));
+        await cursor.click(await pointOn(page.getByText(CARD)));
         const dialog = page.getByRole('dialog');
         await dialog.getByText('dekzeil & zo.vcf').waitFor();
         await Bun.sleep(1200);
-        await cursor.moveTo(await centerOf(dialog.getByText('dekzeil & zo.vcf')));
+        await cursor.moveTo(await pointOn(dialog.getByText('dekzeil & zo.vcf')));
         await Bun.sleep(4000);
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });
@@ -50,13 +50,13 @@ export const stickiesAssign = {
     theme: 'light',
     run: async ({ pages: [page], cursors: [cursor] }) => {
         const assign = async (who: string) => {
-            const card = await centerOf(page.getByText(CARD));
+            const card = await pointOn(page.getByText(CARD));
             await cursor.moveTo(card);
             await page.mouse.click(card.x, card.y, { button: 'right' });
             await Bun.sleep(700);
-            await cursor.click(await centerOf(page.getByRole('menuitem', { name: 'Assign to' })));
+            await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'Assign to' })));
             await Bun.sleep(700);
-            await cursor.click(await centerOf(page.getByRole('menuitemradio', { name: who })));
+            await cursor.click(await pointOn(page.getByRole('menuitemradio', { name: who })));
         };
         await Bun.sleep(1000);
         await assign('Timo Jansen');

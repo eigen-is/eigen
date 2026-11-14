@@ -2,7 +2,7 @@
 // from the team, and opens a stage hand's card. She clears the search and closes the card, so the loop ends where it
 // began.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
@@ -26,17 +26,17 @@ export const contactsHero = {
     run: async ({ pages: [page], cursors: [cursor] }) => {
         const search = page.getByPlaceholder('Search contacts...');
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(search));
+        await cursor.click(await pointOn(search));
         await Bun.sleep(400);
         await typeLikeAPerson(page, 'sa');
         await Bun.sleep(1500);
-        await cursor.click(await centerOf(page.getByText('Sanne Kok')));
+        await cursor.click(await pointOn(page.getByText('Sanne Kok')));
         await Bun.sleep(3000);
-        await cursor.click(await centerOf(search));
+        await cursor.click(await pointOn(search));
         await page.keyboard.press('ControlOrMeta+a');
         await page.keyboard.press('Backspace');
         await Bun.sleep(1200);
-        await cursor.click(await centerOf(page.getByRole('button', { name: 'Close' })));
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Close' })));
         await Bun.sleep(800);
         await cursor.moveTo(REST, { duration: 900 });
         await Bun.sleep(800);

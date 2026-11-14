@@ -2,7 +2,7 @@
 // emote list narrows as she types, and she cheers the tech lead's confirmed generator runs. She deletes the cheer
 // again, so the loop ends where it began.
 
-import { centerOf } from '../lib/cursor';
+import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
@@ -24,7 +24,7 @@ export const chatHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await centerOf(page.getByPlaceholder('Message production')));
+        await cursor.click(await pointOn(page.getByPlaceholder('Message production')));
         await Bun.sleep(500);
         await typeLikeAPerson(page, '/');
         await Bun.sleep(1600);
@@ -36,13 +36,13 @@ export const chatHero = {
         const cheer = page.getByText('You cheer enthusiastically!');
         await cheer.waitFor();
         await Bun.sleep(2200);
-        await cursor.moveTo(await centerOf(cheer));
+        await cursor.moveTo(await pointOn(cheer));
         await Bun.sleep(600);
         // Every message of hers has a hidden action bar, so the bin is found in the cheer's own row.
         const row = page.locator('div.group', { has: cheer });
-        await cursor.click(await centerOf(row.getByRole('button', { name: 'Delete' })));
+        await cursor.click(await pointOn(row.getByRole('button', { name: 'Delete' })));
         await Bun.sleep(800);
-        await cursor.click(await centerOf(page.getByRole('dialog').getByRole('button', { name: 'Delete' })));
+        await cursor.click(await pointOn(page.getByRole('dialog').getByRole('button', { name: 'Delete' })));
         await cheer.waitFor({ state: 'detached' });
         await Bun.sleep(600);
         await cursor.moveTo(REST, { duration: 900 });

@@ -15,8 +15,6 @@ export const chatStillVolunteers = {
         await page.getByText('Open site plan').waitFor();
         await page.getByText('volunteers', { exact: true }).first().dispatchEvent('click');
         await page.getByText('Open crew roster').waitFor();
-        // The drawn pointer stays where the mouse last moved, and in the corner it hangs off the screen.
-        await page.mouse.move(1599, 899);
         await Bun.sleep(2000);
     },
 } satisfies Scene;

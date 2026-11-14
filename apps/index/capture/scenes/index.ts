@@ -33,7 +33,6 @@ import { slidesPresent } from './slides-present';
 import { slidesStillHeading } from './slides-still';
 import { stickiesAssign, stickiesComment } from './stickies-cards';
 import { stickiesHero } from './stickies-hero';
-import { suite } from './suite';
 import { vectorHero } from './vector-hero';
 import { vectorStillSketch } from './vector-still';
 import { vectorZoom } from './vector-zoom';
@@ -77,6 +76,5 @@ export const SCENES: Scene[] = [
     adminBackup,
     adminStillSettings,
     adminStillBackups,
-    suite,
     ...ROWS,
 ];
