@@ -99,10 +99,9 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         return () => root?.removeEventListener('scroll', onScroll, true);
     }, []);
 
-    // React passes up clicks from a portaled dialog, such as the lightbox, so only the page's own count. A heading
-    // copies its link only where its icon shows, as touch screens hide it, and never over a selection.
-    const onClick = (e: MouseEvent<HTMLDivElement>) => {
-        if (!(e.target instanceof Element) || !e.currentTarget.contains(e.target)) return;
+    // A heading copies its link only where its icon shows, as touch screens hide it, and never over a selection.
+    const onClick = (e: MouseEvent) => {
+        if (!(e.target instanceof Element)) return;
         const control = e.target.closest('.media-carousel-nav button');
         const carousel = control?.closest('.media-carousel');
         const strip = carousel?.querySelector('.media-carousel-strip');
@@ -112,6 +111,13 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             if (control.matches('.media-carousel-prev')) slide = current - 1;
             if (control.matches('.media-carousel-next')) slide = current + 1;
             strip.scrollTo({ left: slide * pitch });
+            return;
+        }
+        const grid = e.target.closest<HTMLElement>('[data-grid]');
+        const thumbnail = e.target.closest('button');
+        if (grid && thumbnail) {
+            const { items } = body.mediaGrids[Number(grid.dataset.grid)];
+            setLightbox({ items, index: Array.from(grid.querySelectorAll('button')).indexOf(thumbnail), open: true });
             return;
         }
         const media = e.target.closest('.site-prose :is(img, figure video)');
@@ -130,28 +136,37 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         copyToClipboard(`${location.origin}${location.pathname}#${id}`, 'Link copied to clipboard');
     };
 
+    // The lightbox sits outside the root, so React passes no click in its portaled dialog up to onClick.
     return (
-        <div ref={ref} className={className} onClick={onClick}>
-            {body.html.split(BLOCK_MARKER).map((section, i) => {
-                if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
-                if (!section) return null;
-                return (
-                    <div key={i} className="eigen-prose site-prose">
-                        {section.split(GRID_MARKER).map((part, j) => {
-                            if (j % 2) return <MediaGrid key={j} {...body.mediaGrids[Number(part)]} />;
-                            if (!part) return null;
-                            // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
-                            return <div key={j} dangerouslySetInnerHTML={{ __html: part }} />;
-                        })}
-                    </div>
-                );
-            })}
+        <>
+            <div ref={ref} className={className} onClick={onClick}>
+                {body.html.split(BLOCK_MARKER).map((section, i) => {
+                    if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
+                    if (!section) return null;
+                    return (
+                        <div key={i} className="eigen-prose site-prose">
+                            {section.split(GRID_MARKER).map((part, j) => {
+                                if (j % 2) {
+                                    return (
+                                        <div key={j} data-grid={part}>
+                                            <MediaGrid {...body.mediaGrids[Number(part)]} />
+                                        </div>
+                                    );
+                                }
+                                if (!part) return null;
+                                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
+                                return <div key={j} dangerouslySetInnerHTML={{ __html: part }} />;
+                            })}
+                        </div>
+                    );
+                })}
+            </div>
             <MediaLightbox
                 {...lightbox}
                 onIndexChange={(index) => setLightbox((current) => ({ ...current, index }))}
                 onOpenChange={(open) => setLightbox((current) => ({ ...current, open }))}
             />
-        </div>
+        </>
     );
 }
 

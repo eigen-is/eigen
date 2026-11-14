@@ -16,7 +16,9 @@ describe('MediaGrid', () => {
     });
 
     test('leaves a caption without a name as text', () => {
-        const html = renderToStaticMarkup(<MediaGrid items={[{ src: '/a.png', type: 'image', caption: 'A chart' }]} />);
+        const html = renderToStaticMarkup(
+            <MediaGrid columns="2" items={[{ src: '/a.png', type: 'image', caption: 'A chart' }]} />,
+        );
         expect(html).toContain('>A chart</p>');
         expect(html).not.toContain('ket-name');
     });

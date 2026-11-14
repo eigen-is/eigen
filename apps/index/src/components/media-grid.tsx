@@ -1,12 +1,11 @@
 // A grid of images and videos inside a blog post or Support article, which the article's markdown declares as a
-// media block. Each item shows a thumbnail, a play mark on a video, and its caption; clicking it opens the full image
-// or plays the video in the lightbox, which pages through the rest of the grid.
+// media block. Each item is a button with a thumbnail, a play mark on a video, and its caption. The page around it
+// opens a clicked item in its lightbox, with the grid as the group to page through.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Play } from 'lucide-react';
-import { useState } from 'react';
-import { Caption, MediaLightbox } from './media-lightbox';
-import type { MediaItem } from './parse-media-grids';
+import { Caption } from './media-lightbox';
+import type { MediaGridData, MediaItem } from './parse-media-grids';
 
 const GRID_COLUMNS: Record<string, string> = {
     '1': 'grid-cols-1',
@@ -17,44 +16,23 @@ const GRID_COLUMNS: Record<string, string> = {
     '6': 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
 };
 
-type MediaGridProps = {
-    columns?: string;
-    items?: MediaItem[];
-};
-
-export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
-    const [open, setOpen] = useState(false);
-    const [index, setIndex] = useState(0);
-
-    if (items.length === 0) {
-        return null;
-    }
-
-    const gridCols = GRID_COLUMNS[columns] ?? 'grid-cols-1 md:grid-cols-2';
-
+export function MediaGrid({ columns, items }: MediaGridData) {
+    if (items.length === 0) return null;
     return (
-        <div className={cn('grid', gridCols, 'gap-6 my-8')}>
+        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns] ?? GRID_COLUMNS['2'])}>
             {items.map((item, i) => (
-                <MediaThumbnail
-                    key={i}
-                    {...item}
-                    onOpen={() => {
-                        setIndex(i);
-                        setOpen(true);
-                    }}
-                />
+                <MediaThumbnail key={i} {...item} />
             ))}
-            <MediaLightbox items={items} index={index} open={open} onIndexChange={setIndex} onOpenChange={setOpen} />
         </div>
     );
 }
 
-function MediaThumbnail({ src, type, caption, thumbnail, poster, onOpen }: MediaItem & { onOpen: () => void }) {
+function MediaThumbnail({ src, type, caption, thumbnail, poster }: MediaItem) {
     const thumbnailSrc = thumbnail ?? src;
     const posterSrc = poster ?? thumbnail;
 
     return (
-        <button type="button" className="group block w-full text-left" onClick={onOpen}>
+        <button type="button" className="group block w-full text-left">
             <div className="relative overflow-hidden rounded-lg bg-muted">
                 {type === 'image' && (
                     <img

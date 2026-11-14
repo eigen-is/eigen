@@ -269,6 +269,15 @@ describe('lightbox', () => {
         expect(lightbox()?.src).toBe('/b.webp');
     });
 
+    test('a click on the open picture leaves the group as it is', async () => {
+        const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, '.media-carousel-slide img');
+        await act(async () => document.querySelector<HTMLElement>('[role="dialog"] img')?.click());
+        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp' });
+        expect(lightbox()?.next).not.toBeNull();
+    });
+
     test('an image inside a link follows the link instead', async () => {
         const html = '<p><a href="#elsewhere"><img src="/a.webp" alt="a"></a></p>';
         const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
