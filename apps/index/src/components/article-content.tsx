@@ -37,7 +37,10 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
             for (const video of ref.current?.querySelectorAll<HTMLVideoElement>('.media-video video') ?? []) {
                 video.controls = reduceMotion.matches;
                 if (reduceMotion.matches) video.pause();
-                else video.play().catch(() => {});
+                else
+                    video.play().catch(() => {
+                        video.controls = true;
+                    });
             }
         };
         startVideos();

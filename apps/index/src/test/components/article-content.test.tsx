@@ -44,6 +44,19 @@ describe('ArticleContent', () => {
         expect(video.controls).toBe(false);
     });
 
+    test('shows controls when the browser refuses to start a video', async () => {
+        stubReducedMotion(false);
+        const { play } = HTMLMediaElement.prototype;
+        HTMLMediaElement.prototype.play = () => Promise.reject(new Error('NotAllowedError'));
+        try {
+            const video = await renderVideo();
+            await act(async () => {});
+            expect(video.controls).toBe(true);
+        } finally {
+            HTMLMediaElement.prototype.play = play;
+        }
+    });
+
     test('holds a looping video still with controls for a reader who asked for less motion', async () => {
         stubReducedMotion(true);
         const video = await renderVideo();
