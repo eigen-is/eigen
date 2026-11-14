@@ -152,6 +152,11 @@
         background-color: var(--background);
     }
 
+    /* A picture or film opens bigger on a click, unless a link or a button holds it. */
+    :is(img, .media-video video):not(a img, button img) {
+        cursor: zoom-in;
+    }
+
     /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
     .media-video,
     .media-carousel,
@@ -169,37 +174,31 @@
         background-color: var(--muted);
     }
 
-    /* The images sit in one paragraph inside the block, which steps aside so each image is a slide or a column. */
-    .media-carousel-strip > p,
+    /* The images sit in one paragraph inside the block, which steps aside so each image is a column. */
     .media-side-by-side > p {
         display: contents;
     }
 
-    /* The strip and its buttons share the first row, so the buttons sit over the strip's edges. */
+    /* A carousel's strip runs from a little left of the column to the right edge of the page, the scroll area and
+       a size container, so the next slide peeks in. The column's width follows the site grid: --site-col at most,
+       less the gutters on a narrow page. */
     .media-carousel {
-        display: grid;
+        --carousel-column: min(var(--site-col), 100cqw - 2 * var(--app-gutter-x));
+        --carousel-bleed: calc((100cqw - var(--carousel-column)) / 2);
+        --carousel-inset: min(2rem, var(--carousel-bleed));
     }
 
-    .media-carousel-strip,
-    .media-carousel-prev,
-    .media-carousel-next {
-        grid-row: 1;
-        grid-column: 1;
-    }
-
+    /* The end padding is the bleed, so the last slide can snap to the start too. */
     .media-carousel-strip {
         display: flex;
         align-items: flex-start;
+        gap: 1rem;
+        margin-left: calc(-1 * var(--carousel-inset));
+        margin-right: calc(-1 * var(--carousel-bleed));
+        padding-right: var(--carousel-bleed);
         overflow-x: auto;
         scroll-snap-type: x mandatory;
         scrollbar-width: none;
-        border-radius: 0.5rem;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-        .media-carousel-strip {
-            scroll-behavior: smooth;
-        }
     }
 
     .media-carousel-strip:focus-visible {
@@ -207,9 +206,64 @@
         outline-offset: 2px;
     }
 
-    .media-carousel-strip img {
-        flex: 0 0 100%;
+    .media-carousel-slide {
+        flex: 0 0 calc(var(--carousel-column) + var(--carousel-inset));
+        margin: 0;
         scroll-snap-align: start;
+
+        figcaption {
+            margin-top: 0.5rem;
+            text-align: start;
+        }
+    }
+
+    /* On a phone the strip spans the screen and a slide starts at the gutter, narrow enough for the next to peek. */
+    @media (width < 40rem) {
+        .media-carousel-strip {
+            margin-left: calc(-1 * var(--carousel-bleed));
+            padding-left: var(--carousel-bleed);
+            scroll-padding-left: var(--carousel-bleed);
+        }
+
+        .media-carousel-slide {
+            flex-basis: 85%;
+        }
+    }
+
+    /* Under the strip: the dots centered under the column, and the buttons at its right edge. */
+    .media-carousel-nav {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        margin-top: 0.75rem;
+    }
+
+    .media-carousel-dots {
+        display: flex;
+        grid-column: 2;
+    }
+
+    /* A dot is drawn in its content box, so the padding widens what a finger can hit. */
+    .media-carousel-dot {
+        width: 1rem;
+        height: 1rem;
+        padding: 0.25rem;
+        border: 0;
+        border-radius: 9999px;
+        background-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+        background-clip: content-box;
+        cursor: pointer;
+    }
+
+    .media-carousel-dot[aria-current="true"] {
+        width: 1.75rem;
+        background-color: var(--app-current-color);
+    }
+
+    .media-carousel-steps {
+        display: flex;
+        justify-self: end;
+        gap: 0.5rem;
     }
 
     .media-carousel-prev,
@@ -217,31 +271,36 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        align-self: center;
         width: 2.25rem;
         height: 2.25rem;
-        margin: 0 0.75rem;
         border: 1px solid var(--border);
         border-radius: 9999px;
-        background-color: color-mix(in oklab, var(--background) 85%, transparent);
+        background-color: var(--background);
         color: var(--foreground);
         cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.12s ease;
     }
 
-    .media-carousel-prev {
-        justify-self: start;
+    .media-carousel-prev:hover:enabled,
+    .media-carousel-next:hover:enabled {
+        background-color: var(--muted);
     }
 
-    .media-carousel-next {
-        justify-self: end;
+    .media-carousel-prev:disabled,
+    .media-carousel-next:disabled {
+        opacity: 0.4;
+        cursor: default;
     }
 
-    .media-carousel:hover :is(.media-carousel-prev, .media-carousel-next),
-    .media-carousel-prev:focus-visible,
-    .media-carousel-next:focus-visible {
-        opacity: 1;
+    @media (prefers-reduced-motion: no-preference) {
+        .media-carousel-strip {
+            scroll-behavior: smooth;
+        }
+
+        .media-carousel-dot {
+            transition:
+                width 0.2s ease,
+                background-color 0.2s ease;
+        }
     }
 
     .media-side-by-side {
@@ -274,10 +333,6 @@
 @media (pointer: coarse) {
     .site-prose .heading-anchor {
         display: none;
-    }
-
-    .site-prose :is(.media-carousel-prev, .media-carousel-next) {
-        opacity: 1;
     }
 
     .site-prose h2:has(.heading-anchor),

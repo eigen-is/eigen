@@ -1,7 +1,8 @@
 // A markdown-it plugin for the media blocks the site's Markdown writes as fences, such as a looping video, a carousel
 // or a side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build
 // time, so a block with a mistake in it, or a video whose files are not under the public folder, fails the build
-// instead of shipping a broken page. The page wires up the carousel buttons and starts the videos.
+// instead of shipping a broken page. A carousel comes out whole, its slides, dots and buttons included, and the page
+// wires them up and starts the videos.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,12 +46,6 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
             const html = (content: string) => {
                 state.push('html_block', '', 0).content = content;
             };
-            const tokenizeBody = () => {
-                const lineMax = state.lineMax;
-                state.lineMax = closeLine;
-                state.md.block.tokenize(state, startLine + 1, closeLine);
-                state.lineMax = lineMax;
-            };
 
             if (name === 'video') {
                 const src = attrs.get('src');
@@ -67,16 +62,32 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
                     `<figure class="media-video"><video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
                 );
             } else if (name === 'carousel') {
-                html(
-                    `<figure class="media-carousel"><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n`,
+                const slides: string[] = [];
+                for (let line = startLine + 1; line < closeLine; line++) {
+                    const text = lineText(line);
+                    if (!text) continue;
+                    const [image, ...others] = md.parseInline(text, state.env)[0].children ?? [];
+                    if (image?.type !== 'image' || others.length) {
+                        throw new Error(`${where} takes one image per line, not ${text}`);
+                    }
+                    slides.push(
+                        `<figure class="media-carousel-slide">${md.renderInline(text)}${figcaption(image.content)}</figure>\n`,
+                    );
+                }
+                const dots = slides.map(
+                    (_, i) =>
+                        `<button type="button" class="media-carousel-dot" aria-label="Image ${i + 1} of ${slides.length}"${i === 0 ? ' aria-current="true"' : ''}></button>`,
                 );
-                tokenizeBody();
+                const nextDisabled = slides.length < 2 ? ' disabled' : '';
                 html(
-                    `</div><button type="button" class="media-carousel-prev" aria-label="Previous image">${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image">${NEXT_ICON}</button>${figcaption(caption)}</figure>\n`,
+                    `<figure class="media-carousel"><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous image" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
                 );
             } else {
                 html('<figure class="media-side-by-side">\n');
-                tokenizeBody();
+                const lineMax = state.lineMax;
+                state.lineMax = closeLine;
+                state.md.block.tokenize(state, startLine + 1, closeLine);
+                state.lineMax = lineMax;
                 html(`${figcaption(caption)}</figure>\n`);
             }
             state.line = closeLine + 1;
