@@ -1,11 +1,14 @@
 // Renders the site's Markdown, such as help articles, blog posts and the changelog, to HTML at build time. Each h2
 // and h3 gets a slug id and a link icon, and is collected for the page's table of contents. Raw HTML passes through,
-// since every source is written in this repo, and each app name in the text is marked to be set in the mono font.
+// since every source is written in this repo, each app name in the text is marked to be set in the mono font, and
+// media blocks such as a looping video or a carousel become figures.
 
+import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
 import { splitKetNames } from '../../src/components/ket-names';
 import type { TocEntry } from './content-types';
+import { markdownBlocks } from './markdown-blocks';
 
 // Lucide "link" icon, inlined so each heading gets a hover anchor that copies its link.
 const ANCHOR_ICON =
@@ -20,9 +23,14 @@ function slugify(text: string): string {
         .replace(/\s+/g, '-');
 }
 
-export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[] } {
+// The build runs from the app's folder, so a video's files are looked up under its public folder by default.
+export function renderMarkdown(
+    markdown: string,
+    { publicDir = join(process.cwd(), 'public') }: { publicDir?: string } = {},
+): { html: string; toc: TocEntry[] } {
     const toc: TocEntry[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
+    md.use(markdownBlocks, { publicDir });
     md.use(anchor, {
         slugify,
         level: [2, 3],
