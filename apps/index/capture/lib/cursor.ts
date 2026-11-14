@@ -5,11 +5,10 @@
 import type { Page } from 'playwright-core';
 
 export type Point = { x: number; y: number };
-type Target = string | Point;
 
 export type Cursor = {
-    moveTo(target: Target, opts?: { duration?: number }): Promise<void>;
-    click(target: Target): Promise<void>;
+    moveTo(to: Point, opts?: { duration?: number }): Promise<void>;
+    click(to: Point): Promise<void>;
 };
 
 const ARROW_SVG =
@@ -37,16 +36,8 @@ export function cursor(page: Page): Cursor {
     const size = page.viewportSize();
     let at: Point = size ? { x: size.width / 2, y: size.height / 2 } : { x: 0, y: 0 };
 
-    const pointOf = async (target: Target): Promise<Point> => {
-        if (typeof target !== 'string') return target;
-        const box = await page.locator(target).first().boundingBox();
-        if (!box) throw new Error(`${target} is not on the page`);
-        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-    };
-
-    const moveTo = async (target: Target, opts?: { duration?: number }): Promise<void> => {
+    const moveTo = async (to: Point, opts?: { duration?: number }): Promise<void> => {
         const from = at;
-        const to = await pointOf(target);
         const distance = Math.hypot(to.x - from.x, to.y - from.y);
         const duration = opts?.duration ?? Math.min(900, 400 + distance * 0.5);
         const steps = Math.max(1, Math.round(duration / STEP_MS));
@@ -60,8 +51,8 @@ export function cursor(page: Page): Cursor {
         at = to;
     };
 
-    const click = async (target: Target): Promise<void> => {
-        await moveTo(target);
+    const click = async (to: Point): Promise<void> => {
+        await moveTo(to);
         await page.mouse.down();
         await Bun.sleep(70);
         await page.mouse.up();
