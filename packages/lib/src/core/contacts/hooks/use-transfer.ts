@@ -15,10 +15,10 @@ import { useFileDownload } from '../../download';
 import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../transfer';
 import { invalidateContactList } from './keys';
 
-// The export answers with the file itself, so it goes through raw fetch rather than Eden — same download
-// hook as useExportDocument, down to reporting its own failures (there is no mutation to carry them).
+// The export answers with the file itself, so it is a raw fetch download rather than an Eden call. With no
+// mutation to carry a failure, the download reports its own.
 export function useExportContacts(): {
-    exportContacts: (ids?: string[]) => Promise<Headers | null>;
+    exportContacts: (ids?: readonly string[]) => Promise<Headers | null>;
     isExporting: boolean;
 } {
     const { user } = useAuth();
@@ -26,7 +26,7 @@ export function useExportContacts(): {
     const { download, isDownloading } = useFileDownload();
 
     const exportContacts = useCallback(
-        (ids?: string[]) =>
+        (ids?: readonly string[]) =>
             download(getContactsExportUrl(ownerId), 'contacts.vcf', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },

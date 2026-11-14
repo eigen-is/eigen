@@ -3,10 +3,11 @@
 // smaller questions, such as whether the user owns an item directly or through a team, or had it shared.
 
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { ParsedOwnerId, PublicUser } from '@workspace/lib/types';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, DriveAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
+import type { ParsedOwnerId } from '@workspace/lib/types/owner';
+import { parseOwnerId } from '@workspace/lib/types/owner';
+import type { PublicUser } from '@workspace/lib/types/public';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '../../auth';
 import { useMyTeams } from '../../home';
@@ -18,16 +19,16 @@ type DriveAccess = {
     isGroupOwned: boolean;
     owner: UseQueryResult<PublicUser | null>;
     breadcrumb: UseQueryResult<DrivePath[]>;
-    baseDirectList: DirectAccessItem[];
-    directList: DirectAccessItem[];
-    inheritedList: InheritedAccessItem[];
-    allEntries: DriveAccessItem[];
+    baseDirectList: readonly DirectAccessItem[];
+    directList: readonly DirectAccessItem[];
+    inheritedList: readonly InheritedAccessItem[];
+    allEntries: readonly DriveAccessItem[];
 };
 
 export function useDriveAccess(
     path: DrivePath,
-    overrideDirectList?: DirectAccessItem[],
-    preloadedBreadcrumb?: DrivePath[],
+    overrideDirectList?: readonly DirectAccessItem[],
+    preloadedBreadcrumb?: readonly DrivePath[],
 ): DriveAccess {
     const parsedOwner = useMemo(() => parseOwnerId(path.ownerId), [path.ownerId]);
     const isGroupOwned = parsedOwner.type === 'team';
@@ -152,9 +153,8 @@ export function useIsEffectiveOwner(ownerId: string): boolean {
     return useIsEffectiveOwnerOf()(ownerId);
 }
 
-// True when the path's own ACL names the current user by email — a direct share, which a delete
-// leaves (SharedDrive.deletePath). Access through a shared folder, a team drive or a team ACL
-// entry is not one: a delete there trashes the owner's copy.
+// Only the path's own ACL naming the user is a direct share, which a delete leaves instead of trashing the owner's
+// copy. Access through a shared folder, a team drive or a team entry is not one.
 export function useIsSharedWithMe(): (path: DrivePath) => boolean {
     const { user } = useAuth();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
