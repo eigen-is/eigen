@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { AppShell } from '@workspace/ui';
+import { AppShell } from '@workspace/ui/components/layout/app';
 
 export const Route = createFileRoute('/support')({
     component: SupportLayout,

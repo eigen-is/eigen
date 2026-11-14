@@ -12,8 +12,8 @@ import {
     readParagraphFormat,
     selectionParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useState } from 'react';

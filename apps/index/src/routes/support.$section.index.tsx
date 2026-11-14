@@ -2,7 +2,7 @@
 // the browser tab, and an unknown section shows the null vector.
 
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { ErrorState, useLayout } from '@workspace/ui';
+import { ErrorState, useLayout } from '@workspace/ui/components/layout/app';
 import { useEffect } from 'react';
 import { SitePage } from '../components/site-page';
 import { getSection } from '../components/support/sections';

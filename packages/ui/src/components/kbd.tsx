@@ -1,4 +1,4 @@
-// A key cap, shadcn's Kbd: one key of a shortcut as a muted chip. KbdGroup sets a combination's keys side by side.
+// A key cap, shadcn's Kbd: one key of a shortcut as a muted chip.
 // The mail shortcuts dialog and the command palette's trigger draw their keys with it, and inside a tooltip the cap
 // inverts to read on the tooltip's dark background.
 
@@ -20,8 +20,4 @@ function Kbd({ className, ...props }: React.ComponentProps<'kbd'>) {
     );
 }
 
-function KbdGroup({ className, ...props }: React.ComponentProps<'kbd'>) {
-    return <kbd data-slot="kbd-group" className={cn('inline-flex items-center gap-1', className)} {...props} />;
-}
-
-export { Kbd, KbdGroup };
+export { Kbd };

@@ -8,9 +8,15 @@ import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { AppBarMenu, CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu } from '@workspace/ui';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import {
+    AppBarMenu,
+    CenteredToolbar,
+    DocumentShareCluster,
+    EditMenu,
+    FileMenu,
+} from '@workspace/ui/components/layout/toolbar';
 import { Menubar } from '@workspace/ui/components/menubar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';

@@ -49,7 +49,7 @@ const search = { controller: null, matchedIds: [], activeId: null };
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realVector = { ...(await import('@workspace/ui/components/vector')) };
-const realUi = { ...(await import('@workspace/ui')) };
+const realUi = { ...(await import('@workspace/ui/components/layout/app')) };
 const realPanel = { ...(await import('@workspace/ui/components/properties-panel')) };
 mock.module('@workspace/ui/components/vector', () => ({
     ...realVector,
@@ -88,7 +88,7 @@ mock.module('@workspace/ui/components/vector', () => ({
     },
 }));
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
-mock.module('@workspace/ui', () => ({ ...realUi, useLayout: () => layout }));
+mock.module('@workspace/ui/components/layout/app', () => ({ ...realUi, useLayout: () => layout }));
 mock.module('@workspace/ui/components/properties-panel', () => ({
     ...realPanel,
     ColorRow: ({ label, onChange }: { label: string; onChange: (color: string | null) => void }) => (
@@ -105,7 +105,7 @@ mock.module('@workspace/ui/components/properties-panel', () => ({
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/ui/components/vector', () => realVector);
-    mock.module('@workspace/ui', () => realUi);
+    mock.module('@workspace/ui/components/layout/app', () => realUi);
     mock.module('@workspace/ui/components/properties-panel', () => realPanel);
 });
 

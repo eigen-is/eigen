@@ -31,7 +31,6 @@
     "@tiptap/starter-kit": "^3.31.3"
   },
   "exports": {
-    ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
     "./styles/eigen-prose.css": "./src/styles/eigen-prose.css",
     "./styles/font-weights.css": "./src/styles/font-weights.css",
@@ -41,6 +40,10 @@
     "./lib/eigenAppRouter": "./src/lib/eigenAppRouter.tsx",
     "./components/*": "./src/components/*.tsx",
     "./components/contacts/use-contact-input": "./src/components/contacts/use-contact-input.ts",
+    "./components/use-contact-avatar-upload": "./src/components/use-contact-avatar-upload.ts",
+    "./components/delete/delete-dialog": "./src/components/delete/delete-dialog.tsx",
+    "./components/search-bar/search-bar": "./src/components/search-bar/search-bar.tsx",
+    "./components/transform/object-transform": "./src/components/transform/object-transform.tsx",
     "./components/drive/create-menu": "./src/components/drive/create-menu.ts",
     "./components/drive/drive-capabilities": "./src/components/drive/drive-capabilities.ts",
     "./components/drive/use-drive-list-route": "./src/components/drive/use-drive-list-route.ts",

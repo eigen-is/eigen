@@ -1,4 +1,4 @@
-import { EmptyState } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app';
 import { PersonList, UserItem } from '@workspace/ui/components/user';
 
 export type TeamMember = { email: string; name: string };

@@ -3,7 +3,7 @@
 // section's color, which washes the rows and marks the table of contents inside it, and a page with a trail passes
 // it as the toolbar, the bar the apps keep their location in. The top bar sits outside.
 
-import { Column, ColumnLayout } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import type { ReactNode } from 'react';
 import { SiteFooter } from './site-footer';
 

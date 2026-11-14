@@ -10,8 +10,13 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
-import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';

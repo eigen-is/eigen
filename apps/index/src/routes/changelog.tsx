@@ -3,7 +3,7 @@
 // scripts reads the whole page.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { AppShell } from '@workspace/ui';
+import { AppShell } from '@workspace/ui/components/layout/app';
 import { ArticleContent } from '../components/article-content';
 import { ArticleToc } from '../components/article-toc';
 import { ReadingLayout } from '../components/reading-layout';

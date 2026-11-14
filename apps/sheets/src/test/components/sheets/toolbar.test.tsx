@@ -14,11 +14,11 @@ const seen: { onCloseAutoFocus?: unknown } = {};
 
 // Copies, because mock.module rewrites a loaded module's exports in place.
 const realSheet = { ...(await import('@workspace/sheet')) };
-const realUi = { ...(await import('@workspace/ui')) };
+const realUi = { ...(await import('@workspace/ui/components/layout/toolbar')) };
 const realDrive = { ...(await import('@workspace/ui/components/drive')) };
 const Nothing = () => null;
 mock.module('@workspace/sheet', () => ({ ...realSheet, useCellEditorRefocus: () => refocusCellEditor }));
-mock.module('@workspace/ui', () => ({
+mock.module('@workspace/ui/components/layout/toolbar', () => ({
     ...realUi,
     FileMenu: ({ onCloseAutoFocus }: { onCloseAutoFocus?: unknown }) => {
         seen.onCloseAutoFocus = onCloseAutoFocus;
@@ -33,7 +33,7 @@ mock.module('@workspace/ui/components/drive', () => ({
 }));
 afterAll(() => {
     mock.module('@workspace/sheet', () => realSheet);
-    mock.module('@workspace/ui', () => realUi);
+    mock.module('@workspace/ui/components/layout/toolbar', () => realUi);
     mock.module('@workspace/ui/components/drive', () => realDrive);
 });
 

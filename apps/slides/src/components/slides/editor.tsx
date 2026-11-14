@@ -12,11 +12,12 @@ import {
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
 } from '@workspace/lib/vector';
-import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { ContextMenuAnchor, MenuSections, useContextMenu } from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {

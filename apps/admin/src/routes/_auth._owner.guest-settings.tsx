@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { GuestSettingsPage } from '../components/admin/guest-settings';
 
 export const Route = createFileRoute('/_auth/_owner/guest-settings')({

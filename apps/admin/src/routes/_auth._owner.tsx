@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { useIsOrgOwner } from '@workspace/lib/admin';
-import { EmptyState } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app';
 
 // Settings, onboarding, guest access and the waitlist are the owner's; _auth has already let admins in and loaded the members.
 export const Route = createFileRoute('/_auth/_owner')({

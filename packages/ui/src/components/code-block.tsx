@@ -1,6 +1,6 @@
 // A block of code, a shell command or a log, such as Admin's restore steps: shadcn's Code Block, without its Shiki
-// highlighter. A header can carry a title and actions. CodeBlockActions as a direct child floats in the top corner
-// instead, shown on hover and taking no clicks while hidden. Content scrolls or wraps, with optional line numbers. A
+// highlighter. CodeBlockActions as a direct child floats in the top corner, shown on hover and taking no clicks while
+// hidden. Content scrolls or wraps, with optional line numbers. A
 // line can mark itself added, removed or highlighted. The copy button goes through copyToClipboard, as CopyInput does.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
@@ -39,32 +39,6 @@ function CodeBlock({
             data-variant={variant}
             data-size={size}
             className={cn(codeBlockVariants({ variant }), className)}
-            {...props}
-        />
-    );
-}
-
-function CodeBlockHeader({ className, ...props }: React.ComponentProps<'div'>) {
-    return (
-        <div
-            data-slot="code-block-header"
-            className={cn(
-                'flex min-w-0 shrink-0 items-center gap-2 px-3 pt-3 text-muted-foreground group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:pt-2.5 group-data-[variant=destructive]/code-block:text-destructive *:has-[>[data-slot=code-block-title]]:min-w-0',
-                className,
-            )}
-            {...props}
-        />
-    );
-}
-
-function CodeBlockTitle({ className, ...props }: React.ComponentProps<'div'>) {
-    return (
-        <div
-            data-slot="code-block-title"
-            className={cn(
-                "min-w-0 truncate font-sans text-sm font-medium text-foreground group-data-[size=sm]/code-block:text-xs group-data-[variant=destructive]/code-block:text-destructive [&_svg]:pointer-events-none [&_svg]:inline-block [&_svg]:align-middle [&_svg:not([class*='size-'])]:size-3.5 *:[svg]:me-1.5",
-                className,
-            )}
             {...props}
         />
     );
@@ -194,26 +168,4 @@ function CodeBlockLine({
     );
 }
 
-function CodeBlockFooter({ className, ...props }: React.ComponentProps<'div'>) {
-    return (
-        <div
-            data-slot="code-block-footer"
-            className={cn(
-                'flex min-w-0 shrink-0 items-center gap-2 px-3 pb-3 text-muted-foreground group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:pb-2.5',
-                className,
-            )}
-            {...props}
-        />
-    );
-}
-
-export {
-    CodeBlock,
-    CodeBlockActions,
-    CodeBlockContent,
-    CodeBlockCopyButton,
-    CodeBlockFooter,
-    CodeBlockHeader,
-    CodeBlockLine,
-    CodeBlockTitle,
-};
+export { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton };

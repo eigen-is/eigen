@@ -20,19 +20,18 @@ import {
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/file-kinds';
-import {
-    KebabTrigger,
-    RecentFilesSidebarItem,
-    SidebarBody,
-    SidebarItem,
-    SidebarSection,
-    TooltipButton,
-} from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
+import { KebabTrigger, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { cn, SOFT_HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
 import type { MouseEvent } from 'react';

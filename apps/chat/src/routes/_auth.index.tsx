@@ -1,9 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';
-import { Column, ColumnLayout, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
+import { Column, ColumnLayout, EmptyState } from '@workspace/ui/components/layout/app';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

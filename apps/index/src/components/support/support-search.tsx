@@ -3,8 +3,8 @@
 
 import { loadPagefind } from '@workspace/lib/search';
 import type { HelpSearchDoc } from '@workspace/lib/types/search';
-import { SearchBar } from '@workspace/ui';
 import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { useEffect, useRef, useState } from 'react';
 
 const MAX_RESULTS = 6;

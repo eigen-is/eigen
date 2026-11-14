@@ -8,7 +8,8 @@ import { useRootFolder } from '@workspace/lib/drive';
 import type { AuthUser, RouterAppContext } from '@workspace/lib/types/auth';
 import type { DriveContextType } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { AppShell, AppSidebar, ErrorState, LoadingState } from '@workspace/ui';
+import { AppShell, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { AppSidebar } from '@workspace/ui/components/layout/sidebar';
 import { createContext } from 'react';
 import { DriveNewMenu } from '../components/drive/drive-new-menu';
 

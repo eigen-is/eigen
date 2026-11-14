@@ -1,7 +1,7 @@
 import { formatDate } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { useServerStatus } from '@workspace/lib/settings';
-import { SettingsSection } from '@workspace/ui';
+import { SettingsSection } from '@workspace/ui/components/layout/app';
 import { Separator } from '@workspace/ui/components/separator';
 
 // What ./eigen status reports, read-only: the command line changes these, not this page.

@@ -4,7 +4,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
 import { useAddContact } from '@workspace/lib/contacts';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
-import { Column, ColumnLayout } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
 
 export const Route = createFileRoute('/_auth/new')({

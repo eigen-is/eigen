@@ -2,7 +2,6 @@ import { useAuth } from '@workspace/lib/auth';
 import { useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { ProgressDialog } from '@workspace/ui/components/drive';
@@ -12,6 +11,9 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { EmptyState, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { KebabTrigger, Toolbar } from '@workspace/ui/components/layout/toolbar';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { PersonList, UserItem } from '@workspace/ui/components/user';
 import { ArrowUpDown, Download, Upload } from 'lucide-react';
 import { useMemo } from 'react';

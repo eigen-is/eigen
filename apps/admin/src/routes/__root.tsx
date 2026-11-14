@@ -7,8 +7,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { useServerSettings } from '@workspace/lib/settings';
 import type { RouterAppContext } from '@workspace/lib/types/auth';
-import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { AppShell, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
 import { AdminSidebar } from '../components/admin/admin-sidebar';
 import { SetupWizard } from '../components/admin/setup-wizard';
 

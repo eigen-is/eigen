@@ -18,18 +18,23 @@ mock.module('@workspace/lib/public', () => ({ ...realPublic, useEnabledApps: () 
 
 // The page chrome needs a layout context this test has no use for, so it renders as its children.
 const passThrough = ({ children }: { children: ReactNode }) => children;
-const realUi = { ...(await import('@workspace/ui')) };
-mock.module('@workspace/ui', () => ({
-    ...realUi,
+const realLayout = { ...(await import('@workspace/ui/components/layout/app')) };
+const realBraket = { ...(await import('@workspace/ui/components/braket')) };
+mock.module('@workspace/ui/components/layout/app', () => ({
+    ...realLayout,
     ColumnLayout: passThrough,
     Column: passThrough,
+}));
+mock.module('@workspace/ui/components/braket', () => ({
+    ...realBraket,
     EigenCyclingLogo: () => null,
     KetTile: ({ title, color }: { title: string; color: string }) => <h3 data-color={color}>{title}</h3>,
 }));
 afterAll(() => {
     mock.module('@workspace/lib/admin', () => realAdmin);
     mock.module('@workspace/lib/public', () => realPublic);
-    mock.module('@workspace/ui', () => realUi);
+    mock.module('@workspace/ui/components/layout/app', () => realLayout);
+    mock.module('@workspace/ui/components/braket', () => realBraket);
 });
 
 const { renderToStaticMarkup } = await import('react-dom/server');

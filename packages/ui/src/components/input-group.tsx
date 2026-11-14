@@ -1,9 +1,8 @@
-// shadcn's InputGroup: an input or textarea with addons inside its border, such as the mail domain after a new
+// shadcn's InputGroup: an input with addons inside its border, such as the mail domain after a new
 // user's name. A click on an addon's text focuses the input, and the group draws the input's focus and error ring.
 
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
-import { Textarea } from '@workspace/ui/components/textarea';
 import { cn } from '@workspace/ui/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
 import { cva } from 'class-variance-authority';
@@ -130,17 +129,4 @@ function InputGroupInput({ className, ...props }: React.ComponentProps<'input'>)
     );
 }
 
-function InputGroupTextarea({ className, ...props }: React.ComponentProps<'textarea'>) {
-    return (
-        <Textarea
-            data-slot="input-group-control"
-            className={cn(
-                'flex-1 resize-none rounded-none border-0 bg-transparent py-3 shadow-none focus-visible:ring-0 dark:bg-transparent',
-                className,
-            )}
-            {...props}
-        />
-    );
-}
-
-export { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText, InputGroupTextarea };
+export { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText };

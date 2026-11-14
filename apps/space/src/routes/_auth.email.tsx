@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useMailEnabled } from '@workspace/lib/public';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { MailOffState } from '@workspace/ui/components/mail';
 import { Separator } from '@workspace/ui/components/separator';
 import { MailPrefsSection } from '../components/space/mail-prefs-section';

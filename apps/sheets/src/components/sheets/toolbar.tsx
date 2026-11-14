@@ -3,8 +3,8 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCellEditorRefocus } from '@workspace/sheet';
-import { FileMenu } from '@workspace/ui';
 import { DocumentImportPicker, ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive';
+import { FileMenu } from '@workspace/ui/components/layout/toolbar';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,3 +1,6 @@
+// shadcn's Alert: a bordered note inside a page or dialog, plain or destructive, such as a warning above Admin's
+// backup settings or a notice in Drive's trash.
+
 import { cn } from '@workspace/ui/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
 import { cva } from 'class-variance-authority';
@@ -23,12 +26,8 @@ function Alert({ className, variant, ...props }: React.ComponentProps<'div'> & V
     return <div role="alert" className={cn(alertVariants({ variant }), className)} {...props} />;
 }
 
-function AlertTitle({ className, ...props }: React.ComponentProps<'h5'>) {
-    return <h5 className={cn('mb-1 font-medium leading-none tracking-tight', className)} {...props} />;
-}
-
 function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) {
     return <div className={cn('text-sm [&_p]:leading-relaxed', className)} {...props} />;
 }
 
-export { Alert, AlertDescription, AlertTitle };
+export { Alert, AlertDescription };

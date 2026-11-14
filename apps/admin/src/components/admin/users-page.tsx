@@ -6,7 +6,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useState } from 'react';
 import { UserDetail, UserDetailToolbar } from './user-detail';
 import { AdminUsersTable, AdminUsersToolbar } from './users-table';

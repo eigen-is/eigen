@@ -15,10 +15,11 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
-import { DeleteDialog, EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';

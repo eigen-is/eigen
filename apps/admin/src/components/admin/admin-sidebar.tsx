@@ -2,7 +2,7 @@
 // owner also sees the server settings, onboarding and guest access pages, and the waitlist while it is on.
 // The root route renders it inside the app shell for every signed-in admin.
 
-import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui/components/layout/sidebar';
 import { ClipboardList, KeyRound, Settings, UserPlus, UserRoundCheck, Users, UsersRound } from 'lucide-react';
 
 type AdminSidebarProps = {

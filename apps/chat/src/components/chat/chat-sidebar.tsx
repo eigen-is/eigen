@@ -7,10 +7,16 @@ import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection, UnreadDot } from '@workspace/ui';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { StorageUsage } from '@workspace/ui/components/home';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
+import { UnreadDot } from '@workspace/ui/components/unread-dot';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';

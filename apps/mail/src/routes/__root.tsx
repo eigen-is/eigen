@@ -4,7 +4,7 @@ import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { RouterAppContext } from '@workspace/lib/types/auth';
 import type { Email } from '@workspace/lib/types/mail';
-import { AppShell } from '@workspace/ui';
+import { AppShell } from '@workspace/ui/components/layout/app';
 import { MailOffState } from '@workspace/ui/components/mail';
 import { EmailSidebar } from '../components/mail/email-sidebar';
 

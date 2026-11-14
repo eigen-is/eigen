@@ -5,7 +5,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useTeams } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
-import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useState } from 'react';
 import { TeamDetail, TeamDetailToolbar } from '../components/admin/team-detail';
 import { AdminTeamsTable, AdminTeamsToolbar } from '../components/admin/teams-table';
