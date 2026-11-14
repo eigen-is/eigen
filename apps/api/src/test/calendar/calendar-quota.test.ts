@@ -376,7 +376,7 @@ describe('Calendar storage quota', () => {
         });
     });
 
-    test('an import stops at 507 with the count it managed, and a raised budget finishes it', async () => {
+    test('an import stops at 507, and a raised budget finishes it', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
         const file = [
@@ -411,7 +411,7 @@ describe('Calendar storage quota', () => {
             await setBudget(2);
             const refused = await importOnce();
             expect(refused.status).toBe(507);
-            expect(await refused.text()).toContain('after importing 1 events');
+            expect(await refused.text()).toBe('Not enough storage left');
 
             await setBudget(50);
             const finished = await assertJson<ImportCountsResult>(await importOnce());

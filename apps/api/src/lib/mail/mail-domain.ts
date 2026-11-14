@@ -20,10 +20,10 @@ import { isCalendarPart, isEmailDraft, mailAttachmentName } from '@workspace/lib
 import type { SSEventMail } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
-import { enforceHomeDataQuota, getMailAttachmentMaxSize } from '../config/enforcement';
+import { enforceHomeDataQuota } from '../config/enforcement';
 import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
-import { ApiError, insufficientStorage, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
+import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE, payloadTooLarge } from '../core';
 import type { Home } from '../home';
 import { renderAttachmentLinksText } from '../mailer/mail-template';
 import type { OutboundMail } from '../mailer/mailer';
@@ -52,17 +52,6 @@ function draftIdOf(email: NewDraft): string | undefined {
     const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
-}
-
-function attachmentTooLarge(maxSize: number): ApiError {
-    return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
-}
-
-// An attachment past its own cap answers 413 naming the cap, and one past the room left in the home's data 507.
-export function enforceAttachmentLimits(size: number, room: number): void {
-    const maxSize = getMailAttachmentMaxSize();
-    if (size > maxSize) throw attachmentTooLarge(maxSize);
-    if (size > room) throw insufficientStorage();
 }
 
 // An answer to the browser names a part and its size. The bytes come from the part's own route, because the browser's
@@ -368,22 +357,17 @@ export class Mail {
         return saved;
     }
 
-    public async uploadDraftAttachment(request: Request, room: number): Promise<DraftAttachmentUpload> {
-        const maxSize = getMailAttachmentMaxSize();
+    public async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
         try {
             const events = parseMultipartRequest(request, { maxFileSize: maxSize });
             for await (const event of events) {
                 if (event.type !== 'part' || !event.filename) continue;
                 return await this.store.persistDraftTemp(
                     async (writer) => {
-                        let size = 0;
                         // Advances the same generator: drains this part's body, then stops.
                         for await (const next of events) {
-                            if (next.type === 'chunk') {
-                                size += next.data.byteLength;
-                                if (size > room) throw insufficientStorage();
-                                writer.write(next.data);
-                            } else if (next.type === 'end') return next.size;
+                            if (next.type === 'chunk') writer.write(next.data);
+                            else if (next.type === 'end') return next.size;
                         }
                         return 0; // unreachable: the parser emits 'end' or throws
                     },
@@ -392,7 +376,7 @@ export class Mail {
                 );
             }
         } catch (e) {
-            if (e instanceof MaxFileSizeExceededError) throw attachmentTooLarge(maxSize);
+            if (e instanceof MaxFileSizeExceededError) throw payloadTooLarge();
             throw e;
         }
 
@@ -403,15 +387,15 @@ export class Mail {
         source: StorageFile,
         filename: string,
         contentType: string,
-        room: number,
+        maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        // The route already checked the drive size, so the limits are only for a source that grows mid-read.
+        // The route already checked the drive size, so the cap is only for a source that grows mid-read.
         return this.store.persistDraftTemp(
             (writer) => {
                 let size = 0;
                 return streamStorageFile(source, (chunk) => {
                     size += chunk.byteLength;
-                    enforceAttachmentLimits(size, room);
+                    if (size > maxSize) throw payloadTooLarge();
                     writer.write(chunk);
                 });
             },

@@ -39,7 +39,7 @@ Check those addresses for typos. Because the message has already left Drafts, op
 
 ## An attachment is too large
 
-Each attachment has a size limit. If a file is over it, the attachment fails and Mail shows a message telling you the limit, such as **Attachment exceeds 25MB limit**. The same limit applies whether you add a file from your computer or attach one from Drive.
+Each attachment has a size limit. If a file is over it, the attachment fails and Mail shows **Upload too large**. The limit is at most 25 MB, and less when your storage is nearly full. The same limit applies whether you add a file from your computer or attach one from Drive.
 
 To send a large file, share it from Drive instead of attaching it:
 

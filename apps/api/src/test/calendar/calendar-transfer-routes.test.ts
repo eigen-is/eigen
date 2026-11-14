@@ -964,7 +964,7 @@ describe('Calendar transfer routes', () => {
 
         const res = await importRequest(alice, calendarId, file);
         expect(res.status).toBe(413);
-        expect(await res.text()).toContain('after importing');
+        expect(await res.text()).toBe('Upload too large');
 
         const landed = (await april()).filter((e) => e.uid.includes(stamp)).length;
         expect(landed).toBeGreaterThan(0);

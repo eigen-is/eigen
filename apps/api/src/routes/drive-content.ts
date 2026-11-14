@@ -10,8 +10,7 @@ import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@w
 import type { BunFile } from 'bun';
 import type { ElysiaCustomStatusResponse, Static } from 'elysia';
 import { Elysia, t } from 'elysia';
-import { enforceUploadLimits, getUploadRoom } from '../lib/config/enforcement';
-import { getMaxUploadSize } from '../lib/config/server-settings';
+import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import {
     answerPreview,
@@ -102,10 +101,10 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return await drive.withHomeHeld(async () => {
-                const room = await getUploadRoom(params.ownerId, params.mountId);
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // No abort signal on purpose: a page reload aborts every fetch, and a large workbook takes a minute, so
                 // the conversion finishes anyway and shows up through the drive's SSE refresh.
-                return await convertToDocument(drive, mount, path, targetType, user, room);
+                return await convertToDocument(drive, mount, path, targetType, user, maxSize);
             });
         },
         { auth: true },
@@ -121,11 +120,10 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                 throw new ApiError(403, 'No write permission');
             }
             return await drive.withHomeHeld(async () => {
-                const room = await getUploadRoom(params.ownerId, params.mountId);
-                // A Content-Length over the upload limit is refused before any read, and a stream that goes past it is
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
                 // cancelled there.
-                const bytes = await readBoundedBodyBytes(request, getMaxUploadSize());
-                enforceUploadLimits(bytes.byteLength, room);
+                const bytes = await readBoundedBodyBytes(request, maxSize);
                 const summary = await importIntoDocument(
                     drive,
                     path,
@@ -151,14 +149,13 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                 throw new ApiError(403, 'No write permission');
             }
             return await drive.withHomeHeld(async () => {
-                const room = await getUploadRoom(params.ownerId, params.mountId);
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
                 const bytes = await readImportSourceBytes(user, body, {
                     accepts: () => true,
                     rejection: 'Source is not a file',
-                    maxBytes: getMaxUploadSize(),
+                    maxBytes: maxSize,
                 });
-                enforceUploadLimits(bytes.byteLength, room);
                 const summary = await importIntoDocument(
                     drive,
                     path,

@@ -7,7 +7,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Elysia, t } from 'elysia';
-import { getUploadRoom } from '../lib/config/enforcement';
+import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
@@ -80,8 +80,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             return await drive.withHomeHeld(async () => {
-                const room = await getUploadRoom(params.ownerId, params.mountId);
-                return await drive.uploadFiles(params.mountId, params.pathId, request, room, user);
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
             });
         },
         { auth: true, parse: 'none' },

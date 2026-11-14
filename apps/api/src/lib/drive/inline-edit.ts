@@ -8,7 +8,7 @@ import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EditorSaveResult, FileEditorContent } from '@workspace/lib/types/file-kinds';
 import { enforceMountQuota } from '../config/enforcement';
-import { ApiError, computeEtag, StaleWriteError } from '../core';
+import { ApiError, computeEtag, payloadTooLarge, StaleWriteError } from '../core';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import type { DriveLike } from './get-drive';
@@ -33,7 +33,7 @@ export async function getEditableContent(mount: Mount, path: DrivePath): Promise
 
     const editMode = getBytesTextPreviewMode(path.mimeType, path.name);
     if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
-    if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
+    if (path.size > MAX_INLINE_EDIT_SIZE) throw payloadTooLarge();
 
     const bytes = await mount.readBytes(path.id);
     if (!bytes) throw new ApiError(404, 'File content not found');
@@ -73,7 +73,7 @@ export async function saveEditableContent(
     }
     const data = Buffer.from(reattachFrontmatter(save.content, save.frontmatter ?? null), 'utf-8');
     // The same cap as getEditableContent, or the next read of the file would refuse it.
-    if (data.length > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
+    if (data.length > MAX_INLINE_EDIT_SIZE) throw payloadTooLarge();
 
     // Without force a save needs the etag it loaded. A tab opened before the editor sent one has none, and
     // gets the conflict dialog, whose Download and Overwrite keep its edits. The etag is compared before the

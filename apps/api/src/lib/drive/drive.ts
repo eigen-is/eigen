@@ -391,13 +391,13 @@ export class Drive {
         mountId: string,
         parentId: string,
         request: Request,
-        room: number,
+        maxSize: number,
         user: User,
     ): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         await this.personParent(mount, parentId, DRIVE_TYPE_FILE);
 
-        const streamed = await streamFilesToTemp(mount, request, room);
+        const streamed = await streamFilesToTemp(mount, request, maxSize);
         // All files land at once, each under a free name of its own.
         const settled = await Promise.allSettled(
             streamed.map((file) =>
