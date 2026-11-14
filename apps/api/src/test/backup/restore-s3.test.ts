@@ -22,6 +22,7 @@ import {
     driveUpload,
     getTestContext,
     openMountMetadata,
+    rejectionOf,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
@@ -232,11 +233,12 @@ describe('Backup restore of an s3 mount', () => {
     });
 
     test('a restore that failed midway runs again from the same artifact', async () => {
-        await expect(
+        const error = await rejectionOf(
             restoreHome(artifact, userId, `restore-s3-fail-${Date.now()}`, (step) => {
                 if (step === 'mounts') throw new Error('interrupted mid-install');
             }),
-        ).rejects.toThrow('interrupted mid-install');
+        );
+        expect(error.message).toContain('interrupted mid-install');
 
         await restoreHome(artifact, userId, `restore-s3-again-${Date.now()}`);
         const { mount: restored } = createHomeFaultMount(await getHome(userId), MOUNT_ID, BACKING);

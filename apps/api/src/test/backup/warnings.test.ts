@@ -27,6 +27,7 @@ import {
     driveUpload,
     findOrFail,
     getTestContext,
+    rejectionOf,
     TEST_PNG_BYTES,
 } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, snapshotInto, waitForJob } from './backup-test-helpers';
@@ -183,7 +184,8 @@ describe('Backup of a home whose drives hold rows that do not reach the root', (
     test('a drive whose root row is gone fails the home', async () => {
         const { home: rootless, mountId } = await newUser('rootless');
         writeWithoutForeignKeys(rootless.homeDir, mountId, [['DELETE FROM paths WHERE parentId IS NULL', []]]);
-        await expect(snapshotInto(rootless, 'full')).rejects.toThrow(`mount ${mountId}: the table has no root row`);
+        const error = await rejectionOf(snapshotInto(rootless, 'full'));
+        expect(error.message).toContain(`mount ${mountId}: the table has no root row`);
     });
 });
 
@@ -328,7 +330,8 @@ describe('Backup of a drive that holds no object at all', () => {
             const file = await upload(user, mountId, root.id, name, TEST_PNG_BYTES);
             await mount.storage.delete(await mount.getStorageKey(file.id));
         }
-        await expect(snapshotInto(home)).rejects.toThrow(`mount ${mountId}: storage unreachable`);
+        const error = await rejectionOf(snapshotInto(home));
+        expect(error.message).toContain(`mount ${mountId}: storage unreachable`);
     });
 
     // An unreadable folder answers every exists() with false, as a missing one does.
@@ -340,7 +343,8 @@ describe('Backup of a drive that holds no object at all', () => {
         expect(existsSync(dataDir)).toBe(true);
         chmodSync(dataDir, 0);
         try {
-            await expect(snapshotInto(home)).rejects.toThrow(`mount ${mountId}: storage unreachable`);
+            const error = await rejectionOf(snapshotInto(home));
+            expect(error.message).toContain(`mount ${mountId}: storage unreachable`);
         } finally {
             chmodSync(dataDir, 0o755);
         }
@@ -366,7 +370,8 @@ describe('Backup of a drive that holds no object at all', () => {
             const dataDir = join(home.homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.DATA_DIR);
             renameSync(dataDir, `${dataDir}-aside`);
             try {
-                await expect(snapshotInto(home)).rejects.toThrow(`mount ${id}: storage unreachable`);
+                const error = await rejectionOf(snapshotInto(home));
+                expect(error.message).toContain(`mount ${id}: storage unreachable`);
             } finally {
                 renameSync(`${dataDir}-aside`, dataDir);
             }
