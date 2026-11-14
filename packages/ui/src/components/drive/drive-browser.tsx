@@ -108,7 +108,7 @@ export function DriveBrowser({
                 className="flex-1 flex flex-col min-w-0"
                 onContextMenu={newFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
             >
-                <div className="sm:hidden app-gutter-x py-2 border-b shrink-0">
+                <div className="sm:hidden py-2 border-b shrink-0">
                     <DriveMountSelect
                         activeMountId={mountId}
                         activeOwnerId={ownerId}
