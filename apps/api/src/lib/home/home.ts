@@ -15,8 +15,8 @@ import { PATHS } from '../config/paths';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
-import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../core';
-import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
+import { ApiError, JsonStore, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import { createDefaultMountConfig, createMountConfig, DEFAULT_MOUNT_ID, readMountTotalSize } from '../mount/helpers';
@@ -130,6 +130,11 @@ export abstract class Home {
         }
     }
 
+    // The next home loads its own copy of the settings, so a save through this one once it closes would be lost to it.
+    protected settingsStore<T extends HomeSettings>(defaults: T): JsonStore<T> {
+        return new JsonStore(this.fs, PATHS.SETTINGS, defaults, () => this.refuseIfClosing());
+    }
+
     // A kind of home may fill in missing settings here, before its parts read them.
     protected async loadSettings(): Promise<void> {
         await this.settings.load();
@@ -159,8 +164,10 @@ export abstract class Home {
         const logFailure = (part: string) => (err: unknown) =>
             console.error(`[Home] Failed to close ${part} for ${this.user.id}:`, err);
 
-        // Each part closes its own databases. The second step only closes what is still open.
+        // Each part closes its own databases. The second step only closes what is still open. A settings save still
+        // being written lands first, or the next home would load the file without it.
         await Promise.all([
+            this.settings.settled(),
             this._drive?.destruct().catch(logFailure('drive')),
             this._contacts?.destruct().catch(logFailure('contacts')),
             this._mail?.destruct().catch(logFailure('mail')),
@@ -249,8 +256,8 @@ export abstract class Home {
         return opening as Promise<ManagedDatabase<S>>;
     }
 
-    // The one answer to work that comes too late, such as a hold or a new mount: the client retries
-    // and reaches the next home.
+    // The one answer to work that comes too late, such as a hold, a new mount or a settings save: the
+    // client retries and reaches the next home.
     public refuseIfClosing(): void {
         if (this._closing) throw new ApiError(503, 'Home is closing');
     }
