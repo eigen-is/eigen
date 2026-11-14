@@ -5,8 +5,6 @@
 import type { BunFile, S3File } from 'bun';
 import type { WriteData } from '../core';
 
-export type { S3Config } from '@workspace/lib/types';
-
 export type StorageFile = BunFile | S3File;
 
 // A file's bytes as a write takes them: held in memory, read from storage or streamed from a request.
@@ -23,8 +21,6 @@ export interface StorageBackend {
     exists(key: string): Promise<boolean>;
 
     size(key: string): Promise<number | null>;
-
-    getPath?(key: string): string;
 
     mkdir?(key: string): Promise<void>;
 

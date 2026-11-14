@@ -9,7 +9,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
 import { CONTAINER_DATA_DB } from '../mount/container-dbs';
-import { closeInSlot, documentDbPath, withDocumentDb } from '../mount/document-db';
+import { closeInSlot, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -86,7 +86,7 @@ async function takeSnapshot(
     // The new copy stays out of the prune. Retention keeps the newest version of each hour, and a second
     // snapshot in the same hour would otherwise drop the first before the hour is over.
     const toPrune = selectSnapshotsToPrune(
-        (await mount.listFolder(versions.id)).filter((e) => e.id !== copy.id).map((e) => ({ id: e.id, name: e.name })),
+        (await mount.listFolder(versions.id)).filter((version) => version.id !== copy.id),
         policy,
     );
     for (const item of toPrune) await mount.deletePath(item.id);
@@ -131,22 +131,23 @@ async function snapshotDataDbToVersionLocal(
     const tempId = crypto.randomUUID();
     try {
         const tempPath = mount.getTempPath(tempId);
-        if (!(await stageManagedDbCopy(mount, dataDb.id, tempPath, order))) throw storageGone();
-        const { size, hash } = await hashFile(tempPath);
+        const staged = await stageManagedDbCopy(mount, dataDb.id, tempPath, order);
+        if (!staged) throw storageGone();
+        const { size, hash } = staged === 'local' ? await hashFile(tempPath) : staged;
         return await mount.createFileFromTemp(versionsId, snapshotName, dataDb.mimeType, size, hash, tempId);
     } finally {
         await mount.cleanupTemp(tempId);
     }
 }
 
-// Copies the current bytes of a container's managed database to destPath, and says where they came from. Only a
-// copy of the stored object shows that storage answers. Null: nothing is left to copy, and a version answers 410.
+// Copies the current bytes of a container's managed database to destPath. A copy of the stored object answers its size
+// and hash, and only that one shows that storage answers. Null: nothing is left to copy, and a version answers 410.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,
     destPath: string,
     order: CopyOrder,
-): Promise<'local' | 'stored' | null> {
+): Promise<'local' | { size: number; hash: string } | null> {
     // 'staged-first' never reads the crash temp. It runs inside a close that holds the slot and removes that temp.
     if (order === 'open-handle-first') {
         const staged = await withDocumentDb(mount, pathId, async (slot) => {
@@ -158,17 +159,15 @@ export async function stageManagedDbCopy(
             // and only the slot puts the two in order. Its newest bytes can be read only through SQLite.
             const row = await mount.getPath(pathId);
             if (!row) return false;
-            const file = documentDbPath(mount, pathId, await mount.getStorageKey(pathId));
-            if (!isViableRecoveryTemp(file, row.size ?? 0)) return false;
-            // On local-key with no -wal the stored file is whole, and the read below copies it as it is.
-            if (!mount.needsTempCopy && !fs.existsSync(`${file}-wal`)) return false;
+            const tempPath = mount.getTempPath(pathId);
+            if (!isViableRecoveryTemp(tempPath, row.size ?? 0)) return false;
             // Read-write: a readonly open of a WAL database with no -wal and no -shm fails. The close folds a -wal in.
-            const db = new Database(file, { readwrite: true, create: false });
+            const db = new Database(tempPath, { readwrite: true, create: false });
             db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
             try {
                 db.run('VACUUM INTO ?', [destPath]);
             } catch (error) {
-                throw new Error(`mount ${mount.id}: leftover database ${pathId} at ${file} cannot be copied`, {
+                throw new Error(`mount ${mount.id}: leftover database ${pathId} at ${tempPath} cannot be copied`, {
                     cause: error,
                 });
             } finally {
@@ -198,8 +197,7 @@ export async function stageManagedDbCopy(
         }
         // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and null here is terminal.
         try {
-            await writeTempWithHash(destPath, mount.storage.read(storageKey));
-            return 'stored';
+            return await writeTempWithHash(destPath, mount.storage.read(storageKey));
         } catch (error) {
             if (!isMissingObjectCause(error)) throw error;
             fs.rmSync(destPath, { force: true });
@@ -229,13 +227,6 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
                     fs.copyFileSync(sourcePath, staging);
                     mount.uploadQueue.enqueueStaged(storageKey, staging, true);
                 } else {
-                    // On local-key the object is the database file itself, and its old -wal would replay over the
-                    // new bytes. The main file stays until the write replaces it, so a failed write keeps it.
-                    if (!mount.needsTempCopy) {
-                        for (const file of [`${storageKey}-wal`, `${storageKey}-shm`]) {
-                            await mount.storage.delete(file);
-                        }
-                    }
                     await mount.storage.write(storageKey, Bun.file(sourcePath));
                 }
             });

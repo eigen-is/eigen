@@ -45,7 +45,7 @@ The manifest of a user's or a team's home records the level in `level`, and ever
 
 Each database copy is one committed state. The archive as a whole is not one instant: a mail that arrives during the backup may or may not be in it, and a file created after its mount's database copy is not. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
 
-The capture gives the event loop a turn between two files and every 2 MB inside a drive file, so the API keeps answering other requests during a backup. A few steps run in one go: one `VACUUM INTO`, so a large `mail.db` or `metadata.db` is the longest pause; the raw copy of a closed document's database; and one file outside the drives, such as a mail message. Outside the backup, a Drive copy holds the API for the length of its file ([ROADMAP.md](ROADMAP.md)).
+The capture gives the event loop a turn between two files and every 2 MB inside every file ([STORAGE.md](STORAGE.md#every-storage-read-has-a-30-s-idle-deadline)), so the API keeps answering other requests during a backup. Two steps run in one go: one `VACUUM INTO`, of a home database or of an open or crashed document, so a large `mail.db` or `metadata.db` is the longest pause; and on `s3` the copy of a document's staged upload.
 
 ## Rows come from the database copy, bytes from the live mount
 

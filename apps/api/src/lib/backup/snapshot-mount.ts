@@ -101,7 +101,7 @@ export async function snapshotMountData(
         const container = managedDbContainer(row, byId);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
-            // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
+            // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. Null is
             // no bytes anywhere. A gone row is never read.
             const source = await mount
                 .withPathLock(container.id, async () =>
@@ -119,7 +119,7 @@ export async function snapshotMountData(
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
                 held.add(row.id);
-                if (source === 'stored') stored++;
+                if (source !== 'local') stored++;
                 databases++;
             } else {
                 const live = await mount.getPath(row.id);
@@ -143,7 +143,7 @@ export async function snapshotMountData(
                     if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                     return null;
                 }
-                const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
+                const copy = captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
                     if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
                     fs.rmSync(destPath, { force: true });
                     return null;

@@ -16,9 +16,8 @@ import {
 } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
-// Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
-// STALE storage key after move/rename/trash/delete on the `local` backend (keys are the hierarchical
-// path there; s3/local-key are id-stable and immune). Each `local` test below FAILS before the fix.
+// A cached document DB must sync to its current storage key after a move, rename, trash or delete. On the
+// `local` backend a key is the hierarchical path, so it changes; s3 and local-key keys are id-stable.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-mutation-sync-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -214,7 +213,7 @@ describe('id-stable backends are unaffected by the fix', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.updatePath(containerId, { parentId: dstId }); // no storage move for local-key
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
-        await mount.closeDatabase(dataDbId); // TRUNCATE checkpoint folds the WAL into the backing file
+        await mount.closeDatabase(dataDbId); // the close writes the working copy back
 
         // Backing file lives under the flat id-stable UUID key, untouched by the move.
         expect(await countStoredRows(mount, dataDbId)).toBe(2);

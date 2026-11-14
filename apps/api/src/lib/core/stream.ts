@@ -1,27 +1,20 @@
+// The one loop that reads a stream chunk by chunk, such as a request body or a storage read, and the event
+// loop turn it gives every 2 MiB, so a large local file never holds the API while it is read. A storage
+// read runs it with an idle deadline; a request body or a local file runs it without one. Other long
+// loops, such as a backup's walk over a drive, take the same turn between steps.
+
 import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
 
-// The empty second immediate keeps the loop awake: inside `expect().rejects`, which waits on its promise
-// synchronously, Bun otherwise sleeps until the next timer before it runs what the first one resolved
-// (oven-sh/bun#46558).
-export function eventLoopTurn(): Promise<void> {
-    return new Promise((resolve) =>
-        setImmediate(() => {
-            resolve();
-            setImmediate(() => {});
-        }),
-    );
-}
-
-// The one stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With
-// idleMs it is a storage read: silence for idleMs, an aborted signal or a failed read cancels it and answers 503.
+// Answers the total, and a 413 past maxBytes. With idleMs it is a storage read: silence for idleMs, an aborted
+// signal or a failed read cancels it and answers 503.
 export async function consumeStream(
     stream: ReadableStream<Uint8Array>,
     onChunk: (chunk: Uint8Array) => void,
-    opts: { idleMs?: number; maxBytes?: number; signal?: AbortSignal; yields?: boolean } = {},
+    opts: { idleMs?: number; maxBytes?: number; signal?: AbortSignal } = {},
 ): Promise<number> {
-    const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal, yields = false } = opts;
+    const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal } = opts;
     let reader: ReadableStreamDefaultReader<Uint8Array>;
     try {
         reader = stream.getReader();
@@ -41,7 +34,6 @@ export async function consumeStream(
     let size = 0;
     let unyielded = 0;
     try {
-        // Opt-in: a warm local read never leaves the microtasks, which is all that keeps an unlocked reader whole.
         while (true) {
             timer?.refresh();
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
@@ -56,7 +48,7 @@ export async function consumeStream(
             if (size > maxBytes) throw payloadTooLarge();
             onChunk(value);
             unyielded += value.byteLength;
-            if (yields && unyielded >= YIELD_EVERY_BYTES) {
+            if (unyielded >= YIELD_EVERY_BYTES) {
                 unyielded = 0;
                 await eventLoopTurn();
             }
@@ -68,4 +60,8 @@ export async function consumeStream(
         clearTimeout(timer);
         signal?.removeEventListener('abort', stop);
     }
+}
+
+export function eventLoopTurn(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
 }

@@ -196,7 +196,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         expect(newKey).not.toBe(oldKey);
         expect(await storage.read(newKey).text()).toBe('v1');
         expect(await storage.exists(oldKey)).toBe(false);
-        expect(existsSync(storage.getPath('before'))).toBe(false);
+        expect(existsSync(join(mount.dataDir, 'before'))).toBe(false);
         expect(storage.order).toEqual(['write', 'rename']);
     });
 
@@ -215,7 +215,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         expect(newKey).not.toBe(oldKey);
         expect(await storage.read(newKey).text()).toBe('v1');
         expect(await storage.exists(oldKey)).toBe(false);
-        expect(existsSync(storage.getPath('before'))).toBe(false);
+        expect(existsSync(join(mount.dataDir, 'before'))).toBe(false);
         expect(storage.order).toEqual(['write', 'rename']);
         expect(await mount.getPath(fileId)).toMatchObject({ size: 2, hash: sha256('v1') });
     });
@@ -257,7 +257,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         const key = await mount.getStorageKey(createdId);
         expect(key.startsWith('after/')).toBe(true);
         expect(await storage.read(key).text()).toBe('v1');
-        expect(existsSync(storage.getPath('before'))).toBe(false);
+        expect(existsSync(join(mount.dataDir, 'before'))).toBe(false);
         expect(storage.order).toEqual(['write', 'rename']);
     });
 
@@ -277,10 +277,10 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
         gate.release();
         await Promise.all([sync, move]);
 
-        const dataDbPath = storage.getPath(await mount.getStorageKey(dataDbId));
+        const dataDbPath = join(mount.dataDir, await mount.getStorageKey(dataDbId));
         expect(existsSync(dataDbPath)).toBe(true);
-        expect(dataDbPath.startsWith(`${storage.getPath('after')}/`)).toBe(true);
-        expect(existsSync(storage.getPath('before'))).toBe(false);
+        expect(dataDbPath.startsWith(`${join(mount.dataDir, 'after')}/`)).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'before'))).toBe(false);
         expect(storage.order).toEqual(['write', 'rename']);
         await mount.closeDatabase(dataDbId);
     });
@@ -451,7 +451,7 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
     // The second delete passes its row check, then queues behind the first and an exclusive holder,
     // so it reaches the lock only once the row is gone.
     test.each(['file', 'folder'] as const)('two deletes of one %s both resolve', async (type) => {
-        const { mount, storage, folderId, fileId } = await fileInFolder(`delete-twice-${type}`);
+        const { mount, folderId, fileId } = await fileInFolder(`delete-twice-${type}`);
         const pathId = type === 'file' ? fileId : folderId;
         const key = await mount.getStorageKey(pathId);
         const hold = Promise.withResolvers<void>();
@@ -467,6 +467,6 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         await Promise.all([held, first, between, second]);
 
         expect(await mount.getPath(pathId)).toBeNull();
-        expect(existsSync(storage.getPath(key))).toBe(false);
+        expect(existsSync(join(mount.dataDir, key))).toBe(false);
     });
 });

@@ -14,24 +14,15 @@ afterAll(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
-async function turnsDuringCopy(yields?: boolean): Promise<number> {
-    const turns = countLoopTurns();
-    try {
-        const { size } = await writeTempWithHash(join(dir, crypto.randomUUID()), Bun.file(source), { yields });
-        expect(size).toBe(SIZE);
-    } finally {
-        turns.stop();
-    }
-    return turns.read();
-}
-
 describe('consumeStream', () => {
-    test('a reader that passes yields gives the event loop a turn every 2 MB of a local file', async () => {
-        expect(await turnsDuringCopy(true)).toBeGreaterThanOrEqual(3);
-    });
-
-    // A byte copy of a local-key document's database relies on this to keep a SQLite checkpoint out.
-    test('any other reader copies a warm local file in one step', async () => {
-        expect(await turnsDuringCopy()).toBe(0);
+    test('a copy of a local file gives the event loop a turn every 2 MB', async () => {
+        const turns = countLoopTurns();
+        try {
+            const { size } = await writeTempWithHash(join(dir, crypto.randomUUID()), Bun.file(source));
+            expect(size).toBe(SIZE);
+        } finally {
+            turns.stop();
+        }
+        expect(turns.read()).toBeGreaterThanOrEqual(3);
     });
 });

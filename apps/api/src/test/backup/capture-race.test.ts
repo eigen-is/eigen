@@ -575,16 +575,14 @@ describe('a capture of a local mount shares the event loop', () => {
         const turns = countLoopTurns();
         let turnsDuringBig = 0;
         const captureFile = captureModule.captureFile;
-        const capture = spyOn(captureModule, 'captureFile').mockImplementation(
-            async (bytes, destPath, relPath, yields) => {
-                const before = turns.read();
-                try {
-                    return await captureFile(bytes, destPath, relPath, yields);
-                } finally {
-                    if (relPath.endsWith('/big.bin')) turnsDuringBig = turns.read() - before;
-                }
-            },
-        );
+        const capture = spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath) => {
+            const before = turns.read();
+            try {
+                return await captureFile(bytes, destPath, relPath);
+            } finally {
+                if (relPath.endsWith('/big.bin')) turnsDuringBig = turns.read() - before;
+            }
+        });
         const samples: number[] = [];
         const readKey = Mount.prototype.readKey;
         const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {

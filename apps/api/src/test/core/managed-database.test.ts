@@ -36,9 +36,8 @@ afterAll(() => {
 
 describe('ManagedDatabase open-vs-create intent', () => {
     test('mustExist refuses to create a missing database instead of silently making an empty one', async () => {
-        // An "open existing" must honor the caller's knowledge (from metadata.db) that the db
-        // exists. Opening an absent working copy with create:true silently produced an empty db —
-        // the 2026-06-08 data-loss shape. With mustExist, a missing file throws instead of creating.
+        // The caller knows from metadata.db that the db exists, so a missing file throws instead of
+        // opening as a new empty database.
         const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {}, true);
         await expect(db.open(0)).rejects.toThrow();
     });
@@ -197,9 +196,7 @@ describe('ManagedDatabase snapshot lifecycle', () => {
     });
 
     test('close() awaits the final snapshot instead of firing and forgetting it', async () => {
-        // Regression: close() fired onSnapshot fire-and-forget, then immediately
-        // checkpoint(TRUNCATE)'d and deleted the journals — the async snapshot
-        // copy raced the file teardown.
+        // A snapshot left running would copy the file while the close tears it down.
         let snapshotFinished = false;
         const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
             onSync: async () => {},
@@ -237,9 +234,8 @@ describe('ManagedDatabase snapshot lifecycle', () => {
 
 describe('ManagedDatabase lifecycle serialization', () => {
     test('a parked tick makes flush and close queue instead of running a second onSync', async () => {
-        // Regression: ticks were fire-and-forget, flush() called sync() directly and close() only
-        // cleared the timer — so two onSync callbacks could stage the same db at once, and close
-        // could tear the db down with one still in flight.
+        // Two onSync callbacks must never stage the same db at once, and a close must not tear the db
+        // down with one still in flight.
         let active = 0;
         let overlapped = false;
         let release!: () => void;
@@ -379,7 +375,7 @@ describe('ManagedDatabase statement finalization', () => {
 
 describe('ManagedDatabase close releases the file (no zombie close)', () => {
     test('close → reopen of the SAME path works', async () => {
-        // Every local-key reopen takes exactly this path, so close() must be strict (statements
+        // Every working copy reopens at the same temp path, so close() must be strict (statements
         // finalized, see above) and release the file before the next open.
         const dbPath = nextDbPath();
         const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
@@ -531,9 +527,8 @@ describe('ManagedDatabase leaves its journals to SQLite', () => {
     });
 
     test("a close while another process holds the file keeps that process's writes", async () => {
-        // Unlinking the journals by hand after close left a second connection writing into a WAL
-        // nobody else could see: its writes vanished for the next opener and its later checkpoint
-        // corrupted the file (the 2026-09-22 metadata.db).
+        // Journals unlinked by hand would leave the second connection writing into a WAL nobody else
+        // sees: its writes vanish for the next opener and its later checkpoint corrupts the file.
         const dbPath = nextDbPath();
         const first = new ManagedDatabase(makeConfig(1000), dbPath);
         await first.open(0);

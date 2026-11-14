@@ -12,6 +12,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { PATHS } from '../config/paths';
 import { ApiError } from '../core/errors';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
+import { eventLoopTurn } from '../core/stream';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
@@ -108,7 +109,7 @@ export async function materializeMount(
         // per file.
         const files = rows.filter((row) => row.type === 'file');
         for (let start = 0; start < files.length; start += FILES_PER_BATCH) {
-            if (start > 0) await new Promise(setImmediate);
+            if (start > 0) await eventLoopTurn();
             db.transaction(() => {
                 for (const row of files.slice(start, start + FILES_PER_BATCH)) placeFile(row);
             })();
@@ -134,7 +135,7 @@ export function homeDatabasesIn(homeDir: string, mountIds: readonly string[]): V
 // It opens the files directly, since a safety copy is no home and a rollback runs outside the API.
 export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
     for (const [index, { filePath, config }] of targets.entries()) {
-        if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
+        if (index > 0 && index % DATABASES_PER_YIELD === 0) await eventLoopTurn();
         if (!fs.existsSync(filePath)) continue;
         // One open for both reads, so a writer is waited out once.
         const verdict = readToJudge(filePath, (db) => {

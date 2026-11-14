@@ -155,7 +155,7 @@ describe('Collab WS open under unreachable storage', () => {
     test('a gone object with a viable crash temp opens from the temp', async () => {
         const { docId, dataDbId, dataKey } = await createDoc('CrashTempWins');
         await seedStoredDoc(docId);
-        await mount.downloadKeyToTemp(dataKey, dataDbId);
+        await mount.downloadToTemp(dataDbId, dataDbId);
         await fakeS3.store.delete(dataKey);
 
         const reopened = await drive.getCollabDocument(MOUNT_ID, docId);

@@ -70,6 +70,7 @@ import {
     firstMountId,
     getTestContext,
     openMountMetadata,
+    rejectionOf,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
@@ -618,9 +619,8 @@ describe('Backup restoreHome', () => {
         const before = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
         markHomeRestoring(target.id);
         try {
-            await expect(restoreHome(artifact, target.id, `restore-second-${Date.now()}`)).rejects.toThrow(
-                'Restore already in progress',
-            );
+            const error = await rejectionOf(restoreHome(artifact, target.id, `restore-second-${Date.now()}`));
+            expect(error.message).toContain('Restore already in progress');
         } finally {
             clearHomeRestoring(target.id);
         }
@@ -686,9 +686,8 @@ describe('Backup restoreHome', () => {
 
     test('an artifact for another owner is refused before anything is touched', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        await expect(restoreHome(artifact, ctx.bob.user.id, `restore-mismatch-${Date.now()}`)).rejects.toThrow(
-            /another home|not for/i,
-        );
+        const error = await rejectionOf(restoreHome(artifact, ctx.bob.user.id, `restore-mismatch-${Date.now()}`));
+        expect(error.message).toMatch(/another home|not for/i);
         expect(safetyCopies(ctx.bob.user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
@@ -696,14 +695,14 @@ describe('Backup restoreHome', () => {
     test('a name that is no archive, or an archive that is not there, is refused before anything is touched', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const copies = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
-        await expect(
-            restoreHome('not-an-archive.tar.zst', target.id, `restore-badname-${Date.now()}`),
-        ).rejects.toMatchObject({
+        expect(
+            await rejectionOf(restoreHome('not-an-archive.tar.zst', target.id, `restore-badname-${Date.now()}`)),
+        ).toMatchObject({
             status: 400,
             message: 'Not a backup artifact name',
         });
         const missing = freeArtifactName(target.id, new Date(Date.UTC(2001, 0, 1)));
-        await expect(restoreHome(missing, target.id, `restore-missing-${Date.now()}`)).rejects.toMatchObject({
+        expect(await rejectionOf(restoreHome(missing, target.id, `restore-missing-${Date.now()}`))).toMatchObject({
             status: 404,
             message: 'Artifact not found',
         });
@@ -737,7 +736,8 @@ describe('Backup restoreHome', () => {
         });
         const before = await untakenState(target.id);
 
-        await expect(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`)).rejects.toThrow(/ghost-mount/);
+        const error = await rejectionOf(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`));
+        expect(error.message).toMatch(/ghost-mount/);
 
         await expectNotTaken(target.id, before);
         rmSync(join(getBackupsDir(), doctored), { force: true });
@@ -749,9 +749,8 @@ describe('Backup restoreHome', () => {
             throw new ApiError(500, 'failed by the test');
         });
         try {
-            await expect(restoreHome(artifact, target.id, `restore-materialize-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
+            const error = await rejectionOf(restoreHome(artifact, target.id, `restore-materialize-${Date.now()}`));
+            expect(error.message).toContain('failed by the test');
         } finally {
             spy.mockRestore();
         }
@@ -767,9 +766,8 @@ describe('Backup restoreHome', () => {
             throw new ApiError(500, 'failed by the test');
         });
         try {
-            await expect(restoreHome(artifact, target.id, `restore-rollback-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
+            const error = await rejectionOf(restoreHome(artifact, target.id, `restore-rollback-${Date.now()}`));
+            expect(error.message).toContain('failed by the test');
         } finally {
             spy.mockRestore();
         }
@@ -793,9 +791,8 @@ describe('Backup restoreHome', () => {
             rename(from, to);
         });
         try {
-            await expect(restoreHome(artifact, target.id, `restore-install-${Date.now()}`)).rejects.toThrow(
-                'install failed',
-            );
+            const error = await rejectionOf(restoreHome(artifact, target.id, `restore-install-${Date.now()}`));
+            expect(error.message).toContain('install failed');
         } finally {
             spy.mockRestore();
         }
@@ -812,9 +809,8 @@ describe('Backup restoreHome', () => {
             throw new Error('failed by the test');
         });
         try {
-            await expect(restoreHome(artifact, target.id, `restore-note-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
+            const error = await rejectionOf(restoreHome(artifact, target.id, `restore-note-${Date.now()}`));
+            expect(error.message).toContain('failed by the test');
         } finally {
             spy.mockRestore();
         }
@@ -942,9 +938,8 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         );
         const before = await untakenState(user.id);
 
-        await expect(restoreHome(artifact, user.id, `restore-newer-${Date.now()}`)).rejects.toThrow(
-            /newer than this server/,
-        );
+        const error = await rejectionOf(restoreHome(artifact, user.id, `restore-newer-${Date.now()}`));
+        expect(error.message).toMatch(/newer than this server/);
 
         await expectNotTaken(user.id, before);
         expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(names);
@@ -966,9 +961,8 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         });
         const before = await untakenState(user.id);
 
-        await expect(restoreHome(artifact, user.id, `restore-newer-doc-${Date.now()}`)).rejects.toThrow(
-            /at collab schema v999, newer than this server/,
-        );
+        const error = await rejectionOf(restoreHome(artifact, user.id, `restore-newer-doc-${Date.now()}`));
+        expect(error.message).toMatch(/at collab schema v999, newer than this server/);
 
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
@@ -986,9 +980,8 @@ describe('Backup restore refuses an archive this server cannot open', () => {
                 .status,
         ).toBe(200);
 
-        await expect(restoreHome(artifact, doomed.id, `restore-deleted-newer-${Date.now()}`)).rejects.toThrow(
-            /newer than this server/,
-        );
+        const error = await rejectionOf(restoreHome(artifact, doomed.id, `restore-deleted-newer-${Date.now()}`));
+        expect(error.message).toMatch(/newer than this server/);
 
         // The rollback moves folders; nothing takes a users3.db row back. So the check has to run
         // before the identity write, or this user could sign in with no home — and never be restored,
@@ -1010,9 +1003,8 @@ describe('Backup restore refuses an archive this server cannot open', () => {
                 .status,
         ).toBe(200);
 
-        await expect(restoreHome(artifact, doomed.id, `restore-deleted-shares-${Date.now()}`)).rejects.toThrow(
-            /shares\.json is not a set of share-registry rows/,
-        );
+        const error = await rejectionOf(restoreHome(artifact, doomed.id, `restore-deleted-shares-${Date.now()}`));
+        expect(error.message).toMatch(/shares\.json is not a set of share-registry rows/);
 
         // Judged with the archive, before the home goes aside: no row goes in, and no folder is left half written.
         expect(getAuthDrizzleDb().select().from(userScheme).where(eq(userScheme.id, doomed.id)).all()).toEqual([]);
@@ -1161,7 +1153,7 @@ describe('Backup restore when an auth row cannot be re-inserted', () => {
             })
             .run();
 
-        await expect(restoreHome(artifact, user.id, `restore-clash-${Date.now()}`)).rejects.toThrow();
+        await rejectionOf(restoreHome(artifact, user.id, `restore-clash-${Date.now()}`));
 
         expect(authDb.select().from(userScheme).where(eq(userScheme.id, user.id)).all()).toEqual([]);
         authDb.delete(apikeyScheme).where(eq(apikeyScheme.id, apiKeyId)).run();
@@ -1213,9 +1205,8 @@ describe('Backup restore when a share row cannot be written', () => {
 
         const spy = spyOn(registryModule, 'addRegistryEntry').mockRejectedValue(new Error('failed by the test'));
         try {
-            await expect(restoreHome(artifact, user.id, `restore-sharefail-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
-            );
+            const error = await rejectionOf(restoreHome(artifact, user.id, `restore-sharefail-${Date.now()}`));
+            expect(error.message).toContain('failed by the test');
         } finally {
             spy.mockRestore();
         }
@@ -1357,7 +1348,8 @@ describe('Backup restore over a live user', () => {
         const home = await getHome(user.id);
         const epoch = getDataEpoch(user.id);
 
-        await expect(restoreHome(artifact, user.id, `restore-email-${Date.now()}`)).rejects.toThrow(
+        const error = await rejectionOf(restoreHome(artifact, user.id, `restore-email-${Date.now()}`));
+        expect(error.message).toMatch(
             /is now someone-else@test.eigen.is; the archive holds restore-email@test.eigen.is/,
         );
 
@@ -1672,9 +1664,8 @@ describe('Backup restore refuses a member that is not a complete home', () => {
             const epoch = getDataEpoch(user.id);
             const artifact = await backup(user.id, new Date(Date.now() + 120_000), undefined, 'full');
 
-            await expect(restoreHome(artifact, user.id, `restore-metadata-${Date.now()}`)).rejects.toThrow(
-                `${artifact} holds only the metadata of mount ${S3_MOUNT_ID}`,
-            );
+            const error = await rejectionOf(restoreHome(artifact, user.id, `restore-metadata-${Date.now()}`));
+            expect(error.message).toContain(`${artifact} holds only the metadata of mount ${S3_MOUNT_ID}`);
 
             await expectUntouched(home, before, epoch);
             rmSync(join(getBackupsDir(), artifact), { force: true });
@@ -1785,9 +1776,8 @@ describe('Backup restore of one home judges, then takes the home', () => {
             throw new ApiError(400, 'refused by the test');
         });
         try {
-            await expect(restoreHome(artifact, user.id, `restore-judged-${Date.now()}`)).rejects.toThrow(
-                'refused by the test',
-            );
+            const error = await rejectionOf(restoreHome(artifact, user.id, `restore-judged-${Date.now()}`));
+            expect(error.message).toContain('refused by the test');
         } finally {
             spy.mockRestore();
         }
@@ -1816,9 +1806,8 @@ describe('Backup restore of one home judges, then takes the home', () => {
             throw new Error('failed by the test');
         });
         try {
-            await expect(restoreHome(artifact, user.id, `restore-redate-${Date.now()}`)).rejects.toThrow(
-                `the trash of ${user.id}'s home cannot be dated: failed by the test`,
-            );
+            const error = await rejectionOf(restoreHome(artifact, user.id, `restore-redate-${Date.now()}`));
+            expect(error.message).toContain(`the trash of ${user.id}'s home cannot be dated: failed by the test`);
         } finally {
             spy.mockRestore();
         }
@@ -1887,7 +1876,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
         const jobId = `restore-room-${Date.now()}`;
         const homeDir = join(getDataRoot(), 'home', user.id);
         try {
-            await expect(restoreHome(artifact, user.id, jobId)).rejects.toMatchObject({ status: 507 });
+            expect(await rejectionOf(restoreHome(artifact, user.id, jobId))).toMatchObject({ status: 507 });
         } finally {
             roomSpy.mockRestore();
         }
@@ -1963,9 +1952,8 @@ describe('Backup restore of one home judges, then takes the home', () => {
         }
         const before = await untakenState(user.id);
 
-        await expect(restoreSafetyCopy(user.id, copy, `restore-copy-newer-${Date.now()}`)).rejects.toThrow(
-            /metadata schema v999, newer than this server/,
-        );
+        const error = await rejectionOf(restoreSafetyCopy(user.id, copy, `restore-copy-newer-${Date.now()}`));
+        expect(error.message).toMatch(/metadata schema v999, newer than this server/);
 
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });

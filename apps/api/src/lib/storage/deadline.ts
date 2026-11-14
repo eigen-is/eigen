@@ -100,7 +100,7 @@ export function storageRead<T>(op: string, key: string, read: () => Promise<T>):
 export function streamStorageFile(
     file: StorageFile,
     onChunk: (chunk: Uint8Array) => void,
-    opts: { maxBytes?: number; signal?: AbortSignal; yields?: boolean } = {},
+    opts: { maxBytes?: number; signal?: AbortSignal } = {},
 ): Promise<number> {
     let started = false;
     const read = () =>
@@ -130,7 +130,7 @@ export async function readStorageFile(
 export async function writeTempWithHash(
     tempPath: string,
     data: FileBytes,
-    opts: { signal?: AbortSignal; yields?: boolean } = {},
+    opts: { signal?: AbortSignal } = {},
 ): Promise<{ size: number; hash: string }> {
     const hasher = new Bun.CryptoHasher('sha256');
 
@@ -165,6 +165,6 @@ export async function writeTempWithHash(
 export async function hashFile(filePath: string): Promise<{ size: number; hash: string }> {
     await eventLoopTurn();
     const hasher = new Bun.CryptoHasher('sha256');
-    const size = await consumeStream(Bun.file(filePath).stream(), (chunk) => hasher.update(chunk), { yields: true });
+    const size = await consumeStream(Bun.file(filePath).stream(), (chunk) => hasher.update(chunk));
     return { size, hash: hasher.digest('hex') };
 }

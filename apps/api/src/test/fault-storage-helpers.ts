@@ -20,8 +20,7 @@ import { FakeS3Server } from './fake-s3-server';
 
 // Shared storage double for the resilience suites (upload queue, mutation sync, create/open paths):
 // a StorageBackend over a real LocalStorage whose writes can fail, be delayed, hang or be parked,
-// whose exists() probes can fail, and whose reads can fail for chosen keys. Omits getPath so a mount
-// treats it like S3 (temp-copy path), not a path-based local store.
+// whose exists() probes can fail, and whose reads can fail for chosen keys.
 
 export type ParkedWrite = {
     key: string;

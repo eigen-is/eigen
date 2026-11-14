@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { sql } from 'drizzle-orm';
@@ -317,7 +318,7 @@ describe('versions HTTP routes', () => {
         const mount = (drive as unknown as { getMount(id: string): Mount }).getMount(aliceMountId);
         const versionsFolder = await mount.getChildByName(sheetsPath.id, 'versions');
         const versionFile = await mount.getChildByName(versionsFolder!.id, saved.name);
-        const versionLocalPath = mount.storage.getPath!(await mount.getStorageKey(versionFile!.id));
+        const versionLocalPath = join(mount.dataDir, await mount.getStorageKey(versionFile!.id));
         const rawDb = new Database(versionLocalPath);
         try {
             rawDb.run(`UPDATE doc_updates SET updateData = X'DEADBEEF'`);

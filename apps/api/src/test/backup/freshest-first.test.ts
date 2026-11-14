@@ -26,7 +26,7 @@ import {
     unregisterFaultMount,
 } from '../fault-storage-helpers';
 import { seedFile } from '../mount-test-helpers';
-import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
+import { createTestUser, findOrFail, getTestContext, rejectionOf, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
 // The remote half of snapshotHome: an `s3` mount is materialized into the archive's data/ tree by
@@ -301,11 +301,13 @@ describe('Backup freshest-first on an s3 mount', () => {
             const storageKey = await mount.getStorageKey(fileId);
             // The HEAD fails, then only the GET: each keeps the code the provider answered with.
             fake.faults.set(storageKey, 'fail');
-            await expect(snapshotInto(home)).rejects.toThrow(
+            const headError = await rejectionOf(snapshotInto(home));
+            expect(headError.message).toContain(
                 `mount ${FAILING_MOUNT_ID}: storage unreachable (UnknownError) reading ${storageKey}`,
             );
             fake.faults.set(storageKey, 'fail-get');
-            await expect(snapshotInto(home)).rejects.toThrow(
+            const getError = await rejectionOf(snapshotInto(home));
+            expect(getError.message).toContain(
                 `mount ${FAILING_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
             );
         });
@@ -322,7 +324,8 @@ describe('Backup freshest-first on an s3 mount', () => {
             await settleContainer(mount, containerId);
             const storageKey = await mount.getStorageKey(dataDbId);
             fake.faults.set(storageKey, 'fail-get');
-            await expect(snapshotInto(home)).rejects.toThrow(
+            const error = await rejectionOf(snapshotInto(home));
+            expect(error.message).toContain(
                 `mount ${FAILING_CONTAINER_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
             );
         });
@@ -337,7 +340,8 @@ describe('Backup freshest-first on an s3 mount', () => {
             await settleContainer(mount, containerId);
             const storageKey = await mount.getStorageKey(dataDbId);
             fake.faults.set(storageKey, 'no-bucket');
-            await expect(snapshotInto(home)).rejects.toThrow(
+            const error = await rejectionOf(snapshotInto(home));
+            expect(error.message).toContain(
                 `mount ${NO_BUCKET_MOUNT_ID}: storage unreachable (NoSuchBucket) reading ${storageKey}`,
             );
         });
@@ -366,7 +370,8 @@ describe('Backup freshest-first on an s3 mount', () => {
             await staleFault.waitForParked((p) => p.key === storageKey);
             chmodSync(stagingPath, 0);
             try {
-                await expect(snapshotInto(home)).rejects.toThrow('EACCES: permission denied');
+                const error = await rejectionOf(snapshotInto(home));
+                expect(error.message).toContain('EACCES: permission denied');
             } finally {
                 chmodSync(stagingPath, 0o644);
             }
@@ -410,7 +415,8 @@ describe('Backup freshest-first on an s3 mount', () => {
                 );
                 fake.faults.set(await mount.getStorageKey(fileId), 'no-bucket');
             }
-            await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_PLAIN_MOUNT_ID}: storage unreachable`);
+            const error = await rejectionOf(snapshotInto(home));
+            expect(error.message).toContain(`mount ${NO_BUCKET_PLAIN_MOUNT_ID}: storage unreachable`);
         });
     });
 
@@ -435,7 +441,8 @@ describe('Backup freshest-first on an s3 mount', () => {
             await Bun.write(stagingPath, TEST_PNG_BYTES);
             mount.uploadQueue!.enqueueStaged(fileKey, stagingPath, false);
             for (const key of [docKey, fileKey]) expect(mount.pendingStagedCopy(key)).not.toBeNull();
-            await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_STAGED_MOUNT_ID}: storage unreachable`);
+            const error = await rejectionOf(snapshotInto(home));
+            expect(error.message).toContain(`mount ${NO_BUCKET_STAGED_MOUNT_ID}: storage unreachable`);
         });
     });
 
@@ -523,9 +530,10 @@ describe('Backup freshest-first on an s3 mount', () => {
                 TEST_PNG_BYTES,
             );
             const storageKey = await mount.getStorageKey(fileId);
-            await expect(
+            const error = await rejectionOf(
                 snapshotWithObjectGoneAfterHead(mount, fileId, () => fake.store.delete(storageKey)),
-            ).rejects.toThrow(
+            );
+            expect(error.message).toContain(
                 `mount ${VANISHING_OBJECT_MOUNT_ID}: storage unreachable (NoSuchKey) reading ${storageKey}`,
             );
         });

@@ -28,13 +28,13 @@ Only container databases and the plain files a per-home restore stages go throug
 
 ## Only `s3` mounts queue
 
-A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`. A `local-key` document opens its stored file in place, so what a crash leaves is that file and its `-wal`, which the next open replays and a read of a closed document folds in first (`stageManagedDbCopy`).
+A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to all three backends, since each opens a container database on a working copy in `tmp/` ([DATABASE.md](DATABASE.md#databases-come-in-three-kinds)).
 
 ## Code comments cite seven numbered invariants
 
 Comments and tests name these by number ("invariant 7").
 
-1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key` the live file is the object, and the size comes from it.
+1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too, so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key`, which have no queue, the sync writes the working copy itself to storage, and the size comes from that working copy. Only a sync writes the size: a close whose final sync failed leaves the row on the size of the stored object.
 2. Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches. A staged copy lives until its PUT acks.
 3. Local bytes count as synced only on ack. `ManagedDatabase` moves its dirty watermark once the copy is staged and its row written. The row is the durable marker, and only an ack clears it.
 4. At most one pending upload per storage key, and the newest staged copy wins (a primary-key upsert on `pending_uploads`). The superseded copy is deleted unless it is mid-PUT, in which case the worker deletes it afterwards.
@@ -60,7 +60,7 @@ The mount's startup sweep removes `tmp/` files older than an hour, but never one
 
 **Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a document that answers errors, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
 
-- `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it discards the temp through `Mount.cleanupTemp`, journals included, and re-fetches. A `-wal` left beside the re-fetched file would be replayed into it.
+- `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it re-fetches through `downloadToTemp`, which first removes the temp, journals included (`Mount.cleanupTemp`). A `-wal` left beside the re-fetched file would be replayed into it.
 - A temp with a valid header and a corrupt body passes that check and is adopted: the open throws, the stored object stays good, and the temp stays, so that document keeps answering errors until someone removes the temp. Only a disk fault or a power loss writes one.
 - An open (`Mount.holdDatabase`, `withDatabase`) and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
 - A download or a staged-copy recovery writes a `tmp/<uuid>` side file and renames it onto the working-copy path (`replaceTempFrom`). A process killed mid-GET leaves no partial temp for the next open to adopt.
@@ -69,7 +69,7 @@ Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-obj
 
 ## Reads serve the staged copy first
 
-A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey` and `readRange` (`apps/api/src/lib/mount/mount.ts`) and `downloadToTemp` (`apps/api/src/lib/mount/temp-files.ts`). `downloadKeyToTemp` is the raw GET that skips it, and both its callers look at the staged copy before they call it: `downloadToTemp`, and a document open, which looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
+A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey` and `readRange` (`apps/api/src/lib/mount/mount.ts`) and `downloadToTemp` (`apps/api/src/lib/mount/temp-files.ts`). A document open looks at the crash temp first and then downloads through `downloadToTemp`. A staged copy that vanishes during the read usually had its PUT land, so `downloadToTemp` then reads the stored object. A cancel on delete or a dropped corrupt copy removes one too, and both leave the stored object as the copy to read. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
 
 ## Version snapshots are queued too
 
