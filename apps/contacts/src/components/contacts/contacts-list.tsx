@@ -29,7 +29,7 @@ type ContactsListToolbarProps = {
     onSearchChange: (query: string) => void;
     // Without it there is no sort toggle: a team member has one display name.
     onSortChange?: (sort: 'firstName' | 'lastName') => void;
-    // Without it there is no import or export menu: team members are no cards this book owns.
+    // Without it there is no import or export menu: team members are not cards this book owns.
     onImportClick?: () => void;
 };
 
@@ -129,7 +129,7 @@ export function ContactsList({
                 activeId={activeContactId}
                 getId={(c) => c.id}
                 getName={(c) => (sortBy === 'firstName' ? c.firstName : c.lastName)}
-                getSearchFields={(c) => [c.firstName, c.lastName, ...(c.email ?? [])]}
+                getSearchFields={(c) => [c.firstName, c.lastName, ...c.email]}
                 onRowClick={(id) => onRowClick?.(id)}
                 selectable
                 dragType="contact"
@@ -141,7 +141,7 @@ export function ContactsList({
                                 ? contactFullName(contact)
                                 : `${contact.lastName}, ${contact.firstName}`
                         }
-                        email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                        email={contact.email.length > 0 ? contact.email[0] : undefined}
                         imageUrl={contact.avatar}
                         className="flex-1"
                     />

@@ -28,7 +28,7 @@ type ColumnProps = {
     scrollToTopSignal?: number;
     highlighted?: boolean;
     highlightedCardIds?: ReadonlySet<string>;
-    // Remote presence by card id — the peer whose selection/drag is on that card, if any.
+    // The remote peer whose selection or drag is on each card.
     cardPresence?: ReadonlyMap<string, CardPeer>;
 };
 
@@ -61,15 +61,14 @@ export const Column = memo(function Column({
         contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }, [scrollToTopSignal]);
 
-    // Stable array identity — dnd-kit's SortableContext keys its context value on it, and a fresh
-    // array per render would re-render every useSortable card regardless of React.memo.
+    // dnd-kit's SortableContext keys its context value on this array, so a new one on every render would
+    // re-render every sortable card past React.memo.
     const cardIds = useMemo(() => cards.map((c) => c.id), [cards]);
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 
-    // Double-click on a column's empty space adds a card (same flow as the + button). Guarded to the
-    // background container itself (e.target === currentTarget) so a double-click on a card bubbling up
-    // never fires — the card keeps its own single-click-to-open behavior.
+    // A double-click on a card bubbles up to the column, so only one on the column's own background adds a card,
+    // as the + button does.
     const handleEmptyDoubleClick = (e: React.MouseEvent) => {
         if (canWrite && e.target === e.currentTarget) onAddCard(column.id);
     };

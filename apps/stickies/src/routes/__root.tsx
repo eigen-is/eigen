@@ -1,4 +1,4 @@
-// Stickies's root route. It hands EigenDocRoot the Stickies config and two things the URL knows: whether a board
+// Stickies' root route. It hands EigenDocRoot the Stickies config and two things the URL knows: whether a board
 // is open, which hides the sidebar so the editor fills the page, and which team drive is open, so New
 // creates there and not in the user's own drive.
 

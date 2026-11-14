@@ -26,7 +26,7 @@ import {
 const ROOT = path.join(import.meta.dir, '../..');
 const FONTS_DIR = path.join(ROOT, 'packages/ui/src/assets/fonts');
 const CSS_OUT = path.join(ROOT, 'packages/ui/src/styles/fonts.css');
-// The Chinese and Korean faces, which the website leaves out: 55 of the 62 KB the rules take gzipped.
+// The website leaves out the Chinese and Korean faces, so their rules get a file of their own.
 const CJK_CSS_OUT = path.join(ROOT, 'packages/ui/src/styles/fonts-cjk.css');
 const CJK_FAMILIES = new Set(FALLBACK_FONTS.filter((font) => font.kind === 'cjk').map((font) => font.family));
 const DATA_OUT = path.join(ROOT, 'packages/lib/src/constants/font-slice-data.gen.ts');

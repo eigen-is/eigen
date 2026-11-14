@@ -7,8 +7,8 @@ import type { WebsocketProvider } from 'y-websocket';
 import type { CursorPeerState } from '../../collab';
 import { useAwarenessIdentity, useThrottledAwarenessField } from '../../collab';
 
-// The canvas awareness shape: the shared cursor-layer fields plus the frame the peer is on. Engine-
-// private — frameId never enters the shared CursorPeerState.
+// The frame a peer is on matters only to the canvas, so it is added here and never enters the shared
+// CursorPeerState.
 export type CanvasPeerState = CursorPeerState & { frameId?: string };
 
 // A peer belongs to the frame they are on. A peer that has not published one reads as '', the same value

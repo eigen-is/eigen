@@ -8,7 +8,6 @@ import { useServerStatus } from '@workspace/lib/settings';
 import { SettingsSection } from '@workspace/ui/components/layout/app';
 import { Separator } from '@workspace/ui/components/separator';
 
-// What ./eigen status reports, read-only: the command line changes these, not this page.
 export function ServerStatusSection() {
     const { data: status } = useServerStatus();
 

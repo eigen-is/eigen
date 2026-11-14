@@ -22,7 +22,7 @@ const PACKAGES = [
 type Kind = 'Component' | 'Provider' | 'Schema' | 'Hook' | 'Cache' | 'Type' | 'Util';
 type Primitive = { name: string; kind: Kind; importPath: string; file: string };
 
-// Build the set of public entry files → the import path callers should use to reach them.
+// Maps each public entry file to the import path a caller should use to reach it.
 async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<string, string>> {
     const pkgJson = await Bun.file(join(ROOT, pkg.dir, 'package.json')).json();
     const exportsMap: Record<string, string | string[]> = pkgJson.exports ?? {};
@@ -42,11 +42,9 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
                 record(subpath, target);
                 continue;
             }
-            // Enumerate the file-wildcards: types, constants, hooks and components, shadcn's primitives among the
-            // loose components too. The glob is non-recursive, so named subdir barrels aren't duplicated. A `.gen.ts` file is
-            // generated data, and its hand-written sibling is the entry. The files are sorted, because two import
-            // paths of one length to a symbol keep the first one found. macOS and Linux list a directory in different
-            // orders.
+            // Only the folders of shared pieces count, and the glob skips subfolders so a subfolder barrel is not
+            // listed twice. The files are sorted because macOS and Linux list a folder in different orders, and of
+            // two import paths of one length the first found wins.
             if (!/(types|constants|hooks|components)/.test(subpath)) continue;
             const baseDir = join(ROOT, pkg.dir, dirname(target));
             const files = await Array.fromAsync(new Glob('*.{ts,tsx}').scan(baseDir));
@@ -59,8 +57,7 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
     return found;
 }
 
-// Simple callee name of a call expression: `createContext` from `createContext(...)`
-// or `React.createContext(...)`; `create` from `Node.create(...)` / `Mark.create(...)`.
+// A call through a namespace, such as `React.createContext(...)`, has the same callee name as a direct call.
 function calleeName(call: ts.CallExpression): string | undefined {
     const e = call.expression;
     if (ts.isIdentifier(e)) return e.text;
@@ -68,8 +65,8 @@ function calleeName(call: ts.CallExpression): string | undefined {
     return undefined;
 }
 
-// React class components (ErrorBoundary) extend Component/PureComponent; error and other
-// utility classes (AppError) don't — only the latter belong with the schemas/classes.
+// An error class such as AppError belongs with the schemas, so only a class that extends Component or PureComponent
+// counts as a component.
 function isReactComponentClass(decl: ts.Declaration): boolean {
     if (!ts.isClassDeclaration(decl)) return false;
     for (const clause of decl.heritageClauses ?? []) {
@@ -88,9 +85,8 @@ function classify(name: string, flags: SymbolFlags, decl: ts.Declaration): Kind 
     if (/^use[A-Z]/.test(name)) return 'Hook';
     if (/^invalidate|Keys$/.test(name)) return 'Cache';
     if (/Provider$/.test(name)) return 'Provider';
-    // Non-component classes (AppError), React contexts, and TipTap Node/Mark schemas are
-    // values but not components — name+flags alone can't tell them apart, so inspect the
-    // declaration; React class components (ErrorBoundary) still classify as Component.
+    // A name and its flags can't tell a context, a TipTap schema or an error class from a component, so the
+    // declaration decides.
     if (flags & SymbolFlags.Class) return isReactComponentClass(decl) ? 'Component' : 'Schema';
     if (ts.isVariableDeclaration(decl) && decl.initializer) {
         let init = decl.initializer;
@@ -98,10 +94,10 @@ function classify(name: string, flags: SymbolFlags, decl: ts.Declaration): Kind 
             return 'Schema';
         }
         if (ts.isAsExpression(init)) init = init.expression;
-        // PascalCase `const X = { … } (as const)` is an enum-like constant (SSEventType), not a component.
+        // A PascalCase object literal, such as SSEventType, is a constant that works like an enum.
         if (ts.isObjectLiteralExpression(init)) return 'Util';
     }
-    // PascalCase value (has a lowercase letter, unlike SCREAMING_SNAKE constants) → a component.
+    // A lowercase letter sets a PascalCase component apart from a SCREAMING_SNAKE constant.
     const isValue = flags & (SymbolFlags.Function | SymbolFlags.Variable | SymbolFlags.Class);
     if (isValue && /^[A-Z]/.test(name) && /[a-z]/.test(name)) return 'Component';
     return 'Util';
@@ -141,13 +137,10 @@ try {
             const declFile = decl.getSourceFile().fileName;
             if (declFile.includes('node_modules')) continue;
             const kind = classify(name, sym.flags, decl);
-            // Query-key factories + invalidators are intra-domain plumbing, co-located with the domain's hooks
-            // (same @workspace/lib/<domain> import as the hook you already found). Listing them is redundant
-            // noise, so they're excluded — the convention is documented in the header note instead.
+            // Query keys and invalidators sit beside their domain's hooks under the same import, so the index
+            // leaves them out and its note names the convention.
             if (kind === 'Cache') continue;
-            // Normalize to POSIX separators so the generated doc is identical across
-            // platforms (Windows `relative()` yields backslashes, which would otherwise
-            // flip every path and break `primitives:check`).
+            // Windows paths use backslashes, so they become slashes to keep the index the same on every platform.
             collected.push({ name, kind, importPath, file: relative(ROOT, declFile).replaceAll('\\', '/') });
         }
     }
@@ -156,7 +149,7 @@ try {
     await api.close();
 }
 
-// Dedup by declaration identity, keeping the shortest (most canonical) import path.
+// One row per declaration, with its shortest import path.
 const byKey = new Map<string, Primitive>();
 for (const prim of collected) {
     const key = `${prim.file}::${prim.name}`;

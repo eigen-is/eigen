@@ -37,11 +37,11 @@ type NoteCardDialogProps = {
     // Fires after a read-only task-list checkbox toggle inside `description`.
     // Receives the post-toggle HTML. Only wired when `canWrite` is true.
     onDescriptionChange?: (html: string) => void;
-    // Rendered between the description and the meta/actions footer — card content,
-    // above the separator, unlike `children` (the thread).
+    // Card content between the description and the footer, so it sits above the separator, unlike the thread
+    // in `children`.
     attachments?: ReactNode;
-    // In-place edit: when set, replaces the description/attachments/meta rows with an
-    // editing form. The colored header and the thread `children` stay visible.
+    // Replaces the description, attachments and meta rows with an editing form. The colored header and the
+    // thread in `children` stay visible.
     editForm?: ReactNode;
     children: ReactNode;
 };
