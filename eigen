@@ -295,7 +295,7 @@ api_cli() {
 }
 
 # api_ask <command…>: api_cli for what the API answers at once, given up after 20 s, as an exec through a daemon that
-# stopped answering never returns. The job is docker itself, by exec, so the kill leaves nothing of the ask running.
+# stopped answering never returns. By exec the job is docker itself, which hands the kill on to its compose plugin.
 api_ask() {
     (docker() { exec docker "$@"; }; api_cli "$@") &
     asked=$! deadline=$(($(date +%s) + 20))
