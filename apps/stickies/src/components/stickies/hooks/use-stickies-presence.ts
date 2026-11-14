@@ -29,7 +29,7 @@ export function useStickiesPresence(
 }
 
 // A peer that didn't change keeps its object, so a card whose peer is the same doesn't re-render.
-export function useCardPresence(provider: WebsocketProvider | null): Map<string, CardPeer> {
+export function useCardPresence(provider: WebsocketProvider | null): ReadonlyMap<string, CardPeer> {
     const states = useAwarenessPeers<StickiesPeerState>(provider);
     const prevRef = useRef<Map<string, CardPeer>>(new Map());
 
