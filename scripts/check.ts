@@ -20,6 +20,7 @@ const GATES: Step[] = [
     { name: 'dedupe', cmd: ['bun', 'dedupe', '--check'] },
     { name: 'lint', cmd: ['bun', 'run', 'lint'] },
     { name: 'typecheck', cmd: ['bun', 'run', 'typecheck'] },
+    { name: 'typecheck scripts', cmd: ['bun', 'check', '--no-script', '-p', 'scripts/tsconfig.json'] },
     { name: 'home imports', cmd: ['bun', 'scripts/check-home-imports.ts'] },
     { name: 'test layout', cmd: ['bun', 'scripts/check-test-layout.ts'] },
     { name: 'docs links', cmd: ['bun', 'scripts/check-docs-links.ts'] },
