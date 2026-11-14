@@ -45,7 +45,7 @@ export async function propagateAccessRequest(
         });
 
         if (!getServerSettings().notifications.email.ownerOnAccessRequest) return;
-        // Read again: the Home's user is the row as it was when the Home opened, and an org's is synthetic.
+        // Read again: the Home's user is the row as it was when the Home opened.
         const recipients =
             home instanceof TeamHome
                 ? await home.membersToNotify(requester.email)
