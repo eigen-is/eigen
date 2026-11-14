@@ -96,7 +96,7 @@ describe('useDuplicatePaths', () => {
         if (!(error instanceof PartialBatchError)) return;
         expect(error.succeeded.map((p) => p.id)).toEqual(['copy-of-good']);
         expect(error.failed).toEqual([BAD]);
-        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error']);
     });
 
     test('the copies that landed refresh their folder and the mime listings', async () => {
@@ -134,7 +134,7 @@ describe('useDuplicatePaths', () => {
         const { AppError } = await import('../../../../core/api-error');
         const { error } = await copy('duplicate', [BAD]);
         expect(error).toBeInstanceOf(AppError);
-        expect(toasts).toEqual(['error: Server error (500)']);
+        expect(toasts).toEqual(['error: Server error']);
     });
 });
 
@@ -154,7 +154,7 @@ describe('useCopyToFolder', () => {
         const { PartialBatchError } = await import('../../../../core/drive/hooks/writes');
         const { error } = await copy('folder', [GOOD, BAD]);
         expect(error).toBeInstanceOf(PartialBatchError);
-        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error']);
     });
 });
 
@@ -163,7 +163,7 @@ describe('useCopyToMediaFolder', () => {
         const { result, error } = await copy('media', [GOOD, BAD]);
         expect(error).toBeNull();
         expect(result?.map((p) => p.id)).toEqual(['copy-of-good']);
-        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error']);
     });
 
     // A card's Save stops when its attachment did not copy.
@@ -171,7 +171,7 @@ describe('useCopyToMediaFolder', () => {
         const { AppError } = await import('../../../../core/api-error');
         const { error } = await copy('media', [BAD]);
         expect(error).toBeInstanceOf(AppError);
-        expect(toasts).toEqual(['error: Server error (500)']);
+        expect(toasts).toEqual(['error: Server error']);
     });
 });
 
@@ -208,6 +208,6 @@ describe('useMakeCopy', () => {
     test('a failed copy toasts the server error and no success', async () => {
         const { error } = await makeCopy(BAD);
         expect(error).not.toBeNull();
-        expect(toasts).toEqual(['error: Server error (500)']);
+        expect(toasts).toEqual(['error: Server error']);
     });
 });

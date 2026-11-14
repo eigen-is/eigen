@@ -144,6 +144,6 @@ describe('useUpdateDraft', () => {
         await unmount();
 
         expect(hasKey(invalidated, detail)).toBe(true);
-        expect(toasts).toEqual(['error: No longer a draft (409)']);
+        expect(toasts).toEqual(['error: No longer a draft']);
     });
 });
