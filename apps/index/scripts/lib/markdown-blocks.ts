@@ -62,7 +62,7 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
                     if (!existsSync(file)) throw new Error(`${where} has no file ${file}`);
                 }
                 const base = escapeHtml(src);
-                // Every video stays within level 4.0, about 2048×1152, so a browser that says yes to it can decode it.
+                // Every video stays within level 4.0, about 2048×1088, so a browser that says yes to it can decode it.
                 html(
                     `<figure class="media-video"><video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
                 );

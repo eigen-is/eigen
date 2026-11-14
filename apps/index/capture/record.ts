@@ -42,9 +42,9 @@ export async function recordVideo(pages: readonly Page[], scene: Scene, run: () 
         writeFileSync(listPath, concatList(startingAt(frames, start), stopTime));
         return listPath;
     });
-    // Pages side by side stay at 1x, since two at double density pass the AV1 level the site declares for its videos.
-    const height = sideBySide ? scene.viewport.height : scene.viewport.height * 2;
-    const layout = { height, color: SEAM_COLOR[scene.theme] };
+    // Chrome's screencast delivers frames at the page's CSS size, which keeps every take within the AV1 level the site
+    // declares for its videos; scaling up would only grow the file past it.
+    const layout = { height: scene.viewport.height, color: SEAM_COLOR[scene.theme] };
     const encode = (output: Output, file: string) => exec('ffmpeg', encodeArgs(output, listPaths, layout, file));
     const outputs = [`${scene.name}.av1.mp4`, `${scene.name}.h264.mp4`, `${scene.name}.webp`];
     const posterPng = join(sceneDir, 'poster.png');
@@ -80,8 +80,8 @@ async function startScreencast(page: Page, scene: Scene, framesDir: string): Pro
     await cdp.send('Page.startScreencast', {
         format: 'jpeg',
         quality: 92,
-        maxWidth: scene.viewport.width * 2,
-        maxHeight: scene.viewport.height * 2,
+        maxWidth: scene.viewport.width,
+        maxHeight: scene.viewport.height,
         everyNthFrame: 1,
     });
     return async () => {
