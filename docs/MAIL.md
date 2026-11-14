@@ -97,7 +97,7 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 
 ## The composer is seeded in TipTap's own form
 
-The composer seeds its HTML the way TipTap writes it: an empty paragraph is `<p><br></p>` (`EMPTY_PARA` in `use-draft.ts`), never a bare `<br>` between blocks. Otherwise TipTap's first normalization reads as an edit, and `useDraft` auto-saves a draft the user never touched. The plain text works the same way: `plainSignature` mirrors how `getText()` joins blocks, so a new block type in the LightEditor goes into it too.
+The composer seeds its HTML the way TipTap writes it: an empty paragraph is `<p><br></p>` (`EMPTY_PARA` in `use-draft.ts`), never a bare `<br>` between blocks. Otherwise TipTap's first normalization reads as an edit, and `useDraft` auto-saves a draft the user never touched. The plain text works the same way: `plainSignature` mirrors how `getText()` joins blocks, so a new block type in the LightEditor goes into it too. A reply or forward opens on one empty paragraph above its quote, where the user types (`seedBody`). `formatReplyQuote` writes only the "On … wrote:" line and the blockquote, so a reply's own text sits one paragraph above that line, in the composer and in the demo seed alike.
 
 ## A forward carries the original's parts through the browser
 
