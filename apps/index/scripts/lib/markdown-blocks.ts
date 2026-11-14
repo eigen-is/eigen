@@ -1,7 +1,7 @@
 // A markdown-it plugin for the media blocks the site's Markdown writes as fences, such as a looping video, a carousel
-// or a side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. renderMarkdown uses it
-// at build time, so a block with a mistake in it, or a video whose files are not under the public folder, fails the
-// build instead of shipping a broken page. The carousel buttons are wired up by the article's click handler.
+// or a side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build
+// time, so a block with a mistake in it, or a video whose files are not under the public folder, fails the build
+// instead of shipping a broken page. The page wires up the carousel buttons.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -45,6 +45,12 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
             const html = (content: string) => {
                 state.push('html_block', '', 0).content = content;
             };
+            const tokenizeBody = () => {
+                const lineMax = state.lineMax;
+                state.lineMax = closeLine;
+                state.md.block.tokenize(state, startLine + 1, closeLine);
+                state.lineMax = lineMax;
+            };
 
             if (name === 'video') {
                 const src = attrs.get('src');
@@ -58,21 +64,18 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
                 html(
                     `<figure class="media-video"><video autoplay muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
                 );
+            } else if (name === 'carousel') {
+                html(
+                    `<figure class="media-carousel"><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n`,
+                );
+                tokenizeBody();
+                html(
+                    `</div><button type="button" class="media-carousel-prev" aria-label="Previous image">${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image">${NEXT_ICON}</button>${figcaption(caption)}</figure>\n`,
+                );
             } else {
-                html(
-                    name === 'carousel'
-                        ? `<figure class="media-carousel"><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n`
-                        : '<figure class="media-side-by-side">\n',
-                );
-                const lineMax = state.lineMax;
-                state.lineMax = closeLine;
-                state.md.block.tokenize(state, startLine + 1, closeLine);
-                state.lineMax = lineMax;
-                html(
-                    name === 'carousel'
-                        ? `</div><button type="button" class="media-carousel-prev" aria-label="Previous image">${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image">${NEXT_ICON}</button>${figcaption(caption)}</figure>\n`
-                        : `${figcaption(caption)}</figure>\n`,
-                );
+                html('<figure class="media-side-by-side">\n');
+                tokenizeBody();
+                html(`${figcaption(caption)}</figure>\n`);
             }
             state.line = closeLine + 1;
             return true;

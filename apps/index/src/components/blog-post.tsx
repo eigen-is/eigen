@@ -30,12 +30,20 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
                     <ArticleContent body={body} className="mt-8" />
                 </article>
                 <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
-                    {older ? <PagerLink label="Older" title={older.title} to={`/blog/${older.slug}`} /> : <span />}
+                    {older ? (
+                        <PagerLink
+                            label="Older"
+                            title={older.title}
+                            link={{ to: '/blog/$id', params: { id: older.slug } }}
+                        />
+                    ) : (
+                        <span />
+                    )}
                     {newer ? (
                         <PagerLink
                             label="Newer"
                             title={newer.title}
-                            to={`/blog/${newer.slug}`}
+                            link={{ to: '/blog/$id', params: { id: newer.slug } }}
                             className="text-right"
                         />
                     ) : (

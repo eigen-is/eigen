@@ -10,6 +10,8 @@ import { splitKetNames } from '../../src/components/ket-names';
 import type { TocEntry } from './content-types';
 import { markdownBlocks } from './markdown-blocks';
 
+const PUBLIC_DIR = join(import.meta.dir, '..', '..', 'public');
+
 // Lucide "link" icon, inlined so each heading gets a hover anchor that copies its link.
 const ANCHOR_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
@@ -23,14 +25,10 @@ function slugify(text: string): string {
         .replace(/\s+/g, '-');
 }
 
-// The build runs from the app's folder, so a video's files are looked up under its public folder by default.
-export function renderMarkdown(
-    markdown: string,
-    { publicDir = join(process.cwd(), 'public') }: { publicDir?: string } = {},
-): { html: string; toc: TocEntry[] } {
+export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[] } {
     const toc: TocEntry[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
-    md.use(markdownBlocks, { publicDir });
+    md.use(markdownBlocks, { publicDir: PUBLIC_DIR });
     md.use(anchor, {
         slugify,
         level: [2, 3],

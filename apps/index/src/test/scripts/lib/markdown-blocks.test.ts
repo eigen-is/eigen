@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import MarkdownIt from 'markdown-it';
+import { markdownBlocks } from '../../../../scripts/lib/markdown-blocks';
 import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
 
 let publicDir = '';
@@ -14,7 +16,7 @@ beforeAll(() => {
 
 afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
 
-const render = (markdown: string) => renderMarkdown(markdown, { publicDir }).html;
+const render = (markdown: string) => new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir }).render(markdown);
 
 describe('video', () => {
     test('a video block plays a muted loop with both encodes and a poster', () => {
@@ -36,12 +38,6 @@ describe('video', () => {
     test('a video without src fails the build', () => {
         expect(() => render('::: video\n:::')).toThrow('src');
     });
-
-    test('an app name in a caption is set as a ket', () => {
-        expect(render('::: video src="/data/about/media/a" caption="eigen|sheets⟩ live"\n:::')).toContain(
-            '<span class="ket-name">eigen|sheets⟩</span>',
-        );
-    });
 });
 
 describe('carousel and side by side', () => {
@@ -53,6 +49,12 @@ describe('carousel and side by side', () => {
         expect(html).toContain('class="media-carousel-next"');
         expect(html.match(/<img /g)?.length).toBe(2);
         expect(html).toContain('<figcaption>The budget</figcaption>');
+    });
+
+    test('an app name in a caption is set as a ket', () => {
+        expect(renderMarkdown('::: carousel caption="eigen|sheets⟩ live"\n![a](/a.webp)\n:::').html).toContain(
+            '<figcaption><span class="ket-name">eigen|sheets⟩</span> live</figcaption>',
+        );
     });
 
     test('a side-by-side pair wraps its images', () => {

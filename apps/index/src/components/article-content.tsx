@@ -45,9 +45,8 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
         return () => reduceMotion.removeEventListener('change', holdVideos);
     }, [body.html]);
 
-    // A carousel button scrolls its strip by one image. A click on a heading that shows its link icon copies a link to
-    // that section instead of jumping to it; a drag that selects text, a link in the heading's text and a touch screen,
-    // where the icon is hidden, are left alone.
+    // A carousel button pages by the strip's own width, since each image fills it.
+    // A heading copies its link only where its icon shows, as touch screens hide it, and never over a selection.
     const onClick = (e: MouseEvent<HTMLDivElement>) => {
         if (!(e.target instanceof Element)) return;
         const step = e.target.closest('.media-carousel-prev, .media-carousel-next');

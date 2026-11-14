@@ -7,6 +7,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import type { AboutApp } from '../content/about-apps';
 import { aboutApps } from '../content/about-apps';
 import type { ArticleBody, ArticleMeta } from '../content/manifest';
+import { getAboutArticles } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
 import { ArticleContent } from './article-content';
 import { LandingLinks } from './landing-links';
@@ -16,11 +17,10 @@ import { SitePage } from './site-page';
 type AboutOverviewProps = {
     overview: ArticleMeta;
     body: ArticleBody;
-    pages: readonly ArticleMeta[];
 };
 
-export function AboutOverview({ overview, body, pages }: AboutOverviewProps) {
-    const written = new Set(pages.map((page) => page.slug));
+export function AboutOverview({ overview, body }: AboutOverviewProps) {
+    const written = new Set(getAboutArticles().map((page) => page.slug));
     return (
         <SitePage>
             <ReadingLayout>
@@ -39,7 +39,7 @@ export function AboutOverview({ overview, body, pages }: AboutOverviewProps) {
                         );
                         const style = {
                             '--app-current-color': app.color,
-                            '--app-current-color-soft': `color-mix(in oklab, ${app.color} 14%, var(--background))`,
+                            '--app-current-color-soft': `var(--app-${app.slug}-color-soft)`,
                         };
                         const row = <AppRow app={app} line={overview.rows?.[app.slug]} />;
                         return hasPage ? (

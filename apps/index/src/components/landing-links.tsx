@@ -1,6 +1,6 @@
 // The links the server's admin adds to the public site, such as "Try the demo" on eigen.is, as outline buttons.
-// They come from the public config, so they appear once it has loaded. The landing page shows them beside its
-// Log in button, and the About pages under their title.
+// They come from the public config, so they appear once it has loaded. Pages such as the landing page show them
+// beside their own buttons.
 
 import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';

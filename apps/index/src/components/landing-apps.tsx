@@ -4,7 +4,7 @@
 
 import { Link } from '@tanstack/react-router';
 import { Fragment } from 'react';
-import type { ArticleMeta } from '../content/manifest';
+import { getAboutArticles } from '../content/manifest';
 
 // The line's words in its order, each with the About slug of the app it names: Vector is "drawings" here.
 const WORDS: readonly { word: string; slug: string }[] = [
@@ -20,8 +20,8 @@ const WORDS: readonly { word: string; slug: string }[] = [
     { word: 'chat', slug: 'chat' },
 ];
 
-export function LandingApps({ pages }: { pages: readonly ArticleMeta[] }) {
-    const written = new Set(pages.map((page) => page.slug));
+export function LandingApps() {
+    const written = new Set(getAboutArticles().map((page) => page.slug));
     return (
         <p>
             {WORDS.map(({ word, slug }, index) => (

@@ -10,21 +10,3 @@ export const aboutApps = apps
     .map((app) => ({ ...app, slug: app.name.toLowerCase() }));
 
 export type AboutApp = (typeof aboutApps)[number];
-
-const slugs = new Set(aboutApps.map((app) => app.slug));
-
-// The slug of an About file, such as `sheets` for sheets.md, or `index` for the overview.
-export function aboutPageSlug(file: string): string {
-    const slug = file.replace(/\.md$/, '');
-    if (slug !== 'index' && !slugs.has(slug)) throw new Error(`About page ${file} is named after no app`);
-    return slug;
-}
-
-// The overview's rows, which need a line for every app and for nothing else.
-export function checkAboutRows(rows: Record<string, string> | undefined): Record<string, string> {
-    const keys = Object.keys(rows ?? {});
-    if (!rows || keys.length !== slugs.size || !keys.every((key) => slugs.has(key))) {
-        throw new Error(`About overview rows need exactly one line for each of: ${[...slugs].join(', ')}`);
-    }
-    return rows;
-}
