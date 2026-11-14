@@ -294,6 +294,18 @@ api_cli() {
     dc exec $tty -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh "$@"
 }
 
+# api_ask <command…>: api_cli for what the API answers at once, given up after 20 s, as an exec through a daemon that
+# stopped answering never returns. The job is docker itself, by exec, so the kill leaves nothing of the ask running.
+api_ask() {
+    (docker() { exec docker "$@"; }; api_cli "$@") &
+    asked=$! deadline=$(($(date +%s) + 20))
+    while kill -0 "$asked" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "$deadline" ]; then kill "$asked" 2>/dev/null || :; fi
+        sleep "$TICK" 2>/dev/null || TICK=1
+    done
+    wait "$asked"
+}
+
 # columns: the width of the terminal, 80 when it cannot be read.
 columns() {
     width=$(stty size </dev/tty 2>/dev/null || :)
@@ -644,7 +656,7 @@ stop() {
 # running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
 # line, or nothing. It fails when the API does not answer, and then prints nothing.
 running_backup() {
-    running=$(api_cli status --running </dev/null 2>/dev/null) || return 1
+    running=$(api_ask status --running </dev/null 2>/dev/null) || return 1
     printf '%s\n' "$running"
 }
 
@@ -1148,7 +1160,7 @@ warn_restart() {
 # a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
 # cannot take it holds nothing up.
 announce() {
-    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+    told=$(api_ask restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
         </dev/null 2>&1) || {
         if [ "$1" = 0 ]; then
             say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
@@ -1167,7 +1179,7 @@ announce() {
 }
 
 # unannounce: takes the notice back. The API it asks may be down.
-unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
+unannounce() { api_ask restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
 
 # countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
 # sees one line count down, as shutdown warns; a log gets it once.
