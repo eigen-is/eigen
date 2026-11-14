@@ -60,7 +60,7 @@ async function film(
         hold: (ms) => Bun.sleep(ms),
     };
     await scene.setup?.(ctx);
-    if (scene.kind === 'video') await recordVideo(pages[0], scene, () => scene.run(ctx));
+    if (scene.kind === 'video') await recordVideo(pages, scene, () => scene.run(ctx));
     else {
         await scene.run(ctx);
         await takeStill(pages[0], scene);

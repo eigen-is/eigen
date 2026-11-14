@@ -1,13 +1,14 @@
-// Films a capture scene into the public site's About media. A video records the page's screencast frames with Chrome's
+// Films a capture scene into the public site's About media. A video records a page's screencast frames with Chrome's
 // own timestamps, as fast as the page repaints, and ffmpeg turns them into an AV1 and an H.264 mp4 at a steady 30 fps,
-// with the first frame as a webp poster. A still is one screenshot as webp. Everything is made in a scratch folder and
-// moves into the site only once every file of the scene is done, so a failed run leaves no half file there.
+// with the first frame as a webp poster. A scene of two people can film both pages at once, joined side by side. A
+// still is one screenshot as webp. Everything is made in a scratch folder and moves into the site only once every
+// file of the scene is done, so a failed run leaves no half file there.
 
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from 'playwright-core';
-import type { Frame } from './lib/ffmpeg';
-import { concatList, encodeArgs } from './lib/ffmpeg';
+import type { Frame, Output } from './lib/ffmpeg';
+import { concatList, encodeArgs, startingAt } from './lib/ffmpeg';
 import type { Scene } from './lib/scene';
 
 // The tool's scratch folder, which every run starts by wiping: the seeded data root, the logs, the frames.
@@ -17,12 +18,56 @@ const MEDIA_DIR = join(import.meta.dir, '..', 'public', 'data', 'about', 'media'
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
 
-export async function recordVideo(page: Page, scene: Scene, run: () => Promise<void>): Promise<void> {
-    const framesDir = join(CAPTURE_ROOT, 'frames', scene.name);
-    rmSync(framesDir, { recursive: true, force: true });
-    mkdirSync(framesDir, { recursive: true });
+// The apps' background in each theme, which fills the gap between two pages filmed side by side.
+const BACKGROUND: Record<Scene['theme'], string> = { light: '#ffffff', dark: '#181818' };
+const GAP = 24;
+
+// The first page, or every page side by side when the scene asks for it.
+export async function recordVideo(pages: readonly Page[], scene: Scene, run: () => Promise<void>): Promise<void> {
+    const sceneDir = join(CAPTURE_ROOT, 'frames', scene.name);
+    rmSync(sceneDir, { recursive: true, force: true });
     mkdirSync(OUT_DIR, { recursive: true });
 
+    const filmed = scene.composite === 'side-by-side' ? pages : pages.slice(0, 1);
+    const recordings = await Promise.all(
+        filmed.map((page, i) => startScreencast(page, scene, join(sceneDir, String(i)))),
+    );
+    await run();
+    const stopTime = Date.now() / 1000;
+    const takes = await Promise.all(recordings.map((stop) => stop()));
+    if (takes.some((frames) => frames.length === 0)) throw new Error(`${scene.name} recorded no frames`);
+
+    const start = Math.max(...takes.map((frames) => frames[0].time));
+    const listPaths = takes.map((frames, i) => {
+        const listPath = join(sceneDir, `${i}.txt`);
+        writeFileSync(listPath, concatList(startingAt(frames, start), stopTime));
+        return listPath;
+    });
+    const layout = { height: scene.viewport.height * 2, gap: GAP, color: BACKGROUND[scene.theme] };
+    const encode = (output: Output, file: string) => exec('ffmpeg', encodeArgs(output, listPaths, layout, file));
+    const outputs = [`${scene.name}.av1.mp4`, `${scene.name}.h264.mp4`, `${scene.name}.webp`];
+    const posterPng = join(sceneDir, 'poster.png');
+    await Promise.all([
+        encode('av1', join(OUT_DIR, outputs[0])),
+        encode('h264', join(OUT_DIR, outputs[1])),
+        encode('poster', posterPng).then(() => exec('cwebp', webpArgs(posterPng, join(OUT_DIR, outputs[2])))),
+    ]);
+    publish(outputs);
+}
+
+export async function takeStill(page: Page, scene: Scene): Promise<void> {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const png = join(OUT_DIR, `${scene.name}.png`);
+    await page.screenshot({ path: png });
+    const output = `${scene.name}.webp`;
+    await exec('cwebp', webpArgs(png, join(OUT_DIR, output)));
+    publish([output]);
+}
+
+// Writes the page's screencast frames into framesDir as they come, until the returned stop is called, which gives them
+// with Chrome's own timestamps.
+async function startScreencast(page: Page, scene: Scene, framesDir: string): Promise<() => Promise<Frame[]>> {
+    mkdirSync(framesDir, { recursive: true });
     const frames: Frame[] = [];
     const cdp = await page.context().newCDPSession(page);
     cdp.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
@@ -38,30 +83,11 @@ export async function recordVideo(page: Page, scene: Scene, run: () => Promise<v
         maxHeight: scene.viewport.height * 2,
         everyNthFrame: 1,
     });
-    await run();
-    const stopTime = Date.now() / 1000;
-    await cdp.send('Page.stopScreencast');
-    await cdp.detach();
-    if (frames.length === 0) throw new Error(`${scene.name} recorded no frames`);
-
-    const listPath = join(framesDir, 'list.txt');
-    writeFileSync(listPath, concatList(frames, stopTime));
-    const outputs = [`${scene.name}.av1.mp4`, `${scene.name}.h264.mp4`, `${scene.name}.webp`];
-    await Promise.all([
-        exec('ffmpeg', encodeArgs('av1', listPath, join(OUT_DIR, outputs[0]))),
-        exec('ffmpeg', encodeArgs('h264', listPath, join(OUT_DIR, outputs[1]))),
-        exec('cwebp', webpArgs(frames[0].file, join(OUT_DIR, outputs[2]))),
-    ]);
-    publish(outputs);
-}
-
-export async function takeStill(page: Page, scene: Scene): Promise<void> {
-    mkdirSync(OUT_DIR, { recursive: true });
-    const png = join(OUT_DIR, `${scene.name}.png`);
-    await page.screenshot({ path: png });
-    const output = `${scene.name}.webp`;
-    await exec('cwebp', webpArgs(png, join(OUT_DIR, output)));
-    publish([output]);
+    return async () => {
+        await cdp.send('Page.stopScreencast');
+        await cdp.detach();
+        return frames;
+    };
 }
 
 // This ffmpeg has no webp encoder, so the posters and stills go through libwebp's own cwebp.
