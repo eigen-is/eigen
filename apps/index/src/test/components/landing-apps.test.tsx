@@ -18,6 +18,7 @@ describe('LandingApps', () => {
             'href="/about/slides"',
             'href="/about/vector"',
             'href="/about/calendar"',
+            'href="/about/contacts"',
         ]);
         expect(html.replace(/<[^>]+>/g, '')).toBe(
             'Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.',
