@@ -1,21 +1,11 @@
 // The one loop that reads a stream chunk by chunk, such as a request body or a storage read, and the event
 // loop turn it gives every 2 MiB, so a large local file never holds the API while it is read. A storage
-// read runs it with an idle deadline; a request body or a local file runs it without one.
+// read runs it with an idle deadline; a request body or a local file runs it without one. Other long
+// loops, such as a backup's walk over a drive, take the same turn between steps.
 
 import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
-
-// The empty second immediate keeps the loop awake: under a caller that waits on its promise synchronously,
-// Bun otherwise sleeps until the next timer before it runs what the first one resolved.
-export function eventLoopTurn(): Promise<void> {
-    return new Promise((resolve) =>
-        setImmediate(() => {
-            resolve();
-            setImmediate(() => {});
-        }),
-    );
-}
 
 // Answers the total, and a 413 past maxBytes. With idleMs it is a storage read: silence for idleMs, an aborted
 // signal or a failed read cancels it and answers 503.
@@ -70,4 +60,8 @@ export async function consumeStream(
         clearTimeout(timer);
         signal?.removeEventListener('abort', stop);
     }
+}
+
+export function eventLoopTurn(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
 }
