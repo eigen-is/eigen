@@ -5,7 +5,7 @@
 // videos in view unless the reader asked for less motion.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import type { MouseEvent, ReactNode } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
@@ -109,10 +109,20 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         copyToClipboard(`${location.origin}${location.pathname}#${id}`, 'Link copied to clipboard');
     };
 
+    // A focused strip opens its slide in view on Enter or Space, as a click on the slide would.
+    const onKeyDown = (e: KeyboardEvent) => {
+        const strip = e.target;
+        if ((e.key !== 'Enter' && e.key !== ' ') || !(strip instanceof Element)) return;
+        if (!strip.matches('.media-carousel-strip')) return;
+        e.preventDefault();
+        const group = Array.from(strip.querySelectorAll('img, video'));
+        setLightbox({ items: group.map(lightboxItem), index: carouselPosition(strip).current, open: true });
+    };
+
     // The lightbox sits outside the root, so React passes no click in its portaled dialog up to onClick.
     return (
         <>
-            <div ref={ref} className={className} onClick={onClick}>
+            <div ref={ref} className={className} onClick={onClick} onKeyDown={onKeyDown}>
                 {body.html.split(BLOCK_MARKER).map((section, i) => {
                     if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
                     if (!section) return null;

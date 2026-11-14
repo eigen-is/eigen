@@ -288,6 +288,16 @@ describe('lightbox', () => {
         expect(lightbox()?.src).toBe('/b.webp');
     });
 
+    test.each(['Enter', ' '])('%p on the focused strip opens the slide in view, in its group', async (key) => {
+        const { strip, scrollTo } = await renderCarousel();
+        await scrollTo(600);
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        await act(async () => strip.dispatchEvent(event));
+        expect(event.defaultPrevented).toBe(true);
+        expect(lightbox()).toMatchObject({ count: 1, src: '/b.webp' });
+        expect(lightbox()?.next).not.toBeNull();
+    });
+
     test('a click on the open picture leaves the group as it is', async () => {
         const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
         const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
