@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2361 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2362 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (322)
+## Components (323)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -130,6 +130,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveLocationField` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
 | `DriveLocationPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-picker.tsx |
 | `DriveMountList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
+| `DriveMountSelect` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `DrivePickerWithUpload` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-picker-with-upload.tsx |
 | `DrivePreview` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-preview.tsx |
 | `DriveTable` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
