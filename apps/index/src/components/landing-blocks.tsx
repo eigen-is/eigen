@@ -62,7 +62,7 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     );
 }
 
-// The three blocks alone, laid out by the caller, such as three across the landing page's wide container.
+// The three blocks alone, three across from a tablet up, spaced and placed by the caller.
 export function PrincipleBlocks({ className }: { className?: string }) {
     return (
         <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
