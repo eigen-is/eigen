@@ -305,7 +305,7 @@ describe('Contacts import quota', () => {
 
             await expect(home.contacts.importCards(fileBytes(text))).rejects.toMatchObject({
                 status: 507,
-                message: 'Storage quota exceeded after importing 1 contacts',
+                message: 'Not enough storage left',
             });
 
             // The card committed before the refusal stays.

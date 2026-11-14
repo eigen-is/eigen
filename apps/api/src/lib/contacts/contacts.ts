@@ -16,7 +16,7 @@ import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
+import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen, payloadTooLarge } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -230,9 +230,7 @@ export class Contacts {
         creditBytes: number;
         cache: () => Promise<string>;
     }): Promise<string> {
-        if (opts.row.vcard.byteLength > CARD_MAX_BYTES) {
-            throw new ApiError(413, 'Contact card is too large');
-        }
+        if (opts.row.vcard.byteLength > CARD_MAX_BYTES) throw payloadTooLarge();
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, opts.row.vcard.byteLength, opts.creditBytes);
         }

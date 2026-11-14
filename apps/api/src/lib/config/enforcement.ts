@@ -35,26 +35,14 @@ export async function enforceMountQuota(
     }
 }
 
-// What an upload may add to a mount, so a full one is refused before any bytes move.
-export async function getUploadRoom(ownerId: string, mountId: string): Promise<number> {
+// The most one uploaded file may take: the per-file cap or the room left, so a full mount is refused before any bytes move.
+export async function getUploadMaxSize(ownerId: string, mountId: string): Promise<number> {
     const room = await getMountRoom(ownerId, mountId);
-    if (room <= 0) {
-        throw insufficientStorage();
-    }
-    return room;
-}
-
-// A file past the per-file cap answers 413 and one past the room it may take 507, so the answer names the cap it hit.
-export function enforceUploadLimits(fileSize: number, room: number): void {
-    enforceMaxUploadSize(fileSize);
-    if (fileSize > room) throw insufficientStorage();
+    if (room <= 0) throw insufficientStorage();
+    return Math.min(getMaxUploadSize(), room);
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
-
-export function getMailAttachmentMaxSize(): number {
-    return Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
-}
 
 // Resolves no mount, so a team Home (which has none) meters its calendar here too; every part answers from an in-memory byte counter, so a device sync costs no query per write.
 async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; max: number }> {
@@ -63,14 +51,11 @@ async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; m
     return { used: await home.dataSize(), max: await resolveHomeDataMax(teamIds) };
 }
 
-// What a draft attachment may add to its home's data, so a full budget is refused before any bytes move.
-export async function getMailUploadRoom(userId: string): Promise<number> {
+// The same for a draft attachment, also held to 25 MB and to what is left of its home's data.
+export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const { used, max } = await getHomeDataQuotaState(userId);
-    const room = max - used;
-    if (room <= 0) {
-        throw insufficientStorage();
-    }
-    return room;
+    if (used >= max) throw insufficientStorage();
+    return Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE, max - used);
 }
 
 export function enforceMaxUploadSize(fileSize: number): void {

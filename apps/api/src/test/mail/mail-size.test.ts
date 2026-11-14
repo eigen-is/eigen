@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { getMailUploadRoom } from '../../lib/config/enforcement';
+import { getMailUploadMaxSize } from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import { readMailTotalSize } from '../../lib/mail/maildir-store';
@@ -57,12 +57,22 @@ describe('Mail usage', () => {
     // The gate reads the same counter the store keeps, so a delivery is charged to the very next check —
     // no window in which the user can spend space a message just took.
     test('the quota gate charges a delivery to the next check', async () => {
+        const MB = 1024 * 1024;
         const home = await getHome(userId);
-        const before = await getMailUploadRoom(userId);
-        const message = sizedEml('Mail size gate', 'z'.repeat(8192));
-        await home.mail.mailboxDeliver(message);
+        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
+        try {
+            // Squeeze the budget so what is left of it, not the 25 MB attachment ceiling, is the answer.
+            const used = (await home.mail.size()) + (await home.contacts.size());
+            await updateServerSettings({ quotas: { homeDataMaxMB: Math.ceil(used / MB) + 1 } });
 
-        expect(await getMailUploadRoom(userId)).toBe(before - message.byteLength);
+            const before = await getMailUploadMaxSize(userId);
+            const message = sizedEml('Mail size gate', 'z'.repeat(8192));
+            await home.mail.mailboxDeliver(message);
+
+            expect(await getMailUploadMaxSize(userId)).toBe(before - message.byteLength);
+        } finally {
+            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
+        }
     });
 
     // The counter is adjusted per row and per staged file, so it has to survive every path that adds or
@@ -185,30 +195,6 @@ describe('Staged draft attachment usage', () => {
 
             expect(res.status).toBe(507);
             expect(readdirSync(stagingDir).sort()).toEqual([fill.tempId, `${fill.tempId}.json`].sort());
-        } finally {
-            await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
-        }
-    });
-
-    test('an attachment under the attachment limit but past the room left answers 507 and stages nothing', async () => {
-        const originalMaxMB = getServerSettings().quotas.homeDataMaxMB;
-        try {
-            const used = await reportedUsage();
-            const maxMB = Math.ceil(used / MB) + 1;
-            await updateServerSettings({ quotas: { homeDataMaxMB: maxMB } });
-            const staged = readdirSync(stagingDir);
-
-            const form = new FormData();
-            const room = maxMB * MB - used;
-            form.append('file', new File(['o'.repeat(room + 1024)], 'past-room.txt', { type: 'text/plain' }));
-            const res = await authedRequest(token, `/mail/${userId}/message/draft/attachment`, {
-                method: 'POST',
-                body: form,
-            });
-
-            expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Not enough storage left');
-            expect(readdirSync(stagingDir)).toEqual(staged);
         } finally {
             await updateServerSettings({ quotas: { homeDataMaxMB: originalMaxMB } });
         }

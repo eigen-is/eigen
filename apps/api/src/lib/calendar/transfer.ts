@@ -12,8 +12,10 @@ import {
     countVEvents,
     decodeUtf8Strict,
     ICS_IMPORT_MAX_EVENTS,
+    insufficientStorage,
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
+    payloadTooLarge,
 } from '../core';
 import { keepProperties, newVCalendar, PRODID, parseCalendarStream, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
@@ -112,9 +114,7 @@ export async function importEvents(
             const body = serializeResource(resource);
             // Counted before the put, since a series the store refuses has cost its parse all the same.
             written += Buffer.byteLength(body);
-            if (written > ICS_IMPORT_MAX_WRITTEN_BYTES) {
-                throw new ApiError(413, `Import too large after importing ${result.imported} events`);
-            }
+            if (written > ICS_IMPORT_MAX_WRITTEN_BYTES) throw payloadTooLarge();
             const put = await davStore.putResource(calendar, calendarId, `${crypto.randomUUID()}.ics`, body, {
                 ifMatch: null,
                 ifNoneMatch: '*',
@@ -126,7 +126,7 @@ export async function importEvents(
             } else if (put.error === 'uid-conflict') {
                 result.skipped++;
             } else if (put.error === 'quota') {
-                throw new ApiError(507, `Storage quota exceeded after importing ${result.imported} events`);
+                throw insufficientStorage();
             } else {
                 result.failed++;
             }

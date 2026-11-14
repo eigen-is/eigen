@@ -201,9 +201,14 @@ export class SharedDrive {
         return this.drive.create(mountId, parentId, name, type, this.user);
     }
 
-    public async uploadFiles(mountId: string, parentId: string, request: Request, room: number): Promise<DrivePath[]> {
+    public async uploadFiles(
+        mountId: string,
+        parentId: string,
+        request: Request,
+        maxSize: number,
+    ): Promise<DrivePath[]> {
         await this.requireWrite(mountId, parentId);
-        return this.drive.uploadFiles(mountId, parentId, request, room, this.user);
+        return this.drive.uploadFiles(mountId, parentId, request, maxSize, this.user);
     }
 
     public async createFileFromData(

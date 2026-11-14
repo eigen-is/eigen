@@ -20,7 +20,7 @@ import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { PATHS } from '../config/paths';
 import type { DeleteResourceResult, ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
-import { ApiError, newSyncGen } from '../core';
+import { ApiError, newSyncGen, payloadTooLarge } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import type { EventPatch, Revision } from '../ical/ical-component';
@@ -130,7 +130,7 @@ export class Calendar {
     }): Promise<void> {
         const { calendarId, uri, prepared } = opts;
         const { id, bytes } = prepared;
-        if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
+        if (bytes.byteLength > EVENT_MAX_BYTES) throw payloadTooLarge();
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, opts.creditBytes);
         }

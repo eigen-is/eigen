@@ -10,6 +10,8 @@ Every `useMutation` in `packages/lib/src/core/[domain]/hooks/` hands its error t
 
 `AppError` keeps the HTTP status of an Eden response, and the toast reads the server's own message, like "Folders can be nested at most 256 levels deep". The message comes from the response body: a plain string (what every `ApiError` returns), else its `message`, else its `summary`, else the first `errors` entry. A body with none of those, an empty one or a proxy's HTML page falls back to a phrase and the status, like "Too large (413)", because Elysia strips a validation error down to `{ type, on, found }` in production, and `String()` on that reads as `[object Object]`. A schema field with an `error` option answers that string instead, in production too, so a route whose 422 a person may read names the field and its range there (the backup settings' `keep` and `hourUtc`).
 
+A write past a size cap always throws `payloadTooLarge()` ("Upload too large") and a write past a storage budget always throws `insufficientStorage()` ("Not enough storage left"), both in `apps/api/src/lib/core/errors.ts`, so every path reads the same. Never hand-write a 413 or 507 for those. A refusal of another kind keeps its own words: a file too complex to import, too many events or cards, a server backup's disk room, and a CalDAV or CardDAV protocol reply (`dav/write-result.ts`).
+
 ## Apps never catch a mutation error to toast it
 
 An app must not wrap a mutation in `try/catch` + `toast.error()`: the hook already toasted, and the user would see it twice. An app catches only when it has extra work to do on failure, such as resetting UI state, and then it shows no toast.
