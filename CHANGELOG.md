@@ -48,6 +48,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
 - **TEXT in Sheets** — `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
 - **Keyboard in Contacts** — the highlighted person is the one Enter opens, also when the list holds a name filed under #, such as Łukasz or Иван
+- **Names in Contacts** — a contact saved with capitals in its address, such as Grace@example.com, shows its name and photo wherever that person appears
+- **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode
+- **Guest count in Calendar** — the organizer counts as an accepted guest, so the replies add up to the number of guests
+- **Guest names in Calendar** — a guest you add by typing an address takes the name from your contacts, or shows the address, not the part before the @
+- **Keyboard in Drive's grid** — the item under the keyboard cursor gets the stripe a list row shows, so it no longer looks selected
+- **Team drives on a phone** — **Move to**, **Copy to** and **Save to Drive** have a drive picker above the folders on a phone, so a file can go to a team drive
 
 ## [0.4.3] - 2026-11-11
 
