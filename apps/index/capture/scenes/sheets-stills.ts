@@ -6,7 +6,7 @@ import { openBudget } from './budget';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
-    viewport: { width: 1600, height: 1000 },
+    viewport: { width: 1600, height: 900 },
     apps: ['sheets'],
     personas: ['bram'],
 };
