@@ -11,6 +11,7 @@ import { getAvatarsDir } from '../config/paths';
 import { getTeam, getTeamExists } from '../team';
 import type { User } from '../user';
 import { getUserByEmail, getUserById } from '../user';
+import { avatarFileName } from '../user/profile';
 
 export async function getUserByEmailOrId(emailOrId: string): Promise<User | null> {
     return validateEmailAddress(emailOrId) ? getUserByEmail(emailOrId) : getUserById(emailOrId);
@@ -57,7 +58,7 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile |
         // keeps it clear of user UUIDs. Existence is the only source of truth. Cheap file check
         // first: most teams have no avatar, so skip the team lookup unless there's actually a
         // file that must not be served for a deleted team.
-        const file = Bun.file(path.join(getAvatarsDir(), `${teamOwnerId(parsed.id)}.webp`));
+        const file = Bun.file(path.join(getAvatarsDir(), avatarFileName(teamOwnerId(parsed.id))));
         if (!(await file.exists())) return null;
         return (await getTeamExists(parsed.id)) ? file : null;
     }
@@ -65,7 +66,7 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile |
     const user = await getUserByEmailOrId(emailOrId);
     if (!user) return null;
 
-    const file = Bun.file(path.join(getAvatarsDir(), `${user.id}.webp`));
+    const file = Bun.file(path.join(getAvatarsDir(), avatarFileName(user.id)));
     return (await file.exists()) ? file : null;
 }
 
