@@ -1,33 +1,22 @@
 // What each engine covers: how many of Excel's functions it registers, and a yes or no per language feature, each
 // found by running a probe formula and reading the answer, never from a feature list. IronCalc lists no function
-// names, so a probe call finds its functions too. formulajs has no parser and no cells, so it has no language
-// features; only its function names count. The run calls it in its own process.
+// names, so a probe call finds its functions too. The run calls it in its own process.
 
 import { HyperFormula } from 'hyperformula';
 import { EXCEL_2007_FUNCTIONS, EXCEL_FUTURE_FUNCTIONS } from '../src/functions/excel-names';
 import { FUNCTIONS } from '../src/index';
 import type { CellEngine, Input, SheetInput, Value } from './engines';
-import {
-    formulajsNames,
-    HyperFormulaEngine,
-    IronCalcEngine,
-    ironcalcNames,
-    OursEngine,
-    UniverEngine,
-    univerNames,
-} from './engines';
+import { HyperFormulaEngine, IronCalcEngine, ironcalcNames, OursEngine, UniverEngine, univerNames } from './engines';
 import type { EngineName } from './speed';
 
-export const CELL_ENGINES = ['ours', 'hyperformula', 'ironcalc', 'univer'] as const;
-export type CellEngineName = (typeof CELL_ENGINES)[number];
 export type Partner = Exclude<EngineName, 'ours'>;
 // `other` is null for an engine whose names are found by probing Excel's, which finds no other names.
 export type FunctionCount = { readonly excel: number; readonly other: number | null };
 export type Feature = {
     readonly name: string;
     readonly probe: string;
-    readonly answers: Readonly<Record<CellEngineName, string>>;
-    readonly passes: Readonly<Record<CellEngineName, boolean>>;
+    readonly answers: Readonly<Record<EngineName, string>>;
+    readonly passes: Readonly<Record<EngineName, boolean>>;
 };
 export type Coverage = {
     readonly excel: number;
@@ -184,7 +173,6 @@ export async function coverage(): Promise<Coverage> {
     const ours = upper(FUNCTIONS.keys());
     const names: Record<Partner, ReadonlySet<string>> = {
         hyperformula: upper(HyperFormula.getRegisteredFunctionNames('enGB')),
-        formulajs: upper(formulajsNames()),
         ironcalc: upper(ironcalcNames(excel)),
         univer: upper(univerNames()),
     };
@@ -217,7 +205,6 @@ export async function coverage(): Promise<Coverage> {
         [...from].filter((name) => excel.has(name) && !without.has(name)).sort();
     const partners = (pick: (theirs: ReadonlySet<string>) => readonly string[]) => ({
         hyperformula: pick(names.hyperformula),
-        formulajs: pick(names.formulajs),
         ironcalc: pick(names.ironcalc),
         univer: pick(names.univer),
     });
@@ -226,7 +213,6 @@ export async function coverage(): Promise<Coverage> {
         functions: {
             ours: count(ours, excel),
             hyperformula: count(names.hyperformula, excel),
-            formulajs: count(names.formulajs, excel),
             ironcalc: count(names.ironcalc, excel, true),
             univer: count(names.univer, excel),
         },

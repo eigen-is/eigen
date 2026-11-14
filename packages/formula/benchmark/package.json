@@ -11,7 +11,6 @@
     "typecheck": "bun check --no-script"
   },
   "dependencies": {
-    "@formulajs/formulajs": "4.6.1",
     "@ironcalc/wasm": "0.9.1",
     "@univerjs/core": "1.4.0",
     "@univerjs/engine-formula": "1.4.0",

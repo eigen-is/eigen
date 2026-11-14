@@ -7,8 +7,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import type { Verdict } from './correctness';
 import { VERDICTS } from './correctness';
-import type { CellEngineName, Partner } from './coverage';
-import { CELL_ENGINES } from './coverage';
+import type { Partner } from './coverage';
 import type { EngineVerdicts, Results, SpeedCell, SpeedRow, SpeedRun } from './run';
 import type { EngineName } from './speed';
 import { ENGINES } from './speed';
@@ -19,16 +18,10 @@ const OURS = 'eigen|formula⟩';
 const LABELS: Readonly<Record<EngineName, string>> = {
     ours: OURS,
     hyperformula: 'HyperFormula',
-    formulajs: 'formulajs',
     ironcalc: 'IronCalc',
     univer: 'Univer',
 };
-const PARTNERS: readonly Partner[] = ['hyperformula', 'formulajs', 'ironcalc', 'univer'];
-// A speed table compares ours with two other engines at a time, so it stays narrow enough to read.
-const PAIRS: readonly (readonly [Partner, Partner])[] = [
-    ['hyperformula', 'formulajs'],
-    ['ironcalc', 'univer'],
-];
+const PARTNERS: readonly Partner[] = ['hyperformula', 'ironcalc', 'univer'];
 const FAMILIES: Readonly<Record<string, string>> = {
     math: 'math',
     statistical: 'statistical',
@@ -84,40 +77,32 @@ function ratioCell(row: SpeedRow, engine: EngineName): string {
     return ours === undefined || theirs === undefined ? '' : ratio(theirs, ours);
 }
 
-function speedTable(run: SpeedRun, [first, second]: readonly [Partner, Partner]): string {
-    const [a, b] = [LABELS[first], LABELS[second]];
+function speedTable(run: SpeedRun): string {
     const lines = [
-        `| workload | ${cell(OURS)} | ${a} | ${a} ÷ ${cell(OURS)} | ${b} | ${b} ÷ ${cell(OURS)} |`,
-        '|---|---|---|---|---|---|',
+        `| workload | ${cell(OURS)} | ${PARTNERS.map((engine) => `${LABELS[engine]} | ${LABELS[engine]} ÷ ${cell(OURS)}`).join(' | ')} |`,
+        `|---|---|${PARTNERS.map(() => '---|---|').join('')}`,
     ];
     for (const row of run.rows) {
         const shown = (engine: EngineName) => shownCell(row.engines[engine], row.memory);
-        lines.push(
-            `| ${label(row)} | ${shown('ours')} | ${shown(first)} | ${ratioCell(row, first)} | ${shown(second)} | ${ratioCell(row, second)} |`,
-        );
+        const theirs = PARTNERS.map((engine) => `${shown(engine)} | ${ratioCell(row, engine)}`);
+        lines.push(`| ${label(row)} | ${shown('ours')} | ${theirs.join(' | ')} |`);
     }
     return lines.join('\n');
 }
 
-function speedTables(run: SpeedRun): string {
-    return PAIRS.map(
-        (pair) => `${OURS} with ${LABELS[pair[0]]} and ${LABELS[pair[1]]}:\n\n${speedTable(run, pair)}`,
-    ).join('\n\n');
-}
-
-// Per cell engine, the median time in the load or the edit itself out of the median time of the whole run.
+// Per engine, the median time in the load or the edit itself out of the median time of the whole run.
 function stepTable(run: SpeedRun): string {
     const lines = [
-        `| workload | ${CELL_ENGINES.map((engine) => cell(LABELS[engine])).join(' | ')} |`,
-        `|---|${CELL_ENGINES.map(() => '---').join('|')}|`,
+        `| workload | ${ENGINES.map((engine) => cell(LABELS[engine])).join(' | ')} |`,
+        `|---|${ENGINES.map(() => '---').join('|')}|`,
     ];
     for (const row of run.rows) {
         if (row.memory) continue;
-        const shown = (engine: CellEngineName) => {
+        const shown = (engine: EngineName) => {
             const { status, step, median } = row.engines[engine];
             return step === undefined || median === undefined ? status : `${time(step)} of ${time(median)}`;
         };
-        lines.push(`| ${label(row)} | ${CELL_ENGINES.map(shown).join(' | ')} |`);
+        lines.push(`| ${label(row)} | ${ENGINES.map(shown).join(' | ')} |`);
     }
     return lines.join('\n');
 }
@@ -220,10 +205,8 @@ function correctness(results: Results): Readonly<Record<string, string>> {
         'correctness-unjudged': number(found.unjudged),
         'correctness-totals': `${header}\n${total.join('\n')}`,
         'correctness-families': byFamily,
-        'formulajs-rows': number(found.formulajsRows),
-        'formulajs-share': percent(found.formulajsRows, found.rows),
         hung: hung.length === 0 ? '- None.' : hung.join('\n'),
-        'summary-correctness': `Correctness: of ${number(found.rows)} answers recorded in Excel, ${OURS} gave Excel's answer on ${percent(equal('ours'), judged('ours'))}, HyperFormula on ${percent(equal('hyperformula'), judged('hyperformula'))}, IronCalc on ${percent(equal('ironcalc'), judged('ironcalc'))} and Univer on ${percent(equal('univer'), judged('univer'))}; formulajs, judged only on the ${number(found.formulajsRows)} rows that are one function call, on ${percent(equal('formulajs'), judged('formulajs'))} of those.`,
+        'summary-correctness': `Correctness: of ${number(found.rows)} answers recorded in Excel, ${OURS} gave Excel's answer on ${percent(equal('ours'), judged('ours'))}, HyperFormula on ${percent(equal('hyperformula'), judged('hyperformula'))}, IronCalc on ${percent(equal('ironcalc'), judged('ironcalc'))} and Univer on ${percent(equal('univer'), judged('univer'))}.`,
     };
 }
 
@@ -244,7 +227,7 @@ function coverage(results: Results): Readonly<Record<string, string>> {
     const yes = (passes: boolean) => (passes ? 'yes' : 'no');
     const features = found.features.map(
         (feature) =>
-            `| ${feature.name} | \`${cell(feature.probe)}\` | ${CELL_ENGINES.map((engine) => `${yes(feature.passes[engine])} (${cell(feature.answers[engine])})`).join(' | ')} | no |`,
+            `| ${feature.name} | \`${cell(feature.probe)}\` | ${ENGINES.map((engine) => `${yes(feature.passes[engine])} (${cell(feature.answers[engine])})`).join(' | ')} |`,
     );
     return {
         'excel-functions': String(found.excel),
@@ -259,11 +242,11 @@ function coverage(results: Results): Readonly<Record<string, string>> {
             ...gaps,
         ].join('\n'),
         'coverage-features': [
-            `| feature | probe | ${CELL_ENGINES.map((engine) => cell(LABELS[engine])).join(' | ')} | formulajs |`,
-            `|---|---|${CELL_ENGINES.map(() => '---').join('|')}|---|`,
+            `| feature | probe | ${ENGINES.map((engine) => cell(LABELS[engine])).join(' | ')} |`,
+            `|---|---|${ENGINES.map(() => '---').join('|')}|`,
             ...features,
         ].join('\n'),
-        'summary-coverage': `Coverage: of Excel's ${found.excel} functions, ${OURS} has ${functions.ours.excel}, HyperFormula ${functions.hyperformula.excel}, formulajs ${functions.formulajs.excel}, IronCalc ${functions.ironcalc.excel} and Univer ${functions.univer.excel}.`,
+        'summary-coverage': `Coverage: of Excel's ${found.excel} functions, ${OURS} has ${functions.ours.excel}, HyperFormula ${functions.hyperformula.excel}, IronCalc ${functions.ironcalc.excel} and Univer ${functions.univer.excel}.`,
     };
 }
 
@@ -271,7 +254,7 @@ export function marks(results: Results): Record<string, string> {
     const speed: Record<string, string> = {};
     const first = Object.values(results.speed)[0];
     for (const [runtime, run] of Object.entries(results.speed)) {
-        speed[`speed-${runtime}`] = speedTables(run);
+        speed[`speed-${runtime}`] = speedTable(run);
         speed[`steps-${runtime}`] = stepTable(run);
         speed[`setup-${runtime}`] = speedSetup(run, results);
         speed[`summary-speed-${runtime}`] = speedSummary(run);
@@ -285,7 +268,7 @@ export function marks(results: Results): Record<string, string> {
         generated: results.generated,
         'full-minutes': number(Math.round(results.seconds / 60)),
         machine: `${machine.cpu}, ${machine.cores} cores, ${machine.memoryGb} GB, ${machine.os}`,
-        versions: `Bun ${versions.bun}, Node ${versions.node.replace(/^v/, '')}, HyperFormula ${versions.hyperformula}, formulajs ${versions.formulajs}, IronCalc ${versions.ironcalc}, Univer ${versions.univer}`,
+        versions: `Bun ${versions.bun}, Node ${versions.node.replace(/^v/, '')}, HyperFormula ${versions.hyperformula}, IronCalc ${versions.ironcalc}, Univer ${versions.univer}`,
         workloads: (first?.rows ?? [])
             .filter((row) => row.smallerFor === undefined)
             .map((row) => `- **${row.workload}.** ${row.what}`)

@@ -1,10 +1,8 @@
-// The engines the benchmark compares, behind one small interface: load sheets of cells, recalc, read a value,
-// write a cell, insert rows or columns. Ours, HyperFormula, IronCalc and Univer hold cells; formulajs is a library
-// of functions with no cells, so it gets a second, smaller interface: call one function with plain arguments. The
-// speed, correctness and coverage runs drive every engine only through these, each in a process of its own.
+// The engines the benchmark compares, such as HyperFormula and IronCalc, behind one small interface: load sheets of
+// cells, recalc, read a value, write a cell, insert rows or columns. The speed, correctness and coverage runs drive
+// every engine only through it, each in a process of its own.
 
 import * as fs from 'node:fs';
-import * as formulajs from '@formulajs/formulajs';
 import { initSync, Model } from '@ironcalc/wasm';
 import ironcalcWasm from '@ironcalc/wasm/wasm_bg.wasm' with { type: 'file' };
 import type { ICellData, IWorksheetData } from '@univerjs/core';
@@ -321,50 +319,4 @@ export function ironcalcNames(names: Iterable<string>): string[] {
     for (const [i, name] of all.entries()) model.setUserInput(0, i + 1, 1, `=${name}()`);
     model.evaluate();
     return all.filter((_, i) => !IRONCALC_UNKNOWN.has(model.getFormattedCellValue(0, i + 1, 1)));
-}
-
-// A formulajs function by Excel's name: NORM.DIST is the DIST member of its NORM export.
-export function formulajsFunction(name: string): ((...args: unknown[]) => unknown) | undefined {
-    let found: unknown = formulajs;
-    for (const part of name.split('.')) {
-        if (found === null || (typeof found !== 'object' && typeof found !== 'function')) return undefined;
-        found = Reflect.get(found, part);
-    }
-    return typeof found === 'function' ? (...args: unknown[]) => Reflect.apply(found, undefined, args) : undefined;
-}
-
-// Every name formulajs exports a function under, the dotted ones included.
-export function formulajsNames(): string[] {
-    const names: string[] = [];
-    const walk = (from: object, prefix: string) => {
-        for (const [key, value] of Object.entries(from)) {
-            if (key === 'default') continue;
-            const name = prefix === '' ? key : `${prefix}.${key}`;
-            if (typeof value === 'function') names.push(name);
-            if (value !== null && (typeof value === 'object' || typeof value === 'function')) walk(value, name);
-        }
-    };
-    walk(formulajs, '');
-    return [...new Set(names)].sort();
-}
-
-// A formulajs answer as a cell value: an Error is the error its message names, and a Date, which formulajs builds in
-// local time, is Excel's day number.
-export function formulajsValue(answer: unknown): Value {
-    if (answer === null || answer === undefined) return null;
-    if (typeof answer === 'number' || typeof answer === 'string' || typeof answer === 'boolean') return answer;
-    if (answer instanceof Error) return errorOf(answer.message);
-    if (answer instanceof Date) {
-        const local = Date.UTC(
-            answer.getFullYear(),
-            answer.getMonth(),
-            answer.getDate(),
-            answer.getHours(),
-            answer.getMinutes(),
-            answer.getSeconds(),
-            answer.getMilliseconds(),
-        );
-        return (local - Date.UTC(1899, 11, 30)) / 86_400_000;
-    }
-    return String(answer);
 }

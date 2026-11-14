@@ -1,26 +1,16 @@
 // Judges one engine on every recorded row, or on every n-th for a quick look: the formula goes into cell U21 of the
 // row's sheets in a fresh engine, and its value is compared with Excel's by the oracle's own rule, numbers at 15
 // significant digits. An array is judged by its size and each element, each read through INDEX in a fresh engine,
-// as the oracle does. formulajs is judged only on the rows that are one call with plain literal arguments. The run
-// starts one process per engine.
+// as the oracle does. The run starts one process per engine.
 
 import * as fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { Expected } from '../scripts/oracle-rows';
 import { equalsRecorded } from '../scripts/oracle-rows';
 import type { Literal } from '../src/index';
-import type { FormulaNode } from '../src/text';
-import { NodeKind, parseA1, parseA1Range, Token } from '../src/text';
+import { parseA1Range } from '../src/text';
 import type { CellEngine, Input, SheetInput, Value } from './engines';
-import {
-    formulajsFunction,
-    formulajsValue,
-    HyperFormulaEngine,
-    IRONCALC_UNKNOWN,
-    IronCalcEngine,
-    OursEngine,
-    UniverEngine,
-} from './engines';
+import { HyperFormulaEngine, IRONCALC_UNKNOWN, IronCalcEngine, OursEngine, UniverEngine } from './engines';
 import type { DataRow, RowSheet } from './rows';
 import { readData } from './rows';
 
@@ -32,12 +22,6 @@ const [HOST_ROW, HOST_COLUMN] = [20, 20];
 // for a function it knows but does not implement.
 const UNSUPPORTED = new Set(['#NAME?', '#ERROR!', ...IRONCALC_UNKNOWN]);
 
-type SingleCall = {
-    readonly place: number;
-    readonly expected: Expected;
-    readonly name: string;
-    readonly args: readonly unknown[];
-};
 type Check = { readonly formula: string; readonly equal: (value: Value) => boolean; readonly wanted: string };
 
 function sheetInputs(sheets: readonly RowSheet[], formula: string): SheetInput[] {
@@ -104,8 +88,8 @@ function worst(verdicts: readonly Verdict[]): Verdict {
     return 'equal';
 }
 
-// One row on a cell engine: each check in a fresh engine, the worst verdict of them.
-export async function judgeRow(
+// One row on one engine: each check in a fresh engine, the worst verdict of them.
+async function judgeRow(
     make: () => CellEngine,
     row: DataRow,
     fixtures: readonly (readonly RowSheet[])[],
@@ -123,44 +107,6 @@ export async function judgeRow(
         }
     }
     return worst(verdicts);
-}
-
-// A literal argument as formulajs takes it, or undefined for anything else.
-function literalOf(node: FormulaNode): number | string | boolean | undefined {
-    if (node.kind === NodeKind.Number) return node.value;
-    if (node.kind === NodeKind.String) return node.text;
-    if (node.kind === NodeKind.Boolean) return node.value === 1;
-    if (node.kind === NodeKind.Prefix && node.op === Token.Minus && node.children[0].kind === NodeKind.Number)
-        return -node.children[0].value;
-    return undefined;
-}
-
-// The rows that are one call of a function with plain literal arguments: their place, name and arguments.
-export function singleCalls(rows: readonly DataRow[]): SingleCall[] {
-    const calls: SingleCall[] = [];
-    for (const [place, row] of rows.entries()) {
-        const [, , formula, expected] = row;
-        if ('rows' in expected) continue;
-        const tree = parseA1(formula, HOST_ROW, HOST_COLUMN, () => undefined);
-        if ('reason' in tree || tree.kind !== NodeKind.Call) continue;
-        const args = tree.children.map(literalOf);
-        if (args.every((arg) => arg !== undefined)) calls.push({ place, expected, name: tree.text, args });
-    }
-    return calls;
-}
-
-export function judgeCall(
-    { expected, name, args }: SingleCall,
-    equals: (value: Literal | null, expected: Expected) => boolean,
-): Verdict {
-    const call = formulajsFunction(name);
-    if (call === undefined) return 'not supported';
-    try {
-        const equal = (value: Value) => equals(value, expected);
-        return verdictOf(formulajsValue(call(...args)), { formula: name, equal, wanted: expected.text });
-    } catch {
-        return 'crashed';
-    }
 }
 
 // The rows a run judges: every row, or for a quick look every `every`-th by its place in the file.
@@ -189,10 +135,7 @@ if (import.meta.main) {
     const from = Number(values.from);
     const every = Number(values.every);
     const make = MAKE[values.engine];
-    const jobs: [number, () => Verdict | Promise<Verdict>][] =
-        values.engine === 'formulajs'
-            ? singleCalls(rows).map((call) => [call.place, () => judgeCall(call, equalsRecorded)])
-            : rows.map((row, place) => [place, () => judgeRow(make, row, header.fixtures, equalsRecorded)]);
-    for (const [place, judge] of jobs)
-        if (place >= from && sampled(place, every)) fs.writeSync(1, `${place}\t${await judge()}\n`);
+    for (const [place, row] of rows.entries())
+        if (place >= from && sampled(place, every))
+            fs.writeSync(1, `${place}\t${await judgeRow(make, row, header.fixtures, equalsRecorded)}\n`);
 }

@@ -11,7 +11,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { Verdict } from './correctness';
-import { sampled, singleCalls, VERDICTS } from './correctness';
+import { sampled, VERDICTS } from './correctness';
 import type { Coverage } from './coverage';
 import { coverage } from './coverage';
 import { HYPERFORMULA_CONFIG } from './engines';
@@ -97,7 +97,6 @@ export type Results = {
         // Every row is judged when this is 1; a quick run judges every n-th.
         readonly every: number;
         readonly unjudged: number;
-        readonly formulajsRows: number;
         readonly engines: Readonly<Record<EngineName, EngineVerdicts>>;
     };
     readonly coverage?: Coverage;
@@ -161,7 +160,6 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
                 const shift = (round + w) % engines.length;
                 for (const engine of [...engines.slice(shift), ...engines.slice(0, shift)]) {
                     const key = `${workload.name}\t${engine}`;
-                    if (engine === 'formulajs' && (workload.formulajs === undefined || workload.memory)) continue;
                     if (failures.has(key) || slow.has(key)) continue;
                     const [file, ...args] = command;
                     const spawned = () =>
@@ -243,7 +241,6 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
                 engines: {
                     ours: cell('ours'),
                     hyperformula: cell('hyperformula'),
-                    formulajs: cell('formulajs'),
                     ironcalc: cell('ironcalc'),
                     univer: cell('univer'),
                 },
@@ -277,7 +274,7 @@ function speedRun(runtime: 'bun' | 'node', { rounds, reps, filter, limit, scale 
     };
 }
 
-// One engine's verdict on every row it is judged on, in child processes that are restarted after a row hangs.
+// One engine's verdict on every sampled row, in child processes that are restarted after a row hangs.
 async function verdictsOf(
     engine: EngineName,
     places: readonly number[],
@@ -323,13 +320,10 @@ async function verdictsOf(
 
 async function correctnessRun(every: number): Promise<NonNullable<Results['correctness']>> {
     const { header, rows } = readData();
-    const calls = singleCalls(rows)
-        .map((call) => call.place)
-        .filter((place) => sampled(place, every));
     const everyRow = rows.map((_, place) => place).filter((place) => sampled(place, every));
     const engines: Partial<Record<EngineName, EngineVerdicts>> = {};
     for (const engine of ENGINES) {
-        const verdicts = await verdictsOf(engine, engine === 'formulajs' ? calls : everyRow, every);
+        const verdicts = await verdictsOf(engine, everyRow, every);
         const zero = (): Record<Verdict, number> => ({ equal: 0, differs: 0, 'not supported': 0, crashed: 0 });
         const total = zero();
         const byFile: Record<string, Record<Verdict, number>> = {};
@@ -345,22 +339,15 @@ async function correctnessRun(every: number): Promise<NonNullable<Results['corre
         engines[engine] = { total, byFile, hung };
         process.stderr.write(`${engine}: ${JSON.stringify(total)}\n`);
     }
-    const { ours, hyperformula, formulajs, ironcalc, univer } = engines;
-    if (
-        ours === undefined ||
-        hyperformula === undefined ||
-        formulajs === undefined ||
-        ironcalc === undefined ||
-        univer === undefined
-    )
+    const { ours, hyperformula, ironcalc, univer } = engines;
+    if (ours === undefined || hyperformula === undefined || ironcalc === undefined || univer === undefined)
         throw new Error('an engine is missing');
     return {
         source: header.source,
         rows: everyRow.length,
         every,
         unjudged: header.unjudged,
-        formulajsRows: calls.length,
-        engines: { ours, hyperformula, formulajs, ironcalc, univer },
+        engines: { ours, hyperformula, ironcalc, univer },
     };
 }
 
@@ -419,7 +406,6 @@ if (import.meta.main) {
             bun: process.versions.bun ?? '',
             node,
             hyperformula: packageVersion('hyperformula'),
-            formulajs: packageVersion('@formulajs/formulajs'),
             ironcalc: packageVersion('@ironcalc/wasm'),
             univer: packageVersion('@univerjs/core'),
         },

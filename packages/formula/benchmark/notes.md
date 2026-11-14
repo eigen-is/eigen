@@ -1,6 +1,6 @@
-# {{ours}} compared with HyperFormula, IronCalc, Univer and formulajs
+# {{ours}} compared with HyperFormula, IronCalc and Univer
 
-This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with four other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/), [Univer](https://univer.ai/) and [formulajs](https://formulajs.info). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. The numbers below come from one run on {{generated}}. A script wrote them into `results.json`, and a second script wrote this README from that file and from `notes.md`. No number here is typed by hand.
+This folder compares {{ours}}, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's {{excel-functions}} functions. The numbers below come from one run on {{generated}}. A script wrote them into `results.json`, and a second script wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
 
 ```sh
 cd packages/formula/benchmark
@@ -32,11 +32,11 @@ bun run.ts && bun readme.ts   # the full run, {{full-minutes}} minutes last time
 
 ## How to read the tables
 
-Each speed row is one workload. A workload is a workbook built in code, so anyone can run it again with nothing but the repo. A cell shows two times in milliseconds: the fastest round and the median round, as `fastest / median`. Lower is better. Five engines do not fit in one readable table, so each runtime has two tables with the same rows: {{ours}} with HyperFormula and formulajs, and {{ours}} with IronCalc and Univer. The {{ours}} column is the same in both. The ratio columns divide the other engine's median by ours. A ratio of 5× means the other engine took five times as long as {{ours}}. A ratio below 1× means the other engine was faster. The memory row shows megabytes instead of times, and its ratio works the same way.
+Each speed row is one workload. A workload is a workbook built in code, so anyone can run it again with nothing but the repo. A cell shows two times in milliseconds: the fastest round and the median round, as `fastest / median`. Lower is better. Each runtime has one table with every engine. The ratio columns divide the other engine's median by ours. A ratio of 5× means the other engine took five times as long as {{ours}}. A ratio below 1× means the other engine was faster. The memory row shows megabytes instead of times, and its ratio works the same way.
 
 "not supported" means the engine cannot run that workload. "wrong values" means the engine ran it, but its values were not the same as ours, so its time does not count. "too slow" means one run of the engine took more than two minutes. Its time is then not taken again in later rounds, and the workload comes back in a row of its own at a tenth of the size, marked "a tenth of the size for" that engine, run only by that engine and {{ours}}. Times at the two sizes are never compared or scaled to each other.
 
-A third table per runtime shows where the time goes. For each engine that holds cells, it shows the median time of the load (or of the edit) on its own, then the median time of the whole run, as `step of whole`. The rest is the engine's own recalculation call. HyperFormula computes during its load, so for it the step is nearly the whole time. IronCalc computes only when it is asked to, so for it the step is the cost of putting the cells in, across the WebAssembly boundary, and the rest is its computing.
+A second table per runtime shows where the time goes. For each engine, it shows the median time of the load (or of the edit) on its own, then the median time of the whole run, as `step of whole`. The rest is the engine's own recalculation call. HyperFormula computes during its load, so for it the step is nearly the whole time. IronCalc computes only when it is asked to, so for it the step is the cost of putting the cells in, across the WebAssembly boundary, and the rest is its computing.
 
 In the correctness tables, a row is one formula that a person typed into Excel for the web, with the answer Excel showed.
 
@@ -49,8 +49,6 @@ A workload without an edit measures the load: the engine gets the cells, reads t
 Before a time counts, the run checks the values. Each engine reports the values of a sample of cells after the workload, and they must match ours at 10 significant digits. We use 10 digits because HyperFormula rounds the numbers it gives out to 10 digits by default.
 
 IronCalc gets every cell through its `setUserInput` call, one cell at a time, with its automatic evaluation paused, and then computes the whole workbook with one `evaluate` call. Univer gets the whole workbook as one snapshot, a single object that holds every sheet and cell. It computes its formulas on its own schedule after a change, not inside the call that made the change, so the run waits for its documented signal that the results are in place (`onCalculationResultApplied`), and the time includes that wait.
-
-formulajs is a library of functions. It has no cells, no formula text and no recalculation. So it takes part only where the same answers come from plain function calls: the run gives it the columns as JavaScript arrays, built without the clock running, and times the calls. This is less work than an engine does, since nothing is parsed, stored or tracked.
 
 The workloads:
 
@@ -92,8 +90,6 @@ A row gets one of four verdicts. **equal**: the engine gave Excel's answer. **di
 
 Our own deliberate differences from Excel count as "differs" for us too. Examples are the dates in January and February 1900 and an empty text in arithmetic. [FUNCTIONS.md](../FUNCTIONS.md) lists every one of them with Excel's answer and ours.
 
-formulajs is judged only on the rows that are one call of a function with plain values as arguments, such as `=ROUND(2.5,0)`: {{formulajs-rows}} rows, {{formulajs-share}} of all. They need no cells.
-
 {{correctness-totals}}
 
 The share of equal answers per family of functions:
@@ -106,7 +102,7 @@ Rows that did not answer within 20 seconds, counted as crashed:
 
 ## Coverage
 
-Excel has {{excel-functions}} functions. The list is the one {{ours}} keeps of them (`EXCEL_2007_FUNCTIONS` and `EXCEL_FUTURE_FUNCTIONS`). For each engine we count the function names it registers that are on that list. For {{ours}} that is its function registry `FUNCTIONS`; for HyperFormula, `HyperFormula.getRegisteredFunctionNames('enGB')`; for formulajs, the functions it exports; for Univer, its exported list `ALL_IMPLEMENTED_FUNCTIONS`. IronCalc has no list of its functions in its API, so each of Excel's names is typed into an IronCalc cell as `=NAME()`, and the name counts when the answer is anything but `#NAME?` or `#N/IMPL!`. A known function called with no arguments answers an error such as `#ERROR!`, which still counts. This way finds only names on Excel's list, so IronCalc's other names are not known. "Other names" are names Excel does not have, such as Google Sheets functions or older spellings.
+Excel has {{excel-functions}} functions. The list is the one {{ours}} keeps of them (`EXCEL_2007_FUNCTIONS` and `EXCEL_FUTURE_FUNCTIONS`). For each engine we count the function names it registers that are on that list. For {{ours}} that is its function registry `FUNCTIONS`; for HyperFormula, `HyperFormula.getRegisteredFunctionNames('enGB')`; for Univer, its exported list `ALL_IMPLEMENTED_FUNCTIONS`. IronCalc has no list of its functions in its API, so each of Excel's names is typed into an IronCalc cell as `=NAME()`, and the name counts when the answer is anything but `#NAME?` or `#N/IMPL!`. A known function called with no arguments answers an error such as `#ERROR!`, which still counts. This way finds only names on Excel's list, so IronCalc's other names are not known. "Other names" are names Excel does not have, such as Google Sheets functions or older spellings.
 
 {{coverage-functions}}
 
@@ -116,7 +112,7 @@ Excel has {{excel-functions}} functions. The list is the one {{ours}} keeps of t
 
 The functions we lack are mostly statistical distributions, engineering and complex-number functions, financial functions, the database functions (`DSUM` and its kin) and the dynamic-array functions (`FILTER`, `SORT`, `UNIQUE`, `SEQUENCE`). Some are common, such as `PMT`, `NPV`, `IRR` and `NORM.DIST`. They are planned for a later step of the engine. Missing functions matter most when a workbook from Excel uses one: such a formula shows `#NAME?` until the function exists. The correctness table above shows the effect on the recorded rows: a missing function makes a row "not supported".
 
-Language features, each tested by running a probe formula and reading the answer (the answer is in brackets). The same probe runs through every engine's adapter. formulajs has no formula language, so it has none of them.
+Language features, each tested by running a probe formula and reading the answer (the answer is in brackets). The same probe runs through every engine's adapter.
 
 {{coverage-features}}
 
@@ -144,16 +140,14 @@ Each point is a design choice described in [FORMULA.md](../../../docs/FORMULA.md
 
 ## Where the others are better
 
-- **Functions.** Every other engine has many more of Excel's functions today. IronCalc and Univer have nearly all of them, and HyperFormula and formulajs most. This is the largest gap.
+- **Functions.** Every other engine has many more of Excel's functions today. IronCalc and Univer have nearly all of them, and HyperFormula most. This is the largest gap.
 - **Spilling and dynamic arrays.** HyperFormula, IronCalc and Univer spill an array answer into the cells below and have `FILTER` and similar functions. {{ours}} keeps only the first value of an array in the cell.
 - **LET and LAMBDA.** IronCalc and Univer have both; {{ours}} and HyperFormula have neither. Univer also reads a 3-D reference across sheets, which no other engine here does.
 - **Growing range sums.** In the running-total workload, where each formula sums a range that grows by one row, HyperFormula is faster than us: we read every cell of every range again, so the work grows with the square of the rows, and HyperFormula does not.
 - **Small edits.** When one cell with only a few dependents changes, HyperFormula is a little faster than us. Both take well under a millisecond.
-- **Plain text calls.** formulajs computes the text workload's calls much faster than our engine computes the same formulas. Part of that is that it parses, stores and tracks nothing, but our text formulas also cost clearly more per formula than the arithmetic formulas of the load workload, so there is room to improve.
 - **IronCalc** is a whole spreadsheet engine in one small WebAssembly file, with no dependencies, so the same engine runs in Rust, in a browser and on a server. Its API also has undo and redo, styles, defined names, conditional formats, and a stream of changes for working together on one workbook. It computes the whole workbook on every `evaluate`, so a small edit in a large workbook costs about as much as a full recalculation; the speed tables show this in the edit rows.
 - **Univer** is a whole office toolkit: sheets, documents and slides, with a screen to show them, collaboration, a worker or a server for computing, and custom functions that can wait for an answer from elsewhere. Its formula engine is one part of a much larger product, and it is the slowest engine here at these sizes; some workloads take it more than two minutes, as the rows at a tenth of the size show.
 - **A finished product.** HyperFormula has undo and redo, named expressions, custom functions, translations of function names, and a clipboard API. {{ours}} has none of these yet; its host is meant to give some of them.
-- **formulajs is tiny to use.** It is just functions. For a program that only needs to call `PMT` or `NORM.DIST` on its own numbers, it is the simplest choice.
 
 ## Fairness and limits of this benchmark
 
@@ -171,14 +165,12 @@ Each point is a design choice described in [FORMULA.md](../../../docs/FORMULA.md
 - Univer computes after a change on its own schedule. The run waits for `getFormula().onCalculationResultApplied()`, its documented way to wait until the results are in the cells, and that wait is part of the time. Edits use `getRange(row, column).setValue`, and inserts `insertRows` and `insertColumns`.
 - Univer's own value of a cell is rounded to 12 digits; `getRawValue` gives every digit, so the adapter reads that. A value an array formula spilled into a cell has no raw value, so for such a cell the adapter reads the rounded one. An error comes out as text, such as `#N/A`, so the adapter reads a formula's text as an error when it is the name of one of Excel's errors.
 - Our adapter turns each typed formula into stored text inside the timed load. HyperFormula, IronCalc and Univer also read typed text, so all four parse the same input.
-- formulajs takes plain JavaScript arrays and does no parsing, storing or dependency tracking. Its times are therefore a lower bound of what an engine built on it would take.
-- formulajs gives a date as a JavaScript `Date`. Before we compare it with Excel, we turn it into Excel's day number from its local date and time.
 - The speed workloads are synthetic. Real workbooks mix many shapes, functions and sizes. The engine's own bench script, `scripts/bench.ts`, times real workbooks against design gates, but those files are not in the repo.
 - The correctness rows were recorded to test the functions {{ours}} has, so they favour it: nearly every row calls a function we built, and few rows call one that only another engine has. A function an engine lacks makes its row "not supported". The column "equal where it answered" leaves those rows and the crashes out, which is a fairer view of the answers each engine does give.
 - The correctness rows were chosen to find edge cases, not to sample real use. A share of equal answers here says how often an engine agrees with Excel on hard cases, not on a typical workbook.
 - The machine is shared with other work. We waited for a low load before each round and recorded the load, but small times (under a millisecond) can still move between runs.
 - Machine: {{machine}}. Versions: {{versions}}.
-- We never read the source code of HyperFormula, IronCalc, Univer or formulajs. We used only their public documentation, READMEs and type declarations, and ran them as black boxes.
+- We never read the source code of HyperFormula, IronCalc or Univer. We used only their public documentation, READMEs and type declarations, and ran them as black boxes.
 
 HyperFormula's configuration:
 
