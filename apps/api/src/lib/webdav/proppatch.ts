@@ -5,7 +5,7 @@
 
 import type { WebdavDeadProp } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
-import { ApiError } from '../core/errors';
+import { ApiError, insufficientStorage } from '../core/errors';
 import { parseXmlRoot, serializeXmlChildren, XML_NAMESPACE, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { DAV_NAMESPACES } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
@@ -76,7 +76,7 @@ export async function handleProppatch(args: {
         }
         // Dead props live in the path row; one path stores no more than one PROPPATCH body can carry.
         if (Buffer.byteLength(JSON.stringify(webdavProps)) > MAX_XML_BODY_BYTES) {
-            throw new ApiError(507, 'Insufficient Storage');
+            throw insufficientStorage();
         }
         if (mutated) {
             await drive.updatePathDetails(mountId, path.id, {

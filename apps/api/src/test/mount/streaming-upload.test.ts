@@ -223,7 +223,7 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         } finally {
             await restore();
         }
@@ -250,7 +250,7 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         } finally {
             await restore();
         }

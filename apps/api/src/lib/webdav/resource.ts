@@ -5,7 +5,7 @@
 
 import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
-import { ApiError } from '../core/errors';
+import { ApiError, insufficientStorage } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
@@ -109,7 +109,7 @@ export async function handlePut(args: {
         const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
         const withinLimits = (bytes: number) => {
             enforceMaxUploadSize(bytes);
-            if (bytes > room) throw new ApiError(507, 'Insufficient Storage');
+            if (bytes > room) throw insufficientStorage();
         };
         // A Content-Length refuses before a byte moves. A chunked body, such as Finder's, has none, so the
         // stream is counted too.

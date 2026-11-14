@@ -3,7 +3,7 @@
 // before they write, such as an upload, a copy, an editor save or a contact card.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { ApiError, payloadTooLarge } from '../core';
+import { insufficientStorage, payloadTooLarge } from '../core';
 import { getHome } from '../home';
 import { getMemberships } from '../user';
 import { resolveHomeDataMax, resolveUserQuotas } from './quota';
@@ -31,7 +31,7 @@ export async function enforceMountQuota(
     creditExisting = 0,
 ): Promise<void> {
     if (addBytes > (await getMountRoom(ownerId, mountId, creditExisting))) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }
 
@@ -39,7 +39,7 @@ export async function enforceMountQuota(
 export async function getUploadRoom(ownerId: string, mountId: string): Promise<number> {
     const room = await getMountRoom(ownerId, mountId);
     if (room <= 0) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
     return room;
 }
@@ -62,7 +62,7 @@ export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const { used, max } = await getHomeDataQuotaState(userId);
     const remainingQuota = max - used;
     if (remainingQuota <= 0) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
     return Math.min(maxUpload, remainingQuota);
 }
@@ -77,7 +77,7 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     enforceMaxUploadSize(fileSize);
     const { used, max } = await getHomeDataQuotaState(userId);
     if (used + fileSize > max) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }
 
@@ -92,6 +92,6 @@ export async function enforceHomeDataQuota(ownerId: string, addBytes: number, cr
     const withinGrace = creditBytes > 0 && addBytes - creditBytes <= HOME_DATA_EDIT_GRACE_BYTES;
     const ceiling = withinGrace ? max + HOME_DATA_EDIT_HEADROOM_BYTES : max;
     if (used + addBytes - creditBytes > ceiling) {
-        throw new ApiError(507, 'Insufficient Storage');
+        throw insufficientStorage();
     }
 }

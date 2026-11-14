@@ -6,7 +6,7 @@
 
 import type { CryptoHasher, FileSink } from 'bun';
 import { getMaxUploadSize } from '../config/server-settings';
-import { ApiError, payloadTooLarge } from '../core';
+import { ApiError, insufficientStorage, payloadTooLarge } from '../core';
 import type { Mount } from '../mount';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 
@@ -48,7 +48,7 @@ export async function streamFilesToTemp(mount: Mount, request: Request, room: nu
                 if (current) {
                     current.size += event.data.byteLength;
                     // Each file may take all that is left, as a quota is a soft limit.
-                    if (current.size > room) throw new ApiError(507, 'Insufficient Storage');
+                    if (current.size > room) throw insufficientStorage();
                     current.hasher.update(event.data);
                     current.writer.write(event.data);
                 }

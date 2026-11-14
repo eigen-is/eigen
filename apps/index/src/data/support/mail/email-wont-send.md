@@ -6,7 +6,7 @@ category: Troubleshooting
 tags: [mail, sending, attachments, errors, troubleshooting]
 related: [mail/compose-and-send, mail/attach-files]
 order: 200
-updated: 2026-09-13
+updated: 2026-11-14
 ---
 
 When you click **Send** and the message doesn't go, Mail tells you why. Some checks happen before the message leaves your screen, and some come back from the mail server as a short message at the bottom of the window. This page covers the usual causes and what to do about each one.
@@ -51,7 +51,7 @@ The reader opens the file from the link, and your email stays small. This also k
 
 ## Your mail storage is full
 
-Sent and received mail counts toward your storage limit. When it's full, adding an attachment or sending fails with **Insufficient Storage**.
+Sent and received mail counts toward your storage limit. When it's full, adding an attachment fails with **Not enough storage left**.
 
 Free up some space, then try again:
 

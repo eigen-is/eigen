@@ -19,7 +19,7 @@ const STATUS_MESSAGES: Record<number, string> = {
     429: 'Too many requests',
     500: 'Server error',
     503: 'Service unavailable',
-    507: 'Insufficient storage',
+    507: 'Not enough storage left',
 };
 
 export class AppError extends Error {

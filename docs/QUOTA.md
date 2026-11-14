@@ -38,7 +38,7 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 ## 507 is a full budget, 413 a file too large
 
-`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/mount.ts`): the API's `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` beside it, 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it.
+`enforcement.ts` answers 507 `insufficientStorage()` ("Not enough storage left") when a budget is full or a projected write would overfill it. It answers 413 `payloadTooLarge()` ("Upload too large") when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/mount.ts`): the API's `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` beside it, 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it.
 
 `getUploadRoom` answers what is left of the mount and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands it to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`), which holds each file to the per-file cap and to that room as it streams: a file that runs past the cap mid-transfer is a 413, and one that runs past the room a 507, so the answer names the cap it hit.
 
