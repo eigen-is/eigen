@@ -1,10 +1,10 @@
 // The apps the About pages describe: every app in the shared registry except Space, the workspace home, in the
-// registry's order. An app's slug is its name in lower case and names both its page's file and its URL, such as
-// sheets.md and /about/sheets. Each also says what it opens and saves and which protocols other apps reach it by,
-// for the panel on its page and the tags under the landing page's blocks. The content build checks the About files
-// against this list, and the pages list the apps in its order.
+// registry's order, then Admin for the person who runs the server. An app's slug is its name in lower case and names
+// both its page's file and its URL, such as sheets.md and /about/sheets. Each also says what it opens and saves and
+// which protocols other apps reach it by, for the panel on its page and the tags under the landing page's blocks. The
+// content build checks the About files against this list, and the pages list the apps in its order.
 
-import { apps } from '@workspace/lib/apps';
+import { adminApp, apps } from '@workspace/lib/apps';
 
 // File types as their endings, such as `.xlsx`, and `article` as a help article's slug, such as `sheets/import-excel`.
 export type AppFormats = { files: readonly string[]; protocols: readonly string[]; text: string; article: string };
@@ -58,15 +58,19 @@ export const appFormats = {
         text: 'Your address book syncs with the contacts app on your phone or computer, and imports and exports as .vcf files.',
         article: 'connect/contacts-client',
     },
+    admin: {
+        files: ['.tar', '.tar.zst'],
+        protocols: [],
+        text: 'A backup of the whole server is a plain .tar, with a .tar.zst inside for each user and team, so tar opens it on any computer, without Eigen.',
+        article: 'self-hosting/back-up-and-restore',
+    },
 } satisfies Record<string, AppFormats>;
 
 const formatsBySlug = new Map<string, AppFormats>(Object.entries(appFormats));
 
-export const aboutApps = apps
-    .filter((app) => app.name !== 'Space')
-    .map((app) => {
-        const slug = app.name.toLowerCase();
-        return { ...app, slug, formats: formatsBySlug.get(slug) };
-    });
+export const aboutApps = [...apps.filter((app) => app.name !== 'Space'), adminApp].map((app) => {
+    const slug = app.name.toLowerCase();
+    return { ...app, slug, formats: formatsBySlug.get(slug) };
+});
 
 export type AboutApp = (typeof aboutApps)[number];

@@ -12,6 +12,7 @@ rows:
   contacts: One address book, synced to your phone.
   chat: Messages and files with your team, in real time.
   stickies: Boards for tasks and ideas.
+  admin: People, teams, storage and backups, for whoever runs the server.
 ---
 
 <!-- DRAFT: the owner rewrites this -->
@@ -36,7 +37,7 @@ You can try it without installing anything at [demo.eigen.is](https://demo.eigen
 
 ## The apps
 
-Ten apps on one server, behind one login. Each does the everyday part of the Google app it replaces.
+Ten apps on one server, behind one login. Each does the everyday part of the Google app it replaces. The last row is for whoever runs the server.
 
 ::: apps
 :::

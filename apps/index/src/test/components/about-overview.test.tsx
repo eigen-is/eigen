@@ -37,10 +37,10 @@ async function renderOverview(): Promise<string> {
 }
 
 describe('AboutOverview', () => {
-    test('draws a row per app at the apps block of the body, and links and highlights only the apps that have a page', async () => {
+    test('draws a row per app, Admin last, at the apps block of the body, and links and highlights only the apps that have a page', async () => {
         const html = await renderOverview();
-        expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(10);
-        expect(html.match(/eigen-list-item/g)).toHaveLength(10);
+        expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(11);
+        expect(html.match(/eigen-list-item/g)).toHaveLength(11);
         expect(html.match(/<a [^>]*href="\/about\/[a-z]+"/g)).toEqual([
             expect.stringContaining('href="/about/mail"'),
             expect.stringContaining('href="/about/drive"'),
@@ -52,8 +52,11 @@ describe('AboutOverview', () => {
             expect.stringContaining('href="/about/stickies"'),
             expect.stringContaining('href="/about/chat"'),
             expect.stringContaining('href="/about/contacts"'),
+            expect.stringContaining('href="/about/admin"'),
         ]);
         expect(html).toContain('The line of Contacts');
         expect(html).toContain('src="/data/about/media/row-mail.webp"');
+        expect(html).toContain('src="/data/about/media/row-admin.webp"');
+        expect(html).toContain('The line of Admin');
     });
 });
