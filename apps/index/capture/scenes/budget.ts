@@ -7,7 +7,7 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
 } from '../../../../packages/lib/src/sheets';
-import { DRIVE_MIME_SHEETS } from '../../../../packages/lib/src/types/drive';
+import { DRIVE_TYPE_SHEETS } from '../../../../packages/lib/src/types/drive';
 import { BUDGET } from '../../../api/src/scripts/demo/content';
 import type { Point } from '../lib/cursor';
 import { openFile } from '../lib/open';
@@ -16,7 +16,7 @@ import type { Stack } from '../lib/scene';
 const COLUMN_WIDTHS = BUDGET.sheets[0].columns.map((column) => column.width);
 
 export async function openBudget(page: Page, stack: Stack): Promise<void> {
-    await openFile(page, stack, DRIVE_MIME_SHEETS, BUDGET.name);
+    await openFile(page, stack, DRIVE_TYPE_SHEETS, BUDGET.name);
     await page.locator('canvas').first().waitFor();
     // The canvas mounts before the workbook's first paint.
     await Bun.sleep(4000);

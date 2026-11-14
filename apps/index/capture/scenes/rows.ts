@@ -3,10 +3,10 @@
 // so no pointer shows in the picture.
 
 import {
-    DRIVE_MIME_DOC,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
-    DRIVE_MIME_VECTOR,
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
+    DRIVE_TYPE_VECTOR,
 } from '../../../../packages/lib/src/types/drive';
 import { DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { openFile } from '../lib/open';
@@ -52,7 +52,7 @@ export const ROWS: Scene[] = [
         await hold(SETTLE_MS);
     }),
     row('docs', 'dark', async ({ pages: [page], stack, hold }) => {
-        await openFile(page, stack, DRIVE_MIME_DOC, DOCS[0].name);
+        await openFile(page, stack, DRIVE_TYPE_DOC, DOCS[0].name);
         await page.getByText('Site & access').waitFor();
         await hold(SETTLE_MS);
     }),
@@ -60,15 +60,15 @@ export const ROWS: Scene[] = [
         await openBudget(page, stack);
     }),
     row('slides', 'light', async ({ pages: [page], stack, hold }) => {
-        await openFile(page, stack, DRIVE_MIME_SLIDES, SPONSOR_DECK.name);
+        await openFile(page, stack, DRIVE_TYPE_SLIDES, SPONSOR_DECK.name);
         await hold(SETTLE_MS * 3);
     }),
     row('vector', 'dark', async ({ pages: [page], stack, hold }) => {
-        await openFile(page, stack, DRIVE_MIME_VECTOR, SITE_PLAN.name);
+        await openFile(page, stack, DRIVE_TYPE_VECTOR, SITE_PLAN.name);
         await hold(SETTLE_MS * 3);
     }),
     row('stickies', 'light', async ({ pages: [page], stack, hold }) => {
-        await openFile(page, stack, DRIVE_MIME_STICKIES, KANBAN.name);
+        await openFile(page, stack, DRIVE_TYPE_STICKIES, KANBAN.name);
         await page.getByText(KANBAN.columns[0], { exact: true }).first().waitFor();
         await hold(SETTLE_MS);
     }),
