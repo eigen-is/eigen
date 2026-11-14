@@ -20,6 +20,7 @@ describe('AppError messages', () => {
     test('falls back to the response status when the error carries none', () => {
         const error = new AppError({ error: { status: undefined, value: 'Boom' }, status: 500 });
 
+        expect(error.status).toBe(500);
         expect(getErrorMessage(error)).toBe('Boom');
     });
 
