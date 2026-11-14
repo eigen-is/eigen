@@ -10,7 +10,7 @@ The scripts in `docker/` are not part of `bun run test`. Each copies the tracked
 
 ## A launcher change runs on both image stores
 
-On a moved tag, the containerd store drops `repo@sha256:<old>` and lists the old image as dangling, while the classic store keeps it as a digest-only image that `docker image ls` shows only with `--all`. Docker Desktop and a fresh Linux install of Docker 29 use containerd (demo.eigen.is does), an older Linux install the classic store. So the launcher pulls a pinned image back by digest before it reads one, and an update pulls back every image the rollback pins before its prune, which takes dangling images (`prune_images`). A launcher change runs on both stores: the Mac gate is containerd, and `test-release.sh`'s update between two builds of main checks that every image of the first is kept.
+On a moved tag, the containerd store drops `repo@sha256:<old>` and lists the old image as dangling, while the classic store keeps it as a digest-only image that `docker image ls` shows only with `--all`. Docker Desktop and a fresh Linux install of Docker 29 use containerd (demo.eigen.is does), an older Linux install the classic store. So the launcher pulls a pinned image back by digest before it reads one, and an update pulls back every image the rollback pins before its prune, which takes dangling images, and removes no image when one cannot be pulled back (`prune_images`). A launcher change runs on both stores: the Mac gate is containerd, and `test-release.sh`'s update between two builds of main checks that every image of the first is kept.
 
 ## Each harness proves one path, and they run one at a time
 
