@@ -6,7 +6,7 @@
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { pushUserProfile } from '../user/avatars';
+import { writeUserProfile } from '../user/profile';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
@@ -201,7 +201,7 @@ export async function putCard(
                 if (data) avatarWebP = Buffer.from(data);
             }
             try {
-                await pushUserProfile(
+                await writeUserProfile(
                     contacts.home.user.id,
                     `${parsed.firstName.trim()} ${parsed.lastName.trim()}`.trim(),
                     avatarWebP,

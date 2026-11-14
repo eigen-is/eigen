@@ -31,7 +31,7 @@ import { sendMail } from '../mailer/mailer';
 import { reconcileShares } from '../share';
 import { getTeamExists } from '../team';
 import { getOrgRole, getUserById, isGuest } from '../user';
-import { pushTeamAvatar } from '../user/avatars';
+import { writeTeamAvatar } from '../user/profile';
 import { ensureAuthSchemaColumns } from './auth-schema-columns';
 
 // The columns better-auth needs are added before it first reads the database.
@@ -222,7 +222,7 @@ export const auth = betterAuth({
                     // Lazy import to avoid the static cycle (get-home → team → auth).
                     const { clearHomeDeleting } = await import('../home/get-home');
                     clearHomeDeleting(teamOwnerId(team.id));
-                    await pushTeamAvatar(team.id, null);
+                    await writeTeamAvatar(team.id, null);
                 },
             },
         }),

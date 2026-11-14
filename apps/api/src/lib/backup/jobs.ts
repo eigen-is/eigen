@@ -6,8 +6,8 @@ import * as path from 'node:path';
 import { homeBackupUnverifiedTag } from '@workspace/lib/notification/tags';
 import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
+import { snapshotHomeHeld } from '../home/home-jobs';
 import { sendToHome } from '../home/home-relay';
-import { pullHomeSnapshot } from '../home/server-jobs';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
 import { packFolder, readUnpackedHome } from './archive';
@@ -170,7 +170,7 @@ export async function drainBackupJobs(): Promise<void> {
 export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: BackupProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
-        const manifest = await pullHomeSnapshot(ownerId, staging, { onProgress });
+        const manifest = await snapshotHomeHeld(ownerId, staging, { onProgress });
         const folder = path.join(staging, buildHomeFolderName(manifest.ownerId));
         const verify = await verifyFolder(folder, onProgress);
         const name = freeArtifactName(manifest.ownerId, new Date(manifest.createdAt));

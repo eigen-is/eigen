@@ -8,13 +8,13 @@ import { LocalFilesystem } from '../core';
 import { updateUser } from './user';
 
 // When homes live in several processes, this becomes a call to the central server.
-export async function pushUserProfile(userId: string, name: string, avatarWebP: Buffer | null): Promise<void> {
+export async function writeUserProfile(userId: string, name: string, avatarWebP: Buffer | null): Promise<void> {
     await writeAvatar(userId, avatarWebP);
     await updateUser(userId, name, avatarWebP ? `${SERVER_DIR}/${SERVER_FILES.avatars}/${userId}.webp` : '');
 }
 
 // A team has no row in the auth database to update, so its avatar file is all there is.
-export async function pushTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
+export async function writeTeamAvatar(teamId: string, avatarWebP: Buffer | null): Promise<void> {
     await writeAvatar(teamOwnerId(teamId), avatarWebP);
 }
 

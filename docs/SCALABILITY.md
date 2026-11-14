@@ -23,7 +23,7 @@ When one user's action touches another Home, it goes through `home-relay.ts`, in
 
 A route whose URL names the owner opens that owner's Home itself and is no relay call: a Drive route through `getSharedDrive`, a calendar route through `checkCalendarAccess`, which answers the owner's `Calendar` with the caller's permission on it, or `routedCalendar`, and the access-request route through `getHome`.
 
-Calls that no Home makes stay out of the relay. The server jobs in `lib/home/server-jobs.ts` work on one home's folder: `pullHomeSize` and `pullHomeBackupBytes` read it without booting the home, and `pullHomeSnapshot` captures it for a backup. `pushUserProfile` and `pushTeamAvatar` in `lib/user/avatars.ts` write server-wide data, a user's name and the avatar files.
+Calls that no Home makes stay out of the relay. The server jobs in `lib/home/home-jobs.ts` work on one home's folder: `sizeUserHome` reads it without booting the home, and `snapshotHomeHeld` captures it for a backup. The server backup's room check sizes each home's folder with `captureBytes`. `writeUserProfile` and `writeTeamAvatar` in `lib/user/profile.ts` write server-wide data, a user's name and the avatar files.
 
 Today each is a direct `getHome()` in the same process. Sharded, `sendToHome` routes or enqueues a message and a pull becomes a request to the owning process, and nothing outside the file changes. A `HomeMessage` is plain data for that reason. [PROPOSAL_HOME_RELAY.md](proposals/PROPOSAL_HOME_RELAY.md), signed off, shrinks the file to `pushToHomes`, `getFromHomes` and `broadcastToHomes`.
 
@@ -50,7 +50,7 @@ The Calendar and Drive `receive*` methods write the database, broadcast the SSE 
 | Waitlist | `data/server/waitlist.db` | One row set, written from any process |
 | Yjs documents | In memory in the process that opened them | Editors connect to the owner's process |
 | SSE streams | In the process that serves the user | A user connects to their Home's process ([SSE.md](SSE.md)) |
-| Backup jobs and the restore mark | The in-memory job map and `markHomeRestoring` ([BACKUP.md § A restore deletes nothing and writes identity last](BACKUP.md#a-restore-deletes-nothing-and-writes-identity-last)), per process | Home jobs run where the Home lives. The whole-server job captures every Home through `pullHomeSnapshot`, a server job that assumes the Home's folder is on this disk, and its slot and schedule tick need one owner ([BACKUP.md](BACKUP.md)) |
+| Backup jobs and the restore mark | The in-memory job map and `markHomeRestoring` ([BACKUP.md § A restore deletes nothing and writes identity last](BACKUP.md#a-restore-deletes-nothing-and-writes-identity-last)), per process | Home jobs run where the Home lives. The whole-server job captures every Home through `snapshotHomeHeld`, a server job that assumes the Home's folder is on this disk, and its slot and schedule tick need one owner ([BACKUP.md](BACKUP.md)) |
 | The deletion mark | `markHomeDeleting` (`apps/api/src/lib/home/get-home.ts`), per process, from the teardown of a home until better-auth has deleted the owner's row | Set where the delete runs, and it must be seen by the process that serves the Home. A deletion that fails after the folder is gone keeps it until a restart ([ROADMAP.md](ROADMAP.md)) |
 | Data epochs | Read once per process (`apps/api/src/lib/home/data-epoch.ts`), so no other process sees a rotation | The Home's process owns its epoch, and a stream or collab open elsewhere reads it through a pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 

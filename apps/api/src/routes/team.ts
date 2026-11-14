@@ -12,7 +12,7 @@ import { ApiError } from '../lib/core/errors';
 import { getTeamHome } from '../lib/home';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
-import { pushTeamAvatar } from '../lib/user/avatars';
+import { writeTeamAvatar } from '../lib/user/profile';
 import { betterAuth } from './auth';
 import { optionalEnum, s3ConfigBody, toS3Config } from './shared-schemas';
 
@@ -140,7 +140,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 fit: 'cover',
             });
             if (!result) throw new ApiError(400, 'Failed to generate avatar thumbnail');
-            await pushTeamAvatar(id, result.data);
+            await writeTeamAvatar(id, result.data);
         },
         {
             body: t.Object({ file: t.File({ format: 'image/*' }) }),
@@ -154,7 +154,7 @@ export const teamRouter = new Elysia({ name: 'team' })
             const id = teamId(params.ownerId);
             await requireTeamAdmin(user.id, id);
             if (!(await getTeamExists(id))) throw new ApiError(404, 'Team not found');
-            await pushTeamAvatar(id, null);
+            await writeTeamAvatar(id, null);
         },
         { auth: true },
     );

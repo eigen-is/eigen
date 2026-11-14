@@ -464,9 +464,9 @@ describe('putCard — self-link', () => {
         expect(body).not.toContain('X-EIGEN-ID');
 
         // A self-card PUT renames the user org-wide; stub the profile push so the unit test stays hermetic.
-        const avatars = await import('../../lib/user/avatars');
+        const profile = await import('../../lib/user/profile');
         let pushed = false;
-        const push = spyOn(avatars, 'pushUserProfile').mockImplementation(async () => {
+        const push = spyOn(profile, 'writeUserProfile').mockImplementation(async () => {
             pushed = true;
         });
 

@@ -225,9 +225,9 @@ describe('self-profile propagation', () => {
         const me = (await contacts.getMe())!;
         const before = rowOf(db, me.id);
 
-        const avatars = await import('../../lib/user/avatars');
+        const profile = await import('../../lib/user/profile');
         let pushed = false;
-        const push = spyOn(avatars, 'pushUserProfile').mockImplementation(async () => {
+        const push = spyOn(profile, 'writeUserProfile').mockImplementation(async () => {
             pushed = true;
             throw new Error('push boom');
         });

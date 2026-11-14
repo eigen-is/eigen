@@ -215,7 +215,7 @@
     "src/test/home/org-home.test.ts": 1446,
     "src/test/home/org-privesc.test.ts": 1520,
     "src/test/home/org.test.ts": 1575,
-    "src/test/home/pull-home-snapshot.test.ts": 1776,
+    "src/test/home/snapshot-home-held.test.ts": 1776,
     "src/test/home/team-avatar.test.ts": 1702,
     "src/test/home/team-mount-live-update.test.ts": 2063,
     "src/test/ical/ical-component.test.ts": 1113,

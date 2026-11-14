@@ -236,7 +236,7 @@ async function main(): Promise<void> {
     const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
     const { drainHomeDeliveries } = await import('../lib/home/home-relay');
-    const { pushTeamAvatar } = await import('../lib/user/avatars');
+    const { writeTeamAvatar } = await import('../lib/user/profile');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');
@@ -283,7 +283,7 @@ async function main(): Promise<void> {
             new File([readFileSync(filePath)], fixtureFile, { type: 'image/jpeg' }),
         );
         const { id, ...fields } = me;
-        // An update of your own card goes through pushUserProfile, which stores the avatar and sets user.image.
+        // An update of your own card goes through writeUserProfile, which stores the avatar and sets user.image.
         await contacts.updateContact(id, { ...fields, avatar: uploadedPath });
     };
     for (const persona of PERSONAS) {
@@ -336,7 +336,7 @@ async function main(): Promise<void> {
             fit: 'cover',
         });
         if (!result) throw new Error('avatar thumbnail generation failed');
-        await pushTeamAvatar(teamId, result.data);
+        await writeTeamAvatar(teamId, result.data);
     } catch (err) {
         console.warn('team avatar seed failed:', err instanceof Error ? err.message : err);
     }
