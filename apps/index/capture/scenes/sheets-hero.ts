@@ -9,12 +9,12 @@ export const sheetsHero = {
     name: 'sheets-hero',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 1000 },
+    viewport: { width: 1600, height: 900 },
     apps: ['sheets'],
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openBudget(page, stack);
-        await cursor.moveTo({ x: 800, y: 500 }, { duration: 1 });
+        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(800);
@@ -33,7 +33,7 @@ export const sheetsHero = {
         await Bun.sleep(2000);
         await page.keyboard.press('ControlOrMeta+z');
         await Bun.sleep(1500);
-        await cursor.moveTo({ x: 800, y: 500 }, { duration: 1200 });
+        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1200 });
         await Bun.sleep(600);
     },
 } satisfies Scene;

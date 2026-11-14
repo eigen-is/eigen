@@ -1,5 +1,5 @@
-// The seeded budget as the Sheets scenes film it: opened ready to film, and the screen point of a cell on its first
-// tab, worked out from the column widths the seeder gives the tab.
+// The seeded budget as the Sheets scenes film it: opened ready to film, the screen point of a cell on its first tab,
+// worked out from the column widths the seeder gives the tab, and a point on the costs chart beside the table.
 
 import type { Page } from 'playwright-core';
 import {
@@ -33,4 +33,11 @@ export async function cellPoint(page: Page, ref: string): Promise<Point> {
         x: grid.x + SHEET_ROW_HEADER_WIDTH + left + COLUMN_WIDTHS[column] / 2,
         y: grid.y + SHEET_COLUMN_HEADER_HEIGHT + (row + 0.5) * SHEET_DEFAULT_ROW_HEIGHT,
     };
+}
+
+// A point on the costs chart, as fractions of its box across and down from its top left corner.
+export async function chartPoint(page: Page, across: number, down: number): Promise<Point> {
+    const box = await page.locator('[data-floating-id="chart-1"]').boundingBox();
+    if (!box) throw new Error('The costs chart is not on the page');
+    return { x: box.x + across * box.width, y: box.y + down * box.height };
 }

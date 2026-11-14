@@ -10,7 +10,7 @@ export const sheetsCollabPair = {
     name: 'sheets-collab-pair',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 960, height: 800 },
+    viewport: { width: 1000, height: 800 },
     composite: 'side-by-side',
     apps: ['sheets'],
     personas: ['bram', 'anouk'],

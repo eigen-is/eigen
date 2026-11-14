@@ -1,15 +1,15 @@
 // A chart that follows its numbers: the finance lead raises the stage and tech line in the budget, and the costs
-// chart under the table grows that bar as the number lands. He undoes it, so the loop ends where it began.
+// chart beside the table grows that bar as the number lands. He undoes it, so the loop ends where it began.
 
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
-import { cellPoint, openBudget } from './budget';
+import { cellPoint, chartPoint, openBudget } from './budget';
 
 export const sheetsChart = {
     name: 'sheets-chart',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 1000 },
+    viewport: { width: 1600, height: 900 },
     apps: ['sheets'],
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
@@ -24,8 +24,7 @@ export const sheetsChart = {
         await page.keyboard.press('Enter');
         await Bun.sleep(600);
         // Over the chart, beside the stage and tech bar, where the eye goes.
-        const bar = await cellPoint(page, 'B30');
-        await cursor.moveTo({ x: bar.x + 15, y: bar.y }, { duration: 900 });
+        await cursor.moveTo(await chartPoint(page, 0.4, 0.6), { duration: 900 });
         await Bun.sleep(2500);
         await page.keyboard.press('ControlOrMeta+z');
         await Bun.sleep(2000);
