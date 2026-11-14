@@ -1,8 +1,9 @@
 // A visible mouse for filmed scenes. A headless page draws no pointer, so CURSOR_SCRIPT, added to each persona's
 // browser context, draws an arrow that follows the page's own mouse events. cursor(page) moves that mouse the way a
 // hand does: real mouse events along an eased path, so hover states show on the way and a click lands where it points.
+// centerOf(locator) gives the point on an element, such as a row or a button, for it to go to.
 
-import type { Page } from 'playwright-core';
+import type { Locator, Page } from 'playwright-core';
 
 export type Point = { x: number; y: number };
 
@@ -59,4 +60,11 @@ export function cursor(page: Page): Cursor {
     };
 
     return { moveTo, click };
+}
+
+// The middle of the first element the locator finds, where a hand would point at it.
+export async function centerOf(locator: Locator): Promise<Point> {
+    const box = await locator.first().boundingBox();
+    if (!box) throw new Error(`${locator} is not on the page`);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
