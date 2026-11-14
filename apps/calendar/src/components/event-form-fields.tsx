@@ -2,7 +2,6 @@
 // and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
-import { formatTime } from '@workspace/lib/date';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
@@ -13,7 +12,7 @@ import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
-import { addMinutes, endAfter, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
+import { addMinutes, endAfter, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
 
 type EventFormFieldsProps = {
     titlePlaceholder: string;
@@ -81,12 +80,7 @@ export function EventFormFields({
 }: EventFormFieldsProps) {
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-
-        const minEnd = addMinutes(newStart, 15);
-        const currentEndMinutes = timeToMinutes(endTime);
-        const minEndMinutes = timeToMinutes(minEnd);
-
-        if (currentEndMinutes < minEndMinutes) {
+        if (timeToMinutes(endTime) < timeToMinutes(addMinutes(newStart, 15))) {
             const end = endAfter(new Date(`${startDate}T${newStart}`), 30);
             setEndTime(end.time);
             setEndDate(end.date);
@@ -96,7 +90,7 @@ export function EventFormFields({
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
-        if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
+        d.setDate(d.getDate() + dayOffset);
         setEndDate(toLocalDateString(d));
     };
 
@@ -172,7 +166,7 @@ export function EventFormFields({
                                     const isAllDay = !!checked;
                                     setAllDay(isAllDay);
                                     if (!isAllDay) {
-                                        const start = formatTime(roundToNext15Minutes(new Date()));
+                                        const start = toTimeString(roundToNext15Minutes(new Date()));
                                         const end = endAfter(new Date(`${startDate}T${start}`), 30);
                                         setStartTime(start);
                                         setEndTime(end.time);

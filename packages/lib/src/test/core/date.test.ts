@@ -1,4 +1,3 @@
-// Times read on a 24-hour clock with two-digit hours, the shape the event dialog's time field takes.
 import { describe, expect, test } from 'bun:test';
 import { formatFullDateTime, formatTime } from '../../core/date';
 

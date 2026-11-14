@@ -10,7 +10,6 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { formatTime } from '@workspace/lib/date';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { UsersRound } from 'lucide-react';
@@ -18,7 +17,7 @@ import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
-import { endAfter, roundToNext15Minutes } from './time-select';
+import { endAfter, roundToNext15Minutes, toTimeString } from './time-select';
 
 type CreateEventDialogProps = {
     open: boolean;
@@ -56,7 +55,7 @@ function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDia
     const [allDay, setAllDay] = useState(false);
     const [startDate, setStartDate] = useState(toLocalDateString(initial.start));
     const [endDate, setEndDate] = useState(initial.end.date);
-    const [startTime, setStartTime] = useState(formatTime(initial.start));
+    const [startTime, setStartTime] = useState(toTimeString(initial.start));
     const [endTime, setEndTime] = useState(initial.end.time);
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [attendees, setAttendees] = useState<Attendee[]>([]);

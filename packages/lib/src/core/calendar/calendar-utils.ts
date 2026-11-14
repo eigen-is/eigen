@@ -121,14 +121,14 @@ export function utcToLocal(date: Date, tz: string): LocalComponents {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
+        hourCycle: 'h23',
     }).formatToParts(date);
     const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
     return {
         year: get('year'),
         month: get('month'),
         day: get('day'),
-        hour: get('hour') % 24,
+        hour: get('hour'),
         minute: get('minute'),
         second: get('second'),
     };
@@ -292,14 +292,7 @@ type SeriesEdit = {
     endTime: Date;
 };
 
-type SeriesEditPatch = {
-    title?: string;
-    description?: string | null;
-    location?: string | null;
-    allDay?: boolean;
-    startTime?: Date;
-    endTime?: Date;
-};
+type SeriesEditPatch = Partial<SeriesEdit>;
 
 // "All events in series" is edited from one occurrence but saved on the master, so what the user changed travels
 // as a delta: taking the dialog's own times would drop every occurrence before the one they opened.

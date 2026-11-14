@@ -1,9 +1,8 @@
-// The strip a signed-in app shows when the server announced a restart, such as before an update, so its user can
-// save in time. It reads like the broadcast `shutdown` sends to every terminal. First comes the time the message
-// came, then what is about to happen and when, then the operator's own line as plain text. AppShell renders it at the
-// foot of every page, and it shows nothing while the tab holds no notice. The strip is a status region, so a screen
-// reader speaks it. It hears the clock time of the restart, not the countdown, which would be read out every second.
-// A demo's reset counts down in minutes and seconds, since its five minutes are short enough to watch.
+// The strip AppShell shows at the foot of every page of a signed-in app when the server announced a restart, such as
+// before an update, so its user can save in time. Like the broadcast `shutdown` sends to terminals, it says when the
+// message came, what happens and when, then the operator's own line as plain text; with no notice it shows nothing.
+// As a status region it gives a screen reader the restart's clock time, not a countdown read out every second. A
+// demo's reset counts down in minutes and seconds, since its five minutes are short enough to watch.
 
 import { dateFormatter, formatDayMonth, formatTime } from '@workspace/lib/date';
 import { useRestartNotice } from '@workspace/lib/sse';

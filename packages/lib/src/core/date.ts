@@ -1,7 +1,7 @@
 // Date and time formatting for every app, always day-month-year in English with a 24-hour clock, with the formatters
 // cached because a long list formats one date per row. The backend uses it too, for example in the CLI.
 
-// "09:05" in the local zone, which is also the value the event dialogs' time field holds.
+// "09:05" in the local zone, on a 24-hour clock.
 export function formatTime(date: Date | string | number): string {
     const d = new Date(date);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -45,9 +45,8 @@ export function formatDate(date: Date | string | number): string {
     return formatDayMonth(new Date(date), { year: true });
 }
 
-// "8 Jun 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
-// `new Date("2026-06-08")` reads the string as UTC midnight, which renders the day before for
-// viewers west of UTC and mismatches between prerender (build TZ) and hydration (viewer TZ).
+// "8 Jun 2026" for a bare YYYY-MM-DD calendar date. `new Date("2026-06-08")` reads UTC midnight, the day before
+// west of UTC, so the parts are read as a local date.
 export function formatDateOnly(isoDate: string): string {
     const [year, month, day] = isoDate.split('-').map(Number);
     return formatDayMonth(new Date(year, month - 1, day), { year: true });
@@ -64,16 +63,9 @@ export function isToday(date: Date): boolean {
 
 export function formatDateTime(date: Date | string | number): string {
     const d = new Date(date);
-    const isSameYear = d.getFullYear() === new Date().getFullYear();
-
-    if (isToday(d)) {
-        return `Today, ${formatTime(d)}`;
-    }
-    if (isSameYear) {
-        return `${formatDayMonth(d)}, ${formatTime(d)}`;
-    }
-
-    return `${formatDate(d)}, ${formatTime(d)}`;
+    if (isToday(d)) return `Today, ${formatTime(d)}`;
+    const day = d.getFullYear() === new Date().getFullYear() ? formatDayMonth(d) : formatDate(d);
+    return `${day}, ${formatTime(d)}`;
 }
 
 export function formatTimeAgo(date: Date | string | number): string {

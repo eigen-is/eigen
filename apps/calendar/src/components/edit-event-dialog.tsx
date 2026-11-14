@@ -22,7 +22,6 @@ import {
     useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { formatTime } from '@workspace/lib/date';
 import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AttendeeList } from '@workspace/ui/components/calendar';
@@ -35,6 +34,7 @@ import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
+import { toTimeString } from './time-select';
 
 type EditEventDialogProps = {
     open: boolean;
@@ -357,9 +357,9 @@ function fieldTimes(event: CalendarEventOccurrence) {
             allDay,
             rrule,
             startDate: toLocalDateString(event.startTime),
-            startTime: formatTime(event.startTime),
+            startTime: toTimeString(event.startTime),
             endDate: toLocalDateString(event.endTime),
-            endTime: formatTime(event.endTime),
+            endTime: toTimeString(event.endTime),
         };
     }
     const utcDay = (date: Date) =>

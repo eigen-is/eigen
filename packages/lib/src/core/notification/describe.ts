@@ -1,18 +1,18 @@
+// Turns a stored notification into the lines an activity row draws, such as in the notification bell: the action,
+// the item and one detail. It runs in the viewer's browser, so a time reads in the viewer's zone, and chat text reads
+// the way the chat shows it.
+
 import type { ActivityLines } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { formatChatPreview } from '../chat/format-preview';
 import { formatDayMonth, formatTime } from '../date';
 import { CHAT_NOTIFICATION_TYPES } from './tags';
 
-// Notification types whose body is raw chat text (emote wire form + bare emails), so it must be
-// rendered through formatChatPreview. Shared with the SSE toast handler. file-event rows are
-// chat-derived only when their details carry chatName (checked below — card titles/filenames in
-// other file-event bodies must not be email-rewritten).
+// Types whose body is raw chat text, with emotes in their wire form and bare emails, which reads right only through
+// formatChatPreview.
 export const CHAT_TEXT_NOTIFICATION_TYPES = new Set<string>(CHAT_NOTIFICATION_TYPES.filter((t) => t !== 'assigned'));
 
-// The client-side mirror of describeFileEvent: maps a persisted Notification to the shared
-// ActivityLines shape. Old rows without details render action + body only; nothing breaks.
-// Details are read via `in`-narrowing because Notification.type stays `string`.
+// Notification.type is a plain string, so the details narrow by `in` rather than by the type.
 export function describeNotification(
     n: Notification,
     opts?: { resolveName?: (email: string) => string | undefined; viewerEmail?: string },
@@ -27,8 +27,7 @@ export function describeNotification(
                 break;
             case 'calendar-invite':
             case 'calendar-invite-updated':
-                // Formatted from the stored epoch so the viewer's timezone applies, not the server's —
-                // see docs/ACTIVITY-ROWS.md § The client formats what depends on the viewer.
+                // Formatted here from the stored instant, so the time reads in the viewer's zone, not the server's.
                 if ('startTime' in details) {
                     const at = new Date(details.startTime);
                     secondary = `${formatDayMonth(at, { year: true })}, ${formatTime(at)}`;
@@ -42,7 +41,7 @@ export function describeNotification(
                 break;
         }
     }
-    // Chat-derived rows carry the raw message in body; render it the way the chat UI does.
+    // A file event is chat text only when it names a chat: other file-event bodies hold card titles and file names.
     const chatDerived =
         CHAT_TEXT_NOTIFICATION_TYPES.has(n.type) ||
         (n.type === 'file-event' && !!details && 'chatName' in details && !!details.chatName);
