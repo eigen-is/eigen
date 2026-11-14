@@ -1,3 +1,7 @@
+// The toolbar above Calendar's month and week views: Today, previous and next, the title with the month or the
+// week's dates, and the view choice. On a phone, Today and the views fold into a kebab menu. The view route owns
+// the date and the mode and passes in the handlers that change them.
+
 import type { ViewMode } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { Button } from '@workspace/ui/components/button';

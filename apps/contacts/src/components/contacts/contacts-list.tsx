@@ -1,3 +1,8 @@
+// The contacts page's list of the address book, or of one label's contacts, and the toolbar above it: search,
+// sort by first or last name, and the import and export menu. A row opens its detail and has the shared contact
+// menu on right-click. The user's own card can't be deleted. A team's member list reuses the toolbar without
+// the sort and the menu.
+
 import { useAuth } from '@workspace/lib/auth';
 import { contactFullName, useContacts, useExportContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';

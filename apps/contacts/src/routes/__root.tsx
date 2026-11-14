@@ -1,3 +1,7 @@
+// Contacts' root route: the app shell around every Contacts page. Anyone signed in gets the Contacts sidebar,
+// and a signed-out visitor only the shell. Contacts dropped on a label in the sidebar get that label here,
+// each saved as its own contact update.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useContacts, useUpdateContact } from '@workspace/lib/contacts';

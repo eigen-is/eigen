@@ -1,3 +1,7 @@
+// The toolbar above a person's detail in Contacts, a stored contact's or a team member's: the Edit and Delete
+// buttons where they apply, and the kebab with the shared contact menu. A team member's card is built on the fly,
+// so it has no Edit, Delete or Export, and nobody deletes their own card.
+
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import type { Contact } from '@workspace/lib/types/contact';
