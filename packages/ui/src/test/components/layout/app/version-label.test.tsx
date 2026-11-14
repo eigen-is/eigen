@@ -25,6 +25,17 @@ describe('VersionLabel', () => {
         expect(await label()).toBe('Version 0.4.2 · 3f2a9c1 · 2026-11-03');
     });
 
+    test('dates a build just after local midnight on its local day', async () => {
+        const originalTz = process.env.TZ;
+        process.env.TZ = 'Europe/Amsterdam';
+        try {
+            config = { version: '0.4.2', commit: '3f2a9c1', builtAt: new Date(2026, 10, 3, 0, 30) };
+            expect(await label()).toBe('Version 0.4.2 · 3f2a9c1 · 2026-11-03');
+        } finally {
+            process.env.TZ = originalTz ?? 'UTC';
+        }
+    });
+
     test('says only the version when the build has no commit', async () => {
         config = { version: '0.4.2' };
         expect(await label()).toBe('Version 0.4.2');

@@ -87,7 +87,3 @@ export function formatFullDateTime(date: Date | string | number): string {
 export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {
     return new Date(date).toLocaleDateString('en', { month: style });
 }
-
-export function formatInputDate(date: Date | string | number): string {
-    return new Date(date).toISOString().slice(0, 10);
-}
