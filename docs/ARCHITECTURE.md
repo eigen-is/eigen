@@ -124,7 +124,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Sheets engine** | `packages/sheet/src/engine/` | The engine that computes Sheets today: DOM-free formulas over formulajs, the half the server imports; it displays numbers through `@workspace/formula/format` and checks Excel's function names through `@workspace/formula/names` ([SHEETS.md](SHEETS.md#the-engine-is-the-half-the-server-imports)) |
 | **Sheet cell glyphs** | `packages/sheet/src/state/modules/data-validation.ts`, `cell-glyph.ts` | Tick boxes, list chevrons and corner marks on the canvas ([SHEETS.md](SHEETS.md#a-tick-box-is-a-validation-rule-and-the-value-is-its-state)) |
 | **Sheets export** | `apps/api/src/lib/export/sheets/` | Class-styled HTML and PDF, and the accepted xlsx round-trip drifts ([SHEETS.md](SHEETS.md#the-full-export-styles-cells-by-class)) |
-| **Everyday UI** | `@workspace/ui` | Check before building UI: `TooltipButton`, `DeleteDialog`, `ConfirmDialog`, `FormDialog`, `EmptyState`, `LoadingState`, `ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView`; the rest: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
+| **Everyday UI** | `@workspace/ui/components/…`, each from its own sub-path, such as `confirm-dialog` or `layout/app` | Check before building UI: `TooltipButton`, `DeleteDialog`, `ConfirmDialog`, `FormDialog`, `EmptyState`, `LoadingState`, `ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView`; the rest: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
 | **App shell** | `packages/ui/src/components/layout/app/app-shell.tsx`, `eigen-app.tsx` | `EigenApp` (providers) around `AppShell` (topbar, sidebar, content) ([LAYOUT.md](LAYOUT.md#every-app-is-eigenapp-around-appshell)) |
 | **Layout** | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` and `Column`, one column on a phone ([LAYOUT.md](LAYOUT.md), [MOBILE.md](MOBILE.md)) |
 | **Routing** | `apps/[name]/src/routes/` | TanStack Router, file-based; `_auth.tsx` guards |
@@ -178,7 +178,7 @@ Two names mislead: `download` is a leaf subpath but needs `document`, so it is f
 
 ### A primitive is shared only when its barrel exports it
 
-**Reusable values go through the package's public entry** (`@workspace/ui`, `@workspace/lib/<domain>`), reusable types through `@workspace/lib/types/<domain>`. An unexported primitive is invisible to the next author, who rebuilds it, and a deep import past a barrel (`@workspace/lib/core/…`) usually means something should be exported. An export also needs a user outside its file ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
+**Reusable values go through the package's public entry** (`@workspace/ui/components/<name>`, `@workspace/lib/<domain>`), reusable types through `@workspace/lib/types/<domain>`. An unexported primitive is invisible to the next author, who rebuilds it, and a deep import past a barrel (`@workspace/lib/core/…`) usually means something should be exported. An export also needs a user outside its file ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
 
 ### Third copy → shared wrapper
 

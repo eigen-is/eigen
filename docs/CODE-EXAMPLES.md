@@ -195,9 +195,9 @@ The rules are in [CODE-STANDARDS.md § Imports](CODE-STANDARDS.md#imports); this
 
 | Specifier | What you get |
 |---|---|
-| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar, not pages), generic leaf primitives |
+| `@workspace/ui/components/[name]` | One component, such as `@workspace/ui/components/confirm-dialog`. The package has no root entry, so every component, the everyday ones included ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), comes from its own sub-path |
 | `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
-| `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
+| `@workspace/ui/components/[area]/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
 | `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
 | `@workspace/ui/hooks/[hook]` | Shared DOM/interaction hooks (`@workspace/ui/hooks/use-long-press`) |
 | `@workspace/ui/lib/utils` | `cn()` utility |
