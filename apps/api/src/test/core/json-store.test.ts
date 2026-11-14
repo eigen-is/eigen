@@ -197,8 +197,8 @@ describe('JsonStore', () => {
         await expect(store.set({ name: 'late' })).rejects.toThrow('too late');
         await store.settled();
 
-        expect(await first).toMatchObject({ name: 'first' });
         expect(JSON.parse(readFileSync(join(dir, 'config.json'), 'utf-8')).name).toBe('first');
+        expect(await first).toMatchObject({ name: 'first' });
     });
 
     test('multiple sets accumulate changes', async () => {

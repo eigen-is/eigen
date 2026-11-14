@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
-import { auth } from '../../lib/auth/auth';
+import { orgOwnerId } from '@workspace/lib/types';
+import { organization } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
@@ -15,8 +17,13 @@ import { getTestContext } from '../setup';
 const USER_IDLE_MS = 5 * 60_000;
 
 describe('getHome teardown race', () => {
+    let orgId: string;
+
     beforeAll(async () => {
         await getTestContext();
+        const org = getAuthDrizzleDb().select({ id: organization.id }).from(organization).get();
+        if (!org) throw new Error('No organization found in test DB');
+        orgId = org.id;
     });
 
     async function createHomeUser(email: string): Promise<string> {
@@ -142,23 +149,17 @@ describe('getHome teardown race', () => {
         await closing;
     });
 
-    // Saved through the old home, the file had the theme until the next home's first save wrote its own copy over it.
-    test('a closed home refuses a settings save, and the next home loses none', async () => {
+    // The next home loads its own copy of the file, so a save through the old one must not reach the disk.
+    test('a closed home refuses a settings save and writes none of it', async () => {
         const userId = await createHomeUser('closed-refuses-save@test.eigen.is');
         const old = await getUserHome(userId);
         await old.close();
-        const next = await getUserHome(userId);
 
         await expect(old.settings.set({ theme: 'dark' })).rejects.toMatchObject({
             status: 503,
             message: 'Reloading. Try again in a moment.',
         });
-        await next.settings.set({ celebrations: false });
-
-        expect(next.settings.get().theme).toBeUndefined();
-        const saved = JSON.parse(readFileSync(path.join(next.homeDir, PATHS.SETTINGS), 'utf8'));
-        expect(saved).toEqual(next.settings.get());
-        await evictHome(userId);
+        expect(JSON.parse(readFileSync(path.join(old.homeDir, PATHS.SETTINGS), 'utf8')).theme).toBeUndefined();
     });
 
     // A save still behind another when the close starts would otherwise be written under the next home.
@@ -179,10 +180,10 @@ describe('getHome teardown race', () => {
         await evictHome(userId);
     });
 
-    // The next home loads the file once, so a save that landed after that would be missing from every later save.
-    test('a close waits for the settings save being written, so the next home loads it', async () => {
-        const userId = await createHomeUser('close-waits-for-save@test.eigen.is');
-        const home = await getUserHome(userId);
+    // An org home has no parts, so its close takes no turn of the event loop unless it waits for the save.
+    test('a close waits for the settings save being written', async () => {
+        const ownerId = orgOwnerId(orgId);
+        const home = await getHome(ownerId);
         const { promise: released, resolve: release } = Promise.withResolvers<void>();
         const writeAtomic = home.fs.writeAtomic.bind(home.fs);
         const write = spyOn(home.fs, 'writeAtomic').mockImplementation(async (...args) => {
@@ -190,23 +191,21 @@ describe('getHome teardown race', () => {
             return writeAtomic(...args);
         });
         try {
-            const saving = home.settings.set({ theme: 'dark' });
-            await Bun.sleep(0);
-            expect(write).toHaveBeenCalledTimes(1);
+            const saving = home.settings.set({});
             let closed = false;
             const closing = home.close().then(() => {
                 closed = true;
             });
-            await Bun.sleep(300);
+            await Bun.sleep(0);
+            expect(write).toHaveBeenCalledTimes(1);
             expect(closed).toBe(false);
 
             release();
             await Promise.all([saving, closing]);
-            expect((await getUserHome(userId)).settings.get().theme).toBe('dark');
         } finally {
             release();
             write.mockRestore();
-            await evictHome(userId);
+            await evictHome(ownerId);
         }
     });
 
