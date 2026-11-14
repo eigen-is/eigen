@@ -7,7 +7,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
-- **About pages** — the public site has an About section, linked from the footer of every page, with what Eigen is and a page for Sheets with short films. On the landing page, Sheets links to it
+- **About pages** — the public site has an About section, linked from the footer of every page, with what Eigen is and a page with short films for each app and for Admin. On the landing page, each app's name links to its page
+- **Pictures and films on the site** — in help articles, blog posts and About pages, a click opens a picture or film bigger, and each has a thin border. A page can show a looping film, a carousel of pictures and films, or two pictures side by side
 
 ### Changed
 
@@ -20,7 +21,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
-- **The demo budget in Sheets** — its costs chart sits under the table, so a changed cost moves its bar in view. The income pie stays on the Charts tab
+- **The demo budget in Sheets** — its costs chart sits beside the table, so a changed cost moves its bar in view. The income pie stays on the Charts tab
 
 ### Fixed
 
@@ -50,6 +51,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Filters and deleted headers in Sheets** — deleting a filter's header row or its columns shows the rows it hid again, instead of leaving them hidden with no filter to bring them back
 - **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
 - **TEXT in Sheets** — `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
+- **Changing slides in Slides** — going to another slide drops the selection on the slide you left, so the properties panel no longer edits a box you can't see
+- **Invitations in Mail** — an invitation shows one attachment, its `invite.ics`, without a nameless second chip beside it. An invitation that sends only the calendar keeps its chip and **Import to Calendar**
+- **Replies in Mail** — a reply has no blank lines between your text and the quoted message
 - **Keyboard in Contacts** — the highlighted person is the one Enter opens, also when the list holds a name filed under #, such as Łukasz or Иван
 - **Names in Contacts** — a contact saved with capitals in its address, such as Grace@example.com, shows its name and photo wherever that person appears
 - **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode
