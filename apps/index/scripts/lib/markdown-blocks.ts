@@ -1,8 +1,9 @@
-// A markdown-it plugin for the media blocks the site's Markdown writes as fences, such as a looping video, a carousel
-// or a side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build
-// time, so a block with a mistake in it, or a video whose files are not under the public folder, fails the build
-// instead of shipping a broken page. A carousel comes out whole, its slides, dots and buttons included, and the page
-// wires them up and starts the videos.
+// A markdown-it plugin for the blocks the site's Markdown writes as fences, such as a looping video, a carousel or a
+// side-by-side pair: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build time, so a
+// block with a mistake in it, or a video whose files are not under the public folder, fails the build instead of
+// shipping a broken page. A carousel comes out whole, its slides, dots and buttons included, and the page wires them
+// up and starts the videos. A block the page draws itself, such as the About overview's app rows, leaves a marker
+// with its name.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,6 +16,9 @@ const PREV_ICON = chevron('m15 18-6-6 6-6');
 const NEXT_ICON = chevron('m9 18 6-6-6-6');
 
 const VIDEO_FILES = ['.av1.mp4', '.h264.mp4', '.webp'];
+
+// The blocks a page draws itself where the Markdown puts them, such as the About pages' app rows and panels.
+const PAGE_BLOCKS = new Set(['apps', 'principles', 'formats']);
 
 export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: string }): void {
     const { escapeHtml } = md.utils;
@@ -33,7 +37,8 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
 
             const [, name, rest] = opener;
             const where = `::: ${name} on line ${startLine + 1}`;
-            if (name !== 'video' && name !== 'carousel' && name !== 'side-by-side') {
+            const pageBlock = PAGE_BLOCKS.has(name);
+            if (name !== 'video' && name !== 'carousel' && name !== 'side-by-side' && !pageBlock) {
                 throw new Error(`Unknown Markdown block ${where}`);
             }
             let closeLine = startLine + 1;
@@ -41,26 +46,35 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
             if (closeLine >= state.lineMax) throw new Error(`${where} has no closing :::`);
             if (silent) return true;
 
-            const attrs = new Map(Array.from(rest.matchAll(/(\w[\w-]*)="([^"]*)"/g), ([, key, value]) => [key, value]));
+            // A key without a value, such as `autoplay`, is a switch.
+            const attrs = new Map(
+                Array.from(rest.matchAll(/(\w[\w-]*)(?:="([^"]*)")?/g), ([, key, value]) => [key, value]),
+            );
             const caption = attrs.get('caption');
             const html = (content: string) => {
                 state.push('html_block', '', 0).content = content;
             };
-
-            if (name === 'video') {
-                const src = attrs.get('src');
-                if (!src) throw new Error(`${where} needs a src`);
+            // A muted loop with no autoplay, so the page starts it only for a reader who did not ask for less motion.
+            const video = (src: string) => {
                 if (!src.startsWith('/')) throw new Error(`${where} needs a src that starts with /`);
-                if (closeLine > startLine + 1) throw new Error(`${where} takes no body`);
                 for (const ext of VIDEO_FILES) {
                     const file = join(publicDir, `${src}${ext}`);
                     if (!existsSync(file)) throw new Error(`${where} has no file ${file}`);
                 }
                 const base = escapeHtml(src);
                 // Every video stays within level 4.0, about 2048×1088, so a browser that says yes to it can decode it.
-                html(
-                    `<figure class="media-video"><video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>${figcaption(caption)}</figure>\n`,
-                );
+                return `<video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>`;
+            };
+
+            if ((name === 'video' || pageBlock) && closeLine > startLine + 1) {
+                throw new Error(`${where} takes no body`);
+            }
+            if (pageBlock) {
+                html(`<p>[BLOCK:${name}]</p>\n`);
+            } else if (name === 'video') {
+                const src = attrs.get('src');
+                if (!src) throw new Error(`${where} needs a src`);
+                html(`<figure class="media-video">${video(src)}${figcaption(caption)}</figure>\n`);
             } else if (name === 'carousel') {
                 const slides: string[] = [];
                 for (let line = startLine + 1; line < closeLine; line++) {
@@ -70,9 +84,10 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
                     if (image?.type !== 'image' || others.length) {
                         throw new Error(`${where} takes one image per line, not ${text}`);
                     }
-                    slides.push(
-                        `<figure class="media-carousel-slide">${md.renderInline(text)}${figcaption(image.content)}</figure>\n`,
-                    );
+                    // A src with no file ending names a video's files, as a video block's does.
+                    const src = image.attrGet('src') ?? '';
+                    const media = /\.\w+$/.test(src) ? md.renderInline(text) : video(src);
+                    slides.push(`<figure class="media-carousel-slide">${media}${figcaption(image.content)}</figure>\n`);
                 }
                 const dots = slides.map(
                     (_, i) =>
@@ -80,7 +95,7 @@ export function markdownBlocks(md: MarkdownIt, { publicDir }: { publicDir: strin
                 );
                 const nextDisabled = slides.length < 2 ? ' disabled' : '';
                 html(
-                    `<figure class="media-carousel"><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous image" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
+                    `<figure class="media-carousel"${attrs.has('autoplay') ? ' data-autoplay' : ''}><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Images')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous image" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next image"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
                 );
             } else {
                 html('<figure class="media-side-by-side">\n');

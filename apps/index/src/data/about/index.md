@@ -18,17 +18,28 @@ rows:
 
 Eigen is a self-hosted alternative to Google Workspace. Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat, on a server you run yourself.
 
-The name is Dutch and German for "own". Your mail, files and calendars stay on your own server, in open formats, so you can always take them with you.
-
-I build Eigen on my own, in my spare time. The code is open source under the MIT license, on [GitHub](https://github.com/eigen-is/eigen). It is not at 1.0 yet. The core works, but expect rough edges.
-
-![The eigen|space⟩ home, with the ten apps](/data/about/media/suite.webp)
+::: carousel autoplay
+![A formula typed, and the totals update.](/data/about/media/sheets-hero)
+![Two people in one budget, each sees the other's edit arrive.](/data/about/media/sheets-collab-pair)
+![A production plan, written in eigen|docs⟩.](/data/about/media/row-docs.webp)
+![The festival site, drawn in eigen|vector⟩.](/data/about/media/row-vector.webp)
+![The crew talking it over in eigen|chat⟩.](/data/about/media/row-chat.webp)
+![The to-do list as a board in eigen|stickies⟩.](/data/about/media/row-stickies.webp)
+![A volunteer's reply in eigen|mail⟩.](/data/about/media/row-mail.webp)
+![The build week in eigen|calendar⟩.](/data/about/media/row-calendar.webp)
+:::
 
 You can try it without installing anything at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
 
-## What's missing
+::: principles
+:::
 
-A lot. There is no single sign-on, backups are not encrypted, and until 1.0 a release can change how data is stored. The full list is in [What Eigen does not do yet](/support/self-hosting/known-gaps).
+## The apps
+
+Ten apps on one server, behind one login. Each does the everyday part of the Google app it replaces.
+
+::: apps
+:::
 
 ## Support the project
 

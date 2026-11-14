@@ -91,20 +91,23 @@ function buildBlog(): ArticleMeta[] {
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
-// The overview first, then one page per app in the registry's order. Every page ends with the shared block for the
-// technical reader, appended before the render so its heading joins the table of contents.
+// The overview first, then one page per app in the registry's order. An app page ends with the block its page fills
+// with the app's open formats, and every page with the shared note for the technical reader in a panel, appended
+// after the render so its heading stays out of the table of contents.
 function buildAbout(): ArticleMeta[] {
     const dir = join(DATA, 'about');
-    const technical = readFileSync(join(dir, '_technical.md'), 'utf-8');
+    const technical = renderMarkdown(readFileSync(join(dir, '_technical.md'), 'utf-8')).html;
     let overview: ArticleMeta | undefined;
     const pages: ArticleMeta[] = [];
     for (const file of readdirSync(dir).filter((name) => name.endsWith('.md') && !name.startsWith('_'))) {
         const slug = aboutPageSlug(file);
         const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
         if (slug !== 'index' && data.rows) throw new Error(`About page ${file} has rows, which only index.md takes`);
-        const { content, mediaGrids } = parseMediaGrids(`${body.trimEnd()}\n\n${technical}`);
+        const { content, mediaGrids } = parseMediaGrids(
+            slug === 'index' ? body : `${body.trimEnd()}\n\n::: formats\n:::\n`,
+        );
         const { html, toc } = renderMarkdown(content);
-        writeArticle('about', slug, { html, mediaGrids });
+        writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, mediaGrids });
         const article: ArticleMeta = {
             slug,
             section: 'about',

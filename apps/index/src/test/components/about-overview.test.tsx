@@ -23,7 +23,10 @@ async function renderOverview(): Promise<string> {
         routeTree: createRootRoute({
             component: () => (
                 <QueryClientProvider client={new QueryClient()}>
-                    <AboutOverview overview={overview} body={{ html: '<p>Intro</p>', mediaGrids: [] }} />
+                    <AboutOverview
+                        overview={overview}
+                        body={{ html: '<p>Intro</p><p>[BLOCK:apps]</p>', mediaGrids: [] }}
+                    />
                 </QueryClientProvider>
             ),
         }),
@@ -34,7 +37,7 @@ async function renderOverview(): Promise<string> {
 }
 
 describe('AboutOverview', () => {
-    test('draws a row per app, and links and highlights only the apps that have a page', async () => {
+    test('draws a row per app at the apps block of the body, and links and highlights only the apps that have a page', async () => {
         const html = await renderOverview();
         expect(html.match(/src="\/data\/about\/media\/row-[a-z]+\.webp"/g)).toHaveLength(10);
         expect(html.match(/eigen-list-item/g)).toHaveLength(1);

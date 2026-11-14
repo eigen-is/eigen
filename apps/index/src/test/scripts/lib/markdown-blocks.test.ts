@@ -63,6 +63,31 @@ describe('carousel and side by side', () => {
         expect(html).toContain('<figcaption>The budget</figcaption></figure>');
     });
 
+    test('an image line without a file ending is a video slide, a loop the page starts, captioned with its alt text', () => {
+        const html = render('::: carousel\n![Two at once](/data/about/media/a)\n![b](/b.webp)\n:::');
+        expect(html).toContain(
+            '<figure class="media-carousel-slide"><video muted loop playsinline preload="metadata" poster="/data/about/media/a.webp"><source src="/data/about/media/a.av1.mp4"',
+        );
+        expect(html).toContain(
+            '<source src="/data/about/media/a.h264.mp4" type="video/mp4"></video><figcaption>Two at once</figcaption></figure>',
+        );
+        expect(html).not.toContain('autoplay');
+        expect(html.match(/<img /g)?.length).toBe(1);
+    });
+
+    test('a video slide whose files are missing fails the build', () => {
+        expect(() => render('::: carousel\n![x](/data/about/media/missing)\n:::')).toThrow(
+            '/data/about/media/missing.av1.mp4',
+        );
+    });
+
+    test('an autoplay carousel says so to the page', () => {
+        expect(render('::: carousel autoplay caption="Shots"\n![a](/a.webp)\n:::')).toContain(
+            '<figure class="media-carousel" data-autoplay>',
+        );
+        expect(render('::: carousel\n![a](/a.webp)\n:::')).toContain('<figure class="media-carousel">');
+    });
+
     test('a carousel of one image has both buttons off', () => {
         const html = render('::: carousel\n![a](/a.webp)\n:::');
         expect(html).toContain('aria-label="Images"');
@@ -83,6 +108,12 @@ describe('carousel and side by side', () => {
         const html = render('::: side-by-side\n![a](/a.webp) ![b](/b.webp)\n:::');
         expect(html).toContain('<figure class="media-side-by-side">');
         expect(html.match(/<img /g)?.length).toBe(2);
+    });
+
+    test('a block the page draws leaves a marker with its name', () => {
+        expect(render('Intro\n\n::: apps\n:::\n\nAfter')).toContain('<p>[BLOCK:apps]</p>');
+        expect(render('::: principles\n:::')).toContain('<p>[BLOCK:principles]</p>');
+        expect(() => render('::: apps\n![a](/a.webp)\n:::')).toThrow('takes no body');
     });
 
     test('text after a block renders as usual', () => {

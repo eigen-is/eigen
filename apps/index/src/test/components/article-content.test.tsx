@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, jest, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -11,6 +11,7 @@ const { renderMarkdown } = await import('../../../scripts/lib/render-markdown');
 const RealMatchMedia = globalThis.matchMedia;
 afterEach(() => {
     globalThis.matchMedia = RealMatchMedia;
+    jest.useRealTimers();
 });
 
 // A reduced-motion setting the test can flip, telling the page's listener as a browser would.
@@ -37,9 +38,10 @@ async function renderVideo() {
     return video;
 }
 
-// A three-image carousel from the real build. happy-dom lays nothing out, so each slide gets its place 600px apart.
-async function renderCarousel() {
-    const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::');
+// A carousel from the real build, three images unless the test writes its own. happy-dom lays nothing out, so each
+// slide gets its place 600px apart.
+async function renderCarousel(markdown = '::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::') {
+    const { html } = renderMarkdown(markdown);
     const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
     for (const [i, slide] of container.querySelectorAll('.media-carousel-slide').entries()) {
         Object.defineProperty(slide, 'offsetLeft', { value: i * 600 });
@@ -55,7 +57,17 @@ async function renderCarousel() {
             strip.dispatchEvent(new Event('scroll'));
         });
     const current = () => dots.findIndex((dot) => dot.getAttribute('aria-current') === 'true');
-    return { strip, prev, next, dots, scrollTo, current };
+    return { container, strip, prev, next, dots, scrollTo, current };
+}
+
+const AUTOPLAY = '::: carousel autoplay\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::';
+
+// Renders the autoplay carousel on a clock the test moves.
+async function renderAutoplay() {
+    jest.useFakeTimers();
+    const carousel = await renderCarousel(AUTOPLAY);
+    const wait = (ms: number) => act(async () => jest.advanceTimersByTime(ms));
+    return { ...carousel, wait };
 }
 
 describe('carousel', () => {
@@ -85,6 +97,81 @@ describe('carousel', () => {
         const { strip, dots } = await renderCarousel();
         await act(async () => dots[2]?.click());
         expect(strip.scrollLeft).toBe(1200);
+    });
+
+    test('only the video on the slide in view plays', async () => {
+        stubReducedMotion(false);
+        const { container, scrollTo } = await renderCarousel(
+            '::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/data/about/media/sheets-chart)\n:::',
+        );
+        const [first, second] = container.querySelectorAll('video');
+        expect([first?.paused, second?.paused]).toEqual([false, true]);
+        await scrollTo(600);
+        expect([first?.paused, second?.paused]).toEqual([true, false]);
+    });
+});
+
+describe('autoplay carousel', () => {
+    test('steps on every few seconds, from the last slide back to the first', async () => {
+        stubReducedMotion(false);
+        const { strip, wait } = await renderAutoplay();
+        await wait(6000);
+        expect(strip.scrollLeft).toBe(0);
+        await wait(1500);
+        expect(strip.scrollLeft).toBe(600);
+        await wait(7500);
+        expect(strip.scrollLeft).toBe(1200);
+        await wait(7500);
+        expect(strip.scrollLeft).toBe(0);
+    });
+
+    test('waits while the pointer is over it', async () => {
+        stubReducedMotion(false);
+        const { container, strip, wait } = await renderAutoplay();
+        const carousel = container.querySelector('.media-carousel');
+        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseenter')));
+        await wait(15000);
+        expect(strip.scrollLeft).toBe(0);
+        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseleave')));
+        await wait(7500);
+        expect(strip.scrollLeft).toBe(600);
+    });
+
+    test('stops for good once the reader uses it', async () => {
+        stubReducedMotion(false);
+        const { strip, next, wait } = await renderAutoplay();
+        await act(async () => next.click());
+        await wait(30000);
+        expect(strip.scrollLeft).toBe(600);
+    });
+
+    test('stops for a sideways wheel, but not for an upright one that scrolls the page past', async () => {
+        stubReducedMotion(false);
+        const { container, strip, wait } = await renderAutoplay();
+        const carousel = container.querySelector('.media-carousel');
+        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 })));
+        await wait(7500);
+        expect(strip.scrollLeft).toBe(600);
+        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaX: 100 })));
+        await wait(15000);
+        expect(strip.scrollLeft).toBe(600);
+    });
+
+    test('never moves for a reader who asked for less motion', async () => {
+        stubReducedMotion(true);
+        const { strip, wait } = await renderAutoplay();
+        await wait(30000);
+        expect(strip.scrollLeft).toBe(0);
+    });
+});
+
+describe('page blocks', () => {
+    test('each draws what the page gives for it where the Markdown put it', async () => {
+        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter');
+        const { container } = await renderInDocument(
+            <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
+        );
+        expect(container.textContent?.replace(/\s+/g, ' ').trim()).toBe('Before Rows Between Panels After');
     });
 });
 
