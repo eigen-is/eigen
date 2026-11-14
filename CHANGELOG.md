@@ -7,6 +7,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
+- **About pages** — the public site has an About section, linked from the footer of every page, with what Eigen is and a page for Sheets with short films. On the landing page, Sheets links to it
 
 ### Changed
 
@@ -19,6 +20,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
+- **The demo budget in Sheets** — its costs chart sits under the table, so a changed cost moves its bar in view. The income pie stays on the Charts tab
 
 ### Fixed
 
