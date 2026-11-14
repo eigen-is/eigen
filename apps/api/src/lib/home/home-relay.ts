@@ -4,13 +4,7 @@
 // this file has to change.
 
 import * as fs from 'node:fs';
-import type {
-    Attendee,
-    CalendarEvent,
-    CalendarEventOccurrence,
-    CalendarItem,
-    CalendarShare,
-} from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
@@ -18,10 +12,9 @@ import type { MyTeam, TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { settlesWithin } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
-import type { CreateEventArgs, InvitationRequest } from '../calendar/types';
+import type { InvitationRequest } from '../calendar/types';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import type { VisiblePath } from '../drive/drive';
-import type { EventPatch } from '../ical/ical-component';
 import type { Memberships, User } from '../user';
 import { getOwnerExists, getUsersByEmails } from '../user';
 import { getHome, getTeamHome, loadedHome } from './get-home';
@@ -276,11 +269,6 @@ export async function pullCalendars(ownerId: string): Promise<CalendarItem[]> {
     return (await calendarOf(ownerId))?.getCalendars() ?? [];
 }
 
-export async function pullCalendarById(ownerId: string, calendarId: string): Promise<CalendarItem | null> {
-    const home = await getHome(ownerId);
-    return home.calendar.getCalendarById(calendarId);
-}
-
 export async function pullCalendarPermission(
     ownerId: string,
     calendarId: string,
@@ -298,74 +286,8 @@ export async function pullCalendarShares(
     return (await calendarOf(ownerId))?.getSharedWith(email, teamIds) ?? [];
 }
 
-export async function pullEventsInRange(
-    ownerId: string,
-    calendarId: string,
-    from: Date,
-    to: Date,
-): Promise<CalendarEventOccurrence[]> {
-    const home = await getHome(ownerId);
-    return home.calendar.getEventsInRange(from, to, calendarId);
-}
-
-export async function pullEventById(
-    ownerId: string,
-    calendarId: string,
-    eventId: string,
-): Promise<CalendarEvent | null> {
-    const home = await getHome(ownerId);
-    return home.calendar.getEventById(calendarId, eventId);
-}
-
 export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<InvitationRequest[]> {
     return (await calendarOf(ownerId))?.pendingInvitations(attendeeEmail) ?? [];
-}
-
-// In the event writes, `user` is the person who makes the change, not the owner of the calendar.
-// The owner's home uses it for the live updates it sends and for the history it keeps.
-
-export async function createEventAt(
-    ownerId: string,
-    calendarId: string,
-    input: CreateEventArgs,
-    user: User,
-): Promise<CalendarEvent> {
-    const home = await getHome(ownerId);
-    return home.calendar.createEvent(calendarId, input, user);
-}
-
-export async function updateEventAt(
-    ownerId: string,
-    calendarId: string,
-    eventId: string,
-    input: EventPatch,
-    user: User,
-    expectedEtag?: string,
-): Promise<CalendarEvent> {
-    const home = await getHome(ownerId);
-    return home.calendar.updateEvent(calendarId, eventId, input, user, expectedEtag);
-}
-
-export async function deleteEventAt(
-    ownerId: string,
-    calendarId: string,
-    eventId: string,
-    user: User,
-    expectedEtag?: string,
-): Promise<void> {
-    const home = await getHome(ownerId);
-    await home.calendar.deleteEvent(calendarId, eventId, user, expectedEtag);
-}
-
-export async function moveEventAt(
-    ownerId: string,
-    calendarId: string,
-    eventId: string,
-    targetCalendarId: string,
-    expectedEtag?: string,
-): Promise<CalendarEvent> {
-    const home = await getHome(ownerId);
-    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId, expectedEtag);
 }
 
 // --- Teams ---
