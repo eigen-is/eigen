@@ -65,6 +65,10 @@ systemctl enable --now eigen-demo-reset.timer
 
 A server backup runs inside the API and holds no `.eigen/lock` ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), so a reset that starts while one runs stops the API under it, and the archive's record says it failed. A demo box has nothing worth backing up: the next reset wipes it anyway.
 
+## Every seeded word belongs to the Tuimel crew
+
+The demo is one story: the crew of the Tuimel Festival (the `PERSONAS` in `apps/api/src/scripts/demo/content.ts`, from the festival director to the stage and tech lead) building their festival. Every text added to the seed, such as a mail, a chat line, a document or a card, is something one of them would write about that work, in the voice their existing chats and mails already have. Nothing is product-demo filler or a feature written for its own sake: a feature shows because the crew uses it for the festival. Read the neighbouring content before adding to it, and ask the owner before a new persona, a new storyline or a change in tone.
+
 ## The seeder drives the product, not the databases
 
 The seeder imports the app in-process, completes setup through `POST /setup/complete`, then acts as the personas through the same domain calls a route makes. Activity panels, file history, watchers and the bell fill in for free, and every reset dogfoods the importers. Where a route does part of the work itself, the seeder mirrors it, such as the bell notification of a comment assignment.
