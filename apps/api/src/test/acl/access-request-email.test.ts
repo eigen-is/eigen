@@ -169,6 +169,25 @@ describe('Access-request email', () => {
         expect(res.status).toBe(422);
     });
 
+    test('mails the address the owner has now, not the one their open Home started with', async () => {
+        const { spy } = await catchMail();
+        const doc = await createDoc('access-request-new-address');
+        const newEmail = `renamed-${crypto.randomUUID()}@example.com`;
+        const db = getAuthDrizzleDb();
+        db.update(userSchema).set({ email: newEmail }).where(eq(userSchema.id, ctx.alice.user.id)).run();
+        try {
+            await requestAccess(doc.id);
+            const toNew = () => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === newEmail));
+            expect(await eventually(async () => (toNew().length ? toNew() : undefined), 'the mail')).toHaveLength(1);
+        } finally {
+            db.update(userSchema)
+                .set({ email: ctx.alice.user.email })
+                .where(eq(userSchema.id, ctx.alice.user.id))
+                .run();
+            spy.mockRestore();
+        }
+    });
+
     test('rejects a guest caller with 403', async () => {
         const email = `access-req-guest-${crypto.randomUUID()}@external.com`;
         const password = crypto.randomUUID();
