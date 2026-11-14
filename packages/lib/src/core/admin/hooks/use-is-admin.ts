@@ -2,7 +2,7 @@ import { useAuth } from '../../auth/auth-context';
 import { usePublicConfig } from '../../public/hooks/use-public';
 import { useMembers } from './use-members';
 
-export function useIsAdmin() {
+export function useIsAdmin(): boolean {
     const { user } = useAuth();
     return user?.role === 'admin';
 }

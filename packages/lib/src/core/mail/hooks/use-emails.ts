@@ -237,7 +237,7 @@ export function useMoveEmail() {
     });
 }
 
-export function useOpenWriteEmailTo() {
+export function useOpenWriteEmailTo(): (addresses: string | string[]) => void {
     // One address or several: several join into the compose `to` field as a comma-separated list,
     // which the composer parses back into one recipient per address.
     return (addresses: string | string[]) => {

@@ -1,3 +1,5 @@
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { ParsedOwnerId, PublicUser } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, DriveAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
@@ -7,11 +9,22 @@ import { useMyTeams } from '../../home';
 import { usePublicUser } from '../../public';
 import { useBreadcrumb } from './reads';
 
+type DriveAccess = {
+    parsedOwner: ParsedOwnerId;
+    isGroupOwned: boolean;
+    owner: UseQueryResult<PublicUser | null>;
+    breadcrumb: UseQueryResult<DrivePath[]>;
+    baseDirectList: DirectAccessItem[];
+    directList: DirectAccessItem[];
+    inheritedList: InheritedAccessItem[];
+    allEntries: DriveAccessItem[];
+};
+
 export function useDriveAccess(
     path: DrivePath,
     overrideDirectList?: DirectAccessItem[],
     preloadedBreadcrumb?: DrivePath[],
-) {
+): DriveAccess {
     const parsedOwner = useMemo(() => parseOwnerId(path.ownerId), [path.ownerId]);
     const isGroupOwned = parsedOwner.type === 'team';
     const owner = usePublicUser(path.ownerId);

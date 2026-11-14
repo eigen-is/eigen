@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2360 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2361 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -687,7 +687,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (466)
+## Types (467)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -706,6 +706,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `ChatRoomState` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `CollabDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |

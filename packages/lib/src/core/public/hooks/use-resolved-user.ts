@@ -10,7 +10,9 @@ type UseResolvedUserParams = {
     imageUrl?: string;
 };
 
-export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams) {
+type ResolvedUser = { displayName: string; resolvedEmail: string; avatarSrc: string; isLoading: boolean };
+
+export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams): ResolvedUser {
     const { data: dataContacts, isLoading: isLoadingContacts } = useContacts();
 
     const parsed = parseOwnerId(userId || email || '');

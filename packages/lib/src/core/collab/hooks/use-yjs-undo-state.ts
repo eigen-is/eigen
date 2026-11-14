@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 
-export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boolean) {
+type YjsUndoState = { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void };
+
+export function useYjsUndoState(undoManager: Y.UndoManager | null, canWrite: boolean): YjsUndoState {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
 
