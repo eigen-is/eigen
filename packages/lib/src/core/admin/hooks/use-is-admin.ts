@@ -1,3 +1,7 @@
+// Whether the signed-in user may run the server: useIsAdmin reads the account's role, and useIsOrgOwner the
+// org role that only the member setup made owner holds. Settings and admin pages use them to show or hide
+// what the server would refuse anyway.
+
 import { useAuth } from '../../auth/auth-context';
 import { usePublicConfig } from '../../public/hooks/use-public';
 import { useMembers } from './use-members';

@@ -1,3 +1,7 @@
+// The edit and delete state of one chat room's composer: which message is being edited or is about to be
+// deleted, and the up arrow that opens the user's own last message for editing. It runs the room's own edit
+// and delete calls and hands the composer its focus back when an edit ends.
+
 import { useCallback, useState } from 'react';
 import type { ChatMessage } from '../../../types/chat';
 import type { ChatRoomState } from './use-chat-room';
