@@ -33,15 +33,16 @@ type AttendeeListProps = {
 };
 
 export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeListProps) {
-    const filteredAttendees = organizer
-        ? attendees.filter((a) => a.email.toLowerCase() !== organizer.email.toLowerCase())
-        : attendees;
+    const organizerEmail = organizer?.email.toLowerCase();
+    const filteredAttendees = attendees.filter((a) => a.email.toLowerCase() !== organizerEmail);
+    // An organizer the file lists only as organizer has no reply of their own, and organizing is accepting.
+    const organizerReply = attendees.find((a) => a.email.toLowerCase() === organizerEmail)?.status ?? 'accepted';
 
     const count = filteredAttendees.length + (organizer ? 1 : 0) + remaining;
     const title = count === 1 ? '1 guest' : `${count} guests`;
     // The replies of the listed guests are the whole event's only when the payload carried them all.
     const statuses = filteredAttendees.map((a) => a.status);
-    if (organizer) statuses.push('accepted');
+    if (organizer) statuses.push(organizerReply);
     const summary = remaining === 0 ? buildAttendeeSummary(statuses) : '';
 
     const handleCopyEmails = () => {
