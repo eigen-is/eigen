@@ -47,6 +47,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Filters and deleted headers in Sheets** — deleting a filter's header row or its columns shows the rows it hid again, instead of leaving them hidden with no filter to bring them back
 - **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
 - **TEXT in Sheets** — `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
+- **Keyboard in Contacts** — the highlighted person is the one Enter opens, also when the list holds a name filed under #, such as Łukasz or Иван
 
 ## [0.4.3] - 2026-11-11
 

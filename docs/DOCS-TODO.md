@@ -38,6 +38,8 @@ The backlog for the Docs app: the editor, its docx and PDF round trip, and the p
 
 - **Typing in a text box on a phone, and peer carets in a box** (M): On a phone a box can be selected and set up in Format › Text box, but its text is read-only, as a note's is. A box's editor has no collaboration of its own, so no peer's caret draws inside it. Both need the story edited in an editor of its own; a phone's must mount where the keyboard reaches it.
 
+- **A View menu** (S): Docs has no View menu, so Show outline sits in Tools (`apps/docs/src/components/docs/tools-menu.tsx`). As Google ([LAYOUT.md](LAYOUT.md#the-bars-menus-come-in-googles-order)), View holds Show outline. The shared Help menu with keyboard shortcuts is a [ROADMAP.md](ROADMAP.md) row.
+
 ## Bugs and small fixes
 
 Verified, bounded, cheap to fix on the next touch.

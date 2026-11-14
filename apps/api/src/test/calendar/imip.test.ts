@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -1170,6 +1170,41 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         const [stored] = await home.calendar.getEventsByUid(event.uid);
         expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['accepted']);
         expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
+    });
+
+    test('a REPLY without DTSTART answers nothing and is logged', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'No Start',
+            startTime: new Date('2026-05-05T10:00:00Z'),
+            endTime: new Date('2026-05-05T11:00:00Z'),
+            allDay: false,
+            data: { attendees: [{ email: 'nostart@external.com', status: 'pending', role: 'required' }] },
+        });
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:nostart@external.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const info = spyOn(console, 'info').mockImplementation(() => {});
+        let logged: unknown[];
+        try {
+            await processInboundImip(home, calendarMail(ics, 'nostart@external.com'), {
+                verified: true,
+                reason: 'dkim pass',
+            });
+            logged = info.mock.calls.flat();
+        } finally {
+            mock.restore();
+        }
+        expect(logged).toContain('iMIP: skipped 1 unreadable events from nostart@external.com');
+        const [stored] = await home.calendar.getEventsByUid(event.uid);
+        expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['pending']);
     });
 
     test('a REPLY answers its first five dates of a series', async () => {

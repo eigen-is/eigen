@@ -514,7 +514,7 @@ The owner merges Wave 2 (decision 9).
 
 **The owner does.** Answers the question left at 1b's start (when production gets it); the blank result is ruled. Keeps other sessions off Sheets. Says go for the merge, and for the deploy if he chose it here.
 
-**Leaves behind.** Develop-ready code with 1b's gates in the results file. SHEETS.md rewritten for the engine, the ops, the cell record and the snapshot; ARCHITECTURE.md's "Sheets ops" row; EXPORT.md; the help-center articles on formulas; CHANGELOG.md; the ROADMAP rows "Rewrite the Sheets formula engine in steps" and "formulajs 2.9.3 → 4.x" closed; the SHEETS-TODO.md rows that are fixed. For step 2: the list of every place a `result` op is made, STATE.md, a hand-off prompt.
+**Leaves behind.** Develop-ready code with 1b's gates in the results file. SHEETS.md rewritten for the engine, the ops, the cell record and the snapshot; ARCHITECTURE.md's "Sheets ops" row; EXPORT.md; the help-center articles on formulas; CHANGELOG.md; the ROADMAP row "Rewrite the Sheets formula engine in steps" closed; the SHEETS-TODO.md rows that are fixed. For step 2: the list of every place a `result` op is made, STATE.md, a hand-off prompt.
 
 ### Step 2
 

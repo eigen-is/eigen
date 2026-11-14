@@ -14,7 +14,7 @@ import { ContextMenuAnchor, ContextMenuButton } from '../context-menu';
 import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 
 type PersonListProps<T> = {
-    items: T[];
+    items: readonly T[];
     searchQuery: string;
     activeId?: string;
     getId: (item: T) => string;
@@ -55,7 +55,12 @@ export function PersonList<T>({
     const listRef = useRef<HTMLDivElement>(null);
 
     const visible = useMemo(() => {
-        const sorted = [...items].sort((a, b) => getName(a).localeCompare(getName(b)));
+        // Letter by letter, as AlphabeticalList draws them, so the keyboard cursor's index is the drawn row's.
+        const sorted = [...items].sort(
+            (a, b) =>
+                alphaGroupKey(getName(a)).localeCompare(alphaGroupKey(getName(b))) ||
+                getName(a).localeCompare(getName(b)),
+        );
         if (!searchQuery) return sorted;
         const query = searchQuery.toLowerCase();
         return sorted.filter((item) => getSearchFields(item).some((field) => field.toLowerCase().includes(query)));
