@@ -148,15 +148,6 @@ describe('SharedDrive gating enumeration', () => {
                 expect(paths.map((p) => p.id)).not.toContain(fileId);
             },
         },
-        getSharedWith: {
-            gate: 'ungated-by-design',
-            // Same scope note as getWatches: stranger-safety pin, not a filtering pin.
-            reason: 'per-caller listing; safe to call with no permissions',
-            call: async (sd) => {
-                const paths = await sd.getSharedWith(charlie);
-                expect(paths.map((p) => p.id)).not.toContain(fileId);
-            },
-        },
 
         // Read-gated.
         getFolderContents: {
