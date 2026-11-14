@@ -49,7 +49,7 @@ The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A 
 
 ## The active slide survives its own deletion
 
-`useActiveFrame` (`packages/ui/src/components/vector/hooks/`) keeps the current slide while it exists. When it vanishes, through an undo of its add or a peer's delete, the slide now at its position takes over, clamped to the ends. So the user lands on a neighbor, never on nothing. The hook also gives the counter its index and the phone swipe its step.
+`useActiveFrame` (`packages/ui/src/components/vector/hooks/`) keeps the current slide while it exists. When it vanishes, through an undo of its add or a peer's delete, the slide now at its position takes over, clamped to the ends. So the user lands on a neighbor, never on nothing. Every move to another slide, a rail click, a swipe, present mode's paging or that handover, trims the selection to the new slide's elements in the same render, so the panel never shows a box from the slide just left. It trims rather than clears, because a reveal goes to a slide and selects there in one step. The hook also gives the counter its index and the phone swipe its step.
 
 ## Revealing an element goes to its slide first
 
