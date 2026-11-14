@@ -31,8 +31,10 @@ export function AboutOverview({ overview, body, pages }: AboutOverviewProps) {
                 <ArticleContent body={body} className="mt-8" />
                 <div className="mt-10">
                     {aboutApps.map((app, index) => {
+                        const hasPage = written.has(app.slug);
                         const className = cn(
-                            'eigen-list-item -mx-(--app-gutter-x) flex items-center gap-4 px-(--app-gutter-x) py-3.5',
+                            '-mx-(--app-gutter-x) flex items-center gap-4 px-(--app-gutter-x) py-3.5',
+                            hasPage && 'eigen-list-item',
                             index > 0 && 'border-t',
                         );
                         const style = {
@@ -40,7 +42,7 @@ export function AboutOverview({ overview, body, pages }: AboutOverviewProps) {
                             '--app-current-color-soft': `color-mix(in oklab, ${app.color} 14%, var(--background))`,
                         };
                         const row = <AppRow app={app} line={overview.rows?.[app.slug]} />;
-                        return written.has(app.slug) ? (
+                        return hasPage ? (
                             <Link
                                 key={app.slug}
                                 to="/about/$app"
