@@ -10,9 +10,9 @@ export const suite = {
     viewport: { width: 1600, height: 1000 },
     apps: ['space'],
     personas: ['anouk'],
-    run: async ({ pages: [page], stack, hold }) => {
+    run: async ({ pages: [page], stack }) => {
         await page.goto(stack.appUrl('space'));
         await page.getByText('Help and support').waitFor();
-        await hold(2500);
+        await Bun.sleep(2500);
     },
 } satisfies Scene;

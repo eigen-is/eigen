@@ -7,24 +7,24 @@ import type { Browser } from 'playwright-core';
 import { chromium } from 'playwright-core';
 import { personaContext, signIn } from './auth';
 import { cursor } from './lib/cursor';
-import { pickScenes } from './lib/pick';
 import type { Scene, SceneContext, Stack } from './lib/scene';
-import { typeLikeAPerson } from './lib/type';
 import { recordVideo, takeStill } from './record';
 import { SCENES } from './scenes';
 import { startStack } from './stack';
 
-let scenes: Scene[];
-try {
-    scenes = pickScenes(process.argv.slice(2), SCENES);
-} catch (err) {
-    console.error(err instanceof Error ? err.message : err);
+const missingTools = ['ffmpeg', 'cwebp'].filter((tool) => !Bun.which(tool));
+if (missingTools.length) {
+    console.error(`${missingTools.join(' and ')} not found. Install them with: brew install ffmpeg webp`);
     process.exit(1);
 }
-if (scenes.length === 0) {
-    console.log('No scenes yet.');
-    process.exit(0);
+
+const names = process.argv.slice(2);
+const unknown = names.filter((name) => !SCENES.some((scene) => scene.name === name));
+if (unknown.length) {
+    console.error(`Unknown scene ${unknown.join(', ')}. Scenes: ${SCENES.map((scene) => scene.name).join(', ')}`);
+    process.exit(1);
 }
+const scenes = names.length ? SCENES.filter((scene) => names.includes(scene.name)) : SCENES;
 
 const stack = await startStack({ apps: [...new Set(scenes.flatMap((scene) => scene.apps))] });
 try {
@@ -52,13 +52,7 @@ async function film(
 ): Promise<void> {
     const contexts = await Promise.all(scene.personas.map((key) => personaContext(browser, sessions[key], scene)));
     const pages = await Promise.all(contexts.map((context) => context.newPage()));
-    const ctx: SceneContext = {
-        pages,
-        cursors: pages.map(cursor),
-        stack,
-        type: typeLikeAPerson,
-        hold: (ms) => Bun.sleep(ms),
-    };
+    const ctx: SceneContext = { pages, cursors: pages.map(cursor), stack };
     await scene.setup?.(ctx);
     if (scene.kind === 'video') await recordVideo(pages, scene, () => scene.run(ctx));
     else {

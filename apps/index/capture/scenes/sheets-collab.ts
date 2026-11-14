@@ -3,6 +3,7 @@
 // One film shows his side; the pair shows both screens side by side.
 
 import type { Scene } from '../lib/scene';
+import { typeLikeAPerson } from '../lib/type';
 import { cellPoint, openBudget } from './budget';
 
 export const sheetsCollab = {
@@ -15,23 +16,23 @@ export const sheetsCollab = {
     setup: async ({ pages, stack }) => {
         await Promise.all(pages.map((page) => openBudget(page, stack)));
     },
-    run: async ({ pages: [bram, anouk], cursors: [bramCursor, anoukCursor], type, hold }) => {
+    run: async ({ pages: [bram, anouk], cursors: [bramCursor, anoukCursor] }) => {
         await bramCursor.moveTo(await cellPoint(bram, 'A16'), { duration: 1 });
-        await hold(800);
+        await Bun.sleep(800);
         await bramCursor.moveTo(await cellPoint(bram, 'C17'), { duration: 900 });
-        await hold(700);
+        await Bun.sleep(700);
         await anoukCursor.click(await cellPoint(anouk, 'B13'));
-        await hold(1800);
-        await type(anouk, '7500');
+        await Bun.sleep(1800);
+        await typeLikeAPerson(anouk, '7500');
         // Tab, not Enter, so her name tag sits beside the new number rather than over it.
         await anouk.keyboard.press('Tab');
-        await hold(1200);
+        await Bun.sleep(1200);
         await bramCursor.moveTo(await cellPoint(bram, 'C18'), { duration: 800 });
-        await hold(2500);
+        await Bun.sleep(2500);
         await anouk.keyboard.press('ControlOrMeta+z');
-        await hold(1500);
+        await Bun.sleep(1500);
         await bramCursor.moveTo(await cellPoint(bram, 'A16'), { duration: 1000 });
-        await hold(800);
+        await Bun.sleep(800);
     },
 } satisfies Scene;
 
