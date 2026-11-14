@@ -289,7 +289,7 @@ Its REQUEST events are grouped by UID, so the order a file lists them in doesn't
 
 ## The mail app draws an invite from the server's summary
 
-`Mail.messageGet` summarizes each calendar part through the same parser into `Attachment.calendarInvite`, and `calendar-invite-widget.tsx` (`apps/mail/`) draws it inline instead of in the attachment list. A `null` summary is an unparseable file or a part past `IMIP_MAX_BYTES`, and draws as an error card.
+`Mail.messageGet` summarizes each calendar part through the same parser into `Attachment.calendarInvite`, and `calendar-invite-widget.tsx` (`apps/mail/`) draws it inline. A calendar part that no `Content-Disposition` marks as an attachment is the invitation sent as the body, the `text/calendar` alternative beside the text and the HTML that Eigen, Gmail and Outlook send. The parser flags it `invitationBody`, so it gets no chip, no forward, no `.eml` preview row and no paperclip in the list. It stays in the part list, so the card and the iMIP scan read it and every later part keeps its index. An attached calendar file, such as the `invite.ics` beside the body, keeps its chip: the file to save or import. An invitation that carries only the body, as Outlook's does, has no file to import. A `null` summary is an unparseable file or a part past `IMIP_MAX_BYTES`, and draws as an error card.
 
 ## Import replays each series through putResource, as a device sync does
 

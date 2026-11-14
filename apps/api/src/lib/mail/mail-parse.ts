@@ -59,7 +59,7 @@ function toEmail(messageId: string, mailbox: string, parsedMail: ParsedMail, siz
         isFlagged: false,
         isDraft: false,
         isReplied: false,
-        hasAttachments: parsedMail.attachments.length > 0,
+        hasAttachments: parsedMail.attachments.some((part) => !part.invitationBody),
         fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
         fromAddress: parsedMail.from?.value[0]?.address || '',
         toShort,

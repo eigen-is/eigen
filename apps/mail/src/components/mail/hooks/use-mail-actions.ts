@@ -35,6 +35,10 @@ function formatEmailQuote(email: Email): string {
     return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, new Date(email.date), content);
 }
 
+function replySubject(subject: string): string {
+    return subject.startsWith('RE:') ? subject : `RE: ${subject}`;
+}
+
 // Single-slot undo (Gmail-style): only the most recent reversible action is remembered. `done` is a
 // one-shot latch so the same action can't be reversed twice (e.g. `z` then clicking its still-visible toast).
 type Undoable = { done?: boolean } & (
@@ -252,41 +256,28 @@ export function useMailActions() {
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
     };
 
-    const handleArchiveEmailsByIds = async (emailIds: string[]) => {
+    // An archive or a spam report: one toast and one Undoable for every message that moved.
+    const moveEmailsByIdsWithUndo = async (emailIds: string[], mailbox: string, done: string) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        const results = await Promise.allSettled(
-            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: MAILBOX_ARCHIVE })),
-        );
+        const results = await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox })));
         const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
         if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
                 items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: MAILBOX_ARCHIVE,
+                to: mailbox,
             };
             lastAction.current = action;
-            undoToast(`${moved.length} archived`, action);
+            undoToast(`${moved.length} ${done}`, action);
             navigateToList();
         }
     };
 
-    const handleReportSpamByIds = async (emailIds: string[]) => {
-        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        const results = await Promise.allSettled(
-            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: MAILBOX_JUNK })),
-        );
-        const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
-        if (moved.length > 0) {
-            const action: Undoable = {
-                kind: 'move',
-                items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: MAILBOX_JUNK,
-            };
-            lastAction.current = action;
-            undoToast(`${moved.length} reported as spam`, action);
-            navigateToList();
-        }
-    };
+    const handleArchiveEmailsByIds = (emailIds: string[]) =>
+        moveEmailsByIdsWithUndo(emailIds, MAILBOX_ARCHIVE, 'archived');
+
+    const handleReportSpamByIds = (emailIds: string[]) =>
+        moveEmailsByIdsWithUndo(emailIds, MAILBOX_JUNK, 'reported as spam');
 
     // With no navigation, for the open-conversation and cursored-row paths, whose callers advance at once and must not block
     // on the round-trip. Errors surface via the mutation's onMutationError.
@@ -364,7 +355,7 @@ export function useMailActions() {
         openPrefilledCompose({
             ...createDraftEmail({
                 to: email.replyTo || email.from,
-                subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
+                subject: replySubject(email.subject),
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
@@ -391,7 +382,7 @@ export function useMailActions() {
         openPrefilledCompose({
             ...createDraftEmail({
                 to: { value: allRecipients, text: '' },
-                subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
+                subject: replySubject(email.subject),
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
@@ -408,9 +399,11 @@ export function useMailActions() {
                 subject: `FW: ${email.subject}`,
                 html: formatEmailQuote(email),
             }),
-            email.attachments.map(({ index, filename, contentType, size }) =>
-                subjectFromMailAttachment(user.id, email.id, index, { filename, contentType, size }),
-            ),
+            email.attachments
+                .filter((part) => !part.invitationBody)
+                .map(({ index, filename, contentType, size }) =>
+                    subjectFromMailAttachment(user.id, email.id, index, { filename, contentType, size }),
+                ),
         );
     };
 

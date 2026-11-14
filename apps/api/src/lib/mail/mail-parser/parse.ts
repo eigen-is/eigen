@@ -58,6 +58,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                     const method = headers.contentType.params['method']?.toUpperCase();
                     const calendarMethod = IMIP_METHODS.find((known) => known === method);
                     if (calendarMethod) attachment.calendarMethod = calendarMethod;
+                    if (declared !== 'attachment') attachment.invitationBody = true;
                 }
                 attachments.push(attachment);
                 if (headers.contentId) {

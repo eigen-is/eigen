@@ -41,6 +41,9 @@ export type Attachment = {
     // The charset the part declares, kept for text parts: the bytes are not UTF-8 unless they say so.
     charset?: string;
     calendarMethod?: ImipMethod;
+    // A calendar part no Content-Disposition marks as a file: the invitation sent as the body. The invite card draws
+    // it, so no list of files shows it.
+    invitationBody?: boolean;
     // Set on text/calendar attachments in the message-detail payload; null = unparseable or too large.
     calendarInvite?: CalendarInvite | null;
 };
