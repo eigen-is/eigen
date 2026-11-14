@@ -2,8 +2,8 @@
 // presence host reads a peer from. An editor's presence hook, such as the canvas's or the stickies board's, calls it
 // once per provider. Sheets publishes its own, because it waits for the first sync.
 
-import type { AuthUser } from '@workspace/lib/auth';
 import { userColor } from '@workspace/lib/constants/colors';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 

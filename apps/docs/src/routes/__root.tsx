@@ -1,5 +1,5 @@
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
-import type { RouterAppContext } from '@workspace/lib/auth';
+import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { DOCS_CONFIG, EigenDocRoot } from '@workspace/ui/components/drive';
 
 function DocsRoot() {

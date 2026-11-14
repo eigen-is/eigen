@@ -1,8 +1,8 @@
 // A sheet's presence over Yjs awareness: it publishes this window's identity and cursor, and hands the grid every
 // peer's cursor to draw. The sheet editor calls it once, and calls the callback it returns when the selection changes.
 
-import type { AuthUser } from '@workspace/lib/auth';
 import { userColor } from '@workspace/lib/constants/colors';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { PeerPresence, WorkbookInstance } from '@workspace/sheet';
 import { presencesFromPeers } from '@workspace/sheet';
 import { useAwarenessPeers } from '@workspace/ui/components/collab';

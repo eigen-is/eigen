@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2233 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2234 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -565,7 +565,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (465)
+## Types (466)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -583,8 +583,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Span` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
-| `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
-| `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -668,6 +666,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Attachment` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AttachmentMeta` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Attendee` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `AuthContextType` | `@workspace/lib/types` | packages/lib/src/types/auth.ts |
+| `AuthUser` | `@workspace/lib/types` | packages/lib/src/types/auth.ts |
 | `CalendarEvent` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarEventOccurrence` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarInvite` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -782,6 +782,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
+| `RouterAppContext` | `@workspace/lib/types` | packages/lib/src/types/auth.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |

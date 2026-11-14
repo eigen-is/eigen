@@ -4,7 +4,7 @@
 
 import { Outlet, redirect } from '@tanstack/react-router';
 import { getDriveAppUrl } from '@workspace/lib/api';
-import type { RouterAppContext } from '@workspace/lib/auth';
+import type { RouterAppContext } from '@workspace/lib/types/auth';
 
 function AuthOutlet() {
     return <Outlet />;

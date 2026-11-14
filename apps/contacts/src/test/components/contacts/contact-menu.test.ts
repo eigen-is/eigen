@@ -1,7 +1,7 @@
 // A card is you when it carries your account's id or your email, in any case and with stray spaces, and
 // every contact surface asks the same question before it offers Delete, mail or chat.
 import { expect, test } from 'bun:test';
-import type { AuthUser } from '@workspace/lib/auth';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { Contact } from '@workspace/lib/types/contact';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
