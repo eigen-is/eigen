@@ -638,5 +638,34 @@ describe('Contacts', () => {
                 await updateUser(before.id, before.name, before.image ?? '');
             }
         });
+
+        test('her own card with no last name renames Alice without a trailing space', async () => {
+            const meRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
+            const me = await assertJson<Contact>(meRes);
+            const before = await getUserById(ctx.alice.user.id);
+            if (!before) throw new Error('Alice has no user row');
+
+            try {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/contacts/${ctx.alice.user.id}/contacts/${me.id}`,
+                    {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            firstName: 'Alice',
+                            lastName: '',
+                            email: me.email,
+                            phone: me.phone,
+                            etag: me.etag,
+                        }),
+                    },
+                );
+                expect(res.status).toBe(200);
+                expect((await getUserById(ctx.alice.user.id))?.name).toBe('Alice');
+            } finally {
+                await updateUser(before.id, before.name, before.image ?? '');
+            }
+        });
     });
 });
