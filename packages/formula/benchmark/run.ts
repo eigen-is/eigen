@@ -32,7 +32,8 @@ const USAGE = `bun run.ts [options], from packages/formula/benchmark after bun i
   --rounds <n>        rounds per speed row, each a fresh process per engine (default 5); an engine whose first run
                       of a workload takes over ${LONG_RUN.ms / 1000} s gets at most ${LONG_RUN.rounds} rounds of it
   --runtimes <list>   bun, node (default both)
-  --filter <regex>    only the speed workloads whose name matches
+  --filter <regex>    only the speed workloads whose name matches; such a run is a look, like --quick, and writes
+                      its results to the temporary folder, never to results.json
   --max-load <n>      wait before each round until the 1-minute load is below this (default 6)`;
 
 const HERE = import.meta.dir;
@@ -415,7 +416,9 @@ if (import.meta.main) {
         process.exit(0);
     }
     const { quick } = options;
-    const file = quick ? QUICK_FILE : RESULTS_FILE;
+    // A quick or filtered run measures part of the table, so it writes to the temporary folder, never results.json.
+    const look = quick || options.filter !== '';
+    const file = look ? QUICK_FILE : RESULTS_FILE;
     const parts = new Set(options.only.split(','));
     const listed = options.engines?.split(',') ?? [...ENGINES];
     const unknown = listed.find((name) => !ENGINES.some((engine) => engine === name));
@@ -424,7 +427,7 @@ if (import.meta.main) {
     const kept = ENGINES.filter((engine) => !measured.includes(engine));
     // A full run keeps the parts and engines it does not measure again; a quick run starts afresh.
     const earlier: Results | undefined =
-        !quick && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
+        !look && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
     const machine = {
         cpu: os.cpus()[0]?.model ?? 'unknown',
         cores: os.cpus().length,
@@ -440,7 +443,7 @@ if (import.meta.main) {
     };
     let keptFrom: Partial<Record<EngineName, string>> | undefined;
     if (kept.length > 0) {
-        if (quick) throw new Error('A quick run keeps nothing, so it runs every engine');
+        if (look) throw new Error('A quick or filtered run keeps nothing, so it runs every engine');
         // A ratio across two machines or runtime versions would measure those, not the engines.
         const sameRuntimes = earlier?.versions.bun === versions.bun && earlier?.versions.node === versions.node;
         if (earlier === undefined || JSON.stringify(earlier.machine) !== JSON.stringify(machine) || !sameRuntimes)
@@ -487,6 +490,7 @@ if (import.meta.main) {
         seconds: Math.round((Date.now() - started) / 1000),
     };
     fs.writeFileSync(file, `${JSON.stringify(results, null, 2)}\n`);
+    if (look && !quick) console.log(`A filtered run: its results are in ${file}, not results.json.`);
     if (quick) {
         const shown = marks(results);
         console.log(
