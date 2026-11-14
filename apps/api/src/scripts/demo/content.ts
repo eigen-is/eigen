@@ -6,6 +6,7 @@
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
+import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type {
     Arrowhead,
@@ -216,6 +217,27 @@ export type SheetSpec = {
 const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
+const BUDGET_ROWS: SheetRowSpec[] = [
+    { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
+    { cells: [] },
+    { cells: ['Income'], style: 'section' },
+    { cells: ['Ticket sales', 42000, 'pending'] },
+    { cells: ['Bar', 9000, 'pending'] },
+    { cells: ['Culture fund grant', 15000, 'confirmed'] },
+    { cells: ['Local sponsors', 6000, 'paid'] },
+    { cells: ['Total income', '=SUM(B4:B7)'], style: 'total' },
+    { cells: [] },
+    { cells: ['Costs'], style: 'section' },
+    { cells: ['Artist fees', 28000, 'confirmed'] },
+    { cells: ['Stage & tech', 12000, 'confirmed'] },
+    { cells: ['Security', 6000, 'pending'] },
+    { cells: ['Sanitation', 4000, 'paid'] },
+    { cells: ['Shuttle buses', 3500, 'pending'] },
+    { cells: ['Marketing', 2500, 'paid'] },
+    { cells: ['Total costs', '=SUM(B11:B16)'], style: 'total' },
+    { cells: ['Margin', '=B8-B17'], style: 'total' },
+];
+
 export const BUDGET = {
     folder: 'finance' as const satisfies TeamFolder,
     name: 'budget', // lowercase, no extension
@@ -224,37 +246,13 @@ export const BUDGET = {
         {
             name: 'Budget',
             columns: [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }],
-            rows: [
-                { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
-                { cells: [] },
-                { cells: ['Income'], style: 'section' },
-                { cells: ['Ticket sales', 42000, 'pending'] },
-                { cells: ['Bar', 9000, 'pending'] },
-                { cells: ['Culture fund grant', 15000, 'confirmed'] },
-                { cells: ['Local sponsors', 6000, 'paid'] },
-                { cells: ['Total income', '=SUM(B4:B7)'], style: 'total' },
-                { cells: [] },
-                { cells: ['Costs'], style: 'section' },
-                { cells: ['Artist fees', 28000, 'confirmed'] },
-                { cells: ['Stage & tech', 12000, 'confirmed'] },
-                { cells: ['Security', 6000, 'pending'] },
-                { cells: ['Sanitation', 4000, 'paid'] },
-                { cells: ['Shuttle buses', 3500, 'pending'] },
-                { cells: ['Marketing', 2500, 'paid'] },
-                { cells: ['Total costs', '=SUM(B11:B16)'], style: 'total' },
-                { cells: ['Margin', '=B8-B17'], style: 'total' },
-            ],
+            rows: BUDGET_ROWS,
             dataBars: ['B4:B7', 'B11:B16'],
             redBelowZero: ['B18'],
             dropdowns: [
                 { range: 'C4:C7', options: BUDGET_STATUSES },
                 { range: 'C11:C16', options: BUDGET_STATUSES },
             ],
-        },
-        {
-            name: 'Charts',
-            columns: [],
-            rows: [],
             charts: [
                 {
                     type: 'column',
@@ -263,15 +261,23 @@ export const BUDGET = {
                     categories: 'Budget!A11:A16',
                     values: 'Budget!B11:B16',
                     x: 20,
-                    y: 20,
+                    // Below the table, after one empty row: the builder leaves every row at the default height.
+                    y: (BUDGET_ROWS.length + 1) * SHEET_DEFAULT_ROW_HEIGHT,
                 },
+            ],
+        },
+        {
+            name: 'Charts',
+            columns: [],
+            rows: [],
+            charts: [
                 {
                     type: 'pie',
                     title: 'Income',
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A4:A7',
                     values: 'Budget!B4:B7',
-                    x: 640,
+                    x: 20,
                     y: 20,
                 },
             ],
