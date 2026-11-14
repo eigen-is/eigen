@@ -1,5 +1,3 @@
-// The landing page's line of apps reads the same on every server, and each app word links to that app's About page
-// once the page is written. The pages come from the built manifest, which has the sheets page.
 import { describe, expect, test } from 'bun:test';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToStaticMarkup } from 'react-dom/server';
