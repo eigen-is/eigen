@@ -189,7 +189,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
-        // The explicit union annotation stabilises the Eden type: a free-busy caller gets the redacted shape.
+        // The explicit union annotation stabilizes the Eden type: a free-busy caller gets the redacted shape.
         async ({ params, user }): Promise<CalendarEventOccurrence[] | FreeBusyBlock[]> => {
             requireNonGuest(user);
             const { calendar, permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
