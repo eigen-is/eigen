@@ -182,6 +182,12 @@
         border-radius: 0.5rem;
     }
 
+    @media (prefers-reduced-motion: no-preference) {
+        .media-carousel-strip {
+            scroll-behavior: smooth;
+        }
+    }
+
     .media-carousel-strip:focus-visible {
         outline: 2px solid var(--ring);
         outline-offset: 2px;

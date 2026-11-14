@@ -55,7 +55,7 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
             const strip = step.closest('figure')?.querySelector('.media-carousel-strip');
             if (!strip) return;
             const width = step.classList.contains('media-carousel-prev') ? -strip.clientWidth : strip.clientWidth;
-            strip.scrollBy({ left: width, behavior: 'smooth' });
+            strip.scrollBy({ left: width });
             return;
         }
         if (!window.getSelection()?.isCollapsed) return;
