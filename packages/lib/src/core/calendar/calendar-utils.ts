@@ -177,12 +177,6 @@ export function formatEventWhen(
     const tz = allDay ? 'UTC' : (normalizeTimezone(timezone) ?? fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
-    const timeOpts: Intl.DateTimeFormatOptions = {
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23',
-        timeZone: tz,
-    };
 
     if (allDay) {
         // All-day endTime is exclusive, so the displayed end date is one day earlier than the stored one.
@@ -192,10 +186,9 @@ export function formatEventWhen(
     }
 
     if (dayKey(start) === dayKey(end)) {
-        const time = dateFormatter(timeOpts);
-        return `${date(start)} · ${time.format(start)} – ${time.format(end)}`;
+        return `${date(start)} · ${formatTime(start, tz)} – ${formatTime(end, tz)}`;
     }
-    const when = (d: Date) => `${date(d)}, ${dateFormatter(timeOpts).format(d)}`;
+    const when = (d: Date) => `${date(d)}, ${formatTime(d, tz)}`;
     return `${when(start)} – ${when(end)}`;
 }
 
