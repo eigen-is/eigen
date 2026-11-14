@@ -7,6 +7,7 @@ const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${ap
 describe('aboutPageSlug', () => {
     test('an app page takes its app from the file name', () => {
         expect(aboutPageSlug('sheets.md')).toBe('sheets');
+        expect(aboutPageSlug('admin.md')).toBe('admin');
     });
 
     test('index.md is the overview', () => {
