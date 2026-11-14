@@ -5,7 +5,7 @@
 // reader speaks it. It hears the clock time of the restart, not the countdown, which would be read out every second.
 // A demo's reset counts down in minutes and seconds, since its five minutes are short enough to watch.
 
-import { dateFormatter, formatDayMonth } from '@workspace/lib/date';
+import { dateFormatter, formatDayMonth, formatTime } from '@workspace/lib/date';
 import { useRestartNotice } from '@workspace/lib/sse';
 import type { HeldRestartNotice, RestartReason } from '@workspace/lib/types/sse';
 import { useEffect, useState } from 'react';
@@ -63,7 +63,7 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
 
     // "Mon 2 Nov, 14:22", the clock time a terminal stamps on a broadcast.
     const heard = new Date(notice.heardAt);
-    const heardTime = `${dateFormatter({ weekday: 'short' }).format(heard)} ${formatDayMonth(heard)}, ${clockTime(heard)}`;
+    const heardTime = `${dateFormatter({ weekday: 'short' }).format(heard)} ${formatDayMonth(heard)}, ${formatTime(heard)}`;
     const { lead, when, tail } = restartParts(notice, msLeft, streamDown);
     return (
         <div role="status" className="shrink-0 border-t border-warning/40 bg-warning/10 app-gutter-x py-1.5 text-xs">
@@ -73,7 +73,7 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
                 {when && (
                     <>
                         <span aria-hidden="true"> {when}</span>
-                        <span className="sr-only"> at {clockTime(new Date(notice.deadline))}</span>
+                        <span className="sr-only"> at {formatTime(notice.deadline)}</span>
                     </>
                 )}
                 {tail}
@@ -81,11 +81,6 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
             {notice.message && <p>“{notice.message}”</p>}
         </div>
     );
-}
-
-// "14:22", in the user's own time zone.
-function clockTime(date: Date): string {
-    return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
 }
 
 // The sentence in three parts, so the ticking `when` can sit apart from the words that only change with the state.

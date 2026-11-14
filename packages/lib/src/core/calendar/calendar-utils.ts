@@ -178,9 +178,9 @@ export function formatEventWhen(
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
     const timeOpts: Intl.DateTimeFormatOptions = {
-        hour: 'numeric',
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: true,
+        hourCycle: 'h23',
         timeZone: tz,
     };
 

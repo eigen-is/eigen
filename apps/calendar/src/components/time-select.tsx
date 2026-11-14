@@ -9,12 +9,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 
-function formatTimeSlot(time: string): string {
-    const [h, m] = time.split(':').map(Number);
-    const d = new Date(2000, 0, 1, h, m);
-    return formatTime(d);
-}
-
 function generateTimeSlots(): string[] {
     const slots: string[] = [];
     for (let h = 0; h < 24; h++) {
@@ -177,7 +171,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
                                 setOpen(false);
                             }}
                         >
-                            {formatTimeSlot(slot.time)}
+                            {slot.time}
                             {refMinutes != null && (
                                 <span className="text-muted-foreground ml-2 text-xs">
                                     {formatDuration(refMinutes, timeToMinutes(slot.time) + slot.dayOffset * 24 * 60)}
@@ -189,10 +183,6 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
             </PopoverContent>
         </Popover>
     );
-}
-
-export function toTimeString(date: Date): string {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export function roundToNext15Minutes(date: Date): Date {
@@ -210,7 +200,7 @@ export function roundToNext15Minutes(date: Date): Date {
 // The end of an event that starts at `start`, as the dialog's date and time fields: past midnight it is the next day.
 export function endAfter(start: Date, minutes: number): { date: string; time: string } {
     const end = new Date(start.getTime() + minutes * 60_000);
-    return { date: toLocalDateString(end), time: toTimeString(end) };
+    return { date: toLocalDateString(end), time: formatTime(end) };
 }
 
 export function addMinutes(time: string, minutes: number): string {

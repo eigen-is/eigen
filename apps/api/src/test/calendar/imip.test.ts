@@ -249,14 +249,14 @@ describe('iMIP Outbound Email Composition', () => {
 
     test('invitation mail labels a zone-less event UTC instead of guessing the server zone', () => {
         const mail = invite(MOCK_EVENT, organizer);
-        expect(mail.text).toContain('10:00 AM – 11:00 AM (UTC)');
+        expect(mail.text).toContain('10:00 – 11:00 (UTC)');
         expect(mail.html).toContain('(UTC)');
     });
 
     test('invitation mail renders a stored zone as its own wall clock and names it', () => {
         const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
-        expect(mail.text).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
-        expect(mail.html).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+        expect(mail.text).toContain('12:00 – 13:00 (Europe/Amsterdam)');
+        expect(mail.html).toContain('12:00 – 13:00 (Europe/Amsterdam)');
     });
 
     test('invitation mail says how a series repeats, right after when', () => {

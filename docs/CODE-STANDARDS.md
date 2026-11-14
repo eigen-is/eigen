@@ -65,7 +65,7 @@ Workspace imports resolve through each package's `exports` map, never tsconfig a
 
 ### Dates and labels
 
-**User-visible dates are day-month-year**: "5 January 2026", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Use `formatDayMonth` / `formatDate` from `@workspace/lib/date` (not `'en-GB'`), and `d MMM yyyy` for hand-built shapes. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari"; fix a sibling that passes `[]` on touch. A plain number's `.toLocaleString()` stays. Other spelling is en-US: fix British spelling on touch.
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Times are 24-hour, "09:05", never "9:05 AM", from `formatTime`. Use `formatDayMonth` / `formatDate` from `@workspace/lib/date` (not `'en-GB'`), and `d MMM yyyy` for hand-built shapes. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari"; fix a sibling that passes `[]` on touch. A plain number's `.toLocaleString()` stays. Other spelling is en-US: fix British spelling on touch.
 
 **UI labels are sentence case**: only the first word and proper nouns start with a capital ("Keep aspect ratio"), in buttons, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. `bun scripts/check-standards.ts` fails a capital after the first word in a label prop or element; `PROPER_NOUNS` in `scripts/sentence-case.ts` is the one list of names that keep theirs. Help-center articles quote labels exactly, so a renamed label changes the articles that bold it in the same commit.
 

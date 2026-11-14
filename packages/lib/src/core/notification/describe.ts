@@ -1,7 +1,7 @@
 import type { ActivityLines } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import { formatChatPreview } from '../chat/format-preview';
-import { formatDayMonth } from '../date';
+import { formatDayMonth, formatTime } from '../date';
 import { CHAT_NOTIFICATION_TYPES } from './tags';
 
 // Notification types whose body is raw chat text (emote wire form + bare emails), so it must be
@@ -31,7 +31,7 @@ export function describeNotification(
                 // see docs/ACTIVITY-ROWS.md § The client formats what depends on the viewer.
                 if ('startTime' in details) {
                     const at = new Date(details.startTime);
-                    secondary = `${formatDayMonth(at, { year: true })}, ${at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+                    secondary = `${formatDayMonth(at, { year: true })}, ${formatTime(at)}`;
                 }
                 break;
             case 'access-request':
