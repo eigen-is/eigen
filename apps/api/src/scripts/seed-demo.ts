@@ -2,7 +2,8 @@
 // lived-in team drive with such files as docs, a budget sheet and a stickies board, and their mail, calendars, chats
 // and contacts. It boots the API in this process and acts as the personas through the product's own code, so
 // activity, file history and notifications fill in. The demo reset wipes the data root and runs it again, and a
-// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN and EIGEN_DEMO_ADMIN_PASSWORD may be set.
+// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN, EIGEN_DEMO_ADMIN_PASSWORD and
+// EIGEN_DEMO_PERSONA_PASSWORD may be set.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -104,8 +105,9 @@ for (const [name, path] of [
     process.env[name] ||= `${WEB_ORIGIN}${path}`;
 }
 const ADMIN_PASSWORD = process.env['EIGEN_DEMO_ADMIN_PASSWORD'] || randomBytes(12).toString('base64url');
-// A random one is enough: the demo entry route resets each persona's password on every visit.
-const PERSONA_PASSWORD = randomBytes(18).toString('base64url');
+// The demo entry route resets each persona's password on every visit, so a demo box needs none of its own. A tool that
+// signs a persona in with a password sets one.
+const PERSONA_PASSWORD = process.env['EIGEN_DEMO_PERSONA_PASSWORD'] || randomBytes(18).toString('base64url');
 
 const emailFor = (localPart: string) => `${localPart}@${MAIL_DOMAIN}`;
 const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART);
