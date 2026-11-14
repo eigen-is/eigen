@@ -67,7 +67,7 @@ function calleeName(call: ts.CallExpression): string | undefined {
 
 // An error class such as AppError belongs with the schemas, so only a class that extends Component or PureComponent
 // counts as a component.
-function isReactComponentClass(decl: ts.Declaration): boolean {
+function isReactComponentClass(decl: ts.Node): boolean {
     if (!ts.isClassDeclaration(decl)) return false;
     for (const clause of decl.heritageClauses ?? []) {
         if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
@@ -80,7 +80,7 @@ function isReactComponentClass(decl: ts.Declaration): boolean {
     return false;
 }
 
-function classify(name: string, flags: SymbolFlags, decl: ts.Declaration): Kind {
+function classify(name: string, flags: SymbolFlags, decl: ts.Node): Kind {
     if (flags & (SymbolFlags.TypeAlias | SymbolFlags.Interface)) return 'Type';
     if (/^use[A-Z]/.test(name)) return 'Hook';
     if (/^invalidate|Keys$/.test(name)) return 'Cache';
