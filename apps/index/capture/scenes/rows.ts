@@ -19,7 +19,7 @@ const row = (app: string, theme: Scene['theme'], run: Scene['run']): Scene => ({
     name: basename(aboutRowStill(app), '.webp'),
     kind: 'still',
     theme,
-    viewport: { width: 1280, height: 800 },
+    viewport: { width: 1280, height: 720 },
     apps: [app],
     personas: ['anouk'],
     run,
