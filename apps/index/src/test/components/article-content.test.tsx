@@ -127,3 +127,68 @@ describe('ArticleContent', () => {
         expect(video.controls).toBe(false);
     });
 });
+
+// The open lightbox: what it shows, its caption, and its previous and next buttons, if any.
+function lightbox() {
+    const dialog = document.querySelector('[role="dialog"]');
+    if (!dialog) return null;
+    const media = dialog.querySelector('img, video');
+    return {
+        count: document.querySelectorAll('[role="dialog"]').length,
+        src: media?.getAttribute('src'),
+        caption: dialog.querySelector('p')?.textContent,
+        prev: dialog.querySelector<HTMLButtonElement>('button[aria-label="Previous"]'),
+        next: dialog.querySelector<HTMLButtonElement>('button[aria-label="Next"]'),
+    };
+}
+
+async function clickOn(container: HTMLElement, selector: string) {
+    const target = container.querySelector<HTMLElement>(selector);
+    if (!target) throw new Error(`Nothing matches ${selector}`);
+    await act(async () => target.click());
+}
+
+describe('lightbox', () => {
+    test('a lone image opens bigger, alone, with its alt text as the caption', async () => {
+        const html = '<p><img src="/a.webp" alt="A budget"></p>';
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, 'img');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget', prev: null, next: null });
+    });
+
+    test('a carousel image opens with the carousel as its group, at the image clicked', async () => {
+        const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, '.media-carousel-slide:nth-child(2) img');
+        expect(lightbox()).toMatchObject({ src: '/b.webp', caption: 'b' });
+        await act(async () => lightbox()?.next?.click());
+        expect(lightbox()?.src).toBe('/c.webp');
+        expect(lightbox()?.next?.disabled).toBe(true);
+        await act(async () => {
+            document
+                .querySelector('[role="dialog"]')
+                ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+        });
+        expect(lightbox()?.src).toBe('/b.webp');
+    });
+
+    test('an image inside a link follows the link instead', async () => {
+        const html = '<p><a href="#elsewhere"><img src="/a.webp" alt="a"></a></p>';
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, 'img');
+        expect(lightbox()).toBeNull();
+    });
+
+    test('a media grid opens one lightbox with the grid as its group', async () => {
+        const items = [
+            { src: '/g1.png', type: 'image' as const, caption: 'One' },
+            { src: '/g2.png', type: 'image' as const, caption: 'Two' },
+        ];
+        const body = { html: '<p>[MEDIAGRID:0]</p>', mediaGrids: [{ columns: '2', items }] };
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        await clickOn(container, 'button img');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/g1.png', caption: 'One' });
+        await act(async () => lightbox()?.next?.click());
+        expect(lightbox()).toMatchObject({ count: 1, src: '/g2.png', caption: 'Two' });
+    });
+});

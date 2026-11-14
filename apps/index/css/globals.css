@@ -146,6 +146,11 @@
         border-radius: 0.5rem;
     }
 
+    /* A picture or film opens bigger on a click, unless a link or a button holds it. */
+    :is(img, .media-video video):not(a img, button img) {
+        cursor: zoom-in;
+    }
+
     /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
     .media-video,
     .media-carousel,
