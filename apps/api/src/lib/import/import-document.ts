@@ -16,7 +16,7 @@ import type { ConvertTarget, DocumentImportOptions } from '@workspace/lib/types/
 import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive-convert';
 import { readSlidePage } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { enforceMountQuota } from '../config/enforcement';
+import { enforceMountQuota, enforceUploadLimits } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -58,7 +58,7 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: ConvertTarget,
     user: User,
-    maxBytes: number,
+    room: number,
 ): Promise<DrivePath> {
     const { parentId } = sourcePath;
     if (!parentId) throw new ApiError(400, 'Cannot convert a root file');
@@ -74,13 +74,13 @@ export async function convertToDocument(
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(sourcePath.size, format);
     // The upload limit may have been higher when the file was stored, so it applies here too.
-    if (sourcePath.size > maxBytes) throw new ApiError(413, 'Source file too large');
+    enforceUploadLimits(sourcePath.size, room);
 
     // The row's size is only a claim, so the read stops one byte past the lower cap and refuses what passes it, without
     // the rest ever being buffered. Past the byte cap, the check before the transform refuses it.
-    const bytes = await mount.readBytes(sourcePath.id, Math.min(maxBytes, MAX_DECOMPRESSED_BYTES) + 1);
+    const bytes = await mount.readBytes(sourcePath.id, Math.min(getMaxUploadSize(), MAX_DECOMPRESSED_BYTES) + 1);
     if (!bytes) throw new ApiError(404, 'File not found');
-    if (bytes.byteLength > maxBytes) throw new ApiError(413, 'Source file too large');
+    enforceUploadLimits(bytes.byteLength, room);
     const buffer = Buffer.from(bytes);
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 

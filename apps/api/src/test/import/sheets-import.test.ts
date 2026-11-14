@@ -705,7 +705,7 @@ describe('Sheets xlsx import/convert', () => {
                 { method: 'POST' },
             );
             expect(res.status).toBe(413);
-            expect(await res.text()).toBe('Source file too large');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }

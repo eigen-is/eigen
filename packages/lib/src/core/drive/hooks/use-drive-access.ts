@@ -1,6 +1,7 @@
 // Who can reach a Drive item, as the share dialog and the detail panel show it: the owner and the item's own
 // ACL entries first, then what each parent folder grants, each person once. The rest of the file answers
-// smaller questions, such as whether the user owns an item directly or through a team, or had it shared.
+// smaller questions, such as whether the user owns an item directly or through a team, had it shared, or may
+// write in a folder.
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -13,6 +14,7 @@ import { useAuth } from '../../auth';
 import { useMyTeams } from '../../home';
 import { usePublicUser } from '../../public';
 import { useBreadcrumb } from './reads';
+import { useCheckPermissions } from './sharing';
 
 type DriveAccess = {
     parsedOwner: ParsedOwnerId;
@@ -151,6 +153,15 @@ export function useIsEffectiveOwnerOf(): (ownerId: string) => boolean {
 
 export function useIsEffectiveOwner(ownerId: string): boolean {
     return useIsEffectiveOwnerOf()(ownerId);
+}
+
+// An owner writes without asking the server; anyone else as the folder's share allows. The "root" alias names no
+// folder to ask about until it resolves.
+export function useCanWriteFolder(ownerId: string, mountId: string, pathId: string): boolean {
+    const isOwner = useIsEffectiveOwner(ownerId);
+    const askServer = !isOwner && pathId !== 'root';
+    const { data: permissions } = useCheckPermissions(ownerId, mountId, askServer ? pathId : undefined);
+    return isOwner || permissions?.canWrite === true;
 }
 
 // Only the path's own ACL naming the user is a direct share, which a delete leaves instead of trashing the owner's

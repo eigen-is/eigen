@@ -1,9 +1,9 @@
 // The New button at the top of the Drive sidebar: a menu that creates a folder or a document, or uploads files, into
-// the folder the user has open, else the drive root. The app shell draws it. After a new folder or an upload, the
-// view moves to the folder it went into.
+// the folder the user has open, else the drive root. The app shell draws it. It is greyed out in a folder the user
+// may only view, and after a new folder or an upload the view moves to the folder it went into.
 
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { usePathInfo } from '@workspace/lib/drive';
+import { useCanWriteFolder, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
@@ -46,6 +46,9 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     );
 
     const targetPath = currentPath || rootPath;
+    // Off a folder page New goes into the viewer's own root.
+    const canWriteFolder = useCanWriteFolder(currentOwnerId ?? '', currentMountId ?? '', currentPathId ?? '');
+    const canCreate = !routeMatch || canWriteFolder;
 
     const handleAfterAction = () => {
         navigate({
@@ -72,7 +75,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <SidebarPrimaryButton icon={Plus} label="New" condensed={condensed} />
+                    <SidebarPrimaryButton icon={Plus} label="New" condensed={condensed} disabled={!canCreate} />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align={condensed ? 'center' : 'start'}>
                     {createItems.map(({ kind, icon: Icon, label, onSelect }) => (

@@ -1,6 +1,7 @@
 // A small settings object kept in one JSON file, such as a home's settings or the server settings.
 // It loads the file once, serves reads from memory and saves the whole object again on every change.
-// A change deep-merges into what is there, so a caller sends only the fields it changes.
+// A change deep-merges into what is there, so a caller sends only the fields it changes. An owner
+// that is replaced while the server runs, such as a home, can refuse a late save and wait for the rest.
 
 import { deepMerge } from '@workspace/lib/deep-merge';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -16,6 +17,8 @@ export class JsonStore<T extends Record<string, unknown>> {
         private fs: LocalFilesystem,
         private filename: string,
         private defaults: T,
+        // Throws when a save comes too late, such as through a home that is closing.
+        private refuseSet: () => void = () => {},
     ) {
         this.data = { ...defaults };
     }
@@ -33,7 +36,8 @@ export class JsonStore<T extends Record<string, unknown>> {
     }
 
     // Memory shows a change only once it is on disk, so a failed save changes nothing.
-    public set(update: DeepPartial<T>): Promise<T> {
+    public async set(update: DeepPartial<T>): Promise<T> {
+        this.refuseSet();
         const run = this.writes.then(async () => {
             const next = deepMerge(this.data, update);
             await this.fs.writeAtomic(this.filename, JSON.stringify(next, null, 2));
@@ -42,5 +46,10 @@ export class JsonStore<T extends Record<string, unknown>> {
         });
         this.writes = run.catch(() => {});
         return run;
+    }
+
+    // Done once every set so far is on disk or has failed.
+    public settled(): Promise<unknown> {
+        return this.writes;
     }
 }

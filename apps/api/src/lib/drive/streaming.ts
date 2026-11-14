@@ -1,10 +1,12 @@
 // Receives an upload without holding it in memory. It reads a multipart request part by part,
 // writes each file to a temp file on the mount, and hashes it on the way. The caller gets the
 // temp ids, hashes and sizes, and moves the files into place. On any failure it deletes the temp
-// files it made. Drive calls it when an upload request arrives.
+// files it made. A file past the server's upload limit answers 413, and one past what is left of the
+// mount 507. Drive calls it when an upload request arrives.
 
 import type { CryptoHasher, FileSink } from 'bun';
-import { ApiError } from '../core';
+import { getMaxUploadSize } from '../config/server-settings';
+import { ApiError, insufficientStorage, payloadTooLarge } from '../core';
 import type { Mount } from '../mount';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 
@@ -22,18 +24,15 @@ type InFlightFile = {
     hasher: CryptoHasher;
     fileName: string;
     mimeType: string;
+    size: number;
 };
 
-export async function streamFilesToTemp(
-    mount: Mount,
-    request: Request,
-    maxSizePerFile: number,
-): Promise<StreamResult[]> {
+export async function streamFilesToTemp(mount: Mount, request: Request, room: number): Promise<StreamResult[]> {
     const results: StreamResult[] = [];
     let current: InFlightFile | null = null;
 
     try {
-        for await (const event of parseMultipartRequest(request, { maxFileSize: maxSizePerFile })) {
+        for await (const event of parseMultipartRequest(request, { maxFileSize: getMaxUploadSize() })) {
             if (event.type === 'part') {
                 if (!event.filename) continue; // non-file field: chunks fall through unconsumed
                 const tempId = crypto.randomUUID();
@@ -43,9 +42,13 @@ export async function streamFilesToTemp(
                     hasher: new Bun.CryptoHasher('sha256'),
                     fileName: event.filename,
                     mimeType: event.mediaType || 'application/octet-stream',
+                    size: 0,
                 };
             } else if (event.type === 'chunk') {
                 if (current) {
+                    current.size += event.data.byteLength;
+                    // Each file may take all that is left, as a quota is a soft limit.
+                    if (current.size > room) throw insufficientStorage();
                     current.hasher.update(event.data);
                     current.writer.write(event.data);
                 }
@@ -62,7 +65,6 @@ export async function streamFilesToTemp(
             }
         }
     } catch (e) {
-        // Clean up the in-flight file and any temp files from already-parsed parts
         if (current) {
             try {
                 await current.writer.end();
@@ -70,9 +72,7 @@ export async function streamFilesToTemp(
             await mount.cleanupTemp(current.tempId);
         }
         await Promise.all(results.map((r) => mount.cleanupTemp(r.tempId)));
-        if (e instanceof MaxFileSizeExceededError) {
-            throw new ApiError(413, 'File exceeds maximum upload size');
-        }
+        if (e instanceof MaxFileSizeExceededError) throw payloadTooLarge();
         throw e;
     }
 

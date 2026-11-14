@@ -108,7 +108,7 @@ test('a refusal toasts the reason the server gave', async () => {
     await settle();
     await act(async () => FakeXHR.sent[0].respond(413, 'Upload too large'));
     await settle();
-    expect(toasts).toEqual(['Upload too large (413)']);
+    expect(toasts).toEqual(['Upload too large']);
 });
 
 test('cancel aborts the upload and shows no error', async () => {

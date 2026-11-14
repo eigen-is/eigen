@@ -77,7 +77,7 @@ test("a team the server won't delete fails as a refusal with the server's messag
     });
 
     expect(isRefusal(failure)).toBe(true);
-    expect(getErrorMessage(failure)).toBe("The organization's default team can't be deleted (403)");
+    expect(getErrorMessage(failure)).toBe("The organization's default team can't be deleted");
     expect(wasToasted(failure)).toBe(true);
     await unmount();
 });

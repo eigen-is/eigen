@@ -1,6 +1,7 @@
 // Eigen's own mail parser: from a message's raw bytes to its body as text and HTML, its attachments and its header
 // fields. Its contract is a golden corpus. Callers such as the mail store and the `.eml` preview read through it.
 
+import { formatDayMonth, formatTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
@@ -90,8 +91,11 @@ export function parseMail(bytes: Buffer): ParsedMail {
                 html: `<strong>${escapeHtml(headers.subject)}</strong>`,
             });
         }
-        if (headers.date)
-            rows.push({ key: 'Date', text: headers.date.toUTCString(), html: headers.date.toUTCString() });
+        if (headers.date) {
+            // The server knows no reader's zone, so the time names UTC.
+            const date = `${formatDayMonth(headers.date, { year: true, timeZone: 'UTC' })}, ${formatTime(headers.date, 'UTC')} UTC`;
+            rows.push({ key: 'Date', text: date, html: date });
+        }
         addressRow('To', headers.to);
         addressRow('Cc', headers.cc);
         addressRow('Bcc', headers.bcc);

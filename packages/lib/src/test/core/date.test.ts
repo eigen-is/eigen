@@ -15,6 +15,18 @@ describe('formatTime', () => {
         expect(formatTime(new Date(2026, 10, 14, 12, 0))).toBe('12:00');
         expect(formatTime(new Date(2026, 10, 14, 0, 0))).toBe('00:00');
     });
+
+    test('a time zone reads the clock there, on the same 24-hour shape', () => {
+        const halfPastMidnightUtc = new Date(Date.UTC(2026, 10, 14, 0, 30));
+        expect(formatTime(halfPastMidnightUtc, 'UTC')).toBe('00:30');
+        expect(formatTime(halfPastMidnightUtc, 'America/New_York')).toBe('19:30');
+        expect(formatTime(new Date(Date.UTC(2026, 10, 14, 15, 42)), 'Asia/Kolkata')).toBe('21:12');
+    });
+
+    test('a zone read first leaves the local clock local', () => {
+        formatTime(new Date(), 'Asia/Kolkata');
+        expect(formatTime(new Date(2026, 10, 14, 9, 5))).toBe('09:05');
+    });
 });
 
 describe('formatFullDateTime', () => {

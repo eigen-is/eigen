@@ -219,7 +219,7 @@ describe('Changing a team mount', () => {
             const before = readFileSync(settingsFile, 'utf8');
             answerCheck();
 
-            await expect(saving).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            await expect(saving).rejects.toMatchObject({ status: 503, message: 'Reloading. Try again in a moment.' });
             expect(readFileSync(settingsFile, 'utf8')).toBe(before);
             expect(next.closing).toBe(false);
             expect(next.drive.getMountConfig(mount.id).s3Config).toEqual(bucketA);
@@ -235,7 +235,7 @@ describe('Changing a team mount', () => {
 
         await expect(home.addMount({ name: 'Refused', storageType: 'local' })).rejects.toMatchObject({
             status: 503,
-            message: 'Home is closing',
+            message: 'Reloading. Try again in a moment.',
         });
         await closing;
         expect(home.settings.get().mounts ?? {}).toEqual({});

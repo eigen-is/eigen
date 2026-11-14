@@ -147,3 +147,12 @@ jobs:
       - uses: actions/checkout@v7
 
       - run: bash docker/test-launcher.sh
+
+  # The operator commands on a built install, on Linux, where the checks Docker Desktop's file share hides run.
+  cli:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: bash docker/test-cli.sh

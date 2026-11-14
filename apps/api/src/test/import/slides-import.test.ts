@@ -4,6 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive-convert';
 import type { VectorScene } from '@workspace/lib/vector';
 import { readVectorFromDoc, SLIDES_STYLE_DEFAULTS, writeElementInDoc, writeFrameInDoc } from '@workspace/lib/vector';
+import { getMaxUploadSize } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
@@ -265,17 +266,17 @@ describe('Convert to Slides', () => {
         const drive = await getSharedDrive(ctx.alice.user.id, alice);
         const { mount, path } = await drive.resolveFile(mountId, uploaded.id);
         // The stored object grew past the upload limit out of band; the row still claims its upload's size.
-        const maxBytes = path.size + 1024;
         const readSpy = spyOn(mount, 'readBytes').mockImplementation(
             async (_id, limit) =>
                 new ArrayBuffer(Math.min(limit ?? Number.MAX_SAFE_INTEGER, MAX_DECOMPRESSED_BYTES + 1)),
         );
         try {
-            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice, maxBytes)).rejects.toMatchObject({
+            const room = Number.MAX_SAFE_INTEGER;
+            await expect(convertToDocument(drive, mount, path, 'eigenslides', alice, room)).rejects.toMatchObject({
                 status: 413,
-                message: 'Source file too large',
+                message: 'Upload too large',
             });
-            expect(readSpy).toHaveBeenCalledWith(path.id, maxBytes + 1);
+            expect(readSpy).toHaveBeenCalledWith(path.id, getMaxUploadSize() + 1);
         } finally {
             readSpy.mockRestore();
         }

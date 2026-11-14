@@ -1,26 +1,27 @@
-// Every error toast is one of these strings. The shapes below are the ones Eden hands us: an ApiError's
-// plain text, Elysia's validation body (which drops everything but `type`/`on`/`found` in production),
-// and the untyped routes' empty bodies.
 import { describe, expect, test } from 'bun:test';
 import { AppError, getErrorMessage, isRefusal } from '../../core/api-error';
 
 describe('AppError messages', () => {
     test('reads the message a body carries', () => {
-        const error = new AppError({ error: { status: 507, value: { message: 'Insufficient Storage' } }, status: 507 });
+        const error = new AppError({
+            error: { status: 507, value: { message: 'Not enough storage left' } },
+            status: 507,
+        });
 
-        expect(getErrorMessage(error)).toBe('Insufficient Storage (507)');
+        expect(getErrorMessage(error)).toBe('Not enough storage left');
     });
 
     test('reads a plain string body — what every ApiError returns', () => {
         const error = new AppError({ error: { status: 409, value: 'A file with that name exists' }, status: 409 });
 
-        expect(getErrorMessage(error)).toBe('A file with that name exists (409)');
+        expect(getErrorMessage(error)).toBe('A file with that name exists');
     });
 
     test('falls back to the response status when the error carries none', () => {
         const error = new AppError({ error: { status: undefined, value: 'Boom' }, status: 500 });
 
-        expect(getErrorMessage(error)).toBe('Boom (500)');
+        expect(error.status).toBe(500);
+        expect(getErrorMessage(error)).toBe('Boom');
     });
 
     test("production's message-less validation body reads as a plain rejection", () => {
@@ -48,7 +49,7 @@ describe('AppError messages', () => {
             status: 422,
         });
 
-        expect(getErrorMessage(error)).toBe('Expected string (422)');
+        expect(getErrorMessage(error)).toBe('Expected string');
     });
 
     test('a validation body with only a summary reads the summary', () => {
@@ -60,7 +61,7 @@ describe('AppError messages', () => {
             status: 422,
         });
 
-        expect(getErrorMessage(error)).toBe("Expected 'limit' to be number (422)");
+        expect(getErrorMessage(error)).toBe("Expected 'limit' to be number");
     });
 
     test('a validation body with only an errors array reads the first error', () => {
@@ -76,7 +77,31 @@ describe('AppError messages', () => {
             status: 422,
         });
 
-        expect(getErrorMessage(error)).toBe("Expected 'limit' to be number (422)");
+        expect(getErrorMessage(error)).toBe("Expected 'limit' to be number");
+    });
+
+    test("the server's own message shows without its status", () => {
+        const error = new AppError({
+            error: { status: 400, value: 'Folders can be nested at most 256 levels deep' },
+            status: 400,
+        });
+
+        expect(getErrorMessage(error)).toBe('Folders can be nested at most 256 levels deep');
+        expect(error.message).toBe('Folders can be nested at most 256 levels deep');
+    });
+
+    test('a message-less error still shows its status', () => {
+        const error = new AppError({ error: { status: 403, value: '  ' }, status: 403 });
+
+        expect(getErrorMessage(error)).toBe('No access (403)');
+        expect(error.message).toBe('No access (403)');
+    });
+
+    test("a proxy's HTML error page reads as the status, not as markup", () => {
+        const page = '<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>nginx</body>\r\n</html>';
+        const error = new AppError({ error: { status: 502, value: page }, status: 502 });
+
+        expect(getErrorMessage(error)).toBe('Request failed (502)');
     });
 
     test('an empty body falls back to the status', () => {

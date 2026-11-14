@@ -198,8 +198,7 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(413);
-            // The parser's MaxFileSizeExceededError mapping in streamFilesToTemp
-            expect(await res.text()).toBe('File exceeds maximum upload size');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
@@ -209,10 +208,31 @@ describe('Streaming Upload', () => {
         }
     });
 
+    // The cut-off comes mid-stream, so the answer must still say the drive is full, not that the file is too large.
+    test('a file larger than the room left in the mount answers 507', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const usedMB = (await home.drive.size(aliceMountId)) / (1024 * 1024);
+        const restore = await capUserDrive(ctx.alice.user.id, aliceMountId, usedMB + 1);
+        try {
+            const file = new File(['x'.repeat(2 * 1024 * 1024)], 'over-room.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`,
+                { method: 'POST', body: formData },
+            );
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Not enough storage left');
+        } finally {
+            await restore();
+        }
+    });
+
     test('upload to a mount already at quota returns 507 before the body is read', async () => {
         // Seed so the mount has bytes, then shrink the live mount quota to exactly what's used
         // (mirrors editor.test.ts, which also lowers the server default). remaining <= 0 makes
-        // getUploadMaxSize throw up front: even this tiny file, which the parser's maxFileSize
+        // getUploadRoom throw up front: even this tiny file, which the parser's maxFileSize
         // would never reject, must bounce with 507.
         const seed = new File(['seed'], 'quota-seed.txt', { type: 'text/plain' });
         await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, seed);
@@ -230,7 +250,7 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         } finally {
             await restore();
         }
