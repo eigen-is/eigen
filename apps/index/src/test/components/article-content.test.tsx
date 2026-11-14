@@ -270,6 +270,24 @@ describe('lightbox', () => {
         expect(lightbox()?.src).toBe('/b.webp');
     });
 
+    test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
+        const { html } = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, '.media-carousel-slide video');
+        const press = (target: Element | null | undefined, handled = false) =>
+            act(async () => {
+                const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+                if (handled) event.preventDefault();
+                target?.dispatchEvent(event);
+            });
+        await press(document.querySelector('[role="dialog"] video'));
+        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
+        await press(document.querySelector('[role="dialog"]'), true);
+        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
+        await press(document.querySelector('[role="dialog"]'));
+        expect(lightbox()?.src).toBe('/b.webp');
+    });
+
     test('a click on the open picture leaves the group as it is', async () => {
         const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
         const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);

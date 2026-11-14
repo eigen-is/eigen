@@ -93,8 +93,8 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             setLightbox({ items, index: Array.from(grid.querySelectorAll('button')).indexOf(thumbnail), open: true });
             return;
         }
-        const media = e.target.closest('.site-prose :is(img, figure video)');
-        if (media && !media.closest('a, button')) {
+        const media = e.target.closest('img, figure video');
+        if (media?.closest('.site-prose') && !media.closest('a, button')) {
             const group = Array.from(media.closest('.media-carousel-strip')?.querySelectorAll('img, video') ?? [media]);
             setLightbox({ items: group.map(lightboxItem), index: group.indexOf(media), open: true });
             return;
