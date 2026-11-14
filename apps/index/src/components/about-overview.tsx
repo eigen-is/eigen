@@ -33,7 +33,7 @@ export function AboutOverview({ overview, body }: AboutOverviewProps) {
                 <ArticleContent
                     body={body}
                     blocks={{
-                        principles: <PrincipleBlocks className="not-prose my-8 md:grid-cols-3 md:gap-4" />,
+                        principles: <PrincipleBlocks className="my-8 md:gap-4" />,
                         apps: <AppRows rows={overview.rows} />,
                     }}
                     className="mt-8"
@@ -46,7 +46,7 @@ export function AboutOverview({ overview, body }: AboutOverviewProps) {
 function AppRows({ rows }: { rows: ArticleMeta['rows'] }) {
     const written = new Set(getAboutArticles().map((page) => page.slug));
     return (
-        <div className="not-prose">
+        <div className="mb-3">
             {aboutApps.map((app, index) => {
                 const hasPage = written.has(app.slug);
                 const className = cn(

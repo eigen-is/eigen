@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { aboutPageSlug, checkAboutRows } from '../../../../scripts/lib/about-pages';
+import { aboutPageSlug, checkAboutRows, checkFormatArticles } from '../../../../scripts/lib/about-pages';
 import { aboutApps } from '../../../content/about-apps';
 
 const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${app.name}`]));
@@ -30,5 +30,19 @@ describe('checkAboutRows', () => {
         const { sheets: _, ...missing } = allRows;
         expect(() => checkAboutRows(missing)).toThrow();
         expect(() => checkAboutRows({ ...allRows, space: 'Your workspace home' })).toThrow();
+    });
+});
+
+describe('checkFormatArticles', () => {
+    const articles = new Set(aboutApps.flatMap((app) => (app.formats ? [app.formats.article] : [])));
+
+    test('passes when every formats panel links a help article', () => {
+        expect(() => checkFormatArticles(articles)).not.toThrow();
+    });
+
+    test('fails naming a link to no help article', () => {
+        const fewer = new Set(articles);
+        fewer.delete('sheets/import-excel');
+        expect(() => checkFormatArticles(fewer)).toThrow('sheets/import-excel');
     });
 });

@@ -125,19 +125,23 @@ describe('autoplay carousel', () => {
         expect(strip.scrollLeft).toBe(0);
     });
 
-    test('waits while the pointer is over it', async () => {
+    test('waits while the pointer is over it or focus is inside it', async () => {
         stubReducedMotion(false);
         const { container, strip, wait } = await renderAutoplay();
         const carousel = container.querySelector('.media-carousel');
-        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseenter')));
+        // happy-dom matches neither :hover nor :focus-within, so the test says when the reader is there.
+        let readerThere = true;
+        Object.defineProperty(carousel, 'matches', {
+            value: (selector: string) => selector === ':hover, :focus-within' && readerThere,
+        });
         await wait(15000);
         expect(strip.scrollLeft).toBe(0);
-        await act(async () => carousel?.dispatchEvent(new MouseEvent('mouseleave')));
+        readerThere = false;
         await wait(7500);
         expect(strip.scrollLeft).toBe(600);
     });
 
-    test('stops for good once the reader uses it', async () => {
+    test('stops for good once the reader moved it', async () => {
         stubReducedMotion(false);
         const { strip, next, wait } = await renderAutoplay();
         await act(async () => next.click());
@@ -145,16 +149,13 @@ describe('autoplay carousel', () => {
         expect(strip.scrollLeft).toBe(600);
     });
 
-    test('stops for a sideways wheel, but not for an upright one that scrolls the page past', async () => {
+    test('stops for good after a swipe to another slide', async () => {
         stubReducedMotion(false);
-        const { container, strip, wait } = await renderAutoplay();
-        const carousel = container.querySelector('.media-carousel');
-        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 })));
+        const { strip, scrollTo, wait } = await renderAutoplay();
         await wait(7500);
-        expect(strip.scrollLeft).toBe(600);
-        await act(async () => carousel?.dispatchEvent(new WheelEvent('wheel', { deltaX: 100 })));
-        await wait(15000);
-        expect(strip.scrollLeft).toBe(600);
+        await scrollTo(1200);
+        await wait(30000);
+        expect(strip.scrollLeft).toBe(1200);
     });
 
     test('never moves for a reader who asked for less motion', async () => {
@@ -167,11 +168,24 @@ describe('autoplay carousel', () => {
 
 describe('page blocks', () => {
     test('each draws what the page gives for it where the Markdown put it', async () => {
-        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter');
+        const { html } = renderMarkdown(
+            'Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter',
+            new Set(['apps', 'principles']),
+        );
         const { container } = await renderInDocument(
             <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
         );
         expect(container.textContent?.replace(/\s+/g, ' ').trim()).toBe('Before Rows Between Panels After');
+    });
+
+    test('draw outside the prose, which holds the Markdown around them', async () => {
+        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter', new Set(['apps']));
+        const { container } = await renderInDocument(
+            <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
+        );
+        const prose = Array.from(container.querySelectorAll('.eigen-prose.site-prose'), (div) => div.textContent);
+        expect(prose).toEqual(['Before\n', '\nAfter\n']);
+        expect(container.querySelector('.rows')?.closest('.eigen-prose')).toBeNull();
     });
 });
 
@@ -257,6 +271,43 @@ describe('lightbox', () => {
                 ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
         });
         expect(lightbox()?.src).toBe('/b.webp');
+    });
+
+    test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
+        const { html } = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, '.media-carousel-slide video');
+        const press = (target: Element | null | undefined, handled = false) =>
+            act(async () => {
+                const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
+                if (handled) event.preventDefault();
+                target?.dispatchEvent(event);
+            });
+        await press(document.querySelector('[role="dialog"] video'));
+        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
+        await press(document.querySelector('[role="dialog"]'), true);
+        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
+        await press(document.querySelector('[role="dialog"]'));
+        expect(lightbox()?.src).toBe('/b.webp');
+    });
+
+    test.each(['Enter', ' '])('%p on the focused strip opens the slide in view, in its group', async (key) => {
+        const { strip, scrollTo } = await renderCarousel();
+        await scrollTo(600);
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        await act(async () => strip.dispatchEvent(event));
+        expect(event.defaultPrevented).toBe(true);
+        expect(lightbox()).toMatchObject({ count: 1, src: '/b.webp' });
+        expect(lightbox()?.next).not.toBeNull();
+    });
+
+    test('a click on the open picture leaves the group as it is', async () => {
+        const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        await clickOn(container, '.media-carousel-slide img');
+        await act(async () => document.querySelector<HTMLElement>('[role="dialog"] img')?.click());
+        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp' });
+        expect(lightbox()?.next).not.toBeNull();
     });
 
     test('an image inside a link follows the link instead', async () => {

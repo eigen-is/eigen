@@ -27,7 +27,9 @@ export function MediaLightbox({ items, index, open, onIndexChange, onOpenChange 
     const step = (by: number) => {
         if (items[index + by]) onIndexChange(index + by);
     };
+    // On a film the arrow keys seek it.
     const onKeyDown = (e: KeyboardEvent) => {
+        if (e.defaultPrevented || e.target instanceof HTMLVideoElement) return;
         if (e.key === 'ArrowLeft') step(-1);
         if (e.key === 'ArrowRight') step(1);
     };

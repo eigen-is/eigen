@@ -1,13 +1,12 @@
-// The rendered body of an article, a post or the changelog, in the site's prose style, on every page that shows
-// Markdown. The build leaves the HTML with a marker for each media grid and each block the page draws itself, such as
-// the About overview's app rows, so this draws the HTML as it is and each marker as a component. It wires the heading
-// links, the carousels (buttons, dots, autoplay) and the lightbox, and plays the looping videos in view unless the
-// reader asked for less motion.
+// The rendered body of an article, a post or the changelog, on every page that shows Markdown. The build leaves the
+// HTML with a marker for each media grid and each block the page draws itself, such as the About overview's app rows,
+// so this draws the HTML in the site's prose style and each marker as a component, the page's own blocks outside the
+// prose. It wires the heading links, the carousels (buttons, dots, autoplay) and the lightbox, and plays the looping
+// videos in view unless the reader asked for less motion.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { cn } from '@workspace/ui/lib/utils';
-import type { MouseEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
 import type { LightboxItem } from './media-lightbox';
@@ -17,21 +16,6 @@ import { MediaLightbox } from './media-lightbox';
 type ArticleContentProps = { body: ArticleBody; blocks?: Readonly<Record<string, ReactNode>>; className?: string };
 
 export function ArticleContent({ body, blocks, className }: ArticleContentProps) {
-    const parts = useMemo(() => {
-        const segments: Array<{ html: string } | { grid: number } | { block: string }> = [];
-        const regex = /<p>\[(?:MEDIAGRID:(\d+)|BLOCK:([\w-]+))\]<\/p>/g;
-        let last = 0;
-        let match: RegExpExecArray | null = regex.exec(body.html);
-        while (match !== null) {
-            segments.push({ html: body.html.slice(last, match.index) });
-            segments.push(match[2] ? { block: match[2] } : { grid: Number(match[1]) });
-            last = match.index + match[0].length;
-            match = regex.exec(body.html);
-        }
-        segments.push({ html: body.html.slice(last) });
-        return segments;
-    }, [body.html]);
-
     const ref = useRef<HTMLDivElement>(null);
     const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number; open: boolean }>({
         items: [],
@@ -40,61 +24,12 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
     });
 
     // The build writes no autoplay, so a loop never moves before hydration for a reader who asked for less motion.
-    useEffect(() => {
-        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-        const startVideos = () => {
-            if (ref.current) playVideosInView(ref.current);
-        };
-        startVideos();
-        reduceMotion.addEventListener('change', startVideos);
-        return () => reduceMotion.removeEventListener('change', startVideos);
-    }, [body.html]);
-
-    // An autoplay carousel waits while the reader points at it or is inside it, or the tab is hidden, and stops for
-    // good once they use it: a click, a key, or a sideways wheel or swipe. An upright one only scrolls the page past.
-    useEffect(() => {
-        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-        const done = new AbortController();
-        const timers: ReturnType<typeof setInterval>[] = [];
-        for (const carousel of ref.current?.querySelectorAll<HTMLElement>('.media-carousel[data-autoplay]') ?? []) {
-            const strip = carousel.querySelector('.media-carousel-strip');
-            if (!strip) continue;
-            let pointedAt = false;
-            const timer = setInterval(() => {
-                if (reduceMotion.matches || document.hidden || pointedAt || carousel.contains(document.activeElement)) {
-                    return;
-                }
-                const { pitch, current } = carouselPosition(strip);
-                strip.scrollTo({ left: ((current + 1) % strip.children.length) * pitch });
-            }, AUTOPLAY_MS);
-            timers.push(timer);
-            const { signal } = done;
-            carousel.addEventListener('mouseenter', () => (pointedAt = true), { signal });
-            carousel.addEventListener('mouseleave', () => (pointedAt = false), { signal });
-            const stop = () => clearInterval(timer);
-            carousel.addEventListener('click', stop, { signal });
-            carousel.addEventListener('keydown', stop, { signal });
-            const sideways = (x: number, y: number) => Math.abs(x) > Math.abs(y);
-            carousel.addEventListener('wheel', (e) => sideways(e.deltaX, e.deltaY) && stop(), { signal });
-            let touchStart = { clientX: 0, clientY: 0 };
-            carousel.addEventListener('touchstart', (e) => (touchStart = e.touches[0]), { signal });
-            carousel.addEventListener(
-                'touchmove',
-                (e) =>
-                    sideways(e.touches[0].clientX - touchStart.clientX, e.touches[0].clientY - touchStart.clientY) &&
-                    stop(),
-                { signal },
-            );
-        }
-        return () => {
-            done.abort();
-            for (const timer of timers) clearInterval(timer);
-        };
-    }, [body.html]);
-
     // Scroll does not bubble, so the root hears each carousel strip's in the capture phase.
     useEffect(() => {
         const root = ref.current;
+        if (!root) return;
+        const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+        const playVideos = () => playVideosInView(root, reduceMotion.matches);
         const onScroll = (e: Event) => {
             const strip = e.target;
             if (!(strip instanceof Element) || !strip.matches('.media-carousel-strip')) return;
@@ -109,16 +44,37 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             for (const button of carousel.querySelectorAll<HTMLButtonElement>('.media-carousel-steps button')) {
                 button.disabled = button.matches('.media-carousel-prev') ? current <= 0 : current >= dots.length - 1;
             }
-            playVideosInView(carousel);
+            playVideosInView(carousel, reduceMotion.matches);
         };
-        root?.addEventListener('scroll', onScroll, true);
-        return () => root?.removeEventListener('scroll', onScroll, true);
-    }, []);
+        // An autoplay carousel waits while the reader points at it or is inside it. It remembers the slide it scrolled
+        // to, so a strip on any other slide is the reader's doing, and it stops for good.
+        const timers: ReturnType<typeof setInterval>[] = [];
+        for (const carousel of root.querySelectorAll('.media-carousel[data-autoplay]')) {
+            const strip = carousel.querySelector('.media-carousel-strip');
+            if (!strip) continue;
+            let shown = 0;
+            const timer = setInterval(() => {
+                if (reduceMotion.matches || document.hidden || carousel.matches(':hover, :focus-within')) return;
+                const { pitch, current } = carouselPosition(strip);
+                if (current !== shown) return clearInterval(timer);
+                shown = (current + 1) % strip.children.length;
+                strip.scrollTo({ left: shown * pitch });
+            }, AUTOPLAY_MS);
+            timers.push(timer);
+        }
+        playVideos();
+        reduceMotion.addEventListener('change', playVideos);
+        root.addEventListener('scroll', onScroll, true);
+        return () => {
+            reduceMotion.removeEventListener('change', playVideos);
+            root.removeEventListener('scroll', onScroll, true);
+            for (const timer of timers) clearInterval(timer);
+        };
+    }, [body.html]);
 
-    // React passes up clicks from a portaled dialog, such as the lightbox, so only the page's own count. A heading
-    // copies its link only where its icon shows, as touch screens hide it, and never over a selection.
-    const onClick = (e: MouseEvent<HTMLDivElement>) => {
-        if (!(e.target instanceof Element) || !e.currentTarget.contains(e.target)) return;
+    // A heading copies its link only where its icon shows, as touch screens hide it, and never over a selection.
+    const onClick = (e: MouseEvent) => {
+        if (!(e.target instanceof Element)) return;
         const control = e.target.closest('.media-carousel-nav button');
         const carousel = control?.closest('.media-carousel');
         const strip = carousel?.querySelector('.media-carousel-strip');
@@ -130,8 +86,15 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             strip.scrollTo({ left: slide * pitch });
             return;
         }
+        const grid = e.target.closest<HTMLElement>('[data-grid]');
+        const thumbnail = e.target.closest('button');
+        if (grid && thumbnail) {
+            const { items } = body.mediaGrids[Number(grid.dataset.grid)];
+            setLightbox({ items, index: Array.from(grid.querySelectorAll('button')).indexOf(thumbnail), open: true });
+            return;
+        }
         const media = e.target.closest('img, figure video');
-        if (media && !media.closest('a, button, .not-prose')) {
+        if (media?.closest('.site-prose') && !media.closest('a, button')) {
             const group = Array.from(media.closest('.media-carousel-strip')?.querySelectorAll('img, video') ?? [media]);
             setLightbox({ items: group.map(lightboxItem), index: group.indexOf(media), open: true });
             return;
@@ -146,26 +109,51 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         copyToClipboard(`${location.origin}${location.pathname}#${id}`, 'Link copied to clipboard');
     };
 
+    // A focused strip opens its slide in view on Enter or Space, as a click on the slide would.
+    const onKeyDown = (e: KeyboardEvent) => {
+        const strip = e.target;
+        if ((e.key !== 'Enter' && e.key !== ' ') || !(strip instanceof Element)) return;
+        if (!strip.matches('.media-carousel-strip')) return;
+        e.preventDefault();
+        const group = Array.from(strip.querySelectorAll('img, video'));
+        setLightbox({ items: group.map(lightboxItem), index: carouselPosition(strip).current, open: true });
+    };
+
+    // The lightbox sits outside the root, so React passes no click in its portaled dialog up to onClick.
     return (
-        <div ref={ref} className={cn('eigen-prose site-prose', className)} onClick={onClick}>
-            {parts.map((part, i) => {
-                if ('block' in part) return <div key={i}>{blocks?.[part.block]}</div>;
-                if ('grid' in part) {
-                    const grid = body.mediaGrids[part.grid];
-                    return grid ? <MediaGrid key={i} columns={grid.columns} items={grid.items} /> : null;
-                }
-                if (!part.html) return null;
-                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
-                return <div key={i} dangerouslySetInnerHTML={{ __html: part.html }} />;
-            })}
+        <>
+            <div ref={ref} className={className} onClick={onClick} onKeyDown={onKeyDown}>
+                {body.html.split(BLOCK_MARKER).map((section, i) => {
+                    if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
+                    if (!section) return null;
+                    return (
+                        <div key={i} className="eigen-prose site-prose">
+                            {section.split(GRID_MARKER).map((part, j) => {
+                                if (j % 2) {
+                                    const grid = Number(part);
+                                    return <MediaGrid key={j} {...body.mediaGrids[grid]} index={grid} />;
+                                }
+                                if (!part) return null;
+                                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
+                                return <div key={j} dangerouslySetInnerHTML={{ __html: part }} />;
+                            })}
+                        </div>
+                    );
+                })}
+            </div>
             <MediaLightbox
                 {...lightbox}
                 onIndexChange={(index) => setLightbox((current) => ({ ...current, index }))}
                 onOpenChange={(open) => setLightbox((current) => ({ ...current, open }))}
             />
-        </div>
+        </>
     );
 }
+
+// The build's markers for a block the page draws, such as `apps`, and for a media grid, by its number. Split on
+// them, the pieces at odd places are the captured names and numbers.
+const BLOCK_MARKER = /<p>\[BLOCK:([\w-]+)\]<\/p>/;
+const GRID_MARKER = /<p>\[MEDIAGRID:(\d+)\]<\/p>/;
 
 const AUTOPLAY_MS = 7000;
 
@@ -178,8 +166,7 @@ function carouselPosition(strip: Element) {
 
 // A looping video plays while it is in view, which in a carousel means on the slide its dots mark, and holds still
 // with controls for a reader who asked for less motion.
-function playVideosInView(scope: Element) {
-    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function playVideosInView(scope: Element, reduceMotion: boolean) {
     for (const video of scope.querySelectorAll<HTMLVideoElement>('figure video')) {
         const carousel = video.closest('.media-carousel');
         const dots = Array.from(carousel?.querySelectorAll('.media-carousel-dot') ?? []);

@@ -257,7 +257,7 @@ export function useMailActions() {
     };
 
     // An archive or a spam report: one toast and one Undoable for every message that moved.
-    const moveEmailsByIdsWithUndo = async (emailIds: string[], mailbox: string, done: string) => {
+    const moveEmailsByIdsWithUndo = async (emailIds: string[], mailbox: string, toastWording: string) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const results = await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox })));
         const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
@@ -268,7 +268,7 @@ export function useMailActions() {
                 to: mailbox,
             };
             lastAction.current = action;
-            undoToast(`${moved.length} ${done}`, action);
+            undoToast(`${moved.length} ${toastWording}`, action);
             navigateToList();
         }
     };

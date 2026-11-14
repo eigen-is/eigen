@@ -25,10 +25,14 @@ function slugify(text: string): string {
         .replace(/\s+/g, '-');
 }
 
-export function renderMarkdown(markdown: string): { html: string; toc: TocEntry[] } {
+// `pageBlocks` names the blocks the page draws itself, such as `apps` on the About overview.
+export function renderMarkdown(
+    markdown: string,
+    pageBlocks: ReadonlySet<string> = new Set(),
+): { html: string; toc: TocEntry[] } {
     const toc: TocEntry[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
-    md.use(markdownBlocks, { publicDir: PUBLIC_DIR });
+    md.use(markdownBlocks, { publicDir: PUBLIC_DIR, pageBlocks });
     md.use(anchor, {
         slugify,
         level: [2, 3],
