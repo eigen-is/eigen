@@ -1,4 +1,4 @@
-// Slides's root route. It hands EigenDocRoot the Slides config and two things the URL knows: whether a presentation
+// Slides' root route. It hands EigenDocRoot the Slides config and two things the URL knows: whether a presentation
 // is open, which hides the sidebar so the editor fills the page, and which team drive is open, so New
 // creates there and not in the user's own drive.
 

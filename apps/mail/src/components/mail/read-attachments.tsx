@@ -23,9 +23,8 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
     const { openPreview } = usePreview();
     const ownerId = user?.id ?? '';
 
-    // Every part is a chip, a calendar part included: the invite widget above says what the invitation
-    // is, the chip is the file it rides in — quick look, save, Import to Calendar. Each subject keeps
-    // the raw part index the mail routes address.
+    // The invite widget above says what an invitation is, so a calendar part still gets a chip: the file to look
+    // at, save or import to Calendar. Each subject keeps the raw part index the mail routes address.
     const subjects = useMemo(
         () => (attachments ?? []).map((att) => subjectFromMailAttachment(ownerId, emailId, att.index, att)),
         [attachments, emailId, ownerId],

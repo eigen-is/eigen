@@ -86,7 +86,6 @@ function ContactsRoute() {
         });
     };
 
-    // Shared by the list context menu and the detail kebab — toggle one label across the batch.
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
         const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
         await Promise.allSettled(
@@ -111,8 +110,6 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            // Team members carry a single display name — no first/last sort to offer, and the
-            // member list holds no cards to import into or export.
             onSortChange={filterType === 'team' ? undefined : setSortBy}
             onImportClick={filterType === 'team' ? undefined : () => setImportOpen(true)}
         />

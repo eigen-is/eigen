@@ -171,8 +171,8 @@ export function EmailDraft({
     const uploadFiles = async (files: FileList | File[] | null) => {
         if (!files) return;
         const list = files instanceof FileList ? Array.from(files) : files;
-        // Uploads run in parallel — multiple small attachments shouldn't block on each other.
-        // Errors toast via the mutation hook; any individual failure still lets the others proceed.
+        // Uploads run in parallel so small attachments don't wait on each other. The mutation hook reports each
+        // error, and one failed upload still lets the others finish.
         const results = await Promise.all(
             list.map(async (file) => {
                 const result = await uploadMutation.mutateAsync(file).catch(() => null);

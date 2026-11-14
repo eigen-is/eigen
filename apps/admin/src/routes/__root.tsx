@@ -33,7 +33,7 @@ function AdminRoot() {
             />
         );
     }
-    // Never infer "configured" from absent data — only a resolved status decides.
+    // Missing data never means the server is configured, so only a resolved status decides.
     if (!setupStatus) return <LoadingState />;
     if (setupStatus.setupRequired) return <SetupWizard status={setupStatus} setupToken={setupToken} />;
 

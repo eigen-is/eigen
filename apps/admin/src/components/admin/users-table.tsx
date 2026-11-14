@@ -25,7 +25,6 @@ import { useMemo, useState } from 'react';
 import { AddToTeamDialog } from './add-to-team-dialog';
 import { CreateUserDialog } from './create-user-dialog';
 
-// Org role → badge variant for the role column (orphans render a plain outline badge inline).
 const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
     owner: 'default',
     admin: 'secondary',
@@ -68,9 +67,8 @@ export function AdminUsersToolbar({ searchQuery, onSearchChange, guests }: Admin
 type SortCol = 'name' | 'email' | 'role' | 'teams' | 'disk' | 'lastActive' | 'joined';
 type SortState = { col: SortCol; dir: SortDir };
 
-// Sort semantics mirror Drive's (via the shared nextSortDir helper): re-selecting the active column
-// flips direction; switching to a new column uses that column's default — text ascending, size and
-// date columns descending.
+// Sorting works as in Drive: the active column clicked again flips its direction, and a new column starts at
+// its default, ascending for text and descending for sizes and dates.
 const DEFAULT_DIR: Record<SortCol, SortDir> = {
     name: 'asc',
     email: 'asc',
