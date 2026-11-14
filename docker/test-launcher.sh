@@ -14,7 +14,7 @@
 #     and the countdown before the backup, or before the stop of a rollback or restore; a TERM, a hangup and a failed
 #     backup each taking it back; a failed notice with and without a wait;
 #   - backup on the running API, refused in the same .env.production cases, and restart stopping eigen-api first;
-#   - stop, and a running server backup or its upload waited out before it;
+#   - stop, a running server backup or its upload waited out before it, and an ask that never returns given up;
 #   - restore: the stage and the swap and what each failure leaves, an archive uid 1000 cannot read, a restore that
 #     cannot write its files, a swap that was cut off and finished first (with no .env.production too), and a
 #     restore on a new machine from the launcher alone;
@@ -53,8 +53,8 @@ trap 'rm -rf "$FIX"' EXIT
 # running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, compose exec of backup prints
 # archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and exits STUB_NOTICE, one of
 # status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail fails as one that is not
-# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any
-# other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
+# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, hang never answers, -
+# names nothing and any other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
 # STUB_MOUNTED, the file eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
@@ -103,6 +103,7 @@ case $1 in
                         sed 1d "$STUB_ASKS" >"$STUB_ASKS.next" && mv "$STUB_ASKS.next" "$STUB_ASKS"
                         case $answer in
                             fail) echo '■  Eigen is not answering.' >&2; exit 1 ;;
+                            hang) exec sleep 600 ;;
                             '' | -) ;;
                             *) printf '%s\n' "$answer" ;;
                         esac
@@ -793,6 +794,14 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: stop asks once more when the first ask fails"
     else
         fail "$SHELL_NAME: stop past one failed first ask: exit $CODE, '$OUT'"
+    fi
+    # An exec on a daemon that stopped answering never returns, and launch kills a stop that waits for it.
+    launch_asked hang - -- stop
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$OUT" | grep -q 'did not say' && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' &&
+        [ "$(asked)" = 2 ]; then
+        ok "$SHELL_NAME: stop gives up an ask that never returns, asks once more, and stops"
+    else
+        fail "$SHELL_NAME: stop past an ask that never returns: exit $CODE, '$OUT', '$ERR', asked $(asked) times"
     fi
     launch_asked "$BACKUP_RUNS" "$BACKUP_RUNS" fail "$BACKUP_RUNS" - -- stop
     if [ "$CODE" = 0 ] && waited_for_backup && ! printf '%s\n' "$OUT" | grep -q 'did not say' && [ "$(asked)" -ge 5 ]; then
