@@ -109,6 +109,42 @@ An external message can carry an `invite`, which `serializeEventForImip`, the sh
 
 Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as the About pages' capture tool ([HELP-CENTER.md § Filming the demo](HELP-CENTER.md#filming-the-demo)); unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
 
+## The About films show only what the demo holds
+
+The About pages film the demo world ([HELP-CENTER.md § Filming the demo](HELP-CENTER.md#filming-the-demo)), so a feature the seed never uses can't be filmed. The filming found these gaps, each checked against `apps/api/src/scripts/demo/content.ts` and `seed-demo.ts`. None is approved: each adds to the story, so it waits for the owner under [§ Every seeded word belongs to the Tuimel crew](#every-seeded-word-belongs-to-the-tuimel-crew). Sizes are S and M as in [ROADMAP.md](ROADMAP.md), XS for a one-line change.
+
+| App | What the demo lacks | Who would write it, and why it fits the festival | Size |
+|---|---|---|---|
+| Docs | No crew document holds a real equation; the only one is the joke in `trying eigen` | Timo, a power-load sum in the production plan: two generators against the stages' draw, the worry of the generator thread | S |
+| Docs, Chat, Stickies | Every comment, reply and channel message carries the minute of the seed, as `ChatRoom.postMessage` takes no time | Everyone: a thread that grew over days reads lived in, as the mails and the board's cards already do | M |
+| Slides | The sponsor deck is five one-line slides on a gradient | Mees, a slide with a site photo from `fixtures/images/`; Bram, a sponsor-tier chart, which `deck-build.ts` can't write yet | S each |
+| Slides, Vector | No comment on a canvas object; the seeder writes comment cards into docs and the board only | Timo and Saar, the wind-cover thread on the site plan's second stage, as it runs on the board | M |
+| Vector | No freehand stroke: the site plan's lines support `freedraw` and none sets it | Sem, a hand-drawn art trail along the dune path he hangs the art on | S |
+| Calendar | The team calendar's festival week holds the build day, the go/no-go and the weekend only; the soundcheck and the volunteer briefing are personal shifts | Saar and Timo: load-in, soundchecks, the volunteer briefing and Monday's strike, all in the production plan's timeline | S |
+| Calendar | Every guest of every team event has accepted | Joris or Lieke as Maybe or Declined on a meeting, so the reply counts differ | S |
+| Calendar | The culture fund's walk-through invitation never reaches Bram's calendar, because seeded mail carries no DKIM verdict ([§ Mail threads because the seeder owns its headers](#mail-threads-because-the-seeder-owns-its-headers)) | Bram, the committee's visit to the field he waits on | M |
+| Calendar | Each persona's own calendar holds one shift | Each persona, a second personal line such as a train home, so the own calendar reads as theirs | S |
+| Contacts | A persona's own card holds only the name and email: `seedAvatar` updates it with the photo and nothing else | Each persona, the job title from `PERSONAS` and a phone number, in the same own-card update | S |
+| Contacts | No seeded contact carries a label, so the default labels stay unused | Saar, labelling her suppliers | S |
+| Contacts | Saar's own book holds two people, Griet and Kees | Saar adds Ruud of Dekzeil & Zo, Rob Tempel of the generator quote and Hein Klarenbeek of the fencing delivery, the suppliers she works with | S |
+| Contacts | No address-book contact has a photo; only the `.vcf` in the team drive does | Saar's Griet and Kees, the farmer and the shuttle operator she deals with most | S |
+| Mail | The generator quote's first column is too narrow for its longest item | Rob's quote, a wider first column in `GENERATOR_QUOTE` | XS |
+| Mail | Bram's grant reply says the budget is attached and carries no attachment | Bram, the budget as a Drive link or an xlsx, which Marijke asked for | S |
+| Mail | Saar never sends a Drive link or an attachment herself | Saar, the site plan to Hein for the fencing drop | S |
+| Chat | No channel message carries a file uploaded from a device; every attachment is a Drive document | Timo, the generator spec sheet in the production channel | S |
+| Chat | No `/whisper` and no `/me` | A crew aside in a channel, once the tone is checked against the existing chats | S |
+| Stickies | No card is assigned, resolved or has an image cover | Nour assigned to the volunteer card, the shuttle card resolved, a site photo on the wristband card. The seeder already rewrites each copied card, so assignee and status can go there; a cover also needs an upload into the board's `media/` | S |
+| Drive | No file has an edit history, so Version history is empty: each document is written once | Saar's production plan, edited over days | M |
+| Drive | Nothing is shared outside the team | A share with an outside supplier, an outward-facing story choice | S |
+| Admin | One team, the default `festival crew` | A "stage & tech" team for Timo, Sanne and Tessa | S |
+| Admin | No guests | A supplier as a guest on a shared file, with the outside share in Drive | S |
+| Admin | One admin, the setup account | Anouk as the second admin. The visitor pool takes plain members only (`getDemoPersonaPool`), so she leaves the pool of 20 | S |
+| Admin | No user shows a last-active time, as no persona has a session | The leads, through a sign-in each in the seed | S |
+| Admin | No backup in any list. Backups sit beside the data root (`backupsDirPath`), outside the hourly wipe, so a seeded backup needs the reset to clear them too | The office account's nightly backup | M |
+| Admin | No team quota override | The festival crew's drive, raised for the photos | S |
+
+An S3 team drive is not on the list: an `s3` mount keeps its bytes outside the data root, where the hourly wipe cannot reach ([§ The hourly reset runs outside the app](#the-hourly-reset-runs-outside-the-app)).
+
 ## Accepted residuals
 
 - A visitor's offensive content stays visible until the next reset.
