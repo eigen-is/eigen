@@ -1,3 +1,7 @@
+// Mail's root route: the app shell around every Mail page. When mail is off on this server it shows only the
+// mail-off notice, without a sidebar. Otherwise anyone signed in gets the mail sidebar with their mailboxes,
+// where a message dropped on a mailbox moves into it, and a signed-out visitor only the shell.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';

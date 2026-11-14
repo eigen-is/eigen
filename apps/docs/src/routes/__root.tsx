@@ -1,3 +1,7 @@
+// Docs's root route. It hands EigenDocRoot the Docs config and two things the URL knows: whether a document
+// is open, which hides the sidebar so the editor fills the page, and which team drive is open, so New
+// creates there and not in the user's own drive.
+
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
 import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { DOCS_CONFIG, EigenDocRoot } from '@workspace/ui/components/drive';

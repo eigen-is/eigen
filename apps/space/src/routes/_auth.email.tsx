@@ -1,3 +1,6 @@
+// Space's Mail settings page: the email signature and the mail preferences. When mail is off on this server it
+// shows the mail-off notice instead.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { useMailEnabled } from '@workspace/lib/public';
 import { SettingsPage } from '@workspace/ui/components/layout/app';

@@ -1,3 +1,7 @@
+// Who is on which card of a Stickies board, through the board's Yjs awareness. useStickiesPresence publishes the
+// user's name, color and the card they work on, such as the one whose dialog is open. useCardPresence turns the
+// other peers' states into a map from card to peer, which the board draws as outlines. The board calls both.
+
 import type { AuthUser } from '@workspace/lib/types/auth';
 import type { CursorPeerState } from '@workspace/ui/components/collab';
 import { useAwarenessIdentity, useAwarenessPeers } from '@workspace/ui/components/collab';

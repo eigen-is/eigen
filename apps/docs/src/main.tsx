@@ -1,3 +1,7 @@
+// Docs's entry point. It builds the router over Docs's route tree under /docs and mounts it inside
+// EigenApp, which brings the query client, auth and the other providers every app shares. It loads the
+// shared app styles and Docs' accent color and editor rules, such as the line that resizes a table column.
+
 import { createEigenAppRouter, mountEigenApp } from '@workspace/ui/lib/eigenAppRouter';
 import { routeTree } from './routeTree.gen';
 

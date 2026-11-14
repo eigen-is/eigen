@@ -1,3 +1,6 @@
+// Chat's start page. It opens the user's first chat as soon as the list arrives. With no chats it says so and,
+// for anyone but a guest, offers to create the first one; until then it asks the user to pick a chat.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';

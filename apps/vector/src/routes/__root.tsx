@@ -1,3 +1,7 @@
+// Vector's root route. It hands EigenDocRoot the Vector config and two things the URL knows: whether a drawing
+// is open, which hides the sidebar so the editor fills the page, and which team drive is open, so New
+// creates there and not in the user's own drive.
+
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
 import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { EigenDocRoot, VECTOR_CONFIG } from '@workspace/ui/components/drive';

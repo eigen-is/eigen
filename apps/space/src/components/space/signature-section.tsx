@@ -1,3 +1,7 @@
+// The Signature section of Space's Mail settings: a rich-text editor for the user's email signature and its Save
+// button. Mail adds the signature to new emails and above the quote in replies and forwards. The editor loads the
+// saved signature once and keeps what the user types through later refetches.
+
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { Button } from '@workspace/ui/components/button';
 import { LightEditor } from '@workspace/ui/components/editor';

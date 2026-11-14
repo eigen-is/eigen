@@ -1,3 +1,6 @@
+// Calendar's root route: the app shell around every Calendar page. Anyone signed in gets the Calendar sidebar
+// beside the page, and a signed-out visitor, such as on the login page, only the shell.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import type { RouterAppContext } from '@workspace/lib/types/auth';

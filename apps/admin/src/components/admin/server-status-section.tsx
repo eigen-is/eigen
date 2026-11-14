@@ -1,3 +1,7 @@
+// The Server section of the admin's Server settings page: the version, how the server sends mail, its free disk
+// space and its HTTPS certificate. It shows what the eigen status command reports, read-only, since only the
+// command line changes these.
+
 import { formatDate } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { useServerStatus } from '@workspace/lib/settings';
