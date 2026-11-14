@@ -1,6 +1,10 @@
 // An invitation that travels as the message's body, the text/calendar part beside the text and the HTML, is the invite
-// card's to draw: no list of files counts it. A calendar file a person attached stays a file.
+// card's to draw when a calendar file beside it repeats it: no list of files counts it. Without that file, and for a
+// calendar file a person attached, the part is a file.
 import { beforeAll, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { isListedFile } from '@workspace/lib/types/mail';
 import { parseEmlBytes } from '../../lib/mail/mail-parse';
 import { parseMail } from '../../lib/mail/mail-parser';
 import type { OutboundMail } from '../../lib/mailer/mailer';
@@ -55,16 +59,54 @@ test('an invitation built the way Eigen sends one lists only its invite.ics', as
     ]);
 });
 
-test('an invitation with no calendar file beside its body has no attachments', async () => {
-    const bytes = await composeRfc822({ ...base, icalEvent: { method: 'REQUEST', content: ICS } });
-    // Outlook's shape: the text/calendar alternative alone, without the application/ics copy.
-    const outlook = Buffer.from(
-        bytes.toString().replace(/\r\n--[^\r\n]+\r\nContent-Type: application\/ics[\s\S]*?(?=\r\n--)/, ''),
-    );
-    expect(parseMail(outlook).attachments.map((part) => part.contentType)).toEqual(['text/calendar']);
+test('an invitation that is only the body, as Outlook sends it, keeps the calendar part as its file', () => {
+    const bytes = readFileSync(join(import.meta.dir, '../fixtures/mail-corpus/calendar-invitation-outlook.eml'));
+    const listed = parseMail(bytes).attachments.filter(isListedFile);
 
-    expect(buildEmlPreviewPayload(new Uint8Array(outlook).buffer).attachments).toEqual([]);
-    expect(parseEmlBytes('m1', 'INBOX', outlook).hasAttachments).toBe(false);
+    // The reader's chip and a forward read this list: the one file to save or import to Calendar.
+    expect(listed.map((part) => part.contentType)).toEqual(['text/calendar']);
+    expect(buildEmlPreviewPayload(new Uint8Array(bytes).buffer).attachments).toHaveLength(1);
+    expect(parseEmlBytes('m1', 'INBOX', bytes).hasAttachments).toBe(true);
+});
+
+test('a message that is nothing but its calendar keeps it as a file', () => {
+    const bytes = Buffer.from(
+        ['From: fund@example.com', 'Subject: Grant talk', 'Content-Type: text/calendar; method=REQUEST', '', ICS].join(
+            '\r\n',
+        ),
+    );
+
+    expect(parseMail(bytes).attachments.filter(isListedFile)).toHaveLength(1);
+});
+
+test('a calendar file marked inline keeps its chip', () => {
+    const bytes = Buffer.from(
+        [
+            'From: fund@example.com',
+            'Subject: Festival',
+            'Content-Type: multipart/mixed; boundary="mix"',
+            '',
+            '--mix',
+            'Content-Type: text/plain',
+            '',
+            'The programme.',
+            '--mix',
+            'Content-Type: text/calendar; name="festival.ics"',
+            'Content-Disposition: inline; filename="festival.ics"',
+            '',
+            ICS,
+            '--mix--',
+        ].join('\r\n'),
+    );
+
+    expect(
+        parseMail(bytes)
+            .attachments.filter(isListedFile)
+            .map((part) => part.filename),
+    ).toEqual(['festival.ics']);
+    expect(buildEmlPreviewPayload(new Uint8Array(bytes).buffer).attachments.map((part) => part.filename)).toEqual([
+        'festival.ics',
+    ]);
 });
 
 test('a calendar file a person attached is one attachment', async () => {

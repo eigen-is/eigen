@@ -10,6 +10,7 @@ import {
     stripRemoteRefs,
 } from '@workspace/lib/mail/remote-content';
 import type { ParsedMail } from '@workspace/lib/types/mail';
+import { isListedFile } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../core/errors';
@@ -82,7 +83,7 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
         throw new ApiError(422, 'Could not read this file');
     }
 
-    const files = parsed.attachments.filter((part) => !part.invitationBody);
+    const files = parsed.attachments.filter(isListedFile);
     return {
         subject: parsed.subject ?? '',
         from: parsed.from ?? null,

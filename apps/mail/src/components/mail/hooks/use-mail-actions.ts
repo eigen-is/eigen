@@ -22,6 +22,7 @@ import {
 } from '@workspace/lib/mail';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
+import { isListedFile } from '@workspace/lib/types/mail';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
@@ -59,7 +60,6 @@ export function useMailActions() {
     const sendDraftMutation = useSendDraft();
     const getEmailById = useEmailById();
 
-    // Single-slot undo: overwritten by each new reversible action; `z` / the toast Undo reverses it.
     const lastAction = useRef<Undoable | null>(null);
     // The one message whose remote images the reader shows, until another is loaded.
     const [imagesLoadedFor, setImagesLoadedFor] = useState<string | null>(null);
@@ -132,7 +132,7 @@ export function useMailActions() {
         });
     };
 
-    // Fresh composeSessionKey remounts any open composer (see the session-key contract below).
+    // A fresh composeSessionKey remounts any open composer.
     const openCompose = () => {
         navigate({
             to: Route.fullPath,
@@ -400,7 +400,7 @@ export function useMailActions() {
                 html: formatEmailQuote(email),
             }),
             email.attachments
-                .filter((part) => !part.invitationBody)
+                .filter(isListedFile)
                 .map(({ index, filename, contentType, size }) =>
                     subjectFromMailAttachment(user.id, email.id, index, { filename, contentType, size }),
                 ),
