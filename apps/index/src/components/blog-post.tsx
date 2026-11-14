@@ -1,15 +1,14 @@
 // A blog post page: the title with its date, the cover, the body and a pager to the older and the newer post, under
 // a breadcrumb back to the blog. It sits in the site's reading column with the table of contents in the gutter.
 
-import { Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
-import { cn } from '@workspace/ui/lib/utils';
 import type { ArticleBody } from '../content/manifest';
 import type { BlogPost as BlogPostType } from '../data/blog-posts';
 import { ArticleBreadcrumb } from './article-breadcrumb';
 import { ArticleContent } from './article-content';
 import { ArticleToc } from './article-toc';
 import { BlogCover } from './blog-cover';
+import { PagerLink } from './pager-link';
 import { ReadingLayout } from './reading-layout';
 import { SitePage } from './site-page';
 
@@ -31,19 +30,19 @@ export function BlogPost({ post, body, older, newer }: BlogPostProps) {
                     <ArticleContent body={body} className="mt-8" />
                 </article>
                 <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
-                    {older ? <PagerLink label="Older" post={older} /> : <span />}
-                    {newer ? <PagerLink label="Newer" post={newer} className="text-right" /> : <span />}
+                    {older ? <PagerLink label="Older" title={older.title} to={`/blog/${older.slug}`} /> : <span />}
+                    {newer ? (
+                        <PagerLink
+                            label="Newer"
+                            title={newer.title}
+                            to={`/blog/${newer.slug}`}
+                            className="text-right"
+                        />
+                    ) : (
+                        <span />
+                    )}
                 </nav>
             </ReadingLayout>
         </SitePage>
-    );
-}
-
-function PagerLink({ label, post, className }: { label: string; post: BlogPostType; className?: string }) {
-    return (
-        <Link to="/blog/$id" params={{ id: post.slug }} className={cn('group block', className)}>
-            <span className="eigen-section-label mb-1 block">{label}</span>
-            <span className="font-medium underline-offset-4 group-hover:underline">{post.title}</span>
-        </Link>
     );
 }
