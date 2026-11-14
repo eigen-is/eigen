@@ -4,7 +4,7 @@
 
 import type { Page } from 'playwright-core';
 
-type Point = { x: number; y: number };
+export type Point = { x: number; y: number };
 type Target = string | Point;
 
 export type Cursor = {
