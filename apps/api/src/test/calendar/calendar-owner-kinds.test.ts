@@ -156,6 +156,23 @@ describe('A calendar route on a team', () => {
         expect(fs.existsSync(getTeamHomePath(teamId))).toBe(true);
     });
 
+    test('lets a member without a share read a team calendar that is on, and not write it', async () => {
+        const owner = teamOwnerId(await createTeamFor('bob'));
+        const enabled = await authedRequest(ctx.alice.user.sessionToken, `/team/${owner}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calendar: { enabled: true } }),
+        });
+        expect(enabled.status).toBe(200);
+        const token = ctx.bob.user.sessionToken;
+        const read = await authedRequest(token, `/calendar/${owner}/calendars/some-calendar/events/some-event`);
+        expect(await statusAndMessage(read)).toEqual({ status: 404, message: 'Event not found' });
+        expect(await statusAndMessage(await createEvent(token, owner, 'some-calendar'))).toEqual({
+            status: 403,
+            message: 'Write permission required',
+        });
+    });
+
     test('refuses someone who is no member before it opens the team home', async () => {
         const teamId = await createTeamFor('nobody');
         const owner = teamOwnerId(teamId);
