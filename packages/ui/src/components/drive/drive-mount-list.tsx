@@ -28,7 +28,7 @@ type DriveMountListProps = {
 type MountEntry = { ownerId: string; mountId: string; name: string };
 
 export function useMountLabel(activeOwnerId: string, activeMountId: string): string {
-    const { teamMounts } = useMountEntries(false);
+    const teamMounts = useTeamMounts();
     if (activeMountId === 'default') return 'Drive';
     const mount = teamMounts.find((m) => m.mountId === activeMountId && m.ownerId === activeOwnerId);
     return mount?.name || 'Drive';
@@ -113,14 +113,17 @@ export function DriveMountSelect({ activeMountId, activeOwnerId, onMountSelect, 
 
 function useMountEntries(ownMountsOnly: boolean | undefined) {
     const { user } = useAuth();
-    const { data: myTeams = [] } = useMyTeams();
+    const teamMounts = useTeamMounts();
     const myDrive: MountEntry = { ownerId: user?.id ?? '', mountId: 'default', name: 'Drive' };
-    const teamMounts: MountEntry[] = ownMountsOnly
-        ? []
-        : myTeams.flatMap((team) =>
-              team.mounts.map((mount) => ({ ownerId: teamOwnerId(team.id), mountId: mount.id, name: mount.name })),
-          );
-    return { myDrive, teamMounts };
+    return { myDrive, teamMounts: ownMountsOnly ? [] : teamMounts };
+}
+
+// A drive's label needs only the teams, so it reads them without the signed-in user.
+function useTeamMounts(): MountEntry[] {
+    const { data: myTeams = [] } = useMyTeams();
+    return myTeams.flatMap((team) =>
+        team.mounts.map((mount) => ({ ownerId: teamOwnerId(team.id), mountId: mount.id, name: mount.name })),
+    );
 }
 
 function mountKey(ownerId: string, mountId: string) {
