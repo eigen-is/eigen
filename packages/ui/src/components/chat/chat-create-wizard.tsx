@@ -7,6 +7,7 @@ import { openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
+import { contactFullName, findContactByEmail, useContacts } from '@workspace/lib/contacts';
 import { useResolvedDriveLocation } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
@@ -68,6 +69,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const myEmail = (user?.email ?? '').toLowerCase();
 
     const { data: myTeams } = useMyTeams();
+    const { data: contacts } = useContacts();
 
     const [step, setStep] = useState<1 | 2>(1);
     const [picked, setPicked] = useState<PickedPerson[]>([]);
@@ -129,13 +131,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
     const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
-    // Typed input and picked suggestions join the picked set, as in the share dialog.
+    // Typed input and picked suggestions join the picked set, as in the share dialog. A typed address is named by the
+    // user's contact for it, and the chat's name falls back to its local part only for an address nobody knows.
     const contactInput = useContactInput(({ email, displayName }) => {
         if (email === myEmail) return true;
+        const known = contacts && findContactByEmail(contacts, email);
+        const name = displayName ?? ((known && contactFullName(known)) || email.split('@')[0]);
         setPicked((prev) =>
-            prev.some((person) => person.email === email)
-                ? prev
-                : [...prev, { email, displayName: displayName ?? email.split('@')[0] }],
+            prev.some((person) => person.email === email) ? prev : [...prev, { email, displayName: name }],
         );
         return true;
     });

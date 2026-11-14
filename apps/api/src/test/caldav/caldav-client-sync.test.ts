@@ -285,7 +285,7 @@ describe('CalDAV client sync on web-created events', () => {
             recurrenceDate: null,
             recurrenceId: null,
             data: {
-                organizer: { userId: '', email: ORGANIZER, name: 'Org' },
+                organizer: { email: ORGANIZER, name: 'Org' },
                 attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
             },
         });
