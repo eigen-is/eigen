@@ -180,9 +180,8 @@ export class Recalc {
         return { rewrites: plan.rewrites };
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
-    // name, the clock formulas when the clock was set, and what an earlier pass left, in sheet, column, row order
-    // where the reads do not ask for another.
+    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not name
+    // or a clock that was set, and what an earlier pass left, in sheet, column, row order where no read asks another.
     public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
@@ -311,9 +310,8 @@ export class Recalc {
         return true;
     }
 
-    // The next number in [0, 1) the running formula draws. Its n-th draw is made of the seed, its sheet, its row,
-    // its column and n alone, with no state that goes from cell to cell: so it is the same in whatever order the
-    // cells compute, however often a throw for depth starts the formula again, and on every machine.
+    // The next number in [0, 1) the running formula draws. Its n-th draw is made of the seed, its sheet, its row, its
+    // column and n alone: so it is the same in whatever order cells compute and however often the formula starts again.
     public draw(): number {
         const at = this.current;
         const count = this.drew[at] + 1;
@@ -325,6 +323,16 @@ export class Recalc {
         mixed = Math.imul(mixed ^ (mixed >>> 15), 1 | mixed);
         mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
         return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    }
+
+    public factsOf(shape: number): number {
+        let facts = this.facts[shape];
+        if (facts < 0) {
+            const { tree } = this.workbook.shapes.shape(shape);
+            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
+            this.facts[shape] = facts;
+        }
+        return facts;
     }
 
     // A cell is about to be written: it is a seed of the next pass or edit.
@@ -452,16 +460,6 @@ export class Recalc {
     // What one cell of a shape adds to the nesting.
     private nesting(shape: number): number {
         return (this.factsOf(shape) >> FACT_BITS) + CELL;
-    }
-
-    public factsOf(shape: number): number {
-        let facts = this.facts[shape];
-        if (facts < 0) {
-            const { tree } = this.workbook.shapes.shape(shape);
-            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
-            this.facts[shape] = facts;
-        }
-        return facts;
     }
 }
 

@@ -1,9 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
 // structural edits, the clock of each batch of them, a recalc of what they reach, and the reads, such as the value
-// of a cell and a walk of a sheet.
-// A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only
-// through the recalc. What a host can get wrong, such as a sheet that is not there or a cell off the grid, is
-// checked here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
+// of a cell and a walk of a sheet. A sheet is named by its id and a cell by its row and column from 0. It reads the
+// store and changes it only through the recalc. What a host can get wrong, such as a cell off the grid, is checked
+// here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';

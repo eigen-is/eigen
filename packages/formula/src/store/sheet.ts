@@ -14,7 +14,7 @@ export class Sheet {
     public name: string;
     // Where the sheet sits among the tabs, from 0.
     public place = 0;
-    // The id as a number, for the draws of the sheet's cells: the same wherever the tab sits and whatever its name.
+    // The id hashed to a number, for the draws of the sheet's cells: the same wherever the tab sits, whatever its name.
     public readonly salt: number;
     private readonly held: Column[];
 
