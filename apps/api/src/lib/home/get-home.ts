@@ -135,10 +135,7 @@ async function createHome(ownerId: string, onClosed: () => void): Promise<Home> 
     switch (parsed.type) {
         case 'user': {
             const user = await getUserById(parsed.id);
-            if (!user) {
-                console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
-                throw new ApiError(404, 'User not found');
-            }
+            if (!user) throw new ApiError(404, 'User not found');
             return isGuest(user) ? new GuestHome(user, onClosed) : new UserHome(user, onClosed);
         }
         case 'team': {

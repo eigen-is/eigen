@@ -2,7 +2,9 @@ import { afterEach, beforeAll, describe, expect, jest, mock, spyOn, test } from 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
+import { ApiError } from '../../lib/core';
 import { Drive } from '../../lib/drive/drive';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { sharedPaths } from '../../lib/drive/shared-schema';
@@ -16,8 +18,10 @@ import {
     sendToHome,
     sendToUserHomes,
 } from '../../lib/home/home-relay';
+import * as teamModule from '../../lib/team/team';
 import type { User } from '../../lib/user';
 import { getMemberships } from '../../lib/user';
+import * as userModule from '../../lib/user/user';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -389,6 +393,82 @@ describe('A get from many homes', () => {
 
         expect([...answers.keys()]).toEqual([ctx.alice.user.id]);
         expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(gone.id)))).toBe(false);
+    });
+
+    test('skips a team that is gone, with no error logged', async () => {
+        const neverMade = teamOwnerId(crypto.randomUUID().replaceAll('-', ''));
+        const deletedId = await createTeam(ctx, getServerConfig()!.orgId, 'Deleted Relay Team');
+        await getHomeModule.getHome(teamOwnerId(deletedId));
+        const removed = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId: deletedId }),
+        });
+        expect(removed.status).toBe(200);
+        const gone = [neverMade, teamOwnerId(deletedId)];
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        const answers = await getFromHomes([...gone, teamOwner], 'team:quota-overrides', null);
+
+        expect([...answers.keys()]).toEqual([teamOwner]);
+        for (const ownerId of gone) {
+            expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(ownerId)))).toBe(false);
+        }
+    });
+
+    test('skips an owner whose deletion is running, with no error logged', async () => {
+        const [going, live] = [members[0], ctx.alice.user];
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        getHomeModule.markHomeDeleting(going.id);
+        let answers: Map<string, DrivePath[]>;
+        try {
+            answers = await watchesOf([going, live]);
+        } finally {
+            getHomeModule.clearHomeDeleting(going.id);
+        }
+
+        expect([...answers.keys()]).toEqual([live.id]);
+        expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(going.id)))).toBe(false);
+    });
+
+    test('answers a loaded home without looking its owner up', async () => {
+        const owners = [ctx.alice.user.id, teamOwner];
+        for (const ownerId of owners) await getHomeModule.getHome(ownerId);
+        const userLookups = spyOn(userModule, 'getUserById');
+        const teamLookups = spyOn(teamModule, 'getTeam');
+
+        const answers = await getFromHomes(owners, 'drive:watches', { user: viewer });
+
+        expect([...answers.keys()].sort()).toEqual([...owners].sort());
+        expect(userLookups).not.toHaveBeenCalledWith(ctx.alice.user.id);
+        expect(teamLookups).not.toHaveBeenCalledWith(parseOwnerId(teamOwner).id);
+    });
+
+    test('logs and leaves out a home whose answer is a 404', async () => {
+        const [failing, other] = [members[0], ctx.alice.user];
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        const failingHome = await getHomeModule.getHome(failing.id);
+        spyOn(failingHome.drive, 'getWatches').mockRejectedValue(new ApiError(404, 'Mount not found'));
+
+        const answers = await watchesOf([failing, other]);
+
+        expect([...answers.keys()]).toEqual([other.id]);
+        expect(errors).toHaveBeenCalledWith(
+            `home-relay: drive:watches from ${failing.id} failed:`,
+            expect.objectContaining({ status: 404 }),
+        );
+    });
+
+    test('logs and leaves out an id that names no owner', async () => {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        const answers = await watchesOf([{ id: 'not-an-owner' }, ctx.alice.user]);
+
+        expect([...answers.keys()]).toEqual([ctx.alice.user.id]);
+        expect(errors).toHaveBeenCalledWith(
+            'home-relay: drive:watches from not-an-owner failed:',
+            expect.objectContaining({ status: 400 }),
+        );
     });
 
     test('leaves out a home that does not open within the deadline, and the others still answer', async () => {

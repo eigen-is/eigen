@@ -4,8 +4,9 @@ import { getMountQuotaState } from '../../lib/config/enforcement';
 import { resolveHomeDataMax, resolveUserQuotas } from '../../lib/config/quota';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
+import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
 import { getFromHomes } from '../../lib/home/home-relay';
+import * as teamModule from '../../lib/team/team';
 import { getMemberships } from '../../lib/user';
 import { addMember, authedRequest, createTeam, getTestContext } from '../setup';
 
@@ -211,12 +212,92 @@ describe('a user in two teams that both raise a limit gets the higher', () => {
         expect(await resolveHomeDataMax([lower, higher])).toBe(expected);
     });
 
+    test('asks a loaded team for its overrides without looking the team up', async () => {
+        for (const teamId of [higher, lower]) await getHome(teamOwnerId(teamId));
+        const lookups = spyOn(teamModule, 'getTeam');
+        let looked: string[];
+        try {
+            await resolveHomeDataMax([higher, lower]);
+        } finally {
+            looked = lookups.mock.calls.map(([teamId]) => teamId);
+            lookups.mockRestore();
+        }
+
+        expect(looked).toEqual([]);
+    });
+
     test("for a drive's cap, whichever team comes first", async () => {
         const expected = (getServerSettings().quotas.defaultMountMaxSizeMB + 2000) * MB;
         const mount = { id: 'default', name: 'Drive', storageType: 'local' as const, isDefault: true, maxSizeMB: 10 };
 
         expect((await resolveUserQuotas(mount, [higher, lower], 'user')).mountMax).toBe(expected);
         expect((await resolveUserQuotas(mount, [lower, higher], 'user')).mountMax).toBe(expected);
+    });
+});
+
+// A team deleted while a list of team ids still names it is skipped like any gone owner: it raises nothing and is
+// not an error, so a write is measured against the teams that remain.
+describe('a team that is gone adds no override and fails no write', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let gone: string;
+    let remaining: string;
+    const MB = 1024 * 1024;
+
+    function setHomeDataRaise(teamId: string, raise: number | null): Promise<Response> {
+        const { homeDataMaxMB } = getServerSettings().quotas;
+        return authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ memberOverrides: { homeDataMaxMB: raise === null ? null : homeDataMaxMB + raise } }),
+        });
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getPublicConfig().orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        gone = await createTeam(ctx, orgId, 'Gone Override Team');
+        remaining = await createTeam(ctx, orgId, 'Remaining Override Team');
+        for (const teamId of [gone, remaining]) await addMember(ctx, teamId, ctx.charlie.user.id);
+        await setHomeDataRaise(gone, 2000);
+        await setHomeDataRaise(remaining, 1000);
+        await getHome(teamOwnerId(gone));
+        const removed = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId: gone }),
+        });
+        expect(removed.status).toBe(200);
+    });
+
+    afterEach(() => {
+        mock.restore();
+    });
+
+    afterAll(async () => {
+        await setHomeDataRaise(remaining, null);
+    });
+
+    test('a list that still names it gets the limit of the team that remains, with no error logged', async () => {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        const limit = await resolveHomeDataMax([gone, remaining]);
+
+        expect(limit).toBe((getServerSettings().quotas.homeDataMaxMB + 1000) * MB);
+        expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(teamOwnerId(gone))))).toBe(
+            false,
+        );
+    });
+
+    test("the member's own teams no longer name it, and still give the remaining limit", async () => {
+        const { teamIds } = await getMemberships(ctx.charlie.user.id);
+
+        expect(teamIds).not.toContain(gone);
+        expect(await resolveHomeDataMax(teamIds)).toBe((getServerSettings().quotas.homeDataMaxMB + 1000) * MB);
     });
 });
 

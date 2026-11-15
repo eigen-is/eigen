@@ -19,7 +19,7 @@ import { answerDrive } from '../drive/home-calls';
 import type { TeamQueries } from '../team/home-calls';
 import { answerTeam } from '../team/home-calls';
 import type { User } from '../user';
-import { getOwnerExists, getUsersByEmails } from '../user';
+import { getUsersByEmails } from '../user';
 import { getHome, loadedHome } from './get-home';
 import type { Home } from './home';
 import { TeamHome } from './team-home';
@@ -233,8 +233,8 @@ const opens = new Semaphore(HOME_OPENS_AT_ONCE);
 // slot however many ask for it.
 const opening = new Map<string, Promise<Home>>();
 
-// A gone owner is skipped. A home that fails, or that doesn't open within the deadline, is logged and left out, so the
-// others still answer and this never rejects.
+// An open that answers 404 means the owner is gone or being deleted, and is skipped. A home that fails, or that doesn't
+// open within the deadline, is logged and left out, so the others still answer and this never rejects.
 export async function getFromHomes<K extends keyof HomeQueries>(
     ownerIds: readonly string[],
     kind: K,
@@ -244,9 +244,11 @@ export async function getFromHomes<K extends keyof HomeQueries>(
     await Promise.all(
         ownerIds.map(async (ownerId) => {
             try {
-                if (!(await getOwnerExists(ownerId))) return;
-                const home = await openUnderCap(ownerId);
-                answers.set(ownerId, await answerers[kind](home, ask));
+                const home = await openUnderCap(ownerId).catch((err) => {
+                    if (err instanceof ApiError && err.status === 404) return null;
+                    throw err;
+                });
+                if (home) answers.set(ownerId, await answerers[kind](home, ask));
             } catch (err) {
                 console.error(`home-relay: ${kind} from ${ownerId} failed:`, err);
             }
