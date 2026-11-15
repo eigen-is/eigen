@@ -1153,6 +1153,46 @@ describe('The invitation mail of one save', () => {
         build.mockRestore();
         mail.mockRestore();
     });
+
+    test('a guest on this server gets the notice although their home refuses the invitation', async () => {
+        const mailer = await import('../../lib/mailer/mailer');
+        const mail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        mail.mockClear();
+        const bobCalendar = (await getHome(ctx.bob.user.id)).calendar;
+        const refusal = spyOn(bobCalendar, 'receiveRequest').mockRejectedValue(new Error('This home refuses it'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${calendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Refused request',
+                        startTime: new Date(Date.now() + 3600_000),
+                        endTime: new Date(Date.now() + 7200_000),
+                        allDay: false,
+                        data: { attendees: [{ email: ctx.bob.user.email, status: 'pending', role: 'required' }] },
+                    }),
+                },
+            );
+            expect(res.status).toBe(200);
+            const notice = await eventually(
+                async () =>
+                    mail.mock.calls.map((call) => call[0]).find((m) => m.subject === 'Invitation: Refused request'),
+                'the notice to Bob',
+            );
+
+            expect(notice.to.map((t) => t.address)).toEqual([ctx.bob.user.email]);
+            const logged = errors.mock.calls.map((call) => String(call[0]));
+            expect(logged.some((line) => line.includes(`calendar:request to ${ctx.bob.user.id}`))).toBe(true);
+        } finally {
+            errors.mockRestore();
+            refusal.mockRestore();
+            mail.mockRestore();
+        }
+    });
 });
 
 describe('A save that changes nothing', () => {

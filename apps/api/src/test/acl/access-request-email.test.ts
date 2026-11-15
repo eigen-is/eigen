@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig } from '../../lib/config/server-config';
+import { getHome } from '../../lib/home';
 import { assertJson, authedRequest, driveDelete, driveGet, drivePost, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -81,6 +82,28 @@ describe('Access-request email', () => {
         expect(req?.title).toBe(`${ctx.bob.user.name} requested access`);
         expect(req?.body).toBe('access-request-on');
         expect(req?.details).toEqual({ message: 'Please', pathType: 'doc' });
+    });
+
+    test('still mails the owner when their home refuses the notification', async () => {
+        const { spy, toAlice } = await catchMail();
+        const refusal = spyOn(await getHome(ctx.alice.user.id), 'notify').mockImplementation(() => {
+            throw new Error('This home refuses the notification');
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const doc = await createDoc('access-request-refused-bell');
+            await requestAccess(doc.id);
+
+            expect(await eventually(async () => (toAlice().length ? toAlice() : undefined), 'the mail')).toHaveLength(
+                1,
+            );
+            const logged = errors.mock.calls.map((call) => String(call[0]));
+            expect(logged.some((line) => line.includes(`notification to ${ctx.alice.user.id}`))).toBe(true);
+        } finally {
+            errors.mockRestore();
+            refusal.mockRestore();
+            spy.mockRestore();
+        }
     });
 
     // The notification folds a repeat on its tag; the mail must not go out once per click either.

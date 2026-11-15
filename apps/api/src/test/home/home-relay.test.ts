@@ -3,6 +3,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { Drive } from '../../lib/drive/drive';
@@ -29,6 +30,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    collectSSE,
     createTeam,
     createTestGuest,
     createTestUser,
@@ -119,6 +121,29 @@ describe('A notification to a team', () => {
         for (const member of members) {
             expect(await notificationsWithTag(member, tag)).toHaveLength(1);
         }
+    });
+});
+
+describe('A drive event for the members of a team', () => {
+    test('reaches a member whose home is loaded and opens no home that is closed', async () => {
+        const [closed, loaded] = members;
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+        const sse = await collectSSE(loaded.id);
+        await getHomeModule.evictHome(closed.id);
+        try {
+            const file = await driveUpload(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                root.id,
+                new File(['heard'], 'heard.txt'),
+            );
+            await sse.next((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === file.id);
+        } finally {
+            sse.stop();
+        }
+
+        expect(getHomeModule.atHome(closed.id)).toBe(false);
     });
 });
 
