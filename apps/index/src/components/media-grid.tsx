@@ -19,7 +19,7 @@ const GRID_COLUMNS: Readonly<Record<MediaGridData['columns'], string>> = {
 
 export function MediaGrid({ columns, items, onOpen }: MediaGridData & { onOpen: OpenLightbox }) {
     return (
-        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns])}>
+        <div className={cn('media-grid grid gap-6 my-8', GRID_COLUMNS[columns])}>
             {items.map((item, i) => (
                 <MediaThumbnail key={i} {...item} onClick={() => onOpen(items, i)} />
             ))}

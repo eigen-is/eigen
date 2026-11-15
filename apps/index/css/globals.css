@@ -168,6 +168,11 @@
         margin: 2rem 0;
     }
 
+    /* The prose gives a picture a margin unless a figure holds it, and a grid's thumbnail sits in a button. */
+    .media-grid img {
+        margin: 0;
+    }
+
     .media-video video,
     .media-carousel :is(img, video) {
         display: block;
