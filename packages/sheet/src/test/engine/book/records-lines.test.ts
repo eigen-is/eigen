@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { LineEdit } from '@workspace/formula/text';
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { DataValidationRule, SingleRange } from '@workspace/lib/sheets';
 import type { Rect, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
 import {
@@ -468,6 +469,25 @@ describe('charts and images', () => {
         editLines([sheet], columnsAt(false, 0, 3, 'T'));
         expect(sheet.records('chart').get('c')).toBe(before);
         expect(sheet.records('image').get('i')).toBe(image);
+    });
+
+    test('an edit that would take a chart past its size bound refuses and writes nothing', () => {
+        const padded = (length: number) =>
+            chartOf({
+                categories: null,
+                series: Array.from({ length: 32 }, (_, i) => ({
+                    id: `s-${i}`,
+                    name: 'n'.repeat(length),
+                    values: ref('S', [0, 0], [i, i]),
+                })),
+            });
+        let length = 1;
+        while (!exceedsChartSpecBytes(padded(length + 1))) length += 1;
+        const big = padded(length);
+        const sheet = sheetOf({ chart: { c: big } });
+        expect(sheet.planLines(rowsAt(true, 0, 1_000_000))).toBe('key-too-long');
+        expect(sheet.records('chart').get('c')).toBe(big);
+        expect(typeof sheet.planLines(rowsAt(true, 0, 1))).toBe('object');
     });
 });
 

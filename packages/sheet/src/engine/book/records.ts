@@ -16,6 +16,7 @@ import {
     transformLines,
     transformMove,
 } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
@@ -372,6 +373,7 @@ export class SheetRecords {
                 if (after[0] === start && after[1] === end) return ref;
                 return rows ? { ...ref, row: after } : { ...ref, column: after };
             });
+            if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
             settle('chart', id, chart, next);
         }
         return {
