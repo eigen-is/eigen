@@ -167,6 +167,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 PRODUCTION: '1',
                 EIGEN_DEMO: '1',
                 API_URL: 'https://localhost',
+                // bun test runs in UTC without setting TZ, so the seeder gets the test's zone and both date a thread alike.
+                TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
             };
             const proc = Bun.spawn(['bun', 'src/scripts/seed-demo.ts'], {
                 cwd: API_DIR,
