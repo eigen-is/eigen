@@ -14,7 +14,6 @@ import { AppWordmark } from './app-wordmark';
 import { ArticleContent } from './article-content';
 import { PrincipleBlocks } from './landing-blocks';
 import { LandingLinks } from './landing-links';
-import { ReadingLayout } from './reading-layout';
 import { SitePage } from './site-page';
 
 type AboutOverviewProps = {
@@ -25,7 +24,7 @@ type AboutOverviewProps = {
 export function AboutOverview({ overview, body }: AboutOverviewProps) {
     return (
         <SitePage>
-            <ReadingLayout>
+            <div className="site-wide py-12">
                 <h1 className="site-title">{overview.title}</h1>
                 <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
                     <LandingLinks />
@@ -38,7 +37,7 @@ export function AboutOverview({ overview, body }: AboutOverviewProps) {
                     }}
                     className="mt-8"
                 />
-            </ReadingLayout>
+            </div>
         </SitePage>
     );
 }
