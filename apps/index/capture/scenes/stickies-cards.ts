@@ -33,9 +33,18 @@ export const stickiesComment = {
         await Bun.sleep(1000);
         await cursor.click(await pointOn(page.getByText(CARD)));
         const dialog = page.getByRole('dialog');
-        await dialog.getByText('dekzeil & zo.vcf').waitFor();
-        await Bun.sleep(1200);
-        await cursor.moveTo(await pointOn(dialog.getByText('dekzeil & zo.vcf')));
+        const contactCard = page.getByText('dekzeil & zo.vcf');
+        await contactCard.waitFor();
+        // The thread scrolls to its end before the contact card's chip has its height, which leaves the chip half
+        // under the reply box, so she scrolls on to the end of its message. A message's row is the innermost block
+        // that lights up under the pointer.
+        await Bun.sleep(600);
+        await dialog
+            .locator('div.group', { has: contactCard })
+            .last()
+            .evaluate((row) => row.scrollIntoView({ block: 'end', behavior: 'smooth' }));
+        await Bun.sleep(600);
+        await cursor.moveTo(await pointOn(contactCard));
         await Bun.sleep(4000);
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });
