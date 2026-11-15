@@ -22,7 +22,7 @@ build      vite build                                                 routes imp
 postbuild  prerender.tsx, build-search-index.ts                       every route -> static HTML; Pagefind index
 ```
 
-`typecheck` runs the content build first, because the routes import the generated JSON.
+`typecheck` and `test` run the content build first, because the routes and the About tests read the generated JSON, which a fresh clone lacks.
 
 ## A bad frontmatter field fails the build
 
