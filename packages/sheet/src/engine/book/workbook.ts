@@ -88,6 +88,8 @@ export class Workbook {
                     }
                 },
             })),
+            now,
+            seed,
         );
         const held = new Map<string, BookSheet>();
         for (const [at, { id, fields, cells, rows, columns, records }] of ordered.entries()) {

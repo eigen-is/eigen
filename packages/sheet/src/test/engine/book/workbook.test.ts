@@ -348,3 +348,11 @@ describe('engine/book/workbook — the look sweep', () => {
         expect(book.content()).toEqual(before);
     });
 });
+
+describe('engine/book/workbook — the clock', () => {
+    test('a formula the load computes reads the snapshot’s clock', () => {
+        const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { f: '=NOW()' }]] })));
+        book.engine.recalc(100);
+        expect(book.engine.valueOf('a', 0, 0)).toBe(45_000.5);
+    });
+});
