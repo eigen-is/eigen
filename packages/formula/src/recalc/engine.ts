@@ -1,9 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, a recalc of what they reach, and the reads: the value and the formula of a cell, a walk of the
-// cells of a sheet and how far they reach. A sheet is named by its id and a cell by its row and column from 0. It
-// reads the store and changes it only through the recalc. What a host can get wrong, such as a sheet that is not
-// there or a cell off the grid, is checked here, once, before anything is noted or changed: so a call that throws
-// left the workbook as it was.
+// structural edits, a recalc of what they reach, and the reads, such as the value of a cell and a walk of a sheet.
+// A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only
+// through the recalc. What a host can get wrong, such as a sheet that is not there or a cell off the grid, is
+// checked here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -127,7 +126,7 @@ export class Engine {
     }
 
     // Reports the cells of a block that hold a value or a formula, a column at a time and down its rows, as a load
-    // takes them. The sink must not write to the engine: the walk reads the columns as they were when it started.
+    // takes them. The sink must not write to the engine: after a write, what the walk reports is not defined.
     public cells(
         sheet: string,
         cell: CellSink,

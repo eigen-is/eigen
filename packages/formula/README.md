@@ -77,7 +77,7 @@ The stored text holds offsets from the formula's own cell, so inserting a row ab
 
 A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
 
-`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. The sink must not write to the engine. `nextCell` is the same walk as a cursor, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host walks for a snapshot only after a `recalc` whose result says `stopped` is false. The sink must not write to the engine. `nextCell` is the same walk as a cursor, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
 
 ## The design in ten lines
 
@@ -137,5 +137,5 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - Approximate searches assume sorted data, as Excel's documentation requires.
 - A 3-D reference is not computed: a loaded formula keeps its value and a typed one is `#REF!`.
 - Volatile functions are computed when the document is, not after every unrelated edit.
-- An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect either from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
+- An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect `grid-end` from `editLines` only and `too-long` from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
 - Number display is numfmt's, with a few known gaps in `TEXT`.
