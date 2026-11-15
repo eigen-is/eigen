@@ -2,16 +2,17 @@
 // engine, which keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which
 // look a cell wears, the keys of its rows and columns, what its cells hold beyond a value, and its records. It is
 // built from a decoded snapshot and walks back to one, so equal documents give equal snapshots whatever their
-// history. The appliers of the ops reach the parts through it, and nothing outside this folder does.
+// history. A sheet an op adds is built as the load builds one. The appliers of the ops reach the parts through it, and
+// nothing outside this folder does.
 
-import type { Literal } from '@workspace/formula';
+import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
-import type { CellRecord, Placed } from '@workspace/lib/sheets/ops';
+import type { CellRecord, Placed, SheetContent } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
 import type { Extra } from './extras';
@@ -39,7 +40,7 @@ export class Workbook {
     public readonly engine: Engine;
     // A look id is this table's, so it means the same look on every sheet, until the next sweep.
     public readonly looks = new LookTable();
-    public readonly sheets: ReadonlyMap<string, BookSheet>;
+    private readonly parts = new Map<string, BookSheet>();
     // The generation: it rises only when the document is replaced whole, never with an edit.
     public readonly g: number;
     // The clock of the last batch that landed, or of the snapshot: its author's time and the seed of its draws.
@@ -53,22 +54,7 @@ export class Workbook {
     // band said twice is.
     public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
-        const parts = ordered.map(({ id, fields, cells, looks, bands, rows, columns, records }): BookSheet => {
-            const extras = new Extras();
-            for (const [row, column, { s, link, qp }] of cells) {
-                if (s || link || qp) extras.write(row, column, { s, link, qp });
-            }
-            return {
-                bands: new Bands(
-                    bands,
-                    looks.map((look) => this.looks.intern(look)),
-                ),
-                rows: new LineRuns(rows),
-                columns: new LineRuns(columns),
-                extras,
-                records: new SheetRecords(id, fields, records),
-            };
-        });
+        const parts = ordered.map((sheet) => this.partsOf(sheet));
         let slots = 0;
         for (const { cells } of ordered) {
             // The cells come in column order, so a column's last cell says how many slots the engine gives it.
@@ -85,90 +71,93 @@ export class Workbook {
         const refusal = fits(weightOf(slots, parts));
         if (refusal) throw new Refusal(refusal);
 
-        this.engine = new Engine(
-            ordered.map(({ id, fields, cells }) => ({
-                id,
-                name: fields.name,
-                cells: (cell) => {
-                    for (const [row, column, record] of cells) {
-                        if (!reachesEngine(record)) continue;
-                        const { v, e, f, s } = record;
-                        const value = s ? textOf(s) : e && typeof v === 'string' ? errorOf(v) : (v ?? null);
-                        cell(row, column, value, f ?? null);
-                    }
-                },
-            })),
-            now,
-            seed,
-        );
-        this.sheets = new Map(ordered.map(({ id }, at) => [id, parts[at]]));
+        this.engine = new Engine(ordered.map(sourceOf), now, seed);
+        for (const [at, { id }] of ordered.entries()) this.parts.set(id, parts[at]);
         this.g = g;
         this.now = now;
         this.seed = seed;
         this.sweep();
     }
 
+    public get sheets(): ReadonlyMap<string, BookSheet> {
+        return this.parts;
+    }
+
     // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
     // a host walks only after a recalc that did not stop.
     public content(): Omit<BookContent, 'computed'> {
-        const sheets = [...this.sheets].sort(([idA, a], [idB, b]) =>
+        const sheets = [...this.parts].sort(([idA, a], [idB, b]) =>
             compareRules(a.records.fields.order, idA, b.records.fields.order, idB),
         );
         return {
             g: this.g,
             now: this.now,
             seed: this.seed,
-            sheets: sheets.map(([id, { bands, rows, columns, extras, records }]) => {
-                const cells: Placed<CellRecord>[] = [];
-                const list = (
-                    row: number,
-                    column: number,
-                    value: Literal | null,
-                    formula: string | null,
-                    extra?: Extra,
-                ) => {
-                    const cell: CellRecord = {};
-                    if (extra?.s) cell.s = extra.s;
-                    else if (value !== null && typeof value === 'object') {
-                        cell.v = value.text;
-                        cell.e = 1;
-                    } else if (value !== null) cell.v = value;
-                    if (formula !== null) cell.f = formula;
-                    if (extra?.link) cell.link = extra.link;
-                    if (extra?.qp) cell.qp = extra.qp;
-                    cells.push([row, column, cell]);
-                };
-                // A cell that holds only a link or a mark is no cell of the engine's: it is listed in its place
-                // among them.
-                const marked = extras.content();
-                let next = 0;
-                const listMarkedBefore = (row: number, column: number) => {
-                    for (; next < marked.length; next += 1) {
-                        const [r, c, extra] = marked[next];
-                        if (c > column || (c === column && r >= row)) return;
-                        list(r, c, null, null, extra);
-                    }
-                };
-                this.engine.cells(id, (row, column, value, formula) => {
-                    listMarkedBefore(row, column);
-                    const here = next < marked.length && marked[next][0] === row && marked[next][1] === column;
-                    list(row, column, value, formula, here ? marked[next][2] : undefined);
-                    if (here) next += 1;
-                });
-                listMarkedBefore(GRID_ROWS, GRID_COLUMNS);
-                const look = bands.content();
-                return {
-                    id,
-                    fields: records.fields,
-                    cells,
-                    looks: look.looks.map((id) => this.looks.look(id)),
-                    bands: look.bands,
-                    rows: rows.content(),
-                    columns: columns.content(),
-                    records: records.content(),
-                };
-            }),
+            sheets: sheets.map(([id, sheet]) => this.sheetContent(id, sheet)),
         };
+    }
+
+    // One sheet whole, as the snapshot lists it and a `sheet` op adds it.
+    public sheetContent(id: string, { bands, rows, columns, extras, records }: BookSheet): SheetContent {
+        const cells: Placed<CellRecord>[] = [];
+        const list = (row: number, column: number, value: Literal | null, formula: string | null, extra?: Extra) => {
+            const cell: CellRecord = {};
+            if (extra?.s) cell.s = extra.s;
+            else if (value !== null && typeof value === 'object') {
+                cell.v = value.text;
+                cell.e = 1;
+            } else if (value !== null) cell.v = value;
+            if (formula !== null) cell.f = formula;
+            if (extra?.link) cell.link = extra.link;
+            if (extra?.qp) cell.qp = extra.qp;
+            cells.push([row, column, cell]);
+        };
+        // A cell that holds only a link or a mark is no cell of the engine's: it is listed in its place among them.
+        const marked = extras.content();
+        let next = 0;
+        const listMarkedBefore = (row: number, column: number) => {
+            for (; next < marked.length; next += 1) {
+                const [r, c, extra] = marked[next];
+                if (c > column || (c === column && r >= row)) return;
+                list(r, c, null, null, extra);
+            }
+        };
+        this.engine.cells(id, (row, column, value, formula) => {
+            listMarkedBefore(row, column);
+            const here = next < marked.length && marked[next][0] === row && marked[next][1] === column;
+            list(row, column, value, formula, here ? marked[next][2] : undefined);
+            if (here) next += 1;
+        });
+        listMarkedBefore(GRID_ROWS, GRID_COLUMNS);
+        const look = bands.content();
+        return {
+            id,
+            fields: records.fields,
+            cells,
+            looks: look.looks.map((at) => this.looks.look(at)),
+            bands: look.bands,
+            rows: rows.content(),
+            columns: columns.content(),
+            records: records.content(),
+        };
+    }
+
+    // Adds a sheet as the load builds one, in its place among the tabs. The engine takes it first, and refuses it
+    // with nothing written; it hands back the formulas of the other sheets that the sheet's name bound.
+    public addSheet(sheet: SheetContent): EditResult {
+        let place = 0;
+        for (const [id, { records }] of this.parts) {
+            if (compareRules(records.fields.order, id, sheet.fields.order, sheet.id) < 0) place += 1;
+        }
+        const result = this.engine.addSheet(sourceOf(sheet), place);
+        this.parts.set(sheet.id, this.partsOf(sheet));
+        return result;
+    }
+
+    // Its looks stay in the table until the next sweep.
+    public removeSheet(id: string): void {
+        this.engine.removeSheet(id);
+        this.parts.delete(id);
     }
 
     // The clock of a batch, which the host hands over once the batch's ops are applied: a refused batch throws
@@ -181,7 +170,7 @@ export class Workbook {
 
     // What the limits count: the engine's slots, the runs, bands and extras of every sheet, its records, the sheets.
     public weight(): WorkbookWeight {
-        return weightOf(this.engine.slots(), [...this.sheets.values()]);
+        return weightOf(this.engine.slots(), [...this.parts.values()]);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
@@ -190,13 +179,31 @@ export class Workbook {
         if (this.looks.size > Math.max(SWEEP_FLOOR, 2 * this.swept)) this.sweep();
     }
 
+    // A sheet's parts, its looks interned into the table and its bands rebuilt in the one form whatever it said.
+    private partsOf({ id, fields, cells, looks, bands, rows, columns, records }: SheetContent): BookSheet {
+        const extras = new Extras();
+        for (const [row, column, { s, link, qp }] of cells) {
+            if (s || link || qp) extras.write(row, column, { s, link, qp });
+        }
+        return {
+            bands: new Bands(
+                bands,
+                looks.map((look) => this.looks.intern(look)),
+            ),
+            rows: new LineRuns(rows),
+            columns: new LineRuns(columns),
+            extras,
+            records: new SheetRecords(id, fields, records),
+        };
+    }
+
     private sweep(): void {
         const worn = new Set<number>();
-        for (const { bands } of this.sheets.values()) {
+        for (const { bands } of this.parts.values()) {
             for (const id of bands.content().looks) worn.add(id);
         }
         const moved = this.looks.sweep(worn);
-        for (const { bands } of this.sheets.values()) {
+        for (const { bands } of this.parts.values()) {
             bands.write([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1], (id) => moved[id]);
         }
         this.swept = this.looks.size;
@@ -216,6 +223,23 @@ function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
         records = Math.max(records, sheet.records.weight().records);
     }
     return { slots, runs, bands, extras, records, sheets: sheets.length };
+}
+
+// A sheet's cells as the engine reads them: a rich text is the text of its runs, and only a value, a formula or a
+// rich text reaches it.
+function sourceOf({ id, fields, cells }: SheetContent): SheetSource {
+    return {
+        id,
+        name: fields.name,
+        cells: (cell) => {
+            for (const [row, column, record] of cells) {
+                if (!reachesEngine(record)) continue;
+                const { v, e, f, s } = record;
+                const value = s ? textOf(s) : e && typeof v === 'string' ? errorOf(v) : (v ?? null);
+                cell(row, column, value, f ?? null);
+            }
+        },
+    };
 }
 
 // A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.

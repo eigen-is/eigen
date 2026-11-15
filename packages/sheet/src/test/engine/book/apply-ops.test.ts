@@ -1,21 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import { MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
-import type { Batch, InputOp, RecordOp, SheetContent } from '@workspace/lib/sheets/ops';
+import { MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
+import type { Batch, InputOp, RecordOp, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, randomBookContent, randomInputOp, randomRecordOp } from './batches';
+import { batchOf, randomBookContent, randomInputOp, randomRecordOp, randomSheetOp } from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 
-type Applied = InputOp | RecordOp;
+type Applied = InputOp | RecordOp | SheetOp;
 type AppliedBatch = Omit<Batch, 'ops'> & { ops: Applied[] };
 
 const LAST_ROW = GRID_ROWS - 1;
@@ -114,18 +114,47 @@ const LANDING: readonly Applied[] = [
     { kind: 'input', sheet: 'a', runs: [[[2, 2, 3, 3], null]], cells: [[1, 0, { s: [{ v: 'rich', bl: 1 }] }]] },
 ];
 const TRAILING: RecordOp = { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { color: '#ff0000' } };
-const REFUSED: readonly [RefusalKey, RecordOp][] = [
+// Four cells on the grid's last row hold more slots than the limit, as each column then holds every row.
+const PAST_SLOTS = [1, 2, 3, 4].map((column) => [LAST_ROW, column, { v: 1 }] as const);
+// Four bands of runs, no two neighbours alike, weigh past the format limit.
+const PAST_FORMATS = Array.from({ length: 4 }, (_, band) => [
+    band,
+    MAX_STYLE_RUNS / 4,
+    ...Array.from({ length: MAX_STYLE_RUNS / 4 }, (_, row) => [row, 1 + ((row + band) % 2)]).flat(),
+]).flat();
+const addOf = (id: string, part: Partial<SheetContent> = {}, name = id): SheetOp => ({
+    kind: 'sheet',
+    add: sheetOf(id, { fields: { name, order: 'a2' }, ...part }),
+});
+// The refused op, and the book it is refused on when that is not `twoSheets`.
+const REFUSED: readonly [RefusalKey, Applied, Book?][] = [
     ['merge-overlap', { kind: 'record', sheet: 'a', type: 'merge', id: 'm2', set: { rect: [6, 6, 7, 7] }, whole: 1 }],
     ['last-sheet', { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { hide: 1 } }],
+    ['last-sheet', { kind: 'sheet', delete: 'a' }],
     ['key-too-long', { kind: 'record', sheet: B, type: 'sheet', id: B, set: { name: 'N' } }],
     ['key-too-long', chartChange({ specTitle: padded(PARTS.specTitle) })],
+    // The engine refuses the add, as the name binds a formula of sheet a past the stored bound.
+    ['key-too-long', addOf('c'.repeat(60), { looks: [{ fs: 99 }], bands: [0, 1, 0, 1] }, 'N')],
+    ['too-many-cells', addOf('c', { cells: [...PAST_SLOTS] })],
+    ['too-many-formats', addOf('c', { looks: [{ bl: 1 }, { it: 1 }], bands: PAST_FORMATS })],
+    [
+        'too-many-sheets',
+        addOf('c'),
+        (() => {
+            const book = twoSheets();
+            const more = Array.from({ length: MAX_SHEETS - 2 }, (_, at) =>
+                sheetOf(`x${at}`, { fields: { name: `x${at}`, order: 'b' } }),
+            );
+            return { ...book, sheets: [...book.sheets, ...more] };
+        })(),
+    ],
 ];
 
 describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as they were', () => {
-    for (const [key, refused] of REFUSED) {
+    for (const [key, refused, on] of REFUSED) {
         for (let k = 0; k <= LANDING.length; k += 1) {
-            test(`${key} by a ${refused.type} op at op ${k}, after ${k} ops landed`, () => {
-                const content = twoSheets();
+            test(`${key} by a ${refused.kind} op at op ${k}, after ${k} ops landed`, () => {
+                const content = on ?? twoSheets();
                 const book = new Workbook(content);
                 const before = bytes(book);
                 expect(refusalOf(() => land(book, batch(...LANDING.slice(0, k), refused, TRAILING)))).toBe(key);
@@ -161,12 +190,7 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
         }
     });
 
-    // Four cells on the grid's last row hold more slots than the limit, as each column then holds every row.
-    const PAST_LIMIT: InputOp = {
-        kind: 'input',
-        sheet: 'a',
-        cells: [1, 2, 3, 4].map((column) => [LAST_ROW, column, { v: 1 }] as const),
-    };
+    const PAST_LIMIT: InputOp = { kind: 'input', sheet: 'a', cells: [...PAST_SLOTS] };
     const BACK: InputOp = { kind: 'input', sheet: 'a', runs: [[[LAST_ROW, 1, LAST_ROW, 4], null]] };
 
     for (let k = 0; k <= LANDING.length; k += 1) {
@@ -186,6 +210,15 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
         expect(refusalOf(() => land(book, batch(LANDING[1], PAST_LIMIT, BACK)))).toBeUndefined();
         expect(bytes(book)).not.toBe(before);
         expect(book.engine.columnLength('a', 1)).toBe(0);
+    });
+
+    test('a sheet added past the limits and deleted in the same batch lands', () => {
+        const book = new Workbook(twoSheets());
+        const before = bytes(book);
+        const ops: Applied[] = [addOf('c', { cells: [...PAST_SLOTS] }), LANDING[1], { kind: 'sheet', delete: 'c' }];
+        expect(refusalOf(() => land(book, batch(...ops)))).toBeUndefined();
+        expect(bytes(book)).not.toBe(before);
+        expect(book.sheets.has('c')).toBe(false);
     });
 
     test('too-many-formats at the weigh', () => {
@@ -297,7 +330,7 @@ describe('engine/book/apply-ops — the look sweep', () => {
     });
 });
 
-describe('engine/book/apply-ops — the laws over random books and random batches of inputs and records', () => {
+describe('engine/book/apply-ops — the laws over random books and random batches of inputs, records and sheets', () => {
     test('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
         const content: Book = {
             g: 1,
@@ -333,6 +366,8 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         const refusedAt = new Map<string, number>();
         let landed = 0;
         let undone = 0;
+        // The sheet ops that landed, by what their inverse is: an add lands as its delete, a delete as its add.
+        const sheets = { add: 0, delete: 0 };
         for (let seed = 1; seed <= 600; seed += 1) {
             const random = randomOf(seed);
             const content = randomBookContent(random);
@@ -342,7 +377,11 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 const ops = batchOf(
                     random,
                     model,
-                    (r, m) => (r() < 0.5 ? randomInputOp(r, m) : randomRecordOp(r, m)),
+                    (r, m) => {
+                        const draw = r();
+                        if (draw < 0.4) return randomInputOp(r, m);
+                        return draw < 0.85 ? randomRecordOp(r, m) : randomSheetOp(r, m);
+                    },
                     6,
                 );
                 const before = bytes(book);
@@ -372,10 +411,15 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 land(book, { ...ops, ops: again });
                 expect(bytes(book)).toBe(after);
                 undone += 1;
+                for (const op of inverse) {
+                    if (op.kind === 'sheet') sheets['add' in op ? 'delete' : 'add'] += 1;
+                }
             }
         }
         expect(landed).toBeGreaterThan(4000);
         expect(undone).toBe(landed);
+        expect(sheets.add).toBeGreaterThan(1000);
+        expect(sheets.delete).toBeGreaterThan(500);
         for (const key of ['merge-overlap', 'last-sheet']) {
             for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`${key} ${k}`) ?? 0).toBeGreaterThan(0);
         }
