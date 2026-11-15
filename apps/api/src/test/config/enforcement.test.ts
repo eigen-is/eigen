@@ -5,6 +5,7 @@ import { resolveHomeDataMax, resolveUserQuotas } from '../../lib/config/quota';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
+import { getFromHomes } from '../../lib/home/home-relay';
 import { getMemberships } from '../../lib/user';
 import { addMember, authedRequest, createTeam, getTestContext } from '../setup';
 
@@ -162,4 +163,12 @@ describe('a team that does not answer adds no override', () => {
 
         expect(await homeDataMaxWhileRestoring(raising)).toBe(getServerSettings().quotas.homeDataMaxMB * MB);
     });
+});
+
+// Every owner can be asked for overrides, and only a team has any.
+test("a home that is not a team's raises nothing", async () => {
+    const { charlie } = await getTestContext();
+    const answers = await getFromHomes([charlie.user.id], 'team:quota-overrides', null);
+
+    expect(answers.get(charlie.user.id)).toEqual({});
 });

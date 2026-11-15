@@ -1,14 +1,12 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
 // another home. getFromHomes asks many homes one question, such as which paths a user watches there, and the domain
 // that owns the question keeps its handler. It opens at most a few homes at once and leaves out a home that is too
-// slow. A team's quota overrides are still read apart from it, with no such limit. Today every call runs in this
-// process. When homes live in several processes, only this file has to change.
+// slow. Today every call runs in this process. When homes live in several processes, only this file has to change.
 
 import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
 import { settlesWithin } from '../../utils/timing';
@@ -22,7 +20,7 @@ import type { TeamQueries } from '../team/home-calls';
 import { answerTeam } from '../team/home-calls';
 import type { User } from '../user';
 import { getOwnerExists, getUsersByEmails } from '../user';
-import { getHome, getTeamHome, loadedHome } from './get-home';
+import { getHome, loadedHome } from './get-home';
 import type { Home } from './home';
 import { TeamHome } from './team-home';
 
@@ -272,13 +270,4 @@ function cappedOpen(ownerId: string): Promise<Home> {
         opening.set(ownerId, open);
     }
     return open;
-}
-
-// --- Teams ---
-
-export type TeamQuotaOverrides = NonNullable<TeamSettings['memberOverrides']>;
-
-export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuotaOverrides> {
-    const home = await getTeamHome(ownerId);
-    return home.settings.get().memberOverrides ?? {};
 }

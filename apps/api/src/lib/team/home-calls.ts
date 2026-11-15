@@ -3,11 +3,12 @@
 // The relay spreads this table into its own while it loads, so this file imports types only: a value import that led
 // back to the relay would run the relay first, and it would read this table before it exists.
 
-import type { MyTeam } from '@workspace/lib/types/settings';
+import type { MyTeam, TeamQuotaOverrides } from '@workspace/lib/types/settings';
 import type { Answerers } from '../home/home-relay';
 
 export type TeamQueries = {
     'team:mounts': { ask: null; answer: MyTeam['mounts'] };
+    'team:quota-overrides': { ask: null; answer: TeamQuotaOverrides };
 };
 
 export const answerTeam: Answerers<TeamQueries> = {
@@ -20,4 +21,5 @@ export const answerTeam: Answerers<TeamQueries> = {
             }),
         );
     },
+    'team:quota-overrides': async (home) => home.memberOverrides,
 };
