@@ -24,6 +24,12 @@ export const mailHero = {
         await page.goto(stack.appUrl('mail'));
         await page.getByText('Re: Generator quote').first().dispatchEvent('click');
         await page.getByRole('heading', { name: 'Re: Generator quote' }).waitFor();
+        // The first message's row is the list's last and partly cut off, and clicking it scrolls the list to show it
+        // whole, so the film starts with it whole and ends on the same list. The virtualizer marks each row.
+        await page
+            .locator('[data-index]')
+            .filter({ hasText: 'Hi Saar, Quote attached' })
+            .evaluate((row) => row.scrollIntoView({ block: 'nearest' }));
         await Bun.sleep(1500);
         await cursor.moveTo(REST, { duration: 1 });
     },

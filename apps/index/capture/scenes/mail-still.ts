@@ -14,7 +14,15 @@ export const mailStillInvite = {
     run: async ({ pages: [page], stack }) => {
         await page.goto(stack.appUrl('mail'));
         await page.getByText('Committee visit to the field').first().dispatchEvent('click');
-        await page.getByText('View in Calendar').waitFor();
+        const viewInCalendar = page.getByRole('link', { name: 'View in Calendar' });
+        await viewInCalendar.waitFor();
         await Bun.sleep(2000);
+        // The card runs past the window's foot, so the message scrolls just far enough to show it whole. The innermost
+        // block that holds the button is the card.
+        await page
+            .locator('div', { has: viewInCalendar })
+            .last()
+            .evaluate((card) => card.scrollIntoView({ block: 'nearest' }));
+        await Bun.sleep(500);
     },
 } satisfies Scene;
