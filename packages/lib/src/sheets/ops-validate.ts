@@ -91,10 +91,24 @@ function addsSheets(value: unknown): boolean {
     );
 }
 
-// A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value fresh from `JSON.parse`,
+// A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value built from `JSON.parse`,
 // so no getter, hole or `undefined` can stand in it.
 export function isSheetContent(value: unknown): value is SheetContent {
     return isOf(value, SHEET_CONTENT) && isBands(value.bands, value.looks.length);
+}
+
+// The generation and the clock as a batch carries them, and a snapshot its last batch's.
+export function isGeneration(value: unknown): value is number {
+    return isCount(value, Number.MAX_SAFE_INTEGER);
+}
+
+export function isNow(value: unknown): value is number {
+    return isFiniteNumber(value) && value >= 0 && value < LAST_DATE_SERIAL + 1;
+}
+
+// A draw's seed is read as a signed 32-bit integer.
+export function isSeed(value: unknown): value is number {
+    return typeof value === 'number' && Number.isInteger(value) && value >= -(2 ** 31) && value < 2 ** 31;
 }
 
 function isOp(value: unknown): value is Op {
@@ -498,13 +512,9 @@ type RecordOpShape = Omit<RecordOp, 'set'> & { set?: Record<string, unknown> };
 
 const FORMAT = table<NonNullable<CellFormatOp['set']>>({ ...LOOK_FIELDS, link: [(value) => isOf(value, LINK), false] });
 const BATCH = table<Batch>({
-    g: [(value) => isCount(value, Number.MAX_SAFE_INTEGER), true],
-    now: [(value) => isFiniteNumber(value) && value >= 0 && value < LAST_DATE_SERIAL + 1, true],
-    // A draw's seed is read as a signed 32-bit integer.
-    seed: [
-        (value) => typeof value === 'number' && Number.isInteger(value) && value >= -(2 ** 31) && value < 2 ** 31,
-        true,
-    ],
+    g: [isGeneration, true],
+    now: [isNow, true],
+    seed: [isSeed, true],
     ops: [(value) => isListOf(value, isOp), true],
 });
 const INPUT = table<InputOp>({
