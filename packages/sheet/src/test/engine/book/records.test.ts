@@ -11,7 +11,7 @@ describe('the store', () => {
         const comment = sheet.records('comment').get('c1');
         const merge = sheet.records('merge').get('m1');
         expect(Object.isFrozen(comment)).toBe(true);
-        sheet.put({ type: 'comment', id: 'c2', set: { row: 2, column: 2 } });
+        sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'c2', set: { row: 2, column: 2 }, whole: 1 });
         sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'm1', set: { rect: [4, 4, 5, 5] } });
         sheet.write({ kind: 'record', sheet: 'S', type: 'sheet', id: 'S', set: { color: '#f00' } });
         expect(sheet.records('comment').get('c1')).toBe(comment);
@@ -64,7 +64,7 @@ describe('merges are read through an index', () => {
 
     test('the index follows a make, a change, a delete and a line edit', () => {
         const merges = sheet();
-        merges.put({ type: 'merge', id: 'c', set: { rect: [300, 0, 301, 0] } });
+        merges.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'c', set: { rect: [300, 0, 301, 0] }, whole: 1 });
         expect(merges.merge(301, 0)).toEqual([300, 0, 301, 0]);
         merges.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'tall', set: { rect: [10, 9, 11, 9] } });
         expect(merges.merge(150, 3)).toBeUndefined();
@@ -83,12 +83,26 @@ describe('merges are read through an index', () => {
 describe('record writes and what their inverse needs', () => {
     test('a make of a new record is undone by a delete, a replace by the old record whole', () => {
         const sheet = sheetOf({ comment: { c1: { row: 1, column: 1 } } });
-        expect(sheet.put({ type: 'comment', id: 'c2', set: { row: 3, column: 0 } })).toEqual([
-            { kind: 'record', type: 'comment', sheet: 'S', id: 'c2' },
-        ]);
-        expect(sheet.put({ type: 'comment', id: 'c1', set: { row: 4, column: 4 } })).toEqual([
-            { kind: 'record', type: 'comment', sheet: 'S', id: 'c1', set: { row: 1, column: 1 }, whole: 1 },
-        ]);
+        expect(
+            sheet.write({
+                kind: 'record',
+                sheet: 'S',
+                type: 'comment',
+                id: 'c2',
+                set: { row: 3, column: 0 },
+                whole: 1,
+            }),
+        ).toEqual([{ kind: 'record', type: 'comment', sheet: 'S', id: 'c2' }]);
+        expect(
+            sheet.write({
+                kind: 'record',
+                sheet: 'S',
+                type: 'comment',
+                id: 'c1',
+                set: { row: 4, column: 4 },
+                whole: 1,
+            }),
+        ).toEqual([{ kind: 'record', type: 'comment', sheet: 'S', id: 'c1', set: { row: 1, column: 1 }, whole: 1 }]);
     });
 
     test('a change sets named fields, null clears one, and the inverse sets the old values back', () => {
@@ -131,16 +145,18 @@ describe('record writes and what their inverse needs', () => {
     test('a merge over a live merge is refused and writes nothing, by a make or a change', () => {
         const sheet = sheetOf({ merge: { a: { rect: [0, 0, 1, 1] }, b: { rect: [3, 3, 4, 4] } } });
         const over: Rect = [1, 1, 3, 3];
-        expect(sheet.put({ type: 'merge', id: 'c', set: { rect: over } })).toBe('merge-overlap');
+        expect(sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'c', set: { rect: over }, whole: 1 })).toBe(
+            'merge-overlap',
+        );
         expect(sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'a', set: { rect: over } })).toBe(
             'merge-overlap',
         );
         expect(sheet.records('merge').size).toBe(2);
         expect(sheet.merge(2, 2)).toBeUndefined();
         // A merge replaced over its own cells is no overlap.
-        expect(sheet.put({ type: 'merge', id: 'a', set: { rect: [0, 0, 2, 2] } })).toEqual([
-            { kind: 'record', type: 'merge', sheet: 'S', id: 'a', set: { rect: [0, 0, 1, 1] }, whole: 1 },
-        ]);
+        expect(
+            sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'a', set: { rect: [0, 0, 2, 2] }, whole: 1 }),
+        ).toEqual([{ kind: 'record', type: 'merge', sheet: 'S', id: 'a', set: { rect: [0, 0, 1, 1] }, whole: 1 }]);
     });
 
     test('a new filter takes the place of the live one and its columns, which its inverse brings back first', () => {
@@ -151,7 +167,14 @@ describe('record writes and what their inverse needs', () => {
                 k2: { filter: 'f', column: 2, rows: [] },
             },
         });
-        const inverse = sheet.put({ type: 'filter', id: 'g', set: { rect: [5, 5, 9, 9] } });
+        const inverse = sheet.write({
+            kind: 'record',
+            sheet: 'S',
+            type: 'filter',
+            id: 'g',
+            set: { rect: [5, 5, 9, 9] },
+            whole: 1,
+        });
         expect(contentOf(sheet).records).toEqual({ filter: { g: { rect: [5, 5, 9, 9] } } });
         expect(inverse).toEqual([
             { kind: 'record', type: 'filter', sheet: 'S', id: 'f', set: { rect: [0, 0, 9, 3] }, whole: 1 },
@@ -172,9 +195,16 @@ describe('record writes and what their inverse needs', () => {
                 whole: 1,
             },
         ]);
-        expect(sheetOf().put({ type: 'filter', id: 'g', set: { rect: [0, 0, 1, 1] } })).toEqual([
-            { kind: 'record', type: 'filter', sheet: 'S', id: 'g' },
-        ]);
+        expect(
+            sheetOf().write({
+                kind: 'record',
+                sheet: 'S',
+                type: 'filter',
+                id: 'g',
+                set: { rect: [0, 0, 1, 1] },
+                whole: 1,
+            }),
+        ).toEqual([{ kind: 'record', type: 'filter', sheet: 'S', id: 'g' }]);
     });
 
     test('deleting a filter deletes its columns, and its inverse makes the filter before them', () => {
@@ -194,7 +224,16 @@ describe('record writes and what their inverse needs', () => {
             filter: { f: { rect: [0, 0, 9, 3] } },
             filterColumn: { k1: { filter: 'f', column: 1, rows: [] } },
         });
-        expect(sheet.put({ type: 'filterColumn', id: 'k2', set: { filter: 'old', column: 2, rows: [] } })).toEqual([]);
+        expect(
+            sheet.write({
+                kind: 'record',
+                sheet: 'S',
+                type: 'filterColumn',
+                id: 'k2',
+                set: { filter: 'old', column: 2, rows: [] },
+                whole: 1,
+            }),
+        ).toEqual([]);
         expect(
             sheet.write({ kind: 'record', sheet: 'S', type: 'filterColumn', id: 'k1', set: { filter: 'old' } }),
         ).toEqual([]);

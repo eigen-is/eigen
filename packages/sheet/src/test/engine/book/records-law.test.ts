@@ -1,12 +1,14 @@
 // The law the applier leans on, over random records: a line edit, then its inverse edit, then the record ops the edit
 // returned give back every record deep-equal; a move, the reverse move and its record ops do the same. Records sit
-// near the grid's first lines and near its last, so open ranges and pushed lines come up often.
+// near the grid's first lines and near its last, so open ranges and pushed lines come up often. Every record op the
+// stores hand back on the way reads back through the batch validator.
 
 import { expect, test } from 'bun:test';
 import type { LineEdit } from '@workspace/formula/text';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { SingleRange } from '@workspace/lib/sheets';
-import type { MoveOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
+import type { MoveOp, RecordOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
+import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { SheetRecords } from '../../../engine/book/records';
 import {
     applyRecordOps,
@@ -140,9 +142,12 @@ function expectSame(sheets: ReadonlyMap<string, SheetRecords>, before: ReadonlyM
     for (const id of ['S', 'T']) expect(contentOf(sheetNamed(sheets, id))).toEqual(contentOf(sheetNamed(before, id)));
 }
 
-test('a line edit, its inverse and its record ops give back every record', () => {
+type Case = { build: () => Map<string, SheetRecords>; run: (sheets: ReadonlyMap<string, SheetRecords>) => RecordOp[] };
+
+// The line edits the law holds for: the applier refuses an insert that would push a record off the grid, and an edit
+// that would make a key too long. The case runs the edit and then its inverse, returning the edit's record ops.
+function* lineCases(): Generator<Case> {
     const random = randomFrom(7);
-    let checked = 0;
     for (let i = 0; i < CASES; i += 1) {
         const build = bookOn(random);
         const rows = random() < 0.5;
@@ -151,23 +156,22 @@ test('a line edit, its inverse and its record ops give back every record', () =>
         const index = Math.min(lineOn(random, lines), lines - count);
         const edit: LineEdit = { insert: random() < 0.5, index, count, sheet: random() < 0.8 ? 'S' : 'T', rows };
         const sheets = build();
-        const edited = sheetNamed(sheets, edit.sheet);
-        // The applier refuses an insert that would push a record off the grid, so the law holds for the rest.
-        if (edit.insert && edited.blocksPush(rows, count)) continue;
+        if (edit.insert && sheetNamed(sheets, edit.sheet).blocksPush(rows, count)) continue;
         if ([...sheets.values()].some((sheet) => sheet.planLines(edit) === 'key-too-long')) continue;
-        const restore = editLines(sheets.values(), edit);
-        if (!edit.insert) expect(edited.blocksPush(rows, count)).toBe(false);
-        editLines(sheets.values(), inverseOf(edit));
-        applyRecordOps(sheets, build(), restore);
-        expectSame(sheets, build());
-        checked += 1;
+        yield {
+            build,
+            run: (sheets) => {
+                const restore = editLines(sheets.values(), edit);
+                if (!edit.insert) expect(sheetNamed(sheets, edit.sheet).blocksPush(rows, count)).toBe(false);
+                editLines(sheets.values(), inverseOf(edit));
+                return restore;
+            },
+        };
     }
-    expect(checked).toBeGreaterThan(CASES / 2);
-});
+}
 
-test('a move, the reverse move and its record ops give back every record', () => {
+function* moveCases(): Generator<Case> {
     const random = randomFrom(11);
-    let checked = 0;
     for (let i = 0; i < CASES; i += 1) {
         const build = bookOn(random);
         const [top, left] = [below(random, 12), below(random, 12)];
@@ -183,11 +187,55 @@ test('a move, the reverse move and its record ops give back every record', () =>
         const sheets = build();
         const source = sheetNamed(sheets, 'S');
         if ([...sheets.values()].some((sheet) => typeof sheet.planMove(op, source) === 'string')) continue;
-        const restore = moveBlock(sheets, op);
-        moveBlock(sheets, reverseOf(op));
-        applyRecordOps(sheets, build(), restore);
-        expectSame(sheets, build());
+        yield {
+            build,
+            run: (sheets) => {
+                const restore = moveBlock(sheets, op);
+                moveBlock(sheets, reverseOf(op));
+                return restore;
+            },
+        };
+    }
+}
+
+// Runs a case through the law and returns every record op the stores handed back: the edit's, then the inverses of
+// its record ops as they were applied.
+function holds({ build, run }: Case): RecordOp[] {
+    const sheets = build();
+    const restore = run(sheets);
+    const inverses = applyRecordOps(sheets, build(), restore);
+    expectSame(sheets, build());
+    return [...restore, ...inverses];
+}
+
+test('a line edit, its inverse and its record ops give back every record', () => {
+    let checked = 0;
+    for (const lineCase of lineCases()) {
+        holds(lineCase);
+        checked += 1;
+    }
+    expect(checked).toBeGreaterThan(CASES / 2);
+});
+
+test('a move, the reverse move and its record ops give back every record', () => {
+    let checked = 0;
+    for (const moveCase of moveCases()) {
+        holds(moveCase);
         checked += 1;
     }
     expect(checked).toBeGreaterThan(CASES / 3);
+});
+
+test('every record op the stores hand back reads back from a batch', () => {
+    let read = 0;
+    for (const lawCase of [...lineCases(), ...moveCases()]) {
+        for (const op of holds(lawCase)) {
+            expect({ op, read: readBatch(JSON.stringify({ g: 1, now: 0, seed: 0, ops: [op] })) !== null }).toEqual({
+                op,
+                read: true,
+            });
+            read += 1;
+        }
+    }
+    expect(read).toBeGreaterThan(CASES);
 });

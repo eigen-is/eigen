@@ -32,13 +32,9 @@ import type {
 import { mapChartRefs } from '../chart-data';
 
 type Kind = Exclude<RecordType, 'sheet'>;
+type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
 type Fields<R> = { [K in keyof R]?: R[K] | null };
 type Span = [first: number, last: number];
-
-// A record made or replaced whole, in the shape of the op that does it.
-export type WholeRecord = {
-    readonly [T in Kind]: { readonly type: T; readonly id: string; readonly set: Records[T] };
-}[Kind];
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
@@ -58,15 +54,27 @@ const KINDS: readonly Kind[] = [
 // A merge is listed under every band of this many rows it covers, so a read looks at the merges near its rows only.
 const BAND_SHIFT = 6;
 
-// The op type is a union over the record types, so an op of a type known only as a type parameter is made here.
-type Body<T extends RecordType> = { sheet: string; id: string; set?: Fields<Records[T]>; whole?: 1 };
-const RECORD_OP: { readonly [T in RecordType]: (body: Body<T>) => RecordOp } = {
-    sheet: (body) => ({ kind: 'record', type: 'sheet', ...body }),
+// The op type is a union over the record types, so an op of a type known only as a type parameter is made here: made
+// whole or deleted, or with some of its fields set, which a rule never is.
+type MadeBody<T extends Kind> =
+    | { sheet: string; id: string; set: Records[T]; whole: 1 }
+    | { sheet: string; id: string; set?: undefined };
+type ChangeBody<T extends ChangedKind> = { sheet: string; id: string; set: Fields<Records[T]> };
+const MADE_OP: { readonly [T in Kind]: (body: MadeBody<T>) => RecordOp } = {
     merge: (body) => ({ kind: 'record', type: 'merge', ...body }),
     filter: (body) => ({ kind: 'record', type: 'filter', ...body }),
     filterColumn: (body) => ({ kind: 'record', type: 'filterColumn', ...body }),
     comment: (body) => ({ kind: 'record', type: 'comment', ...body }),
     conditionalFormat: (body) => ({ kind: 'record', type: 'conditionalFormat', ...body }),
+    validation: (body) => ({ kind: 'record', type: 'validation', ...body }),
+    image: (body) => ({ kind: 'record', type: 'image', ...body }),
+    chart: (body) => ({ kind: 'record', type: 'chart', ...body }),
+};
+const CHANGE_OP: { readonly [T in ChangedKind]: (body: ChangeBody<T>) => RecordOp } = {
+    merge: (body) => ({ kind: 'record', type: 'merge', ...body }),
+    filter: (body) => ({ kind: 'record', type: 'filter', ...body }),
+    filterColumn: (body) => ({ kind: 'record', type: 'filterColumn', ...body }),
+    comment: (body) => ({ kind: 'record', type: 'comment', ...body }),
     validation: (body) => ({ kind: 'record', type: 'validation', ...body }),
     image: (body) => ({ kind: 'record', type: 'image', ...body }),
     chart: (body) => ({ kind: 'record', type: 'chart', ...body }),
@@ -136,36 +144,32 @@ export class SheetRecords {
         return this.commentCells.get(cellKey(row, column)) ?? [];
     }
 
-    // Makes or replaces a record. A merge over a live merge is refused, a filter takes the place of the live one and
-    // its columns, and a filter column that names no live filter is skipped. Returns the inverse: empty when skipped.
-    public put(record: WholeRecord): RecordOp[] | 'merge-overlap' {
-        switch (record.type) {
-            case 'merge':
-                if (this.overlaps(record.id, record.set.rect)) return 'merge-overlap';
-                return this.swap('merge', record.id, record.set);
-            case 'filter': {
-                const live = [...this.stored.filter.keys()];
-                const restore = live.flatMap((id) => this.removeFilter(id));
-                this.replace('filter', record.id, record.set);
-                return restore.length > 0 ? restore : [RECORD_OP.filter({ sheet: this.sheet, id: record.id })];
-            }
-            case 'filterColumn':
-                if (!this.stored.filter.has(record.set.filter)) return [];
-                return this.swap('filterColumn', record.id, record.set);
-            default:
-                return this.swap(record.type, record.id, record.set);
-        }
-    }
-
-    // A record op that is not whole: `set` changes the named fields, null clearing one, and no `set` deletes. A change
-    // of a record that is gone, or of a filter column to a filter that is not live, is skipped: its inverse is empty.
+    // Whole makes or replaces a record, a `set` alone changes the fields it names, null clearing one, and no `set`
+    // deletes. A write that is skipped, such as a change of a record that is gone, returns no inverse.
     public write(op: RecordOp): RecordOp[] | 'merge-overlap' {
+        if (op.whole) {
+            switch (op.type) {
+                case 'merge':
+                    if (this.overlaps(op.id, op.set.rect)) return 'merge-overlap';
+                    return this.swap('merge', op.id, op.set);
+                case 'filter': {
+                    const live = [...this.stored.filter.keys()];
+                    const restore = live.flatMap((id) => this.removeFilter(id));
+                    this.replace('filter', op.id, op.set);
+                    return restore.length > 0 ? restore : [MADE_OP.filter({ sheet: this.sheet, id: op.id })];
+                }
+                case 'filterColumn':
+                    if (!this.stored.filter.has(op.set.filter)) return [];
+                    return this.swap('filterColumn', op.id, op.set);
+                default:
+                    return this.swap(op.type, op.id, op.set);
+            }
+        }
         if (op.type === 'sheet') {
-            if (!op.set) return [];
             const before = fieldsBefore(this.sheetFields, op.set);
             this.sheetFields = Object.freeze(withFields(this.sheetFields, op.set));
             return Object.keys(before).length > 0
-                ? [RECORD_OP.sheet({ sheet: this.sheet, id: op.id, set: before })]
+                ? [{ kind: 'record', sheet: this.sheet, type: 'sheet', id: op.id, set: before }]
                 : [];
         }
         if (!op.set) return op.type === 'filter' ? this.removeFilter(op.id) : this.swap(op.type, op.id, undefined);
@@ -238,9 +242,15 @@ export class SheetRecords {
             });
             return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
         };
-        const settle = <T extends Kind>(type: T, id: string, old: Records[T], next: Records[T] | undefined) => {
+        const settle = <T extends ChangedKind>(type: T, id: string, old: Records[T], next: Records[T] | undefined) => {
             if (next !== old) writes.push(() => this.replace(type, id, next));
             if (!kept || next === undefined) restore.push(this.restoreOp(type, id, old, next === undefined));
+            kept = true;
+        };
+        // A rule changes only whole, so it comes back whole.
+        const settleRule = (id: string, old: ConditionalFormatRecord, next: ConditionalFormatRecord | undefined) => {
+            if (next !== old) writes.push(() => this.replace('conditionalFormat', id, next));
+            if (!kept || next === undefined) restore.push(this.wholeOp('conditionalFormat', id, old));
             kept = true;
         };
 
@@ -256,7 +266,7 @@ export class SheetRecords {
             }
             if (frozenAfter(inverse, after) !== frozen) {
                 const set = rows ? { frozenRows: frozen } : { frozenColumns: frozen };
-                restore.push(RECORD_OP.sheet({ sheet: this.sheet, id: this.sheet, set }));
+                restore.push({ kind: 'record', sheet: this.sheet, type: 'sheet', id: this.sheet, set });
             }
             for (const [id, merge] of this.stored.merge) {
                 const [top, left, bottom, right] = merge.rect;
@@ -312,7 +322,7 @@ export class SheetRecords {
         for (const [id, rule] of this.stored.conditionalFormat) {
             const next = here ? ranges(rule.ranges) : rule.ranges;
             if (next.length === 0) {
-                settle('conditionalFormat', id, rule, undefined);
+                settleRule(id, rule, undefined);
                 continue;
             }
             const ruled = next === rule.ranges ? rule : { ...rule, ranges: next };
@@ -325,7 +335,7 @@ export class SheetRecords {
             const backHost = lineSpan(formula.ranges[0], rows)[0];
             const back = withFormula(formula, (tree) => transformLines(tree, inverseEdit, this.sheet, backHost));
             if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) kept = false;
-            settle('conditionalFormat', id, rule, formula);
+            settleRule(id, rule, formula);
         }
         for (const [id, chart] of this.stored.chart) {
             const next = mapChartRefs(chart, (ref) => {
@@ -401,7 +411,7 @@ export class SheetRecords {
             // The move back takes along what lies where the block landed, so undo puts it back after.
             for (const [id, comment] of this.stored.comment) {
                 if (moving.has(id) || !covers(rectRange(target), comment.row, comment.column)) continue;
-                if (!oneSheet) restore.push(RECORD_OP.comment({ sheet: op.sheet, id }));
+                if (!oneSheet) restore.push(MADE_OP.comment({ sheet: op.sheet, id }));
                 restore.push(this.restoreOp('comment', id, comment, !oneSheet));
             }
             for (const [id, rect] of carried) writes.push(() => this.replace('merge', id, { rect: shifted(rect) }));
@@ -447,7 +457,7 @@ export class SheetRecords {
                 : formula;
             if (formula !== rule) writes.push(() => this.replace('conditionalFormat', id, formula));
             if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule) || returns(rule.ranges)) {
-                restore.push(this.restoreOp('conditionalFormat', id, rule, false));
+                restore.push(this.wholeOp('conditionalFormat', id, rule));
             }
         }
         return {
@@ -486,23 +496,25 @@ export class SheetRecords {
         const old = this.stored[type].get(id);
         if (old === undefined && record === undefined) return [];
         this.replace(type, id, record);
-        return [old === undefined ? RECORD_OP[type]({ sheet: this.sheet, id }) : this.restoreOp(type, id, old, true)];
+        return [old === undefined ? MADE_OP[type]({ sheet: this.sheet, id }) : this.wholeOp(type, id, old)];
     }
 
-    private change<T extends Kind>(type: T, id: string, set: Fields<Records[T]>): RecordOp[] {
+    private change<T extends ChangedKind>(type: T, id: string, set: Fields<Records[T]>): RecordOp[] {
         const old = this.stored[type].get(id);
         if (old === undefined) return [];
         const before = fieldsBefore(old, set);
         this.replace(type, id, withFields(old, set));
-        return Object.keys(before).length > 0 ? [RECORD_OP[type]({ sheet: this.sheet, id, set: before })] : [];
+        return Object.keys(before).length > 0 ? [CHANGE_OP[type]({ sheet: this.sheet, id, set: before })] : [];
+    }
+
+    private wholeOp<T extends Kind>(type: T, id: string, record: Records[T]): RecordOp {
+        return MADE_OP[type]({ sheet: this.sheet, id, set: record, whole: 1 });
     }
 
     // A record that is gone comes back whole; one that is there has every field set back, since a whole make of a
     // filter would take its columns.
-    private restoreOp<T extends Kind>(type: T, id: string, old: Records[T], gone: boolean): RecordOp {
-        return gone
-            ? RECORD_OP[type]({ sheet: this.sheet, id, set: old, whole: 1 })
-            : RECORD_OP[type]({ sheet: this.sheet, id, set: old });
+    private restoreOp<T extends ChangedKind>(type: T, id: string, old: Records[T], gone: boolean): RecordOp {
+        return gone ? this.wholeOp(type, id, old) : CHANGE_OP[type]({ sheet: this.sheet, id, set: old });
     }
 
     // Every write lands here, which keeps the merge bands and the comment cells in step.

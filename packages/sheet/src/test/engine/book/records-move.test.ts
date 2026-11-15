@@ -198,11 +198,11 @@ describe('the formula of a conditional format', () => {
         roundTrips({}, move('T'), onT);
     });
 
-    test('a rule that reads where the block lands reads #REF!, and the old rule rides in the restore ops', () => {
+    test('a rule that reads where the block lands reads #REF!, and the old rule comes back whole in the restore ops', () => {
         const records = rule([{ row: [8, 8], column: [0, 0] }], '=$E$5');
         const { s, restore } = moved(records, move());
         expect(keyAt(s, 8, 0)).toBe('=#REF!');
-        expect(restore.map((op) => [op.type, op.whole])).toEqual([['conditionalFormat', undefined]]);
+        expect(restore.map((op) => [op.type, op.whole])).toEqual([['conditionalFormat', 1]]);
         roundTrips(records, move());
     });
 });

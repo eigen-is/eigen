@@ -385,11 +385,11 @@ describe('the formula of a conditional format', () => {
         expect(restore).toEqual([]);
     });
 
-    test('a delete of a row the formula reads makes it #REF!, and the old rule rides in the restore ops', () => {
+    test('a delete of a row the formula reads makes it #REF!, and the old rule comes back whole in the restore ops', () => {
         const records = rule([column([5, 9])], '=$C$2>0');
         const { content, restore } = edited(records, rowsAt(false, 1));
         expect(typedAt(String(keyOfRule(content.records.conditionalFormat?.r)), 4, 0)).toBe('=#REF!>0');
-        expect(restore.map((op) => [op.type, op.whole])).toEqual([['conditionalFormat', undefined]]);
+        expect(restore.map((op) => [op.type, op.whole])).toEqual([['conditionalFormat', 1]]);
         roundTrips(records, rowsAt(false, 1));
     });
 
