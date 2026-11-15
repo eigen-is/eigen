@@ -18,6 +18,7 @@ import {
     MAX_ORDER_KEY,
     MAX_RECORDS_PER_TYPE,
     MAX_RUNS_PER_CELL,
+    MAX_SHEETS,
     MAX_SHORT_TEXT,
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
@@ -70,7 +71,7 @@ type Table<T> = {
 };
 
 // A batch of ops from its JSON text, when the text parses, fits the batch budget and every op in it is valid, else null.
-// The budget is read before any op, so a text past it costs no more than its parse.
+// The budget is read before any op, so a text past it costs no more than its parse and a pass over its sheet adds.
 export function readBatch(text: string): Batch | null {
     let value: unknown;
     try {
@@ -78,19 +79,16 @@ export function readBatch(text: string): Batch | null {
     } catch {
         return null;
     }
-    if (text.length > MAX_BATCH_JSON && !addsSheets(value)) return null;
-    return isOf(value, BATCH) ? value : null;
-}
-
-// A batch of sheet ops alone, one of them an add, is left out of the budget, since a sheet's add has bounds of its own.
-// It reads the parsed value raw: the ops are checked after.
-function addsSheets(value: unknown): boolean {
     const ops = isRecord(value) ? value['ops'] : undefined;
-    return (
-        Array.isArray(ops) &&
-        ops.every((op) => isRecord(op) && op['kind'] === 'sheet') &&
-        ops.some((op) => isRecord(op) && 'add' in op)
+    if (!Array.isArray(ops)) return null;
+    // A sheet's add is left out of the budget, since `fits` bounds it. The ops are read raw here and checked after.
+    const added: unknown[] = ops.flatMap((op) =>
+        isRecord(op) && op['kind'] === 'sheet' && 'add' in op ? [op['add']] : [],
     );
+    if (added.length > MAX_SHEETS) return null;
+    let weight = text.length;
+    if (weight > MAX_BATCH_JSON) for (const add of added) weight -= JSON.stringify(add).length;
+    return weight <= MAX_BATCH_JSON && isOf(value, BATCH) ? value : null;
 }
 
 // A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value built from `JSON.parse`,

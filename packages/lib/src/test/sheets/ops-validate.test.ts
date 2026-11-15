@@ -8,6 +8,7 @@ import {
     MAX_ORDER_KEY,
     MAX_RECORDS_PER_TYPE,
     MAX_RUNS_PER_CELL,
+    MAX_SHEETS,
     MAX_SHORT_TEXT,
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
@@ -813,11 +814,32 @@ describe('11. the batch budget', () => {
         expect(readBatch(padded(MAX_BATCH_JSON + 1))).toBeNull();
     });
 
-    test('leaves a batch of sheet ops alone out of the count, and counts an add beside any other op', () => {
+    test('leaves the content of a sheet add out of the count, and counts every other op beside it', () => {
         expect(read(batchOf(added({ cells })))).not.toBeNull();
         expect(read(batchOf(added({ cells }), { kind: 'sheet', delete: 's1' }))).not.toBeNull();
-        expect(read(batchOf(added({ cells }), cell({ v: 1 })))).toBeNull();
-        expect(read(batchOf(added({ cells }), record('comment', { set: { row: 0, column: 0 } })))).toBeNull();
+        expect(read(batchOf(added({ cells }), cell({ v: 1 })))).not.toBeNull();
+        expect(read(batchOf(added({ cells }), input({ cells })))).toBeNull();
+        const deletes = Array.from({ length: MAX_BATCH_JSON / 20 }, (_, index) => ({
+            kind: 'sheet',
+            delete: `d${index}`,
+        }));
+        expect(read(batchOf(added({}), ...deletes))).toBeNull();
+        expect(read(batchOf(added({}), ...deletes.slice(0, 1000)))).not.toBeNull();
+    });
+
+    test('counts the text around a sheet add, however it is padded', () => {
+        const batch = JSON.stringify(batchOf(added({ cells })));
+        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON / 2)}`))).not.toBeNull();
+        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON)}`))).toBeNull();
+    });
+
+    test('refuses a batch that adds more sheets than a workbook holds', () => {
+        const adds = (count: number) =>
+            Array.from({ length: count }, (_, index) =>
+                added({ id: `s${index}`, fields: { name: `n${index}`, order: 'a0' } }),
+            );
+        expect(read(batchOf(...adds(MAX_SHEETS)))).not.toBeNull();
+        expect(read(batchOf(...adds(MAX_SHEETS + 1)))).toBeNull();
     });
 
     test('counts a batch of sheet ops with no add, however its text is padded', () => {
