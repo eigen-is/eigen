@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { FUNCTIONS } from '../../functions/library';
+import { fn } from '../../functions/registry';
 import type { CellSink, Literal } from '../../index';
 import { Engine, NA, REF } from '../../index';
+import { Recalc } from '../../recalc/recalc';
+import { Workbook } from '../../store/workbook';
 import { random } from '../store/support';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
@@ -279,26 +283,36 @@ describe('depth', () => {
         expect(engine.valueOf('s1', 0, 0)).toBe(5000);
     });
 
-    // A formula that draws before it reads tells how often it ran: its value is that draw of the pass.
-    test('a formula too deep to read a range still to be computed starts again once, however long the range', () => {
-        const draws = sheetOf((cell) => {
-            for (let row = 0; row < 10; row += 1) cell(row, 0, null, '=RAND()');
-        });
-        draws.setClock(0, 5);
-        draws.recalc(NO_CAP);
-        const drawn = Array.from({ length: 10 }, (_, row) => draws.valueOf('s1', row, 0));
+    // A row of this test's own counts how often the formula ran.
+    test('a formula too deep to read a range still to be computed starts again once, however long the range, and draws again what it drew', () => {
+        const first = sheetOf((cell) => cell(0, 0, null, '=RAND()'));
+        first.setClock(0, 5);
+        first.recalc(NO_CAP);
         for (const length of [1000, 4000]) {
-            const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
-            const engine = sheetOf((cell) => {
-                cell(0, 0, null, `=RAND()+0*${deep}`);
-                cell(1, 0, null, `=${deep}`);
-                cell(0, 2, 1, null);
-                for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+            let runs = 0;
+            const ran = fn('RAN', [], () => {
+                runs += 1;
+                return 0;
             });
-            engine.setClock(0, 5);
-            expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
-            expect(drawn.indexOf(engine.valueOf('s1', 0, 0))).toBe(1);
-            expect(engine.valueOf('s1', 1, 0)).toBe(2 * length);
+            const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
+            const workbook = new Workbook([
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
+                        cell(1, 0, null, `=${deep}`);
+                        cell(0, 2, 1, null);
+                        for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+                    },
+                },
+            ]);
+            const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5);
+            expect(recalc.pass(NO_CAP)).toMatchObject({ loops: [], stopped: false });
+            const [column] = workbook.sheets[0].columns;
+            expect(runs).toBe(2);
+            expect(workbook.value(column, 0)).toBe(first.valueOf('s1', 0, 0));
+            expect(workbook.value(column, 1)).toBe(2 * length);
         }
     });
 

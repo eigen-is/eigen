@@ -88,17 +88,22 @@ function together(formulas: readonly string[]) {
     return valuesWith(OWN, { ...SHEET, ...cells }, Object.keys(cells));
 }
 
-// Each formula in a pass of its own, so every one of them starts from the same draw.
+// Each formula alone in the same cell of a workbook of its own, so every one of them makes the same draws.
 function apart(formulas: readonly string[]) {
     return formulas.map((formula) => together([formula])[0]);
 }
 
-// The formulas computed one after the other in one pass: each reads the one before it, then makes its own call.
+// The calls made one after the other in one cell: each formula first makes the calls before it and drops them.
 function inTurn(formulas: readonly string[]) {
-    return together(
-        formulas.map((formula, at) =>
-            at === 0 ? formula : `=IF(ISERROR(N${at}),${formula.slice(1)},${formula.slice(1)})`,
-        ),
+    return apart(
+        formulas.map((formula, at) => {
+            const earlier = formulas.slice(0, at);
+            const calls = earlier.reduceRight(
+                (rest, before) => `IF(ISERROR(${before.slice(1)}),${rest},${rest})`,
+                formula.slice(1),
+            );
+            return `=${calls}`;
+        }),
     );
 }
 
@@ -216,7 +221,7 @@ describe.each(ROWS.map((entry) => [entry.name, entry] as const))('%s', (_name, e
         for (const value of evaluateAll(formulas)) expect(value).toBe(DIV0);
     });
 
-    // Of a row that draws, the calls are made one after the other, in the order the elements are written.
+    // Of a row that draws, the calls are made one after the other in the cell, in the order the elements are written.
     test('an array where one value is read gives the answers of one call per element', () => {
         for (const at of [...scalars, ...corners]) {
             const [a, b] = [pool(params[at])[0], pool(params[at])[1]];

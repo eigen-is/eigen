@@ -84,21 +84,22 @@ export class Recalc {
     private stored = false;
     // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
+    // How many numbers each cell in progress has drawn since its formula last started.
+    private readonly drew: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
-    // The clock of the last batch of edits: its author's time as a serial, and what its draws are made of.
-    private now: number;
+    // What the draws of the last batch of edits are made of, beside the cell that draws.
     private seed: number;
     // Whether the clock formulas were flagged since the clock was last set.
     private stamped = true;
 
     public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
-        this.now = now;
-        this.seed = seed;
         this.workbook = workbook;
         this.functions = functions;
         this.facts = workbook.shapes.facts;
         this.evaluator = new Evaluator(workbook, functions, this);
+        this.evaluator.now = now;
+        this.seed = seed;
         // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
             const { columns } = workbook.sheets[s];
@@ -113,7 +114,7 @@ export class Recalc {
 
     // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
     public setClock(now: number, seed: number): void {
-        this.now = now;
+        this.evaluator.now = now;
         this.seed = seed;
         this.stamped = false;
     }
@@ -168,7 +169,6 @@ export class Recalc {
     public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
-        this.evaluator.clock(this.now, this.seed);
         if (!this.stamped) {
             // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
             this.reach();
@@ -294,6 +294,22 @@ export class Recalc {
         return true;
     }
 
+    // The next number in [0, 1) the running formula draws. Its n-th draw is made of the seed, its sheet, its row,
+    // its column and n alone, with no state that goes from cell to cell: so it is the same in whatever order the
+    // cells compute, however often a throw for depth starts the formula again, and on every machine.
+    public draw(): number {
+        const at = this.current;
+        const count = this.drew[at] + 1;
+        this.drew[at] = count;
+        let mixed = Math.imul(this.seed ^ this.sheets[at].salt, 0x9e3779b1);
+        mixed = Math.imul(mixed ^ (mixed >>> 15) ^ this.rows[at], 0x85ebca6b);
+        mixed = Math.imul(mixed ^ (mixed >>> 13) ^ this.places[at], 0xc2b2ae35);
+        mixed = ((mixed ^ (mixed >>> 16)) + Math.imul(count, 0x6d2b79f5)) | 0;
+        mixed = Math.imul(mixed ^ (mixed >>> 15), 1 | mixed);
+        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    }
+
     // A cell is about to be written: it is a seed of the next pass or edit.
     private touch(sheet: Sheet, row: number, c: number): void {
         const column = sheet.columns[c];
@@ -390,8 +406,9 @@ export class Recalc {
         const row = this.rows[at];
         const shape = column.shape[row];
         const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
-        // A formula that runs again after a throw for depth makes its arrays again.
+        // A formula that runs again after a throw for depth makes its arrays again, and its draws.
         this.made[at] = 0;
+        this.drew[at] = 0;
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
             ? (this.workbook.value(column, row) ?? REF)

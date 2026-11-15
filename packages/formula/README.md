@@ -90,7 +90,7 @@ A structural edit answers the formulas it rewrote. A block to move must lie on t
 - A structural edit is one transform of stored text, worked out once per stretch of hosts with one outcome, on top of `mapIndex` and `mapSpan`, the one rule for where an index goes (`edit/`).
 - A function is one row: a name, a list of parameter words and a body. The call wrapper reads, coerces and checks every argument, so the body only computes (`functions/registry.ts`, `eval/call.ts`).
 - Numbers compare and round on the 15 digits Excel holds, and text orders by the engine's own rule, so neither depends on the machine (`values/precision.ts`, `values/text-order.ts`). The trigonometric, logarithmic and hyperbolic functions use the runtime's `Math` and can differ in the last digit between runtimes.
-- No clock, no locale, no module-level state: the time and the seed of the draws come in with every batch of edits (`setClock`).
+- No clock, no locale, no module-level state: the time and the seed of the draws come in with every batch of edits (`setClock`), and a draw is a function of that seed and its cell, so every reader of the same edits computes the same values.
 
 ## Tests and type check
 

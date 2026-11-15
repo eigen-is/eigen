@@ -14,12 +14,17 @@ export class Sheet {
     public name: string;
     // Where the sheet sits among the tabs, from 0.
     public place = 0;
+    // The id as a number, for the draws of the sheet's cells: the same wherever the tab sits and whatever its name.
+    public readonly salt: number;
     private readonly held: Column[];
 
     // One column per length, as a load measured them.
     public constructor(id: string, name: string, lengths: readonly number[]) {
         this.id = id;
         this.name = name;
+        let salt = 0x811c9dc5;
+        for (let i = 0; i < id.length; i += 1) salt = Math.imul(salt ^ id.charCodeAt(i), 0x01000193);
+        this.salt = salt;
         this.held = lengths.map((length) => new Column(length));
     }
 

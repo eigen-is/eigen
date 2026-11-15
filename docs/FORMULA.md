@@ -99,9 +99,11 @@ Every cell a shape reads is known to the index, or the shape carries `ReadsUnnam
 
 ## The clock moves with every batch of edits
 
-A row that takes `NOW` or `RANDOM` never reads the machine (`NOW`, `TODAY`, `RAND`, `RANDBETWEEN`, and `DATEVALUE` and `TIMEVALUE`, since a date without a year takes the current one). The host hands the engine a clock with each batch of edits it applies, `Engine.setClock(now, seed)`: the author's time as a serial and a whole number the author drew. The next pass then computes every clock formula again, whatever the batch wrote, as Excel does after any edit: a formula whose tree calls such a row anywhere (`Fact.Clock`), and what reads it. So every reader of one log of batches computes the same values itself, and nothing about a clock cell is sent.
+A row that takes `NOW` or `RANDOM` never reads the machine (`NOW`, `TODAY`, `RAND`, `RANDBETWEEN`, and `DATEVALUE` and `TIMEVALUE`, since a date without a year takes the current one). The host hands the engine a clock with each batch of edits it applies, `Engine.setClock(now, seed)`: the author's time as a serial and a whole number the author drew. The next pass then computes every clock formula again, whatever the batch wrote, as Excel does after any edit: a formula whose tree calls such a row anywhere (`Fact.Clock`), and what reads it. So every reader of one log of batches computes the same values itself, and nothing about a clock cell is sent: its value depends on what it reads, the last batch's clock and the cell's place alone.
 
 `setClock` only stores the clock and notes that a stamp is due. The pass then flags the blocks the reverse index lists (`ReverseIndex.clocks`), so a stamp costs the clock formulas and their readers, not the workbook. It runs for every `setClock`, with the same clock too, since a row insert moves a clock cell under one clock. A pass that stopped goes on with the same clock, and a batch that arrives meanwhile stamps every clock formula again, computed or not. A load takes the clock its values were computed with (`new Engine(sheets, now, seed)`) and stamps nothing: a clock formula keeps the value it came with, and one that came with none is computed with that clock. A formula this build cannot evaluate (`Kept`) is never stamped.
+
+A draw is made of the seed and the cell. The n-th draw of a formula is a function of the seed, its sheet's id (`Sheet.salt`), its row, its column and n (`Recalc.draw`), and no stream runs from cell to cell. So a draw is the same in whatever order the cells compute, whether or not a pass stopped at its cap, and however often a throw for depth starts a formula again. `RAND()-RAND()` is two draws, and an array of eight `RANDBETWEEN` draws eight. A tab that moves or is renamed keeps its draws, and a cell that an insert moves to another row draws others at the next batch. `src/test/recalc/clock.test.ts` holds the law: readers that pass after every batch, once at the end, capped, with a wrong clock in between, through a fold, through a load and from nothing end with equal values.
 
 A host calls `setClock` once per batch it applies and not for one it refuses, stores the last clock with a snapshot and loads with it, and walks for a snapshot only after a pass that did not stop. Two costs follow from the rule. Every batch computes every clock formula and its readers again, so a filled column of 10,000 `RAND()` costs one compute of that column per batch on every reader. And a reader whose cap is below its clock formulas and their readers does not settle while batches keep coming.
 
@@ -258,7 +260,7 @@ Each line is a decided choice; the function-by-function list is `packages/formul
 
 Tests live in `src/test/`, one folder per source folder (`edit`, `eval`, `format`, `functions`, `recalc`, `store`, `text`, `values`). Three kinds carry the suite:
 
-- **Laws with generators.** Incremental recalc equals a fresh load of the same inputs, after any writes and stopped passes (`recalc/law.test.ts`), and after any structural edits (`recalc/edit-law.test.ts`); the string table's sweep never frees a held text (`recalc/strings-law.test.ts`); the stored key reads back as the same tree (`text/xlsx-laws.test.ts`); the wrapper does what every row's words say (`functions/laws.test.ts`).
+- **Laws with generators.** Incremental recalc equals a fresh load of the same inputs, after any writes and stopped passes (`recalc/law.test.ts`), and after any structural edits (`recalc/edit-law.test.ts`); every reader of one log of batches ends with the same values (`recalc/clock.test.ts`); the string table's sweep never frees a held text (`recalc/strings-law.test.ts`); the stored key reads back as the same tree (`text/xlsx-laws.test.ts`); the wrapper does what every row's words say (`functions/laws.test.ts`).
 - **Excel's recorded rows.** Function tests carry Excel's answers as recorded in Excel for the web, and a row that differs by a decided pick sits in a pick table with both answers, such as `PICKED` in `functions/search-order.test.ts` and the 255-character table in `functions/text.test.ts`.
 - **Timing bounds.** A few tests hold a cost to a bound, such as `functions/products.test.ts`, so a quadratic shape fails the suite.
 
@@ -268,6 +270,7 @@ bun run test                       # the whole suite, each file isolated
 bun run typecheck                  # source and tests
 bun test ./src/test/functions/lookup.test.ts
 EDIT_LAW_SEED=7 EDIT_LAW_COUNT=5000 bun test ./src/test/recalc/edit-law.test.ts   # a long law run
+CLOCK_LAW_SEED=7 CLOCK_LAW_COUNT=20000 bun test ./src/test/recalc/clock.test.ts -t 'one log'
 ```
 
 ## See also
