@@ -409,6 +409,11 @@ describe('4. values and formulas', () => {
         expect(acceptsText('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":1e400}]]}')).toBe(false);
     });
 
+    test('a value is never the negative zero, which a snapshot would read back as zero', () => {
+        expect(acceptsText('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":0}]]}')).toBe(true);
+        expect(acceptsText('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":-0}]]}')).toBe(false);
+    });
+
     test('an error is a known error literal beside e: 1', () => {
         expect(accepts(cell({ v: '#DIV/0!', e: 1 }))).toBe(true);
         expect(accepts(cell({ v: '#BUSY!', e: 1 }))).toBe(true);
