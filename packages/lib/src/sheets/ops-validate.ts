@@ -37,12 +37,14 @@ import type {
     Op,
     RecordOp,
     Records,
+    Rect,
     Run,
     RunStyle,
     SheetContent,
     SheetFields,
     SheetOp,
 } from './ops';
+import { disjoint } from './rect';
 import { isSheetName } from './sheet-name';
 import type {
     BorderSide,
@@ -209,79 +211,12 @@ function isCellList(value: unknown, isCellAt: Check): boolean {
 
 function isRuns(value: unknown): boolean {
     if (!Array.isArray(value)) return false;
-    const rects: (readonly number[])[] = [];
+    const rects: Rect[] = [];
     for (const run of value) {
         if (!Array.isArray(run) || run.length !== 2 || !isRect(run[0]) || !isContentOrNull(run[1])) return false;
         rects.push(run[0]);
     }
     return disjoint(rects);
-}
-
-// Two rectangles meet where a column holds both over a shared row. A sweep across the columns counts how many
-// rectangles cover each row, in a tree over the rows where rectangles start and end, so the check is n log n.
-function disjoint(rects: readonly (readonly number[])[]): boolean {
-    if (rects.length < 2) return true;
-    const edges = [...new Set(rects.flatMap(([top, , bottom]) => [top, bottom + 1]))].sort((a, b) => a - b);
-    const slot = (row: number) => {
-        let low = 0;
-        let high = edges.length - 1;
-        while (low < high) {
-            const middle = (low + high) >> 1;
-            if (edges[middle] < row) low = middle + 1;
-            else high = middle;
-        }
-        return low;
-    };
-    // An event is a rectangle entering at its left column or leaving after its right one; leaving sorts first.
-    const at = (event: number) =>
-        event < rects.length ? rects[event][1] * 2 + 1 : (rects[event - rects.length][3] + 1) * 2;
-    const events = Array.from({ length: rects.length * 2 }, (_, event) => event).sort((a, b) => at(a) - at(b));
-    const covers = new Coverage(edges.length - 1);
-    for (const event of events) {
-        const entering = event < rects.length;
-        const [top, , bottom] = rects[entering ? event : event - rects.length];
-        const from = slot(top);
-        const to = slot(bottom + 1);
-        if (entering && covers.most(from, to) > 0) return false;
-        covers.add(from, to, entering ? 1 : -1);
-    }
-    return true;
-}
-
-// How many rectangles cover each slot, in a segment tree: a node holds the count added over its whole span and the most
-// any slot under it is covered.
-class Coverage {
-    private readonly added: Int32Array;
-    private readonly peak: Int32Array;
-
-    public constructor(private readonly size: number) {
-        this.added = new Int32Array(4 * size);
-        this.peak = new Int32Array(4 * size);
-    }
-
-    public add(from: number, to: number, delta: number, node = 1, low = 0, high = this.size): void {
-        if (to <= low || high <= from) return;
-        if (from <= low && high <= to) {
-            this.added[node] += delta;
-            this.peak[node] += delta;
-            return;
-        }
-        const middle = (low + high) >> 1;
-        this.add(from, to, delta, 2 * node, low, middle);
-        this.add(from, to, delta, 2 * node + 1, middle, high);
-        this.peak[node] = this.added[node] + Math.max(this.peak[2 * node], this.peak[2 * node + 1]);
-    }
-
-    public most(from: number, to: number, node = 1, low = 0, high = this.size): number {
-        if (to <= low || high <= from) return 0;
-        if (from <= low && high <= to) return this.peak[node];
-        const middle = (low + high) >> 1;
-        const below = Math.max(
-            this.most(from, to, 2 * node, low, middle),
-            this.most(from, to, 2 * node + 1, middle, high),
-        );
-        return this.added[node] + below;
-    }
 }
 
 // Bands are flat: first column, n, then n pairs of start row and look index, columns and rows ascending.
@@ -324,7 +259,7 @@ function lineSpan(run: unknown): unknown {
 // Merges share no cell: the applier refuses a merge over another, so no edit makes a sheet where two do.
 function isSheetRecords(value: unknown): boolean {
     if (!isRecord(value)) return false;
-    const merges: (readonly number[])[] = [];
+    const merges: Rect[] = [];
     for (const type in value) {
         const records = value[type];
         if (type === 'sheet' || !Object.hasOwn(RECORD_KINDS, type) || !isRecord(records)) return false;
@@ -404,7 +339,7 @@ function isColumn(value: unknown): value is number {
     return isCount(value, GRID_COLUMNS - 1);
 }
 
-function isRect(value: unknown): value is readonly number[] {
+function isRect(value: unknown): value is Rect {
     if (!Array.isArray(value) || value.length !== 4) return false;
     const [top, left, bottom, right] = value;
     return isRow(top) && isColumn(left) && isRow(bottom) && isColumn(right) && top <= bottom && left <= right;
