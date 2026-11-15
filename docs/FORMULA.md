@@ -198,6 +198,16 @@ A load, `addSheet` and `renameSheet` refuse a name another sheet has, by a throw
 
 `Engine` and `addSheet` read a sheet through its `SheetSource`, whose `cells` callback is called twice, once to size the columns and once to fill them, so a host walks its own cells and builds no list (`Workbook.read` in `src/store/workbook.ts`). Both walks go through `admit`, and a cell the second walk reports outside the columns the first one sized is refused, so a source that reports other cells the second time cannot write where no cell is. While the source runs the sheet is a draft of its own: its texts, its formulas and its errors only a file knows are numbered in lists beside it, and the workbook's tables take them only once the source has returned (`Workbook.adopt`). A load that is refused leaves every table as it was. So a source that calls the engine, which it has no reason to do, meets the workbook as it was before the load: a recalc from inside it sweeps no text or shape of the half-read sheet. What `addSheet` refuses, such as an id in use, it checks after the source has run. Reading to the end was chosen over refusing a call from inside a load, which would need a flag that every method of `Engine` tests.
 
+## The walk of a sheet is a source a load takes
+
+`Engine.cells(sheet, sink, top, left, bottom, right)` reports the cells of a block that hold a value or a formula, a column at a time and down its rows, through the `CellSink` a load takes. So `cells: (cell) => engine.cells(id, cell)` is a `SheetSource`, and an engine built from it holds the same cells. The walk allocates nothing per cell: a text comes from the string table, an error is the object the engine holds and a formula is its shape's text. A formula whose result is blank is reported with its text and no value. A formula still to be computed is reported with the value it last held, so a host that keeps values walks after a recalc. Over 1,000,000 cells the walk takes about 10 ns a cell on Bun and Node, a seventh of a full recalc of the same cheap formulas.
+
+The sink must not write to the engine. The walk reads the columns as it goes and copies nothing, so after a write what it reports next is not defined. It is a sentence and no refusal: the walk only reads, so a sink that writes cannot harm the store, and a refusal would need a flag that every write tests.
+
+`nextCell(sheet, column, row)` is the same walk as a cursor, the first content row at or after `row` or -1, for a host that feeds an iterator, which a callback cannot. With `valueOf` and `formulaOf` per cell it costs two to three times the sink, so whatever reads a whole sheet uses `cells`.
+
+The extents are `columnLength` (one past a column's last content cell, 0 for a column never written), `lastRow` and `lastColumn` (-1 on an empty sheet) and `slots()`, the lengths of every column of the workbook together. A column ends at its last content cell (`Column.trim`), so all four are facts of the content: a clear or a delete shortens them, the spare room of a column that grew never counts, and `slots()` is the number a decoder sums from a cell list, per column its last row plus one.
+
 ## Known differences from Excel
 
 Each line is a decided choice; the function-by-function list is `packages/formula/FUNCTIONS.md`.

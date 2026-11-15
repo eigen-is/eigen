@@ -75,6 +75,8 @@ if (typeof total === 'number') console.log(numberDisplay(total, '#,##0.00'));
 
 The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The first argument of `recalc` caps how many formulas one pass computes; a later pass goes on where a capped one stopped. The clock and the random draw come in as its other two arguments, so a recalc never reads the machine.
 
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. The sink must not write to the engine. `nextCell` is the same walk as a cursor, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
+
 ## The design in ten lines
 
 - A formula is stored as its shape: the canonical text with relative references as offsets and sheets by id. That text is the one key, so equal formulas are one shape, parsed once into an immutable tree (`text/shapes.ts`).

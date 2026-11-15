@@ -1,6 +1,6 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, a recalc of what they reach, and the value and the formula of a cell. A sheet is named by its
-// id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. What makes
+// structural edits, a recalc of what they reach, and the reads: the value and the formula of a cell, a walk of the
+// cells of a sheet and how far they reach. A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. What makes
 // it refuse a write or an edit, such as a sheet that is not there or a cell off the grid, is checked here, once,
 // before anything is noted or changed: so a call that throws left the workbook as it was.
 
@@ -9,7 +9,7 @@ import type { LineEdit } from '../edit/transform';
 import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
-import type { Literal, SheetSource } from '../store/workbook';
+import type { CellSink, Literal, SheetSource } from '../store/workbook';
 import { admit, ChangeKind, Workbook, within } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
@@ -17,7 +17,10 @@ import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<Workbook, 'known' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName'>;
+    private readonly workbook: Pick<
+        Workbook,
+        'known' | 'sheets' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName'
+    >;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -115,6 +118,70 @@ export class Engine {
     public isPending(sheet: string, row: number, column: number): boolean {
         const cells = this.workbook.known(sheet).columns[column];
         return cells !== undefined && row < cells.length && cells.kind[row] > SETTLED;
+    }
+
+    // Reports the cells of a block that hold a value or a formula, a column at a time and down its rows, as a load
+    // takes them. The sink must not write to the engine: the walk reads the columns as they were when it started.
+    public cells(
+        sheet: string,
+        cell: CellSink,
+        top = 0,
+        left = 0,
+        bottom = GRID_ROWS - 1,
+        right = GRID_COLUMNS - 1,
+    ): void {
+        const { workbook } = this;
+        const { columns } = workbook.known(sheet);
+        const last = Math.min(right, columns.length - 1);
+        for (let c = left; c <= last; c += 1) {
+            const column = columns[c];
+            const { kind, shape } = column;
+            const end = Math.min(bottom + 1, column.length);
+            for (let row = top; row < end; row += 1) {
+                const id = shape[row];
+                if (kind[row] === 0 && id === 0) continue;
+                cell(row, c, workbook.value(column, row), id > 0 ? workbook.shapes.shape(id).text : null);
+            }
+        }
+    }
+
+    // The first row at or after `row` where a column holds a value or a formula, or -1.
+    public nextCell(sheet: string, column: number, row: number): number {
+        const cells = this.workbook.known(sheet).columns[column];
+        if (cells === undefined) return -1;
+        const { kind, shape, length } = cells;
+        for (let at = row; at < length; at += 1) {
+            if (kind[at] !== 0 || shape[at] !== 0) return at;
+        }
+        return -1;
+    }
+
+    // The rows a column holds: one past its last cell that holds a value or a formula.
+    public columnLength(sheet: string, column: number): number {
+        return this.workbook.known(sheet).columns[column]?.length ?? 0;
+    }
+
+    // The last row and the last column that hold a value or a formula, or -1 on an empty sheet.
+    public lastRow(sheet: string): number {
+        let rows = 0;
+        for (const column of this.workbook.known(sheet).columns) rows = Math.max(rows, column.length);
+        return rows - 1;
+    }
+
+    public lastColumn(sheet: string): number {
+        const { columns } = this.workbook.known(sheet);
+        let last = columns.length - 1;
+        while (last >= 0 && columns[last].length === 0) last -= 1;
+        return last;
+    }
+
+    // The rows every column of the workbook holds, together: what the cells cost, whatever room a column has.
+    public slots(): number {
+        let slots = 0;
+        for (const sheet of this.workbook.sheets) {
+            for (const column of sheet.columns) slots += column.length;
+        }
+        return slots;
     }
 
     // The id of the sheet at a place among the tabs, which is how a recalc names the sheet of a changed cell.
