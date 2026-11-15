@@ -1,6 +1,7 @@
-// A check that `bun run check` runs: lib/ code outside lib/home/ and the allowlist below may not name a function
-// that hands out a Home, such as getHome() or openHome(). Lib code receives its Home as a parameter or goes through
-// the relay's pull*/sendToHome functions.
+// A check that `bun run check` runs, with the two rules that keep one owner's Home apart from another's in lib/. Code
+// outside lib/home/ and the allowlist below may not name a function that hands out a Home, such as getHome() or
+// openHome(): it receives its Home as a parameter or goes through the relay, such as sendToHome and getFromHomes. And
+// a home-calls.ts, a domain's table of handlers that the relay loads, may import types only.
 
 import { Glob } from 'bun';
 
@@ -15,29 +16,46 @@ const ALLOWED = new Set([
     'caldav-router.ts',
 ]);
 
-const glob = new Glob('**/*.ts');
-const violations: string[] = [];
+const namesHome: string[] = [];
+const valueImports: string[] = [];
 
-for await (const path of glob.scan('apps/api/src/lib')) {
-    // Bun.Glob yields platform-native separators on Windows — normalize so the basename
-    // extraction and the home/ prefix check work regardless of platform.
+for await (const path of new Glob('**/*.ts').scan('apps/api/src/lib')) {
+    // Bun.Glob yields the platform's separators, so a Windows path is normalized before it is compared.
     const normalized = path.replaceAll('\\', '/');
     const filename = normalized.slice(normalized.lastIndexOf('/') + 1);
-    if (normalized.startsWith('home/')) continue;
-    if (ALLOWED.has(filename)) continue;
+    const isTable = filename === 'home-calls.ts';
+    const mayNameHome = normalized.startsWith('home/') || ALLOWED.has(filename);
+    if (mayNameHome && !isTable) continue;
 
     const content = await Bun.file(`apps/api/src/lib/${path}`).text();
     // Each of these hands out another owner's Home.
-    if (/\b(getHome|openHome|loadedHome|getTeamHome|getUserHome)\b/.test(content)) {
-        violations.push(`apps/api/src/lib/${normalized}`);
+    if (!mayNameHome && /\b(getHome|openHome|loadedHome|getTeamHome|getUserHome)\b/.test(content)) {
+        namesHome.push(`apps/api/src/lib/${normalized}`);
+    }
+    // The relay spreads each table while it loads, so a table whose value import led back to the relay would run
+    // first and read it half-built.
+    if (isTable) {
+        for (const line of content.split('\n')) {
+            if (line.startsWith('import ') && !line.startsWith('import type ')) {
+                valueImports.push(`apps/api/src/lib/${normalized}: ${line.trim()}`);
+            }
+        }
     }
 }
 
-if (violations.length > 0) {
+if (namesHome.length > 0) {
     console.error(
         'ERROR: lib/ outside lib/home/ may not name getHome, openHome, loadedHome, getTeamHome or getUserHome (use home-relay or pass Home as a parameter)\n',
     );
-    for (const v of violations) console.error(`  ${v}`);
-    console.error('\nSee docs/SCALABILITY.md for the home relay pattern.');
-    process.exit(1);
+    for (const file of namesHome) console.error(`  ${file}`);
+    console.error('\nSee docs/SCALABILITY.md for the home relay pattern.\n');
 }
+
+if (valueImports.length > 0) {
+    console.error(
+        'ERROR: a home-calls.ts may have only `import type` lines (its handlers call methods on the Home they are given)\n',
+    );
+    for (const line of valueImports) console.error(`  ${line}`);
+}
+
+if (namesHome.length > 0 || valueImports.length > 0) process.exit(1);
