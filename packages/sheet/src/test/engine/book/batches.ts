@@ -188,10 +188,6 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
         if (random() < 0.8) return [top, left, bottom, right];
         return random() < 0.5 ? [top, left, GRID_ROWS - 1, right] : [top, left, bottom, GRID_COLUMNS - 1];
     };
-    const range = () => {
-        const [top, left, bottom, right] = reaching();
-        return { row: [top, bottom], column: [left, right] };
-    };
     const mode = below(random, 3);
     const { records } = held;
     switch (below(random, 10)) {
@@ -257,7 +253,7 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
         case 6: {
             const id = idOf(records.conditionalFormat.keys(), fresh('r'));
             if (mode === 0) return { kind: 'record', sheet, type: 'conditionalFormat', id };
-            const set = formulaRule([range(), range()], pick(random, ['=RC>1', '=R[1]C[1]="x"', '=[s0]!R1C1>0']));
+            const set = formulaRule([reaching(), reaching()], pick(random, ['=RC>1', '=R[1]C[1]="x"', '=[s0]!R1C1>0']));
             return { kind: 'record', sheet, type: 'conditionalFormat', id, set, whole: 1 };
         }
         case 7: {
@@ -265,10 +261,10 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
             if (mode === 0) return { kind: 'record', sheet, type: 'validation', id };
             if (mode === 1) {
-                const set = random() < 0.5 ? { order: pick(random, ORDERS) } : { ranges: [range()] };
+                const set = random() < 0.5 ? { order: pick(random, ORDERS) } : { ranges: [reaching()] };
                 return { kind: 'record', sheet, type: 'validation', id, set };
             }
-            const set = { ranges: [range()], order: pick(random, ORDERS), rule };
+            const set = { ranges: [reaching()], order: pick(random, ORDERS), rule };
             return { kind: 'record', sheet, type: 'validation', id, set, whole: 1 };
         }
         case 8: {

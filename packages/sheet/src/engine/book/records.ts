@@ -17,7 +17,6 @@ import {
     transformMove,
 } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '@workspace/lib/charts';
-import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
     ConditionalFormatRecord,
@@ -219,15 +218,15 @@ export class SheetRecords {
         const last = (rows ? GRID_ROWS : GRID_COLUMNS) - 1;
         const pushed = last + 1 - count;
         const spanPushed = (start: number, end: number) => start >= pushed || (end >= pushed && end !== last);
-        const rangePushed = (range: SingleRange) => spanPushed(...lineSpan(range, rows));
+        const rectPushed = (rect: Rect) => spanPushed(...lineSpan(rect, rows));
         for (const { rect } of this.stored.merge.values()) if (rect[rows ? 2 : 3] >= pushed) return true;
         for (const { row, column } of this.stored.comment.values()) if ((rows ? row : column) >= pushed) return true;
-        for (const { rect } of this.stored.filter.values()) if (rangePushed(rectRange(rect))) return true;
+        for (const { rect } of this.stored.filter.values()) if (rectPushed(rect)) return true;
         for (const { column, rows: spans } of this.stored.filterColumn.values()) {
             if (rows ? spans.some(([start, end]) => spanPushed(start, end)) : column >= pushed) return true;
         }
         for (const { ranges } of [...this.stored.conditionalFormat.values(), ...this.stored.validation.values()]) {
-            if (ranges.some(rangePushed)) return true;
+            if (ranges.some(rectPushed)) return true;
         }
         return false;
     }
@@ -260,14 +259,16 @@ export class SheetRecords {
             if (after === GONE || mapIndex(inverse, after) !== index) kept = false;
             return after;
         };
+        const rectAfter = (rect: Rect, open: boolean): Rect | null => {
+            const [top, left, bottom, right] = rect;
+            const after = span(...lineSpan(rect, rows), open);
+            return after && (rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]);
+        };
         // The list itself when no range moves.
-        const ranges = (list: SingleRange[]): SingleRange[] => {
+        const ranges = (list: Rect[]): Rect[] => {
             const next = list.flatMap((range) => {
-                const [start, end] = lineSpan(range, rows);
-                const after = span(start, end, true);
-                if (!after) return [];
-                if (after[0] === start && after[1] === end) return [range];
-                return [rows ? { ...range, row: [...after] } : { ...range, column: [...after] }];
+                const after = rectAfter(range, true);
+                return after ? [sameRect(after, range) ? range : after] : [];
             });
             return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
         };
@@ -299,9 +300,7 @@ export class SheetRecords {
             }
             for (const [id, merge] of this.stored.merge) {
                 const [top, left, bottom, right] = merge.rect;
-                const after = rows ? span(top, bottom, false) : span(left, right, false);
-                const rect: Rect | null =
-                    after && (rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]);
+                const rect = rectAfter(merge.rect, false);
                 // A merge the edit cuts to one cell is a merge no more, as in Excel.
                 const single = rect && rect[0] === rect[2] && rect[1] === rect[3] && (top !== bottom || left !== right);
                 settle('merge', id, merge, !rect || single ? undefined : sameRect(rect, merge.rect) ? merge : { rect });
@@ -310,9 +309,8 @@ export class SheetRecords {
             for (const [id, filter] of this.stored.filter) {
                 // The header row holds the filter's buttons, so a delete of it removes the filter.
                 const header = rows && !edit.insert && mapIndex(axis, filter.rect[0]) === GONE;
-                const [range] = header ? [] : ranges([rectRange(filter.rect)]);
-                if (!range) removed.add(id);
-                const rect = range && rangeRect(range);
+                const rect = header ? null : rectAfter(filter.rect, true);
+                if (!rect) removed.add(id);
                 settle('filter', id, filter, !rect ? undefined : sameRect(rect, filter.rect) ? filter : { rect });
             }
             for (const [id, column] of this.stored.filterColumn) {
@@ -433,13 +431,13 @@ export class SheetRecords {
             }
         }
         const comments = near
-            ? [...source.stored.comment].filter(([, { row, column }]) => covers(rectRange(block), row, column))
+            ? [...source.stored.comment].filter(([, { row, column }]) => covers(block, row, column))
             : [];
         if (toHere) {
             const moving = new Set(comments.map(([id]) => id));
             // The move back takes along what lies where the block landed, so undo puts it back after.
             for (const [id, comment] of this.stored.comment) {
-                if (moving.has(id) || !covers(rectRange(target), comment.row, comment.column)) continue;
+                if (moving.has(id) || !covers(target, comment.row, comment.column)) continue;
                 if (!oneSheet) restore.push(MADE_OP.comment({ sheet: op.sheet, id }));
                 restore.push(this.restoreOp('comment', id, comment, !oneSheet));
             }
@@ -457,12 +455,12 @@ export class SheetRecords {
 
         const carries = oneSheet && fromHere;
         // The list itself when no range moves.
-        const moved = (list: SingleRange[]): SingleRange[] =>
-            carries && list.some((range) => within(rangeRect(range), block))
-                ? list.map((range) => (within(rangeRect(range), block) ? rectRange(shifted(rangeRect(range))) : range))
+        const moved = (list: Rect[]): Rect[] =>
+            carries && list.some((range) => within(range, block))
+                ? list.map((range) => (within(range, block) ? shifted(range) : range))
                 : list;
-        const returns = (list: readonly SingleRange[]) =>
-            carries && list.some((range) => !within(rangeRect(range), block) && within(rangeRect(range), target));
+        const returns = (list: readonly Rect[]) =>
+            carries && list.some((range) => !within(range, block) && within(range, target));
         for (const [id, validation] of this.stored.validation) {
             const ranges = moved(validation.ranges);
             if (ranges !== validation.ranges)
@@ -475,12 +473,7 @@ export class SheetRecords {
             const host = moveHost(rule.ranges, block, fromHere, ranges[0] !== rule.ranges[0]);
             const formula = host ? withFormula(ruled, (tree) => transformMove(tree, move, this.sheet, ...host)) : ruled;
             if (formula === 'key-too-long') return formula;
-            const backHost = moveHost(
-                formula.ranges,
-                target,
-                toHere,
-                carries && within(rangeRect(formula.ranges[0]), target),
-            );
+            const backHost = moveHost(formula.ranges, target, toHere, carries && within(formula.ranges[0], target));
             const back = backHost
                 ? withFormula(formula, (tree) => transformMove(tree, reverse, this.sheet, ...backHost))
                 : formula;
@@ -602,32 +595,23 @@ function formulaOf(rule: ConditionalFormatRecord): string | undefined {
 // Where a rule is read during a move: the top-left of its first range, or, when the block leaves its sheet with cells
 // of the rule but not that range, the first cell it leaves behind. None when the block holds every range.
 function moveHost(
-    ranges: readonly SingleRange[],
+    ranges: readonly Rect[],
     block: Rect,
     fromSheet: boolean,
     firstMoves: boolean,
 ): [number, number] | undefined {
-    const [{ row, column }] = ranges;
-    if (!fromSheet || firstMoves) return [row[0], column[0]];
-    for (const { row, column } of ranges) {
-        if (!covers(rectRange(block), row[0], column[0])) return [row[0], column[0]];
-        if (column[1] > block[3]) return [row[0], block[3] + 1];
-        if (row[1] > block[2]) return [block[2] + 1, column[0]];
+    const [[firstTop, firstLeft]] = ranges;
+    if (!fromSheet || firstMoves) return [firstTop, firstLeft];
+    for (const [top, left, bottom, right] of ranges) {
+        if (!covers(block, top, left)) return [top, left];
+        if (right > block[3]) return [top, block[3] + 1];
+        if (bottom > block[2]) return [block[2] + 1, left];
     }
     return undefined;
 }
 
-function lineSpan(range: SingleRange, rows: boolean): Span {
-    const [start, end] = rows ? range.row : range.column;
-    return [start, end];
-}
-
-function rectRange([top, left, bottom, right]: Rect): SingleRange {
-    return { row: [top, bottom], column: [left, right] };
-}
-
-function rangeRect({ row, column }: SingleRange): Rect {
-    return [row[0], column[0], row[1], column[1]];
+function lineSpan([top, left, bottom, right]: Rect, rows: boolean): Span {
+    return rows ? [top, bottom] : [left, right];
 }
 
 function withFields<R extends object>(record: R, set: FieldsOf<R>): R {

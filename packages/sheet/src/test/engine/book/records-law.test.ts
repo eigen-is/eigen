@@ -5,7 +5,6 @@
 
 import { expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { SingleRange } from '@workspace/lib/sheets';
 import type { LinesOp, MoveOp, RecordOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { SheetRecords } from '../../../engine/book/records';
@@ -54,13 +53,11 @@ function spanOn(random: Random, lines: number): Span {
     return [start, end];
 }
 
-function rangeOn(random: Random): SingleRange {
-    const [r0, r1] = spanOn(random, GRID_ROWS);
-    const [c0, c1] = spanOn(random, GRID_COLUMNS);
-    return { row: [r0, r1], column: [c0, c1] };
+function rectOn(random: Random): Rect {
+    const [top, bottom] = spanOn(random, GRID_ROWS);
+    const [left, right] = spanOn(random, GRID_COLUMNS);
+    return [top, left, bottom, right];
 }
-
-const rectOf = ({ row, column }: SingleRange): Rect => [row[0], column[0], row[1], column[1]];
 const meets = (a: Rect, b: Rect) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 
 function recordsOn(random: Random, id: string): { records: SheetContent['records']; fields: Partial<SheetFields> } {
@@ -91,7 +88,7 @@ function recordsOn(random: Random, id: string): { records: SheetContent['records
         };
     }
     if (random() < 0.6) {
-        const rect = rectOf(rangeOn(random));
+        const rect = rectOn(random);
         records.filter = { f: { rect } };
         records.filterColumn = {};
         for (let column = rect[1]; column <= Math.min(rect[3], rect[1] + 2); column += 1) {
@@ -103,22 +100,22 @@ function recordsOn(random: Random, id: string): { records: SheetContent['records
         }
     }
     for (let i = below(random, 4); i > 0; i -= 1) {
-        const ranges = Array.from({ length: 1 + below(random, 2) }, () => rangeOn(random));
+        const ranges = Array.from({ length: 1 + below(random, 2) }, () => rectOn(random));
         const formula = FORMULAS[below(random, FORMULAS.length)];
         records.conditionalFormat = {
             ...records.conditionalFormat,
-            [`r${i}`]: formulaRule(ranges, keyOf(formula, ranges[0].row[0], ranges[0].column[0])),
+            [`r${i}`]: formulaRule(ranges, keyOf(formula, ranges[0][0], ranges[0][1])),
         };
     }
     for (let i = below(random, 3); i > 0; i -= 1) {
-        const ranges = Array.from({ length: 1 + below(random, 2) }, () => rangeOn(random));
+        const ranges = Array.from({ length: 1 + below(random, 2) }, () => rectOn(random));
         const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
         records.validation = { ...records.validation, [`v${i}`]: { ranges, order: `a${i}`, rule } };
     }
     if (random() < 0.5) {
         const on = () => (random() < 0.5 ? 'S' : 'T');
-        const { row, column } = rangeOn(random);
-        const values = ref(on(), [row[0], row[1]], [column[0], column[1]]);
+        const [top, left, bottom, right] = rectOn(random);
+        const values = ref(on(), [top, bottom], [left, right]);
         records.chart = {
             c: chartOf({ categories: random() < 0.5 ? values : null, series: [{ id: 's', name: 'n', values }] }),
         };
