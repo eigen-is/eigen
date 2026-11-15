@@ -8,7 +8,8 @@ import type { BorderSide, CellLink, ConditionalFormatConditionName, DataValidati
 
 export type Scalar = number | string | boolean;
 // What an op says a cell holds. `v` with `e: 1` is an error literal, and `f` is the stored key with its `=`. `v`
-// stands beside `f` only when the author gives the value, since no reader can derive it; `s` stands with neither.
+// stands beside `f` only for a formula this build cannot evaluate, such as a reference into another workbook, whose
+// value an import or a paste gives; beside any other it is ignored. `s` stands with neither.
 export type CellContent = { v?: Scalar; e?: 1; f?: string; s?: Run[]; link?: CellLink; qp?: 1 };
 export type RunStyle = { bl?: 1; it?: 1; ff?: number | string; fs?: number; fc?: string; cl?: 1; un?: 1 };
 export type Run = RunStyle & { v: string };

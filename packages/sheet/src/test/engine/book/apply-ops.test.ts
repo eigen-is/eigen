@@ -2,20 +2,21 @@ import { describe, expect, test } from 'bun:test';
 import { GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
-import type { Batch, RecordOp, SheetContent } from '@workspace/lib/sheets/ops';
+import type { Batch, InputOp, RecordOp, SheetContent } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, LATER, randomBookContent, randomRecordOp } from './batches';
+import { batchOf, randomBookContent, randomInputOp, randomRecordOp } from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 
-type RecordBatch = Omit<Batch, 'ops'> & { ops: RecordOp[] };
+type Applied = InputOp | RecordOp;
+type AppliedBatch = Omit<Batch, 'ops'> & { ops: Applied[] };
 
 const LAST_ROW = GRID_ROWS - 1;
 // A sheet id as long as an id may be, so a formula bound to it grows.
@@ -32,7 +33,7 @@ function chartChange(set: Partial<typeof PARTS>): RecordOp {
 }
 
 // A batch as a host lands it: the ops, then the clock of the batch, which a refused batch never reaches.
-function land(book: Workbook, batch: RecordBatch): RecordOp[] {
+function land(book: Workbook, batch: AppliedBatch): Applied[] {
     const inverse = applyOps(book, batch.ops);
     book.setClock(batch.now, batch.seed);
     return inverse;
@@ -48,7 +49,7 @@ function refusalOf(run: () => unknown): RefusalKey | undefined {
     return undefined;
 }
 
-function batch(...ops: RecordOp[]): RecordBatch {
+function batch(...ops: Applied[]): AppliedBatch {
     return { g: 1, now: 46_000.25, seed: 99, ops };
 }
 
@@ -88,7 +89,7 @@ function twoSheets(): Book {
 }
 
 // Ops that land on `twoSheets`, each of which changes its bytes, and the later ones what the earlier ones wrote.
-const LANDING: readonly RecordOp[] = [
+const LANDING: readonly Applied[] = [
     { kind: 'record', sheet: B, type: 'sheet', id: B, set: { name: 'Renamed', order: 'Zz' } },
     { kind: 'record', sheet: 'a', type: 'comment', id: 'c', set: { row: 5 } },
     { kind: 'record', sheet: 'a', type: 'comment', id: 'c', set: { row: 9 } },
@@ -101,6 +102,16 @@ const LANDING: readonly RecordOp[] = [
         set: { filter: 'f2', column: 0, rows: [] },
         whole: 1,
     },
+    {
+        kind: 'input',
+        sheet: 'a',
+        runs: [[[0, 1, 9, 2], { f: "='Renamed'!R1C1+1" }]],
+        cells: [
+            [0, 0, { v: 'x', link: { type: 'webpage', address: 'https://eigen.is' } }],
+            [3, 0, null],
+        ],
+    },
+    { kind: 'input', sheet: 'a', runs: [[[2, 2, 3, 3], null]], cells: [[1, 0, { s: [{ v: 'rich', bl: 1 }] }]] },
 ];
 const TRAILING: RecordOp = { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { color: '#ff0000' } };
 const REFUSED: readonly [RefusalKey, RecordOp][] = [
@@ -150,16 +161,32 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
         }
     });
 
+    // Four cells on the grid's last row hold more slots than the limit, as each column then holds every row.
+    const PAST_LIMIT: InputOp = {
+        kind: 'input',
+        sheet: 'a',
+        cells: [1, 2, 3, 4].map((column) => [LAST_ROW, column, { v: 1 }] as const),
+    };
+    const BACK: InputOp = { kind: 'input', sheet: 'a', runs: [[[LAST_ROW, 1, LAST_ROW, 4], null]] };
+
     for (let k = 0; k <= LANDING.length; k += 1) {
         test(`too-many-cells at the weigh, after ${k} ops landed`, () => {
-            const book = new Workbook(twoSheets());
-            // Past the limit without an op, as no kind that writes cells is built yet.
-            for (let column = 1; column <= 4; column += 1) book.engine.setValue('a', LAST_ROW, column, 1);
+            const content = twoSheets();
+            const book = new Workbook(content);
             const before = bytes(book);
-            expect(refusalOf(() => land(book, batch(...LANDING.slice(0, k))))).toBe('too-many-cells');
+            expect(refusalOf(() => land(book, batch(...LANDING.slice(0, k), PAST_LIMIT)))).toBe('too-many-cells');
             expect(bytes(book)).toBe(before);
+            expectReads(book, modelOf(content));
         });
     }
+
+    test('the limits are weighed after the last op only: a batch past them midway and back within them lands', () => {
+        const book = new Workbook(twoSheets());
+        const before = bytes(book);
+        expect(refusalOf(() => land(book, batch(LANDING[1], PAST_LIMIT, BACK)))).toBeUndefined();
+        expect(bytes(book)).not.toBe(before);
+        expect(book.engine.columnLength('a', 1)).toBe(0);
+    });
 
     test('too-many-formats at the weigh', () => {
         // Four bands of runs, no two neighbours alike, weigh the limit to the run with the other sheet's one band.
@@ -270,14 +297,8 @@ describe('engine/book/apply-ops — the look sweep', () => {
     });
 });
 
-// A rename to the name a formula was typed with rewrites that formula, which the inverse must put back with an
-// `input` op: until that kind is built, such a batch is held to the model only.
-function binds(ops: readonly RecordOp[]): boolean {
-    return ops.some((op) => op.type === 'sheet' && op.set.name === LATER);
-}
-
-describe('engine/book/apply-ops — the laws over random books and random batches of records', () => {
-    test.todo('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
+describe('engine/book/apply-ops — the laws over random books and random batches of inputs and records', () => {
+    test('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
         const content: Book = {
             g: 1,
             now: 1,
@@ -312,13 +333,18 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         const refusedAt = new Map<string, number>();
         let landed = 0;
         let undone = 0;
-        for (let seed = 1; seed <= 400; seed += 1) {
+        for (let seed = 1; seed <= 600; seed += 1) {
             const random = randomOf(seed);
             const content = randomBookContent(random);
             const book = new Workbook(content);
             let model: Model = modelOf(content);
             for (let round = 0; round < 8; round += 1) {
-                const ops = batchOf(random, model, randomRecordOp);
+                const ops = batchOf(
+                    random,
+                    model,
+                    (r, m) => (r() < 0.5 ? randomInputOp(r, m) : randomRecordOp(r, m)),
+                    6,
+                );
                 const before = bytes(book);
                 const clock = model;
                 const expected = modelAfter(model, ops);
@@ -329,8 +355,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                     );
                     refusedAt.set(`${expected} ${at}`, (refusedAt.get(`${expected} ${at}`) ?? 0) + 1);
                     expect(refusalOf(() => land(book, ops))).toBe(expected);
-                    if (!binds(ops.ops.slice(0, at))) expect(bytes(book)).toBe(before);
-                    else model = modelOf(book.content());
+                    expect(bytes(book)).toBe(before);
                     expectReads(book, model);
                     continue;
                 }
@@ -338,7 +363,6 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 landed += 1;
                 expectReads(book, expected);
                 model = expected;
-                if (binds(ops.ops)) continue;
                 const after = bytes(book);
                 const text = JSON.stringify({ ...ops, ops: inverse });
                 expect(readBatch(text)).toEqual(JSON.parse(text));
@@ -350,10 +374,10 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 undone += 1;
             }
         }
-        expect(landed).toBeGreaterThan(1500);
-        expect(undone).toBeGreaterThan(1400);
+        expect(landed).toBeGreaterThan(4000);
+        expect(undone).toBe(landed);
         for (const key of ['merge-overlap', 'last-sheet']) {
             for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`${key} ${k}`) ?? 0).toBeGreaterThan(0);
         }
-    });
+    }, 120_000);
 });

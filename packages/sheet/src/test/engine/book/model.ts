@@ -1,16 +1,21 @@
 // The model the workbook's appliers are held to: a workbook as plain data, a cell at a time, with no engine, no bands
 // and no runs. Content is a map of cells, looks are a plain grid, line keys a map of lines and records a map per type.
 // `modelAfter` applies a batch of ops of every kind the slow, obvious way, and `expectReads` holds a real workbook to
-// it. Formula texts are the engine's own spelling, as the batches of these tests write them, and a formula's value
-// is not modelled: the model says what a cell holds, the engine what it computes.
+// it. Formula texts are the engine's own spelling, as the batches of these tests write them, bound where they enter as
+// the engine binds them. A computed value is not modelled, only a given one: the model says what a cell holds, the
+// engine what it computes.
 
 import { expect } from 'bun:test';
 import type { FormulaNode, LineEdit, Move } from '@workspace/formula/text';
 import {
     bindSheet,
+    ERROR_LITERALS,
+    findSheetByName,
     GRID_COLUMNS,
     GRID_ROWS,
+    NodeKind,
     parseStored,
+    SheetKind,
     sheetNameKey,
     storedKey,
     transformLines,
@@ -52,11 +57,13 @@ import { LooksGrid } from './looks-grid';
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
 type RecordMaps = { readonly [T in Kind]: Map<string, Records[T]> };
+type Named = { readonly id: string; readonly name: string };
 
 export type ModelSheet = {
     readonly id: string;
     fields: SheetFields;
-    // By `row,column`. A cell's content is replaced, never changed in place. A formula holds `f` and no value.
+    // By `row,column`. A cell's content is replaced, never changed in place. A formula holds `f`, and a value only
+    // when it is one this build cannot evaluate and its value was given.
     cells: Map<string, CellContent>;
     // Ids of `Model.looks`.
     looks: LooksGrid;
@@ -69,12 +76,14 @@ export type ModelSheet = {
 export type Model = { g: number; now: number; seed: number; looks: CellAttrs[]; sheets: Map<string, ModelSheet> };
 
 const RUN_KEYS = ['bl', 'it', 'ff', 'fs', 'fc', 'cl', 'un'] as const;
+const REF_VALUE = ERROR_LITERALS.indexOf('#REF!') + 1;
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
 
 export function modelOf(content: Book): Model {
     const model: Model = { g: content.g, now: content.now, seed: content.seed, looks: [{}], sheets: new Map() };
-    for (const sheet of content.sheets) model.sheets.set(sheet.id, sheetOf(model, sheet));
+    const sheets = content.sheets.map(({ id, fields }) => ({ id, name: fields.name }));
+    for (const sheet of content.sheets) model.sheets.set(sheet.id, sheetOf(model, sheet, sheets));
     return model;
 }
 
@@ -138,8 +147,10 @@ export function contentOfModel(model: Model): Book {
 }
 
 // Every place of the workbook reads as the model does: content, look, line keys, records, fields, tab order and the
-// clock. A formula's value is the engine's, so it is left out on the workbook's side.
+// clock. A formula's value is the engine's, so it is left out on the workbook's side, but for a given one, which
+// reads as given once every formula is computed.
 export function expectReads(book: Workbook, model: Model): void {
+    while (book.engine.recalc(Number.MAX_SAFE_INTEGER).stopped);
     const content = book.content();
     const read = {
         ...content,
@@ -154,7 +165,8 @@ export function expectReads(book: Workbook, model: Model): void {
     expect(expected.sheets.map((_, place) => book.engine.sheetAt(place))).toEqual(expected.sheets.map(({ id }) => id));
 }
 
-function sheetOf(model: Model, content: SheetContent): ModelSheet {
+// A sheet as it enters, its formulas bound to `sheets`.
+function sheetOf(model: Model, content: SheetContent, sheets: readonly Named[]): ModelSheet {
     const sheet: ModelSheet = {
         id: content.id,
         fields: content.fields,
@@ -164,7 +176,9 @@ function sheetOf(model: Model, content: SheetContent): ModelSheet {
         columns: new Map(),
         records: mapsOf(content.records),
     };
-    for (const [row, column, { spill: _, ...cell }] of content.cells) sheet.cells.set(key(row, column), held(cell));
+    for (const [row, column, { spill: _, ...cell }] of content.cells) {
+        sheet.cells.set(key(row, column), entering(cell, sheets));
+    }
     const named = [0, ...content.looks.map((look) => lookId(model, look))];
     const { bands } = content;
     for (let at = 0; at < bands.length; at += 2 + 2 * bands[at + 1]) {
@@ -214,11 +228,58 @@ function listed(maps: RecordMaps): SheetContent['records'] {
     };
 }
 
-// What a cell holds: a value beside a formula is the engine's to compute.
+// What a cell holds: a value beside a formula is the engine's to compute, but for a formula this build cannot
+// evaluate, which keeps the value it was given. Given none, or #REF!, it reads #REF! either way.
 function held(cell: CellContent): CellContent {
     if (cell.f === undefined) return cell;
-    const { v: _, e: __, ...rest } = cell;
-    return rest;
+    const { v, e, ...rest } = cell;
+    return v !== undefined && !(e && v === '#REF!') && isKept(cell.f) ? cell : rest;
+}
+
+function isKept(text: string): boolean {
+    const tree = parseStored(text);
+    const crosses = (node: FormulaNode): boolean =>
+        node.sheetKind === SheetKind.External || node.sheetKind === SheetKind.Span || node.children.some(crosses);
+    return !('reason' in tree) && crosses(tree);
+}
+
+// A cell as the engine holds it once it enters: a formula typed with the name of a held sheet is bound to it, or
+// holds #REF! in its place where the bound text is too long to store.
+function entering(cell: CellContent, sheets: readonly Named[]): CellContent {
+    if (cell.f === undefined) return cell;
+    const tree = parseStored(cell.f);
+    if ('reason' in tree) return held(cell);
+    const bound = sheets.reduce((at, { id, name }) => bindSheet(at, name, id), tree);
+    if (bound === tree) return held(cell);
+    const key = storedKey(bound);
+    const text = typeof key === 'string' ? key : storedKey(withoutNames(tree, sheets));
+    return held({ ...cell, f: typeof text === 'string' ? text : cell.f });
+}
+
+// #REF! in place of every reference typed with the name of one of `sheets`.
+function withoutNames(node: FormulaNode, sheets: readonly Named[]): FormulaNode {
+    if (node.children.length > 0) {
+        return { ...node, children: node.children.map((child) => withoutNames(child, sheets)) };
+    }
+    if (node.sheetKind !== SheetKind.Name || !findSheetByName(sheets, node.sheet)) return node;
+    return {
+        ...node,
+        kind: NodeKind.Error,
+        op: 0,
+        value: REF_VALUE,
+        text: '',
+        sheetKind: SheetKind.Host,
+        sheet: '',
+        row: 0,
+        column: 0,
+        row2: 0,
+        column2: 0,
+        flags: 0,
+    };
+}
+
+function namedOf(model: Model): Named[] {
+    return [...model.sheets.values()].map(({ id, fields }) => ({ id, name: fields.name }));
 }
 
 function key(row: number, column: number): string {
@@ -304,16 +365,18 @@ function applyOne(model: Model, op: Op): RefusalKey | null {
 function applyInput(model: Model, op: InputOp): null {
     const sheet = model.sheets.get(op.sheet);
     if (!sheet) return null;
+    const named = namedOf(model);
     const put = (row: number, column: number, content: CellContent | null) => {
         if (content === null) sheet.cells.delete(key(row, column));
-        else sheet.cells.set(key(row, column), held(content));
+        else sheet.cells.set(key(row, column), content);
     };
     for (const [[top, left, bottom, right], content] of op.runs ?? []) {
+        const cell = content && entering(content, named);
         for (let row = top; row <= bottom; row += 1) {
-            for (let column = left; column <= right; column += 1) put(row, column, content);
+            for (let column = left; column <= right; column += 1) put(row, column, cell);
         }
     }
-    for (const [row, column, content] of op.cells ?? []) put(row, column, content);
+    for (const [row, column, content] of op.cells ?? []) put(row, column, content && entering(content, named));
     return null;
 }
 
@@ -760,15 +823,13 @@ function applySheet(model: Model, op: SheetOp): RefusalKey | null {
         const suffix = ` (${n})`;
         name = `${op.add.fields.name.slice(0, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
     }
-    const sheet = sheetOf(model, { ...op.add, fields: { ...op.add.fields, name } });
-    // A formula typed with the name of a sheet that was not there reads the sheet that now has it: the formulas of
-    // the workbook the new sheet, and the new sheet's formulas itself first and then the sheets in tab order.
-    const tabs = [...model.sheets.values()].sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
-    const refusal =
-        rewrite(tabs, (tree) => bindSheet(tree, name, sheet.id)) ??
-        rewrite([sheet], (tree) =>
-            [sheet, ...tabs].reduce((bound, named) => bindSheet(bound, named.fields.name, named.id), tree),
-        );
+    // The new sheet's formulas enter as a load's do. A formula of the workbook typed with the new sheet's name binds to
+    // it, and is refused where that is too long a text.
+    const sheet = sheetOf(model, { ...op.add, fields: { ...op.add.fields, name } }, [
+        { id: op.add.id, name },
+        ...namedOf(model),
+    ]);
+    const refusal = rewrite(model.sheets.values(), (tree) => bindSheet(tree, name, sheet.id));
     if (refusal) return refusal;
     model.sheets.set(sheet.id, sheet);
     return null;
