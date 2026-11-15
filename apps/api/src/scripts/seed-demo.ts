@@ -338,20 +338,15 @@ async function main(): Promise<void> {
         headers: adminHeaders,
     });
 
-    // --- Team avatar: the festival logo, through the same pipeline as the avatar route. A failure is logged and
-    // skipped, like a persona's. ---
-    try {
-        const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
-        const result = await generateImagePreview(logoBytes, 'image/webp', 'logo.webp', '', 'avatar', {
-            maxSize: 512,
-            quality: 80,
-            fit: 'cover',
-        });
-        if (!result) throw new Error('avatar thumbnail generation failed');
-        await pushTeamAvatar(teamId, result.data);
-    } catch (err) {
-        console.warn('team avatar seed failed:', err instanceof Error ? err.message : err);
-    }
+    // --- Team avatar: the festival logo, through the same pipeline as the avatar route. ---
+    const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
+    const logo = await generateImagePreview(logoBytes, 'image/webp', 'logo.webp', '', 'avatar', {
+        maxSize: 512,
+        quality: 80,
+        fit: 'cover',
+    });
+    if (!logo) throw new Error('The team avatar thumbnail failed');
+    await pushTeamAvatar(teamId, logo.data);
 
     // --- Team home: enable the calendar (starts disabled) and add the shared mount, raised above the default quota
     // for the crew's photos. ---
