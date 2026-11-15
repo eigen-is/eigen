@@ -136,6 +136,11 @@ export class SheetRecords {
         return content;
     }
 
+    // What the limit on records counts: the most records of one type.
+    public weight(): { records: number } {
+        return { records: Math.max(...KINDS.map((type) => this.stored[type].size)) };
+    }
+
     public merge(row: number, column: number): Rect | undefined {
         return this.merges.at(row, column);
     }

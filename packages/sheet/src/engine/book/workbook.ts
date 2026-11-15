@@ -61,6 +61,7 @@ export class Workbook {
                     sheet.looks.map((look) => this.looks.intern(look)),
                 ),
         );
+        const records = ordered.map(({ id, fields, records }) => new SheetRecords(id, fields, records));
         let slots = 0;
         for (const { cells } of ordered) {
             // The cells come in column order, so a column's last cell says how many slots the engine gives it.
@@ -74,7 +75,7 @@ export class Workbook {
             }
             slots += length;
         }
-        const refusal = fits(weightOf(slots, bands));
+        const refusal = fits(weightOf(slots, bands, records));
         if (refusal) throw new Refusal(refusal);
 
         this.engine = new Engine(
@@ -94,7 +95,7 @@ export class Workbook {
             seed,
         );
         const held = new Map<string, BookSheet>();
-        for (const [at, { id, fields, cells, rows, columns, records }] of ordered.entries()) {
+        for (const [at, { id, cells, rows, columns }] of ordered.entries()) {
             const extras = new Extras();
             for (const [row, column, { s, link, qp }] of cells) {
                 if (s || link || qp) extras.write(row, column, { s, link, qp });
@@ -104,7 +105,7 @@ export class Workbook {
                 rows: new LineRuns(rows),
                 columns: new LineRuns(columns),
                 extras,
-                records: new SheetRecords(id, fields, records),
+                records: records[at],
             });
         }
         this.sheets = held;
@@ -177,11 +178,13 @@ export class Workbook {
         };
     }
 
-    // What the limits count: the engine's slots and the runs and bands of every sheet.
+    // What the limits count: the engine's slots, the runs and bands of every sheet, its records and the sheets.
     public weight(): WorkbookWeight {
+        const sheets = [...this.sheets.values()];
         return weightOf(
             this.engine.slots(),
-            [...this.sheets.values()].map((sheet) => sheet.bands),
+            sheets.map((sheet) => sheet.bands),
+            sheets.map((sheet) => sheet.records),
         );
     }
 
@@ -204,7 +207,7 @@ export class Workbook {
     }
 }
 
-function weightOf(slots: number, bands: readonly Bands[]): WorkbookWeight {
+function weightOf(slots: number, bands: readonly Bands[], records: readonly SheetRecords[]): WorkbookWeight {
     let runs = 0;
     let count = 0;
     for (const sheet of bands) {
@@ -212,5 +215,6 @@ function weightOf(slots: number, bands: readonly Bands[]): WorkbookWeight {
         runs += weight.runs;
         count += weight.bands;
     }
-    return { slots, runs, bands: count };
+    const most = Math.max(0, ...records.map((sheet) => sheet.weight().records));
+    return { slots, runs, bands: count, records: most, sheets: bands.length };
 }

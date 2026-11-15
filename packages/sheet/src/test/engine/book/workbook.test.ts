@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import { MAX_STYLE_RUNS, MAX_VALUE_SLOTS } from '@workspace/lib/sheets/limits';
+import { fits, MAX_RECORDS_PER_TYPE, MAX_STYLE_RUNS, MAX_VALUE_SLOTS } from '@workspace/lib/sheets/limits';
 import type { CellRecord, Placed, SheetContent } from '@workspace/lib/sheets/ops';
 import { isSheetContent } from '@workspace/lib/sheets/ops-validate';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -32,7 +32,7 @@ describe('engine/book/workbook — a load and the walk back', () => {
     test('a sheet with nothing on it walks back plain', () => {
         const book = new Workbook(bookOf(sheetOf('a')));
         expect(book.content()).toEqual(bookOf(sheetOf('a', { bands: [0, 0] })));
-        expect(book.weight()).toEqual({ slots: 0, runs: 0, bands: 1 });
+        expect(book.weight()).toEqual({ slots: 0, runs: 0, bands: 1, records: 0, sheets: 1 });
     });
 
     test('every kind of cell walks back as it came, in column order', () => {
@@ -84,7 +84,7 @@ describe('engine/book/workbook — a load and the walk back', () => {
         expect(book.content().sheets[0]).toEqual(
             sheetOf('a', { looks: [bold, { it: 1 }], bands: [0, 3, 0, 0, 2, 1, 6, 0, 5, 0, 7, 2, 0, 0, 3, 2] }),
         );
-        expect(book.weight()).toEqual({ slots: 0, runs: 5, bands: 3 });
+        expect(book.weight()).toEqual({ slots: 0, runs: 5, bands: 3, records: 0, sheets: 1 });
     });
 
     test('line keys the bytes say in pieces load joined, and a line with no key is in no run', () => {
@@ -249,7 +249,26 @@ describe('engine/book/workbook — the limits at the door', () => {
                 }),
             ),
         );
-        expect(book.weight()).toEqual({ slots: 1 + 5, runs: 3, bands: 3 });
+        expect(book.weight()).toEqual({ slots: 1 + 5, runs: 3, bands: 3, records: 0, sheets: 2 });
+    });
+
+    test('the weight counts the most records of a type on one sheet, so a write past the loader’s cap is refused', () => {
+        const comments = Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`c${i}`, { row: i, column: 0 }]));
+        const book = new Workbook(bookOf(sheetOf('a', { records: { comment: comments } }), sheetOf('b')));
+        expect(book.weight()).toMatchObject({ records: 5, sheets: 2 });
+        const records = book.sheets.get('b')?.records;
+        for (let i = 0; i <= MAX_RECORDS_PER_TYPE; i += 1) {
+            records?.write({
+                kind: 'record',
+                sheet: 'b',
+                type: 'comment',
+                id: `c${i}`,
+                set: { row: i % 1000, column: 0 },
+                whole: 1,
+            });
+        }
+        expect(book.weight().records).toBe(MAX_RECORDS_PER_TYPE + 1);
+        expect(fits(book.weight())).toBe('too-many-records');
     });
 
     test('a book over the format limit does not open', () => {
@@ -259,7 +278,7 @@ describe('engine/book/workbook — the limits at the door', () => {
     test('the limits weigh the bands as rebuilt: runs the bytes say twice count once', () => {
         const twice = stripes.map((n, at) => (at % (2 + MAX_STYLE_RUNS / 2) > 1 && at % 2 === 1 ? 1 : n));
         const book = new Workbook(bookOf(sheetOf('a', { ...striped, bands: twice })));
-        expect(book.weight()).toEqual({ slots: 0, runs: 1, bands: 1 });
+        expect(book.weight()).toEqual({ slots: 0, runs: 1, bands: 1, records: 0, sheets: 1 });
     });
 
     test('the limits are weighed before the engine reads a sheet: a book over one with two sheets of one id is refused for its weight', () => {
