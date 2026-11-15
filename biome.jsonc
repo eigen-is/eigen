@@ -117,14 +117,21 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                // The root sets no `paths`, so this override's are the only ones.
+                "paths": {
+                  "@workspace/formula/text": {
+                    "allowImportNames": ["MAX_STORED_LENGTH", "GRID_ROWS", "GRID_COLUMNS", "ERROR_LITERALS"],
+                    "message": "lib imports only the stored-format constants from the engine's text entry."
+                  }
+                },
                 "patterns": [
                   {
                     "group": ["@workspace/sheet", "@workspace/sheet/**", "@workspace/ui", "@workspace/ui/**"],
                     "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
                   },
                   {
-                    "group": ["@workspace/formula", "@workspace/formula/text", "@workspace/formula/names"],
-                    "message": "lib imports only the number-display entry of the engine: @workspace/formula/format."
+                    "group": ["@workspace/formula", "@workspace/formula/names"],
+                    "message": "lib imports the engine only through @workspace/formula/format and the stored-format constants of @workspace/formula/text."
                   },
                   // Overrides replace the root rule options wholesale — restate the suffix ban.
                   {

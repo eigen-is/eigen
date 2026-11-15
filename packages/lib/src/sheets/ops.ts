@@ -1,4 +1,4 @@
-// The ops of the workbook model: seven kinds of edit, such as typing into cells, a format over a range, a record made
+// The ops of the workbook model: six kinds of edit, such as typing into cells, a format over a range, a record made
 // or changed, or rows inserted, and the cell, look and record shapes they carry. A writer builds them, the log holds
 // them in batches, and every reader applies them in order to the same state. They live in lib so the sheet engine, the
 // editor and the server share one vocabulary without React.
@@ -130,12 +130,24 @@ export type FormatOp =
           set?: LineAttrs;
           clear?: (keyof LineAttrs)[];
       };
-export type ResultOp = { kind: 'result'; sheet: string; cells: Placed<{ f: string; v?: Scalar; e?: 1 }>[] };
-// Distributive, so that a field of one kind of conditional-format rule can be set: the rule type is a union.
-type FieldsOf<R> = R extends unknown ? { [K in keyof R]?: R[K] | null } : never;
-export type RecordOp = {
-    [T in RecordType]: { kind: 'record'; sheet: string; type: T; id: string; set?: FieldsOf<Records[T]>; whole?: 1 };
-}[RecordType];
+// A record made whole, or some of its fields set with null clearing one, or deleted with no `set`. A rule changes only
+// whole, so its fields always agree with its kind, and a sheet's record is made only by a `sheet` op.
+type Make<T extends RecordType> = { kind: 'record'; sheet: string; type: T; id: string; set: Records[T]; whole: 1 };
+type Change<T extends RecordType, S> = {
+    kind: 'record';
+    sheet: string;
+    type: T;
+    id: string;
+    set?: S;
+    whole?: undefined;
+};
+type FieldsOf<R> = { [K in keyof R]?: R[K] | null };
+type ChangedByField = Exclude<RecordType, 'sheet' | 'conditionalFormat'>;
+export type RecordOp =
+    | { [T in ChangedByField]: Make<T> | Change<T, FieldsOf<Records[T]>> }[ChangedByField]
+    | Make<'conditionalFormat'>
+    | Change<'conditionalFormat', never>
+    | { kind: 'record'; sheet: string; type: 'sheet'; id: string; set: FieldsOf<SheetFields>; whole?: undefined };
 export type LinesOp = {
     kind: 'lines';
     sheet: string;
@@ -147,9 +159,11 @@ export type LinesOp = {
 };
 export type MoveOp = { kind: 'move'; sheet: string; from: Rect; toSheet: string; toRow: number; toColumn: number };
 export type SheetOp = { kind: 'sheet'; add: SheetContent } | { kind: 'sheet'; delete: string };
-export type Op = InputOp | FormatOp | ResultOp | RecordOp | LinesOp | MoveOp | SheetOp;
+export type Op = InputOp | FormatOp | RecordOp | LinesOp | MoveOp | SheetOp;
 export type OpKind = Op['kind'];
-export type Batch = { g: number; ops: Op[] };
+// `now` is the author's clock as a serial of the engine's day line, days with the time of day as the fraction, and
+// `seed` a 32-bit integer the author drew: every reader recomputes the clock and random cells with them.
+export type Batch = { g: number; now: number; seed: number; ops: Op[] };
 export type OpReferences = { media: string[]; comments: string[] };
 
 // The media files and comment cards an op brings in, so a sweep keeps them: media an image record is set to, a card
@@ -159,13 +173,12 @@ export function opReferences(op: Op): OpReferences {
     switch (op.kind) {
         case 'input':
         case 'format':
-        case 'result':
         case 'lines':
         case 'move':
             return names;
         case 'record':
-            if (op.type === 'image' && typeof op.set?.mediaName === 'string') names.media.push(op.set.mediaName);
-            if (op.type === 'comment' && op.set && op.whole) names.comments.push(op.id);
+            if (op.type === 'image' && op.set?.mediaName) names.media.push(op.set.mediaName);
+            if (op.type === 'comment' && op.whole) names.comments.push(op.id);
             return names;
         case 'sheet':
             if ('add' in op) {
@@ -185,7 +198,6 @@ export function isStructural(op: Op): boolean {
             return true;
         case 'input':
         case 'format':
-        case 'result':
         case 'record':
             return false;
     }
