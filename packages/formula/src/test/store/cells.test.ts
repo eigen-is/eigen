@@ -56,16 +56,23 @@ describe('load', () => {
             source('s1', [
                 [0, 0, 1, '=1+1'],
                 [1, 0, null, '=2+2'],
+                [0, 1, 3],
             ]),
         ]);
-        const read = () => [
-            engine.valueOf('s1', row, column),
-            engine.formulaOf('s1', row, column),
-            engine.isPending('s1', row, column),
-        ];
-        expect(read()).toEqual([null, null, false]);
+        const read = () => {
+            const walked: number[] = [];
+            engine.cells('s1', (at) => walked.push(at), row, column);
+            return [
+                engine.valueOf('s1', row, column),
+                engine.formulaOf('s1', row, column),
+                engine.isPending('s1', row, column),
+                engine.nextCell('s1', column, row),
+                walked,
+            ];
+        };
+        expect(read()).toEqual([null, null, false, -1, []]);
         engine.recalc(ALL);
-        expect(read()).toEqual([null, null, false]);
+        expect(read()).toEqual([null, null, false, -1, []]);
     });
 
     test.each([
