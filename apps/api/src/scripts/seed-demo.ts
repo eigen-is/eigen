@@ -2,7 +2,8 @@
 // lived-in team drive with such files as docs, a budget sheet and a stickies board, and their mail, calendars, chats
 // and contacts. It boots the API in this process and acts as the personas through the product's own code, so
 // activity, file history and notifications fill in. The demo reset wipes the data root and runs it again, and a
-// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN and EIGEN_DEMO_ADMIN_PASSWORD may be set.
+// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN, EIGEN_DEMO_ADMIN_PASSWORD and
+// EIGEN_DEMO_PERSONA_PASSWORD may be set.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -46,8 +47,10 @@ import {
     BUDGET,
     CHATS,
     CONTACTS,
+    DEMO_MAIL_DOMAIN,
     DOCS,
     EVENTS,
+    emailFor,
     KANBAN,
     MAILS,
     NOTES,
@@ -84,7 +87,7 @@ if (!DATA_ROOT) {
 process.env['API_URL'] ||= 'http://localhost';
 
 // Setup reads both from the env, as it does after ./eigen setup.
-const MAIL_DOMAIN = (process.env['MAIL_DOMAIN'] ||= 'tuimel.example');
+const MAIL_DOMAIN = (process.env['MAIL_DOMAIN'] ||= DEMO_MAIL_DOMAIN);
 const DOMAIN = (process.env['DOMAIN'] ||= MAIL_DOMAIN);
 
 // Seeded mail links drive files with pills ("Open festival →"), and appUrl builds their links from the per-app
@@ -104,11 +107,11 @@ for (const [name, path] of [
     process.env[name] ||= `${WEB_ORIGIN}${path}`;
 }
 const ADMIN_PASSWORD = process.env['EIGEN_DEMO_ADMIN_PASSWORD'] || randomBytes(12).toString('base64url');
-// A random one is enough: the demo entry route resets each persona's password on every visit.
-const PERSONA_PASSWORD = randomBytes(18).toString('base64url');
+// The demo entry route resets each persona's password on every visit, so a demo box needs none of its own. A tool that
+// signs a persona in with a password sets one.
+const PERSONA_PASSWORD = process.env['EIGEN_DEMO_PERSONA_PASSWORD'] || randomBytes(18).toString('base64url');
 
-const emailFor = (localPart: string) => `${localPart}@${MAIL_DOMAIN}`;
-const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART);
+const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART, MAIL_DOMAIN);
 
 if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
     console.error(`Setup already completed at ${DATA_ROOT} (server/config.json exists). The reset script wipes first.`);
@@ -255,17 +258,22 @@ async function main(): Promise<void> {
     // --- Personas: the user.create hook auto-joins each to the default org as `member`. ---
     for (const persona of PERSONAS) {
         await auth.api.createUser({
-            body: { email: emailFor(persona.key), password: PERSONA_PASSWORD, name: persona.name, role: 'user' },
+            body: {
+                email: emailFor(persona.key, MAIL_DOMAIN),
+                password: PERSONA_PASSWORD,
+                name: persona.name,
+                role: 'user',
+            },
         });
     }
     const userByKey = new Map<string, User>();
     for (const persona of PERSONAS) {
-        const user = await getUserByEmail(emailFor(persona.key));
+        const user = await getUserByEmail(emailFor(persona.key, MAIL_DOMAIN));
         if (!user) throw new Error(`Persona ${persona.key} not found after creation`);
         userByKey.set(persona.key, user);
     }
     const userForRole = (role: LeadRole): User => lookup(userByKey, personaByRole(role).key);
-    const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key);
+    const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key, MAIL_DOMAIN);
 
     // --- Avatars: each persona's portrait goes through the upload a user makes, so it sets user.image the same
     // way. A missing or broken fixture is logged and skipped, never fatal. ---
@@ -467,7 +475,7 @@ async function main(): Promise<void> {
     {
         const author = userForRole('volunteers');
         const rosterItems = PERSONAS.map((persona) => {
-            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(persona.key))}`;
+            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(persona.key, MAIL_DOMAIN))}`;
             return `<li><a href="${url}">${persona.name}</a> - ${persona.title}</li>`;
         }).join('');
         const rosterHtml = [
@@ -666,7 +674,7 @@ async function main(): Promise<void> {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 if (!(entry instanceof Y.Map)) continue;
-                entry.set('creator', emailFor(entry.get('creator')));
+                entry.set('creator', emailFor(entry.get('creator'), MAIL_DOMAIN));
             }
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');
@@ -733,7 +741,12 @@ async function main(): Promise<void> {
         const organizer = userForRole(event.organizer);
         const attendees: Attendee[] = event.attendees.map((ref) => {
             const persona = resolvePersona(ref);
-            return { email: emailFor(persona.key), name: persona.name, status: 'accepted', role: 'required' };
+            return {
+                email: emailFor(persona.key, MAIL_DOMAIN),
+                name: persona.name,
+                status: 'accepted',
+                role: 'required',
+            };
         });
         const data: EventData = {
             attendees,
@@ -835,7 +848,7 @@ async function main(): Promise<void> {
         if (message.fromExternal) return { name: message.fromExternal.name, address: message.fromExternal.email };
         if (!message.from) throw new Error('A seeded message names no sender');
         const persona = resolvePersona(message.from);
-        return { name: persona.name, address: emailFor(persona.key) };
+        return { name: persona.name, address: emailFor(persona.key, MAIL_DOMAIN) };
     };
     // Threads one flow's messages: the date, the Re: prefix, the In-Reply-To and References chain, and the quote.
     // Each branch below only picks the sender and the recipient and delivers. A reply quotes the message before it,
@@ -925,7 +938,7 @@ async function main(): Promise<void> {
                     const deliveredId = await home.mail.mailboxDeliver(buffer);
                     copies.set(persona.key, deliveredId);
                     // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
-                    if (emailFor(persona.key) === senderAddress) {
+                    if (emailFor(persona.key, MAIL_DOMAIN) === senderAddress) {
                         await home.mail.messageMove(deliveredId, MAILBOX_SENT);
                         await home.mail.messageSetRead(deliveredId, true);
                         const answeredId = previousCopies.get(persona.key);

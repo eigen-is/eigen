@@ -1,7 +1,7 @@
-// Turns the built single-page shell into a static page for every public route: the landing page, the blog and each
-// post, the Support pages, the licenses and the changelog. Each page gets its own title, description and metadata, and
-// the markup the route renders, which the browser then hydrates in place. It runs after the Vite build, and a sitemap
-// comes with it when the server's domain is known.
+// Turns the built single-page shell into a static page for every public route, such as the landing page, the blog
+// and each post, the Support pages, the About pages and the changelog. Each page gets its own title, description and
+// metadata, and the markup the route renders, which the browser then hydrates in place. It runs after the Vite
+// build, and a sitemap comes with it when the server's domain is known.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,6 +16,8 @@ const DIST = join(ROOT, '..', '..', 'dist', 'index');
 const GEN = join(ROOT, 'src', 'content', '.generated');
 const DOMAIN = process.env['DOMAIN']?.replace(/\/+$/, '');
 const PUBLIC_ORIGIN = DOMAIN ? `https://${DOMAIN}` : undefined;
+// The About pages say the same on every server, so each copy names eigen.is's as the one search engines should list.
+const ABOUT_ORIGIN = 'https://eigen.is';
 
 function publicUrl(path: string): string | undefined {
     if (!PUBLIC_ORIGIN) return undefined;
@@ -33,20 +35,19 @@ type PageMeta = {
     type: 'website' | 'article';
     updated?: string;
 };
-type ArticleRef = { collection: 'blog' | 'support'; slug: string };
+type ArticleRef = { collection: 'blog' | 'support' | 'about'; slug: string };
 type PageArticle = ArticleRef & { body: ArticleBody };
-type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
+// `canonical` overrides only the page's <link rel="canonical">, not its og:url or its sitemap entry.
+type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef; canonical?: string };
 
-// Build the route list: the home page, plus the /blog and /support trees.
 function routes(shellDescription: string): PrerenderRoute[] {
     const blogArticles = manifest('blog').articles;
     const support = manifest('support').articles;
+    const about = manifest('about').articles;
     const list: PrerenderRoute[] = [
         {
-            // Landing page. Its first render is deterministic — the wordmark starts at the first app and
-            // the config-driven buttons and install line wait for the public config — so it hydrates
-            // cleanly in place (AuthProvider renders children on the first client render
-            // for this ungated app rather than a null loading fallback).
+            // The landing page's first render is deterministic, so it hydrates in place: the wordmark starts at the
+            // first app, and the buttons and the install line wait for the public config.
             path: '/',
             meta: {
                 title: 'eigen - a self-hosted alternative to Google Workspace',
@@ -87,17 +88,17 @@ function routes(shellDescription: string): PrerenderRoute[] {
             },
         },
     ];
-    for (const a of blogArticles) {
+    for (const post of blogArticles) {
         list.push({
-            path: `/blog/${a.slug}`,
+            path: `/blog/${post.slug}`,
             meta: {
-                title: `${a.title} - eigen blog`,
-                description: a.description,
-                url: publicUrl(`/blog/${a.slug}`),
+                title: `${post.title} - eigen blog`,
+                description: post.description,
+                url: publicUrl(`/blog/${post.slug}`),
                 type: 'article',
-                updated: a.date,
+                updated: post.date,
             },
-            article: { collection: 'blog', slug: a.slug },
+            article: { collection: 'blog', slug: post.slug },
         });
     }
     for (const section of new Set(support.map((a) => a.section))) {
@@ -111,60 +112,71 @@ function routes(shellDescription: string): PrerenderRoute[] {
             },
         });
     }
-    for (const a of support) {
+    for (const article of support) {
         list.push({
-            path: `/support/${a.slug}`,
+            path: `/support/${article.slug}`,
             meta: {
-                title: `${a.title} - Eigen Support`,
-                description: a.description,
-                url: publicUrl(`/support/${a.slug}`),
+                title: `${article.title} - Eigen Support`,
+                description: article.description,
+                url: publicUrl(`/support/${article.slug}`),
                 type: 'article',
-                updated: a.updated,
+                updated: article.updated,
             },
-            article: { collection: 'support', slug: a.slug },
+            article: { collection: 'support', slug: article.slug },
+        });
+    }
+    for (const page of about) {
+        const overview = page.slug === 'index';
+        const path = overview ? '/about' : `/about/${page.slug}`;
+        list.push({
+            path,
+            meta: {
+                title: overview ? page.title : `${page.title} - eigen`,
+                description: page.description,
+                url: publicUrl(path),
+                type: overview ? 'website' : 'article',
+            },
+            article: { collection: 'about', slug: page.slug },
+            canonical: `${ABOUT_ORIGIN}${path}`,
         });
     }
     return list;
 }
 
-function withMeta(html: string, m: PageMeta, shellDescription: string): string {
-    const t = escapeHtml(m.title);
-    const d = escapeHtml(m.description);
+function withMeta(html: string, meta: PageMeta, shellDescription: string): string {
+    const title = escapeHtml(meta.title);
+    const description = escapeHtml(meta.description);
     const page = html
-        .replace('<title>eigen</title>', `<title>${t}</title>`)
-        .replace('property="og:title" content="eigen"', `property="og:title" content="${t}"`)
-        .replaceAll(`content="${shellDescription}"`, `content="${d}"`)
-        .replace('content="website"', `content="${m.type}"`);
-    const ogUrl = m.url ? `<meta property="og:url" content="${escapeHtml(m.url)}"/>` : '';
-    // OG scrapers ignore relative og:image URLs — absolutize when the origin is known.
+        .replace('<title>eigen</title>', `<title>${title}</title>`)
+        .replace('property="og:title" content="eigen"', `property="og:title" content="${title}"`)
+        .replaceAll(`content="${shellDescription}"`, `content="${description}"`)
+        .replace('content="website"', `content="${meta.type}"`);
+    const ogUrl = meta.url ? `<meta property="og:url" content="${escapeHtml(meta.url)}"/>` : '';
+    // OG scrapers ignore a relative og:image URL, so it gets the origin when that is known.
     const absolutized = PUBLIC_ORIGIN
         ? page.replace('content="/eigen-space-logo.svg', `content="${PUBLIC_ORIGIN}/eigen-space-logo.svg`)
         : page;
     return absolutized.replace('</head>', `${ogUrl}</head>`);
 }
 
-// Minimal Article JSON-LD for article pages (SEO). A safe, always-valid schema.
-function jsonLd(m: PageMeta): string {
-    if (m.type !== 'article') return '';
+function jsonLd(meta: PageMeta): string {
+    if (meta.type !== 'article') return '';
     const data = {
         '@context': 'https://schema.org',
         '@type': 'Article',
-        headline: m.title,
-        description: m.description,
-        url: m.url,
+        headline: meta.title,
+        description: meta.description,
+        url: meta.url,
     };
     // Replace </ to prevent </script> from breaking out of the script tag.
     return `<script type="application/ld+json">${JSON.stringify(data).replace(/<\//g, '<\\/')}</script>`;
 }
 
-// Pair a route's article ref with its prerendered body, read from the generated
-// content. Used both for the server render and for the inlined hydration <script>.
 function readArticle(ref: ArticleRef): PageArticle {
     const body: ArticleBody = JSON.parse(readFileSync(join(GEN, ref.collection, `${ref.slug}.json`), 'utf-8'));
     return { ...ref, body };
 }
 
-// dist/index/index.html for "/"; dist/index/<path>/index.html for the rest.
 function outFile(path: string): string {
     if (path === '/') return join(DIST, 'index.html');
     const dir = join(DIST, ...path.split('/').filter(Boolean));
@@ -184,8 +196,7 @@ function sitemap(routeList: PrerenderRoute[]): string {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
-// Render through a Vite SSR server so the route tree's Vite-only APIs
-// (import.meta.glob in the content loader, import.meta.env app URLs) resolve.
+// A Vite SSR server renders the routes, so their Vite-only APIs such as import.meta.glob and import.meta.env resolve.
 async function main() {
     const vite = await createServer({
         root: ROOT,
@@ -206,27 +217,21 @@ async function main() {
         for (const route of all) {
             const article = route.article ? readArticle(route.article) : null;
             const { appHtml, dehydrationHtml } = await render(route.path, article);
-            // React 19 auto-emits <link rel="preload"> for rendered <img> elements.
-            // renderToString produces this app fragment with no <head>, so those links
-            // land at the top of #app — but in the browser React hoists them to <head>.
-            // Move them to <head> here so the prerendered #app matches the client's
-            // first render; otherwise hydration mismatches and the page renders twice.
+            // The browser's React hoists the <link rel="preload"> it emits for an image into <head>, but renderToString
+            // leaves it atop #app, so it moves to <head> here or hydration mismatches and the page renders twice.
             const hoisted = appHtml.match(/^(?:\s*<link\b[^>]*>)+/)?.[0] ?? '';
             const appBody = appHtml.slice(hoisted.length);
-            // Inline the page's own body so the client's first render resolves it
-            // synchronously — see getInlinedBody in src/content/manifest.ts. Escape
-            // </ so the body HTML cannot break out of the script tag.
+            // The page's own body is inlined so the first client render has it at once, with </ escaped so the body
+            // cannot close the script tag.
             const inlined = article
                 ? `<script type="application/json" id="eigen-article-body">${JSON.stringify(article).replace(/<\//g, '<\\/')}</script>`
                 : '';
-            const canonical = route.meta.url ? `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>` : '';
+            const canonicalUrl = route.canonical ?? route.meta.url;
+            const canonical = canonicalUrl ? `<link rel="canonical" href="${escapeHtml(canonicalUrl)}"/>` : '';
             const page = withMeta(shell, route.meta, shellDescription)
                 .replace('</head>', `${hoisted}${canonical}${jsonLd(route.meta)}</head>`)
-                // Append TanStack Router's dehydration <script> (sets window.$_TSR)
-                // after the inlined body. It's a plain inline script in the body, so it
-                // runs during HTML parse — before the deferred entry module
-                // (<script src="/src/main.tsx"> / the hashed bundle in <head>) — so
-                // $_TSR exists by the time RouterClient's hydrate() reads it.
+                // TanStack's dehydration script is a plain inline script, so it sets window.$_TSR as the HTML parses,
+                // before the deferred entry module runs RouterClient's hydrate().
                 .replace('<div id="app"></div>', `<div id="app">${appBody}</div>${inlined}${dehydrationHtml}`);
             // The dehydration scripts differ per page, so the CSP meta gets this page's hashes.
             writeFileSync(outFile(route.path), withInlineScriptHashes(page));

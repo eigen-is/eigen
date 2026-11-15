@@ -63,6 +63,8 @@ export const PERSONAS: Persona[] = [
 
 export const ADMIN_NAME = 'Tuimel Admin';
 export const ADMIN_LOCALPART = 'office';
+// The mail domain the seeder uses when MAIL_DOMAIN is unset.
+export const DEMO_MAIL_DOMAIN = 'tuimel.example';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
@@ -201,6 +203,7 @@ export type SheetChartSpec = {
     values: string;
     x: number; // the chart's box on the grid, in pixels from A1
     y: number;
+    size?: { width: number; height: number }; // Insert's default size when missing
 };
 
 export type SheetSpec = {
@@ -216,6 +219,8 @@ export type SheetSpec = {
 const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
+const BUDGET_COLUMNS = [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }];
+
 export const BUDGET = {
     folder: 'finance' as const satisfies TeamFolder,
     name: 'budget', // lowercase, no extension
@@ -223,7 +228,7 @@ export const BUDGET = {
     sheets: [
         {
             name: 'Budget',
-            columns: [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }],
+            columns: BUDGET_COLUMNS,
             rows: [
                 { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
                 { cells: [] },
@@ -250,11 +255,6 @@ export const BUDGET = {
                 { range: 'C4:C7', options: BUDGET_STATUSES },
                 { range: 'C11:C16', options: BUDGET_STATUSES },
             ],
-        },
-        {
-            name: 'Charts',
-            columns: [],
-            rows: [],
             charts: [
                 {
                     type: 'column',
@@ -262,16 +262,25 @@ export const BUDGET = {
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A11:A16',
                     values: 'Budget!B11:B16',
-                    x: 20,
-                    y: 20,
+                    // Beside the table and level with its top, small enough that both fit a 1000-pixel-wide page.
+                    x: BUDGET_COLUMNS.reduce((sum, column) => sum + column.width, 0) + 24,
+                    y: 0,
+                    size: { width: 440, height: 320 },
                 },
+            ],
+        },
+        {
+            name: 'Charts',
+            columns: [],
+            rows: [],
+            charts: [
                 {
                     type: 'pie',
                     title: 'Income',
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A4:A7',
                     values: 'Budget!B4:B7',
-                    x: 640,
+                    x: 20,
                     y: 20,
                 },
             ],
@@ -1960,4 +1969,8 @@ export function personaByKey(key: string): Persona {
     const persona = PERSONAS.find((p) => p.key === key);
     if (!persona) throw new Error(`No persona for key ${key}`);
     return persona;
+}
+
+export function emailFor(localPart: string, mailDomain: string): string {
+    return `${localPart}@${mailDomain}`;
 }

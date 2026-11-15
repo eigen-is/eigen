@@ -4,6 +4,7 @@
 import { formatDayMonth, formatTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
+import { isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
@@ -23,6 +24,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
     const root = splitMime(bytes);
     const attachments: Attachment[] = [];
     const cidImages: CidImage[] = [];
+    const calendarBodies: Attachment[] = [];
     const bodies = new Map<MimePart, string>();
     let hasText = false;
     let hasHtml = false;
@@ -59,6 +61,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                     const method = headers.contentType.params['method']?.toUpperCase();
                     const calendarMethod = IMIP_METHODS.find((known) => known === method);
                     if (calendarMethod) attachment.calendarMethod = calendarMethod;
+                    if (declared !== 'attachment') calendarBodies.push(attachment);
                 }
                 attachments.push(attachment);
                 if (headers.contentId) {
@@ -127,6 +130,13 @@ export function parseMail(bytes: Buffer): ParsedMail {
 
     collect(root);
     render(root, false);
+
+    // A calendar body is the invite card's only while a calendar file repeats it. Alone, as Outlook sends it, the
+    // body is the one file to save or import.
+    const calendarFile = attachments.some(
+        (part) => !calendarBodies.includes(part) && isIcsFile(part.contentType, part.filename ?? ''),
+    );
+    if (calendarFile) for (const part of calendarBodies) part.invitationBody = true;
 
     const { headers } = root;
     return {

@@ -8,5 +8,5 @@ import { escapeHtml } from '@workspace/lib/html';
 // `html` goes in as it is, so the caller passes HTML that is already safe: a sanitized body or escaped text.
 export function formatReplyQuote(from: { name: string; address: string }, date: Date, html: string): string {
     const header = `On ${escapeHtml(formatFullDateTime(date))} ${escapeHtml(from.name)} &lt;${escapeHtml(from.address)}&gt; wrote:`;
-    return `<br><br><p>${header}</p><blockquote>${html}</blockquote>`;
+    return `<p>${header}</p><blockquote>${html}</blockquote>`;
 }

@@ -20,13 +20,13 @@ All notable user-visible changes are documented here.
         expect(body.html).toContain('<h2'); // versions render as h2
         expect(body.html).toContain('9.9.9'); // version heading retained
         expect(body.html).toContain('Added'); // section retained
-        expect(body.mediaGrids).toEqual([]); // changelog has no media grids
+        expect(body.media).toEqual([]); // changelog has no media blocks
     });
 
     test('renders the whole input when there is no version heading', () => {
         const body = renderChangelog('# Changelog\n\nNothing yet.\n');
         expect(body.html).toContain('Nothing yet');
-        expect(body.mediaGrids).toEqual([]);
+        expect(body.media).toEqual([]);
     });
 
     describe('release headings', () => {

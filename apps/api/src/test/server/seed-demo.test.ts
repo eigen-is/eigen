@@ -380,7 +380,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
 
             // Budget sheet: built from BUDGET (demo/sheet-build.ts) and decoded through the shipped reader. The
             // formulas hold their computed values; the amounts carry data bars, the margin a red rule below zero and
-            // the status cells a dropdown; and the second tab's charts read the first tab by its id.
+            // the status cells a dropdown; and every chart reads the first tab by its id and has an id of its own in
+            // the workbook.
             const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, `${BUDGET.name}.eigensheets`);
             const { sheets } = readSheetsFromDoc(await loadCollabDoc(sheetDataDb), { recalc: false });
             expect(sheets.map((sheet) => sheet.name)).toEqual(BUDGET.sheets.map((sheet) => sheet.name));
@@ -401,8 +402,15 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 [{ row: [10, 15], column: [2, 2] }],
             ]);
             for (const { rule } of dropdowns) expect(rule.type).toBe('dropdown');
-            const charts = Object.values(chartsSheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
-            expect(charts.map((spec) => spec?.chart.type).sort()).toEqual(['column', 'pie']);
+            const chartsOf = (sheet: typeof budgetSheet) =>
+                Object.values(sheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
+            expect(chartsOf(budgetSheet).map((spec) => spec?.chart.type)).toEqual(['column']);
+            expect(chartsOf(chartsSheet).map((spec) => spec?.chart.type)).toEqual(['pie']);
+            expect([budgetSheet, chartsSheet].flatMap((sheet) => Object.keys(sheet.charts ?? {}))).toEqual([
+                'chart-1',
+                'chart-2',
+            ]);
+            const charts = [...chartsOf(budgetSheet), ...chartsOf(chartsSheet)];
             for (const spec of charts) {
                 if (spec?.data.source !== 'range') throw new Error('a budget chart holds no range data');
                 expect(spec.data.series[0].values?.sheetId).toBe(budgetSheet.id);

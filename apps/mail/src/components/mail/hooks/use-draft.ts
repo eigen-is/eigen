@@ -185,14 +185,6 @@ function stringToAddressObject(text: string): AddressObject | undefined {
 // TipTap's own form of an empty paragraph, so its first normalization doesn't read as an edit and trip the auto-save.
 const EMPTY_PARA = '<p><br></p>';
 
-function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'reply'): string {
-    if (!sig) return body;
-    if (kind === 'new') return body + EMPTY_PARA + sig;
-    // TipTap rewrites bare <br>s between blocks on first edit, so the quote's leading ones become one empty paragraph.
-    const trimmed = body.replace(/^(<br\s*\/?>)+/i, '');
-    return EMPTY_PARA + sig + EMPTY_PARA + trimmed;
-}
-
 // Mirrors TipTap getText() over the blocks LightEditor exposes (p, blockquote, ul/ol/li), so the seeded bodyText stays
 // close to what the editor emits and the fingerprint holds on first interaction.
 function plainSignature(sig: string | undefined): string {
@@ -236,12 +228,13 @@ function initFields(
     }
     const sigText = plainSignature(signatureHtml);
     if (prefillDraft) {
+        // A reply or forward opens on an empty paragraph above its quote, where the user types.
         return {
             to: addressObjectToString(prefillDraft.to),
             cc: addressObjectToString(prefillDraft.cc),
             bcc: addressObjectToString(prefillDraft.bcc),
             subject: prefillDraft.subject || '',
-            body: injectSignature(prefillDraft.html || '', signatureHtml, 'reply'),
+            body: `${EMPTY_PARA}${signatureHtml ? `${signatureHtml}${EMPTY_PARA}` : ''}${prefillDraft.html || ''}`,
             bodyText: sigText ? `${sigText}\n\n${prefillDraft.text || ''}` : prefillDraft.text || '',
             attachments: [],
             driveReferences: prefillDraft.driveReferences ?? [],
@@ -256,7 +249,7 @@ function initFields(
         cc: '',
         bcc: '',
         subject: '',
-        body: injectSignature('', signatureHtml, 'new'),
+        body: signatureHtml ? `${EMPTY_PARA}${signatureHtml}` : '',
         bodyText: sigText ? `\n\n${sigText}` : '',
         attachments: [],
         driveReferences: [],

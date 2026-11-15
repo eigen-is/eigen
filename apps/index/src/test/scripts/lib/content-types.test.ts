@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { blogFrontmatterSchema } from '../../../../scripts/lib/content-types';
+import { aboutFrontmatterSchema, blogFrontmatterSchema } from '../../../../scripts/lib/content-types';
 
 describe('blogFrontmatterSchema', () => {
     const post = { id: 'eigen-vector', title: 'Eigen: Vector', description: 'A new app.' };
@@ -20,5 +20,22 @@ describe('blogFrontmatterSchema', () => {
 
     test('a cover that is not a path fails the build', () => {
         expect(() => blogFrontmatterSchema.parse({ ...post, cover: 'vector.webp' })).toThrow();
+    });
+});
+
+describe('aboutFrontmatterSchema', () => {
+    const page = { title: 'Sheets', description: 'Spreadsheets and formulas.' };
+
+    test('a page needs only a title and a description', () => {
+        expect(aboutFrontmatterSchema.parse(page)).toEqual(page);
+    });
+
+    test('the overview lists a line per app in rows', () => {
+        expect(aboutFrontmatterSchema.parse({ ...page, rows: { sheets: 'x' } }).rows).toEqual({ sheets: 'x' });
+    });
+
+    test('a field the About pages do not read fails the build', () => {
+        expect(() => aboutFrontmatterSchema.parse({ ...page, draft: true })).toThrow();
+        expect(() => aboutFrontmatterSchema.parse({ ...page, order: 1 })).toThrow();
     });
 });

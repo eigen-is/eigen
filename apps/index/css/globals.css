@@ -65,6 +65,11 @@
     .site-reading-column {
         grid-column: 2;
     }
+
+    /* A block in the column that reaches over both gutters to the wide container's edges. */
+    .site-reading-wide {
+        margin-inline: calc(-1 * (var(--site-gutter) + var(--site-gap)));
+    }
 }
 
 .eigen-callout {
@@ -137,6 +142,179 @@
     .heading-anchor:focus-visible {
         opacity: 1;
     }
+
+    /* Every picture and film in a page gets a hairline and round corners, so a screenshot of a white page keeps its
+       edge on a white page. */
+    img,
+    video {
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+    }
+
+    /* A drawing made for paper, such as a chart with a clear background, keeps its white sheet in dark mode. */
+    img.eigen-paper {
+        padding: 0.75rem;
+        background-color: var(--background);
+    }
+
+    /* A picture or film opens bigger on a click, unless a link or a button holds it. */
+    :is(img, figure video):not(a img, button img) {
+        cursor: zoom-in;
+    }
+
+    /* A media block from the Markdown, such as a looping video or a carousel. */
+    .media-video,
+    .media-carousel {
+        margin: 2rem 0;
+    }
+
+    /* The prose gives a picture a margin unless a figure holds it, and a grid's thumbnail sits in a button. */
+    .media-grid img {
+        margin: 0;
+    }
+
+    .media-video video,
+    .media-carousel :is(img, video) {
+        display: block;
+        width: 100%;
+        height: auto;
+        background-color: var(--muted);
+    }
+
+    /* A carousel's strip starts at the column's left edge and runs to the right edge of the page, the scroll area and
+       a size container, so the next slide peeks in. The column's width follows the site grid: --site-col at most,
+       less the gutters on a narrow page. */
+    .media-carousel {
+        --carousel-column: min(var(--site-col), 100cqw - 2 * var(--app-gutter-x));
+        --carousel-bleed: calc((100cqw - var(--carousel-column)) / 2);
+    }
+
+    /* The end padding is the bleed, so the last slide can snap to the start too. */
+    .media-carousel-strip {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-right: calc(-1 * var(--carousel-bleed));
+        padding-right: var(--carousel-bleed);
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+    }
+
+    .media-carousel-strip:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+    }
+
+    .media-carousel-slide {
+        flex: 0 0 var(--carousel-column);
+        margin: 0;
+        scroll-snap-align: start;
+
+        figcaption {
+            margin-top: 0.5rem;
+            text-align: start;
+        }
+    }
+
+    /* On a phone the strip spans the screen and a slide starts at the gutter, narrow enough for the next to peek. */
+    @media (width < 40rem) {
+        .media-carousel-strip {
+            margin-left: calc(-1 * var(--carousel-bleed));
+            padding-left: var(--carousel-bleed);
+            scroll-padding-left: var(--carousel-bleed);
+        }
+
+        .media-carousel-slide {
+            flex-basis: 85%;
+        }
+    }
+
+    /* Under the strip: the dots centered under the column, and the buttons at its right edge. */
+    .media-carousel-nav {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        margin-top: 0.75rem;
+    }
+
+    .media-carousel-dots {
+        display: flex;
+        grid-column: 2;
+    }
+
+    /* A dot is drawn in its content box, so the padding widens what a finger can hit. */
+    .media-carousel-dot {
+        width: 1rem;
+        height: 1rem;
+        padding: 0.25rem;
+        border: 0;
+        border-radius: 9999px;
+        background-color: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
+        background-clip: content-box;
+        cursor: pointer;
+    }
+
+    .media-carousel-dot[aria-current="true"] {
+        width: 1.75rem;
+        background-color: var(--app-current-color);
+    }
+
+    .media-carousel-steps {
+        display: flex;
+        justify-self: end;
+        gap: 0.5rem;
+    }
+
+    .media-carousel-prev,
+    .media-carousel-next {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border: 1px solid var(--border);
+        border-radius: 9999px;
+        background-color: var(--background);
+        color: var(--foreground);
+        cursor: pointer;
+    }
+
+    .media-carousel-prev:hover:enabled,
+    .media-carousel-next:hover:enabled {
+        background-color: var(--muted);
+    }
+
+    .media-carousel-prev:disabled,
+    .media-carousel-next:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        .media-carousel-strip {
+            scroll-behavior: smooth;
+        }
+
+        .media-carousel-dot {
+            transition:
+                width 0.2s ease,
+                background-color 0.2s ease;
+        }
+    }
+
+    /* A boxed note at the end of a page, such as the About pages' note for the reader's technical person. */
+    .site-panel {
+        margin-top: 2.75rem;
+
+        > :first-child {
+            margin-top: 0;
+        }
+
+        > :last-child {
+            margin-bottom: 0;
+        }
+    }
 }
 
 /* An app name in prose or a caption, such as eigen|mail⟩: letters, bar and ket from one font. Not .site-prose only,
@@ -164,7 +342,7 @@
 
 /* The changelog: a release is a section with a thin rule above it, its h3 a small label and its entries a bold lead
    on a line of their own. */
-.site-prose.changelog {
+.changelog .site-prose {
     --release-text: color-mix(in oklab, var(--foreground) 82%, var(--background));
 
     .release {

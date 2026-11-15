@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, settings, landing, links]
 related: [admin/server-settings, admin/waitlist]
 order: 85
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
@@ -33,11 +33,13 @@ A few things happen when you save:
 
 The buttons sit on the landing page next to **Log in**, in the order you listed them. If the waitlist is turned on, they come after the **Join waitlist** button. See [Manage the waitlist](/support/admin/waitlist) for that form.
 
+The same buttons also show under the title of the About pages, which the **About** link at the bottom of the landing page opens.
+
 Clicking one opens the address in the same tab, so the visitor leaves the landing page.
 
 <div class="eigen-callout">
 
-Visitors who are already signed in never see the landing page. Eigen sends them straight to their workspace, so these buttons are for people who have not signed in yet.
+Visitors who are already signed in never see the landing page. Eigen sends them straight to their workspace, so on the landing page these buttons are for people who have not signed in yet.
 
 </div>
 

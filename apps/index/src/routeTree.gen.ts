@@ -10,10 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as ChangelogRouteImport } from './routes/changelog'
 import { Route as LicensesRouteImport } from './routes/licenses'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as AboutIndexRouteImport } from './routes/about.index'
+import { Route as AboutAppRouteImport } from './routes/about.$app'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogIdRouteImport } from './routes/blog.$id'
 import { Route as SupportIndexRouteImport } from './routes/support.index'
@@ -23,6 +26,11 @@ import { Route as SupportSectionArticleRouteImport } from './routes/support.$sec
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -44,6 +52,16 @@ const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AboutIndexRoute = AboutIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AboutRoute,
+} as any)
+const AboutAppRoute = AboutAppRouteImport.update({
+  id: '/$app',
+  path: '/$app',
+  getParentRoute: () => AboutRoute,
 } as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/',
@@ -73,11 +91,14 @@ const SupportSectionArticleRoute = SupportSectionArticleRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
   '/changelog': typeof ChangelogRoute
   '/licenses': typeof LicensesRoute
   '/support': typeof SupportRouteWithChildren
+  '/about/$app': typeof AboutAppRoute
   '/blog/$id': typeof BlogIdRoute
+  '/about/': typeof AboutIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/support/': typeof SupportIndexRoute
   '/support/$section/$article': typeof SupportSectionArticleRoute
@@ -87,7 +108,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/changelog': typeof ChangelogRoute
   '/licenses': typeof LicensesRoute
+  '/about/$app': typeof AboutAppRoute
   '/blog/$id': typeof BlogIdRoute
+  '/about': typeof AboutIndexRoute
   '/blog': typeof BlogIndexRoute
   '/support': typeof SupportIndexRoute
   '/support/$section/$article': typeof SupportSectionArticleRoute
@@ -96,11 +119,14 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
   '/changelog': typeof ChangelogRoute
   '/licenses': typeof LicensesRoute
   '/support': typeof SupportRouteWithChildren
+  '/about/$app': typeof AboutAppRoute
   '/blog/$id': typeof BlogIdRoute
+  '/about/': typeof AboutIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/support/': typeof SupportIndexRoute
   '/support/$section/$article': typeof SupportSectionArticleRoute
@@ -110,11 +136,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/blog'
     | '/changelog'
     | '/licenses'
     | '/support'
+    | '/about/$app'
     | '/blog/$id'
+    | '/about/'
     | '/blog/'
     | '/support/'
     | '/support/$section/$article'
@@ -124,7 +153,9 @@ export interface FileRouteTypes {
     | '/'
     | '/changelog'
     | '/licenses'
+    | '/about/$app'
     | '/blog/$id'
+    | '/about'
     | '/blog'
     | '/support'
     | '/support/$section/$article'
@@ -132,11 +163,14 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/about'
     | '/blog'
     | '/changelog'
     | '/licenses'
     | '/support'
+    | '/about/$app'
     | '/blog/$id'
+    | '/about/'
     | '/blog/'
     | '/support/'
     | '/support/$section/$article'
@@ -145,6 +179,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRouteWithChildren
   BlogRoute: typeof BlogRouteWithChildren
   ChangelogRoute: typeof ChangelogRoute
   LicensesRoute: typeof LicensesRoute
@@ -158,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -187,6 +229,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/about/': {
+      id: '/about/'
+      path: '/'
+      fullPath: '/about/'
+      preLoaderRoute: typeof AboutIndexRouteImport
+      parentRoute: typeof AboutRoute
+    }
+    '/about/$app': {
+      id: '/about/$app'
+      path: '/$app'
+      fullPath: '/about/$app'
+      preLoaderRoute: typeof AboutAppRouteImport
+      parentRoute: typeof AboutRoute
     }
     '/blog/': {
       id: '/blog/'
@@ -226,6 +282,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AboutRouteChildren {
+  AboutAppRoute: typeof AboutAppRoute
+  AboutIndexRoute: typeof AboutIndexRoute
+}
+
+const AboutRouteChildren: AboutRouteChildren = {
+  AboutAppRoute: AboutAppRoute,
+  AboutIndexRoute: AboutIndexRoute,
+}
+
+const AboutRouteWithChildren = AboutRoute._addFileChildren(AboutRouteChildren)
+
 interface BlogRouteChildren {
   BlogIdRoute: typeof BlogIdRoute
   BlogIndexRoute: typeof BlogIndexRoute
@@ -255,6 +323,7 @@ const SupportRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRouteWithChildren,
   BlogRoute: BlogRouteWithChildren,
   ChangelogRoute: ChangelogRoute,
   LicensesRoute: LicensesRoute,

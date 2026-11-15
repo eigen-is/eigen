@@ -1,0 +1,21 @@
+From: organizer@example.com
+To: attendee@example.com
+Subject: Invitation: Grant talk
+MIME-Version: 1.0
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain
+
+You are invited.
+--alt
+Content-Type: text/html
+
+<p>You are invited.</p>
+--alt
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Transfer-Encoding: base64
+
+QkVHSU46VkNBTEVOREFSDQpWRVJTSU9OOjIuMA0KTUVUSE9EOlJFUVVFU1QNCkJFR0lOOlZFVkVOVA0KVUlEOmJvZHktMUBleGFtcGxlLmNvbQ0KU1VNTUFSWTpHcmFudCB0YWxrDQpEVFNUQVJUOjIwMjYwNDE1VDEwMDAwMFoNCkRURU5EOjIwMjYwNDE1VDExMDAwMFoNCkVORDpWRVZFTlQNCkVORDpWQ0FMRU5EQVINCg==
+--alt--
