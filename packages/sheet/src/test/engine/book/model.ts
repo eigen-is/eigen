@@ -525,28 +525,16 @@ function lineAfter({ insert, index, count }: LinesOp, line: number): number {
     return line < index + count ? -1 : line - count;
 }
 
-// The lines `start` to `end` after the edit, or null when none is left. An insert inside them grows them. With
-// `open`, an end on the axis's last line stays there, and the whole axis stays whole.
+// The lines `start` to `end` after the edit, or null when none is left, worked out line by line: the first and the
+// last of them that the edit leaves, where they stand after it, so an insert between them grows the span. With `open`,
+// an end on the axis's last line stays there, and the whole axis stays whole.
 function spanAfter(op: LinesOp, start: number, end: number, open: boolean): [number, number] | null {
-    const { insert, index, count } = op;
     const last = op.rows ? LAST_ROW : LAST_COLUMN;
     if (open && start === 0 && end === last) return [start, end];
-    const first = insert
-        ? start >= index
-            ? start + count
-            : start
-        : start < index
-          ? start
-          : Math.max(start - count, index);
-    const final = insert
-        ? end >= index
-            ? end + count
-            : end
-        : end < index + count
-          ? Math.min(end, index - 1)
-          : end - count;
+    const first = lineAfter(op, start) < 0 ? op.index + op.count : start;
+    const final = lineAfter(op, end) < 0 ? op.index - 1 : end;
     if (first > final) return null;
-    return [first, open && end === last ? last : final];
+    return [lineAfter(op, first), open && end === last ? last : lineAfter(op, final)];
 }
 
 function applyLines(model: Model, op: LinesOp): RefusalKey | null {

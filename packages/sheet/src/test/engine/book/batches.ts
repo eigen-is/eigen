@@ -344,20 +344,104 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
     }
 }
 
+// Rows or columns inserted or deleted: mostly among the cells of the book, now and then at the grid's first line or
+// among its last, where an insert pushes lines off the grid and a delete lets lines in.
 export function randomLinesOp(random: Random, model: Model): LinesOp {
     const rows = random() < 0.6;
     const insert = random() < 0.5;
-    const index = below(random, rows ? 20 : 9);
-    const op: LinesOp = {
-        kind: 'lines',
-        sheet: sheetId(random, model),
-        rows,
-        insert,
-        index,
-        count: 1 + below(random, 3),
-    };
+    const count = 1 + below(random, 3);
+    const place = random();
+    const end = (rows ? GRID_ROWS : GRID_COLUMNS) - count;
+    const index = place < 0.1 ? 0 : place < 0.3 ? end - below(random, 4) : below(random, rows ? 20 : 9);
+    const op: LinesOp = { kind: 'lines', sheet: sheetId(random, model), rows, insert, index, count };
     if (insert && random() < 0.7) op.like = index > 0 && random() < 0.6 ? index - 1 : index;
     return op;
+}
+
+// One thing put on one of the last three rows or columns of a sheet, which an insert then pushes off the grid: a link
+// or a mark alone, content, a line key, a look, a comment, a merge, a filter, filtered rows or a rule range. Now and
+// then the comment goes again.
+export function randomEndOp(random: Random, model: Model): InputOp | FormatOp | RecordOp {
+    const { id: sheet, records } = someSheet(random, model);
+    const row = GRID_ROWS - 1 - below(random, 3);
+    const column = GRID_COLUMNS - 1 - below(random, 3);
+    const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const filter = [...records.filter.keys()][0] ?? 'nofilter';
+    return pick<() => InputOp | FormatOp | RecordOp>(random, [
+        () => ({ kind: 'input', sheet, cells: [[row, below(random, 4), random() < 0.5 ? { link: LINK } : { qp: 1 }]] }),
+        () => ({ kind: 'input', sheet, cells: [[below(random, 9), column, content(random, model)]] }),
+        () => ({ kind: 'format', sheet, lines: 'rows', spans: [[row, row]], set: { size: 30 } }),
+        () => ({ kind: 'format', sheet, lines: 'columns', spans: [[column, column]], set: { hidden: 1 } }),
+        () => ({ kind: 'format', sheet, ranges: [[row, 0, row, 2]], set: { bl: 1 } }),
+        () => ({ kind: 'format', sheet, ranges: [[0, column, 5, column]], set: { it: 1 } }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e`, set: { row, column: 1 }, whole: 1 }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e`, set: { row: 1, column }, whole: 1 }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e` }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'merge',
+            id: `${sheet}e`,
+            set: { rect: [row - 1, 12, row, 13] },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'merge',
+            id: `${sheet}e`,
+            set: { rect: [12, column - 1, 12, column] },
+            whole: 1,
+        }),
+        () => ({ kind: 'record', sheet, type: 'filter', id: 'f', set: { rect: [2, 0, row, 4] }, whole: 1 }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'filterColumn',
+            id: 'ke',
+            set: { filter, column: 1, rows: [[row - 1, row]] },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'validation',
+            id: 've',
+            set: { ranges: [[row, 0, row, 1]], order: 'a2', rule },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'conditionalFormat',
+            id: 're',
+            set: formulaRule([[0, column, 2, column]], '=RC>1'),
+            whole: 1,
+        }),
+    ])();
+}
+
+// Formulas that read whole lines, lines beside their own and lines of another sheet, typed one cell at a time or
+// filled over a block: a line edit moves, stops or breaks what they read, on their sheet and from another.
+const READERS = [
+    '=SUM(R1C1:R1048576C1)',
+    '=SUM(R1C1:R1C16384)',
+    '=R[-2]C+1',
+    '=SUM(R[-3]C:R[-1]C)',
+    '=RC[-1]*2',
+    '=[s0]!R4C2+1',
+    '=SUM([s0]!R2C1:R1048576C2)',
+    '=SUM([s0]!R1C3:R9C16384)',
+    '=[s1]!R[1]C[1]',
+];
+
+export function randomReaderOp(random: Random, model: Model): InputOp {
+    const sheet = someSheet(random, model).id;
+    const top = 3 + below(random, 12);
+    const left = 1 + below(random, 8);
+    const f = pick(random, READERS);
+    if (random() < 0.7) return { kind: 'input', sheet, cells: [[top, left, { f }]] };
+    return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 4), left + below(random, 2)], { f }]] };
 }
 
 export function randomMoveOp(random: Random, model: Model): MoveOp {

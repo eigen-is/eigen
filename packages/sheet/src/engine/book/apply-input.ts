@@ -1,12 +1,12 @@
 // The applier of an `input` op: what cells of a sheet hold, written over rectangles and then cell by cell, such as
 // typing, a paste, a fill or a clear. Values and formulas go to the engine, rich runs, links and the quote mark to the
 // sheet's extras; looks and records stay. Its inverse is one `input` that writes back what the targets held, read
-// before the write as the engine and the extras hold it, joined into rectangles of equal content where it can be.
-// The same reading turns the formulas an edit bound, such as a rename, back into the text they held.
+// before the write and joined into rectangles of equal content where it can be. The same reading says what blocks
+// held, for an edit that takes them, and turns formulas an edit could not keep, such as a rename, back into their text.
 
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
-import type { CellContent, InputOp, Placed, Rect } from '@workspace/lib/sheets/ops';
+import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf } from './extras';
 import type { Workbook } from './workbook';
@@ -65,22 +65,38 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     return [inputOf(sheet, gathered)];
 }
 
-// The ops that put back the text of every formula an edit bound to a sheet that took its name, one per sheet, each
-// cell with the link, the mark and the given value it holds. They apply after the edit's own inverse, which frees
-// the name: before it, the text would bind again.
-export function lostInputs(book: Workbook, { rewrites }: EditResult): InputOp[] {
+// The ops that put back the text of every formula an edit could not keep, such as a rename that bound it or rows
+// deleted under what it read, one per sheet, each cell with the link, the mark and the given value it holds. They
+// apply after the edit's own inverse: where that is a line edit, `after`, each cell is said where it stands then.
+export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
     const ops: InputOp[] = [];
     for (const [sheet, { extras }] of book.sheets) {
+        const moves = after?.sheet === sheet ? after : undefined;
         const gathered: Gathered = { runs: [], cells: [] };
         for (const { sheet: on, top, left, bottom, right, lost } of rewrites) {
             if (on !== sheet || lost === null) continue;
-            readBlock(book, sheet, extras, [top, left, bottom, right], (group) =>
-                gather(gathered, group, { ...contentOfGroup(group), f: lost }),
-            );
+            readBlock(book, sheet, extras, [top, left, bottom, right], (group) => {
+                const content = { ...contentOfGroup(group), f: lost };
+                for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
+            });
         }
         if (gathered.runs.length + gathered.cells.length > 0) ops.push(inputOf(sheet, gathered));
     }
     return ops;
+}
+
+// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it, and without
+// the lines a delete takes.
+function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Group[] {
+    const [first, last] = rows ? [group.top, group.bottom] : [group.left, group.right];
+    const shift = insert ? count : -count;
+    const parts = [
+        [first, Math.min(last, index - 1)],
+        [Math.max(first, insert ? index : index + count) + shift, last + shift],
+    ];
+    return parts
+        .filter(([start, end]) => start <= end)
+        .map(([start, end]) => (rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end }));
 }
 
 // Reads a block a column at a time, down the cells the engine and the extras hold, and hands over each rectangle

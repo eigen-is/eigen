@@ -317,6 +317,73 @@ describe('engine/book — the model, rule by rule', () => {
         expect(after(sheets, title, change({ specLegend: padded(parts.specLegend) }))).toBe('key-too-long');
     });
 
+    // Each line of a small axis carries its own number through the edit, as an array spliced; the rest of the grid
+    // follows it. A range is where its lines went: from the first that is left to the last, the new lines between
+    // them included.
+    test('a range, a comment and filtered rows under a line edit cover the cells their lines went to', () => {
+        const LINES = 12;
+        const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+        let checked = 0;
+        for (const rows of [true, false]) {
+            const last = (rows ? GRID_ROWS : GRID_COLUMNS) - 1;
+            for (const insert of [true, false]) {
+                for (let index = 0; index < LINES; index += 1) {
+                    for (let count = 1; count <= 3; count += 1) {
+                        const axis: (number | null)[] = Array.from({ length: LINES + 4 }, (_, line) => line);
+                        if (insert) axis.splice(index, 0, ...Array.from({ length: count }, () => null));
+                        else axis.splice(index, count);
+                        for (let start = 0; start < LINES; start += 1) {
+                            for (let end = start; end <= LINES; end += 1) {
+                                // Past the small axis the range reaches the grid's last line, and stays reaching it.
+                                const open = end === LINES;
+                                const stop = open ? last : end;
+                                const places = axis.flatMap((line, place) =>
+                                    line !== null && line >= start && line <= (open ? LINES + 3 : end) ? [place] : [],
+                                );
+                                // A range of the whole axis stays whole: lines inserted at its start are in it.
+                                const first = open && start === 0 ? 0 : places[0];
+                                const span =
+                                    places.length > 0
+                                        ? ([first, open ? last : places[places.length - 1]] as const)
+                                        : null;
+                                const rect = (a: number, b: number) =>
+                                    rows ? ([a, 2, b, 3] as const) : ([2, a, 3, b] as const);
+                                const records: SheetContent['records'] = {
+                                    validation: { v: { ranges: [rect(start, stop)], order: 'a', rule } },
+                                    comment: { c: rows ? { row: start, column: 1 } : { row: 1, column: start } },
+                                    filter: { f: { rect: rows ? [0, 0, last, 4] : [0, 0, 20, last] } },
+                                };
+                                if (rows)
+                                    records.filterColumn = { k: { filter: 'f', column: 1, rows: [[start, stop]] } };
+                                const [sheet] = sheetsAfter([sheetOf('a', {}, { records })], {
+                                    kind: 'lines',
+                                    sheet: 'a',
+                                    rows,
+                                    insert,
+                                    index,
+                                    count,
+                                });
+                                const at = axis.indexOf(start);
+                                expect(sheet.records.validation?.v?.ranges ?? null).toEqual(
+                                    span && [rect(span[0], span[1])],
+                                );
+                                expect(sheet.records.comment?.c ?? null).toEqual(
+                                    at < 0 ? null : rows ? { row: at, column: 1 } : { row: 1, column: at },
+                                );
+                                // A delete of the filter's first row takes the filter, and its columns with it.
+                                const header = rows && !insert && index === 0;
+                                if (rows && !header)
+                                    expect(sheet.records.filterColumn?.k?.rows).toEqual(span ? [span] : []);
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        expect(checked).toBeGreaterThan(10_000);
+    });
+
     test('a line edit is refused when the refs it rewrites take a chart past its size bound', () => {
         const chart = (length: number) =>
             chartOf({

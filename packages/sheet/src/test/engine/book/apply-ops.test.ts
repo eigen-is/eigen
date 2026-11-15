@@ -8,7 +8,15 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, randomBookContent, randomFormatOp, randomInputOp, randomRecordOp, randomSheetOp } from './batches';
+import {
+    batchOf,
+    randomBookContent,
+    randomFormatOp,
+    randomInputOp,
+    randomLinesOp,
+    randomRecordOp,
+    randomSheetOp,
+} from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
@@ -445,6 +453,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                         const draw = r();
                         if (draw < 0.25) return randomInputOp(r, m);
                         if (draw < 0.45) return randomFormatOp(r, m);
+                        if (draw < 0.55) return randomLinesOp(r, m);
                         return draw < 0.85 ? randomRecordOp(r, m) : randomSheetOp(r, m);
                     },
                     6,
