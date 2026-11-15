@@ -72,7 +72,7 @@ type Table<T> = {
 };
 
 // A batch of ops from its JSON text when the text parses, fits the batch budget and every op in it is valid, else null.
-// The budget is read before any op, so a text past it costs no more than its parse and a pass over its sheet adds.
+// The budget is read before any op, so a text past it costs no more than its parse and one write of its other ops.
 export function readBatch(text: string): Batch | null {
     let value: unknown;
     try {
@@ -80,16 +80,17 @@ export function readBatch(text: string): Batch | null {
     } catch {
         return null;
     }
-    const ops = isRecord(value) ? value['ops'] : undefined;
-    if (!Array.isArray(ops)) return null;
+    if (!isRecord(value) || !Array.isArray(value['ops'])) return null;
     // A sheet's add is left out of the budget, since `fits` bounds it. The ops are read raw here and checked after.
-    const added: unknown[] = ops.flatMap((op) =>
-        isRecord(op) && op['kind'] === 'sheet' && 'add' in op ? [op['add']] : [],
-    );
-    if (added.length > MAX_SHEETS) return null;
-    let weight = text.length;
-    if (weight > MAX_BATCH_JSON) for (const add of added) weight -= JSON.stringify(add).length;
-    return weight <= MAX_BATCH_JSON && isOf(value, BATCH) ? value : null;
+    const isAdd = (op: unknown): op is Record<string, unknown> => isRecord(op) && op['kind'] === 'sheet' && 'add' in op;
+    const ops: unknown[] = value['ops'];
+    if (ops.filter(isAdd).length > MAX_SHEETS) return null;
+    // Past the budget the parsed batch is weighed as JSON writes it, since a text can spell a value shorter.
+    const weighed =
+        text.length <= MAX_BATCH_JSON ||
+        JSON.stringify({ ...value, ops: ops.map((op) => (isAdd(op) ? { ...op, add: null } : op)) }).length <=
+            MAX_BATCH_JSON;
+    return weighed && isOf(value, BATCH) ? value : null;
 }
 
 // A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value built from `JSON.parse`,

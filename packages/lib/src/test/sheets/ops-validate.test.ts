@@ -834,13 +834,16 @@ describe('10. lines', () => {
 describe('11. the batch budget', () => {
     const text = 'x'.repeat(100_000);
     const cells = Array.from({ length: Math.ceil(MAX_BATCH_JSON / text.length) }, (_, row) => [row, 0, { v: text }]);
+    const deletes = Array.from({ length: MAX_BATCH_JSON / 20 }, (_, index) => ({ kind: 'sheet', delete: `d${index}` }));
 
-    test('refuses a batch whose text is past MAX_BATCH_JSON, to the code unit', () => {
+    test('refuses a batch past MAX_BATCH_JSON as JSON writes it, to the code unit', () => {
         expect(read(batchOf(input({ cells })))).toBeNull();
-        const small = JSON.stringify(EXAMPLES[0]);
-        const padded = (length: number) => `${small}${' '.repeat(length - small.length)}`;
-        expect(readBatch(padded(MAX_BATCH_JSON))).not.toBeNull();
-        expect(readBatch(padded(MAX_BATCH_JSON + 1))).toBeNull();
+        const sized = (length: number) => {
+            const last = (v: string) => batchOf(input({ cells: [...cells.slice(0, -1), [cells.length, 0, { v }]] }));
+            return read(last('x'.repeat(length - JSON.stringify(last('')).length)));
+        };
+        expect(sized(MAX_BATCH_JSON)).not.toBeNull();
+        expect(sized(MAX_BATCH_JSON + 1)).toBeNull();
     });
 
     test('leaves the content of a sheet add out of the count, and counts every other op beside it', () => {
@@ -848,18 +851,28 @@ describe('11. the batch budget', () => {
         expect(read(batchOf(added({ cells }), { kind: 'sheet', delete: 's1' }))).not.toBeNull();
         expect(read(batchOf(added({ cells }), cell({ v: 1 })))).not.toBeNull();
         expect(read(batchOf(added({ cells }), input({ cells })))).toBeNull();
-        const deletes = Array.from({ length: MAX_BATCH_JSON / 20 }, (_, index) => ({
-            kind: 'sheet',
-            delete: `d${index}`,
-        }));
         expect(read(batchOf(added({}), ...deletes))).toBeNull();
         expect(read(batchOf(added({}), ...deletes.slice(0, 1000)))).not.toBeNull();
     });
 
-    test('counts the text around a sheet add, however it is padded', () => {
+    test('weighs the ops beside a sheet add as they parse, however the text spells the add', () => {
+        const big = Array.from({ length: 300_000 }, (_, row) => [row, 0, { v: 1e20 }]);
+        const exponents = JSON.stringify(batchOf(added({ cells: big }), ...deletes));
+        expect(readBatch(exponents.replaceAll('100000000000000000000', '1e20'))).toBeNull();
+        const lone = String.fromCharCode(0xd800);
+        const texts = Array.from({ length: 40 }, (_, row) => [row, 0, { v: lone.repeat(100_000) }]);
+        const surrogates = JSON.stringify(batchOf(added({ cells: texts }), ...deletes));
+        expect(readBatch(surrogates.replaceAll('\\ud800', lone))).toBeNull();
+    });
+
+    test('spends nothing on what the parse drops, such as padding or a repeated key', () => {
         const batch = JSON.stringify(batchOf(added({ cells })));
-        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON / 2)}`))).not.toBeNull();
-        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON)}`))).toBeNull();
+        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON)}`))).not.toBeNull();
+        const pad = (value: unknown) => `${JSON.stringify(value)}${' '.repeat(MAX_BATCH_JSON)}`;
+        expect(readBatch(pad(batchOf({ kind: 'sheet', delete: 's1' })))).not.toBeNull();
+        expect(readBatch(pad(batchOf()))).not.toBeNull();
+        const repeated = ',"delete":"s1"'.repeat(400_000);
+        expect(readBatch(`{"g":0,"now":1,"seed":0,"ops":[{"kind":"sheet"${repeated}}]}`)).not.toBeNull();
     });
 
     test('refuses a batch that adds more sheets than a workbook holds', () => {
@@ -869,14 +882,6 @@ describe('11. the batch budget', () => {
             );
         expect(read(batchOf(...adds(MAX_SHEETS)))).not.toBeNull();
         expect(read(batchOf(...adds(MAX_SHEETS + 1)))).toBeNull();
-    });
-
-    test('counts a batch of sheet ops with no add, however its text is padded', () => {
-        const pad = (batch: unknown) => `${JSON.stringify(batch)}${' '.repeat(MAX_BATCH_JSON)}`;
-        expect(readBatch(pad(batchOf({ kind: 'sheet', delete: 's1' })))).toBeNull();
-        expect(readBatch(pad(batchOf()))).toBeNull();
-        const deletes = ',"delete":"s1"'.repeat(400_000);
-        expect(readBatch(`{"g":0,"now":1,"seed":0,"ops":[{"kind":"sheet"${deletes}}]}`)).toBeNull();
     });
 });
 
