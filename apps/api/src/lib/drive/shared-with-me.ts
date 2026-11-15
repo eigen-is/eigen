@@ -89,11 +89,11 @@ export async function listSharedWithMe(sharedDb: SharedDb, user: User, mimeTypeP
     const rows = sharedDb.select().from(sharedPaths).orderBy(asc(sharedPaths.sharedAt)).all();
     if (rows.length === 0) return [];
     const memberships = await getMemberships(user.id);
-    return (await pullVisiblePaths(user, memberships, rows, mimeTypePrefix)).map(({ path }) => path);
+    return (await readVisiblePaths(user, memberships, rows, mimeTypePrefix)).map(({ path }) => path);
 }
 
 // Asks each owner once for all of its rows, and keeps the rows' order, each visible path beside its row.
-export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
+export async function readVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
     user: User,
     memberships: Memberships,
     rows: readonly Row[],
