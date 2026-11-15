@@ -51,14 +51,22 @@ export class Workbook {
     // allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
     public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
-        const bands = ordered.map(
-            (sheet) =>
-                new Bands(
-                    sheet.bands,
-                    sheet.looks.map((look) => this.looks.intern(look)),
+        const parts = ordered.map(({ id, fields, cells, looks, bands, rows, columns, records }): BookSheet => {
+            const extras = new Extras();
+            for (const [row, column, { s, link, qp }] of cells) {
+                if (s || link || qp) extras.write(row, column, { s, link, qp });
+            }
+            return {
+                bands: new Bands(
+                    bands,
+                    looks.map((look) => this.looks.intern(look)),
                 ),
-        );
-        const records = ordered.map(({ id, fields, records }) => new SheetRecords(id, fields, records));
+                rows: new LineRuns(rows),
+                columns: new LineRuns(columns),
+                extras,
+                records: new SheetRecords(id, fields, records),
+            };
+        });
         let slots = 0;
         for (const { cells } of ordered) {
             // The cells come in column order, so a column's last cell says how many slots the engine gives it.
@@ -72,7 +80,7 @@ export class Workbook {
             }
             slots += length;
         }
-        const refusal = fits(weightOf(slots, bands, records));
+        const refusal = fits(weightOf(slots, parts));
         if (refusal) throw new Refusal(refusal);
 
         this.engine = new Engine(
@@ -91,21 +99,7 @@ export class Workbook {
             now,
             seed,
         );
-        const held = new Map<string, BookSheet>();
-        for (const [at, { id, cells, rows, columns }] of ordered.entries()) {
-            const extras = new Extras();
-            for (const [row, column, { s, link, qp }] of cells) {
-                if (s || link || qp) extras.write(row, column, { s, link, qp });
-            }
-            held.set(id, {
-                bands: bands[at],
-                rows: new LineRuns(rows),
-                columns: new LineRuns(columns),
-                extras,
-                records: records[at],
-            });
-        }
-        this.sheets = held;
+        this.sheets = new Map(ordered.map(({ id }, at) => [id, parts[at]]));
         this.g = g;
         this.now = now;
         this.seed = seed;
@@ -177,12 +171,7 @@ export class Workbook {
 
     // What the limits count: the engine's slots, the runs and bands of every sheet, its records and the sheets.
     public weight(): WorkbookWeight {
-        const sheets = [...this.sheets.values()];
-        return weightOf(
-            this.engine.slots(),
-            sheets.map((sheet) => sheet.bands),
-            sheets.map((sheet) => sheet.records),
-        );
+        return weightOf(this.engine.slots(), [...this.sheets.values()]);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
@@ -204,16 +193,17 @@ export class Workbook {
     }
 }
 
-function weightOf(slots: number, bands: readonly Bands[], records: readonly SheetRecords[]): WorkbookWeight {
+function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
     let runs = 0;
-    let count = 0;
-    for (const sheet of bands) {
-        const weight = sheet.weight();
-        runs += weight.runs;
-        count += weight.bands;
+    let bands = 0;
+    let records = 0;
+    for (const sheet of sheets) {
+        const looks = sheet.bands.weight();
+        runs += looks.runs;
+        bands += looks.bands;
+        records = Math.max(records, sheet.records.weight().records);
     }
-    const most = Math.max(0, ...records.map((sheet) => sheet.weight().records));
-    return { slots, runs, bands: count, records: most, sheets: bands.length };
+    return { slots, runs, bands, records, sheets: sheets.length };
 }
 
 // A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.
