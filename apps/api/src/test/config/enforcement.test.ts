@@ -1,9 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getMountQuotaState } from '../../lib/config/enforcement';
-import { resolveUserQuotas } from '../../lib/config/quota';
+import { resolveHomeDataMax, resolveUserQuotas } from '../../lib/config/quota';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
+import { getMemberships } from '../../lib/user';
 import { addMember, authedRequest, createTeam, getTestContext } from '../setup';
 
 // A mount's cap belongs to the mount: the same mount meets the same cap, WebDAV reports the same quota,
@@ -96,5 +98,68 @@ describe('a raised server default lifts a user drive, never a team drive', () =>
 
         expect((await resolveUserQuotas(mount, [], 'team')).mountMax).toBe(200 * MB);
         expect((await resolveUserQuotas(mount, [], 'user')).mountMax).toBe(5000 * MB);
+    });
+});
+
+// A team that does not answer adds no override, so a write can be refused at the lower limit but never fails whole.
+describe('a team that does not answer adds no override', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let raising: string;
+    let restoring: string;
+    const MB = 1024 * 1024;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()!.orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        raising = await createTeam(ctx, orgId, 'Raising Team');
+        restoring = await createTeam(ctx, orgId, 'Restoring Team');
+        for (const teamId of [raising, restoring]) await addMember(ctx, teamId, ctx.charlie.user.id);
+        await setHomeDataOverride(raising, getServerSettings().quotas.homeDataMaxMB + 1000);
+    });
+
+    afterEach(() => {
+        mock.restore();
+    });
+
+    afterAll(async () => {
+        await setHomeDataOverride(raising, null);
+    });
+
+    function setHomeDataOverride(teamId: string, homeDataMaxMB: number | null): Promise<Response> {
+        return authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ memberOverrides: { homeDataMaxMB } }),
+        });
+    }
+
+    async function homeDataMaxWhileRestoring(teamId: string): Promise<number> {
+        markHomeRestoring(teamOwnerId(teamId));
+        try {
+            return await resolveHomeDataMax((await getMemberships(ctx.charlie.user.id)).teamIds);
+        } finally {
+            clearHomeRestoring(teamOwnerId(teamId));
+        }
+    }
+
+    test('the teams that answer still raise the limit, and the one that does not is logged', async () => {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(await homeDataMaxWhileRestoring(restoring)).toBe((getServerSettings().quotas.homeDataMaxMB + 1000) * MB);
+        expect(errors).toHaveBeenCalledWith(
+            `home-relay: team:quota-overrides from ${teamOwnerId(restoring)} failed:`,
+            expect.anything(),
+        );
+    });
+
+    test('with the raising team not answering, the server default applies', async () => {
+        spyOn(console, 'error').mockImplementation(() => {});
+
+        expect(await homeDataMaxWhileRestoring(raising)).toBe(getServerSettings().quotas.homeDataMaxMB * MB);
     });
 });
