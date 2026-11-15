@@ -462,6 +462,8 @@ describe('4. values and formulas', () => {
         expect(accepts(added({ cells: [[0, 0, { f: '=1', v: 1, spill: 1 }]] }))).toBe(false);
         expect(accepts(added({ cells: [[0, 0, { v: 1, spill: true }]] }))).toBe(false);
         expect(accepts(added({ cells: [[0, 0, { spill: 1 }]] }))).toBe(false);
+        expect(accepts(added({ cells: [[0, 0, { s: [{ v: 'a' }], spill: 1 }]] }))).toBe(false);
+        expect(accepts(added({ cells: [[0, 0, { link: { type: 'sheet', address: 's1' }, spill: 1 }]] }))).toBe(false);
         expect(accepts(cell({ v: 1, spill: 1 }))).toBe(false);
     });
 
@@ -660,6 +662,8 @@ describe('8. record', () => {
             ),
         ).toBe(false);
         expect(accepts(column({ condition: { name: 'byValue', values: ['a', 1] } }))).toBe(false);
+        expect(accepts(column({ condition: { name: 'byValue', values: ['a'], extra: 1 } }))).toBe(false);
+        expect(accepts(column({ condition: { values: ['a'] } }))).toBe(false);
         expect(accepts(record('filterColumn', { set: { filter: '' } }))).toBe(false);
     });
 
@@ -731,9 +735,29 @@ describe('8. record', () => {
     });
 
     test('a floating box is finite', () => {
-        expect(accepts(record('image', { set: { x: Number.POSITIVE_INFINITY } }))).toBe(false);
+        expect(acceptsText('{"kind":"record","sheet":"s1","type":"image","id":"i1","set":{"x":1e400}}')).toBe(false);
         expect(accepts(record('chart', { set: { strokeStyle: 'wavy' } }))).toBe(false);
         expect(accepts(record('chart', { set: { index: '' } }))).toBe(false);
+    });
+
+    test('a chart part and a rule value are each text of at most MAX_TEXT_LENGTH', () => {
+        const long = 'x'.repeat(MAX_TEXT_LENGTH);
+        expect(accepts(record('chart', { set: { specData: long } }))).toBe(true);
+        expect(accepts(record('chart', { set: { specData: `${long}x` } }))).toBe(false);
+        const rule = (conditionValue: unknown[]) =>
+            record('conditionalFormat', {
+                whole: 1,
+                set: {
+                    ranges: [RANGE],
+                    order: 'a0',
+                    type: 'default',
+                    format: {},
+                    conditionName: 'equal',
+                    conditionValue,
+                },
+            });
+        expect(accepts(rule([long, 1]))).toBe(true);
+        expect(accepts(rule([`${long}x`]))).toBe(false);
     });
 });
 
