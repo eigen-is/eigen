@@ -4,7 +4,7 @@
 
 import { aboutApps } from '../../src/content/about-apps';
 
-const slugs = new Set(aboutApps.map((app) => app.slug));
+const slugs = new Set<string>(aboutApps.map((app) => app.slug));
 
 // The slug of an About file, such as `sheets` for sheets.md, or `index` for the overview.
 export function aboutPageSlug(file: string): string {

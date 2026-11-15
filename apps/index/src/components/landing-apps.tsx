@@ -4,10 +4,11 @@
 
 import { Link } from '@tanstack/react-router';
 import { Fragment } from 'react';
+import type { AboutSlug } from '../content/about-apps';
 import { getAboutArticles } from '../content/manifest';
 
 // The line's words in its order, each with the About slug of the app it names: Vector is "drawings" here.
-const WORDS: readonly { word: string; slug: string }[] = [
+const WORDS: readonly { word: string; slug: AboutSlug }[] = [
     { word: 'Mail', slug: 'mail' },
     { word: 'drive', slug: 'drive' },
     { word: 'docs', slug: 'docs' },

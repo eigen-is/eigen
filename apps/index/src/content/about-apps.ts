@@ -6,6 +6,24 @@
 
 import { adminApp, apps } from '@workspace/lib/apps';
 
+// The registry names its apps as plain strings, so the slugs are written out once here to give them a type; an app
+// the registry adds without one throws below.
+const aboutSlugs = [
+    'mail',
+    'drive',
+    'calendar',
+    'docs',
+    'sheets',
+    'slides',
+    'vector',
+    'stickies',
+    'chat',
+    'contacts',
+    'admin',
+] as const;
+
+export type AboutSlug = (typeof aboutSlugs)[number];
+
 export const principles = ['Use your favorite apps', 'Office compatible', 'Built for data sovereignty'] as const;
 
 export type Principle = (typeof principles)[number];
@@ -19,7 +37,7 @@ export const principleLabels: Record<Principle, string> = {
 
 // Tags are file endings or protocols, such as `.xlsx` or `CalDAV`, and `article` a help article's slug, such as
 // `sheets/import-excel`.
-export type AppPrinciple = { principle: Principle; line: string; tags: readonly string[]; article: string };
+type AppPrinciple = { principle: Principle; line: string; tags: readonly string[]; article: string };
 
 export const appPrinciples = {
     mail: [
@@ -112,12 +130,13 @@ export const appPrinciples = {
             article: 'self-hosting/back-up-and-restore',
         },
     ],
-} satisfies Record<string, readonly AppPrinciple[]>;
+} satisfies Partial<Record<AboutSlug, readonly AppPrinciple[]>>;
 
 const principlesBySlug = new Map<string, readonly AppPrinciple[]>(Object.entries(appPrinciples));
 
 export const aboutApps = [...apps.filter((app) => app.name !== 'Space'), adminApp].map((app) => {
-    const slug = app.name.toLowerCase();
+    const slug = aboutSlugs.find((entry) => entry === app.name.toLowerCase());
+    if (!slug) throw new Error(`${app.name} has no About slug`);
     return { ...app, slug, principles: principlesBySlug.get(slug) ?? [] };
 });
 
