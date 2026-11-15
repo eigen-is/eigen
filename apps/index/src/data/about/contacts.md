@@ -21,7 +21,7 @@ A card holds [a photo](/support/contacts/contact-details), a company and job tit
 From a card, or a selection of them, you [start an email or a chat](/support/contacts/email-or-chat-a-contact) with those people. Select the stage crew, and a mail to all of them is a right-click away.
 
 ::: carousel
-![The farmer's card in Saar's own address book: phone, farm and a note on the gate code](/data/about/media/contacts-still-card.webp)
+![The farmer's card in Saar's own address book: phone, farm, a note on the gate code and a label](/data/about/media/contacts-still-card.webp)
 ![A first aider's vCard that came by mail, open in the preview with Import to Contacts](/data/about/media/contacts-still-vcard.webp)
 :::
 
