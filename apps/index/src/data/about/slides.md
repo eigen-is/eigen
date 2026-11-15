@@ -16,6 +16,13 @@ A slide holds text, images, shapes and arrows. Double-click a text box to type i
 
 Slides runs on the same canvas as eigen|vector⟩, so shapes have the same hand-drawn look, which you can turn down to clean lines ([Style shapes, text, and images](/support/slides/style-objects)).
 
+## From a sheet to a slide
+
+Copy a chart in eigen|sheets⟩ and paste it on a slide, and it stays a chart you can edit, with the numbers it showed ([Add a chart to a spreadsheet](/support/sheets/add-a-chart), [Insert text and images](/support/slides/insert-content)). Give it the hand-drawn look and font, then Convert to shapes splits it into slices and labels you move one by one. An arrow docked on a slice moves with it ([Draw shapes, lines, and arrows on a slide](/support/slides/draw-shapes-and-arrows)).
+
+::: video src="/data/about/media/slides-pie" caption="The income pie from the budget on a new slide of the sponsor deck, drawn by hand, with its biggest slice pulled out."
+:::
+
 ## Presenting
 
 Press Present and the slide fills the screen. Click or use the arrow keys to move on; a presentation clicker works too. Escape takes you back to the editor ([Present your slides](/support/slides/present)).
