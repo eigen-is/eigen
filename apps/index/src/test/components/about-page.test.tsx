@@ -56,8 +56,8 @@ describe('AboutPage', () => {
         const html = await renderPage();
         const [gutter, column] = html.split('site-reading-column');
         for (const part of [gutter, column]) {
-            expect(part.match(/Use your favorite apps/g)?.length).toBe(1);
-            expect(part.match(/Built for data sovereignty/g)?.length).toBe(1);
+            expect(part.match(/Use your apps/g)?.length).toBe(1);
+            expect(part.match(/Data sovereignty/g)?.length).toBe(1);
             expect(part).not.toContain('Office compatible');
             expect(part).not.toContain('>IMAP</span>');
             expect(part).toContain('Every message is a plain .eml file.');
@@ -67,8 +67,8 @@ describe('AboutPage', () => {
 
     test('an app with no principles shows no boxes', async () => {
         const html = await renderPage(undefined, undefined, 'chat');
-        expect(html).not.toContain('Use your favorite apps');
-        expect(html).not.toContain('Built for data sovereignty');
+        expect(html).not.toContain('Use your apps');
+        expect(html).not.toContain('Data sovereignty');
         expect(html).not.toContain('data-slot="badge"');
     });
 

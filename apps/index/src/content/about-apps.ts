@@ -10,6 +10,13 @@ export const principles = ['Use your favorite apps', 'Office compatible', 'Built
 
 export type Principle = (typeof principles)[number];
 
+// The short name a principle carries in a box beside an About page, where the full title wraps.
+export const principleLabels: Record<Principle, string> = {
+    'Use your favorite apps': 'Use your apps',
+    'Office compatible': 'Office compatible',
+    'Built for data sovereignty': 'Data sovereignty',
+};
+
 // Tags are file endings or protocols, such as `.xlsx` or `CalDAV`, and `article` a help article's slug, such as
 // `sheets/import-excel`.
 export type AppPrinciple = { principle: Principle; line: string; tags: readonly string[]; article: string };

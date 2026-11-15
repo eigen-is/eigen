@@ -5,6 +5,7 @@
 // the boxes sit at the body's end, above the technical panel.
 
 import type { AboutApp } from '../content/about-apps';
+import { principleLabels } from '../content/about-apps';
 import type { ArticleBody, ArticleMeta } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
 import { ArticleBreadcrumb } from './article-breadcrumb';
@@ -93,7 +94,7 @@ function PrincipleBoxes({ app, className }: { app: AboutApp; className: string }
                     href={`/support/${entry.article}`}
                     className="site-panel block text-sm leading-snug text-muted-foreground transition-colors hover:text-foreground"
                 >
-                    <p className="eigen-section-label mb-2 leading-5">{entry.principle}</p>
+                    <p className="eigen-section-label mb-2 leading-5">{principleLabels[entry.principle]}</p>
                     <p className="text-pretty">{entry.line}</p>
                 </a>
             ))}
