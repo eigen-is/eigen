@@ -1,9 +1,8 @@
-// The state of one spreadsheet document on one host, such as a browser tab or the server. It holds the formula
-// engine, which keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which
-// look a cell wears, the keys of its rows and columns, what its cells hold beyond a value, and its records. It is
-// built from a decoded snapshot and walks back to one, so equal documents give equal snapshots whatever their
-// history. A sheet an op adds is built as the load builds one. The appliers of the ops reach the parts through it, and
-// nothing outside this folder does.
+// The state of one spreadsheet document on one host, such as a browser tab or the server: the formula engine, which
+// keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
+// the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
+// snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. A
+// sheet an op adds is built as the load builds one. Only the appliers in this folder reach the parts through it.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
