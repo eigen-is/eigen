@@ -212,7 +212,7 @@ other half left for sockets, document DBs, and multi-mount variance. Pinned comp
 
 ### Composition with the home-relay outbox
 
-[PROPOSAL_HOME_RELAY.md](PROPOSAL_HOME_RELAY.md) runs every Home the relay opens, for reads and deliveries alike, under one cap, `HOME_OPENS_AT_ONCE`: a bound on *in-flight opens* (flow). The LRU cap bounds *resident homes* (stock). They compose without coordination: the relay opens at most that many homes concurrently, each install may evict the least-recently-used resident, so residency overshoots N by at most the open cap plus the opens outside the relay. Today's code has no such cap: `sendToUserHomes` opens one home at a time, and `pullFromEach` opens them all at once.
+The relay's `getFromHomes` opens the homes it reads under one cap, `HOME_OPENS_AT_ONCE` (4): a bound on *in-flight opens* (flow), which [PROPOSAL_HOME_RELAY.md](PROPOSAL_HOME_RELAY.md) extends to deliveries. The LRU cap bounds *resident homes* (stock). They compose without coordination: the relay opens at most that many homes concurrently, each install may evict the least-recently-used resident, so residency overshoots N by at most the open cap plus the opens outside it. Deliveries are outside it today: `sendToUserHomes` opens one home at a time per fan-out, and fan-outs run side by side.
 
 ## Failure honesty
 

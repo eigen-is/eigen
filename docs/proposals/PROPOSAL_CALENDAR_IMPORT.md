@@ -330,8 +330,8 @@ mechanism. One clamp in `Calendar.checkPermission`: return at most `'read'` when
 everywhere by construction, verified against current code:
 
 - `checkCalendarAccess` (`get-calendar.ts`) resolves cross-user and team permissions through
-  `pullCalendarPermission` → `checkPermission`, so route-level write checks
-  (`permission !== 'write'` → 403) reject before the relay is even called.
+  `checkPermission` on the owner's calendar, so route-level write checks
+  (`permission !== 'write'` → 403) reject before any write.
 - `propagateCalendarShare` (`share-propagation.ts`) resolves each recipient's permission through
   `checkPermission` before `sendToHome`, so recipients' `shared_calendars` rows store `read` and
   their UI shows no write affordances.

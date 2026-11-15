@@ -42,7 +42,7 @@ The `paths_fts` UPDATE trigger fires only when the name changes, so the frequent
 
 A `bm25()` score is comparable only within one index. So `Drive.search` (`apps/api/src/lib/drive/drive.ts`) merges each mount's results and sorts them by `updatedAt`. That sort runs even for a single mount, so the name-first order decides which files make the cut but not the order they come back in.
 
-`teams=1` goes through `aggregateFileSearch` (`lib/drive/aggregate.ts`), which adds each of the caller's team homes through `pullDriveSearch` on the home relay, dedupes by path id and sorts by recency again. A team home that fails to answer is left out. Mail stays personal, and items other users shared into the home are not searched.
+`teams=1` goes through `aggregateFileSearch` (`lib/drive/aggregate.ts`), which asks each of the caller's team homes through the home relay's `getFromHomes` (`'drive:search'`), dedupes by path id and sorts by recency again. A team home that fails to answer, or does not open within the relay's deadline, is left out. Mail stays personal, and items other users shared into the home are not searched.
 
 ## Body text lives in its own table
 
