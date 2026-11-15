@@ -10,7 +10,7 @@ eigen|calendar⟩ is the [calendar app](/support/calendar/get-started) in Eigen.
 
 ## More than one calendar
 
-Everyone has a calendar of their own, and a team has one its members share. Each has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round. You can [share one of your calendars](/support/calendar/share-calendar) with people or a team, to edit, to view, or to see only when you are busy. An event [repeats](/support/calendar/recurring-events) daily, weekly or on weekdays, and you change one date or the whole series.
+Everyone has a calendar of their own, and a team has one its members share. Each has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round. You can [share one of your calendars](/support/calendar/share-calendar) with people or a team, to edit, to view, or to see only when you are busy. An event [repeats](/support/calendar/recurring-events), such as daily, weekly or on weekdays, and you change one date or the whole series.
 
 ## Guests and their answers
 
