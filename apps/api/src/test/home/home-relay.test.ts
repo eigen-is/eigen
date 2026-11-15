@@ -109,20 +109,6 @@ async function answersFirst(request: Promise<unknown>): Promise<boolean> {
     return Promise.race([request.then(() => true), Bun.sleep(2_000).then(() => false)]);
 }
 
-describe('A notification to a team', () => {
-    test('reaches every member of the team', async () => {
-        const tag = 'relay:team-notification';
-        await pushToHomes([teamOwner], {
-            type: 'notification',
-            notification: { type: 'admin-alert', title: 'To the whole team', tag },
-        });
-
-        for (const member of members) {
-            expect(await notificationsWithTag(member, tag)).toHaveLength(1);
-        }
-    });
-});
-
 describe('A drive event for the members of a team', () => {
     test('reaches a member whose home is loaded and opens no home that is closed', async () => {
         const [closed, loaded] = members;

@@ -21,7 +21,6 @@ import type { TeamQueries } from '../team/home-calls';
 import { answerTeam } from '../team/home-calls';
 import { getHome, loadedHome } from './get-home';
 import type { Home } from './home';
-import { TeamHome } from './team-home';
 
 // --- Pushes ---
 
@@ -144,15 +143,7 @@ async function deliver(targetId: string, message: HomeMessage): Promise<void> {
             }
             break;
         case 'notification':
-            if (home instanceof TeamHome) {
-                const members = await home.membersToNotify(message.notification.actorEmail);
-                await pushToHomes(
-                    members.map((member) => member.id),
-                    message,
-                );
-            } else {
-                home.notify(message.notification);
-            }
+            home.notify(message.notification);
             break;
     }
 }
