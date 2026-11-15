@@ -7,8 +7,8 @@ import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
-// A letter heading in the list, so the resting pointer lights up no row.
-const REST = { x: 770, y: 283 };
+// The empty sidebar under the labels, so the resting pointer lights up no row.
+const REST = { x: 130, y: 500 };
 
 export const contactsHero = {
     name: 'contacts-hero',
