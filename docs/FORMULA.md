@@ -17,11 +17,11 @@ The engine runs unchanged in the browser, in Bun and in Node. Arithmetic, `^` an
 | Entry | What it holds | Who imports it today |
 |---|---|---|
 | `@workspace/formula` | `Engine`, the function registry `FUNCTIONS`, the error values and the host's types | the package's tests and scripts |
-| `@workspace/formula/text` | the parser and printers, `storedKey`, A1 labels and sheet names, `mapIndex` and `mapSpan`, the transforms, the xlsx dialect, `resolveTables`, `tokens` | `packages/sheet`, for the row and column map |
+| `@workspace/formula/text` | the parser and printers, `storedKey`, A1 labels and sheet names, `mapIndex` and `mapSpan`, the transforms, the xlsx dialect, `resolveTables`, `tokens` | `packages/sheet`, for the row and column map; lib's op validators, for four constants |
 | `@workspace/formula/format` | `numberDisplay`, `isDateFormat` and `numberFormatError` (numfmt's reason for a format it cannot show, for the format dialog's preview), the product's one call of numfmt's `format` (the sheet asks numfmt only whether a format parses) | `packages/sheet`, `packages/lib`'s charts, the API's xlsx import, chart export and demo seed |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` | the sheet engine's `#NAME?` rule, the API's xlsx writer |
 
-lib imports only `/format`, which a biome rule enforces, so lib, which every app and the server load, carries number display and not the engine. `/format` holds no engine for the same reason.
+lib imports only `/format`, and from `/text` only the constants its op validators check against (`MAX_STORED_LENGTH`, `GRID_ROWS`, `GRID_COLUMNS`, `ERROR_LITERALS`); a biome rule enforces both, so lib, which every app and the server load, carries number display and four constants and not the engine. `/format` holds no engine for the same reason.
 
 ## A formula has three spellings and one tree
 
