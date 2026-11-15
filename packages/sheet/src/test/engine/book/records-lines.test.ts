@@ -247,6 +247,17 @@ describe('the frozen panes', () => {
         expect(content.fields.frozenColumns).toBe(1);
         expect(restore).toEqual([{ kind: 'record', type: 'sheet', sheet: 'S', id: 'S', set: { frozenColumns: 3 } }]);
     });
+
+    test('an insert inside a freeze that ends near the grid’s end freezes no line past it', () => {
+        for (const [frozenRows, count] of [
+            [LAST_ROW + 1, 1],
+            [LAST_ROW - 575, 1000],
+        ]) {
+            const { content } = edited({}, rowsAt(true, 0, count), { frozenRows });
+            expect(content.fields.frozenRows).toBe(LAST_ROW + 1);
+            roundTrips({}, rowsAt(true, 0, count), { frozenRows });
+        }
+    });
 });
 
 describe('the ranges of a rule', () => {

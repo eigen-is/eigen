@@ -595,10 +595,11 @@ function spanAfter(edit: Edit, start: number, end: number, open: boolean): Span 
     return [into.start, open && end === edit.lines - 1 ? end : into.end];
 }
 
-// An insert before the last frozen line freezes the new lines too; a delete takes the frozen lines it deletes.
-function frozenAfter({ insert, index, count }: Edit, frozen: number): number {
+// An insert before the last frozen line freezes the new lines too, up to the grid's end; a delete takes the frozen
+// lines it deletes.
+function frozenAfter({ insert, index, count, lines }: Edit, frozen: number): number {
     if (index >= frozen) return frozen;
-    return insert ? frozen + count : frozen - Math.min(count, frozen - index);
+    return insert ? Math.min(frozen + count, lines) : frozen - Math.min(count, frozen - index);
 }
 
 // A formula rule with its stored key transformed: the rule as it came when its key stays, or when its text does not
