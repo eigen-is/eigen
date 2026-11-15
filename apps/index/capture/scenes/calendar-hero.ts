@@ -1,12 +1,14 @@
-// The Calendar page's opening loop: the production lead opens the go/no-go meeting on the eve of the festival and
-// unfolds its guest list with each answer. She closes it, hides the team's calendar so only her own two lines are
-// left, and shows it again, so the loop ends where it began.
+// The Calendar page's opening loop: in the festival's month, the production lead opens the go/no-go meeting on the eve
+// of the festival and unfolds its guest list with each answer. She closes it, hides the team's calendar so only her
+// own two lines are left, and shows it again, so the loop ends where it began.
 
+import type { Locator } from 'playwright-core';
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 
-const REST = { x: 910, y: 392 };
+// The empty sidebar under the calendars, as a day cell lights up under the pointer.
+const REST = { x: 130, y: 470 };
 
 export const calendarHero = {
     name: 'calendar-hero',
@@ -17,7 +19,13 @@ export const calendarHero = {
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await page.goto(stack.appUrl('calendar'));
-        await page.getByText('Go / no-go meeting').first().waitFor();
+        const meeting = page.getByText('Go / no-go meeting').first();
+        await meeting.waitFor();
+        // The festival week is the month's last row, under the window's foot, so she steps on to the month it opens.
+        for (let month = 0; month < 3 && !(await inView(meeting)); month++) {
+            await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
+            await Bun.sleep(800);
+        }
         await Bun.sleep(2000);
         await cursor.moveTo(REST, { duration: 1 });
     },
@@ -40,3 +48,9 @@ export const calendarHero = {
         await Bun.sleep(800);
     },
 } satisfies Scene;
+
+// Whether the element lies whole inside the window, where a click can reach it.
+async function inView(locator: Locator): Promise<boolean> {
+    const box = await locator.boundingBox();
+    return box !== null && box.y >= 0 && box.y + box.height <= VIEWPORT.height;
+}
