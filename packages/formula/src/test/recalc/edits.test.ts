@@ -3,7 +3,7 @@ import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
 import type { LineEdit, Move, SheetSource } from '../../index';
 import { DIV0, Engine, ERROR, REF } from '../../index';
-import { GRID_ROWS, MAX_STORED_LENGTH, parseA1, sheetFinder } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
 
@@ -363,6 +363,81 @@ describe('rows and columns', () => {
         engine.recalc(NO_CAP);
         expect([text(engine, 'C3'), valueAt(engine, 'C3')]).toEqual([kept, 10]);
     });
+    test.each([
+        [
+            'rows',
+            true,
+            `R1C1:R${GRID_ROWS}C1`,
+            `R1C1:R${GRID_ROWS - 5}C1`,
+            `R${GRID_ROWS}C1`,
+            `R${GRID_ROWS - 5}C1`,
+            `R1C1:R${GRID_ROWS - 4}C1`,
+        ],
+        [
+            'columns',
+            false,
+            `R1C1:R1C${GRID_COLUMNS}`,
+            `R1C1:R1C${GRID_COLUMNS - 5}`,
+            `R1C${GRID_COLUMNS}`,
+            `R1C${GRID_COLUMNS - 5}`,
+            `R1C1:R1C${GRID_COLUMNS - 4}`,
+        ],
+    ])(
+        'a reference that inserted %s stop at the last line is reported as lost, and undo puts it back',
+        (_, onRows, range, shorter, cell, near, close) => {
+            // No cell holds anything near the last line, so the insert pushes nothing off: only references reach there.
+            const formulas = [
+                `=SUM(${range})`,
+                `=${cell}`,
+                `=SUM([s1]!${range})+1`,
+                `=${near}`,
+                `=SUM(${onRows ? 'C1' : 'R1'})`,
+            ];
+            const engine = new Engine([
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => formulas.forEach((formula, at) => void cell(20 + at, 20 + at, null, formula)),
+                },
+                { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, `=SUM([s1]!${close})`) },
+            ]);
+            const read = () => [
+                ...formulas.map((_, at) => engine.formulaOf('s1', 20 + at, 20 + at)),
+                engine.formulaOf('s2', 0, 0),
+            ];
+            const before = read();
+            expect(before).toEqual([...formulas, `=SUM([s1]!${close})`]);
+            const edit = { insert: true, index: 10, count: 5, sheet: 's1', rows: onRows };
+            const { rewrites } = engine.editLines(edit);
+            // A range to the last line ends where it ended, and one that ends four lines short of it ends there too:
+            // each names fewer cells than it did, and the cell on the last line is gone. The inverse delete brings
+            // none of them back. The reference five lines short of the end just moved.
+            expect(rewrites.map((rewrite) => [rewrite.sheet, rewrite.formula, rewrite.lost])).toEqual([
+                ['s1', before[0], before[0]],
+                ['s1', '=#REF!', before[1]],
+                ['s1', before[2], before[2]],
+                ['s1', `=${cell}`, null],
+                ['s2', `=SUM([s1]!${range})`, before[5]],
+            ]);
+            engine.editLines({ ...edit, insert: false });
+            expect(read()).toEqual([
+                `=SUM(${shorter})`,
+                '=#REF!',
+                `=SUM([s1]!${shorter})+1`,
+                before[3],
+                before[4],
+                `=SUM([s1]!${shorter})`,
+            ]);
+            for (const { sheet: id, top, left, bottom, right, lost } of rewrites) {
+                // The rows and columns of the rewrites are those after the insert, 5 lines further on sheet s1.
+                const back = id === 's1' ? 5 : 0;
+                if (lost === null) continue;
+                if (onRows) engine.fillFormula(id, top - back, left, bottom - back, right, lost);
+                else engine.fillFormula(id, top, left - back, bottom, right - back, lost);
+            }
+            expect(read()).toEqual(before);
+        },
+    );
 });
 
 describe('sheets', () => {
