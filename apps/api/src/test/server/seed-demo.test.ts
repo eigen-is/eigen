@@ -13,6 +13,7 @@ import type { EventData } from '@workspace/lib/types/calendar';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
+    elementForCommentCard,
     elementsInFrame,
     orderByFractionalIndex,
     parseBackgroundFill,
@@ -27,9 +28,12 @@ import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { parseMail } from '../../lib/mail/mail-parser/parse';
+import type { CanvasComment } from '../../scripts/demo/content';
 import {
     BRANDING,
     BUDGET,
+    CHATS,
+    DOCS,
     KANBAN,
     MAILS,
     PERSONAS,
@@ -40,6 +44,7 @@ import {
     SPONSOR_DECK,
     TEAM_NAME,
     TRYING_EIGEN,
+    threadTimes,
     VCARD_FILES,
 } from '../../scripts/demo/content';
 import { formatList } from '../fixtures/validations';
@@ -102,7 +107,13 @@ function collectCommentMarkIds(json: JSONContent, out: Set<string>): void {
 
 // Resolve a top-level container's data.db path from metadata.db (used for both the seeded doc
 // and the stickies board — each container's data.db is a child path row, not the container itself).
-function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: string, containerName: string): string {
+function findContainerDataDb(
+    metadataDb: string,
+    mountsDir: string,
+    mountId: string,
+    containerName: string,
+    dbName = 'data.db',
+): string {
     const containerRow = query<{ id: string }>(
         metadataDb,
         `SELECT id FROM paths WHERE name = '${containerName}' AND trashedAt IS NULL`,
@@ -110,15 +121,36 @@ function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: str
     expect(containerRow.length).toBe(1);
     const dataDbRow = query<{ file: string }>(
         metadataDb,
-        `SELECT file FROM paths WHERE parentId = '${containerRow[0].id}' AND name = 'data.db'`,
+        `SELECT file FROM paths WHERE parentId = '${containerRow[0].id}' AND name = '${dbName}'`,
     );
     expect(dataDbRow.length).toBe(1);
     return join(mountsDir, mountId, 'data', dataDbRow[0].file);
 }
 
+// The names of the files in a container's media/ folder, such as a chat's uploads or a board's covers.
+function mediaNames(metadataDb: string, containerName: string): string[] {
+    return query<{ name: string }>(
+        metadataDb,
+        `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id JOIN paths c ON m.parentId = c.id
+         WHERE c.name = '${containerName}' AND m.name = 'media' AND p.trashedAt IS NULL`,
+    ).map((row) => row.name);
+}
+
+type MessageRow = {
+    type: string;
+    content: string;
+    whisperTo: string | null;
+    attachments: string | null;
+    createdAt: number;
+};
+
+const unixSeconds = (time: Date) => Math.floor(time.getTime() / 1000);
+
 describe.skipIf(!runSlow)('seed-demo', () => {
     test('produces a coherent Tuimel Festival world', async () => {
         const root = mkdtempSync(join(tmpdir(), 'eigen-demo-seed-'));
+        // The seeder dates its threads back from its own start, a moment later on the same day.
+        const seedStart = new Date();
         try {
             // Env mirrors the real demo box: production mode, EIGEN_DEMO, and an https API_URL —
             // which makes better-auth __Secure--prefix its cookies, pinning the seeder's handling.
@@ -257,6 +289,12 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(existsSync(metadataDb)).toBe(true);
             const events = query<{ n: number }>(metadataDb, 'SELECT count(*) AS n FROM file_events');
             expect(events[0].n).toBeGreaterThanOrEqual(1);
+            // A chat's messages in the order they were posted.
+            const messagesOf = (chatName: string) =>
+                query<MessageRow>(
+                    findContainerDataDb(metadataDb, mountsDir, mountId, `${chatName}.eigenchat`),
+                    'SELECT type, content, whisperTo, attachments, createdAt FROM messages ORDER BY rowid',
+                );
 
             // Team drive images/: every site photo landed as a real .webp blob on disk (each row's
             // `file` is the storage key under the mount's data dir, non-trivial size = real image data).
@@ -499,6 +537,26 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(spec.legend.position).toBe('none');
             }
 
+            // A canvas comment's card opens on the element its spec names, and is as old as its first message.
+            const expectCanvasComments = (doc: Y.Doc, comments: CanvasComment[]) => {
+                const { elements } = readVectorFromDoc(doc);
+                const canvasCards = [...doc.getMap<Y.Map<unknown>>('comments').values()];
+                expect(canvasCards.length).toBe(comments.length);
+                for (const comment of comments) {
+                    const card = canvasCards.find((candidate) => candidate.get('title') === comment.title);
+                    const cardId = card?.get('id');
+                    if (typeof cardId !== 'string') throw new Error(`no card "${comment.title}"`);
+                    expect(elementForCommentCard(elements, cardId)?.id).toBe(`el-${comment.element}`);
+                    expect(card?.get('chatName')).toBe(`${comment.card}.eigenchat`);
+                    const rows = messagesOf(comment.card);
+                    expect(rows.map((row) => row.createdAt)).toEqual(
+                        threadTimes(seedStart, comment.start, comment.replies ?? []).map(unixSeconds),
+                    );
+                    expect(card?.get('createdAt')).toBe(rows[0].createdAt * 1000);
+                }
+            };
+            expectCanvasComments(deckDoc, SPONSOR_DECK.comments);
+
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
             expect(existsSync(calendarDb)).toBe(true);
@@ -585,6 +643,90 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(task.creator).toContain('@');
             }
 
+            // Threads are dated after they are posted: every message keeps its insertion order and sits at its
+            // drafted time, counted back from the seed. A row stores whole seconds.
+            const expectThreadTimes = (rows: MessageRow[], times: Date[]) => {
+                const stored = rows.map((row) => row.createdAt);
+                expect(stored).toEqual(times.map(unixSeconds));
+                expect(stored).toEqual(stored.toSorted((a, b) => a - b));
+                for (const time of stored) expect(time).toBeLessThan(unixSeconds(seedStart));
+            };
+            const daysBefore = (daysAgo: number, hour: number, minute: number) => {
+                const time = new Date(seedStart);
+                time.setDate(time.getDate() - daysAgo);
+                time.setHours(hour, minute, 0, 0);
+                return unixSeconds(time);
+            };
+            for (const channel of CHATS) {
+                expectThreadTimes(
+                    messagesOf(channel.name),
+                    threadTimes(seedStart, channel.start, channel.messages.slice(1)),
+                );
+            }
+            const productionRows = messagesOf('production');
+            expect(productionRows[0].createdAt).toBe(daysBefore(8, 9, 12));
+            expect(productionRows.at(-1)?.createdAt).toBe(daysBefore(2, 16, 30));
+            expect(messagesOf('volunteers').at(-1)?.createdAt).toBe(daysBefore(1, 9, 21));
+            for (const comment of DOCS.flatMap((doc) => doc.comments)) {
+                expectThreadTimes(
+                    messagesOf(comment.card),
+                    threadTimes(seedStart, comment.start, comment.replies ?? []),
+                );
+            }
+            // A doc card is as old as its first message.
+            const planCardTimes = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) =>
+                card.get('createdAt'),
+            );
+            expect(planCardTimes.toSorted()).toEqual(
+                DOCS[0].comments.map((comment) => messagesOf(comment.card)[0].createdAt * 1000).toSorted(),
+            );
+            // A card's thread starts when the card was made. The wind-cover card's quote came three days ago.
+            const boardCards = [...board.getMap<Y.Map<unknown>>('tasks').values()];
+            for (const spec of KANBAN.cards) {
+                const createdAt = boardCards.find((task) => task.get('title') === spec.title)?.get('createdAt');
+                if (typeof createdAt !== 'number') throw new Error(`the card "${spec.title}" has no createdAt`);
+                expectThreadTimes(
+                    messagesOf(spec.chat),
+                    threadTimes(seedStart, new Date(createdAt), spec.chatReplies ?? []),
+                );
+            }
+            expect(messagesOf('wind-cover').at(-1)?.createdAt).toBe(daysBefore(3, 15, 30));
+
+            // A whisper is stored with its type and its reader's email, and /me as an emote without the command.
+            const volunteerRows = messagesOf('volunteers');
+            const whisper = volunteerRows.find((row) => row.type === 'whisper');
+            expect(whisper?.content).toBe('What are your friends called? The roster just says Maud plus two.');
+            expect(whisper?.whisperTo).toBe(`maud@${MAIL_DOMAIN}`);
+            expect(volunteerRows.filter((row) => row.type === 'emote').map((row) => row.content)).toContain(
+                'puts both hands up',
+            );
+
+            // A file uploaded from a device sits in the channel's own media/, and its message names it.
+            expect(mediaNames(metadataDb, 'production.eigenchat')).toEqual(['storm-over-the-field.webp']);
+            const gusts = productionRows.find((row) => row.content.startsWith('Gusts into the evening'));
+            expect(JSON.parse(gusts?.attachments ?? '[]')).toEqual(['storm-over-the-field.webp']);
+
+            // The board's comment index holds the assigned card and the resolved one.
+            const boardIndex = query<{ title: string; assignee: string | null; status: string; resolvedBy: string }>(
+                findContainerDataDb(metadataDb, mountsDir, mountId, `${KANBAN.name}.eigenstickies`, 'comments.db'),
+                'SELECT title, assignee, status, resolvedBy FROM comments',
+            );
+            expect(
+                boardIndex.filter((row) => row.assignee).map(({ title, assignee }) => ({ title, assignee })),
+            ).toEqual([
+                { title: 'Recruit 10 more volunteers', assignee: `${personaByRole('volunteers').key}@${MAIL_DOMAIN}` },
+            ]);
+            expect(
+                boardIndex
+                    .filter((row) => row.status === 'resolved')
+                    .map(({ title, resolvedBy }) => ({ title, resolvedBy })),
+            ).toEqual([{ title: 'Book shuttle buses', resolvedBy: `saar@${MAIL_DOMAIN}` }]);
+
+            // A cover is an image in the board's media/, named first among its card's attachments.
+            expect(mediaNames(metadataDb, `${KANBAN.name}.eigenstickies`)).toEqual(['storm-over-the-field.webp']);
+            const windCover = boardCards.find((task) => task.get('title') === 'Sunday wind cover');
+            expect(windCover?.get('attachments')).toEqual(['storm-over-the-field.webp']);
+
             // A card chat reply's attachVCards uploads the card into that chat's own media/ folder, the
             // folder the thread resolves attachment names in, and the message names the file.
             const vcardReplyCard = KANBAN.cards.find((card) => card.chatReplies?.some((r) => r.attachVCards));
@@ -615,7 +757,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // elbow arrows, measured rich text, and every image pointing at a media file that landed.
             const vectorName = `${SITE_PLAN.name}.eigenvector`;
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
-            const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
+            const vectorDoc = await loadCollabDoc(vectorDataDb);
+            const scene = readVectorFromDoc(vectorDoc);
+            expectCanvasComments(vectorDoc, SITE_PLAN.comments);
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
             expect(scene.meta.background).toBe(SITE_PLAN.background);
 

@@ -1,8 +1,8 @@
 // The data of the "Tuimel Festival" demo world, a small volunteer-run arts and music festival three weeks out: its
-// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few one-line helpers that
-// spell some of it, such as an equation's MathML. The demo seeder turns it into a live workspace through the real
-// product surfaces, so a richer pass changes data here, not mechanics. Personas resolve by `<key>@<MAIL_DOMAIN>`, so
-// ids may differ per rebuild. All names, acts and vendors are fictional.
+// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few small helpers that
+// spell or read some of it, such as an equation's MathML and a thread's times. The demo seeder turns it into a live
+// workspace through the real product surfaces, so a richer pass changes data here, not mechanics. Personas resolve
+// by `<key>@<MAIL_DOMAIN>`, so ids may differ per rebuild. All names, acts and vendors are fictional.
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
@@ -141,6 +141,39 @@ export const TEAM_FOLDERS = [
 ] as const;
 export type TeamFolder = (typeof TEAM_FOLDERS)[number];
 
+// --- Threads: a chat channel, and the chat under a doc comment, a board card or a canvas comment ---
+
+// A day counted back from the day of the seed, at a local time.
+export type SeededTime = { daysAgo: number; hour: number; minute: number };
+
+// One message of a thread. Its time is `gap` minutes after the message before, 2 when left out, or `at` when it
+// opens a later day. A thread's first message takes the thread's start and neither of the two.
+export type ChatLine = {
+    author: string; // persona key
+    text: string;
+    // Seeded team documents, posted as drive references. The seeder resolves them to ids at seed time, so a document
+    // can only be attached from content seeded after it.
+    attach?: string[];
+    // VCARD_FILES names and fixture paths, each uploaded into the chat's own media/ the way a user's upload lands.
+    attachVCards?: string[];
+    upload?: string[];
+    whisperTo?: string; // persona key: only they and the author read the text
+    gap?: number;
+    at?: SeededTime;
+};
+
+// A comment on one element of a canvas, such as a shape of the site plan or a chart on a slide.
+export type CanvasComment = {
+    card: string; // slug of the thread's chat name (lowercase, no extension)
+    // The element's id without its `el-`: a shape's key, or a slide's key with the kind and number of what sits on it.
+    element: string;
+    title: string;
+    author: string; // persona key
+    text: string;
+    start: SeededTime;
+    replies?: ChatLine[];
+};
+
 // --- Documents (written as HTML, parsed by the editor's schema into each eigendoc) ---
 
 export type DocComment = {
@@ -151,7 +184,8 @@ export type DocComment = {
     anchor: string;
     author: string; // persona key
     text: string;
-    replies?: { author: string; text: string }[];
+    start: SeededTime;
+    replies?: ChatLine[];
     assignTo?: LeadRole; // records an `assigned` activity + notification
     attach?: string[]; // seeded team documents pinned to the card
 };
@@ -210,9 +244,10 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'short on crew for the build weekend',
                 author: 'saar',
                 text: "We're still about 10 volunteers short for the build weekend. Can we push the call-out again?",
+                start: { daysAgo: 5, hour: 9, minute: 40 },
                 attach: ['crew roster'],
                 replies: [
-                    { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.' },
+                    { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.', gap: 18 },
                     { author: 'saar', text: '/highfive' },
                 ],
                 assignTo: 'volunteers',
@@ -222,8 +257,13 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'wind cover for the second stage',
                 author: 'timo',
                 text: 'The Sunday forecast for the field looks rough. Do we tent the second stage?',
+                start: { daysAgo: 6, hour: 17, minute: 5 },
                 replies: [
-                    { author: 'saar', text: "Let's decide at the go/no-go. Getting a quote for wind-rated cover." },
+                    {
+                        author: 'saar',
+                        text: "Let's decide at the go/no-go. Getting a quote for wind-rated cover.",
+                        gap: 205,
+                    },
                 ],
             },
             {
@@ -231,7 +271,8 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'Shuttle buses from the nearest station',
                 author: 'joris',
                 text: 'Last shuttle at 01:00 or 02:00? It affects the closing set.',
-                replies: [{ author: 'mees', text: "02:00, I'll put it on the info page." }],
+                start: { daysAgo: 7, hour: 14, minute: 20 },
+                replies: [{ author: 'mees', text: "02:00, I'll put it on the info page.", gap: 45 }],
             },
         ],
     },
@@ -251,6 +292,7 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'full line-up reveal',
                 author: 'anouk',
                 text: 'Can we lead with the line-up reveal date instead of the theme?',
+                start: { daysAgo: 3, hour: 11, minute: 10 },
             },
         ],
     },
@@ -574,6 +616,17 @@ export const SPONSOR_DECK = {
             ],
         },
     ] satisfies DeckSlide[],
+    comments: [
+        {
+            card: 'sponsor-numbers',
+            element: 'sponsors-chart-0',
+            title: 'Sponsor numbers',
+            author: 'bram',
+            text: 'Numbers are from the budget: 8 friends, 2 partners, 1 stage partner. All paid.',
+            start: { daysAgo: 2, hour: 10, minute: 20 },
+            replies: [{ author: 'mees', text: "Thanks. I'll update it when the next one signs." }],
+        },
+    ] satisfies CanvasComment[],
 };
 
 // --- Stickies board fixture (authored once, byte-copied in; creator = persona email) ---
@@ -583,13 +636,15 @@ export type CardSpec = {
     description: string;
     column: string; // must be one of KANBAN.columns
     creator: string; // persona key; domainised into an email by the seeder
-    // Linked chat thread, mirroring DocComment: a real chat inside the container's chat/ subfolder,
-    // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
+    // The card's chat thread, as a DocComment has one: a chat in the board's chat/ subfolder, started by the creator
+    // when the card was made.
     chat: string; // slug, lowercase, no extension
     chatText: string;
-    // attachVCards names VCARD_FILES entries, uploaded into the chat's own media/ the way a user's upload lands.
-    chatReplies?: { author: string; text: string; attach?: string[]; attachVCards?: string[] }[];
+    chatReplies?: ChatLine[];
     attach?: string[]; // seeded team documents pinned to the card
+    cover?: string; // fixture path, uploaded into the board's media/ and named first on the card
+    assignTo?: LeadRole; // by the board's author
+    resolvedBy?: string; // persona key
 };
 
 export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; cards: CardSpec[] } = {
@@ -605,7 +660,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'headliner-contract',
             chatText: 'Signed and countersigned today.',
             chatReplies: [
-                { author: 'anouk', text: "Nice one, let's get it into the press release." },
+                { author: 'anouk', text: "Nice one, let's get it into the press release.", gap: 25 },
                 { author: 'joris', text: '/cheer' },
             ],
         },
@@ -624,7 +679,11 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'fencing-order',
             chatText: 'Getting quotes in for the build-weekend delivery.',
             chatReplies: [
-                { author: 'timo', text: 'See if they can drop it Thursday, we need the site clear before that.' },
+                {
+                    author: 'timo',
+                    text: 'See if they can drop it Thursday, we need the site clear before that.',
+                    gap: 40,
+                },
             ],
         },
         {
@@ -634,7 +693,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'mees',
             chat: 'lineup-publish',
             chatText: 'Holding this until the last two acts confirm.',
-            chatReplies: [{ author: 'joris', text: 'Should have both locked in by Friday.' }],
+            chatReplies: [{ author: 'joris', text: 'Should have both locked in by Friday.', gap: 95 }],
         },
         {
             title: 'Recruit 10 more volunteers',
@@ -643,7 +702,8 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'nour',
             chat: 'volunteer-recruit',
             chatText: 'Still about 10 short for the build weekend. Call-out goes out today.',
-            chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.' }],
+            chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.', gap: 30 }],
+            assignTo: 'volunteers',
         },
         {
             title: 'Fix generator quote',
@@ -653,7 +713,11 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'generator-quote',
             chatText: 'Chasing numbers for two generators plus a backup.',
             chatReplies: [
-                { author: 'timo', text: 'Make sure the backup can carry the second stage on its own if it has to.' },
+                {
+                    author: 'timo',
+                    text: 'Make sure the backup can carry the second stage on its own if it has to.',
+                    gap: 50,
+                },
             ],
             attach: ['site plan'],
         },
@@ -664,7 +728,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'daan',
             chat: 'wristbands-print',
             chatText: 'Three tiers, camping included. Sending the design to print this week.',
-            chatReplies: [{ author: 'anouk', text: "Nice, post a preview here when it's back." }],
+            chatReplies: [{ author: 'anouk', text: "Nice, post a preview here when it's back.", gap: 20 }],
         },
         {
             title: 'Book shuttle buses',
@@ -673,7 +737,8 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'saar',
             chat: 'shuttle-buses',
             chatText: 'Booked. Every 30 minutes from the station.',
-            chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page." }],
+            chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page.", gap: 65 }],
+            resolvedBy: 'saar',
         },
         {
             title: 'Sunday wind cover',
@@ -683,13 +748,19 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'wind-cover',
             chatText: 'Forecast for the field is turning windy Sunday. Need a call on tenting the second stage.',
             chatReplies: [
-                { author: 'saar', text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then." },
+                {
+                    author: 'saar',
+                    text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then.",
+                    gap: 35,
+                },
                 {
                     author: 'saar',
                     text: 'Quote is in from Dekzeil & Zo. They have a stage rain cover free that weekend, wind rated. Their card is attached if you want to talk sizes.',
                     attachVCards: ['dekzeil & zo.vcf'],
+                    at: { daysAgo: 3, hour: 15, minute: 30 },
                 },
             ],
+            cover: 'images/storm-over-the-field.webp',
         },
     ],
 };
@@ -1353,56 +1424,120 @@ export const SITE_PLAN = {
         { text: 'camping, gate & meadow', x: 1352, y: 843, fontSize: 12, color: NOTE },
         { text: 'first aid', x: 1352, y: 863, fontSize: 12, color: NOTE },
     ] satisfies SitePlanText[],
+    comments: [
+        {
+            card: 'wind-cover-footprint',
+            element: 'wind-cover',
+            title: 'Wind cover footprint',
+            author: 'timo',
+            text: 'If we tent it, the red line is the room it needs. Ruud wants 3 m clear on every side for the guy lines.',
+            start: { daysAgo: 3, hour: 16, minute: 10 },
+            replies: [
+                {
+                    author: 'saar',
+                    text: "Fits, just. The toilets on that side may have to shift a little. I'll pace it out on the site visit.",
+                },
+                { author: 'timo', text: '/highfive' },
+            ],
+        },
+    ] satisfies CanvasComment[],
 };
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
-// `attach` names seeded team documents, posted as drive-reference attachments. The seeder resolves them to ids at
-// seed time, so a document can only be attached from content seeded after it.
-export type ChatLine = { author: string; text: string; attach?: string[] };
-export type SeededChat = { name: string; messages: ChatLine[] };
+export type SeededChat = { name: string; start: SeededTime; messages: ChatLine[] };
 
 export const CHATS: SeededChat[] = [
     {
         name: 'production',
+        start: { daysAgo: 8, hour: 9, minute: 12 },
         messages: [
             { author: 'saar', text: 'Build weekend plan is up in the drive. Shout if a slot clashes.' },
-            { author: 'timo', text: 'Power run looks fine. One generator quote still open.' },
-            { author: 'daan', text: 'Wristbands ordered. Three tiers, camping included.' },
-            { author: 'timo', text: 'Heads up: the Sunday forecast for the field is turning windy.' },
-            { author: 'saar', text: 'How bad? The second stage is the exposed one.' },
-            { author: 'timo', text: 'Gusts into the evening. No shelter out there right now.' },
-            { author: 'saar', text: '/groan' },
-            { author: 'sanne', text: 'we could move the quieter acts to the barn stage sunday?' },
-            { author: 'anouk', text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote." },
-            { author: 'saar', text: 'On it. Will have numbers before the meeting.' },
-            { author: 'ravi', text: 'Site crew can re-peg the second stage either way. Ready for both.' },
-            { author: 'timo', text: '/highfive' },
+            { author: 'timo', text: 'Power run looks fine. One generator quote still open.', gap: 28 },
+            {
+                author: 'daan',
+                text: 'Wristbands ordered. Three tiers, camping included.',
+                at: { daysAgo: 7, hour: 11, minute: 30 },
+            },
+            {
+                author: 'timo',
+                text: 'Heads up: the Sunday forecast for the field is turning windy.',
+                at: { daysAgo: 6, hour: 16, minute: 48 },
+            },
+            { author: 'saar', text: 'How bad? The second stage is the exposed one.', gap: 3 },
+            {
+                author: 'timo',
+                text: 'Gusts into the evening. No shelter out there right now.',
+                upload: ['images/storm-over-the-field.webp'],
+            },
+            { author: 'saar', text: '/groan', gap: 0 },
+            { author: 'sanne', text: 'we could move the quieter acts to the barn stage sunday?', gap: 27 },
+            {
+                author: 'anouk',
+                text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote.",
+                gap: 175,
+            },
+            { author: 'saar', text: 'On it. Will have numbers before the meeting.', gap: 7 },
+            {
+                author: 'ravi',
+                text: 'Site crew can re-peg the second stage either way. Ready for both.',
+                at: { daysAgo: 5, hour: 8, minute: 5 },
+            },
+            { author: 'timo', text: '/highfive', gap: 15 },
             {
                 author: 'saar',
                 text: 'Site plan draft is up, based on last year. We walk it on the site visit and make it final after. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
                 attach: ['site plan'],
+                at: { daysAgo: 2, hour: 14, minute: 40 },
             },
-            { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.' },
-            { author: 'timo', text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.' },
+            { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.', gap: 22 },
+            {
+                author: 'timo',
+                text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.',
+                gap: 88,
+            },
         ],
     },
     {
         name: 'volunteers',
+        start: { daysAgo: 5, hour: 10, minute: 5 },
         messages: [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
-            { author: 'maud', text: 'i can bring two friends for load-in thursday' },
-            { author: 'maud', text: '*friday' },
-            { author: 'nour', text: 'Nice, added you three to the roster.', attach: ['crew roster'] },
-            { author: 'maud', text: '/allthethings' },
-            { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
-            { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.' },
-            { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out." },
-            { author: 'lars', text: 'Waste team is set. Extra bins arrive with the fencing.' },
-            { author: 'pieter', text: 'Box office wants two runners at peak. Any takers?' },
-            { author: 'maud', text: 'Put me down as a runner for Saturday peak.' },
-            { author: 'nour', text: 'Thanks all. Roster is looking a lot healthier.' },
-            { author: 'maud', text: '/cheer' },
+            { author: 'maud', text: 'i can bring two friends for load-in thursday', gap: 35 },
+            { author: 'maud', text: '*friday', gap: 1 },
+            { author: 'nour', text: 'Nice, added you three to the roster.', attach: ['crew roster'], gap: 34 },
+            {
+                author: 'nour',
+                text: 'What are your friends called? The roster just says Maud plus two.',
+                whisperTo: 'maud',
+                gap: 0,
+            },
+            { author: 'maud', text: '/allthethings', gap: 1 },
+            {
+                author: 'yara',
+                text: 'Camping host desk needs one more for the night shift.',
+                at: { daysAgo: 4, hour: 9, minute: 30 },
+            },
+            { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.', gap: 220 },
+            { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out.", gap: 15 },
+            {
+                author: 'lars',
+                text: 'Waste team is set. Extra bins arrive with the fencing.',
+                at: { daysAgo: 3, hour: 8, minute: 45 },
+            },
+            {
+                author: 'pieter',
+                text: 'Box office wants two runners at peak. Any takers?',
+                at: { daysAgo: 2, hour: 17, minute: 30 },
+            },
+            { author: 'maud', text: '/me puts both hands up' },
+            { author: 'maud', text: 'Put me down as a runner for Saturday peak.', gap: 30 },
+            {
+                author: 'nour',
+                text: 'Thanks all. Roster is looking a lot healthier.',
+                at: { daysAgo: 1, hour: 9, minute: 20 },
+            },
+            { author: 'maud', text: '/cheer', gap: 1 },
         ],
     },
 ];
@@ -2208,6 +2343,26 @@ export function personaByKey(key: string): Persona {
     const persona = PERSONAS.find((p) => p.key === key);
     if (!persona) throw new Error(`No persona for key ${key}`);
     return persona;
+}
+
+// The time of every message of a thread, the first at `start` and each later one by its `gap` or `at`. A day counts
+// back on the calendar from `now`, so a clock change in between moves no message to another day.
+export function threadTimes(now: Date, start: SeededTime | Date, later: readonly ChatLine[]): Date[] {
+    const timeOf = ({ daysAgo, hour, minute }: SeededTime): Date => {
+        const time = new Date(now);
+        time.setDate(time.getDate() - daysAgo);
+        time.setHours(hour, minute, 0, 0);
+        return time;
+    };
+    let previous = start instanceof Date ? start : timeOf(start);
+    const times = [previous];
+    for (const { text, gap = 2, at } of later) {
+        const time = at ? timeOf(at) : new Date(previous.getTime() + gap * 60_000);
+        if (time < previous) throw new Error(`The seeded message "${text}" is dated before the one it follows`);
+        times.push(time);
+        previous = time;
+    }
+    return times;
 }
 
 export function emailFor(localPart: string, mailDomain: string): string {
