@@ -66,7 +66,7 @@ describe('load', () => {
                 engine.valueOf('s1', row, column),
                 engine.formulaOf('s1', row, column),
                 engine.isPending('s1', row, column),
-                engine.nextCell('s1', column, row),
+                engine.nextCell('s1', column, row, row),
                 walked,
             ];
         };

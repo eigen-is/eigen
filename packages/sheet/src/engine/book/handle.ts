@@ -115,9 +115,9 @@ export class Sheet {
         const last = Math.min(right, engine.lastColumn(this.id));
         for (let c = left; c <= last; c += 1) {
             for (
-                let r = engine.nextCell(this.id, c, top);
-                r >= 0 && r <= bottom;
-                r = engine.nextCell(this.id, c, r + 1)
+                let r = engine.nextCell(this.id, c, top, bottom);
+                r >= 0;
+                r = engine.nextCell(this.id, c, r + 1, bottom)
             ) {
                 yield { r, c };
             }
