@@ -4,7 +4,7 @@
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
-import { openSitePlan } from './site-plan';
+import { openSitePlan, showGround } from './site-plan';
 
 export const vectorHero = {
     name: 'vector-hero',
@@ -15,6 +15,7 @@ export const vectorHero = {
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openSitePlan(page, stack);
+        await showGround(page, cursor);
         await cursor.moveTo({ x: 490, y: 455 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {

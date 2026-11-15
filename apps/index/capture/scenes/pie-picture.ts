@@ -20,6 +20,9 @@ import { openSponsorDeck } from './sponsor-deck';
 // in radians clockwise from 3 o'clock as the screen measures them.
 const TICKET_MIDDLE = (0.58 / 2) * 2 * Math.PI - Math.PI / 2;
 
+// The properties panel's width, at the window's right edge.
+const PANEL_WIDTH = 256;
+
 // The drawing the setup makes, so the pie lands on an empty canvas.
 const DRAWING = 'income picture';
 
@@ -140,9 +143,10 @@ async function drawPicture(
         y: pie.y + Math.sin(angle) * radii * pie.r,
     });
 
-    // A box up and to the right of the pie, clear of the slice labels.
-    const corner = { x: pie.x + 2.5 * pie.r, y: pie.y - 1.05 * pie.r };
-    const size = { x: 1.6 * pie.r, y: 0.62 * pie.r };
+    // A box up and to the right of the pie, clear of the slice labels and of the properties panel, which a pie pasted
+    // at full size on a drawing comes close to.
+    const corner = { x: pie.x + 1.2 * pie.r, y: pie.y - 1.25 * pie.r };
+    const size = { x: Math.min(1.6 * pie.r, VIEWPORT.width - PANEL_WIDTH - 24 - corner.x), y: 0.62 * pie.r };
     await pickTool(page, cursor, /^Rectangle/);
     await cursor.moveTo(corner);
     await page.mouse.down();
@@ -158,9 +162,9 @@ async function drawPicture(
     await Bun.sleep(400);
 
     await pickTool(page, cursor, /^Arrow/);
-    await cursor.moveTo({ x: corner.x + 4, y: corner.y + 0.7 * size.y });
+    await cursor.moveTo({ x: corner.x + 0.3 * size.x, y: corner.y + size.y - 4 });
     await page.mouse.down();
-    await cursor.moveTo(at(0.7, -0.15), { duration: 900 });
+    await cursor.moveTo(at(0.6, -0.25), { duration: 900 });
     await page.mouse.up();
     await Bun.sleep(400);
     await page.keyboard.press('Escape');
@@ -232,9 +236,8 @@ async function pieCircle(page: Page, before: ReadonlySet<string>): Promise<Point
     return { x: largest.x + r, y: largest.y + r, r };
 }
 
-// Over the properties panel, 256 pixels wide at the window's right edge.
 async function scrollPanel(page: Page, cursor: Cursor, direction: 1 | -1): Promise<void> {
-    await cursor.moveTo({ x: VIEWPORT.width - 128, y: 420 }, { duration: 500 });
+    await cursor.moveTo({ x: VIEWPORT.width - PANEL_WIDTH / 2, y: 420 }, { duration: 500 });
     for (let step = 0; step < 12; step++) {
         await page.mouse.wheel(0, direction * 150);
         await Bun.sleep(30);
