@@ -171,7 +171,7 @@ export class SheetRecords {
 
     // Whole makes or replaces a record, a `set` alone changes the fields it names, null clearing one, and no `set`
     // deletes. A write that is skipped, such as a change of a record that is gone, returns no inverse.
-    public write(op: RecordOp): RecordOp[] | 'merge-overlap' {
+    public write(op: RecordOp): RecordOp[] | 'merge-overlap' | 'key-too-long' {
         if (op.whole) {
             switch (op.type) {
                 case 'merge':
@@ -205,6 +205,10 @@ export class SheetRecords {
         if (op.type === 'filterColumn') {
             const old = this.stored.filterColumn.get(op.id);
             if (old && !this.stored.filter.has(op.set.filter ?? old.filter)) return [];
+        }
+        if (op.type === 'chart') {
+            const old = this.stored.chart.get(op.id);
+            if (old && exceedsChartSpecBytes(withFields(old, op.set))) return 'key-too-long';
         }
         return this.change(op.type, op.id, op.set);
     }

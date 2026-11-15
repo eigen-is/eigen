@@ -98,7 +98,7 @@ export function applyRecordOps(
     for (const op of ops) {
         if (op.whole) expect(sheetNamed(before, op.sheet).records(op.type).get(op.id)).toEqual(op.set);
         const written = sheetNamed(sheets, op.sheet).write(op);
-        if (written === 'merge-overlap') throw new Error('merge-overlap');
+        if (typeof written === 'string') throw new Error(written);
         inverses.push(...written);
     }
     return inverses;
