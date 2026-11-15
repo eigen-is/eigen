@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { isRecord } from '../../core/guards';
 import {
+    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
@@ -231,10 +232,12 @@ describe('readBatch', () => {
         expect(read({ g: 0, ...CLOCK, ops: [] })).toEqual({ g: 0, ...CLOCK, ops: [] });
     });
 
-    test('takes the clock as a serial and the seed as a 32-bit integer', () => {
+    test('takes the clock as a serial of the days the engine dates, and the seed as a 32-bit integer', () => {
         const clock = (now: unknown, seed: unknown) => read({ g: 0, now, seed, ops: [] }) !== null;
         expect(clock(0, 0)).toBe(true);
-        expect(clock(2958465.5, 2 ** 31 - 1)).toBe(true);
+        expect(clock(LAST_DATE_SERIAL + 0.999, 2 ** 31 - 1)).toBe(true);
+        expect(clock(LAST_DATE_SERIAL + 1, 0)).toBe(false);
+        expect(clock(1e300, 0)).toBe(false);
         expect(clock(1, -(2 ** 31))).toBe(true);
         for (const now of [-1, Number.NaN, Number.POSITIVE_INFINITY, '1']) expect(clock(now, 0)).toBe(false);
         for (const seed of [2 ** 31, -(2 ** 31) - 1, 0.5, Number.NaN, '1']) expect(clock(0, seed)).toBe(false);
@@ -474,6 +477,15 @@ describe('5. input', () => {
         expect(accepts(input({ runs: [[[0, 0, 0, 0], { v: 1 }]] }))).toBe(true);
         expect(accepts(input({ cells: [[0, 0, null]] }))).toBe(true);
     });
+
+    test('empties a cell with null, so a cell that names no key or no rich run is refused', () => {
+        expect(accepts(cell({}))).toBe(false);
+        expect(accepts(cell({ s: [] }))).toBe(false);
+        expect(accepts(input({ runs: [[[0, 0, 1, 1], {}]] }))).toBe(false);
+        expect(accepts(added({ cells: [[0, 0, {}]] }))).toBe(false);
+        expect(accepts(added({ cells: [[0, 0, { s: [] }]] }))).toBe(false);
+        expect(accepts(cell({ qp: 1 }))).toBe(true);
+    });
 });
 
 describe('6. format', () => {
@@ -493,6 +505,21 @@ describe('6. format', () => {
         expect(accepts({ kind: 'format', sheet: 's1', lines: 'cols', spans: [[0, 0]], set: { hidden: 1 } })).toBe(
             false,
         );
+    });
+
+    test('names at least one range or span', () => {
+        expect(accepts({ kind: 'format', sheet: 's1', ranges: [], set: { bl: 1 } })).toBe(false);
+        expect(accepts({ kind: 'format', sheet: 's1', lines: 'rows', spans: [], set: { hidden: 1 } })).toBe(false);
+    });
+
+    test('never sets and clears one key', () => {
+        const range = { kind: 'format', sheet: 's1', ranges: [[0, 0, 0, 0]] };
+        expect(accepts({ ...range, set: { bl: 1 }, clear: ['bl'] })).toBe(false);
+        expect(accepts({ ...range, set: { link: { type: 'sheet', address: 's2' } }, clear: ['link'] })).toBe(false);
+        expect(accepts({ ...range, set: { bl: 1 }, clear: ['it'] })).toBe(true);
+        const spans = { kind: 'format', sheet: 's1', lines: 'rows', spans: [[0, 0]] };
+        expect(accepts({ ...spans, set: { hidden: 1 }, clear: ['hidden'] })).toBe(false);
+        expect(accepts({ ...spans, set: { hidden: 1 }, clear: ['size'] })).toBe(true);
     });
 
     test('names at least one key', () => {

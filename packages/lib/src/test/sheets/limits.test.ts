@@ -3,6 +3,7 @@ import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import {
     BAND_WEIGHT,
     fits,
+    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
@@ -40,6 +41,10 @@ describe('the limits', () => {
         expect([MAX_ID_LENGTH, MAX_ORDER_KEY, MAX_SHORT_TEXT]).toEqual([64, 64, 256]);
         expect(MAX_TEXT_LENGTH).toBe(MAX_STORED_LENGTH);
         expect(MAX_BATCH_JSON).toBe(4 * 1024 * 1024);
+    });
+
+    test('hold the last day the engine dates, 31 December 9999', () => {
+        expect(LAST_DATE_SERIAL).toBe(2_958_465);
     });
 
     test('hold the provisional numbers', () => {

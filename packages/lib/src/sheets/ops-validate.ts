@@ -11,6 +11,7 @@ import { isSafeMediaName } from '../vector/media-refs';
 import { STROKE_STYLES } from '../vector/types';
 import { BORDER_STYLES } from './borders';
 import {
+    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
@@ -51,7 +52,14 @@ export function readBatch(text: string): Batch | null {
     }
     if (!isRecord(value) || !hasOnlyKeys(value, BATCH_KEYS)) return null;
     const { g, now, seed, ops } = value;
-    if (!isCount(g, Number.MAX_SAFE_INTEGER) || !isFiniteNumber(now) || now < 0 || !isSeed(seed) || !isOpList(ops))
+    if (
+        !isCount(g, Number.MAX_SAFE_INTEGER) ||
+        !isFiniteNumber(now) ||
+        now < 0 ||
+        now >= LAST_DATE_SERIAL + 1 ||
+        !isSeed(seed) ||
+        !isOpList(ops)
+    )
         return null;
     return text.length <= MAX_BATCH_JSON || ops.every((op) => op.kind === 'sheet') ? { g, now, seed, ops } : null;
 }
@@ -112,6 +120,7 @@ function isCellFormatOp(op: Entries): boolean {
     const { ranges, set, clear } = op;
     return (
         Array.isArray(ranges) &&
+        ranges.length > 0 &&
         ranges.every(isRect) &&
         (set === undefined || isLookOf(set, FORMAT_CHECKS)) &&
         (clear === undefined || isKeyList(clear, FORMAT_CHECKS)) &&
@@ -126,6 +135,7 @@ function isLineFormatOp(op: Entries): boolean {
     const count = lines === 'rows' ? GRID_ROWS : GRID_COLUMNS;
     return (
         Array.isArray(spans) &&
+        spans.length > 0 &&
         spans.every((span) => isSpan(span, count)) &&
         (set === undefined || isWhole(set, LINE_FIELDS)) &&
         (clear === undefined || isKeyList(clear, LINE_FIELDS.checks)) &&
@@ -180,6 +190,8 @@ function isCellRecord(value: unknown): value is CellRecord {
 function isCell(value: unknown, keys: ReadonlySet<string>): boolean {
     if (!isRecord(value) || !hasOnlyKeys(value, keys)) return false;
     const { v, e, f, s, link, qp, spill } = value;
+    // An empty cell is null in an input and absent from a sheet's cells, so a cell names a key.
+    if (v === undefined && f === undefined && s === undefined && link === undefined && qp === undefined) return false;
     if (v !== undefined && !isScalar(v)) return false;
     if (e !== undefined && (e !== 1 || typeof v !== 'string' || !ERRORS.has(v))) return false;
     if (f !== undefined && !isStoredKey(f)) return false;
@@ -199,7 +211,7 @@ function isStoredKey(value: unknown): boolean {
 
 // The runs' texts join into the cell's value, so together they keep the bound of one text.
 function isRichText(value: unknown): boolean {
-    if (!Array.isArray(value) || value.length > MAX_RUNS_PER_CELL) return false;
+    if (!Array.isArray(value) || value.length === 0 || value.length > MAX_RUNS_PER_CELL) return false;
     let length = 0;
     for (const run of value) {
         if (!isRecord(run) || typeof run['v'] !== 'string') return false;
@@ -369,7 +381,8 @@ function table(fields: { readonly [key: string]: readonly [Check, boolean] }): T
     };
 }
 
-// A record whole: only its fields, every required one present.
+// A record whole: only its fields, every required one present. An optional field it lacks is absent, never null, so a
+// record has one form.
 function isWhole(value: unknown, { checks, required }: Table): boolean {
     if (!isRecord(value)) return false;
     let present = 0;
@@ -408,7 +421,14 @@ function isKeyList(value: unknown, checks: ReadonlyMap<string, Check>): boolean 
     return Array.isArray(value) && value.every((key) => typeof key === 'string' && checks.has(key));
 }
 
+// A key both set and cleared would read as either, by which the reader applies first.
 function namesAKey(set: unknown, clear: unknown): boolean {
+    if (
+        isRecord(set) &&
+        Array.isArray(clear) &&
+        clear.some((key) => typeof key === 'string' && Object.hasOwn(set, key))
+    )
+        return false;
     return (isRecord(set) && Object.keys(set).length > 0) || (Array.isArray(clear) && clear.length > 0);
 }
 
