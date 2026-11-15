@@ -171,8 +171,9 @@ function isContentOrNull(value: unknown): boolean {
     return value === null || isCell(value, CONTENT);
 }
 
+// A snapshot writes the negative zero as zero, so a reader that replayed it and one that loaded it would differ.
 function isScalar(value: unknown): boolean {
-    return typeof value === 'boolean' || isFiniteNumber(value) || isLongText(value);
+    return typeof value === 'boolean' || (isFiniteNumber(value) && !Object.is(value, -0)) || isLongText(value);
 }
 
 function isStoredKey(value: unknown): boolean {
