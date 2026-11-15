@@ -2,7 +2,6 @@
 // of the festival and unfolds its guest list with each answer. She closes it, hides the team's calendar so only her
 // own two lines are left, and shows it again, so the loop ends where it began.
 
-import type { Locator } from 'playwright-core';
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
@@ -22,7 +21,10 @@ export const calendarHero = {
         const meeting = page.getByText('Go / no-go meeting').first();
         await meeting.waitFor();
         // The festival week is the month's last row, under the window's foot, so she steps on to the month it opens.
-        for (let month = 0; month < 3 && !(await inView(meeting)); month++) {
+        for (let month = 0; month < 3; month++) {
+            // Whole inside the window, where a click can reach it.
+            const box = await meeting.boundingBox();
+            if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) break;
             await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
             await Bun.sleep(800);
         }
@@ -48,9 +50,3 @@ export const calendarHero = {
         await Bun.sleep(800);
     },
 } satisfies Scene;
-
-// Whether the element lies whole inside the window, where a click can reach it.
-async function inView(locator: Locator): Promise<boolean> {
-    const box = await locator.boundingBox();
-    return box !== null && box.y >= 0 && box.y + box.height <= VIEWPORT.height;
-}
