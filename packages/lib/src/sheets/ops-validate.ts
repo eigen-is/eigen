@@ -401,12 +401,6 @@ function isConditionalFormat(value: unknown): boolean {
     return conditionName !== 'formula' || (Array.isArray(conditionValue) && isStoredKey(conditionValue[0]));
 }
 
-// A change of a rule's fields that some kind of rule holds; a rule changes kind only whole.
-function isConditionalFormatChange(value: unknown): boolean {
-    if (!isRecord(value) || value['type'] !== undefined) return false;
-    return [DATA_BAR_FIELDS, COLOR_GRADATION_FIELDS, DEFAULT_RULE_FIELDS].some((fields) => isChange(value, fields));
-}
-
 // Every item is checked, holes of a sparse list included, which `every` would skip.
 function everyItem(list: readonly unknown[], check: Check): boolean {
     for (const item of list) if (!check(item)) return false;
@@ -727,5 +721,6 @@ const RECORD_KINDS: ReadonlyMap<string, RecordKind> = new Map([
         const fieldTable = table(fields);
         return [type, { whole: (value) => isWhole(value, fieldTable), change: (value) => isChange(value, fieldTable) }];
     }),
-    ['conditionalFormat', { whole: isConditionalFormat, change: isConditionalFormatChange }],
+    // A rule changes only whole: a field of one kind of rule merged into a rule of another would leave one of neither.
+    ['conditionalFormat', { whole: isConditionalFormat, change: () => false }],
 ]);

@@ -655,10 +655,19 @@ describe('8. record', () => {
         expect(accepts(formula(['=A1>1']))).toBe(true);
         expect(accepts(formula(['A1>1']))).toBe(false);
         expect(accepts(formula([`=${'1'.repeat(MAX_STORED_LENGTH)}`]))).toBe(false);
-        expect(accepts(record('conditionalFormat', { set: { conditionValue: [6] } }))).toBe(true);
-        expect(accepts(record('conditionalFormat', { set: { format: ['#f00'] } }))).toBe(true);
-        expect(accepts(record('conditionalFormat', { set: { type: 'dataBar' } }))).toBe(false);
-        expect(accepts(record('conditionalFormat', { set: { format: ['#f00'], conditionName: 'equal' } }))).toBe(false);
+    });
+
+    test('a conditional format changes only whole, so a field edit never leaves a rule of no kind', () => {
+        for (const set of [
+            { format: { cellColor: '#0f0' } },
+            { conditionValue: ['A1>1'] },
+            { conditionName: 'formula' },
+            { conditionValue: [6] },
+            { type: 'dataBar' },
+        ]) {
+            expect(accepts(record('conditionalFormat', { set }))).toBe(false);
+        }
+        expect(accepts(record('conditionalFormat', {}))).toBe(true);
     });
 
     test('a validation keeps its dropdown source as text', () => {
