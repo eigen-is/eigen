@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, jest, test } from 'bun:test';
+import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
 const { act } = await import('react');
+const { hydrateRoot } = await import('react-dom/client');
+const { renderToString } = await import('react-dom/server');
 const { ArticleContent } = await import('../../components/article-content');
 const { renderMarkdown } = await import('../../../scripts/lib/render-markdown');
 
@@ -71,6 +73,28 @@ async function renderAutoplay() {
 }
 
 describe('carousel', () => {
+    test('each slide has a dot that says which of how many it is, the first marked, and the previous button off', async () => {
+        const { prev, next, dots, current } = await renderCarousel();
+        expect(dots.map((dot) => dot.getAttribute('aria-label'))).toEqual([
+            'Slide 1 of 3',
+            'Slide 2 of 3',
+            'Slide 3 of 3',
+        ]);
+        expect(current()).toBe(0);
+        expect([prev.disabled, next.disabled]).toEqual([true, false]);
+        expect([prev.getAttribute('aria-label'), next.getAttribute('aria-label')]).toEqual([
+            'Previous slide',
+            'Next slide',
+        ]);
+    });
+
+    test('the previous button moves the strip one slide back', async () => {
+        const { strip, prev, scrollTo } = await renderCarousel();
+        await scrollTo(1200);
+        await act(async () => prev.click());
+        expect(strip.scrollLeft).toBe(600);
+    });
+
     test('the next button moves the strip one slide on', async () => {
         const { strip, next } = await renderCarousel();
         await act(async () => next.click());
@@ -328,5 +352,63 @@ describe('lightbox', () => {
         expect(lightbox()).toMatchObject({ count: 1, src: '/g1.png', caption: 'One' });
         await act(async () => lightbox()?.next?.click());
         expect(lightbox()).toMatchObject({ count: 1, src: '/g2.png', caption: 'Two' });
+    });
+});
+
+const PAGE = [
+    'Intro',
+    '::: carousel caption="The *budget*"\n![A table](/a.webp)\n![A film](/data/about/media/sheets-hero)\n:::',
+    '::: video src="/data/about/media/sheets-chart" caption="A bar grows"\n:::',
+    'Outro',
+].join('\n\n');
+
+describe('prerender', () => {
+    test('the server markup holds every slide with its alt text and captions, and no film that starts itself', () => {
+        const page = document.createElement('div');
+        page.innerHTML = renderToString(<ArticleContent body={{ html: renderMarkdown(PAGE).html, mediaGrids: [] }} />);
+        expect(page.querySelector('.media-carousel-slide img[src="/a.webp"][alt="A table"]')).not.toBeNull();
+        const captions = Array.from(page.querySelectorAll('figcaption'), (caption) => caption.innerHTML);
+        expect(captions).toEqual(['A table', 'A film', 'The <em>budget</em>', 'A bar grows']);
+        expect(page.querySelector('.media-carousel-strip')?.getAttribute('aria-label')).toBe('The *budget*');
+        expect(page.querySelectorAll('.media-carousel-dot[aria-label="Slide 2 of 2"]').length).toBe(1);
+        expect(page.querySelector('.media-carousel-prev')?.hasAttribute('disabled')).toBe(true);
+        const videos = Array.from(page.querySelectorAll('video'));
+        expect(videos.map((video) => video.getAttribute('poster'))).toEqual([
+            '/data/about/media/sheets-hero.webp',
+            '/data/about/media/sheets-chart.webp',
+        ]);
+        for (const video of videos) {
+            expect(['muted', 'loop', 'playsinline'].every((name) => video.hasAttribute(name))).toBe(true);
+            expect(['autoplay', 'controls'].some((name) => video.hasAttribute(name))).toBe(false);
+            expect(Array.from(video.querySelectorAll('source'), (source) => source.getAttribute('type'))).toEqual([
+                'video/mp4; codecs="av01.0.08M.08"',
+                'video/mp4',
+            ]);
+        }
+        expect(page.querySelector('.media-video source')?.getAttribute('src')).toBe(
+            '/data/about/media/sheets-chart.av1.mp4',
+        );
+    });
+
+    test('the first client render is the server markup, also for a reader who asked for less motion', async () => {
+        stubReducedMotion(true);
+        const element = <ArticleContent body={{ html: renderMarkdown(PAGE).html, mediaGrids: [] }} />;
+        const page = document.createElement('div');
+        page.innerHTML = renderToString(element);
+        document.body.append(page);
+        const complaints = spyOn(console, 'error');
+        const mismatches: unknown[] = [];
+        const root = await act(async () =>
+            hydrateRoot(page, element, { onRecoverableError: (error) => mismatches.push(error) }),
+        );
+        try {
+            expect(mismatches).toEqual([]);
+            expect(complaints).not.toHaveBeenCalled();
+            expect(page.querySelector('video')?.controls).toBe(true);
+        } finally {
+            complaints.mockRestore();
+            await act(async () => root.unmount());
+            page.remove();
+        }
     });
 });
