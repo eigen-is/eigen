@@ -1,11 +1,12 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, a recalc of what they reach, and the reads, such as the value of a cell and a walk of a sheet.
-// A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only
-// through the recalc. What a host can get wrong, such as a sheet that is not there or a cell off the grid, is
-// checked here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
+// structural edits, the clock of each batch of them, a recalc of what they reach, and the reads, such as the value
+// of a cell and a walk of a sheet. A sheet is named by its id and a cell by its row and column from 0. It reads the
+// store and changes it only through the recalc. What a host can get wrong, such as a cell off the grid, is checked
+// here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
+import { Fact } from '../eval/facts';
 import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
@@ -24,26 +25,44 @@ export class Engine {
     >;
     private readonly calc: Recalc;
 
-    public constructor(sheets: readonly SheetSource[]) {
+    // A load, with the clock its values were computed with: a clock formula keeps the value it came with.
+    public constructor(sheets: readonly SheetSource[], now = 0, seed = 0) {
+        clocked(now, seed);
         const workbook = new Workbook(sheets);
         this.workbook = workbook;
-        this.calc = new Recalc(workbook, FUNCTIONS);
+        this.calc = new Recalc(workbook, FUNCTIONS, now, seed);
+    }
+
+    // The clock of a batch of edits, once per batch: its author's time as a serial and a whole number its draws are
+    // made of. The next recalc computes every formula that reads the clock or draws again, whatever was written.
+    public setClock(now: number, seed: number): void {
+        clocked(now, seed);
+        this.calc.setClock(now, seed);
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
         this.calc.setValue(this.cell(sheet, row, column, value), row, column, value);
     }
 
-    // The formula in its stored text. It holds no value until a recalc computes it.
-    public setFormula(sheet: string, row: number, column: number, text: string): void {
-        this.calc.fillFormula(this.cell(sheet, row, column), row, column, row, column, text);
+    // The formula in its stored text. It holds no value until a recalc computes it. A formula this build cannot
+    // evaluate holds `given` at once, as an import or a paste brings its value; for any other formula it is ignored.
+    public setFormula(sheet: string, row: number, column: number, text: string, given: Literal | null = null): void {
+        this.calc.fillFormula(this.cell(sheet, row, column, given), row, column, row, column, text, given);
     }
 
     // One stored text in every cell of a block, as a fill writes it and as undo puts a rewritten block back.
-    public fillFormula(sheet: string, top: number, left: number, bottom: number, right: number, text: string): void {
-        this.cell(sheet, bottom, right);
+    public fillFormula(
+        sheet: string,
+        top: number,
+        left: number,
+        bottom: number,
+        right: number,
+        text: string,
+        given: Literal | null = null,
+    ): void {
+        this.cell(sheet, bottom, right, given);
         if (top > bottom || left > right) throw new RangeError(`No block from ${top},${left} to ${bottom},${right}`);
-        this.calc.fillFormula(this.cell(sheet, top, left), top, left, bottom, right, text);
+        this.calc.fillFormula(this.cell(sheet, top, left), top, left, bottom, right, text, given);
     }
 
     public clear(sheet: string, row: number, column: number): void {
@@ -101,8 +120,8 @@ export class Engine {
 
     // Computes the formulas the writes and edits since the last recalc reach: one that came with a value other than
     // #REF! and reads nothing written keeps it. After `cap` formulas the pass stops, and the next one goes on.
-    public recalc(cap: number, now = 0, seed = 0): RecalcResult {
-        return this.calc.pass(cap, now, seed);
+    public recalc(cap: number): RecalcResult {
+        return this.calc.pass(cap);
     }
 
     // The value a cell holds. For a formula that is the last one a recalc computed.
@@ -117,6 +136,13 @@ export class Engine {
         const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
         // A row that is no row, such as -1, reads nothing off the column, as its value does.
         return shape > 0 ? this.workbook.shapes.shape(shape).text : null;
+    }
+
+    // Whether a cell holds a formula this build cannot evaluate, whose value is therefore given with it.
+    public isGiven(sheet: string, row: number, column: number): boolean {
+        const cells = this.workbook.known(sheet).columns[column];
+        const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
+        return shape > 0 && (this.calc.factsOf(shape) & Fact.Kept) !== 0;
     }
 
     // Whether a cell holds a formula that is still to be computed.
@@ -201,6 +227,11 @@ export class Engine {
         admit(row, column, value);
         return found;
     }
+}
+
+// Throws unless it is a clock: a time, and a whole number to draw from.
+function clocked(now: number, seed: number): void {
+    if (!Number.isFinite(now) || !Number.isInteger(seed)) throw new RangeError(`No clock ${now}, ${seed}`);
 }
 
 // Throws unless it counts lines: a whole number of them, and at least one.

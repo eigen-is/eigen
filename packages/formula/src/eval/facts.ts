@@ -1,7 +1,7 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
-// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name,
-// whether a structural edit can change its answer through a place or a size, and how much of the stack its
-// evaluation can take. They are packed into one number, the depth above the flags.
+// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name or the
+// clock, whether a structural edit can change its answer through a place or a size, and how much of the stack
+// its evaluation can take. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
 import { CellKind } from '../store/column';
@@ -24,6 +24,8 @@ export const Fact = {
     // The answer can depend on how many lines a range spans: a range stands somewhere else than as the argument
     // of a parameter that passes over empty cells.
     Sized: 16,
+    // A call of a row that reads the clock or draws: the clock of every batch of edits computes the cell again.
+    Clock: 32,
 } as const;
 
 export const FACT_BITS = 8;
@@ -72,6 +74,7 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
     if (entry?.slots.some((slot) => slot.read === Read.Here)) flags |= Fact.Positional;
     if (node.kind === NodeKind.Prefix && node.op === Token.At) flags |= Fact.Positional;
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
+    if (entry?.volatile) flags |= Fact.Clock;
     if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
     // What a row asks of the workbook itself, such as the text of a formula, is the value of no cell it names.
     if (entry?.params.some((param) => param.read === Read.Engine)) flags |= Fact.ReadsUnnamed;

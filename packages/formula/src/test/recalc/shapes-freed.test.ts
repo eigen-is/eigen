@@ -98,9 +98,9 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
     test('a hundred row inserts above ten thousand formulas of their own shape keep two shapes a formula', () => {
         const count = 10_000;
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
-        for (let row = 1; row <= count; row += 1) recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${row}`);
+        for (let row = 1; row <= count; row += 1) recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${row}`, null);
         recalc.pass(NO_CAP);
         expect(workbook.shapes.size).toBe(count);
         for (let i = 0; i < 100; i += 1) {
@@ -116,13 +116,13 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
 
     test('thirty edits refused for a formula too long to store leave the shapes of one edit behind', () => {
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         for (let column = 1; column <= 50; column += 1) {
-            recalc.fillFormula(sheet, 0, column, 0, column, `=R[20]C+${column}`);
+            recalc.fillFormula(sheet, 0, column, 0, column, `=R[20]C+${column}`, null);
         }
         // A row inserted between this formula and the cell it reads adds a digit to it, which is one too many.
-        recalc.fillFormula(sheet, 0, 60, 0, 60, `=R[9]C${'+1'.repeat((MAX_STORED_LENGTH - 6) / 2)}`);
+        recalc.fillFormula(sheet, 0, 60, 0, 60, `=R[9]C${'+1'.repeat((MAX_STORED_LENGTH - 6) / 2)}`, null);
         recalc.pass(NO_CAP);
         expect(workbook.shapes.size).toBe(51);
         for (let count = 1; count <= 30; count += 1) {
@@ -144,10 +144,11 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
 
     test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         for (let i = 1; i <= 1000; i += 1) {
-            for (let row = 0; row < 3; row += 1) recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${i * 3 + row}`);
+            for (let row = 0; row < 3; row += 1)
+                recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${i * 3 + row}`, null);
             // The three shapes in the cells and the three they took the place of, which the pass forgets.
             expect(workbook.shapes.size).toBeLessThanOrEqual(6);
             recalc.pass(NO_CAP);

@@ -192,15 +192,20 @@ describe('what an edit seeds', () => {
         engine.moveSheet('s2', 0);
         expect(pending(engine, 'C1')).toBe(true);
     });
-    test('a formula that draws is not computed again by an edit that leaves what it reads alone', () => {
+    test('a formula that draws is flagged by no edit that leaves what it reads alone: the clock of the batch computes it', () => {
         const engine = engineOf({ s1: { A1: '=RAND()', A2: '=NOW()', B5: 1 } });
-        engine.recalc(NO_CAP, 46000, 1);
+        engine.setClock(46000, 1);
+        engine.recalc(NO_CAP);
         const before = [valueAt(engine, 'A1'), valueAt(engine, 'A2')];
         engine.editLines(rows(true, 4));
         engine.moveCells(move('B6', 'D9'));
         expect([pending(engine, 'A1'), pending(engine, 'A2')]).toEqual([false, false]);
-        engine.recalc(NO_CAP, 46001, 2);
+        engine.recalc(NO_CAP);
         expect([valueAt(engine, 'A1'), valueAt(engine, 'A2')]).toEqual(before);
+        engine.setClock(46001, 2);
+        engine.recalc(NO_CAP);
+        expect(valueAt(engine, 'A1')).not.toBe(before[0]);
+        expect(valueAt(engine, 'A2')).toBe(46001);
     });
     test('a formula over a span of sheets is flagged by every edit of the sheets', () => {
         const engine = computed({ s1: { A1: 1 }, s2: { A1: 2, B1: '=SUM(Sheet1:Sheet2!A1)' } });

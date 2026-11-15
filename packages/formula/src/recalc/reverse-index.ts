@@ -48,6 +48,8 @@ export class ReverseIndex {
     private levels: number[][] = [];
     // The rectangles whose shape reads cells its references do not name: sheet, first and last column and row.
     private unnamed: number[] = [];
+    // The rectangles whose shape reads the clock or draws, in the same five numbers.
+    public clocks: readonly number[] = [];
     // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
     // last row, and shape.
     public rectangles: readonly number[] = [];
@@ -100,12 +102,15 @@ export class ReverseIndex {
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
         this.unnamed = [];
+        const clocks: number[] = [];
+        this.clocks = clocks;
         for (let r = 0; r < rectangles.length; r += 6) {
             const s = rectangles[r];
             const id = rectangles[r + 5];
             const facts = shapes.facts[id];
             if (facts & Fact.Kept) continue;
             if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
+            if (facts & Fact.Clock) clocks.push(...rectangles.slice(r, r + 5));
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =

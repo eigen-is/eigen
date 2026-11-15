@@ -1,8 +1,8 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach and computes
-// them: reading a cell still to be computed computes it first, so no order is worked out ahead. A cell met while it
-// is being computed is on a loop with every cell reading towards it. Nesting has one budget: past it the calls in
-// progress are dropped by a throw and the cells computed again from the list of cells in progress.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and with a new
+// clock those that read it, and computes them: reading a cell still to be computed computes it first, so no order
+// is worked out ahead. A cell met while it is being computed is on a loop with every cell reading towards it.
+// Nesting has one budget: past it the calls in progress are dropped by a throw and the cells computed again.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -84,14 +84,24 @@ export class Recalc {
     private stored = false;
     // What each cell in progress has made since its formula last started.
     private readonly made: number[] = [];
+    // How many numbers each cell in progress has drawn since its formula last started.
+    private readonly drew: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
+    // The clock of the last batch of edits: its author's date and time as a serial, and what its draws are made
+    // of beside the cell that draws.
+    public now: number;
+    private seed: number;
+    // Whether the clock formulas were flagged since the clock was last set.
+    private stamped = true;
 
-    public constructor(workbook: Workbook, functions: Registry) {
+    public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
         this.workbook = workbook;
         this.functions = functions;
         this.facts = workbook.shapes.facts;
         this.evaluator = new Evaluator(workbook, functions, this);
+        this.now = now;
+        this.seed = seed;
         // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
             const { columns } = workbook.sheets[s];
@@ -104,6 +114,13 @@ export class Recalc {
         }
     }
 
+    // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
+    public setClock(now: number, seed: number): void {
+        this.now = now;
+        this.seed = seed;
+        this.stamped = false;
+    }
+
     public setValue(sheet: Sheet, row: number, c: number, value: Literal): void {
         this.touch(sheet, row, c);
         this.workbook.setValue(sheet, row, c, value);
@@ -114,11 +131,28 @@ export class Recalc {
         this.workbook.clear(sheet, row, c);
     }
 
-    // One formula in its stored text in every cell of a block. It holds no value until a pass computes it.
-    public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
+    // One formula in its stored text in every cell of a block. It holds no value until a pass computes it, unless
+    // this build cannot evaluate it and it comes with one: then every cell holds that value and waits for no pass.
+    public fillFormula(
+        sheet: Sheet,
+        top: number,
+        left: number,
+        bottom: number,
+        right: number,
+        text: string,
+        given: Literal | null,
+    ): void {
         this.stale = true;
         for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
+        if (given === null || (this.factsOf(sheet.columns[left].shape[top]) & Fact.Kept) === 0) return;
+        for (let c = left; c <= right; c += 1) {
+            const column = sheet.columns[c];
+            for (let row = top; row <= bottom; row += 1) {
+                this.workbook.put(column, row, given);
+                column.settle(row);
+            }
+        }
     }
 
     // Adds a sheet that was read from its description. The index is brought up to date before the tables take the
@@ -148,12 +182,24 @@ export class Recalc {
         return { rewrites: plan.rewrites };
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
-    // name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
-    public pass(cap: number, now = 0, seed = 0): RecalcResult {
+    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not name
+    // or a clock that was set, and what an earlier pass left, in sheet, column, row order where no read asks another.
+    public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
-        this.evaluator.clock(now, seed);
+        if (!this.stamped) {
+            // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
+            this.reach();
+            const { clocks } = this.index;
+            for (let i = 0; i < clocks.length; i += 5) {
+                const { columns } = workbook.sheets[clocks[i]];
+                for (let c = clocks[i + 1]; c <= clocks[i + 2]; c += 1) {
+                    for (let row = clocks[i + 3]; row <= clocks[i + 4]; row += 1) columns[c].markDirty(row);
+                    this.seeds.push(clocks[i], c, clocks[i + 3], clocks[i + 4]);
+                }
+            }
+            this.stamped = true;
+        }
         // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
         if (this.seeds.length > 0) {
             this.reach();
@@ -266,6 +312,31 @@ export class Recalc {
         return true;
     }
 
+    // The next number in [0, 1) the running formula draws. Its n-th draw is made of the seed, its sheet, its row, its
+    // column and n alone: so it is the same in whatever order cells compute and however often the formula starts again.
+    public draw(): number {
+        const at = this.current;
+        const count = this.drew[at] + 1;
+        this.drew[at] = count;
+        let mixed = Math.imul(this.seed ^ this.sheets[at].salt, 0x9e3779b1);
+        mixed = Math.imul(mixed ^ (mixed >>> 15) ^ this.rows[at], 0x85ebca6b);
+        mixed = Math.imul(mixed ^ (mixed >>> 13) ^ this.places[at], 0xc2b2ae35);
+        mixed = ((mixed ^ (mixed >>> 16)) + Math.imul(count, 0x6d2b79f5)) | 0;
+        mixed = Math.imul(mixed ^ (mixed >>> 15), 1 | mixed);
+        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+    }
+
+    public factsOf(shape: number): number {
+        let facts = this.facts[shape];
+        if (facts < 0) {
+            const { tree } = this.workbook.shapes.shape(shape);
+            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
+            this.facts[shape] = facts;
+        }
+        return facts;
+    }
+
     // A cell is about to be written: it is a seed of the next pass or edit.
     private touch(sheet: Sheet, row: number, c: number): void {
         const column = sheet.columns[c];
@@ -362,8 +433,9 @@ export class Recalc {
         const row = this.rows[at];
         const shape = column.shape[row];
         const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
-        // A formula that runs again after a throw for depth makes its arrays again.
+        // A formula that runs again after a throw for depth makes its arrays again, and its draws.
         this.made[at] = 0;
+        this.drew[at] = 0;
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
             ? (this.workbook.value(column, row) ?? REF)
@@ -390,16 +462,6 @@ export class Recalc {
     // What one cell of a shape adds to the nesting.
     private nesting(shape: number): number {
         return (this.factsOf(shape) >> FACT_BITS) + CELL;
-    }
-
-    public factsOf(shape: number): number {
-        let facts = this.facts[shape];
-        if (facts < 0) {
-            const { tree } = this.workbook.shapes.shape(shape);
-            facts = tree === null ? 1 << FACT_BITS : shapeFacts(tree, this.functions);
-            this.facts[shape] = facts;
-        }
-        return facts;
     }
 }
 
