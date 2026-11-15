@@ -1,8 +1,6 @@
 // The questions another home may ask of a calendar, such as which calendars a home has, each with the handler that
 // answers it on the owner's Home. Callers ask through the home relay's getFromHomes, and first leave out every owner
-// without a home folder, so asking never creates a home. The relay spreads this table while it loads, so this file
-// imports types only: a module that led back to the relay would make the relay run first and read the table before
-// it exists.
+// without a home folder, so asking never creates a home. This file imports types only, which `bun run check` gates.
 
 import type { CalendarItem, SharedWithMeCalendar } from '@workspace/lib/types/calendar';
 import type { Answerers } from '../home/home-relay';
