@@ -98,7 +98,7 @@ these requests across backends.
 :8080 {
     map {path} {relay_owner} {
         ~^/internal/relay/([^/]+)       ${1}
-        ~^/internal/pull/([^/]+)        ${1}
+        ~^/internal/get/([^/]+)         ${1}
         default                          ""
     }
 
@@ -146,7 +146,7 @@ single-process path.
 
 ### Modified: `../../apps/api/src/lib/home/home-relay.ts`
 
-With the [outbox](PROPOSAL_HOME_RELAY.md#7-sharding-later) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
+With the [outbox](PROPOSAL_HOME_RELAY.md#6-sharding-later) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
 
 The switch in the relay's private `deliver`, which every delivery passes, is extracted into
 `dispatchToLocalHome()` (exported, used by internal endpoints) and wrapped with the cluster routing:
@@ -184,16 +184,12 @@ Key behaviors:
   peer based on the ownerId in the URL path. The receiving peer calls `getHome()` to initialize the
   Home if needed.
 
-Pull functions (`pullSharedPaths`, `pullCalendarShares`, etc.) follow the same pattern: local fast
-path if `atHome()`, else fetch through Caddy relay:
+`getFromHomes` follows the same pattern for each owner it asks: the local path if the Home is loaded here or cluster mode is off, else a fetch through the Caddy relay with the query's kind and `ask`:
 
 ```typescript
-export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
-    if (atHome(ownerUserId) || !isClusterMode()) {
-        const home = await getHome(ownerUserId);
-        return home.drive.getAllSharedWith(user);
-    }
-    return fetchFromRelay(ownerUserId, 'shared-paths', { user });
+async function answerOf<K extends keyof HomeQueries>(ownerId: string, kind: K, ask: HomeQueries[K]['ask']) {
+    if (atHome(ownerId) || !isClusterMode()) return answerers[kind](await openUnderCap(ownerId), ask);
+    return fetchFromRelay(ownerId, kind, ask);
 }
 ```
 
@@ -204,15 +200,9 @@ New endpoints with `:ownerId` in the path (so Caddy can extract it for routing):
 - `POST /internal/relay/:ownerId` — receives `{ message: HomeMessage }`, calls
   `dispatchToLocalHome()`. For `broadcast` messages only: checks `atHome()` first and skips if the
   Home isn't loaded (user has no active SSE connection, so broadcasting is pointless).
-- `POST /internal/pull/:ownerId/shared-paths` — calls `getHome()`, returns shared paths
-- `POST /internal/pull/:ownerId/calendar-shares` — returns calendar shares
-- `POST /internal/pull/:ownerId/pending-invitations` — returns pending invitations
-- `POST /internal/pull/:ownerId/calendar-permission` — returns permission level
-- `POST /internal/pull/:ownerId/calendars` — returns calendars
-- `POST /internal/pull/:ownerId/team-quota-overrides` — returns team quota overrides
-- `POST /internal/pull/:ownerId/team-mounts` — returns team mounts
+- `POST /internal/get/:ownerId` — receives `{ kind, ask }`, runs that kind's answerer on the local Home and returns the answer. One route serves every query kind.
 
-Avatars need no pull route: they are server files under `getAvatarsDir()`, not Home data.
+Avatars need no get route: they are server files under `getAvatarsDir()`, not Home data.
 
 All endpoints use `requireLocalhost(request, server)` for access control. This passes for
 Docker-internal traffic (Caddy's IP is in `TRUSTED_NETWORKS: 172.16.0.0/12`). External access
@@ -285,7 +275,7 @@ proposed startup check are in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md).
 ## Implementation Checklist
 
 1. Create `apps/api/src/lib/config/cluster.ts` — `isClusterMode()`, `getRelayUrl()`
-2. Add internal relay/pull endpoints to `../../apps/api/src/routes/internal.ts` (with `:ownerId` in path)
+2. Add the internal relay and get endpoints to `../../apps/api/src/routes/internal.ts` (with `:ownerId` in path)
 3. Refactor `../../apps/api/src/lib/home/home-relay.ts` — extract `dispatchToLocalHome()`, add Caddy
    relay for cluster mode
 4. Update `../../apps/api/src/index.ts` — configurable port, cluster logging

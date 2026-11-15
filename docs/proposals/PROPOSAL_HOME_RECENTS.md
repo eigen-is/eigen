@@ -76,7 +76,7 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 1. Take the caller's newest 100 rows and group them by owner.
 2. Look up the caller's team memberships once, for the whole load.
-3. Ask each owner through `pullVisiblePaths`, which groups the rows by owner and reads each through `pullFromEach` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner that is gone is skipped, an owner whose read fails is logged and adds nothing, and the others still answer.
+3. Ask each owner through `readVisiblePaths` (`apps/api/src/lib/drive/shared-with-me.ts`), which asks each owner of the rows once through the home relay's `getFromHomes` ([below](#one-helper-for-reads-across-homes)). The caller's own home is asked the same way. An owner that is gone is skipped, an owner whose read fails is logged and adds nothing, and the others still answer.
 4. If fewer than 100 rows came back visible, do the same for the remaining rows, at most 100 more. This is what the other 100 stored rows are for: after a bulk trash the page still has older files to show, and in the usual load those owners are never asked.
 5. Merge and sort by `lastActivityAt`, newest first, and return at most 100, each as the current `DrivePath` plus `lastActivityAt`.
 
@@ -94,32 +94,13 @@ GET /drive/:ownerId/recent     requireSelf + requireNonGuest
 
 ## One helper for reads across homes
 
-`aggregateWatches`, `aggregateMimeContents` and `aggregateFileSearch` each ask their homes in one `Promise.all` and swallow a failed read with `.catch(() => [])`, so a home that can't answer looks like a home with nothing to show, and nothing records it. One helper replaces those three catches, and `aggregateRecents` uses it too. It skips an owner that is gone, because `shared_paths` rows and Recent rows can outlive their owner, and those would otherwise log an error on each load. It landed first as a private function in `aggregate.ts`, and moves to `home-relay.ts` as an export, so that every read of many homes goes through one function and how many run at once can be changed in one place.
+Watched, All docs, file search, Recent and the teams list ask their homes through one function, the home relay's `getFromHomes`, so every read of many homes goes through one place and how many open at once is set there. It skips an owner that is gone, because `shared_paths` rows and Recent rows can outlive their owner, and those would otherwise log an error on each load. A failed read is logged and leaves that owner out, so a home that can't answer never looks like a home with nothing to show and the others still answer. It opens at most four closed homes at once and leaves out a home that does not open within four seconds ([SCALABILITY.md § Reads across many homes go through getFromHomes](../SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)).
 
-Its first other caller is the teams list in `routes/home.ts`, whose per-team pulls already log and skip a failure. Its calendar pull turns a 404, a team with its calendar off (the default), into an empty list inside the pull, since that isn't a failure. Quota's team overrides, admin usage, team calendar sync and signup reconciliation differ in how a failure should end, or run one at a time on purpose, so they move in a later unit of their own.
+Measured on 2026-11-09, a closed team home opens in 4 to 8 ms with 9 file descriptors, and a closed user home in 6 to 14 ms with 18.
 
-```ts
-// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
-export async function pullFromEach<T>(ownerIds: readonly string[], pull: (ownerId: string) => Promise<T>): Promise<T[]> {
-    const results = await Promise.all(
-        ownerIds.map((ownerId) =>
-            getOwnerExists(ownerId)
-                .then((exists) => (exists ? pull(ownerId) : null))
-                .catch((err) => {
-                    console.error(`home-relay: reading ${ownerId} failed:`, err);
-                    return null;
-                }),
-        ),
-    );
-    return results.filter((result) => result !== null);
-}
-```
+The real cost is homes held open. A read of a hundred closed homes took file descriptors from 37 to 937 that day, and those homes stayed open for their idle time, as any read of them does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
 
-It runs every read at once, with no limit, by the owner's choice on 2026-11-09. Measured under load that day, a closed team home opens in 4 to 8 ms with 9 file descriptors, and a closed user home in 6 to 14 ms with 18. The database opens, most of that CPU, are synchronous, so running fewer at a time saves no CPU and ends with the same open files, but it does keep the server answering. On the API image over 500 closed user homes, all at once took 1.2 s with a longest event-loop gap of 1.17 s, eight at a time 1.4 s with gaps of 64 to 79 ms, and one at a time 1.5 to 1.7 s with gaps of 11 to 16 ms. Over 100 lighter team homes the gap was 7 to 15 ms all at once. If loads that large show up, this function is the one place to change.
-
-The real cost is homes held open. That run took file descriptors from 37 to 937, and those hundred homes stayed open for their idle time, as any read of them does. That is the job of the LRU cap in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md). Production pins a high file limit in `docker-compose.yml`, and a dev machine at a low `ulimit -n` can run out sooner, as it already can with Watched or a large share. Recent is normally the lighter of the two, because it asks only the owners in your list, while Watched asks every team and everyone who shared with you.
-
-`pullVisiblePaths` groups the rows by owner and hands each owner's `Drive.getVisiblePaths` only that owner's rows, through `pullFromEach`.
+`readVisiblePaths` asks each owner once with the rows, and each owner hands its `Drive.getVisiblePaths` only its own rows.
 
 | | Cost per load |
 |---|---|
@@ -140,8 +121,8 @@ The real cost is homes held open. That run took file descriptors from 37 to 937,
 
 ## Build order
 
-1. `pullFromEach` in `aggregate.ts`, with Watched, All docs and file search on it. Its own commit: these log a failed read whether or not Recent files ships.
-2. `pullFromEach` moved to `home-relay.ts`, with the teams list on it. Table, `recordOpened` in the three places, `Drive.getVisiblePaths`, `pullVisiblePaths`, the route, the `Home.notify` write, tests.
+1. One helper for reads across homes, with Watched, All docs and file search on it. Its own commit: these log a failed read whether or not Recent files ships.
+2. The helper in `home-relay.ts`, with the teams list on it. Table, `recordOpened` in the three places, `Drive.getVisiblePaths`, the read of the visible rows, the route, the `Home.notify` write, tests.
 3. Sidebar rows, page, the sort and date props.
 4. Dropped: the latest-activity line, by the owner's ruling of 2026-11-09 above.
 
@@ -157,7 +138,7 @@ Plus `app-sidebar.test.tsx` for the row in Drive and in an app, a test that sort
 
 ## Docs when it lands
 
-`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `pullFromEach` and `pullVisiblePaths`, a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
+`docs/STORAGE.md` or a new domain doc for the table, [ARCHITECTURE.md](../ARCHITECTURE.md) for the concept, [NOTIFICATION-CENTER.md](../NOTIFICATION-CENTER.md) for the write in `Home.notify`, [SCALABILITY.md](../SCALABILITY.md) for `getFromHomes` and `readVisiblePaths`, a help-center article under `apps/index/src/data/support/drive/` and `CHANGELOG.md`.
 
 ## Later: Recent files in the command palette
 
