@@ -120,17 +120,18 @@ export class Workbook {
     // source does while it is read, such as a call of the engine, meets the workbook as it was.
     public read(source: SheetSource): Draft {
         const lengths: number[] = [];
-        source.cells((row, column, value, formula) => {
-            if (value === null && formula === null) return;
-            admit(row, column, value);
+        walk(source, (row, column) => {
             while (lengths.length <= column) lengths.push(0);
             if (row >= lengths[column]) lengths[column] = row + 1;
         });
         const sheet = new Sheet(source.id, source.name, lengths);
         const texts = new Map<string, number>();
         const formulas = new Map<string, number>();
-        source.cells((row, column, value, formula) => {
+        walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
+            if (held === undefined || row >= held.length) {
+                throw new Error(`Sheet ${source.id} reported cell ${row},${column} only when it was read again`);
+            }
             if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
             if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
             else if (value !== null) this.put(held, row, value);
@@ -303,6 +304,16 @@ export class Workbook {
         }
         return code;
     }
+}
+
+// Reports the cells of a source that hold something, each through the store's door: both walks of a load meet
+// the same refusals, as a source may report other cells the second time.
+function walk(source: SheetSource, cell: CellSink): void {
+    source.cells((row, column, value, formula) => {
+        if (value === null && formula === null) return;
+        admit(row, column, value);
+        cell(row, column, value, formula);
+    });
 }
 
 // The number of a text in a list of distinct texts in the order they came, from 0.

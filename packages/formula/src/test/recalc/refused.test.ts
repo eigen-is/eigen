@@ -71,6 +71,29 @@ function sheetWith(row: number, column: number, value: Literal | null, formula: 
     };
 }
 
+// A sheet whose source reports one more cell the second time it is walked, when the columns are sized.
+function sheetThatDiffers(row: number, column: number, value: Literal): SheetSource {
+    let walks = 0;
+    return {
+        id: 's9',
+        name: 'Later',
+        cells: (cell) => {
+            walks += 1;
+            cell(0, 0, 'kept', '=1+1');
+            cell(1, 0, 1, null);
+            if (walks === 2) cell(row, column, value, null);
+        },
+    };
+}
+
+const DIFFERS: [string, number, number, Literal, string][] = [
+    ['a number that is not one', 0, 0, Number.NaN, 'No number NaN'],
+    ['a row that is a fraction', 0.5, 0, 3, 'No cell 0.5,0'],
+    ['a column that is negative', 0, -1, 3, 'No cell 0,-1'],
+    ['a column it did not report', 0, 5, 2, 'Sheet s9 reported cell 0,5 only when it was read again'],
+    ['a row past the last it reported', 7, 0, 2, 'Sheet s9 reported cell 7,0 only when it was read again'],
+];
+
 const REFUSED: [string, (engine: Engine) => unknown][] = [
     ['a value on a sheet that is gone', (engine) => engine.setValue('nope', 0, 0, 1)],
     ['a formula on a sheet that is gone', (engine) => engine.setFormula('nope', 0, 0, '=1')],
@@ -133,6 +156,10 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
         [`a sheet with a value that is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, null), 0)],
         [`a sheet with a formula whose value is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, '=1'), 0)],
     ]),
+    ...DIFFERS.map(([what, row, column, value]): [string, (engine: Engine) => unknown] => [
+        `a sheet that reports ${what} when it is read again`,
+        (engine) => engine.addSheet(sheetThatDiffers(row, column, value), 0),
+    ]),
     ...counts.flatMap(([what, count]): [string, (engine: Engine) => unknown][] => [
         [`rows inserted, their count ${what}`, (engine) => engine.editLines({ ...lines, count })],
         [
@@ -170,6 +197,12 @@ describe('a write or an edit the engine refuses changes nothing', () => {
     ])('a workbook is not loaded from a sheet with %s', (_, sheet) => {
         expect(() => new Engine([sheet])).toThrow(RangeError);
     });
+    test.each(DIFFERS)(
+        'a workbook is not loaded from a sheet that reports %s when it is read again',
+        (_, row, column, value, error) => {
+            expect(() => new Engine([sheetThatDiffers(row, column, value)])).toThrow(error);
+        },
+    );
     test.each([
         ['the same', 'Data', 'Data'],
         ['the same but for their case', 'Data', 'dATA'],
