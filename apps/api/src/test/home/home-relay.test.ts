@@ -395,6 +395,27 @@ describe('A get from many homes', () => {
         expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(gone.id)))).toBe(false);
     });
 
+    test('skips a team that is gone, with no error logged', async () => {
+        const neverMade = teamOwnerId(crypto.randomUUID().replaceAll('-', ''));
+        const deletedId = await createTeam(ctx, getServerConfig()!.orgId, 'Deleted Relay Team');
+        await getHomeModule.getHome(teamOwnerId(deletedId));
+        const removed = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId: deletedId }),
+        });
+        expect(removed.status).toBe(200);
+        const gone = [neverMade, teamOwnerId(deletedId)];
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        const answers = await getFromHomes([...gone, teamOwner], 'team:quota-overrides', null);
+
+        expect([...answers.keys()]).toEqual([teamOwner]);
+        for (const ownerId of gone) {
+            expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(ownerId)))).toBe(false);
+        }
+    });
+
     test('skips an owner whose deletion is running, with no error logged', async () => {
         const [going, live] = [members[0], ctx.alice.user];
         const errors = spyOn(console, 'error').mockImplementation(() => {});
