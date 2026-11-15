@@ -360,16 +360,82 @@ export function randomLinesOp(random: Random, model: Model): LinesOp {
     return op;
 }
 
+// A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range
+// or a comment, one a little larger, or a whole column or row. Half the moves land near where they start, so the block
+// overlaps itself in every direction; now and then either sheet is one the book does not hold.
 export function randomMoveOp(random: Random, model: Model): MoveOp {
-    const sheet = sheetId(random, model);
+    const held = someSheet(random, model);
+    const sheet = random() < 0.04 ? 'nosheet' : held.id;
+    const { merge, comment, conditionalFormat, validation } = held.records;
+    // A sheet added from a copy holds the ids of the sheet it copies, so a block that brings one may clash there.
+    const ids = [...merge.keys(), ...comment.keys()];
+    const twins = [...model.sheets.values()].filter(
+        (other) => other !== held && ids.some((id) => other.records.merge.has(id) || other.records.comment.has(id)),
+    );
+    const twin = twins.length > 0 && random() < 0.5 ? pick(random, twins) : undefined;
+    const toSheet = twin?.id ?? (random() < 0.6 ? sheet : sheetId(random, model));
+    const placed: Rect[] = [
+        ...[...merge.values()].map(({ rect }) => rect),
+        ...[...comment.values()].map(({ row, column }): Rect => [row, column, row, column]),
+        ...[...conditionalFormat.values(), ...validation.values()].flatMap(({ ranges }) => ranges),
+    ].filter(([top, left, bottom, right]) => bottom - top < 40 && right - left < 40);
+    const row = below(random, 14);
+    const column = below(random, 8);
+    const shared = [...merge].filter(([id]) => twin?.records.merge.has(id)).map(([, { rect }]) => rect);
+    for (const [id, { row, column }] of comment)
+        if (twin?.records.comment.has(id)) shared.push([row, column, row, column]);
+    const from =
+        shared.length > 0
+            ? pick(random, shared)
+            : pick<() => Rect>(random, [
+                  () => smallRect(random),
+                  () => smallRect(random),
+                  () => smallRect(random),
+                  () => smallRect(random),
+                  () => [row, column, row, column],
+                  () => {
+                      if (placed.length === 0) return smallRect(random);
+                      const [top, left, bottom, right] = pick(random, placed);
+                      const grow = random() < 0.5 ? 0 : 1;
+                      return [Math.max(0, top - grow), Math.max(0, left - grow), bottom + grow, right + grow];
+                  },
+                  () =>
+                      random() < 0.5
+                          ? [0, column, GRID_ROWS - 1, column + below(random, 2)]
+                          : [row, 0, row, GRID_COLUMNS - 1],
+              ])();
+    const [top, left, bottom, right] = from;
+    // A move near its start lands less than its own size away, so it overlaps itself when it stays on its sheet.
+    const near = random() < 0.6;
+    const toward = (start: number, size: number, room: number) =>
+        Math.min(room, Math.max(0, near ? start + below(random, 2 * size + 1) - size : below(random, 16)));
     return {
         kind: 'move',
         sheet,
-        from: smallRect(random),
-        toSheet: random() < 0.7 ? sheet : sheetId(random, model),
-        toRow: below(random, 16),
-        toColumn: below(random, 9),
+        from,
+        toSheet,
+        toRow: toward(top, Math.max(1, bottom - top), GRID_ROWS - 1 - (bottom - top)),
+        toColumn: toward(left, Math.max(1, right - left), GRID_COLUMNS - 1 - (right - left)),
     };
+}
+
+// Formulas that read cells where blocks move from and land, on their own sheet and on another, so a move makes some
+// follow it and some lossy.
+export function randomReaderOp(random: Random, model: Model): InputOp {
+    const cells = Array.from({ length: 1 + below(random, 4) }, (_, at): Placed<CellContent | null> => {
+        const row = 1 + below(random, 16);
+        const column = 1 + below(random, 9);
+        const read = `R${row}C${column}`;
+        const f = pick(random, [
+            `=${read}+1`,
+            `=[${someSheet(random, model).id}]!${read}*2`,
+            `=SUM(${read}:R${row + below(random, 4)}C${column + below(random, 3)})`,
+            '=R[-1]C+R[1]C',
+        ]);
+        return [at * 5 + below(random, 5), 12 + below(random, 4), { f }];
+    });
+    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    return { kind: 'input', sheet: sheetId(random, model), cells };
 }
 
 // An add of a random sheet with something of every part, now and then under an id the book holds, a name in use in any
