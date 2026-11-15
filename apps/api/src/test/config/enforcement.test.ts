@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, mock, spyOn, test } f
 import { teamOwnerId } from '@workspace/lib/types';
 import { getMountQuotaState } from '../../lib/config/enforcement';
 import { resolveHomeDataMax, resolveUserQuotas } from '../../lib/config/quota';
-import { getServerConfig } from '../../lib/config/server-config';
+import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
 import { getFromHomes } from '../../lib/home/home-relay';
@@ -162,6 +162,61 @@ describe('a team that does not answer adds no override', () => {
         spyOn(console, 'error').mockImplementation(() => {});
 
         expect(await homeDataMaxWhileRestoring(raising)).toBe(getServerSettings().quotas.homeDataMaxMB * MB);
+    });
+});
+
+describe('a user in two teams that both raise a limit gets the higher', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let higher: string;
+    let lower: string;
+    const MB = 1024 * 1024;
+
+    function setOverrides(teamId: string, raise: number | null): Promise<Response> {
+        const { homeDataMaxMB, defaultMountMaxSizeMB } = getServerSettings().quotas;
+        return authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                memberOverrides: {
+                    homeDataMaxMB: raise === null ? null : homeDataMaxMB + raise,
+                    defaultMountMaxSizeMB: raise === null ? null : defaultMountMaxSizeMB + raise,
+                },
+            }),
+        });
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getPublicConfig().orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        higher = await createTeam(ctx, orgId, 'Higher Override Team');
+        lower = await createTeam(ctx, orgId, 'Lower Override Team');
+        for (const teamId of [higher, lower]) await addMember(ctx, teamId, ctx.charlie.user.id);
+        await setOverrides(higher, 2000);
+        await setOverrides(lower, 1000);
+    });
+
+    afterAll(async () => {
+        for (const teamId of [higher, lower]) await setOverrides(teamId, null);
+    });
+
+    test('for the home-data budget, whichever team comes first', async () => {
+        const expected = (getServerSettings().quotas.homeDataMaxMB + 2000) * MB;
+
+        expect(await resolveHomeDataMax([higher, lower])).toBe(expected);
+        expect(await resolveHomeDataMax([lower, higher])).toBe(expected);
+    });
+
+    test("for a drive's cap, whichever team comes first", async () => {
+        const expected = (getServerSettings().quotas.defaultMountMaxSizeMB + 2000) * MB;
+        const mount = { id: 'default', name: 'Drive', storageType: 'local' as const, isDefault: true, maxSizeMB: 10 };
+
+        expect((await resolveUserQuotas(mount, [higher, lower], 'user')).mountMax).toBe(expected);
+        expect((await resolveUserQuotas(mount, [lower, higher], 'user')).mountMax).toBe(expected);
     });
 });
 
