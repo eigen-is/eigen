@@ -42,8 +42,9 @@ export class Workbook {
     public readonly sheets: ReadonlyMap<string, BookSheet>;
     // The generation: it rises only when the document is replaced whole, never with an edit.
     public readonly g: number;
-    private readonly now: number;
-    private readonly seed: number;
+    // The clock of the last batch that landed, or of the snapshot: its author's time and the seed of its draws.
+    private now: number;
+    private seed: number;
     // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
     private swept = 0;
 
@@ -167,6 +168,14 @@ export class Workbook {
                 };
             }),
         };
+    }
+
+    // The clock of a batch, which the host hands over once the batch's ops are applied: a refused batch throws
+    // before that, so it leaves the clock of the batch before it.
+    public setClock(now: number, seed: number): void {
+        this.engine.setClock(now, seed);
+        this.now = now;
+        this.seed = seed;
     }
 
     // What the limits count: the engine's slots, the runs and bands of every sheet, its records and the sheets.
