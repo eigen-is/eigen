@@ -10,7 +10,7 @@ import type { LineAttrs, LinesOp, SheetContent, Span } from '@workspace/lib/shee
 type Run = { readonly first: number; last: number; readonly attrs: Readonly<LineAttrs> };
 
 // The lines of a span with the keys they share, as a sheet's content lists them.
-type LineRun = [Span, Readonly<LineAttrs>];
+type LineRun = SheetContent['rows'][number];
 
 const NO_KEYS: Readonly<LineAttrs> = Object.freeze({});
 // Every line key once, in the order a run holds them: the mapped type fails the build on a key left out.

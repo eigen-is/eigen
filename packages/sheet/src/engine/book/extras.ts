@@ -9,31 +9,35 @@ import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
+// A cell's place: its column times the grid's rows plus its row, so the places ascend in column order.
+export function placeOf(row: number, column: number): number {
+    return column * GRID_ROWS + row;
+}
+
 // The text a rich cell shows, which is the value the engine holds for it.
 export function textOf(runs: readonly Run[]): string {
     return runs.map((run) => run.v).join('');
 }
 
 export class Extras {
-    // A place is its column times the grid's rows plus its row, so the places ascend in column order.
     private places: number[] = [];
     private held: Extra[] = [];
 
     public at(row: number, column: number): Extra | undefined {
-        const place = column * GRID_ROWS + row;
+        const place = placeOf(row, column);
         const at = this.search(place);
         return this.places[at] === place ? this.held[at] : undefined;
     }
 
     // The entries of a block in column order. It reads the lists as it goes, so nothing is written during a walk.
     public *cells([top, left, bottom, right]: Rect): Generator<Placed<Extra>> {
-        let at = this.search(left * GRID_ROWS + top);
+        let at = this.search(placeOf(top, left));
         while (at < this.places.length) {
             const row = this.places[at] % GRID_ROWS;
             const column = (this.places[at] - row) / GRID_ROWS;
             if (column > right) return;
-            if (row < top) at = this.search(column * GRID_ROWS + top);
-            else if (row > bottom) at = this.search((column + 1) * GRID_ROWS + top);
+            if (row < top) at = this.search(placeOf(top, column));
+            else if (row > bottom) at = this.search(placeOf(top, column + 1));
             else {
                 yield [row, column, this.held[at]];
                 at += 1;
@@ -48,7 +52,7 @@ export class Extras {
     // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
     // entry, so writing none deletes.
     public write(row: number, column: number, { s, link, qp }: Extra): Extra | undefined {
-        const place = column * GRID_ROWS + row;
+        const place = placeOf(row, column);
         const at = this.search(place);
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
@@ -74,13 +78,13 @@ export class Extras {
         const covered = [...this.cells(target)];
         const block = source.take(from);
         this.take(target);
-        const shift = (toColumn - left) * GRID_ROWS + toRow - top;
+        const shift = placeOf(toRow, toColumn) - placeOf(top, left);
         const places: number[] = [];
         const held: Extra[] = [];
         let at = 0;
         // Both lists ascend, and a block shifted whole still does, so one pass merges them.
         for (const [row, column, extra] of block) {
-            const place = column * GRID_ROWS + row + shift;
+            const place = placeOf(row, column) + shift;
             for (; at < this.places.length && this.places[at] < place; at += 1) {
                 places.push(this.places[at]);
                 held.push(this.held[at]);
@@ -100,7 +104,7 @@ export class Extras {
     // Whether the insert would push an entry off the grid's end.
     public wouldPush({ rows, count }: LinesOp): boolean {
         const last = this.places.at(-1) ?? -1;
-        if (!rows) return last >= (GRID_COLUMNS - count) * GRID_ROWS;
+        if (!rows) return last >= placeOf(0, GRID_COLUMNS - count);
         return this.places.some((place) => place % GRID_ROWS >= GRID_ROWS - count);
     }
 

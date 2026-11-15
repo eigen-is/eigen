@@ -8,9 +8,10 @@ import type { Literal } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
+import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
-import type { CellRecord, Placed, SheetContent } from '@workspace/lib/sheets/ops';
+import type { CellRecord, Placed } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
 import type { Extra } from './extras';
@@ -18,10 +19,6 @@ import { Extras, textOf } from './extras';
 import { LineRuns } from './line-runs';
 import { LookTable } from './look-table';
 import { SheetRecords } from './records';
-
-// A document whole, as a snapshot holds it: the generation, the clock and the random seed of its last batch, and
-// its sheets in tab order.
-type Content = { g: number; now: number; seed: number; sheets: SheetContent[] };
 
 // The parts of one sheet. Its cells are the engine's, under the sheet's id, and its fields are its records'. A part
 // takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an insert pushes
@@ -52,7 +49,7 @@ export class Workbook {
 
     // Loads a snapshot, weighing the limits on the bands as rebuilt and the cells as listed before the engine
     // allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
-    public constructor({ g, now, seed, sheets }: Readonly<Content>) {
+    public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const bands = ordered.map(
             (sheet) =>
@@ -67,8 +64,8 @@ export class Workbook {
             // The cells come in column order, so a column's last cell says how many slots the engine gives it.
             let column = -1;
             let length = 0;
-            for (const [row, at, { v, f, s }] of cells) {
-                if (v === undefined && f === undefined && s === undefined) continue;
+            for (const [row, at, cell] of cells) {
+                if (!reachesEngine(cell)) continue;
                 if (at !== column) slots += length;
                 column = at;
                 length = row + 1;
@@ -83,11 +80,11 @@ export class Workbook {
                 id,
                 name: fields.name,
                 cells: (cell) => {
-                    for (const [row, column, { v, e, f, s }] of cells) {
-                        if (s) cell(row, column, textOf(s), null);
-                        else if (v !== undefined || f !== undefined) {
-                            cell(row, column, e && typeof v === 'string' ? errorOf(v) : (v ?? null), f ?? null);
-                        }
+                    for (const [row, column, record] of cells) {
+                        if (!reachesEngine(record)) continue;
+                        const { v, e, f, s } = record;
+                        const value = s ? textOf(s) : e && typeof v === 'string' ? errorOf(v) : (v ?? null);
+                        cell(row, column, value, f ?? null);
                     }
                 },
             })),
@@ -117,7 +114,7 @@ export class Workbook {
 
     // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
     // a host walks only after a recalc that did not stop.
-    public content(): Content {
+    public content(): Omit<BookContent, 'computed'> {
         const sheets = [...this.sheets].sort(([idA, a], [idB, b]) =>
             compareRules(a.records.fields.order, idA, b.records.fields.order, idB),
         );
@@ -217,4 +214,9 @@ function weightOf(slots: number, bands: readonly Bands[], records: readonly Shee
     }
     const most = Math.max(0, ...records.map((sheet) => sheet.weight().records));
     return { slots, runs, bands: count, records: most, sheets: bands.length };
+}
+
+// A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.
+function reachesEngine({ v, f, s }: CellRecord): boolean {
+    return v !== undefined || f !== undefined || s !== undefined;
 }

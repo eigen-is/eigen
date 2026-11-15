@@ -3,6 +3,7 @@
 // form of a snapshot worked out here from plain data, without the workbook's own parts.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type {
     CellAttrs,
     CellRecord,
@@ -20,7 +21,7 @@ import type { CellLink } from '@workspace/lib/sheets/types';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
 export type Random = () => number;
-export type BookContent = { g: number; now: number; seed: number; sheets: SheetContent[] };
+export type Book = Omit<BookContent, 'computed'>;
 
 export function randomOf(seed: number): Random {
     let state = seed;
@@ -180,7 +181,7 @@ function randomSheet(random: Random, at: number): SheetContent {
     return { id, fields, cells, looks, bands, rows: randomLines(random), columns: randomLines(random), records };
 }
 
-export function randomBook(random: Random): BookContent {
+export function randomBook(random: Random): Book {
     const sheets = Array.from({ length: 1 + below(random, 4) }, (_, at) => randomSheet(random, at));
     // The sheets come in any order: their fields say where their tabs stand.
     sheets.sort(() => random() - 0.5);
@@ -239,7 +240,7 @@ function canonicalLines(runs: SheetContent['rows']): [Span, LineAttrs][] {
 }
 
 // What a workbook loaded from the snapshot walks back to, when every formula text is the engine's own spelling.
-export function canonical(book: BookContent): BookContent {
+export function canonical(book: Book): Book {
     const sheets = book.sheets.toSorted((a, b) =>
         a.fields.order !== b.fields.order ? (a.fields.order < b.fields.order ? -1 : 1) : a.id < b.id ? -1 : 1,
     );
@@ -256,7 +257,7 @@ export function canonical(book: BookContent): BookContent {
 }
 
 // The same document said another way: the sheets, the records and the listed looks in reverse.
-export function reversed(book: BookContent): BookContent {
+export function reversed(book: Book): Book {
     return {
         ...book,
         sheets: book.sheets.toReversed().map((sheet) => {

@@ -30,14 +30,16 @@ import type {
     Rect,
     SheetContent,
     SheetFields,
+    Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
+import { covers, sameRect, within } from '@workspace/lib/sheets/rect';
 import { mapChartRefs } from '../chart-data';
+import { placeOf } from './extras';
 import { MergeIndex } from './merge-index';
 
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
-type Span = [first: number, last: number];
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
@@ -164,7 +166,7 @@ export class SheetRecords {
     }
 
     public comments(row: number, column: number): readonly string[] {
-        return this.commentCells.get(cellKey(row, column)) ?? [];
+        return this.commentCells.get(placeOf(row, column)) ?? [];
     }
 
     // Whole makes or replaces a record, a `set` alone changes the fields it names, null clearing one, and no `set`
@@ -261,7 +263,7 @@ export class SheetRecords {
                 const after = span(start, end, true);
                 if (!after) return [];
                 if (after[0] === start && after[1] === end) return [range];
-                return [rows ? { ...range, row: after } : { ...range, column: after }];
+                return [rows ? { ...range, row: [...after] } : { ...range, column: [...after] }];
             });
             return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
         };
@@ -367,7 +369,7 @@ export class SheetRecords {
                 const after = span(start, end, true);
                 if (!after) return null;
                 if (after[0] === start && after[1] === end) return ref;
-                return rows ? { ...ref, row: after } : { ...ref, column: after };
+                return rows ? { ...ref, row: [...after] } : { ...ref, column: [...after] };
             });
             if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
             settle('chart', id, chart, next);
@@ -547,7 +549,7 @@ export class SheetRecords {
     private indexComment(id: string, add: boolean): void {
         const comment = this.stored.comment.get(id);
         if (!comment) return;
-        const key = cellKey(comment.row, comment.column);
+        const key = placeOf(comment.row, comment.column);
         const ids = (this.commentCells.get(key) ?? []).filter((other) => other !== id);
         const at = ids.findIndex((other) => other > id);
         if (add) ids.splice(at < 0 ? ids.length : at, 0, id);
@@ -622,22 +624,6 @@ function rectRange([top, left, bottom, right]: Rect): SingleRange {
 
 function rangeRect({ row, column }: SingleRange): Rect {
     return [row[0], column[0], row[1], column[1]];
-}
-
-function sameRect(a: Rect, b: Rect): boolean {
-    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
-}
-
-function covers({ row, column }: SingleRange, r: number, c: number): boolean {
-    return r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
-}
-
-function within(inner: Rect, outer: Rect): boolean {
-    return inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
-}
-
-function cellKey(row: number, column: number): number {
-    return row * GRID_COLUMNS + column;
 }
 
 function withFields<R extends object>(record: R, set: FieldsOf<R>): R {

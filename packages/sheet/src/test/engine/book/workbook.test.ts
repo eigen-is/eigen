@@ -5,7 +5,7 @@ import type { CellRecord, Placed, SheetContent } from '@workspace/lib/sheets/ops
 import { isSheetContent } from '@workspace/lib/sheets/ops-validate';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Workbook } from '../../../engine/book/workbook';
-import type { BookContent } from './book-fixtures';
+import type { Book } from './book-fixtures';
 import { canonical, FORMULAS, randomBook, randomOf, reversed } from './book-fixtures';
 
 const LAST_ROW = GRID_ROWS - 1;
@@ -15,7 +15,7 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
     return { id, fields, cells: [], looks: [], bands: [], rows: [], columns: [], records: {}, ...part };
 }
 
-function bookOf(...sheets: SheetContent[]): BookContent {
+function bookOf(...sheets: SheetContent[]): Book {
     return { g: 1, now: 45_000.5, seed: 7, sheets };
 }
 

@@ -5,6 +5,7 @@
 // holds while a line edit or a move rewrites the merges one by one.
 
 import type { Rect } from '@workspace/lib/sheets/ops';
+import { meets } from '@workspace/lib/sheets/rect';
 
 // A band holds two to this power of rows at least.
 const MIN_BAND_SHIFT = 6;
@@ -51,8 +52,4 @@ export class MergeIndex {
         if (bands.size > 0) this.bands.set(shift, bands);
         else this.bands.delete(shift);
     }
-}
-
-function meets(a: Rect, b: Rect): boolean {
-    return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
 }
