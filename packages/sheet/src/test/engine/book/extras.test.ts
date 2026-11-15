@@ -12,6 +12,11 @@ const RICH: Extra = { s: [{ v: 'a', bl: 1 }, { v: 'b' }], link: { type: 'sheet',
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
 
+// The weight of entries counted the slow way: an entry two units, its link three more, each run of its text one.
+function weightOf(cells: readonly Placed<Extra>[]): number {
+    return cells.reduce((sum, [, , { s, link }]) => sum + 2 + (link ? 3 : 0) + (s?.length ?? 0), 0);
+}
+
 function extrasOf(cells: readonly Placed<Extra>[]): Extras {
     const extras = new Extras();
     for (const [row, column, extra] of cells) extras.write(row, column, extra);
@@ -70,6 +75,29 @@ describe('engine/book/extras — Extras', () => {
         expect(extras.write(1, 1, {})).toEqual(RICH);
         expect(extras.write(1, 1, {})).toBeUndefined();
         expect(extras.content()).toEqual([]);
+    });
+
+    test('an entry weighs two units, its link three more and each run of its text one', () => {
+        expect(extrasOf([[0, 0, QUOTED]]).weight()).toBe(2);
+        expect(extrasOf([[0, 0, LINK]]).weight()).toBe(5);
+        expect(extrasOf([[0, 0, { link: LINK.link, qp: 1 }]]).weight()).toBe(5);
+        expect(extrasOf([[0, 0, { s: [{ v: 'only' }] }]]).weight()).toBe(3);
+        expect(extrasOf([[0, 0, RICH]]).weight()).toBe(7);
+        const thousand = Array.from({ length: 1000 }, () => ({ v: 'r' }));
+        expect(extrasOf([[0, 0, { s: thousand }]]).weight()).toBe(1002);
+        expect(new Extras().weight()).toBe(0);
+    });
+
+    test('the weight follows a write that adds, replaces and clears an entry', () => {
+        const extras = extrasOf([[4, 4, QUOTED]]);
+        extras.write(1, 1, LINK);
+        expect(extras.weight()).toBe(2 + 5);
+        extras.write(1, 1, RICH);
+        expect(extras.weight()).toBe(2 + 7);
+        extras.write(1, 1, {});
+        expect(extras.weight()).toBe(2);
+        extras.write(1, 1, {});
+        expect(extras.weight()).toBe(2);
     });
 
     test('inserted lines hold nothing and push the entries after them', () => {
@@ -295,6 +323,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                 }
                 for (const sheet of sheets) {
                     expect([...sheet.extras.content()]).toEqual(sheet.model.within(WHOLE));
+                    expect(sheet.extras.weight()).toBe(weightOf(sheet.model.within(WHOLE)));
                     const block = randomBlock(random);
                     expect([...sheet.extras.cells(block)]).toEqual(sheet.model.within(block));
                     expect(sheet.extras.at(block[0], block[1])).toEqual(
@@ -305,6 +334,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     undo();
                     for (const [at, sheet] of sheets.entries()) {
                         expect([...sheet.extras.content()]).toEqual(before[at]);
+                        expect(sheet.extras.weight()).toBe(weightOf(before[at]));
                         sheet.model.cells = new Map(before[at].map((cell) => [`${cell[0]},${cell[1]}`, cell]));
                     }
                 }
