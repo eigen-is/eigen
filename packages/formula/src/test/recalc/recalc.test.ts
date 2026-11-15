@@ -107,15 +107,16 @@ describe('recalc', () => {
     });
 });
 
-// The workbook loaded again with every value a full recalc gave it, as a host loads what it stored.
-function reloaded(cells: Cells): Engine {
+// The workbook loaded again with every value a full recalc gave it, as a host loads what it stored. `kept` is what
+// the host made of a value while it held it.
+function reloaded(cells: Cells, kept = (value: Literal | null) => value): Engine {
     const fresh = engineOf({ s1: cells });
     fresh.recalc(NO_CAP);
     return sheetOf((cell) => {
         for (const [label, input] of Object.entries(cells)) {
             const [row, column] = at(label);
             const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
-            cell(row, column, formula === null ? input : fresh.valueOf('s1', row, column), formula);
+            cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
         }
     });
 }
@@ -156,6 +157,13 @@ describe('circular references', () => {
         const { changed, loops: listed } = engine.recalc(NO_CAP);
         expect(listed.map(({ row, column }) => `${String.fromCharCode(65 + column)}${row + 1}`).sort()).toEqual(loops);
         expect(changed).toEqual([]);
+        for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test.each(LOOPS)('%s, loaded with copies of the values it had', (_name, cells, loops, values) => {
+        // A value that crossed to another thread and back is a copy: its #REF! is not the engine's own object.
+        const engine = reloaded(cells, structuredClone);
+        expect(loopsOf(engine)).toEqual(loops);
         for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
     });
 
