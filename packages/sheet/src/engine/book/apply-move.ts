@@ -78,17 +78,7 @@ export function applyMove(book: Workbook, op: MoveOp): (MoveOp | FormatOp | Inpu
         const format: FormatOp = { kind: 'format', sheet: op.toSheet, ranges: areas.joined(), set: { ...look } };
         inverse.push(clear.length > 0 ? { ...format, clear } : format);
     }
-    // The cells are empty after the move back, so an empty one needs no entry.
-    const runs = held?.runs?.filter(([, content]) => content !== null) ?? [];
-    const cells = held?.cells?.filter(([, , content]) => content !== null) ?? [];
-    if (runs.length + cells.length > 0) {
-        inverse.push({
-            kind: 'input',
-            sheet: op.toSheet,
-            ...(runs.length > 0 && { runs }),
-            ...(cells.length > 0 && { cells }),
-        });
-    }
+    if (held) inverse.push(held);
     for (const plan of plans) inverse.push(...plan.restore);
     inverse.push(...movedBack(lostInputs(book, result), op, target));
     return inverse;

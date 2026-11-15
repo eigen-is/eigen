@@ -86,6 +86,16 @@ describe('comments', () => {
         ]);
         roundTrips(comments(), move('T'), onT);
     });
+
+    test('a comment the block carries over its own cells is not one it lands on, so only the landed-on one comes back', () => {
+        const records = { comment: { in: { row: 2, column: 2 }, landed: { row: 4, column: 4 } } };
+        const { s, restore } = moved(records, move('S', [1, 1, 3, 3], 2, 2));
+        expect(s.comment).toEqual({ in: { row: 3, column: 3 } });
+        expect(restore).toEqual([
+            { kind: 'record', type: 'comment', sheet: 'S', id: 'landed', set: { row: 4, column: 4 }, whole: 1 },
+        ]);
+        roundTrips(records, move('S', [1, 1, 3, 3], 2, 2));
+    });
 });
 
 describe('ids the sheet a block lands on holds', () => {
