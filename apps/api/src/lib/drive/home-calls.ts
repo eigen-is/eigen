@@ -1,16 +1,40 @@
 // The questions another home may ask of a drive, such as which paths a user watches there, each with the handler that
-// answers it on the owner's Home. Callers ask through the home relay's getFromHomes. The relay joins this table with
-// its own when it loads, so this file imports types only: a value import that led back to the relay would find it
-// half-built.
+// answers it on the owner's Home. Callers ask through the home relay's getFromHomes. The relay spreads this table
+// into its own while it loads, so this file imports types only: a value import that led back to the relay would run
+// the relay first, and it would read this table before it exists.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Answerers } from '../home/home-relay';
-import type { User } from '../user';
+import type { Memberships, User } from '../user';
 
 export type DriveQueries = {
     'drive:watches': { ask: { user: User }; answer: DrivePath[] };
+    'drive:visible-paths': {
+        ask: {
+            user: User;
+            memberships: Memberships;
+            rows: readonly { ownerId: string; mountId: string; pathId: string }[];
+            mimeTypePrefix: string;
+        };
+        answer: DrivePath[];
+    };
+    'drive:shared-with': { ask: { user: User }; answer: DrivePath[] };
+    'drive:mime-contents': { ask: { mimeType: string }; answer: DrivePath[] };
+    'drive:search': { ask: { q: string; limit: number }; answer: DrivePath[] };
 };
 
+// The kinds that list a whole drive check no user, since a member may read all of a team's drive and their callers
+// ask only the user's own teams.
 export const answerDrive: Answerers<DriveQueries> = {
     'drive:watches': (home, ask) => home.drive.getWatches(ask.user),
+    'drive:visible-paths': (home, ask) =>
+        home.drive.getVisiblePaths(
+            ask.user,
+            ask.memberships,
+            ask.rows.filter((row) => row.ownerId === home.user.id),
+            ask.mimeTypePrefix,
+        ),
+    'drive:shared-with': (home, ask) => home.drive.getAllSharedWith(ask.user),
+    'drive:mime-contents': (home, ask) => home.drive.getMimeTypeContents(ask.mimeType),
+    'drive:search': async (home, ask) => home.drive.search(ask),
 };

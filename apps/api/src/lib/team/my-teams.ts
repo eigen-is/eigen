@@ -5,15 +5,15 @@
 import { teamOwnerId } from '@workspace/lib/types';
 import type { MyTeam } from '@workspace/lib/types/settings';
 import { ApiError } from '../core/errors';
-import { pullCalendars, pullFromEach, pullTeamMounts } from '../home/home-relay';
+import { getFromHomes, pullCalendars, pullFromEach } from '../home/home-relay';
 import { getMemberships } from '../user';
 import { getTeam, getTeamMembers } from './team';
 
 export async function listMyTeams(userId: string): Promise<MyTeam[]> {
     const { teamIds } = await getMemberships(userId);
     const owners = teamIds.map(teamOwnerId);
-    const [mounts, calendars, teams] = await Promise.all([
-        pullFromEach(owners, async (owner) => [owner, await pullTeamMounts(owner)] as const),
+    const [mountsOf, calendars, teams] = await Promise.all([
+        getFromHomes(owners, 'team:mounts', null),
         pullFromEach(owners, async (owner) => {
             const items = await pullCalendars(owner).catch((err) => {
                 // A team's calendar is off by default, and its home answers that with a 404.
@@ -24,7 +24,6 @@ export async function listMyTeams(userId: string): Promise<MyTeam[]> {
         }),
         Promise.all(teamIds.map((teamId) => Promise.all([teamId, getTeam(teamId), getTeamMembers(teamId)]))),
     ]);
-    const mountsOf = new Map(mounts);
     const calendarsOf = new Map(calendars);
 
     return teams.map(([teamId, team, members]) => ({

@@ -9,7 +9,7 @@ import type { Attendee, CalendarItem, CalendarShare } from '@workspace/lib/types
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { MyTeam, TeamSettings } from '@workspace/lib/types/settings';
+import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
 import { settlesWithin } from '../../utils/timing';
@@ -17,10 +17,11 @@ import type { Calendar } from '../calendar/calendar';
 import type { InvitationRequest } from '../calendar/types';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core';
-import type { VisiblePath } from '../drive/drive';
 import type { DriveQueries } from '../drive/home-calls';
 import { answerDrive } from '../drive/home-calls';
-import type { Memberships, User } from '../user';
+import type { TeamQueries } from '../team/home-calls';
+import { answerTeam } from '../team/home-calls';
+import type { User } from '../user';
 import { getOwnerExists, getUsersByEmails } from '../user';
 import { getHome, getTeamHome, loadedHome } from './get-home';
 import type { Home } from './home';
@@ -220,9 +221,9 @@ export type Answerers<Q extends { [K in keyof Q]: { ask: unknown; answer: unknow
     [K in keyof Q]: (home: Home, ask: Q[K]['ask']) => Promise<Q[K]['answer']>;
 };
 
-type HomeQueries = DriveQueries;
+type HomeQueries = DriveQueries & TeamQueries;
 
-const answerers: Answerers<HomeQueries> = { ...answerDrive };
+const answerers: Answerers<HomeQueries> = { ...answerDrive, ...answerTeam };
 
 export const HOME_OPENS_AT_ONCE = 4;
 
@@ -292,29 +293,6 @@ export async function pullFromEach<T>(
     return results.filter((result) => result !== null);
 }
 
-// --- Drive ---
-
-export async function pullSharedPaths(ownerId: string, user: User): Promise<DrivePath[]> {
-    const home = await getHome(ownerId);
-    return home.drive.getAllSharedWith(user);
-}
-
-// The paths a user's own rows name, such as those of Recent, as far as the user may still see them: one read per
-// owner, who answers from the path as it is now.
-export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
-    user: User,
-    memberships: Memberships,
-    rows: readonly Row[],
-    mimeTypePrefix = '',
-): Promise<VisiblePath<Row>[]> {
-    const byOwner = Map.groupBy(rows, (row) => row.ownerId);
-    const lists = await pullFromEach([...byOwner.keys()], async (ownerId) => {
-        const home = await getHome(ownerId);
-        return home.drive.getVisiblePaths(user, memberships, byOwner.get(ownerId) ?? [], mimeTypePrefix);
-    });
-    return lists.flat();
-}
-
 // --- Calendar ---
 
 // The calendar of a home that has one. Every other owner answers as if the caller may not see the calendar, so asking
@@ -357,27 +335,4 @@ export type TeamQuotaOverrides = NonNullable<TeamSettings['memberOverrides']>;
 export async function pullTeamQuotaOverrides(ownerId: string): Promise<TeamQuotaOverrides> {
     const home = await getTeamHome(ownerId);
     return home.settings.get().memberOverrides ?? {};
-}
-
-export async function pullTeamMounts(ownerId: string): Promise<MyTeam['mounts']> {
-    const home = await getTeamHome(ownerId);
-    const mounts = Object.entries(home.settings.get().mounts ?? {}).filter(([, mount]) => mount.enabled);
-    return Promise.all(
-        mounts.map(async ([id, mount]) => {
-            const root = await home.drive.getRootFolder(id);
-            return { id, name: mount.name || id, rootPathId: root?.id ?? null };
-        }),
-    );
-}
-
-// A team member may read the whole team drive, by design. So the caller's membership check is the
-// only check, here and in pullDriveSearch.
-export async function pullMimeContents(ownerId: string, mimeType: string): Promise<DrivePath[]> {
-    const home = await getTeamHome(ownerId);
-    return home.drive.getMimeTypeContents(mimeType);
-}
-
-export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
-    const home = await getTeamHome(ownerId);
-    return home.drive.search(opts);
 }

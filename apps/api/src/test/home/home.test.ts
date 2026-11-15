@@ -6,9 +6,8 @@ import type { MyTeam } from '@workspace/lib/types/settings';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
-import { evictHome, getHome } from '../../lib/home/get-home';
+import { evictHome, getHome, getTeamHome } from '../../lib/home/get-home';
 import type { HomeSettings } from '../../lib/home/home';
-import * as homeRelay from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import {
     addMember,
@@ -149,16 +148,25 @@ describe('home: my-teams', () => {
             await addTeamMount(ctx, id, 'Drive');
         }
 
-        const pullTeamMounts = homeRelay.pullTeamMounts;
-        spyOn(homeRelay, 'pullTeamMounts').mockImplementation(async (ownerId) => {
-            if (ownerId === teamOwnerId(brokenTeam)) throw new Error('metadata.db is unreadable');
-            return pullTeamMounts(ownerId);
-        });
+        const broken = await getHome(teamOwnerId(brokenTeam));
+        spyOn(broken.drive, 'getRootFolder').mockRejectedValue(new Error('metadata.db is unreadable'));
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         const teams = await myTeams();
         expect(errors).toHaveBeenCalledWith(expect.stringContaining(brokenTeam), expect.anything());
         expect(findOrFail(teams, (t) => t.id === brokenTeam).mounts).toEqual([]);
         expect(findOrFail(teams, (t) => t.id === liveTeam).mounts.map((m) => m.name)).toEqual(['Drive']);
+    });
+
+    test("lists a team's enabled mounts only", async () => {
+        const team = await createTeam(ctx, getPublicConfig().orgId, `Mounts ${crypto.randomUUID()}`);
+        await addMember(ctx, team, ctx.alice.user.id);
+        const home = await getTeamHome(teamOwnerId(team));
+        await home.addMount({ name: 'On', storageType: 'local' });
+        const off = await home.addMount({ name: 'Off', storageType: 'local' });
+        await home.updateMount(off.id, { enabled: false });
+
+        const teams = await myTeams();
+        expect(findOrFail(teams, (t) => t.id === team).mounts.map((m) => m.name)).toEqual(['On']);
     });
 
     test('logs nothing for a team with its calendar off, the default', async () => {

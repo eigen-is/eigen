@@ -6,11 +6,11 @@
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
-import { getFromHomes, pullDriveSearch, pullFromEach, pullMimeContents, pullVisiblePaths } from '../home/home-relay';
-import type { Memberships, User } from '../user';
+import { getFromHomes } from '../home/home-relay';
+import type { User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive } from './get-drive';
-import type { RecentRow } from './recent';
+import { readVisiblePaths } from './shared-with-me';
 
 const RECENT_PAGE = 100;
 
@@ -18,8 +18,8 @@ export async function aggregateMimeContents(user: User, mimeType: string): Promi
     const drive = await getDrive(user);
     const personal = await drive.getMimeTypeContents(mimeType);
     const { teamIds } = await getMemberships(user.id);
-    const teamResults = await pullFromEach(teamIds.map(teamOwnerId), (ownerId) => pullMimeContents(ownerId, mimeType));
-    return mergeById([personal, ...teamResults]).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const teamResults = await getFromHomes(teamIds.map(teamOwnerId), 'drive:mime-contents', { mimeType });
+    return mergeById([personal, ...teamResults.values()]).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 // The Watched view sorts on the client, so this list has no order of its own.
@@ -41,10 +41,8 @@ export async function aggregateFileSearch(user: User, q: string, limit: number):
     const drive = await getDrive(user);
     const personal = drive.search({ q, limit });
     const { teamIds } = await getMemberships(user.id);
-    const teamResults = await pullFromEach(teamIds.map(teamOwnerId), (ownerId) =>
-        pullDriveSearch(ownerId, { q, limit }),
-    );
-    return mergeById([personal, ...teamResults])
+    const teamResults = await getFromHomes(teamIds.map(teamOwnerId), 'drive:search', { q, limit });
+    return mergeById([personal, ...teamResults.values()])
         .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
         .slice(0, limit);
 }
@@ -53,16 +51,12 @@ export async function aggregateFileSearch(user: User, q: string, limit: number):
 export async function aggregateRecents(user: User): Promise<RecentPath[]> {
     const rows = (await getDrive(user)).listRecent();
     const memberships = await getMemberships(user.id);
-    const newest = await pullRecents(user, memberships, rows.slice(0, RECENT_PAGE));
-    const older = newest.length < RECENT_PAGE ? await pullRecents(user, memberships, rows.slice(RECENT_PAGE)) : [];
+    const newest = await readVisiblePaths(user, memberships, rows.slice(0, RECENT_PAGE), '');
+    const older =
+        newest.length < RECENT_PAGE ? await readVisiblePaths(user, memberships, rows.slice(RECENT_PAGE), '') : [];
     return [...newest, ...older]
-        .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime())
-        .slice(0, RECENT_PAGE);
-}
-
-async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
-    const visible = await pullVisiblePaths(user, memberships, rows);
-    return visible.map(({ row, path }) => ({ ...path, lastActivityAt: row.lastActivityAt }));
+        .slice(0, RECENT_PAGE)
+        .map(({ row, path }) => ({ ...path, lastActivityAt: row.lastActivityAt }));
 }
 
 function mergeById(lists: readonly (readonly DrivePath[])[]): DrivePath[] {
