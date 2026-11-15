@@ -15,7 +15,7 @@ type LineRun = SheetContent['rows'][number];
 const NO_KEYS: Readonly<LineAttrs> = Object.freeze({});
 // Every line key once, in the order a run holds them: the mapped type fails the build on a key left out.
 const LINE_KEY: { readonly [K in keyof LineAttrs]-?: K } = { size: 'size', custom: 'custom', hidden: 'hidden' };
-const LINE_KEYS = Object.values(LINE_KEY);
+export const LINE_KEYS = Object.values(LINE_KEY);
 
 export class LineRuns {
     private runs: Run[] = [];

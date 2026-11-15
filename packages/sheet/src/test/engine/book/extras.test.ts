@@ -154,6 +154,50 @@ describe('engine/book/extras — Extras', () => {
         ]);
     });
 
+    test('a link over a block sets every cell’s link, keeping its runs and mark, and a clear keeps the rest', () => {
+        const other = { type: 'cellrange', address: 'A1' } as const;
+        const extras = extrasOf([
+            [1, 0, QUOTED],
+            [0, 1, RICH],
+            [1, 1, { qp: 1, link: other }],
+            [5, 1, LINK],
+            [0, 2, QUOTED],
+        ]);
+        extras.link([0, 1, 2, 1], other);
+        expect(extras.content()).toEqual([
+            [1, 0, QUOTED],
+            [0, 1, { s: RICH.s, link: other }],
+            [1, 1, { qp: 1, link: other }],
+            [2, 1, { link: other }],
+            [5, 1, LINK],
+            [0, 2, QUOTED],
+        ]);
+        expect(extras.weight()).toBe(2 + 7 + 5 + 5 + 5 + 2);
+        extras.link([0, 0, 5, 2], undefined);
+        expect(extras.content()).toEqual([
+            [1, 0, QUOTED],
+            [0, 1, { s: RICH.s }],
+            [1, 1, QUOTED],
+            [0, 2, QUOTED],
+        ]);
+        expect(Object.keys(extras.at(0, 1) ?? {})).toEqual(['s']);
+        expect(extras.weight()).toBe(2 + 4 + 2 + 2);
+    });
+
+    test('a link over 150,000 cells among 1,000 rich ones and 150,000 entries beside them is one pass', () => {
+        const extras = new Extras();
+        for (let row = 0; row < 150_000; row += 150) extras.write(row, 0, { s: RICH.s });
+        extras.fill([0, 1, 149_999, 1], QUOTED);
+        const started = performance.now();
+        extras.link([0, 0, 149_999, 0], LINK.link);
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(extras.weight()).toBe(1_000 * 7 + 149_000 * 5 + 150_000 * 2);
+        expect(extras.at(150, 0)).toEqual({ s: RICH.s, link: LINK.link });
+        expect(extras.at(151, 0)).toEqual(LINK);
+        expect(extras.at(151, 1)).toEqual(QUOTED);
+        expect([...extras.cells([0, 0, 149_999, 0])].length).toBe(150_000);
+    });
+
     test('inserted lines hold nothing and push the entries after them', () => {
         const extras = extrasOf([
             [2, 0, LINK],
@@ -310,12 +354,12 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
             const sheets = [0, 1].map(() => ({ extras: new Extras(), model: new CellsModel() }));
             const counts = {
                 ...{ put: 0, fill: 0, filled: 0, cleared: 0, replaced: 0, insert: 0, remove: 0 },
-                ...{ moveOver: 0, moveAcross: 0, carried: 0, covered: 0 },
+                ...{ moveOver: 0, moveAcross: 0, carried: 0, covered: 0, linked: 0, unlinked: 0 },
             };
-            for (let step = 0; step < 4000; step += 1) {
+            for (let step = 0; step < 6000; step += 1) {
                 const { extras, model } = sheets[below(random, 2)];
                 const before = sheets.map((sheet) => [...sheet.extras.content()]);
-                const kind = below(random, 12);
+                const kind = below(random, 14);
                 const rows = random() < 0.5;
                 // Index 0, inside, on the last line that holds an entry and past it.
                 const lines = rows ? ROWS : COLUMNS;
@@ -357,6 +401,24 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     undo = () => {
                         extras.lines(linesOp(rows, true, index, count));
                         for (const [row, column, extra] of removed) extras.write(row, column, extra);
+                    };
+                } else if (kind >= 12) {
+                    const block = randomBlock(random);
+                    const link = random() < 0.5 ? undefined : ENTRIES[below(random, 2) * 4].link;
+                    const covered = model.within(block);
+                    counts[link ? 'linked' : 'unlinked'] += 1;
+                    extras.link(block, link);
+                    for (let row = block[0]; row <= block[2]; row += 1) {
+                        for (let column = block[1]; column <= block[3]; column += 1) {
+                            const old = model.cells.get(`${row},${column}`)?.[2];
+                            const { s, qp } = old ?? {};
+                            const kept = { ...(s && { s }), ...(link && { link }), ...(qp && { qp }) };
+                            model.put(row, column, Object.keys(kept).length > 0 ? kept : undefined);
+                        }
+                    }
+                    undo = () => {
+                        extras.fill(block, {});
+                        for (const [row, column, old] of covered) extras.write(row, column, old);
                     };
                 } else if (kind >= 10) {
                     counts.fill += 1;

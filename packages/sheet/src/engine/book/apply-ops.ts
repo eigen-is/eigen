@@ -9,6 +9,7 @@ import { fits } from '@workspace/lib/sheets/limits';
 import type { Op } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
+import { applyFormat } from './apply-format';
 import { applyInput } from './apply-input';
 import { applyRecord } from './apply-record';
 import { applySheet } from './apply-sheet';
@@ -16,7 +17,7 @@ import type { Workbook } from './workbook';
 
 // THE KINDS STILL TO BE BUILT. The unit that builds a kind takes it out of this list and adds its case to
 // `applyOne`, which does not compile without it. When the list is empty it goes, and `Applied` is `Op`.
-type Unbuilt = 'format' | 'lines' | 'move';
+type Unbuilt = 'lines' | 'move';
 type Applied = Exclude<Op, { kind: Unbuilt }>;
 
 // The key each reason of the engine's refusal is thrown as: a new reason does not compile until it has one.
@@ -55,6 +56,8 @@ function applyOne(book: Workbook, op: Applied): Applied[] {
     switch (op.kind) {
         case 'input':
             return applyInput(book, op);
+        case 'format':
+            return applyFormat(book, op);
         case 'record':
             return applyRecord(book, op);
         case 'sheet':

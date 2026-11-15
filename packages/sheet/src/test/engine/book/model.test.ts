@@ -258,6 +258,34 @@ describe('engine/book — the model, rule by rule', () => {
         ]);
     });
 
+    test('a link format sets every cell’s link, keeping its runs, mark and value, and a clear keeps the rest', () => {
+        const link = { type: 'webpage', address: 'https://eigen.is' } as const;
+        const cells: SheetContent['cells'] = [
+            [0, 0, { s: [{ v: 'a', bl: 1 }] }],
+            [1, 0, { v: 'typed', qp: 1 }],
+            [2, 0, { v: 3, link: { type: 'sheet', address: 's1' } }],
+        ];
+        const set: Op = { kind: 'format', sheet: 'a', ranges: [[0, 0, 3, 0]], set: { link } };
+        const [linked] = sheetsAfter([sheetOf('a', {}, { cells })], set);
+        expect(linked.cells).toEqual([
+            [0, 0, { s: [{ v: 'a', bl: 1 }], link }],
+            [1, 0, { v: 'typed', qp: 1, link }],
+            [2, 0, { v: 3, link }],
+            [3, 0, { link }],
+        ]);
+        const [cleared] = sheetsAfter([sheetOf('a', {}, { cells })], set, {
+            kind: 'format',
+            sheet: 'a',
+            ranges: [[0, 0, 9, 9]],
+            clear: ['link'],
+        });
+        expect(cleared.cells).toEqual([
+            [0, 0, { s: [{ v: 'a', bl: 1 }] }],
+            [1, 0, { v: 'typed', qp: 1 }],
+            [2, 0, { v: 3 }],
+        ]);
+    });
+
     test('a move takes the looks of its block along and leaves the block plain', () => {
         const bold = (rect: [number, number, number, number]): Op => ({
             kind: 'format',
