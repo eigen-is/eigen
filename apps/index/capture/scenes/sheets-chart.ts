@@ -4,7 +4,7 @@
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
-import { cellPoint, chartPoint, openBudget } from './budget';
+import { cellPoint, chartPoint, editAndUndo, openBudget } from './budget';
 
 export const sheetsChart = {
     name: 'sheets-chart',
@@ -15,6 +15,7 @@ export const sheetsChart = {
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openBudget(page, stack);
+        await editAndUndo(page, cursor, 'B12', 'Enter');
         await cursor.moveTo(await cellPoint(page, 'C9'), { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
