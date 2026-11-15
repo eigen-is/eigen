@@ -1,11 +1,11 @@
 // The income pie turned into a picture, filmed once in Vector and once in Slides: a crew member copies the pie from
-// the budget's Charts tab, pastes it on the site plan or a new slide of the sponsor deck, gives it the hand-drawn
+// the budget's Charts tab, pastes it on a new drawing or a new slide of the sponsor deck, gives it the hand-drawn
 // look and font, converts it to shapes, points a new box at the ticket slice with an arrow and pulls that slice out,
 // the arrow following. Both films end on the finished picture.
 
 import type { Page } from 'playwright-core';
 import { DRIVE_TYPE_SLIDES, DRIVE_TYPE_VECTOR } from '../../../../packages/lib/src/types/drive';
-import { SITE_PLAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
+import { SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { elementPoint } from '../lib/canvas';
 import type { Cursor, Point } from '../lib/cursor';
 import { pointOn } from '../lib/cursor';
@@ -13,12 +13,14 @@ import { openFile } from '../lib/open';
 import type { Scene, SceneContext } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { openBudget } from './budget';
-import { openSitePlan } from './site-plan';
 import { openSponsorDeck } from './sponsor-deck';
 
 // The ticket slice runs clockwise from 12 o'clock over 58% of the pie, so its middle points just below 3 o'clock,
 // in radians clockwise from 3 o'clock as the screen measures them.
 const TICKET_MIDDLE = (0.58 / 2) * 2 * Math.PI - Math.PI / 2;
+
+// The drawing the setup makes, so the pie lands on an empty canvas.
+const DRAWING = 'income picture';
 
 const pieScene: Pick<Scene, 'kind' | 'theme' | 'viewport'> = {
     kind: 'video',
@@ -32,23 +34,20 @@ export const vectorPie = {
     apps: ['sheets', 'vector'],
     personas: ['saar'],
     setup: async (ctx) => {
-        await openSitePlan(ctx.pages[0], ctx.stack);
+        const [page] = ctx.pages;
+        await page.goto(ctx.stack.appUrl('vector'));
+        await page.getByRole('button', { name: 'New vector' }).click();
+        await page.getByLabel('Vector name').fill(DRAWING);
+        await page.getByRole('button', { name: 'Create' }).click();
+        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
         await openCharts(ctx);
     },
     run: async (ctx) => {
         const [page] = ctx.pages;
-        const [cursor] = ctx.cursors;
         await copyPie(ctx);
-        await openFile(page, ctx.stack, DRIVE_TYPE_VECTOR, SITE_PLAN.name);
-        await page.locator('[data-element-id="el-main-stage"]').first().waitFor();
+        await openFile(page, ctx.stack, DRIVE_TYPE_VECTOR, DRAWING);
+        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
         await Bun.sleep(800);
-        // Down past the festival ground, to an empty part of the canvas.
-        await cursor.moveTo({ x: 700, y: 520 }, { duration: 500 });
-        for (let step = 0; step < 38; step++) {
-            await page.mouse.wheel(0, 50);
-            await Bun.sleep(25);
-        }
-        await Bun.sleep(500);
         await drawPicture(ctx, await pasteChart(ctx));
     },
 } satisfies Scene;

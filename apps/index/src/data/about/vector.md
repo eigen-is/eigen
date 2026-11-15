@@ -27,7 +27,7 @@ Everything is drawn with a slightly wobbly line, as if by hand. Fills can be hat
 
 Copy a chart in eigen|sheets⟩ and paste it on a drawing, and it stays a chart you can edit, with the numbers it showed ([Add a chart to a spreadsheet](/support/sheets/add-a-chart), [Draw shapes, freehand lines, and text](/support/vector/draw-shapes-and-text)). Give it the hand-drawn look and font, then Convert to shapes splits it into slices and labels you move one by one. An arrow docked on a slice moves with it ([Connect objects with arrows and lines](/support/vector/connect-with-arrows)).
 
-::: video src="/data/about/media/vector-pie" caption="The income pie from the budget, drawn by hand on the site plan, with its biggest slice pulled out."
+::: video src="/data/about/media/vector-pie" caption="The income pie from the budget, drawn by hand on a new drawing, with its biggest slice pulled out."
 :::
 
 ## Moving around
