@@ -509,7 +509,8 @@ describe('An answer that is slow to come', () => {
 });
 
 describe('An answer that asks the relay again', () => {
-    // More teams than slots, each listing a path of a closed home, so every answer needs one more open.
+    // A team Home never receives a shared row: one is put in each by hand, so each answer opens the sharer's closed
+    // home, a nested get. With more teams than slots, every answer needs one more open while every slot is busy.
     test('finishes while every slot is busy', async () => {
         const sharer = await createTestUser(
             `relay-sharer-${crypto.randomUUID()}@test.eigen.is`,

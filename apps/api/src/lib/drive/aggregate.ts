@@ -7,10 +7,10 @@
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
 import { getFromHomes } from '../home/home-relay';
-import type { Memberships, User } from '../user';
+import type { User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive } from './get-drive';
-import type { RecentRow } from './recent';
+import { readVisiblePaths } from './shared-with-me';
 
 const RECENT_PAGE = 100;
 
@@ -51,20 +51,12 @@ export async function aggregateFileSearch(user: User, q: string, limit: number):
 export async function aggregateRecents(user: User): Promise<RecentPath[]> {
     const rows = (await getDrive(user)).listRecent();
     const memberships = await getMemberships(user.id);
-    const newest = await pullRecents(user, memberships, rows.slice(0, RECENT_PAGE));
-    const older = newest.length < RECENT_PAGE ? await pullRecents(user, memberships, rows.slice(RECENT_PAGE)) : [];
-    return [...newest, ...older].slice(0, RECENT_PAGE);
-}
-
-// Walks the rows, so the paths keep their newest-first order.
-async function pullRecents(user: User, memberships: Memberships, rows: readonly RecentRow[]): Promise<RecentPath[]> {
-    const owners = [...new Set(rows.map((row) => row.ownerId))];
-    const answers = await getFromHomes(owners, 'drive:visible-paths', { user, memberships, rows, mimeTypePrefix: '' });
-    const paths = new Map([...answers.values()].flat().map((path) => [path.id, path]));
-    return rows.flatMap((row) => {
-        const path = paths.get(row.pathId);
-        return path ? [{ ...path, lastActivityAt: row.lastActivityAt }] : [];
-    });
+    const newest = await readVisiblePaths(user, memberships, rows.slice(0, RECENT_PAGE), '');
+    const older =
+        newest.length < RECENT_PAGE ? await readVisiblePaths(user, memberships, rows.slice(RECENT_PAGE), '') : [];
+    return [...newest, ...older]
+        .slice(0, RECENT_PAGE)
+        .map(({ row, path }) => ({ ...path, lastActivityAt: row.lastActivityAt }));
 }
 
 function mergeById(lists: readonly (readonly DrivePath[])[]): DrivePath[] {
