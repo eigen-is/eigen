@@ -1,5 +1,5 @@
-// The seeded sponsor deck as the Slides scenes film it: opened ready to film, and the screen point of a slide's
-// thumbnail in the rail.
+// The seeded sponsor deck as the Slides scenes film it: opened ready to film, a slide's place in the deck by its key,
+// and the screen point of that slide's thumbnail in the rail.
 
 import type { Page } from 'playwright-core';
 import { DRIVE_TYPE_SLIDES } from '../../../../packages/lib/src/types/drive';
@@ -16,7 +16,13 @@ export async function openSponsorDeck(page: Page, stack: Stack): Promise<void> {
     await Bun.sleep(4000);
 }
 
-// The middle of the nth slide's thumbnail, counting from 0.
-export async function thumbnailPoint(page: Page, index: number): Promise<Point> {
-    return pointOn(page.locator('[aria-roledescription="sortable"]').nth(index));
+// Counting from 0. A key rather than a number keeps a scene on its slide when one is added before it.
+export function slideIndex(key: string): number {
+    const index = SPONSOR_DECK.slides.findIndex((slide) => slide.key === key);
+    if (index < 0) throw new Error(`The sponsor deck has no slide ${key}`);
+    return index;
+}
+
+export async function thumbnailPoint(page: Page, key: string): Promise<Point> {
+    return pointOn(page.locator('[aria-roledescription="sortable"]').nth(slideIndex(key)));
 }

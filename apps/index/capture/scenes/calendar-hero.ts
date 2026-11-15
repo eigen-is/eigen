@@ -1,6 +1,6 @@
 // The Calendar page's opening loop: the production lead opens the go/no-go meeting on the eve of the festival and
-// unfolds its guest list with each answer. She closes it, hides the team's calendar so only her own shift is left,
-// and shows it again, so the loop ends where it began.
+// unfolds its guest list with each answer. She closes it, hides the team's calendar so only her own two lines are
+// left, and shows it again, so the loop ends where it began.
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';

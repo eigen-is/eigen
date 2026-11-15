@@ -14,7 +14,7 @@ export const slidesStillHeading = {
     personas: ['mees'],
     run: async ({ pages: [page], stack }) => {
         await openSponsorDeck(page, stack);
-        const thumbnail = await thumbnailPoint(page, 3);
+        const thumbnail = await thumbnailPoint(page, 'what-you-get');
         await page.mouse.click(thumbnail.x, thumbnail.y);
         await Bun.sleep(1000);
         const heading = await elementPoint(page, 'el-what-you-get-text-0');
