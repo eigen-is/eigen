@@ -37,6 +37,8 @@ const TYPED_WITH_NAME = "='Later'!R1C1+1";
 // Formulas this build cannot evaluate, which keep the value they are given.
 const KEPT = ["='[b.xlsx]S'!R1C1", "=SUM('N:M'!R1C1)"];
 const ORDERS = ['a0', 'a1', 'a2', 'a3', 'a1V'];
+// A name as long as a name may be: a sheet added with it in use takes a suffix within the same 31 characters.
+const LONG_NAME = 'Quarterly results by region (b)';
 const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
 const RICH: Run[] = [
     { v: 'bold ', bl: 1 },
@@ -344,12 +346,27 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
     };
 }
 
-// An add of a random sheet under a new id, now and then with a name in use or the name a formula waits for, or a
-// delete of a sheet.
+// An add of a random sheet with something of every part, now and then under an id the book holds, a name in use in any
+// letter case or at its 31 characters, the name a formula waits for, or hidden; or a delete of a sheet, shown or
+// hidden, the last shown one, one that formulas read, or one the book does not hold.
 export function randomSheetOp(random: Random, model: Model): SheetOp {
     if (random() < 0.4) return { kind: 'sheet', delete: sheetId(random, model) };
-    const [sheet] = randomBookContent(random).sheets;
-    const name = pick(random, [`New ${below(random, 6)}`, LATER, someSheet(random, model).fields.name]);
+    const [sheet] = randomBook(random).sheets;
+    const held = someSheet(random, model).fields.name;
+    const name = pick(random, [
+        `New ${below(random, 6)}`,
+        LATER,
+        held,
+        held.toUpperCase(),
+        LONG_NAME,
+        LONG_NAME.toUpperCase(),
+    ]);
     const id = random() < 0.05 ? someSheet(random, model).id : `n${below(random, 1_000_000)}`;
-    return { kind: 'sheet', add: { ...sheet, id, fields: { ...sheet.fields, name, order: pick(random, ORDERS) } } };
+    const cells = [...sheet.cells];
+    if (random() < 0.5) cells.push([71, 3, { f: typedWithName(random, model) }]);
+    if (random() < 0.3) cells.push([72, 3, { v: 5, spill: 1 }]);
+    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    const fields: SheetFields = { ...sheet.fields, name, order: pick(random, ORDERS) };
+    if (random() < 0.2) fields.hide = 1;
+    return { kind: 'sheet', add: { ...sheet, id, cells, fields } };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Batch, CellContent, InputOp, Op, RecordOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
+import type { Batch, CellContent, InputOp, Op, RecordOp, Rect, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
@@ -17,7 +17,7 @@ const SPAN = "=SUM('N:M'!R1C1)";
 // A sheet id as long as an id may be, so a formula bound to it grows.
 const LONG_ID = 'b'.repeat(60);
 
-type Applied = InputOp | RecordOp;
+type Applied = InputOp | RecordOp | SheetOp;
 
 function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
     const fields = { name: id, order: 'a0' };
