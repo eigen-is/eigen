@@ -23,7 +23,8 @@ export type Literal = number | string | boolean | FormulaError;
 export type CellSink = (row: number, column: number, value: Literal | null, formula: string | null) => void;
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
-// twice: once to size the columns and once to fill them. So a host walks its own cells and builds no list.
+// twice, to report the same cells: once to size the columns and once to fill them. So a host walks its own cells
+// and builds no list.
 export type SheetSource = {
     readonly id: string;
     readonly name: string;
@@ -150,8 +151,8 @@ export class Workbook {
         return { sheet, texts, formulas, errors };
     }
 
-    // Makes a sheet that was read one whose cells hold ids of the tables, in no place yet: `apply` adds it. Nothing
-    // may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
+    // Makes a sheet that was read one whose cells hold ids and codes of the tables, in no place yet: `apply` adds
+    // it. Nothing may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
     public adopt({ sheet, texts, formulas, errors }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
