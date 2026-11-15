@@ -1,7 +1,8 @@
-// The About overview: what eigen is, the admin's links, and the body, with the landing page's blocks on what Eigen
-// stands for where its `::: principles` block stands, and where its `::: apps` block stands a row for every app in
-// the registry's order, with a still of the app, its eigen|app⟩ wordmark and one line. A row links to its app's page
-// once that page is written, and each washes in its own app's color.
+// The About overview: what eigen is, the admin's links, and the body, in the reading column with the table of
+// contents of its headings in the gutter. Where its `::: apps` block stands it draws a row for every app in the
+// registry's order, with a still of the app, its eigen|app⟩ wordmark and one line; a row links to its app's page once
+// that page is written, and each washes in its own app's color. Where its `::: principles` block stands it draws the
+// landing page's blocks on what Eigen stands for, as wide as they are there.
 
 import { Link } from '@tanstack/react-router';
 import { cn } from '@workspace/ui/lib/utils';
@@ -12,8 +13,10 @@ import type { ArticleBody, ArticleMeta } from '../content/manifest';
 import { getAboutArticles } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
 import { ArticleContent } from './article-content';
+import { ArticleToc } from './article-toc';
 import { PrincipleBlocks } from './landing-blocks';
 import { LandingLinks } from './landing-links';
+import { ReadingLayout } from './reading-layout';
 import { SitePage } from './site-page';
 
 type AboutOverviewProps = {
@@ -24,7 +27,7 @@ type AboutOverviewProps = {
 export function AboutOverview({ overview, body }: AboutOverviewProps) {
     return (
         <SitePage>
-            <div className="site-wide py-12">
+            <ReadingLayout aside={<ArticleToc toc={overview.toc} />}>
                 <h1 className="site-title">{overview.title}</h1>
                 <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
                     <LandingLinks />
@@ -32,12 +35,12 @@ export function AboutOverview({ overview, body }: AboutOverviewProps) {
                 <ArticleContent
                     body={body}
                     blocks={{
-                        principles: <PrincipleBlocks className="my-8 md:gap-4" />,
+                        principles: <PrincipleBlocks className="site-reading-wide my-8" />,
                         apps: <AppRows rows={overview.rows} />,
                     }}
                     className="mt-8"
                 />
-            </div>
+            </ReadingLayout>
         </SitePage>
     );
 }
