@@ -1,5 +1,6 @@
 // The seeded budget as the Sheets scenes film it: opened ready to film, the screen point of a cell on its first tab,
-// worked out from the column widths the seeder gives the tab, and a point on the costs chart beside the table.
+// worked out from the column widths the seeder gives the tab, a point on the costs chart beside the table, and the
+// quiet edit and undo a scene makes before the camera rolls.
 
 import type { Page } from 'playwright-core';
 import {
@@ -9,7 +10,7 @@ import {
 } from '../../../../packages/lib/src/sheets';
 import { DRIVE_TYPE_SHEETS } from '../../../../packages/lib/src/types/drive';
 import { BUDGET } from '../../../api/src/scripts/demo/content';
-import type { Point } from '../lib/cursor';
+import type { Cursor, Point } from '../lib/cursor';
 import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Stack } from '../lib/scene';
@@ -38,4 +39,15 @@ export async function cellPoint(page: Page, ref: string): Promise<Point> {
 
 export async function chartPoint(page: Page, across: number, down: number): Promise<Point> {
     return pointOn(page.locator('[data-floating-id="chart-1"]'), across, down);
+}
+
+// A take that ends with an undo ends with the selection one step on from the edited cell and an empty formula bar, as
+// the bar is not filled again after an undo. A scene makes the same edit and undo here before the camera rolls, with
+// the key that ends its own edit, so its film starts as it ends.
+export async function editAndUndo(page: Page, cursor: Cursor, ref: string, key: 'Enter' | 'Tab'): Promise<void> {
+    await cursor.click(await cellPoint(page, ref));
+    await page.keyboard.type('1');
+    await page.keyboard.press(key);
+    await page.keyboard.press('ControlOrMeta+z');
+    await Bun.sleep(500);
 }

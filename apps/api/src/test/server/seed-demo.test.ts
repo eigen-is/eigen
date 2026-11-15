@@ -6,12 +6,16 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { readChartSpec } from '@workspace/lib/charts';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { textToParagraphHtml } from '@workspace/lib/html';
+import type { EventData } from '@workspace/lib/types/calendar';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
+    elementForCommentCard,
     elementsInFrame,
     orderByFractionalIndex,
     parseBackgroundFill,
@@ -26,11 +30,17 @@ import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { parseMail } from '../../lib/mail/mail-parser/parse';
+import type { CanvasComment } from '../../scripts/demo/content';
 import {
     BRANDING,
     BUDGET,
+    CHATS,
+    CONTACTS,
+    DOCS,
+    HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
+    ORG_NAME,
     PERSONAS,
     PHOTOS,
     personaByRole,
@@ -38,7 +48,10 @@ import {
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_NAME,
+    TECH_TEAM_MEMBERS,
+    TECH_TEAM_NAME,
     TRYING_EIGEN,
+    threadTimes,
     VCARD_FILES,
 } from '../../scripts/demo/content';
 import { formatList } from '../fixtures/validations';
@@ -51,7 +64,6 @@ import { formatList } from '../fixtures/validations';
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 const MAIL_DOMAIN = 'tuimel.test';
 const API_DIR = join(import.meta.dir, '../../..');
-const AVATARS_DIR = join(API_DIR, 'src', 'scripts', 'demo', 'fixtures', 'avatars');
 
 // Read-write open (not readonly): the WAL-mode managed DBs need to (re)create their -shm on open,
 // which readonly forbids. The seeder process has exited, so there is no lock contention, and the
@@ -102,7 +114,13 @@ function collectCommentMarkIds(json: JSONContent, out: Set<string>): void {
 
 // Resolve a top-level container's data.db path from metadata.db (used for both the seeded doc
 // and the stickies board — each container's data.db is a child path row, not the container itself).
-function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: string, containerName: string): string {
+function findContainerDataDb(
+    metadataDb: string,
+    mountsDir: string,
+    mountId: string,
+    containerName: string,
+    dbName = 'data.db',
+): string {
     const containerRow = query<{ id: string }>(
         metadataDb,
         `SELECT id FROM paths WHERE name = '${containerName}' AND trashedAt IS NULL`,
@@ -110,15 +128,36 @@ function findContainerDataDb(metadataDb: string, mountsDir: string, mountId: str
     expect(containerRow.length).toBe(1);
     const dataDbRow = query<{ file: string }>(
         metadataDb,
-        `SELECT file FROM paths WHERE parentId = '${containerRow[0].id}' AND name = 'data.db'`,
+        `SELECT file FROM paths WHERE parentId = '${containerRow[0].id}' AND name = '${dbName}'`,
     );
     expect(dataDbRow.length).toBe(1);
     return join(mountsDir, mountId, 'data', dataDbRow[0].file);
 }
 
+// The names of the files in a container's media/ folder, such as a chat's uploads or a board's covers.
+function mediaNames(metadataDb: string, containerName: string): string[] {
+    return query<{ name: string }>(
+        metadataDb,
+        `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id JOIN paths c ON m.parentId = c.id
+         WHERE c.name = '${containerName}' AND m.name = 'media' AND p.trashedAt IS NULL`,
+    ).map((row) => row.name);
+}
+
+type MessageRow = {
+    type: string;
+    content: string;
+    whisperTo: string | null;
+    attachments: string | null;
+    createdAt: number;
+};
+
+const unixSeconds = (time: Date) => Math.floor(time.getTime() / 1000);
+
 describe.skipIf(!runSlow)('seed-demo', () => {
     test('produces a coherent Tuimel Festival world', async () => {
         const root = mkdtempSync(join(tmpdir(), 'eigen-demo-seed-'));
+        // The seeder dates its threads back from its own start, a moment later on the same day.
+        const seedStart = new Date();
         try {
             // Env mirrors the real demo box: production mode, EIGEN_DEMO, and an https API_URL —
             // which makes better-auth __Secure--prefix its cookies, pinning the seeder's handling.
@@ -130,6 +169,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 PRODUCTION: '1',
                 EIGEN_DEMO: '1',
                 API_URL: 'https://localhost',
+                // bun test runs in UTC without setting TZ, so the seeder gets the test's zone
+                // and both date a thread alike.
+                TZ: Intl.DateTimeFormat().resolvedOptions().timeZone,
             };
             const proc = Bun.spawn(['bun', 'src/scripts/seed-demo.ts'], {
                 cwd: API_DIR,
@@ -165,16 +207,22 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const avatarFiles = readdirSync(join(root, 'server', 'avatars')).filter((f) => f.endsWith('.webp'));
             expect(avatarFiles.length).toBeGreaterThanOrEqual(20);
 
-            // One team: the default team setup made with the org, renamed to the crew, with every member in it.
+            // Two teams: the default team setup made with the org, renamed to the crew, with every member in it, and
+            // the stage and tech crew.
             const teams = query<{ id: string; name: string }>(usersDb, 'SELECT id, name FROM team');
-            expect(teams).toHaveLength(1);
-            const teamId = teams[0].id;
-            expect(teams[0].name).toBe(TEAM_NAME);
+            expect(teams.map((team) => team.name).toSorted()).toEqual([TEAM_NAME, TECH_TEAM_NAME].toSorted());
             const serverConfig = JSON.parse(readFileSync(join(root, 'server', 'config.json'), 'utf8'));
-            expect(serverConfig.defaultTeamId).toBe(teamId);
+            const teamId: string = serverConfig.defaultTeamId;
+            expect(teams.find((team) => team.id === teamId)?.name).toBe(TEAM_NAME);
+            const techTeamId = teams.find((team) => team.name === TECH_TEAM_NAME)?.id;
+            const techMembers = query<{ email: string }>(
+                usersDb,
+                `SELECT u.email AS email FROM team_member t JOIN user u ON u.id = t.user_id WHERE t.team_id = '${techTeamId}'`,
+            ).map((row) => row.email);
+            expect(techMembers.toSorted()).toEqual(TECH_TEAM_MEMBERS.map((key) => `${key}@${MAIL_DOMAIN}`).toSorted());
             const outsideTeam = query<{ n: number }>(
                 usersDb,
-                'SELECT count(*) AS n FROM member m WHERE m.user_id NOT IN (SELECT user_id FROM team_member)',
+                `SELECT count(*) AS n FROM member m WHERE m.user_id NOT IN (SELECT user_id FROM team_member WHERE team_id = '${teamId}')`,
             );
             expect(outsideTeam[0].n).toBe(0);
             expect(existsSync(join(root, 'team', teamId, 'mounts'))).toBe(true);
@@ -216,6 +264,60 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(replied[0].n).toBeGreaterThanOrEqual(1);
 
+            // Each persona's own card carries their title, the festival and their phone. The leads signed in once, so
+            // the user list shows when; the rest of the crew never did.
+            for (const persona of PERSONAS) {
+                const user = query<{ id: string; lastLoginAt: number | null }>(
+                    usersDb,
+                    `SELECT id, last_login_at AS lastLoginAt FROM user WHERE email = '${persona.key}@${MAIL_DOMAIN}'`,
+                );
+                expect(user[0].lastLoginAt !== null).toBe(persona.role !== undefined);
+                const ownCard = query<{ data: string }>(
+                    join(root, 'home', user[0].id, 'eigen.contacts', 'contacts.db'),
+                    `SELECT data FROM contacts WHERE eigenId = '${user[0].id}'`,
+                );
+                expect(ownCard.length).toBe(1);
+                expect(JSON.parse(ownCard[0].data)).toMatchObject({
+                    jobTitle: persona.title,
+                    company: ORG_NAME,
+                    phone: [persona.phone],
+                });
+            }
+
+            // Saar's book holds the default labels and one new one in the next accent color, each contact carries
+            // the labels its spec names, and Ruud's card shows his portrait.
+            const saar = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('production').key}@${MAIL_DOMAIN}'`,
+            );
+            const saarContacts = join(root, 'home', saar[0].id, 'eigen.contacts');
+            const saarLabels = query<{ name: string; color: string }>(
+                join(saarContacts, 'contacts.db'),
+                'SELECT name, color FROM labels ORDER BY rowid',
+            );
+            expect(saarLabels).toEqual(
+                ['Family', 'Friends', 'Work', 'Important', 'Suppliers'].map((name, i) => ({
+                    name,
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[i].value,
+                })),
+            );
+            for (const spec of CONTACTS.filter((contact) => contact.owner === 'production')) {
+                const labelled = query<{ name: string }>(
+                    join(saarContacts, 'contacts.db'),
+                    `SELECT l.name AS name FROM contacts c JOIN contacts_to_labels cl ON cl.contactId = c.id
+                     JOIN labels l ON l.id = cl.labelId WHERE c.firstName = '${spec.firstName}'`,
+                );
+                expect(labelled.map((label) => label.name)).toEqual(spec.labels ?? []);
+            }
+            const ruud = query<{ data: string }>(
+                join(saarContacts, 'contacts.db'),
+                "SELECT data FROM contacts WHERE firstName = 'Ruud'",
+            );
+            const ruudAvatar: string = JSON.parse(ruud[0].data).avatar;
+            const avatarPrefix = `contacts/${saar[0].id}/avatar/`;
+            expect(ruudAvatar).toStartWith(avatarPrefix);
+            expect(readdirSync(join(saarContacts, 'avatars'))).toContain(ruudAvatar.slice(avatarPrefix.length));
+
             // Each persona's inbox holds one unread message, the newest; the seed marked the rest read.
             for (const persona of PERSONAS) {
                 const user = query<{ id: string }>(
@@ -253,10 +355,19 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // mounts/ also holds shared.db — pick the mount's own subdirectory.
             const mountId = readdirSync(mountsDir, { withFileTypes: true }).find((d) => d.isDirectory())?.name;
             if (!mountId) throw new Error('team mount directory missing');
+            // The crew's drive is raised above the demo's default quota, for its photos.
+            const teamSettings = JSON.parse(readFileSync(join(root, 'team', teamId, 'settings.json'), 'utf8'));
+            expect(teamSettings.mounts[mountId].maxSizeMB).toBe(100);
             const metadataDb = join(mountsDir, mountId, 'metadata.db');
             expect(existsSync(metadataDb)).toBe(true);
             const events = query<{ n: number }>(metadataDb, 'SELECT count(*) AS n FROM file_events');
             expect(events[0].n).toBeGreaterThanOrEqual(1);
+            // A chat's messages in the order they were posted.
+            const messagesOf = (chatName: string) =>
+                query<MessageRow>(
+                    findContainerDataDb(metadataDb, mountsDir, mountId, `${chatName}.eigenchat`),
+                    'SELECT type, content, whisperTo, attachments, createdAt FROM messages ORDER BY rowid',
+                );
 
             // Team drive images/: every site photo landed as a real .webp blob on disk (each row's
             // `file` is the storage key under the mount's data dir, non-trivial size = real image data).
@@ -308,8 +419,7 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(cardRows.length).toBe(1);
                 const cardBlob = join(mountsDir, mountId, 'data', cardRows[0].file);
                 expect(statSync(cardBlob).size).toBeGreaterThan(0);
-                // The portrait only rides along once its fixture is committed; the seeder skips a missing one.
-                if (card.card.photo && existsSync(join(AVATARS_DIR, card.card.photo))) {
+                if (card.card.photo) {
                     expect(readFileSync(cardBlob, 'utf8')).toContain('PHOTO;ENCODING=b');
                 }
             }
@@ -449,7 +559,10 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const deckScene = readVectorFromDoc(deckDoc);
             expect(deckScene.frames.length).toBe(SPONSOR_DECK.slides.length);
             expect(deckScene.elements.length).toBe(
-                SPONSOR_DECK.slides.reduce((n, slide) => n + slide.texts.length + (slide.images?.length ?? 0), 0),
+                SPONSOR_DECK.slides.reduce(
+                    (n, slide) => n + slide.texts.length + (slide.images?.length ?? 0) + (slide.charts?.length ?? 0),
+                    0,
+                ),
             );
             const deckFrameIds = new Set(deckScene.frames.map((frame) => frame.id));
             for (const element of deckScene.elements) {
@@ -480,6 +593,44 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
             expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
+
+            // The sponsors slide's chart reads back as inline data under its fixed id, which a comment anchors on.
+            const deckCharts = SPONSOR_DECK.slides.flatMap((slide) =>
+                (slide.charts ?? []).map((chart, i) => ({ id: `el-${slide.key}-chart-${i}`, chart })),
+            );
+            expect(deckCharts.map(({ id }) => id)).toEqual(['el-sponsors-chart-0']);
+            for (const { id, chart } of deckCharts) {
+                const element = deckScene.elements.find((el) => el.id === id);
+                if (element?.type !== 'chart') throw new Error(`${id} is no chart on the deck`);
+                const { spec } = readChartSpec(element);
+                if (spec?.data.source !== 'inline') throw new Error(`${id} holds no inline data`);
+                expect(spec.chart.type).toBe(chart.type);
+                expect(spec.data.categories).toEqual(chart.categories);
+                expect(
+                    spec.data.series.map(({ id, name, values }) => ({ name, values, color: spec.series[id].color })),
+                ).toEqual(chart.series.map(({ name, values, color }) => ({ name, values, color: color ?? null })));
+                expect(spec.legend.position).toBe('none');
+            }
+
+            // A canvas comment's card opens on the element its spec names, and is as old as its first message.
+            const expectCanvasComments = (doc: Y.Doc, comments: CanvasComment[]) => {
+                const { elements } = readVectorFromDoc(doc);
+                const canvasCards = [...doc.getMap<Y.Map<unknown>>('comments').values()];
+                expect(canvasCards.length).toBe(comments.length);
+                for (const comment of comments) {
+                    const card = canvasCards.find((candidate) => candidate.get('title') === comment.title);
+                    const cardId = card?.get('id');
+                    if (typeof cardId !== 'string') throw new Error(`no card "${comment.title}"`);
+                    expect(elementForCommentCard(elements, cardId)?.id).toBe(`el-${comment.element}`);
+                    expect(card?.get('chatName')).toBe(`${comment.card}.eigenchat`);
+                    const rows = messagesOf(comment.card);
+                    expect(rows.map((row) => row.createdAt)).toEqual(
+                        threadTimes(seedStart, comment.start, comment.replies ?? []).map(unixSeconds),
+                    );
+                    expect(card?.get('createdAt')).toBe(rows[0].createdAt * 1000);
+                }
+            };
+            expectCanvasComments(deckDoc, SPONSOR_DECK.comments);
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
@@ -524,6 +675,13 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id WHERE m.parentId = '${planId}' AND m.name = 'media'`,
             ).map((row) => row.name);
             expect(planMedia).toContain(figures[0].attrs?.['mediaName']);
+            // ...and Timo's power sum as one displayed equation, its LaTeX kept for the panel.
+            const planEquations = planNodes.filter((node) => node.type === 'equation');
+            expect(planEquations.length).toBe(1);
+            expect(planEquations[0].attrs?.['display']).toBe(true);
+            expect(planEquations[0].attrs?.['mathml']).toContain(
+                '<annotation encoding="application/x-tex">38 + 22 + 14 + 6 = 80\\,\\text{kW} \\le 2 \\times 60\\,\\text{kVA} \\times 0.8 = 96\\,\\text{kW}</annotation>',
+            );
             const cards = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) => ({
                 id: card.get('id') as string,
                 color: card.get('color') as string,
@@ -560,6 +718,90 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(task.creator).toContain('@');
             }
 
+            // Threads are dated after they are posted: every message keeps its insertion order and sits at its
+            // drafted time, counted back from the seed. A row stores whole seconds.
+            const expectThreadTimes = (rows: MessageRow[], times: Date[]) => {
+                const stored = rows.map((row) => row.createdAt);
+                expect(stored).toEqual(times.map(unixSeconds));
+                expect(stored).toEqual(stored.toSorted((a, b) => a - b));
+                for (const time of stored) expect(time).toBeLessThan(unixSeconds(seedStart));
+            };
+            const daysBefore = (daysAgo: number, hour: number, minute: number) => {
+                const time = new Date(seedStart);
+                time.setDate(time.getDate() - daysAgo);
+                time.setHours(hour, minute, 0, 0);
+                return unixSeconds(time);
+            };
+            for (const channel of CHATS) {
+                expectThreadTimes(
+                    messagesOf(channel.name),
+                    threadTimes(seedStart, channel.start, channel.messages.slice(1)),
+                );
+            }
+            const productionRows = messagesOf('production');
+            expect(productionRows[0].createdAt).toBe(daysBefore(8, 9, 12));
+            expect(productionRows.at(-1)?.createdAt).toBe(daysBefore(2, 16, 30));
+            expect(messagesOf('volunteers').at(-1)?.createdAt).toBe(daysBefore(1, 9, 21));
+            for (const comment of DOCS.flatMap((doc) => doc.comments)) {
+                expectThreadTimes(
+                    messagesOf(comment.card),
+                    threadTimes(seedStart, comment.start, comment.replies ?? []),
+                );
+            }
+            // A doc card is as old as its first message.
+            const planCardTimes = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) =>
+                card.get('createdAt'),
+            );
+            expect(planCardTimes.toSorted()).toEqual(
+                DOCS[0].comments.map((comment) => messagesOf(comment.card)[0].createdAt * 1000).toSorted(),
+            );
+            // A card's thread starts when the card was made. The wind-cover card's quote came three days ago.
+            const boardCards = [...board.getMap<Y.Map<unknown>>('tasks').values()];
+            for (const spec of KANBAN.cards) {
+                const createdAt = boardCards.find((task) => task.get('title') === spec.title)?.get('createdAt');
+                if (typeof createdAt !== 'number') throw new Error(`the card "${spec.title}" has no createdAt`);
+                expectThreadTimes(
+                    messagesOf(spec.chat),
+                    threadTimes(seedStart, new Date(createdAt), spec.chatReplies ?? []),
+                );
+            }
+            expect(messagesOf('wind-cover').at(-1)?.createdAt).toBe(daysBefore(3, 15, 30));
+
+            // A whisper is stored with its type and its reader's email, and /me as an emote without the command.
+            const volunteerRows = messagesOf('volunteers');
+            const whisper = volunteerRows.find((row) => row.type === 'whisper');
+            expect(whisper?.content).toBe('What are your friends called? The roster just says Maud plus two.');
+            expect(whisper?.whisperTo).toBe(`maud@${MAIL_DOMAIN}`);
+            expect(volunteerRows.filter((row) => row.type === 'emote').map((row) => row.content)).toContain(
+                'puts both hands up',
+            );
+
+            // A file uploaded from a device sits in the channel's own media/, and its message names it.
+            expect(mediaNames(metadataDb, 'production.eigenchat')).toEqual(['storm-over-the-field.webp']);
+            const gusts = productionRows.find((row) => row.content.startsWith('Gusts into the evening'));
+            expect(JSON.parse(gusts?.attachments ?? '[]')).toEqual(['storm-over-the-field.webp']);
+
+            // The board's comment index holds the assigned card and the resolved one.
+            const boardIndex = query<{ title: string; assignee: string | null; status: string; resolvedBy: string }>(
+                findContainerDataDb(metadataDb, mountsDir, mountId, `${KANBAN.name}.eigenstickies`, 'comments.db'),
+                'SELECT title, assignee, status, resolvedBy FROM comments',
+            );
+            expect(
+                boardIndex.filter((row) => row.assignee).map(({ title, assignee }) => ({ title, assignee })),
+            ).toEqual([
+                { title: 'Recruit 10 more volunteers', assignee: `${personaByRole('volunteers').key}@${MAIL_DOMAIN}` },
+            ]);
+            expect(
+                boardIndex
+                    .filter((row) => row.status === 'resolved')
+                    .map(({ title, resolvedBy }) => ({ title, resolvedBy })),
+            ).toEqual([{ title: 'Book shuttle buses', resolvedBy: `saar@${MAIL_DOMAIN}` }]);
+
+            // A cover is an image in the board's media/, named first among its card's attachments.
+            expect(mediaNames(metadataDb, `${KANBAN.name}.eigenstickies`)).toEqual(['storm-over-the-field.webp']);
+            const windCover = boardCards.find((task) => task.get('title') === 'Sunday wind cover');
+            expect(windCover?.get('attachments')).toEqual(['storm-over-the-field.webp']);
+
             // A card chat reply's attachVCards uploads the card into that chat's own media/ folder, the
             // folder the thread resolves attachment names in, and the message names the file.
             const vcardReplyCard = KANBAN.cards.find((card) => card.chatReplies?.some((r) => r.attachVCards));
@@ -590,7 +832,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // elbow arrows, measured rich text, and every image pointing at a media file that landed.
             const vectorName = `${SITE_PLAN.name}.eigenvector`;
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
-            const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
+            const vectorDoc = await loadCollabDoc(vectorDataDb);
+            const scene = readVectorFromDoc(vectorDoc);
+            expectCanvasComments(vectorDoc, SITE_PLAN.comments);
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
             expect(scene.meta.background).toBe(SITE_PLAN.background);
 
@@ -680,8 +924,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             }
             expect(imageCount).toBeGreaterThanOrEqual(1);
 
-            // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, while their calendar is
-            // left alone: seeded mail carries no DKIM verdict, the path an unverified sender takes.
+            // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, and, carrying the verdict
+            // our MTA would write, their calendar as a pending invitation linked to its organizer.
             const inviteMail = MAILS.find((mail) => mail.messages.some((message) => message.invite));
             const invite = inviteMail?.messages.find((message) => message.invite)?.invite;
             if (!inviteMail || !invite) throw new Error('no seeded mail carries an invitation');
@@ -692,7 +936,16 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const card = summarizeCalendarInvite(inviteParts[0]);
             expect(card?.method).toBe('REQUEST');
             expect(card?.summary).toBe(invite.title);
-            expect(financeEvents).not.toContain(invite.title);
+            const invitations = query<{ data: string; organizerUserId: string | null }>(
+                financeCalendarDb,
+                `SELECT data, organizerUserId FROM events WHERE title = '${invite.title}'`,
+            );
+            expect(invitations.length).toBe(1);
+            expect(invitations[0].organizerUserId).not.toBeNull();
+            const invitationData: EventData = JSON.parse(invitations[0].data);
+            expect(invitationData.attendees?.find((a) => a.email === `${financeKey}@${MAIL_DOMAIN}`)?.status).toBe(
+                'pending',
+            );
 
             // The generator quote arrives as a real xlsx attachment.
             const quoteMail = MAILS.find((mail) =>
@@ -707,6 +960,76 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 readMessage(join(root, 'home', production[0].id), quoteMail.subject),
             ).attachments;
             expect(quoteParts.some((part) => part.contentType === XLSX_MIME && part.size > 1000)).toBe(true);
+            // ...and Bram's reply to the culture fund carries the budget it says is attached.
+            const budgetParts = parseMail(readMessage(financeHome, 'Re: Grant paperwork')).attachments;
+            expect(budgetParts.map((part) => part.filename)).toContain('tuimel budget.xlsx');
+
+            // Saar mailed Hein the site plan: her message sits in her Sent box with the plan's pill, its link carrying
+            // his address, and the plan's ACL lets him read it.
+            const linkMail = MAILS.find((mail) => mail.messages.some((message) => message.attachDocs));
+            if (!linkMail) throw new Error('no seeded mail links a document');
+            const productionHome = join(root, 'home', production[0].id);
+            const linkRow = query<{ mailbox: string }>(
+                join(productionHome, 'eigen.mail', 'mail.db'),
+                `SELECT mailbox FROM emails WHERE subject = '${linkMail.subject}'`,
+            );
+            expect(linkRow.map((row) => row.mailbox)).toEqual([MAILBOX_SENT]);
+            const linkHtml = parseMail(readMessage(productionHome, linkMail.subject)).html ?? '';
+            expect(linkHtml).toContain(`Open ${SITE_PLAN.name} →`);
+            expect(linkHtml).toContain(sitePlanId);
+            expect(linkHtml).toContain(`email=${encodeURIComponent(HEIN_KLARENBEEK.email)}`);
+            const sitePlanAcl = query<{ acl: string | null }>(
+                metadataDb,
+                `SELECT acl FROM paths WHERE id = '${sitePlanId}'`,
+            );
+            const sitePlanEntries: DriveACL[] = JSON.parse(sitePlanAcl[0].acl ?? '[]');
+            expect(sitePlanEntries).toContainEqual({ id: HEIN_KLARENBEEK.email, read: true, write: false });
+
+            // Hein is the one guest: an account with the guest role, in no org, whose home lists the site plan.
+            const guests = query<{ id: string; email: string }>(
+                usersDb,
+                "SELECT id, email FROM user WHERE role = 'guest'",
+            );
+            expect(guests.map((guest) => guest.email)).toEqual([HEIN_KLARENBEEK.email]);
+            const guestMembership = query<{ n: number }>(
+                usersDb,
+                `SELECT count(*) AS n FROM member WHERE user_id = '${guests[0].id}'`,
+            );
+            expect(guestMembership[0].n).toBe(0);
+            const guestShares = query<{ pathId: string }>(
+                join(root, 'guest', guests[0].id, 'mounts', 'shared.db'),
+                'SELECT pathId FROM shared_paths',
+            );
+            expect(guestShares.map((row) => row.pathId)).toEqual([sitePlanId]);
+
+            // Saar's site access notes are shared with the tech team, so a member who is not the tech lead has them.
+            const notesRow = query<{ id: string; acl: string | null }>(
+                join(productionHome, 'mounts', 'default', 'metadata.db'),
+                "SELECT id, acl FROM paths WHERE name = 'site access notes.txt' AND trashedAt IS NULL",
+            );
+            expect(notesRow.length).toBe(1);
+            expect(JSON.parse(notesRow[0].acl ?? '[]')).toEqual([
+                { id: `team_${techTeamId}`, read: true, write: false },
+            ]);
+            const sanne = query<{ id: string }>(usersDb, `SELECT id FROM user WHERE email = 'sanne@${MAIL_DOMAIN}'`);
+            const sanneShares = query<{ pathId: string }>(
+                join(root, 'home', sanne[0].id, 'mounts', 'shared.db'),
+                'SELECT pathId FROM shared_paths',
+            );
+            expect(sanneShares.map((row) => row.pathId)).toContain(notesRow[0].id);
+
+            // Not every guest accepted: the replies a team event names are the attendees' statuses.
+            const repliedEvents = query<{ title: string; data: string }>(
+                calendarDb,
+                "SELECT title, data FROM events WHERE title IN ('Go / no-go meeting', 'Strike')",
+            );
+            const statusOf = (title: string, key: string) => {
+                const data: EventData = JSON.parse(repliedEvents.find((row) => row.title === title)?.data ?? '{}');
+                return data.attendees?.find((attendee) => attendee.email === `${key}@${MAIL_DOMAIN}`)?.status;
+            };
+            expect(statusOf('Go / no-go meeting', 'joris')).toBe('tentative');
+            expect(statusOf('Strike', 'lieke')).toBe('declined');
+            expect(statusOf('Strike', 'saar')).toBe('accepted');
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.
             const assignees = query<{ id: string }>(

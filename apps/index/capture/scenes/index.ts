@@ -5,6 +5,7 @@ import type { Scene } from '../lib/scene';
 import { adminBackup } from './admin-backup';
 import { adminHero } from './admin-hero';
 import { adminStillBackups } from './admin-still-backups';
+import { adminStillGuests } from './admin-still-guests';
 import { adminStillSettings } from './admin-still-settings';
 import { calendarHero } from './calendar-hero';
 import { calendarStillBuild, calendarStillWeek } from './calendar-stills';
@@ -80,5 +81,6 @@ export const SCENES: Scene[] = [
     adminBackup,
     adminStillSettings,
     adminStillBackups,
+    adminStillGuests,
     ...ROWS,
 ];

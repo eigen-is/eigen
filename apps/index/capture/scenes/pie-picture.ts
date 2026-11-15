@@ -3,7 +3,7 @@
 // look and font, converts it to shapes, points a new box at the ticket slice with an arrow and pulls that slice out,
 // the arrow following. Both films end on the finished picture.
 
-import type { Page } from 'playwright-core';
+import type { Locator, Page } from 'playwright-core';
 import { DRIVE_TYPE_SLIDES, DRIVE_TYPE_VECTOR } from '../../../../packages/lib/src/types/drive';
 import { SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { elementPoint } from '../lib/canvas';
@@ -11,6 +11,7 @@ import type { Cursor, Point } from '../lib/cursor';
 import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene, SceneContext } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { openBudget } from './budget';
 import { openSponsorDeck } from './sponsor-deck';
@@ -19,13 +20,16 @@ import { openSponsorDeck } from './sponsor-deck';
 // in radians clockwise from 3 o'clock as the screen measures them.
 const TICKET_MIDDLE = (0.58 / 2) * 2 * Math.PI - Math.PI / 2;
 
+// The properties panel's width, at the window's right edge.
+const PANEL_WIDTH = 256;
+
 // The drawing the setup makes, so the pie lands on an empty canvas.
 const DRAWING = 'income picture';
 
 const pieScene: Pick<Scene, 'kind' | 'theme' | 'viewport'> = {
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
 };
 
 export const vectorPie = {
@@ -39,14 +43,14 @@ export const vectorPie = {
         await page.getByRole('button', { name: 'New vector' }).click();
         await page.getByLabel('Vector name').fill(DRAWING);
         await page.getByRole('button', { name: 'Create' }).click();
-        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
+        await insertMenu(page).waitFor();
         await openCharts(ctx);
     },
     run: async (ctx) => {
         const [page] = ctx.pages;
         await copyPie(ctx);
         await openFile(page, ctx.stack, DRIVE_TYPE_VECTOR, DRAWING);
-        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
+        await insertMenu(page).waitFor();
         await Bun.sleep(800);
         await drawPicture(ctx, await pasteChart(ctx));
     },
@@ -68,7 +72,7 @@ export const slidesPie = {
         await openFile(page, ctx.stack, DRIVE_TYPE_SLIDES, SPONSOR_DECK.name);
         await page.locator('[data-element-id="el-title-text-0"]').first().waitFor();
         await Bun.sleep(900);
-        await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'Insert', exact: true })));
+        await cursor.click(await pointOn(insertMenu(page)));
         await Bun.sleep(400);
         await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'New slide', exact: true })));
         await Bun.sleep(700);
@@ -94,7 +98,7 @@ async function openCharts({ pages: [page], cursors: [cursor], stack }: SceneCont
     await openBudget(page, stack);
     await page.locator('text="Charts"').dispatchEvent('click');
     await Bun.sleep(2000);
-    await cursor.moveTo({ x: 900, y: 450 }, { duration: 1 });
+    await cursor.moveTo({ x: 630, y: 315 }, { duration: 1 });
 }
 
 async function copyPie({ pages: [page], cursors: [cursor] }: SceneContext): Promise<void> {
@@ -139,11 +143,11 @@ async function drawPicture(
         y: pie.y + Math.sin(angle) * radii * pie.r,
     });
 
-    // A box up and to the right of the pie, clear of the slice labels.
-    const corner = { x: pie.x + 2.5 * pie.r, y: pie.y - 1.05 * pie.r };
-    const size = { x: 1.6 * pie.r, y: 0.62 * pie.r };
-    await cursor.click(await pointOn(page.getByRole('button', { name: /^Rectangle/ })));
-    await Bun.sleep(300);
+    // A box up and to the right of the pie, clear of the slice labels and of the properties panel, which a pie pasted
+    // at full size on a drawing comes close to.
+    const corner = { x: pie.x + 1.2 * pie.r, y: pie.y - 1.25 * pie.r };
+    const size = { x: Math.min(1.6 * pie.r, VIEWPORT.width - PANEL_WIDTH - 24 - corner.x), y: 0.62 * pie.r };
+    await pickTool(page, cursor, /^Rectangle/);
     await cursor.moveTo(corner);
     await page.mouse.down();
     await cursor.moveTo({ x: corner.x + size.x, y: corner.y + size.y }, { duration: 700 });
@@ -157,11 +161,10 @@ async function drawPicture(
     await page.keyboard.press('Escape');
     await Bun.sleep(400);
 
-    await cursor.click(await pointOn(page.getByRole('button', { name: /^Arrow/ })));
-    await Bun.sleep(300);
-    await cursor.moveTo({ x: corner.x + 4, y: corner.y + 0.7 * size.y });
+    await pickTool(page, cursor, /^Arrow/);
+    await cursor.moveTo({ x: corner.x + 0.3 * size.x, y: corner.y + size.y - 4 });
     await page.mouse.down();
-    await cursor.moveTo(at(0.7, -0.15), { duration: 900 });
+    await cursor.moveTo(at(0.6, -0.25), { duration: 900 });
     await page.mouse.up();
     await Bun.sleep(400);
     await page.keyboard.press('Escape');
@@ -182,6 +185,18 @@ async function drawPicture(
     await page.keyboard.press('Escape');
     await cursor.moveTo({ x: pie.x + 1.6 * pie.r, y: pie.y + 1.5 * pie.r }, { duration: 700 });
     await Bun.sleep(1500);
+}
+
+// At the films' width the toolbar folds its shape tools into the Insert menu, where a person picks them.
+function insertMenu(page: Page): Locator {
+    return page.getByRole('menuitem', { name: 'Insert', exact: true });
+}
+
+async function pickTool(page: Page, cursor: Cursor, name: RegExp): Promise<void> {
+    await cursor.click(await pointOn(insertMenu(page)));
+    await Bun.sleep(400);
+    await cursor.click(await pointOn(page.getByRole('menuitem', { name })));
+    await Bun.sleep(300);
 }
 
 // The id of the converted label that reads the text, on the canvas rather than in a slide's thumbnail.
@@ -222,7 +237,7 @@ async function pieCircle(page: Page, before: ReadonlySet<string>): Promise<Point
 }
 
 async function scrollPanel(page: Page, cursor: Cursor, direction: 1 | -1): Promise<void> {
-    await cursor.moveTo({ x: 1480, y: 600 }, { duration: 500 });
+    await cursor.moveTo({ x: VIEWPORT.width - PANEL_WIDTH / 2, y: 420 }, { duration: 500 });
     for (let step = 0; step < 12; step++) {
         await page.mouse.wheel(0, direction * 150);
         await Bun.sleep(30);

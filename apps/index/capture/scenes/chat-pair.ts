@@ -8,13 +8,14 @@ import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
 // The empty end of the room's title bar, where the resting pointer lights up no message.
-const REST = { x: 760, y: 71 };
+const REST = { x: 585, y: 71 };
 
 export const chatPair = {
     name: 'chat-pair',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1000, height: 800 },
+    // Just wider than a phone, so each window keeps Chat's desktop layout at the narrowest it can.
+    viewport: { width: 770, height: 630 },
     composite: 'side-by-side',
     apps: ['chat'],
     personas: ['joris', 'anouk'],

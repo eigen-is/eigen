@@ -5,15 +5,16 @@
 import { ADMIN_LOCALPART, personaByKey } from '../../../api/src/scripts/demo/content';
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 // The sidebar's empty foot, so the resting pointer lights up no row.
-const REST = { x: 130, y: 640 };
+const REST = { x: 91, y: 448 };
 
 export const adminBackup = {
     name: 'admin-backup',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['admin'],
     personas: [ADMIN_LOCALPART],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
@@ -30,7 +31,10 @@ export const adminBackup = {
         await cursor.click(await pointOn(page.getByRole('button', { name: 'Create backup' })));
         await page.getByText('Backup created').waitFor({ timeout: 60_000 });
         await page.getByText('Verified').waitFor();
-        await Bun.sleep(2500);
+        // The archive lists below the fold, so he scrolls the panel down to it.
+        await Bun.sleep(800);
+        await page.mouse.wheel(0, (await pointOn(page.getByText('Verified'))).y - VIEWPORT.height / 2);
+        await Bun.sleep(1700);
         await cursor.moveTo(await pointOn(page.getByText('Verified')), { duration: 700 });
         await Bun.sleep(600);
         await cursor.click(await pointOn(page.getByRole('button', { name: 'Delete' })));

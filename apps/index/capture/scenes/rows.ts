@@ -3,24 +3,21 @@
 // alternate down the list.
 
 import { basename } from 'node:path';
-import {
-    DRIVE_TYPE_DOC,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_STICKIES,
-    DRIVE_TYPE_VECTOR,
-} from '../../../../packages/lib/src/types/drive';
-import { ADMIN_LOCALPART, DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
+import { DRIVE_TYPE_DOC, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES } from '../../../../packages/lib/src/types/drive';
+import { ADMIN_LOCALPART, DOCS, KANBAN, SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { aboutRowStill } from '../../src/content/about-media';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openBudget } from './budget';
 import { openFestivalWeek } from './festival-week';
+import { openSitePlan, showGround } from './site-plan';
 
 const row = (app: string, theme: Scene['theme'], run: Scene['run']): Scene => ({
     name: basename(aboutRowStill(app), '.webp'),
     kind: 'still',
     theme,
-    viewport: { width: 1280, height: 720 },
+    viewport: VIEWPORT,
     apps: [app],
     personas: ['anouk'],
     run,
@@ -60,9 +57,9 @@ export const ROWS: Scene[] = [
         await openFile(page, stack, DRIVE_TYPE_SLIDES, SPONSOR_DECK.name);
         await Bun.sleep(SETTLE_MS * 3);
     }),
-    row('vector', 'dark', async ({ pages: [page], stack }) => {
-        await openFile(page, stack, DRIVE_TYPE_VECTOR, SITE_PLAN.name);
-        await Bun.sleep(SETTLE_MS * 3);
+    row('vector', 'dark', async ({ pages: [page], cursors: [cursor], stack }) => {
+        await openSitePlan(page, stack);
+        await showGround(page, cursor);
     }),
     row('stickies', 'light', async ({ pages: [page], stack }) => {
         await openFile(page, stack, DRIVE_TYPE_STICKIES, KANBAN.name);

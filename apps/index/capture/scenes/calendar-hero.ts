@@ -1,22 +1,33 @@
-// The Calendar page's opening loop: the production lead opens the go/no-go meeting on the eve of the festival and
-// unfolds its guest list with each answer. She closes it, hides the team's calendar so only her own shift is left,
-// and shows it again, so the loop ends where it began.
+// The Calendar page's opening loop: in the festival's month, the production lead opens the go/no-go meeting on the eve
+// of the festival and unfolds its guest list with each answer. She closes it, hides the team's calendar so only her
+// own two lines are left, and shows it again, so the loop ends where it began.
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
-const REST = { x: 1300, y: 560 };
+// The empty sidebar under the calendars, as a day cell lights up under the pointer.
+const REST = { x: 130, y: 470 };
 
 export const calendarHero = {
     name: 'calendar-hero',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['calendar'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await page.goto(stack.appUrl('calendar'));
-        await page.getByText('Go / no-go meeting').first().waitFor();
+        const meeting = page.getByText('Go / no-go meeting').first();
+        await meeting.waitFor();
+        // The festival week is the month's last row, under the window's foot, so she steps on to the month it opens.
+        for (let month = 0; month < 3; month++) {
+            // Whole inside the window, where a click can reach it.
+            const box = await meeting.boundingBox();
+            if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) break;
+            await page.getByRole('button', { name: 'Next month' }).dispatchEvent('click');
+            await Bun.sleep(800);
+        }
         await Bun.sleep(2000);
         await cursor.moveTo(REST, { duration: 1 });
     },

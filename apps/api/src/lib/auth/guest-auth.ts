@@ -1,7 +1,7 @@
 // Sign-in for guests, people without an account who were given access to something by email. A guest asks for a
 // one-time code, gets it by mail and sends it back. A right code finds or creates the guest account, reconciles its
-// shares and signs it in. Requesting and guessing codes are rate limited. The session itself comes from
-// signInWithScopedPassword, which the demo entry shares.
+// shares and signs it in. Requesting and guessing codes are rate limited. The account comes from createGuestUser and
+// the session from signInWithScopedPassword, which the demo seeder and the demo entry share.
 
 import { generateId } from '@better-auth/core/utils/id';
 import { and, eq, like, lt } from 'drizzle-orm';
@@ -13,6 +13,7 @@ import { composeOtpEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { getEntriesForTarget, reconcileShares } from '../share';
 import { GUEST_ROLE, isGuest } from '../user/guest';
+import type { User } from '../user/user';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
 import { setCredentialPassword } from './credential-password';
@@ -99,32 +100,35 @@ export async function verifyOtpAndSignIn(email: string, otp: string, ip: string)
     resetOtpGuesses(email);
     refundOtpRequests(email, ip);
 
-    let guestUser = await getUserByEmail(email);
-    if (guestUser && !isGuest(guestUser)) throw new ApiError(400, 'Use password login');
-
-    if (!guestUser) {
-        const now = new Date();
-        // A direct insert skips better-auth's user hooks, so a guest joins no org. generateId gives only letters and
-        // digits, which parseOwnerId requires.
-        db.insert(userTable)
-            .values({
-                id: generateId(),
-                email,
-                name: email.split('@')[0] ?? email,
-                emailVerified: true,
-                role: GUEST_ROLE,
-                createdAt: now,
-                updatedAt: now,
-            })
-            .run();
-        guestUser = await getUserByEmail(email);
-        if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
-    }
+    const existingUser = await getUserByEmail(email);
+    if (existingUser && !isGuest(existingUser)) throw new ApiError(400, 'Use password login');
+    const guestUser = existingUser ?? (await createGuestUser(email));
 
     // Every sign-in reconciles, not only the first, so a first reconcile that failed heals at the next sign-in.
     await reconcileShares(guestUser);
 
     return signInWithScopedPassword('guest', guestUser.id, email);
+}
+
+// A direct insert skips better-auth's user hooks, so a guest joins no org. generateId gives only letters and digits,
+// which parseOwnerId requires.
+export async function createGuestUser(email: string): Promise<User> {
+    const now = new Date();
+    getAuthDrizzleDb()
+        .insert(userTable)
+        .values({
+            id: generateId(),
+            email,
+            name: email.split('@')[0],
+            emailVerified: true,
+            role: GUEST_ROLE,
+            createdAt: now,
+            updatedAt: now,
+        })
+        .run();
+    const guestUser = await getUserByEmail(email);
+    if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
+    return guestUser;
 }
 
 // The password is written on every call, so one that was changed heals and one visitor cannot lock out the next.

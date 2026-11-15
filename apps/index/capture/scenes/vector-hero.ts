@@ -3,18 +3,20 @@
 
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
-import { openSitePlan } from './site-plan';
+import { VIEWPORT } from '../lib/scene';
+import { openSitePlan, showGround } from './site-plan';
 
 export const vectorHero = {
     name: 'vector-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['vector'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openSitePlan(page, stack);
-        await cursor.moveTo({ x: 700, y: 650 }, { duration: 1 });
+        await showGround(page, cursor);
+        await cursor.moveTo({ x: 490, y: 455 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(800);
@@ -28,7 +30,7 @@ export const vectorHero = {
         await page.keyboard.press('ControlOrMeta+z');
         await page.keyboard.press('Escape');
         await Bun.sleep(1500);
-        await cursor.moveTo({ x: 700, y: 650 }, { duration: 1000 });
+        await cursor.moveTo({ x: 490, y: 455 }, { duration: 1000 });
         await Bun.sleep(800);
     },
 } satisfies Scene;

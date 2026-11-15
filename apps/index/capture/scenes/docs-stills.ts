@@ -1,15 +1,13 @@
-// The two stills of the Docs page: the equation in the scratch doc every crew member has, selected with its panel open
-// on the LaTeX, in dark; and the production plan's File menu open on Download, in light, the pointer resting on it.
+// The two stills of the Docs page, both in the production plan: the tech lead's power sum, selected with its panel open
+// on the LaTeX, in dark; and the File menu open on Download, in light, the pointer resting on it.
 
-import { DRIVE_TYPE_DOC } from '../../../../packages/lib/src/types/drive';
-import { TRYING_EIGEN } from '../../../api/src/scripts/demo/content';
-import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openProductionPlan } from './production-plan';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['docs'],
     personas: ['saar'],
 };
@@ -19,7 +17,8 @@ export const docsStillEquation = {
     name: 'docs-still-equation',
     theme: 'dark',
     run: async ({ pages: [page], stack }) => {
-        await openFile(page, stack, DRIVE_TYPE_DOC, TRYING_EIGEN.name);
+        await openProductionPlan(page, stack);
+        await page.getByRole('heading', { name: 'Power' }).evaluate((heading) => heading.scrollIntoView());
         await page.locator('math').first().click();
         await page.getByText('LaTeX').first().waitFor();
         await Bun.sleep(2500);
