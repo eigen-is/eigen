@@ -7,7 +7,7 @@
 import type { NamedSheet } from '../edit/sheets';
 import { bindSheets, breakSheets } from '../edit/sheets';
 import { parseStored } from './parser';
-import { storedKey } from './printer';
+import { printStored, storedKey } from './printer';
 import type { FormulaNode } from './tree';
 import { NodeKind, SheetKind } from './tree';
 
@@ -44,22 +44,27 @@ export class ShapeTable {
 
     // The id of a formula in stored text as a host hands it, in a workbook that holds `sheets`. Its key is the text
     // its tree prints, so another spelling of one formula, such as a name in lower case, is the same shape. Text
-    // that does not parse is kept as it is, and so is text whose key would not read back, with its tree.
+    // that does not parse is kept as it is, and so is text whose key would not read back: with its tree only when
+    // it names no sheet by its name, as no form of it that binds the name would fit a cell either.
     public intern(text: string, sheets: readonly NamedSheet[]): number {
         let typed = this.ids.get(text);
         if (typed === undefined) {
             const parsed = parseStored(text);
             if ('reason' in parsed) return this.add(text, null);
             const key = storedKey(parsed);
-            typed = typeof key === 'string' ? this.keyed(key, parsed) : this.add(text, parsed);
+            if (typeof key !== 'string') return this.add(text, collect(parsed, []) ? null : parsed);
+            typed = this.keyed(key, parsed);
         }
         const { tree, namesSheet } = this.shapes[typed - 1];
         if (tree === null || !namesSheet) return typed;
-        // What names a held sheet is the shape bound to it, or #REF! in its place where that is too long a key:
-        // kept as typed beside its sheet, a rename back to the name would bind it, or be refused.
+        // What names a held sheet is the shape bound to it, or #REF! in its place where an id makes that too long:
+        // a name in quotes and the least that follows it are never shorter than #REF!, so that fits as the key did.
         const bound = bindSheets(tree, sheets);
         if (bound === tree) return typed;
-        return this.internTree(bound) || this.internTree(breakSheets(tree, sheets)) || typed;
+        const id = this.internTree(bound);
+        if (id !== 0) return id;
+        const broken = breakSheets(tree, sheets);
+        return this.keyed(printStored(broken), broken);
     }
 
     // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key. 0, with

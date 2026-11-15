@@ -117,14 +117,18 @@ describe('ShapeTable', () => {
 
     test('text whose key would not read back is one shape, however often it enters', () => {
         const table = new ShapeTable();
-        // A number in a spelling shorter than the one a key prints, and a name no sheet has.
-        const text = `='Nowhere'!RC+${'1e9+'.repeat(MAX_STORED_LENGTH / 4 - 8)}1`;
-        const id = table.intern(text, []);
-        expect(table.shape(id)).toMatchObject({ text, namesSheet: true });
-        expect(table.intern(text, [])).toBe(id);
-        // Beside a sheet of the name too: neither bound nor with #REF! is there a key to store it under.
-        expect(table.intern(text, [{ id: 's9', name: 'Nowhere' }])).toBe(id);
-        expect(table.size).toBe(1);
+        // A number in a spelling shorter than the one a key prints.
+        const sum = `RC+${'1e9+'.repeat(MAX_STORED_LENGTH / 4 - 8)}1`;
+        const id = table.intern(`=${sum}`, []);
+        expect(table.shape(id)).toMatchObject({ text: `=${sum}`, namesSheet: false });
+        expect(table.shape(id).tree).not.toBeNull();
+        expect(table.intern(`=${sum}`, [])).toBe(id);
+        // With a sheet's name, whether or not a sheet has it, it does not parse: no form that binds it would fit.
+        const text = `='Nowhere'!${sum}`;
+        const named = table.intern(text, []);
+        expect(table.shape(named)).toEqual({ text, tree: null, refs: [], namesSheet: false });
+        expect(table.intern(text, [{ id: 's9', name: 'Nowhere' }])).toBe(named);
+        expect(table.size).toBe(2);
     });
 
     test('text that does not parse is kept as a shape without a tree', () => {
