@@ -4,7 +4,7 @@
 // one op that fails is not read at all, so every reader skips the same batches. State, such as whether a sheet or a
 // filter exists, is the applier's to check.
 
-import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '../charts/limits';
 import { isHexColor, parseRgb } from '../constants/colors';
 import { isRecord } from '../core/guards';
@@ -13,7 +13,6 @@ import { isSafeMediaName } from '../vector/media-refs';
 import { STROKE_STYLES } from '../vector/types';
 import { BORDER_STYLES } from './borders';
 import {
-    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
@@ -105,7 +104,7 @@ export function isGeneration(value: unknown): value is number {
 }
 
 export function isNow(value: unknown): value is number {
-    return isFiniteNumber(value) && value >= 0 && value < LAST_DATE_SERIAL + 1;
+    return isFiniteNumber(value) && value >= 0 && value < LAST_SERIAL + 1;
 }
 
 // A draw's seed is read as a signed 32-bit integer.

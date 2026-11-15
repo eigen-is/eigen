@@ -1,8 +1,7 @@
 // The limits of a workbook and of what enters one: how many sheets, value slots and style runs a workbook may hold, how
-// many records and rich-text runs a sheet's parts may hold, how long an id, an order key, a text and a batch of ops may be,
-// and the last day a batch's clock may name. The op validators check the bounds on what a peer or a file wrote, and
-// every door that changes a workbook, such as the importer, the loader and the applier, weighs the result with `fits`,
-// so every reader refuses the same edit.
+// many records and rich-text runs a sheet's parts may hold, and how long an id, an order key, a text and a batch of ops
+// may be. The op validators check the bounds on what a peer or a file wrote, and every door that changes a workbook,
+// such as the importer, the loader and the applier, weighs the result with `fits`, so every reader refuses the same edit.
 
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import type { RefusalKey } from './refusal';
@@ -16,9 +15,6 @@ export const BAND_WEIGHT = 32;
 // Settled.
 export const MAX_ID_LENGTH = 64;
 export const MAX_ORDER_KEY = 64;
-
-// The engine's last date serial, 31 December 9999, which lib may not import: a batch's clock runs to the end of that day.
-export const LAST_DATE_SERIAL = 2_958_465;
 
 // RULED by the owner: a batch's JSON text in UTF-16 code units, a batch that adds a sheet left out since a sheet's add has
 // bounds of its own (`readBatch` holds the rule); a text a cell or a field holds; a short text such as a color, a number

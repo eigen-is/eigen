@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { MAX_CHART_SPEC_BYTES } from '../../charts/limits';
 import { isRecord } from '../../core/guards';
 import {
-    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
@@ -238,8 +237,8 @@ describe('readBatch', () => {
     test('takes the clock as a serial of the days the engine dates, and the seed as a 32-bit integer', () => {
         const clock = (now: unknown, seed: unknown) => read({ g: 0, now, seed, ops: [] }) !== null;
         expect(clock(0, 0)).toBe(true);
-        expect(clock(LAST_DATE_SERIAL + 0.999, 2 ** 31 - 1)).toBe(true);
-        expect(clock(LAST_DATE_SERIAL + 1, 0)).toBe(false);
+        expect(clock(LAST_SERIAL + 0.999, 2 ** 31 - 1)).toBe(true);
+        expect(clock(LAST_SERIAL + 1, 0)).toBe(false);
         expect(clock(1e300, 0)).toBe(false);
         expect(clock(1, -(2 ** 31))).toBe(true);
         for (const now of [-1, Number.NaN, Number.POSITIVE_INFINITY, '1']) expect(clock(now, 0)).toBe(false);
