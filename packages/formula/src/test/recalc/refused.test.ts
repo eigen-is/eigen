@@ -335,10 +335,6 @@ const TOO_LONG: [string, (engine: Engine) => unknown][] = [
         'a sheet added under a name they were typed with',
         (engine) => engine.addSheet(named('a-long-id-of-a-sheet', '=1'), 1),
     ],
-    [
-        'a sheet added that holds one, typed with the name of a sheet that is there',
-        (engine) => engine.addSheet({ ...named('s9', longest("'Sheet2'!R1C1")), name: 'Other' }, 1),
-    ],
     ['a sheet renamed to the name they were typed with', (engine) => engine.renameSheet('second-sheet', 'Later')],
 ];
 
@@ -416,7 +412,7 @@ describe('an edit that would lose a cell or a formula is refused, and changes no
         expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
         expect(held(engine, sheets)).toEqual(held(untouched, sheets));
         for (const text of [engine.formulaOf('first', 0, 1), engine.formulaOf('first', 1, 1)]) {
-            expect(new Engine([named('s', text ?? '')]).formulaOf('s', 1, 0)).toBe(text);
+            expect(new Engine([{ ...named('s', text ?? ''), name: 'Other' }]).formulaOf('s', 1, 0)).toBe(text);
         }
     });
     test.each([

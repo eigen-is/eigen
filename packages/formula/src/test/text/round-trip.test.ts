@@ -86,7 +86,7 @@ describe('round trip', () => {
         const idOf = new Map<string, number>();
         for (let run = 0; run < RUNS; run += 1) {
             const text = next();
-            const id = run % 2 === 0 ? table.intern(text) : table.internTree(treeStored(text));
+            const id = run % 2 === 0 ? table.intern(text, []) : table.internTree(treeStored(text));
             expect(idOf.get(text) ?? id).toBe(id);
             idOf.set(text, id);
         }

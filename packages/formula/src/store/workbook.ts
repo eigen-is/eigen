@@ -84,11 +84,15 @@ export class Workbook {
     private limit: number;
 
     public constructor(sources: readonly SheetSource[]) {
-        for (const source of sources) {
+        // Every sheet has its place before a formula is read, so one may name a sheet that comes after its own.
+        const drafts = sources.map((source) => {
             this.checkId(source.id);
             this.checkName(source.name, null);
-            this.insert(this.adopt(this.read(source)), this.held.length);
-        }
+            const draft = this.read(source);
+            this.insert(draft.sheet, this.held.length);
+            return draft;
+        });
+        for (const draft of drafts) this.adopt(draft);
         this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
     }
 
@@ -160,11 +164,13 @@ export class Workbook {
         return { sheet, texts, formulas, errors, numbered };
     }
 
-    // Makes a sheet that was read one whose cells hold ids and codes of the tables, in no place yet: `apply` adds
-    // it. Nothing may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
+    // Makes a sheet that was read one whose cells hold ids and codes of the tables. A sheet to add is in no place
+    // yet: nothing may forget a text or a shape before `apply` adds it, as no cell of the workbook holds them yet.
     public adopt({ sheet, texts, formulas, errors, numbered }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
-        const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
+        // A formula may name its own sheet, which the workbook does not hold yet when it is added.
+        const named = [sheet, ...this.held];
+        const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text, named));
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
         // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
         // reported twice is listed twice, and holds an id once it was met.
@@ -293,7 +299,7 @@ export class Workbook {
 
     // One formula in its stored text in every cell of a block. It is to be computed: it holds no value until then.
     public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
-        const shape = this.shapes.intern(text);
+        const shape = this.shapes.intern(text, this.held);
         for (let c = left; c <= right; c += 1) {
             const held = sheet.column(c);
             held.reach(bottom);

@@ -375,7 +375,7 @@ describe('a column filled down splits into few classes, not one per cell', () =>
 
     test('a broken reference splits nothing, as it reads no cell', () => {
         const table = new ShapeTable();
-        const shape = table.shape(table.intern('=[s1]!#REF!+SUM([s1]!#REF!:[s1]!#REF!)+[s1]!#REF!#'));
+        const shape = table.shape(table.intern('=[s1]!#REF!+SUM([s1]!#REF!:[s1]!#REF!)+[s1]!#REF!#', []));
         if (shape.tree === null) throw new Error('unparsed');
         expect(hostClasses(shape.tree, shape.refs, insertRows(50), 's2', 0, 99)).toEqual([
             { start: 0, end: 99, tree: shape.tree, lossy: false, recompute: false, resized: false, slid: false },
