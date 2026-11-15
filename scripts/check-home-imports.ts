@@ -32,13 +32,16 @@ for await (const path of new Glob('**/*.ts').scan('apps/api/src/lib')) {
     if (!mayNameHome && /\b(getHome|openHome|loadedHome|getTeamHome|getUserHome)\b/.test(content)) {
         namesHome.push(`apps/api/src/lib/${normalized}`);
     }
-    // The relay spreads each table while it loads, so a table whose value import led back to the relay would run
-    // first and read it half-built.
+    // The relay spreads each table while it loads. A table that loaded a module leading back to the relay would make
+    // the relay run first and read the table before it exists.
     if (isTable) {
         for (const line of content.split('\n')) {
-            if (line.startsWith('import ') && !line.startsWith('import type ')) {
-                valueImports.push(`apps/api/src/lib/${normalized}: ${line.trim()}`);
-            }
+            const statement = line.trim();
+            const loadsModule =
+                (statement.startsWith('import ') && !statement.startsWith('import type ')) ||
+                (/^export .* from /.test(statement) && !statement.startsWith('export type ')) ||
+                statement.includes('require(');
+            if (loadsModule) valueImports.push(`apps/api/src/lib/${normalized}: ${statement}`);
         }
     }
 }

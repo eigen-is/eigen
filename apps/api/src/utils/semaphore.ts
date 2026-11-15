@@ -1,5 +1,5 @@
-// Counting semaphore: bounds how many run() bodies execute concurrently. Used to cap
-// concurrent storage uploads so a throttling backend isn't slammed with parallel PUTs.
+// A counting semaphore: it bounds how many run() bodies execute at once. Callers such as the storage uploads and the
+// home relay's opens use it so that a burst of work waits its turn.
 export class Semaphore {
     private active = 0;
     private waiters: (() => void)[] = [];
