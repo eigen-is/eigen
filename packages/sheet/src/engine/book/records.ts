@@ -20,6 +20,7 @@ import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
     ConditionalFormatRecord,
+    FieldsOf,
     MoveOp,
     RecordOp,
     Records,
@@ -33,7 +34,6 @@ import { mapChartRefs } from '../chart-data';
 
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
-type Fields<R> = { [K in keyof R]?: R[K] | null };
 type Span = [first: number, last: number];
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
@@ -59,7 +59,7 @@ const BAND_SHIFT = 6;
 type MadeBody<T extends Kind> =
     | { sheet: string; id: string; set: Records[T]; whole: 1 }
     | { sheet: string; id: string; set?: undefined };
-type ChangeBody<T extends ChangedKind> = { sheet: string; id: string; set: Fields<Records[T]> };
+type ChangeBody<T extends ChangedKind> = { sheet: string; id: string; set: FieldsOf<Records[T]> };
 const MADE_OP: { readonly [T in Kind]: (body: MadeBody<T>) => RecordOp } = {
     merge: (body) => ({ kind: 'record', type: 'merge', ...body }),
     filter: (body) => ({ kind: 'record', type: 'filter', ...body }),
@@ -499,7 +499,7 @@ export class SheetRecords {
         return [old === undefined ? MADE_OP[type]({ sheet: this.sheet, id }) : this.wholeOp(type, id, old)];
     }
 
-    private change<T extends ChangedKind>(type: T, id: string, set: Fields<Records[T]>): RecordOp[] {
+    private change<T extends ChangedKind>(type: T, id: string, set: FieldsOf<Records[T]>): RecordOp[] {
         const old = this.stored[type].get(id);
         if (old === undefined) return [];
         const before = fieldsBefore(old, set);
@@ -641,7 +641,7 @@ function cellKey(row: number, column: number): number {
     return row * GRID_COLUMNS + column;
 }
 
-function withFields<R extends object>(record: R, set: Fields<R>): R {
+function withFields<R extends object>(record: R, set: FieldsOf<R>): R {
     const next = { ...record };
     for (const key in set) {
         const value = set[key];
@@ -652,8 +652,8 @@ function withFields<R extends object>(record: R, set: Fields<R>): R {
 }
 
 // The old value of every field `set` changes, null where there was none.
-function fieldsBefore<R extends object>(record: R, set: Fields<R>): Fields<R> {
-    const before: Fields<R> = {};
+function fieldsBefore<R extends object>(record: R, set: FieldsOf<R>): FieldsOf<R> {
+    const before: FieldsOf<R> = {};
     for (const key in set) if (set[key] !== record[key]) before[key] = record[key] ?? null;
     return before;
 }

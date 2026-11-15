@@ -141,7 +141,7 @@ type Change<T extends RecordType, S> = {
     set?: S;
     whole?: undefined;
 };
-type FieldsOf<R> = { [K in keyof R]?: R[K] | null };
+export type FieldsOf<R> = { [K in keyof R]?: R[K] | null };
 type ChangedByField = Exclude<RecordType, 'sheet' | 'conditionalFormat'>;
 export type RecordOp =
     | { [T in ChangedByField]: Make<T> | Change<T, FieldsOf<Records[T]>> }[ChangedByField]
