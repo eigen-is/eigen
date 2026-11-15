@@ -4,21 +4,25 @@
 
 import type { Scene } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
-import { cellPoint, openBudget } from './budget';
+import { cellPoint, editAndUndo, openBudget } from './budget';
 
 export const sheetsCollabPair = {
     name: 'sheets-collab-pair',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1000, height: 800 },
+    // Wide enough for the table and the costs chart beside it, whole.
+    viewport: { width: 990, height: 800 },
     composite: 'side-by-side',
     apps: ['sheets'],
     personas: ['bram', 'anouk'],
-    setup: async ({ pages, stack }) => {
-        await Promise.all(pages.map((page) => openBudget(page, stack)));
+    setup: async ({ pages: [bram, anouk], cursors: [bramCursor, anoukCursor], stack }) => {
+        await Promise.all([bram, anouk].map((page) => openBudget(page, stack)));
+        // Her name tag then sits on the status beside her number on his screen too, as it does at the end.
+        await editAndUndo(anouk, anoukCursor, 'B13', 'Tab');
+        await bramCursor.moveTo(await cellPoint(bram, 'A16'), { duration: 1 });
+        await Bun.sleep(1500);
     },
     run: async ({ pages: [bram, anouk], cursors: [bramCursor, anoukCursor] }) => {
-        await bramCursor.moveTo(await cellPoint(bram, 'A16'), { duration: 1 });
         await Bun.sleep(800);
         await bramCursor.moveTo(await cellPoint(bram, 'C17'), { duration: 900 });
         await Bun.sleep(700);

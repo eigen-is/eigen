@@ -4,15 +4,16 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openBudget } from './budget';
 
-const REST = { x: 1400, y: 760 };
+const REST = { x: 980, y: 532 };
 
 export const mailHero = {
     name: 'mail-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['mail', 'sheets'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
@@ -23,6 +24,12 @@ export const mailHero = {
         await page.goto(stack.appUrl('mail'));
         await page.getByText('Re: Generator quote').first().dispatchEvent('click');
         await page.getByRole('heading', { name: 'Re: Generator quote' }).waitFor();
+        // The first message's row is the list's last and partly cut off, and clicking it scrolls the list to show it
+        // whole, so the film starts with it whole and ends on the same list. The virtualizer marks each row.
+        await page
+            .locator('[data-index]')
+            .filter({ hasText: 'Hi Saar, Quote attached' })
+            .evaluate((row) => row.scrollIntoView({ block: 'nearest' }));
         await Bun.sleep(1500);
         await cursor.moveTo(REST, { duration: 1 });
     },

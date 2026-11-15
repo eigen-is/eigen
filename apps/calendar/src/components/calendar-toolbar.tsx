@@ -13,11 +13,10 @@ import {
     DropdownMenuSeparator,
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app';
-import { KebabTrigger, Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-// The view select and the phone's kebab offer the same views.
 const VIEW_MODES: { value: ViewMode; label: string }[] = [
     { value: 'month', label: 'Month' },
     { value: 'week', label: 'Week' },
@@ -51,7 +50,6 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
         return `${startOfWeek.getDate()} – ${endOfWeek.getDate()} ${startMonth} ${endYear}`;
     }
-    // A week across New Year names both years.
     if (startYear !== endYear) {
         return `${startOfWeek.getDate()} ${startMonth} ${startYear} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
     }
@@ -77,12 +75,8 @@ export function CalendarToolbar({
                     </Button>
                 )}
                 <div className="flex items-center">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrev}>
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNext}>
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <TooltipButton icon={ChevronLeft} tooltipText={`Previous ${viewMode}`} onClick={onPrev} />
+                    <TooltipButton icon={ChevronRight} tooltipText={`Next ${viewMode}`} onClick={onNext} />
                 </div>
                 <ToolbarTitle className="text-lg">{formatTitle(currentDate, viewMode)}</ToolbarTitle>
             </div>

@@ -4,12 +4,13 @@
 // has no other Drive scene.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 export const driveStillActivity = {
     name: 'drive-still-activity',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['drive'],
     personas: ['saar'],
     run: async ({ pages: [page], stack }) => {
@@ -27,7 +28,7 @@ export const driveStillTiles = {
     name: 'drive-still-tiles',
     kind: 'still',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['drive'],
     personas: ['nour'],
     setup: async ({ pages: [page], stack }) => {

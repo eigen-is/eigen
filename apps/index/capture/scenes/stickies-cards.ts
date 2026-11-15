@@ -7,13 +7,14 @@ import { KANBAN } from '../../../api/src/scripts/demo/content';
 import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 const CARD = 'Sunday wind cover';
-const REST = { x: 1450, y: 780 };
+const REST = { x: 1015, y: 546 };
 
 const board: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas' | 'setup'> = {
     kind: 'video',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['stickies'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
@@ -32,9 +33,18 @@ export const stickiesComment = {
         await Bun.sleep(1000);
         await cursor.click(await pointOn(page.getByText(CARD)));
         const dialog = page.getByRole('dialog');
-        await dialog.getByText('dekzeil & zo.vcf').waitFor();
-        await Bun.sleep(1200);
-        await cursor.moveTo(await pointOn(dialog.getByText('dekzeil & zo.vcf')));
+        const contactCard = page.getByText('dekzeil & zo.vcf');
+        await contactCard.waitFor();
+        // The thread scrolls to its end before the contact card's chip has its height, which leaves the chip half
+        // under the reply box, so she scrolls on to the end of its message. A message's row is the innermost block
+        // that lights up under the pointer.
+        await Bun.sleep(600);
+        await dialog
+            .locator('div.group', { has: contactCard })
+            .last()
+            .evaluate((row) => row.scrollIntoView({ block: 'end', behavior: 'smooth' }));
+        await Bun.sleep(600);
+        await cursor.moveTo(await pointOn(contactCard));
         await Bun.sleep(4000);
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });

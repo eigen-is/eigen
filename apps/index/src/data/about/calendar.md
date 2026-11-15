@@ -10,7 +10,7 @@ eigen|calendar⟩ is the [calendar app](/support/calendar/get-started) in Eigen.
 
 ## More than one calendar
 
-Everyone has a calendar of their own, and a team has one its members share. The festival crew's calendar holds the build day, the go/no-go meeting and the weekend itself. Saar's site walk is in her own.
+Everyone has a calendar of their own, and a team has one its members share. The festival crew's calendar holds the build day, load-in and soundchecks, the go/no-go meeting, the volunteer briefing, the weekend itself and the strike. Saar's site walk and her meeting with the fencing hire are in her own.
 
 Each calendar has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round.
 
@@ -25,7 +25,7 @@ An event [repeats](/support/calendar/recurring-events), such as daily, weekly or
 Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
 
 ::: carousel
-![The festival week: a production meeting, the build day, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
+![The festival week: a production meeting, the build day, load-in and soundchecks, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
 ![The build day opened on its three guests](/data/about/media/calendar-still-build.webp)
 :::
 

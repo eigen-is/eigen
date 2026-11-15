@@ -4,16 +4,17 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
 // Empty space under the list, where the resting pointer lights up no row.
-const REST = { x: 700, y: 700 };
+const REST = { x: 490, y: 490 };
 
 export const driveShare = {
     name: 'drive-share',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['drive'],
     personas: ['mees'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

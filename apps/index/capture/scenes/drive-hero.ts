@@ -4,14 +4,15 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
-const REST = { x: 1450, y: 820 };
+const REST = { x: 1015, y: 574 };
 
 export const driveHero = {
     name: 'drive-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['drive'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

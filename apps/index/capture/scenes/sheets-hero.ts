@@ -3,19 +3,24 @@
 // where it began.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
-import { cellPoint, chartPoint, openBudget } from './budget';
+import { cellPoint, chartPoint, editAndUndo, openBudget } from './budget';
+
+// An empty cell under the table, where the resting pointer lights up nothing, as it would over the chart.
+const REST = 'C20';
 
 export const sheetsHero = {
     name: 'sheets-hero',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['sheets'],
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openBudget(page, stack);
-        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1 });
+        await editAndUndo(page, cursor, 'B13', 'Enter');
+        await cursor.moveTo(await cellPoint(page, REST), { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(800);
@@ -36,7 +41,7 @@ export const sheetsHero = {
         await Bun.sleep(2000);
         await page.keyboard.press('ControlOrMeta+z');
         await Bun.sleep(1500);
-        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1200 });
+        await cursor.moveTo(await cellPoint(page, REST), { duration: 1200 });
         await Bun.sleep(600);
     },
 } satisfies Scene;

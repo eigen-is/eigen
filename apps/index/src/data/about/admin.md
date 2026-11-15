@@ -16,9 +16,11 @@ Make someone an Admin to share the work. Reset a password when someone is locked
 
 A [team](/support/admin/teams) is a group you share with at once. Everyone joins the team named after your organization. Make more, add people one by one or a whole selection at a time, and turn on a team calendar.
 
-A team gets its own drive, on the server's disk or in an [S3 bucket](/support/admin/s3-bucket-safety). At the festival the whole crew is one team. A new volunteer gets an account and joins it, and the plan, the budget and the crew's calendar are there at the first login.
+A team gets its own drive, on the server's disk or in an [S3 bucket](/support/admin/s3-bucket-safety). At the festival the whole crew is one team, and Timo, Sanne and Tessa are a second one for stage and tech, which Saar shares her site access notes with. A new volunteer gets an account and joins the crew's team, and the plan, the budget and the crew's calendar are there at the first login.
 
 [People from outside](/support/admin/guests) sign in with a code by mail and see only what was shared with them.
+
+![Guests: Hein from the fencing hire, the one person from outside, with his email address](/data/about/media/admin-still-guests.webp)
 
 ## Server settings
 

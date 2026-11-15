@@ -23,6 +23,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
 - **The demo budget in Sheets** — its costs chart sits beside the table, so a changed cost moves its bar in view. The income pie stays on the Charts tab
+- **The demo** — the festival crew's world holds more of their work, such as a sponsor chart in the deck, comments on the site plan, a guest from the fencing hire and a second team
 
 ### Fixed
 
@@ -62,6 +63,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode
 - **Guest count in Calendar** — the organizer counts as an accepted guest, so the replies add up to the number of guests
 - **Guest names in Calendar** — a guest you add by typing an address takes the name from your contacts, or shows the address, not the part before the @
+- **Arrows in Calendar** — the previous and next buttons say where they go, such as Next month, on hover and to a screen reader
 - **New chats** — a chat you start with a contact by typing their address is named after the contact, not the part before the @
 - **Keyboard in Drive's grid** — the item under the keyboard cursor gets the stripe a list row shows, so it no longer looks selected
 - **Team drives on a phone** — **Move to**, **Copy to** and **Save to Drive** have a drive picker above the folders on a phone, so a file can go to a team drive
