@@ -7,6 +7,7 @@
 import { EditRefusal } from '@workspace/formula';
 import { fits } from '@workspace/lib/sheets/limits';
 import type { Op } from '@workspace/lib/sheets/ops';
+import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyRecord } from './apply-record';
 import type { Workbook } from './workbook';
@@ -15,6 +16,12 @@ import type { Workbook } from './workbook';
 // `applyOne`, which does not compile without it. When the list is empty it goes, and `Applied` is `Op`.
 type Unbuilt = 'input' | 'format' | 'lines' | 'move' | 'sheet';
 type Applied = Exclude<Op, { kind: Unbuilt }>;
+
+// The key each reason of the engine's refusal is thrown as: a new reason does not compile until it has one.
+const REFUSAL_OF = { 'grid-end': 'grid-end', 'too-long': 'key-too-long' } satisfies Record<
+    EditRefusal['reason'],
+    RefusalKey
+>;
 
 // Returns the inverse batch: the inverse ops of every op, the newest op's first, each restoring the state before
 // its op. It throws a `Refusal` with the workbook as it was; any other throw leaves the workbook to be reloaded.
@@ -28,10 +35,7 @@ export function applyOps(book: Workbook, ops: readonly Applied[]): Applied[] {
         if (over) throw new Refusal(over);
     } catch (error) {
         // The engine refuses an edit before it writes, as an applier does, so the op that threw left nothing.
-        const refusal =
-            error instanceof EditRefusal
-                ? new Refusal(error.reason === 'grid-end' ? 'grid-end' : 'key-too-long')
-                : error;
+        const refusal = error instanceof EditRefusal ? new Refusal(REFUSAL_OF[error.reason]) : error;
         if (refusal instanceof Refusal) {
             for (const op of landed.reverse().flat()) applyOne(book, op);
             book.sweepLooks();
