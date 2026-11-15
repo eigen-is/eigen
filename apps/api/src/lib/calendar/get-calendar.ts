@@ -138,7 +138,8 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
             }
         } else if (parseOwnerId(entry.ownerUserId).type === 'team') {
-            // The user left this team. Its entry goes once the team says it shares nothing with them, or is gone.
+            // A team the user is not in: the entry goes when the team answers without it or is gone. A team that
+            // gave no answer keeps it, as a missed answer must not drop a share.
             if (shares || !(await getOwnerExists(entry.ownerUserId))) await calendar.deleteSharedCalendar(entry.id);
         }
     }
