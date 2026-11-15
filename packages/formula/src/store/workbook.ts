@@ -31,9 +31,8 @@ export type SheetSource = {
     readonly cells: (cell: CellSink) => void;
 };
 
-// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold their number in the
-// order of these lists, which `adopt` turns into ids and codes of the workbook's tables. In a cell the number is
-// written as its complement, below 0, where no id or code is.
+// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold the complement of their
+// number in these lists, below 0 where no id or code is, which `adopt` turns into ids and codes of the tables.
 export type Draft = {
     readonly sheet: Sheet;
     readonly texts: ReadonlyMap<string, number>;

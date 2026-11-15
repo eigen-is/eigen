@@ -130,11 +130,11 @@ export class Recalc {
 
     // Performs a structural edit. What it can change is flagged, with the cells written since the last pass, while
     // the index still describes the cells as they are: so only the flags, which move with their cells, cross the edit.
-    // The plan refuses an edit by a throw, before anything is flagged or moved.
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
-        // The plan makes shapes that no cell holds, for good when the edit is refused: the next rebuild forgets them.
+        // The plan makes shapes no cell holds yet, or ever when it refuses the edit by a throw: the next rebuild
+        // forgets those.
         this.stale = true;
         const plan = planEdit(workbook, this.index.rectangles, change);
         const { seeds } = plan;
