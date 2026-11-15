@@ -25,14 +25,23 @@ export const adminHero = {
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
-        await cursor.click(await pointOn(page.getByRole('main').getByText(personaByKey('saar').name)));
+        // Her row sits below the fold at this height, so he scrolls the list down to it first.
+        const saar = page.getByRole('main').getByText(personaByKey('saar').name);
+        await cursor.moveTo(await pointOn(page.getByRole('main').getByText(personaByKey('nour').name)));
+        await page.mouse.wheel(0, (await pointOn(saar)).y - VIEWPORT.height / 2);
+        await Bun.sleep(900);
+        await cursor.click(await pointOn(saar));
         await page.getByRole('heading', { name: 'Storage' }).waitFor();
         await Bun.sleep(3000);
         await cursor.click(await pointOn(page.getByRole('link', { name: 'Teams' })));
         await page.getByText(TEAM_NAME).first().waitFor();
         await Bun.sleep(1000);
         await cursor.click(await pointOn(page.getByRole('main').getByText(TEAM_NAME)));
-        await Bun.sleep(3500);
+        await Bun.sleep(1500);
+        // The members sit below the fold, so he scrolls the team's panel until its drive heads it.
+        await cursor.moveTo(await pointOn(page.getByText('No backups yet.')), { duration: 700 });
+        await page.mouse.wheel(0, (await pointOn(page.getByText('Mounts (1)'))).y - 120);
+        await Bun.sleep(3000);
         await cursor.click(await pointOn(page.getByRole('link', { name: 'Users' })));
         await page.getByText(personaByKey('saar').name).first().waitFor();
         await Bun.sleep(800);
