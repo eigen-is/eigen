@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, LAST_SERIAL } from '@workspace/formula/text';
 import { isRecord } from '../../core/guards';
 import type { BookContent } from '../../sheets/book-codec';
 import { decodeBook, encodeBook } from '../../sheets/book-codec';
-import { LAST_DATE_SERIAL, MAX_RECORDS_PER_TYPE } from '../../sheets/limits';
+import { MAX_RECORDS_PER_TYPE, MAX_SHEETS } from '../../sheets/limits';
 import type { CellAttrs, CellRecord, LineAttrs, Placed, SheetContent, Span } from '../../sheets/ops';
 import { isSheetContent } from '../../sheets/ops-validate';
 import { encodeSheetsSnapshot } from '../../sheets/snapshot-codec';
@@ -175,7 +175,7 @@ function randomSheet(next: () => number, index: number): SheetContent {
 function randomBook(next: () => number): BookContent {
     return {
         g: next() < 0.1 ? Number.MAX_SAFE_INTEGER : below(next, 1_000_000),
-        now: next() < 0.1 ? LAST_DATE_SERIAL + 0.999 : next() * LAST_DATE_SERIAL,
+        now: next() < 0.1 ? LAST_SERIAL + 0.999 : next() * LAST_SERIAL,
         seed: next() < 0.1 ? -(2 ** 31) : below(next, 2 ** 32) - 2 ** 31,
         computed: next() < 0.5,
         sheets: Array.from({ length: 1 + below(next, 3) }, (_, index) => randomSheet(next, index)),
@@ -445,9 +445,26 @@ describe('refusal', () => {
         expect(decodeBook(encodeBook({ ...BOOK, sheets: [BOOK.sheets[1]] }))).not.toBeNull();
     });
 
+    test('of a book with more sheets than a workbook holds', () => {
+        const sheets = (count: number) =>
+            Array.from({ length: count }, (_, index) => ({
+                ...BOOK.sheets[1],
+                id: `s${index}`,
+                fields: { name: `n${index}`, order: 'a0' },
+            }));
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: sheets(MAX_SHEETS) }))).not.toBeNull();
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: sheets(MAX_SHEETS + 1) }))).toBeNull();
+    });
+
+    test('of two sheets with one id', () => {
+        const twin = { ...BOOK.sheets[1], fields: { name: 'Twin', order: 'a2' } };
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's1' }] }))).toBeNull();
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's3' }] }))).not.toBeNull();
+    });
+
     test('of a clock, a generation or a head out of range', () => {
         const heads: [string, unknown][] = [
-            ...[-1, LAST_DATE_SERIAL + 1, '1', null].map((now): [string, unknown] => ['now', now]),
+            ...[-1, LAST_SERIAL + 1, '1', null].map((now): [string, unknown] => ['now', now]),
             ...[2 ** 31, -(2 ** 31) - 1, 0.5].map((seed): [string, unknown] => ['seed', seed]),
             ...[-1, 0.5, Number.MAX_SAFE_INTEGER + 1].map((g): [string, unknown] => ['g', g]),
             ['computed', 1],
@@ -460,9 +477,7 @@ describe('refusal', () => {
             expect(edited((book) => Object.defineProperty(book, key, { value, enumerable: true }))).toBeNull();
         }
         expect(decodeBook(TEXT.replace('"now":46000.25', '"now":1e400'))).toBeNull();
-        expect(
-            edited((book) => Object.assign(book, { now: LAST_DATE_SERIAL + 0.999, seed: -(2 ** 31) })),
-        ).not.toBeNull();
+        expect(edited((book) => Object.assign(book, { now: LAST_SERIAL + 0.999, seed: -(2 ** 31) }))).not.toBeNull();
     });
 
     test('of a book past a bound the sheet guard holds', () => {

@@ -2,11 +2,11 @@
 // quote at either end. A refused name puts the old text back in the tab and says why.
 
 import { describe, expect, test } from 'bun:test';
+import { SHEET_NAME_FORBIDDEN } from '@workspace/lib/sheets';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
-const { SHEET_NAME_FORBIDDEN } = await import('../../../engine/a1-notation');
 const { defaultContext } = await import('../../../state/context');
 const { editSheetName } = await import('../../../state/modules/sheet');
 const { heldGraph } = await import('../factories/context');

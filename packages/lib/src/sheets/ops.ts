@@ -94,9 +94,8 @@ export type Records = {
 export type RecordType = keyof Records;
 export type LineAttrs = { size?: number; custom?: 1; hidden?: 1 };
 
-// A sheet whole, as a `sheet` op adds it and the snapshot holds it. `looks` are in order of first use, walking bands
-// then runs, with the plain look as index 0 and unlisted. `bands` is flat and ascending: first column, n, then n pairs
-// of start row and look index.
+// A sheet whole, as a `sheet` op adds it. `looks` stand in order of first use, bands then runs, the plain look 0 and
+// unlisted; `bands` is flat and ascending: first column, n, then n pairs of start row and look index.
 export type SheetContent = {
     id: string;
     fields: SheetFields;
