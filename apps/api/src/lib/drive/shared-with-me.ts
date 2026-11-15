@@ -1,7 +1,8 @@
 // Each home keeps which paths other owners shared with it. When an owner changes who may see a path, that change is
 // pushed into this home, and receiveSharedPathChange adds or removes the row and tells the user. A row only names the
-// path, so "Shared with me" reads each one from its owner, who decides there whether the user may still see it. This
-// file is the only one that reads or writes that table. Drive calls it with its shared database.
+// path, so "Shared with me" reads each one from its owner, who decides there whether the user may still see it, and
+// Recent reads its own rows the same way. This file is the only one that reads or writes that table. Drive calls it
+// with its shared database.
 
 import { shareTag } from '@workspace/lib/notification/tags';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -12,7 +13,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { and, asc, eq } from 'drizzle-orm';
 import type { Home } from '../home';
 import { getFromHomes } from '../home/home-relay';
-import type { User } from '../user';
+import type { Memberships, User } from '../user';
 import { actorDisplayName, getMemberships } from '../user';
 import { matchesACL } from './acl';
 import type { SharedDb } from './shared';
@@ -87,11 +88,24 @@ export async function receiveSharedPathChange(
 export async function listSharedWithMe(sharedDb: SharedDb, user: User, mimeTypePrefix = ''): Promise<DrivePath[]> {
     const rows = sharedDb.select().from(sharedPaths).orderBy(asc(sharedPaths.sharedAt)).all();
     if (rows.length === 0) return [];
-    const owners = [...new Set(rows.map((row) => row.ownerId))];
     const memberships = await getMemberships(user.id);
+    return (await pullVisiblePaths(user, memberships, rows, mimeTypePrefix)).map(({ path }) => path);
+}
+
+// Asks each owner once for all of its rows, and keeps the rows' order, each visible path beside its row.
+export async function pullVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
+    user: User,
+    memberships: Memberships,
+    rows: readonly Row[],
+    mimeTypePrefix: string,
+): Promise<{ row: Row; path: DrivePath }[]> {
+    const owners = [...new Set(rows.map((row) => row.ownerId))];
     const answers = await getFromHomes(owners, 'drive:visible-paths', { user, memberships, rows, mimeTypePrefix });
     const paths = new Map([...answers.values()].flat().map((path) => [path.id, path]));
-    return rows.flatMap((row) => paths.get(row.pathId) ?? []);
+    return rows.flatMap((row) => {
+        const path = paths.get(row.pathId);
+        return path ? [{ row, path }] : [];
+    });
 }
 
 // The owners who shared at least one path with this home, so a view across owners, such as Watched, asks only
