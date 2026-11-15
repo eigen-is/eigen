@@ -12,9 +12,13 @@ eigen|slides⟩ is the [presentation app](/support/slides/get-started) in Eigen.
 
 A slide holds text, images, [shapes and arrows](/support/slides/draw-shapes-and-arrows). [Double-click a text box](/support/slides/insert-content) to type in it. [Drag a thumbnail](/support/slides/add-slides) to reorder the slides. A [background](/support/slides/slide-backgrounds) can be a color, a gradient or an image, for one slide or all of them.
 
+The festival's sponsor deck is five slides, from who comes to what a sponsor gets. Mees writes one line on each.
+
 Slides runs on the same canvas as eigen|vector⟩, so shapes have the same hand-drawn look, which you can [turn down to clean lines](/support/slides/style-objects).
 
 ## From a sheet to a slide
+
+Bram wants the sponsors to see where the festival's money comes from. The income pie is already in the budget, so he does not draw it again.
 
 Copy a [chart](/support/sheets/add-a-chart) in eigen|sheets⟩ and [paste it on a slide](/support/slides/insert-content), and it stays a chart you can edit, with the numbers it showed. Give it the hand-drawn look and font, then Convert to shapes splits it into slices and labels you move one by one. An arrow [docked on a slice](/support/slides/draw-shapes-and-arrows) moves with it.
 
@@ -32,7 +36,9 @@ Press [Present](/support/slides/present) and the slide fills the screen. Click o
 
 ## Sharing and comments
 
-You [share a deck](/support/slides/share-and-comment) with people, a team or a link, and anyone with edit access can leave a comment on a text box, an image or a shape.
+You [share a deck](/support/slides/share-and-comment) with people, a team or a link. Everyone with edit access works in it at the same time, so Mees can fix a line on one slide while Bram places the chart on another.
+
+Anyone with edit access can also leave a comment on a text box, an image or a shape. It opens a thread, and you resolve it when the slide is right.
 
 ## PowerPoint files
 
