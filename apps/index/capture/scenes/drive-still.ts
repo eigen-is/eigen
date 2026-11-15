@@ -1,6 +1,7 @@
 // The stills of the Drive page, each in the crew's team drive: the production folder selected, with who it is shared
 // with and the recent activity on everything inside it in the panel beside the list, in light, and the site photos as
-// tiles in the grid view, in dark.
+// tiles in the grid view, in dark. The grid view is saved in the persona's settings, so the tiles film as Nour, who
+// has no other Drive scene.
 
 import type { Scene } from '../lib/scene';
 
@@ -28,7 +29,7 @@ export const driveStillTiles = {
     theme: 'dark',
     viewport: { width: 1600, height: 900 },
     apps: ['drive'],
-    personas: ['saar'],
+    personas: ['nour'],
     setup: async ({ pages: [page], stack }) => {
         await page.goto(stack.appUrl('drive'));
         await page.getByLabel('Grid view').dispatchEvent('click');
@@ -45,13 +46,5 @@ export const driveStillTiles = {
             ),
         );
         await Bun.sleep(2000);
-    },
-    // The view is saved in Saar's settings, so the scene waits until the list view is saved back.
-    teardown: async ({ pages: [page] }) => {
-        const saved = page.waitForResponse(
-            (response) => response.request().method() === 'PUT' && response.url().endsWith('/settings'),
-        );
-        await page.getByLabel('List view').dispatchEvent('click');
-        await saved;
     },
 } satisfies Scene;
