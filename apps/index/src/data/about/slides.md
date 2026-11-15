@@ -3,8 +3,6 @@ title: Slides
 description: Decks you build in the browser and present from it, with PowerPoint files in and out, on your own server.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
 eigen|slides⟩ is the [presentation app](/support/slides/get-started) in Eigen. You build a deck slide by slide, with the slides in a rail on the left and the one you edit in the middle. When it is done, you present it from the same browser tab.
 
 ::: video src="/data/about/media/slides-hero" caption="A line on the sponsor deck changed, and undo takes it back."

@@ -3,8 +3,6 @@ title: Drive
 description: Your files and your team's on your own server, with previews, sharing, activity and versions, and a folder on your computer.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
 eigen|drive⟩ is [where your files live](/support/drive/get-started) in Eigen. You upload files, make folders, and start documents, sheets, decks, drawings, boards and chats from the New button. Everything is private to you until you share it.
 
 ::: video src="/data/about/media/drive-hero" caption="Saar opens the site photos in the crew's team drive and pages through them."

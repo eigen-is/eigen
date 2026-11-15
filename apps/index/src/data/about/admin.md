@@ -3,8 +3,6 @@ title: Admin
 description: People, teams, server settings and backups, for the person who runs the server.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
 eigen|admin⟩ is where you [run the server](/support/admin/get-started). Only admins see it. You add people, put them in teams, and see how much disk each one uses. The owner, the person who set the server up, also gets the settings and the backups.
 
 ::: video src="/data/about/media/admin-hero" caption="Saar's account beside the list of users, then the crew's team with its drive and its members."

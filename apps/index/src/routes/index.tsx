@@ -15,7 +15,6 @@ import { AppShell } from '@workspace/ui/components/layout/app';
 import { Textarea } from '@workspace/ui/components/textarea';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { LandingApps } from '../components/landing-apps';
 import { LandingBlocks } from '../components/landing-blocks';
 import { LandingLinks } from '../components/landing-links';
 import { SitePage } from '../components/site-page';
@@ -73,7 +72,10 @@ function HomeComponent() {
                                 </p>
                             ) : (
                                 <>
-                                    <LandingApps />
+                                    <p>
+                                        Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and
+                                        chat.
+                                    </p>
                                     <p>Works with the apps already on your phone and computer.</p>
                                     <p>Runs on your own server, with your files in open formats.</p>
                                 </>

@@ -1,7 +1,7 @@
 // A throwaway Eigen for the capture tool, beside the owner's own dev stack: it seeds the Tuimel demo world into a fresh
 // data root, then runs the API and the vite of each app the scenes need on agent ports, 86xx and 36xx. Each server
-// runs in its own process group, so stop() also ends the children bun and vite start. A signal stops it too, even
-// while it is still starting.
+// runs in its own process group, so stop() also ends the children bun and vite start. A signal such as Ctrl-C or a
+// closed terminal stops it too, even while it is still starting.
 
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
@@ -21,6 +21,8 @@ const LOG_DIR = join(CAPTURE_ROOT, 'logs');
 const API_PORT = 8690;
 const ANSWER_TIMEOUT_MS = 120_000;
 const EXIT_TIMEOUT_MS = 30_000;
+// SIGHUP comes when the terminal closes, which would otherwise leave the detached servers running.
+const STOP_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 
 const logOf = (name: string) => join(LOG_DIR, `${name}.log`);
 const capturePort = (app: string) => 3600 + APP_PORTS[app] - 3000;
@@ -41,14 +43,12 @@ export async function startStack({ apps }: { apps: readonly string[] }): Promise
     let stopping: Promise<void> | undefined;
     const stop = (): Promise<void> => {
         stopping ??= (async () => {
-            process.off('SIGINT', onSignal);
-            process.off('SIGTERM', onSignal);
+            for (const signal of STOP_SIGNALS) process.off(signal, onSignal);
             await Promise.all(children.map(stopGroup));
         })();
         return stopping;
     };
-    process.on('SIGINT', onSignal);
-    process.on('SIGTERM', onSignal);
+    for (const signal of STOP_SIGNALS) process.on(signal, onSignal);
 
     try {
         rmSync(CAPTURE_ROOT, { recursive: true, force: true });

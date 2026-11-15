@@ -3,9 +3,7 @@ title: Chat
 description: Rooms for the people you work with and for your whole team, with files, mentions and a long list of emotes, on your own server.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
-eigen|chat⟩ is the [messaging app](/support/chat/get-started) in Eigen. Your rooms are in the sidebar, your own at the top and your teams' below them, and you type at the bottom of the room. It is plain text, files and a few slash commands.
+eigen|chat⟩ is the [messaging app](/support/chat/get-started) in Eigen. Your rooms are in the sidebar, your own at the top and your teams' below them, and you type at the bottom of the room. It is plain text, files and slash commands.
 
 ::: video src="/data/about/media/chat-hero" caption="Saar cheers in the production channel, then deletes it again."
 :::

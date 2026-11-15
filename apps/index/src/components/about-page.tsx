@@ -2,7 +2,7 @@
 // body, which ends with a panel for the reader's technical person, and a pager to the previous and the next app. It
 // reads like a blog post, in the reading column with the table of contents in the gutter, and under it a small box for
 // each of Eigen's principles the app holds to, such as CalDAV for Calendar, and a line to the app's whole help section.
-// Narrow screens have no gutter, so there the boxes and the line sit at the body's end, above the technical panel.
+// Narrow screens have no gutter, so there the boxes and the line follow the body and its technical panel.
 
 import type { AboutApp } from '../content/about-apps';
 import { principleLabels } from '../content/about-apps';
@@ -44,21 +44,14 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                     <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
                         <LandingLinks />
                     </div>
-                    <ArticleContent
-                        body={body}
-                        blocks={{
-                            'app-principles': (
-                                <div className="mt-10 grid gap-4 min-[76rem]:hidden">
-                                    <PrincipleBoxes
-                                        app={app}
-                                        className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4"
-                                    />
-                                    <HelpSectionLink app={app} />
-                                </div>
-                            ),
-                        }}
-                        className="mt-8"
-                    />
+                    <ArticleContent body={body} className="mt-8" />
+                    <div className="mt-10 grid gap-4 min-[76rem]:hidden">
+                        <PrincipleBoxes
+                            app={app}
+                            className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4"
+                        />
+                        <HelpSectionLink app={app} />
+                    </div>
                 </article>
                 {(previous || next) && (
                     <nav className="mt-14 grid grid-cols-2 gap-6 border-t pt-6">
