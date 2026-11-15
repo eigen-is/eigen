@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { aboutPageSlug, checkAboutRows, checkPrincipleArticles } from '../../../../scripts/lib/about-pages';
-import { aboutApps } from '../../../content/about-apps';
+import {
+    aboutPageBlocks,
+    aboutPageSlug,
+    checkAboutRows,
+    checkPrincipleApps,
+    checkPrincipleArticles,
+} from '../../../../scripts/lib/about-pages';
+import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
+import { aboutApps, appPrinciples } from '../../../content/about-apps';
 
 const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${app.name}`]));
 
@@ -20,6 +27,16 @@ describe('aboutPageSlug', () => {
     });
 });
 
+describe('aboutPageBlocks', () => {
+    test('the overview draws its app rows at ::: apps', () => {
+        expect(renderMarkdown('::: apps\n:::', aboutPageBlocks('index')).html).toContain('[BLOCK:apps]');
+    });
+
+    test('an app page draws none, so ::: apps there fails the build', () => {
+        expect(() => renderMarkdown('::: apps\n:::', aboutPageBlocks('sheets'))).toThrow('Unknown Markdown block');
+    });
+});
+
 describe('checkAboutRows', () => {
     test('passes a line for every app', () => {
         expect(checkAboutRows(allRows)).toEqual(allRows);
@@ -30,6 +47,16 @@ describe('checkAboutRows', () => {
         const { sheets: _, ...missing } = allRows;
         expect(() => checkAboutRows(missing)).toThrow();
         expect(() => checkAboutRows({ ...allRows, space: 'Your workspace home' })).toThrow();
+    });
+});
+
+describe('checkPrincipleApps', () => {
+    test('passes the principle map, whose apps are all About apps', () => {
+        expect(() => checkPrincipleApps(Object.keys(appPrinciples))).not.toThrow();
+    });
+
+    test('fails naming an app the About pages do not describe', () => {
+        expect(() => checkPrincipleApps(['sheets', 'space'])).toThrow('space');
     });
 });
 

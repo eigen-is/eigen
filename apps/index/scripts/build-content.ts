@@ -4,8 +4,14 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { aboutApps } from '../src/content/about-apps';
-import { aboutPageSlug, checkAboutRows, checkPrincipleArticles } from './lib/about-pages';
+import { aboutApps, appPrinciples } from '../src/content/about-apps';
+import {
+    aboutPageBlocks,
+    aboutPageSlug,
+    checkAboutRows,
+    checkPrincipleApps,
+    checkPrincipleArticles,
+} from './lib/about-pages';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
 import { aboutFrontmatterSchema, blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
 import { parseContentFile } from './lib/frontmatter';
@@ -87,9 +93,6 @@ function buildBlog(): ArticleMeta[] {
     return articles.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
-// The blocks the About pages draw themselves, such as the overview's app rows. No other collection has any.
-const ABOUT_BLOCKS = new Set(['apps']);
-
 // The overview first, then one page per app in the registry's order. Every page ends with the shared note for the
 // technical reader in a panel, appended after the render so nothing in it reaches the table of contents.
 function buildAbout(): ArticleMeta[] {
@@ -101,7 +104,7 @@ function buildAbout(): ArticleMeta[] {
         const slug = aboutPageSlug(file);
         const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
         if (slug !== 'index' && data.rows) throw new Error(`About page ${file} has rows, which only index.md takes`);
-        const { html, toc, media } = renderMarkdown(body, ABOUT_BLOCKS);
+        const { html, toc, media } = renderMarkdown(body, aboutPageBlocks(slug));
         writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, media });
         const article: ArticleMeta = {
             slug,
@@ -131,6 +134,7 @@ function main() {
     mkdirSync(OUT, { recursive: true });
     const blog = buildBlog();
     const support = buildSupport();
+    checkPrincipleApps(Object.keys(appPrinciples));
     checkPrincipleArticles(new Set(support.map((article) => article.slug)));
     const about = buildAbout();
     writeManifest('blog', blog);

@@ -8,7 +8,7 @@ import type { MediaGridData, MediaItem } from '../../scripts/lib/content-types';
 import type { OpenLightbox } from './media-lightbox';
 import { Caption } from './media-lightbox';
 
-const GRID_COLUMNS: Readonly<Record<string, string>> = {
+const GRID_COLUMNS: Readonly<Record<MediaGridData['columns'], string>> = {
     '1': 'grid-cols-1',
     '2': 'grid-cols-1 md:grid-cols-2',
     '3': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
