@@ -130,7 +130,7 @@ describe('engine/book/look-table — LookTable', () => {
             const content = bands.content();
             return JSON.stringify({ looks: content.looks.map((id) => looks.look(id)), bands: content.bands });
         };
-        const sheets = [new Bands(), new Bands()];
+        const sheets = [new Bands([], []), new Bands([], [])];
         for (let i = 0; i < 40; i += 1) {
             const id = looks.intern({ fs: i });
             // Every third look stays worn; a later write takes the others off again.

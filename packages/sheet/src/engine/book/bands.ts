@@ -26,7 +26,7 @@ export class Bands {
     // A sheet from the flat form of a snapshot: per band its first column, n, then n pairs of start row and look
     // index, where index 0 is plain and index i names `looks[i - 1]`. The form may say in two runs or two bands what
     // one holds; columns before its first band are plain.
-    public constructor(flat: readonly number[] = [], looks: readonly number[] = []) {
+    public constructor(flat: readonly number[], looks: readonly number[]) {
         const ids = [0, ...looks];
         for (let at = 0; at < flat.length; at += 2 + 2 * flat[at + 1]) {
             const runs: number[] = [];

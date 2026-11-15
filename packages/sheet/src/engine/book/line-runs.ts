@@ -20,7 +20,7 @@ export class LineRuns {
     private runs: Run[] = [];
 
     // The runs of a snapshot, ascending, which may say in two runs what one holds or list lines with no key.
-    public constructor(content: SheetContent['rows'] = []) {
+    public constructor(content: SheetContent['rows']) {
         for (const [[first, last], attrs] of content) append(this.runs, first, last, keysOf(attrs));
     }
 

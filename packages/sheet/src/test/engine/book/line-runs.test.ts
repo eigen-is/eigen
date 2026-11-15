@@ -40,8 +40,8 @@ describe('engine/book/line-runs — LineRuns', () => {
             {},
             HIDDEN,
         ]);
-        expect(new LineRuns().at(0)).toEqual({});
-        expect(new LineRuns().content()).toEqual([]);
+        expect(new LineRuns([]).at(0)).toEqual({});
+        expect(new LineRuns([]).content()).toEqual([]);
     });
 
     test('a write sets and clears keys over its spans and returns what every line held', () => {
@@ -178,7 +178,7 @@ describe('engine/book/line-runs — the runs are the per-line model’s runs', (
     for (const seed of [3, 17, 2026]) {
         test(`random writes, inserts and deletes with their inverses, seed ${seed}`, () => {
             const random = randomOf(seed);
-            const runs = new LineRuns();
+            const runs = new LineRuns([]);
             const model = new LinesModel();
             const counts = { write: 0, insert: 0, remove: 0, joined: 0 };
             for (let step = 0; step < 4000; step += 1) {

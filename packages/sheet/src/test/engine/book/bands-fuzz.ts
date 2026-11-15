@@ -57,7 +57,7 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
     };
-    const sheets = [0, 1].map(() => ({ bands: new Bands(), grid: new LooksGrid() }));
+    const sheets = [0, 1].map(() => ({ bands: new Bands([], []), grid: new LooksGrid() }));
     const counts: FuzzCounts = { ops: {}, undone: 0, refused: 0, mostBands: 0, mostRuns: 0 };
 
     // A real line, or the grid's end: near a line where the looks change, and now and then anywhere.

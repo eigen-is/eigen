@@ -13,7 +13,7 @@ const row = (r: number): Rect => [r, 0, r, LAST_COLUMN];
 describe('engine/book/bands — Bands', () => {
     describe('reads', () => {
         test('a new sheet is one plain band with no run', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             expect(bands.content()).toEqual({ looks: [], bands: [0, 0] });
             expect(bands.weight()).toEqual({ runs: 0, bands: 1 });
             expect(bands.extent()).toEqual({ lastRow: -1, lastColumn: -1 });
@@ -23,7 +23,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('one cell is three bands and three runs', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([4, 2, 4, 2], () => 9);
             expect(rawBands(bands)).toEqual([0, 0, 2, 3, 0, 0, 4, 9, 5, 0, 3, 0]);
             expect(bands.weight()).toEqual({ runs: 3, bands: 3 });
@@ -33,7 +33,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('spans come in column order then row order, cut to the rectangle, plain ones included', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([2, 1, 5, 2], () => 7);
             bands.format([4, 2, 9, 2], () => 8);
             expect([...bands.spans([3, 0, 6, 3])]).toEqual([
@@ -49,7 +49,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('the extent counts an open run or band only up to where it starts', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([0, 3, 9, 3], () => 1);
             expect(bands.extent()).toEqual({ lastRow: 9, lastColumn: 3 });
             bands.format(column(6), () => 2);
@@ -66,7 +66,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('bandsIn counts the bands that meet the columns', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(3), () => 1);
             bands.format(column(4), () => 2);
             bands.format(column(8), () => 1);
@@ -82,7 +82,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('the joins', () => {
         test('columns that come to hold equal lists are one band, to the left, to the right and between', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([0, 2, 9, 2], () => 1);
             bands.format([0, 3, 9, 3], () => 1);
             expect(rawBands(bands)).toEqual([0, 0, 2, 2, 0, 1, 10, 0, 4, 0]);
@@ -98,7 +98,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a write that changes nothing leaves the bands as they were', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([0, 2, 9, 5], () => 1);
             const before = rawBands(bands);
             bands.format([3, 3, 4, 4], (look) => look);
@@ -108,7 +108,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a row delete that makes two bands equal joins them', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(1), () => 1);
             bands.format([5, 1, 5, 1], () => 2);
             bands.format(column(2), () => 1);
@@ -118,7 +118,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a column delete that brings two equal bands together joins them', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(1), () => 1);
             bands.format(column(2), () => 2);
             bands.format(column(3), () => 1);
@@ -129,7 +129,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('capture and restore', () => {
         test('restore gives back what a format replaced', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([2, 1, 5, 2], () => 7);
             bands.format([4, 2, 9, 4], () => 8);
             const before = rawBands(bands);
@@ -141,11 +141,11 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('restore with shifts lands the looks elsewhere, on these bands or on others', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([2, 1, 5, 2], () => 7);
             bands.format([4, 2, 6, 2], () => 8);
             const spans = bands.capture([2, 1, 6, 2]);
-            const other = new Bands();
+            const other = new Bands([], []);
             other.restore(spans, 100, 10);
             expect(other.capture([102, 11, 106, 12])).toEqual(
                 spans.map((span) => ({
@@ -168,7 +168,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('lines', () => {
         const striped = () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([0, 1, 9, 1], () => 1);
             bands.format([10, 1, 19, 1], () => 2);
             bands.format(column(3), () => 3);
@@ -218,7 +218,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a column inserted beside a styled one only widens its band', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(5), () => 1);
             bands.insertColumns(6, 3, 5);
             expect(rawBands(bands)).toEqual([0, 0, 5, 1, 0, 1, 9, 0]);
@@ -237,7 +237,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('lines that enter at the grid’s end wear the look of the last line that stays', () => {
         test('a row delete that reaches the end, then the insert that undoes it', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([LAST_ROW, 0, LAST_ROW, 0], () => 7);
             const before = rawBands(bands);
             const lost = bands.capture([LAST_ROW - 1, 0, LAST_ROW, LAST_COLUMN]);
@@ -250,7 +250,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('the entering rows wear the row above the delete, not the look that was at the end', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([LAST_ROW - 2, 0, LAST_ROW - 2, 0], () => 5);
             bands.format([LAST_ROW - 1, 0, LAST_ROW, 0], () => 7);
             bands.deleteRows(LAST_ROW - 1, 2);
@@ -261,7 +261,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a row delete above the end lets the last row’s look in', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([LAST_ROW, 0, LAST_ROW, 0], () => 7);
             const before = rawBands(bands);
             const lost = bands.capture([10, 0, 12, LAST_COLUMN]);
@@ -275,7 +275,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a column delete that reaches the end, then the insert that undoes it', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(LAST_COLUMN - 2), () => 5);
             bands.format(column(LAST_COLUMN), () => 7);
             const before = rawBands(bands);
@@ -289,7 +289,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a column delete before the end widens the last band', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(LAST_COLUMN), () => 7);
             bands.deleteColumns(3, 2);
             expect([LAST_COLUMN - 3, LAST_COLUMN - 2, LAST_COLUMN].map((c) => bands.look(9, c))).toEqual([0, 7, 7]);
@@ -299,7 +299,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('wouldPush', () => {
         test('rows: a run that starts among the pushed rows would be pushed off', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             expect(bands.wouldPush(true, 1)).toBe(false);
             expect(bands.wouldPush(true, GRID_ROWS)).toBe(false);
             bands.format([LAST_ROW - 4, 3, LAST_ROW - 4, 3], () => 1);
@@ -310,29 +310,29 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('rows: an open run may lose its tail', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([10, 3, LAST_ROW, 3], () => 1);
             expect(bands.wouldPush(true, 1)).toBe(false);
             expect(bands.wouldPush(true, GRID_ROWS - 11)).toBe(false);
             expect(bands.wouldPush(true, GRID_ROWS - 10)).toBe(true);
-            const whole = new Bands();
+            const whole = new Bands([], []);
             whole.format(column(3), () => 1);
             expect(whole.wouldPush(true, GRID_ROWS - 1)).toBe(false);
             expect(whole.wouldPush(true, GRID_ROWS)).toBe(true);
         });
 
         test('columns: a band that starts among the pushed columns would be pushed off', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             expect(bands.wouldPush(false, 1)).toBe(false);
             expect(bands.wouldPush(false, GRID_COLUMNS)).toBe(false);
             bands.format(column(LAST_COLUMN - 4), () => 1);
             expect(bands.wouldPush(false, 3)).toBe(false);
             expect(bands.wouldPush(false, 4)).toBe(true);
-            const open = new Bands();
+            const open = new Bands([], []);
             open.format([0, 10, LAST_ROW, LAST_COLUMN], () => 1);
             expect(open.wouldPush(false, GRID_COLUMNS - 11)).toBe(false);
             expect(open.wouldPush(false, GRID_COLUMNS - 10)).toBe(true);
-            const whole = new Bands();
+            const whole = new Bands([], []);
             whole.format(WHOLE, () => 1);
             expect(whole.wouldPush(false, GRID_COLUMNS - 1)).toBe(false);
             expect(whole.wouldPush(false, GRID_COLUMNS)).toBe(true);
@@ -341,7 +341,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('the flat form', () => {
         test('looks are listed in order of first use, walking bands then runs', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([5, 1, 5, 1], () => 40);
             bands.format([2, 1, 2, 1], () => 30);
             bands.format([0, 4, 0, 4], () => 40);
@@ -361,7 +361,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a build from the walk gives the same bands', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format([2, 1, 5, 2], () => 7);
             bands.format(row(4), () => 8);
             bands.format(column(9), () => 7);
@@ -372,7 +372,7 @@ describe('engine/book/bands — Bands', () => {
 
     describe('the worst cases, counted', () => {
         test('a whole-column format is one run in one band', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(column(7), () => 1);
             expect(rawBands(bands)).toEqual([0, 0, 7, 1, 0, 1, 8, 0]);
             expect(bands.weight()).toEqual({ runs: 1, bands: 3 });
@@ -381,14 +381,14 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a whole-row format is one write to each band', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             bands.format(row(5), () => 1);
             expect(rawBands(bands)).toEqual([0, 3, 0, 0, 5, 1, 6, 0]);
             expect(bands.weight()).toEqual({ runs: 3, bands: 1 });
         });
 
         test('100 striped whole rows over 26 styled columns stay near 5,507 runs', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             for (let c = 0; c < 26; c += 1) bands.format([0, c, 999, c], () => c + 1);
             expect(bands.weight()).toEqual({ runs: 52, bands: 27 });
             bands.format(row(5), (look) => look + 100);
@@ -400,7 +400,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('1,000 more striped whole rows are the design’s 59,482 runs, and a row insert adds none', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             for (let c = 0; c < 26; c += 1) bands.format([0, c, 999, c], () => c + 1);
             bands.format(row(5), (look) => look + 100);
             for (let r = 10; r < 210; r += 2) bands.format(row(r), (look) => (look % 100) + 200);
@@ -417,7 +417,7 @@ describe('engine/book/bands — Bands', () => {
         });
 
         test('a cell written into a wide band copies that band’s runs twice', () => {
-            const bands = new Bands();
+            const bands = new Bands([], []);
             for (let r = 0; r < 2000; r += 2) bands.format(row(r), () => 1);
             expect(bands.weight()).toEqual({ runs: 2000, bands: 1 });
             expect(bands.bandsIn(7, 7)).toBe(1);
@@ -443,7 +443,7 @@ describe('engine/book/bands — Bands', () => {
             expect(bands.look(500, 500)).toBe(11);
             expect(bands.look(500, 501)).toBe(12);
             // Written cell by cell in one column, it is the same entries.
-            const written = new Bands();
+            const written = new Bands([], []);
             for (let r = 0; r < 1000; r += 1) written.format([r, 3, r, 3], () => 11 + ((r + 1) & 1));
             expect(written.capture([0, 3, LAST_ROW, 3])).toEqual(bands.capture([0, 3, LAST_ROW, 3]));
         });
