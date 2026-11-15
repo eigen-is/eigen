@@ -30,10 +30,12 @@ import { below, FORMULAS, randomBook } from './book-fixtures';
 import type { Model, ModelSheet } from './model';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
-// A formula typed with the name of a sheet that is not there: a rename or an add of a sheet to that name binds it. A
-// book holds it, never an input: typed while a sheet has the name, the engine leaves it unbound (a todo of the laws).
+// A formula typed with the name of a sheet that is not there: a rename or an add of a sheet to that name binds it,
+// and its inverse writes the typed text back. An input typed with the name of a sheet the book holds is bound.
 export const LATER = 'Later';
 const TYPED_WITH_NAME = "='Later'!R1C1+1";
+// Formulas this build cannot evaluate, which keep the value they are given.
+const KEPT = ["='[b.xlsx]S'!R1C1", "=SUM('N:M'!R1C1)"];
 const ORDERS = ['a0', 'a1', 'a2', 'a3', 'a1V'];
 const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
 const RICH: Run[] = [
@@ -107,7 +109,7 @@ function smallRect(random: Random, rows = 14, columns = 8): Rect {
     return [top, left, top + below(random, 4), left + below(random, 3)];
 }
 
-function content(random: Random): CellContent | null {
+function content(random: Random, model: Model): CellContent | null {
     return pick<() => CellContent | null>(random, [
         () => null,
         () => ({ v: below(random, 400) / 4 }),
@@ -116,11 +118,25 @@ function content(random: Random): CellContent | null {
         () => ({ v: pick(random, ['#DIV/0!', '#N/A']), e: 1 }),
         () => ({ f: pick(random, FORMULAS) }),
         () => ({ f: pick(random, FORMULAS), link: LINK }),
+        () => ({ f: typedWithName(random, model) }),
+        () => ({ f: TYPED_WITH_NAME, qp: 1 }),
+        () => ({ f: pick(random, KEPT), v: below(random, 9) }),
+        () => ({ f: pick(random, KEPT), v: '#N/A', e: 1 }),
+        () => ({ f: pick(random, KEPT) }),
+        // A value beside a formula this build evaluates is not kept.
+        () => ({ f: '=R[1]C+1', v: 5 }),
         () => ({ s: RICH }),
+        () => ({ s: RICH, link: LINK, qp: 1 }),
         () => ({ v: 'x', link: LINK }),
         () => ({ v: 'typed', qp: 1 }),
         () => ({ link: LINK }),
     ])();
+}
+
+// A formula typed with the name of a sheet of the book, in any letter case, or of the sheet a formula waits for.
+function typedWithName(random: Random, model: Model): string {
+    const name = random() < 0.3 ? LATER : someSheet(random, model).fields.name;
+    return `='${random() < 0.5 ? name : name.toUpperCase()}'!R1C1+1`;
 }
 
 export function randomInputOp(random: Random, model: Model): InputOp {
@@ -129,14 +145,26 @@ export function randomInputOp(random: Random, model: Model): InputOp {
     const cells = [...places]
         .sort((a, b) => a - b)
         .map(
-            (place): Placed<CellContent | null> => [place % GRID_ROWS, Math.floor(place / GRID_ROWS), content(random)],
+            (place): Placed<CellContent | null> => [
+                place % GRID_ROWS,
+                Math.floor(place / GRID_ROWS),
+                content(random, model),
+            ],
         );
     const op: InputOp = { kind: 'input', sheet: sheetId(random, model), cells };
-    // The rectangles of the runs stand in columns of their own, so they are disjoint.
+    // The rectangles of the runs stand in columns of their own, so they are disjoint. Cells may stand in them.
     if (random() < 0.4) {
         op.runs = Array.from({ length: 1 + below(random, 2) }, (_, at) => {
             const [top, left, bottom, right] = smallRect(random, 14, 2);
-            const filled = pick(random, [null, { v: 7 }, { f: pick(random, FORMULAS) }, { s: RICH }]);
+            const filled = pick<() => CellContent | null>(random, [
+                () => null,
+                () => ({ v: 7 }),
+                () => ({ f: pick(random, FORMULAS) }),
+                () => ({ f: typedWithName(random, model) }),
+                () => ({ f: pick(random, KEPT), v: 3 }),
+                () => ({ s: RICH }),
+                () => ({ v: 'x', link: LINK, qp: 1 }),
+            ])();
             return [[top, 10 + at * 6 + left, bottom, 10 + at * 6 + right], filled] as const;
         });
         if (random() < 0.3) delete op.cells;

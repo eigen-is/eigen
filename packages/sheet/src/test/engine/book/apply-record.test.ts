@@ -116,7 +116,7 @@ describe('engine/book/apply-record — a sheet’s fields', () => {
         expect(applyOps(book, [fields('a', { name: 'later' })])).toEqual([]);
     });
 
-    test.todo('the inverse of a rename that bound a formula puts the formula’s old text back', () => {
+    test('the inverse of a rename that bound a formula puts the formula’s old text back', () => {
         const cells: SheetContent['cells'] = [[0, 0, { f: "='Later'!R1C1+1" }]];
         const book = bookOf(sheetOf('a', {}, { cells }), sheetOf('b', { order: 'a1' }));
         const before = bytes(book);
@@ -183,9 +183,9 @@ describe('engine/book/apply-record — the records of a sheet', () => {
             { kind: 'record', sheet: 'a', type: 'filter', id: 'g', set: { rect: [1, 1, 5, 5] }, whole: 1 },
         ]);
         expect(book.content().sheets[0].records).toEqual({ filter: { g: { rect: [1, 1, 5, 5] } } });
-        expect(inverse.map((op) => [op.type, op.id])).toEqual([
-            ['filter', 'f'],
-            ['filterColumn', 'k'],
+        expect(inverse).toMatchObject([
+            { type: 'filter', id: 'f' },
+            { type: 'filterColumn', id: 'k' },
         ]);
         applyOps(book, inverse);
         expect(bytes(book)).toBe(before);

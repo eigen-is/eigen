@@ -145,6 +145,61 @@ describe('engine/book — the model, rule by rule', () => {
         for (const sheet of sheets) expect(isSheetContent(JSON.parse(JSON.stringify(sheet)))).toBe(true);
     });
 
+    test('a formula typed with a held sheet’s name enters bound, or with #REF! where bound it is too long', () => {
+        const id = 'b'.repeat(60);
+        const long = `="${'a'.repeat(131_010)}"&'N'!R1C1`;
+        const broken = `="${'a'.repeat(131_010)}"&#REF!`;
+        const typed: SheetContent['cells'] = [
+            [0, 0, { f: "='Data'!R1C1+1" }],
+            [1, 0, { f: "='DATA'!R1C1:R2C2" }],
+            [2, 0, { f: long }],
+            [3, 0, { f: "='Later'!R1C1" }],
+        ];
+        const held = [sheetOf('b', { name: 'Data', order: 'a1' }), sheetOf(id, { name: 'N', order: 'a2' })];
+        const expected: SheetContent['cells'] = [
+            [0, 0, { f: '=[b]!R1C1+1' }],
+            [1, 0, { f: '=[b]!R1C1:R2C2' }],
+            [2, 0, { f: broken }],
+            [3, 0, { f: "='Later'!R1C1" }],
+        ];
+        // On load, as the engine binds it.
+        const content = { g: 1, now: 1, seed: 1, sheets: [sheetOf('a', {}, { cells: typed }), ...held] };
+        expect(contentOfModel(modelOf(content)).sheets[0].cells).toEqual(expected);
+        expectReads(new Workbook(content), modelOf(content));
+        // On input.
+        const [input] = sheetsAfter([sheetOf('a'), ...held], { kind: 'input', sheet: 'a', cells: typed });
+        expect(input.cells).toEqual(expected);
+        // On an add, the added sheet's own name included, and the formulas of the book that waited for its name.
+        const own: SheetContent['cells'] = [...typed, [4, 0, { f: "='later'!R1C1" }]];
+        const added = sheetOf('c', { name: 'Later', order: 'a3' }, { cells: own });
+        const waiting = sheetOf('a', {}, { cells: [[0, 0, { f: "='Later'!R1C1" }]] });
+        const sheets = sheetsAfter([waiting, ...held], { kind: 'sheet', add: added });
+        expect(sheets.map((sheet) => [sheet.id, sheet.cells])).toEqual([
+            ['a', [[0, 0, { f: '=[c]!R1C1' }]]],
+            ['b', []],
+            [id, []],
+            ['c', [...expected.slice(0, 3), [3, 0, { f: '=[c]!R1C1' }], [4, 0, { f: '=[c]!R1C1' }]]],
+        ]);
+    });
+
+    test('a value beside a formula is held only for one this build cannot evaluate, and not when it is #REF!', () => {
+        const cells: SheetContent['cells'] = [
+            [0, 0, { f: "='[1]N'!R1C1", v: 4 }],
+            [1, 0, { f: "=SUM('N:M'!R1C1)", v: '#N/A', e: 1 }],
+            [2, 0, { f: "='[1]N'!R1C1", v: '#REF!', e: 1 }],
+            [3, 0, { f: "='[1]N'!R1C1" }],
+            [4, 0, { f: '=R1C1+1', v: 5 }],
+        ];
+        const content = { g: 1, now: 1, seed: 1, sheets: [sheetOf('a', {}, { cells })] };
+        expect(contentOfModel(modelOf(content)).sheets[0].cells).toEqual([
+            ...cells.slice(0, 2),
+            [2, 0, { f: "='[1]N'!R1C1" }],
+            [3, 0, { f: "='[1]N'!R1C1" }],
+            [4, 0, { f: '=R1C1+1' }],
+        ]);
+        expectReads(new Workbook(content), modelOf(content));
+    });
+
     test('deleting the last shown sheet is refused, and deleting a hidden one is not', () => {
         const sheets = [sheetOf('a'), sheetOf('b', { hide: 1, order: 'a1' })];
         expect(after(sheets, { kind: 'sheet', delete: 'a' })).toBe('last-sheet');
