@@ -13,7 +13,7 @@ import type { Schema } from '@tiptap/pm/model';
 import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import { MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
@@ -33,6 +33,7 @@ import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
 import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
+import type { Contacts } from '../lib/contacts/contacts';
 import type { Drive } from '../lib/drive';
 import { textToHtml } from '../lib/mail/mail-parser/html';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../lib/mount/container-dbs';
@@ -275,25 +276,36 @@ async function main(): Promise<void> {
     const userForRole = (role: LeadRole): User => lookup(userByKey, personaByRole(role).key);
     const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key, MAIL_DOMAIN);
 
-    // --- Avatars: each persona's portrait goes through the upload a user makes, so it sets user.image the same
-    // way. ---
-    const seedAvatar = async (user: User, fixtureFile: string): Promise<void> => {
+    // A portrait fixture uploaded into a book's avatar store, the upload a person makes from the card dialog.
+    const uploadPortrait = (contacts: Contacts, fixtureFile: string): Promise<string> =>
+        contacts.uploadAvatar(
+            new File([readFileSync(join(AVATARS_DIR, fixtureFile))], fixtureFile, { type: 'image/jpeg' }),
+        );
+
+    // --- Own cards: every account's portrait goes through that upload, and a persona's card also gets the job title,
+    // the festival and a phone. An update of your own card goes through pushUserProfile, which stores the avatar
+    // and sets user.image. ---
+    const seedOwnCard = async (
+        user: User,
+        avatarFile: string,
+        details?: Pick<CreateContactInput, 'jobTitle' | 'company' | 'phone'>,
+    ): Promise<void> => {
         const contacts = await resolveContacts(user, user.id);
         const me = await contacts.getMe();
         if (!me) throw new Error(`No own card for ${user.email}`);
-        const uploadedPath = await contacts.uploadAvatar(
-            new File([readFileSync(join(AVATARS_DIR, fixtureFile))], fixtureFile, { type: 'image/jpeg' }),
-        );
         const { id, ...fields } = me;
-        // An update of your own card goes through pushUserProfile, which stores the avatar and sets user.image.
-        await contacts.updateContact(id, { ...fields, avatar: uploadedPath });
+        await contacts.updateContact(id, { ...fields, ...details, avatar: await uploadPortrait(contacts, avatarFile) });
     };
     for (const persona of PERSONAS) {
-        await seedAvatar(lookup(userByKey, persona.key), persona.avatar);
+        await seedOwnCard(lookup(userByKey, persona.key), persona.avatar, {
+            jobTitle: persona.title,
+            company: ORG_NAME,
+            phone: [persona.phone],
+        });
     }
     const adminUser = await getUserByEmail(ADMIN_EMAIL);
     if (!adminUser) throw new Error('The admin is missing after setup');
-    await seedAvatar(adminUser, ADMIN_AVATAR);
+    await seedOwnCard(adminUser, ADMIN_AVATAR);
 
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');
@@ -309,6 +321,13 @@ async function main(): Promise<void> {
     const cookieMatch = setCookie.match(/(?:__Secure-|__Host-)?better-auth\.session_token=[^;,]+/);
     if (!cookieMatch) throw new Error('Could not obtain an admin session token');
     const adminHeaders = new Headers({ cookie: cookieMatch[0] });
+
+    // The leads have signed in before, so the admin's user list shows when each was last active. The sessions are
+    // not kept.
+    for (const persona of PERSONAS) {
+        if (!persona.role) continue;
+        await auth.api.signInEmail({ body: { email: emailFor(persona.key, MAIL_DOMAIN), password: PERSONA_PASSWORD } });
+    }
 
     // --- Team (the whole crew shares one workspace): the default team, which every persona joined
     // with the org, renamed from the org's name to the crew's. ---
@@ -334,10 +353,11 @@ async function main(): Promise<void> {
         console.warn('team avatar seed failed:', err instanceof Error ? err.message : err);
     }
 
-    // --- Team home: enable the calendar (starts disabled) and add the shared mount. ---
+    // --- Team home: enable the calendar (starts disabled) and add the shared mount, raised above the default quota
+    // for the crew's photos. ---
     const teamHome = await getTeamHome(`team_${teamId}`);
     await teamHome.settings.set({ calendar: { enabled: true } });
-    const mount = await teamHome.addMount({ name: TEAM_MOUNT_NAME });
+    const mount = await teamHome.addMount({ name: TEAM_MOUNT_NAME, maxSizeMB: 100 });
     const teamMountId = mount.id;
     const teamDrive = teamHome.drive;
     const teamRoot = await teamDrive.getRootFolder(teamMountId);
@@ -728,7 +748,7 @@ async function main(): Promise<void> {
             return {
                 email: emailFor(persona.key, MAIL_DOMAIN),
                 name: persona.name,
-                status: 'accepted',
+                status: event.replies?.[persona.key] ?? 'accepted',
                 role: 'required',
             };
         });
@@ -749,7 +769,7 @@ async function main(): Promise<void> {
         });
     }
 
-    // --- Shifts: one event in each persona's own calendar, which their home makes on first open. ---
+    // --- Shifts: personal lines in each persona's own calendar, which their home makes on first open. ---
     for (const shift of SHIFTS) {
         const owner = lookup(userByKey, shift.persona);
         const { calendar } = await getHome(owner.id);
@@ -934,11 +954,24 @@ async function main(): Promise<void> {
         }
     }
 
-    // --- Contacts: the external ecosystem in a few leads' address books. ---
+    // --- Contacts: the external ecosystem in a few leads' address books, with their labels and portraits. ---
     for (const contact of CONTACTS) {
         const owner = userForRole(contact.owner);
         const contacts = await resolveContacts(owner, owner.id);
-        await contacts.addContact(contactInput(contact));
+        const labelIds = new Map((await contacts.getLabels()).map((label) => [label.name, label.id]));
+        for (const name of contact.labels ?? []) {
+            if (labelIds.has(name)) continue;
+            // A new label takes the next accent color after the ones the book holds.
+            labelIds.set(
+                name,
+                await contacts.addLabel({ name, color: EIGEN_ACCENT_COLORS_SHUFFLED[labelIds.size].value }),
+            );
+        }
+        await contacts.addContact({
+            ...contactInput(contact),
+            labels: contact.labels?.map((name) => lookup(labelIds, name)),
+            avatar: contact.photo ? await uploadPortrait(contacts, contact.photo) : '',
+        });
     }
 
     // --- Personal-drive files shared person-to-person (shared-with-me variety). ---

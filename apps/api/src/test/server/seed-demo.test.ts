@@ -9,6 +9,7 @@ import { readChartSpec } from '@workspace/lib/charts';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { textToParagraphHtml } from '@workspace/lib/html';
+import type { EventData } from '@workspace/lib/types/calendar';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
@@ -522,6 +523,13 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 `SELECT p.name FROM paths p JOIN paths m ON p.parentId = m.id WHERE m.parentId = '${planId}' AND m.name = 'media'`,
             ).map((row) => row.name);
             expect(planMedia).toContain(figures[0].attrs?.['mediaName']);
+            // ...and Timo's power sum as one displayed equation, its LaTeX kept for the panel.
+            const planEquations = planNodes.filter((node) => node.type === 'equation');
+            expect(planEquations.length).toBe(1);
+            expect(planEquations[0].attrs?.['display']).toBe(true);
+            expect(planEquations[0].attrs?.['mathml']).toContain(
+                '<annotation encoding="application/x-tex">38 + 22 + 14 + 6 = 80\\,\\text{kW} \\le 2 \\times 60\\,\\text{kVA} \\times 0.8 = 96\\,\\text{kW}</annotation>',
+            );
             const cards = [...ydoc.getMap<Y.Map<unknown>>('comments').values()].map((card) => ({
                 id: card.get('id') as string,
                 color: card.get('color') as string,
@@ -705,6 +713,22 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 readMessage(join(root, 'home', production[0].id), quoteMail.subject),
             ).attachments;
             expect(quoteParts.some((part) => part.contentType === XLSX_MIME && part.size > 1000)).toBe(true);
+            // ...and Bram's reply to the culture fund carries the budget it says is attached.
+            const budgetParts = parseMail(readMessage(financeHome, 'Re: Grant paperwork')).attachments;
+            expect(budgetParts.map((part) => part.filename)).toContain('tuimel budget.xlsx');
+
+            // Not every guest accepted: the replies a team event names are the attendees' statuses.
+            const repliedEvents = query<{ title: string; data: string }>(
+                calendarDb,
+                "SELECT title, data FROM events WHERE title IN ('Go / no-go meeting', 'Strike')",
+            );
+            const statusOf = (title: string, key: string) => {
+                const data: EventData = JSON.parse(repliedEvents.find((row) => row.title === title)?.data ?? '{}');
+                return data.attendees?.find((attendee) => attendee.email === `${key}@${MAIL_DOMAIN}`)?.status;
+            };
+            expect(statusOf('Go / no-go meeting', 'joris')).toBe('tentative');
+            expect(statusOf('Strike', 'lieke')).toBe('declined');
+            expect(statusOf('Strike', 'saar')).toBe('accepted');
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.
             const assignees = query<{ id: string }>(
