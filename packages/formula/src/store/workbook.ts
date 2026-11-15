@@ -79,7 +79,7 @@ export class Workbook {
 
     public constructor(sources: readonly SheetSource[]) {
         for (const source of sources) {
-            this.free(source.name, null);
+            this.checkName(source.name, null);
             this.insert(this.adopt(this.read(source)), this.held.length);
         }
         this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
@@ -103,7 +103,7 @@ export class Workbook {
 
     // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is
     // typed with would read either of them.
-    public free(name: string, holder: Sheet | null): void {
+    public checkName(name: string, holder: Sheet | null): void {
         const key = sheetNameKey(name);
         for (const sheet of this.held) {
             if (sheet !== holder && sheetNameKey(sheet.name) === key) throw new Error(`Sheet name ${name} is in use`);

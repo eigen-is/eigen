@@ -192,7 +192,7 @@ Stored text writes a sheet as its id in brackets, `[id]!`, and reads a bracket b
 
 ## Two sheets never share a name
 
-A load, `addSheet` and `renameSheet` refuse a name another sheet has, by a throw before anything changed (`Workbook.free`). Two names are compared as a formula compares them, by `sheetNameKey`: Excel's upper case, each character on its own. So `Data` beside `data` is refused and `Straße` beside `STRASSE` is not, and a sheet may take its own name in another case. With two sheets of one name, a name typed in a third case would read either.
+A load, `addSheet` and `renameSheet` refuse a name another sheet has, by a throw before anything changed (`Workbook.checkName`). Two names are compared as a formula compares them, by `sheetNameKey`: Excel's upper case, each character on its own. So `Data` beside `data` is refused and `Straße` beside `STRASSE` is not, and a sheet may take its own name in another case. With two sheets of one name, a name typed in a third case would read either.
 
 ## A load reads its source to the end before the workbook holds any of it
 

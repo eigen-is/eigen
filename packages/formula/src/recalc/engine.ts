@@ -17,7 +17,7 @@ import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes' | 'read' | 'free'>;
+    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes' | 'read' | 'checkName'>;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -71,7 +71,7 @@ export class Engine {
         // The source is the host's code, so what is refused is checked once it has run.
         const draft = this.workbook.read(source);
         if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
-        this.workbook.free(source.name, null);
+        this.workbook.checkName(source.name, null);
         return this.calc.addSheet(draft, place);
     }
 
@@ -82,7 +82,7 @@ export class Engine {
     }
 
     public renameSheet(sheet: string, name: string): EditResult {
-        this.workbook.free(name, this.workbook.known(sheet));
+        this.workbook.checkName(name, this.workbook.known(sheet));
         return this.calc.edit({ kind: ChangeKind.RenameSheet, sheet, name });
     }
 
@@ -91,8 +91,8 @@ export class Engine {
         this.calc.edit({ kind: ChangeKind.MoveSheet, sheet, place });
     }
 
-    // Computes the formulas that the writes and edits since the last recalc reach: one that came with a value and
-    // reads nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
+    // Computes the formulas the writes and edits since the last recalc reach: one that came with a value other than
+    // #REF! and reads nothing written keeps it. After `cap` formulas the pass stops, and the next one goes on.
     public recalc(cap: number, now = 0, seed = 0): RecalcResult {
         return this.calc.pass(cap, now, seed);
     }
@@ -121,7 +121,7 @@ export class Engine {
         return this.workbook.sheets[place].id;
     }
 
-    // The sheet of a cell a host names, which must exist, as the cell must on the grid, with the value it is to hold.
+    // The sheet of a cell a host names: it must exist, as the cell must on the grid, and its value be one to hold.
     private cell(sheet: string, row: number, column: number, value: Literal | null = null): Sheet {
         const found = this.workbook.known(sheet);
         admit(row, column, value);
