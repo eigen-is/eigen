@@ -67,8 +67,7 @@ export function decodeBook(text: string): BookContent | null {
     if (!isRecord(value) || Object.keys(value).length !== 7) return null;
     const { f, g, now, seed, computed, formulas, sheets } = value;
     if (f !== FORMAT || !isGeneration(g) || !isNow(now) || !isSeed(seed) || typeof computed !== 'boolean') return null;
-    if (!Array.isArray(formulas) || !formulas.every((formula) => typeof formula === 'string')) return null;
-    if (!Array.isArray(sheets)) return null;
+    if (!Array.isArray(formulas) || !Array.isArray(sheets)) return null;
     const decoded: SheetContent[] = [];
     for (const sheet of sheets) {
         if (!isRecord(sheet) || !Array.isArray(sheet['cells'])) return null;
