@@ -20,6 +20,8 @@ A team gets its own drive, on the server's disk or in an [S3 bucket](/support/ad
 
 [People from outside](/support/admin/guests) sign in with a code by mail and see only what was shared with them.
 
+![Guests: Hein from the fencing hire, the one person from outside, with his email address](/data/about/media/admin-still-guests.webp)
+
 ## Server settings
 
 The owner's [Settings page](/support/admin/server-settings) shows the version, the free disk and the HTTPS certificate. It sets who Eigen's own mail comes from, with a button that sends you a test mail.
