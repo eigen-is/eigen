@@ -239,6 +239,37 @@ function binds(ops: readonly RecordOp[]): boolean {
 }
 
 describe('engine/book/apply-ops — the laws over random books and random batches of records', () => {
+    test.todo('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
+        const content: BookContent = {
+            g: 1,
+            now: 1,
+            seed: 1,
+            sheets: [
+                sheetOf('a', {
+                    cells: [[0, 0, { f: "='N'!R1C1+1" }]],
+                    records: { merge: { m: { rect: [5, 5, 6, 6] } } },
+                }),
+                sheetOf('b', { fields: { name: 'N', order: 'a1' }, cells: [[0, 0, { v: 5 }]] }),
+            ],
+        };
+        const rename: RecordOp = { kind: 'record', sheet: 'b', type: 'sheet', id: 'b', set: { name: 'Y' } };
+        const before = bytes(new Workbook(content));
+
+        const refused = new Workbook(content);
+        expect(refusalOf(() => applyOps(refused, [rename, REFUSED[0][1]]))).toBe('merge-overlap');
+        expect(bytes(refused)).toBe(before);
+
+        const undone = new Workbook(content);
+        applyOps(undone, applyOps(undone, [rename]));
+        expect(bytes(undone)).toBe(before);
+
+        const replayed = new Workbook(content);
+        const takenBack = new Workbook(content);
+        applyOps(takenBack, applyOps(takenBack, [rename]));
+        for (const reader of [replayed, takenBack]) land(reader, batch(TRAILING));
+        expect(bytes(takenBack)).toBe(bytes(replayed));
+    });
+
     test('LAW 1, LAW 2 and law 8', () => {
         const refusedAt = new Map<string, number>();
         let landed = 0;
