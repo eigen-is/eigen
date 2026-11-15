@@ -5,18 +5,18 @@ description: Kanban boards you share with your team, with a comment thread on ev
 
 <!-- DRAFT: the owner rewrites this -->
 
-eigen|stickies⟩ is the kanban board in Eigen. Columns run left to right, each holds cards, and every card has a title, a description, a color and its own comment thread ([Get started with Stickies](/support/stickies/get-started)).
+eigen|stickies⟩ is the [kanban board](/support/stickies/get-started) in Eigen. Columns run left to right, each holds cards, and every card has a title, a description, a color and its own comment thread.
 
 ::: video src="/data/about/media/stickies-hero" caption="Saar drags the wristband print job into doing, and undo puts it back."
 :::
 
 ## Columns and cards
 
-Drag a card to another column, or up and down in its own, and Ctrl+Z puts it back if you got it wrong ([Move and reorder cards](/support/stickies/move-cards)). A description can hold a checklist, and the card shows how far along it is, such as 2/3. Hold Alt while you drag and you leave a copy ([Add and edit cards](/support/stickies/add-and-edit-cards)). Columns rename, reorder and delete, and undo brings a deleted column back ([Customize columns](/support/stickies/column-settings)).
+[Drag a card](/support/stickies/move-cards) to another column, or up and down in its own, and Ctrl+Z puts it back if you got it wrong. A description can hold a [checklist](/support/stickies/add-and-edit-cards), and the card shows how far along it is, such as 2/3. Hold Alt while you drag and you leave a copy. Columns [rename, reorder and delete](/support/stickies/column-settings), and undo brings a deleted column back.
 
 ## A thread on every card
 
-Open a card and its thread is under the description. The card face counts the replies, and a red dot says something in it is new for you. The link icon copies a link that lands straight on the card ([Discuss a card with comments](/support/stickies/card-comments)). A card also carries files: an image becomes its cover, and a document goes on as a link rather than a copy ([Attach files to a card](/support/stickies/attach-files-to-a-card)).
+Open a card and [its thread](/support/stickies/card-comments) is under the description. The card face counts the replies, and a red dot says something in it is new for you. The link icon copies a link that lands straight on the card. A card also [carries files](/support/stickies/attach-files-to-a-card): an image becomes its cover, and a document goes on as a link rather than a copy.
 
 ::: carousel
 ![The Sunday wind cover card open on its thread, with the tent hire's contact card in Saar's reply](/data/about/media/stickies-comment)
@@ -25,8 +25,8 @@ Open a card and its thread is under the description. The card face counts the re
 
 ## Who does what
 
-Right-click a card and pick someone under Assign to. They get a notification, and at most one email an hour per board. Resolve a card when it is done; it stays where it is with a tick ([Assign and resolve cards](/support/stickies/assign-and-resolve-cards)). The Filter menu narrows the board to one person, a few colors or what is still open. ([Filter the cards on a board](/support/stickies/filter-a-board)).
+Right-click a card and pick someone under [Assign to](/support/stickies/assign-and-resolve-cards). They get a notification, and at most one email an hour per board. Resolve a card when it is done; it stays where it is with a tick. The [Filter menu](/support/stickies/filter-a-board) narrows the board to one person, a few colors or what is still open.
 
 ## Sharing a board
 
-A board is private until you share it, with people, a team or a link ([Share a board and manage access](/support/stickies/share-board)). Like a document, a board keeps a version history you can restore from ([See and restore previous versions of a file](/support/drive/file-versions)).
+A board is private until you [share it](/support/stickies/share-board), with people, a team or a link. Like a document, a board keeps a [version history](/support/drive/file-versions) you can restore from.

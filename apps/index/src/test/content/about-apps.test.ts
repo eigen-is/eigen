@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { getSection } from '../../components/support/sections';
 import { aboutApps, principles } from '../../content/about-apps';
 import { getSupportArticles } from '../../content/manifest';
 
@@ -35,5 +36,9 @@ describe('aboutApps', () => {
     test('chat and stickies hold none', () => {
         const none = aboutApps.filter((app) => app.principles.length === 0).map((app) => app.slug);
         expect(none).toEqual(['stickies', 'chat']);
+    });
+
+    test("an app's slug names its help section, which its page links", () => {
+        expect(aboutApps.filter((app) => !getSection(app.slug))).toEqual([]);
     });
 });

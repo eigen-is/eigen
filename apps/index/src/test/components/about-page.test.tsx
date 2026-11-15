@@ -72,6 +72,22 @@ describe('AboutPage', () => {
         expect(html).not.toContain('data-slot="badge"');
     });
 
+    test("an app page links its whole help section under the boxes, and again at the body's end", async () => {
+        const [gutter, column] = (await renderPage()).split('site-reading-column');
+        for (const part of [gutter, column]) {
+            expect(part.match(/href="\/support\/mail"/g)?.length).toBe(1);
+            expect(part).toContain('All Mail help articles');
+        }
+    });
+
+    test('an app with no principles still links its help section', async () => {
+        const [gutter, column] = (await renderPage(undefined, undefined, 'chat')).split('site-reading-column');
+        for (const part of [gutter, column]) {
+            expect(part.match(/href="\/support\/chat"/g)?.length).toBe(1);
+            expect(part).toContain('All Chat help articles');
+        }
+    });
+
     test('the body has no formats panel', async () => {
         expect(await renderPage(undefined, undefined, 'sheets')).not.toContain('Open, and yours to take');
     });

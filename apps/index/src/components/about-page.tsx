@@ -1,8 +1,8 @@
 // An app's About page: the headline your own|sheets⟩ with the page's description and the admin's links, then the
 // body, which ends with a panel for the reader's technical person, and a pager to the previous and the next app. It
 // reads like a blog post, in the reading column with the table of contents in the gutter, and under it a small box for
-// each of Eigen's principles the app holds to, such as CalDAV for Calendar. Narrow screens have no gutter, so there
-// the boxes sit at the body's end, above the technical panel.
+// each of Eigen's principles the app holds to, such as CalDAV for Calendar, and a line to the app's whole help section.
+// Narrow screens have no gutter, so there the boxes and the line sit at the body's end, above the technical panel.
 
 import type { AboutApp } from '../content/about-apps';
 import { principleLabels } from '../content/about-apps';
@@ -32,6 +32,7 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                     <>
                         <ArticleToc toc={page.toc} />
                         <PrincipleBoxes app={app} className="grid gap-4" />
+                        <HelpSectionLink app={app} />
                     </>
                 }
             >
@@ -47,10 +48,13 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                         body={body}
                         blocks={{
                             'app-principles': (
-                                <PrincipleBoxes
-                                    app={app}
-                                    className="mt-10 grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4 min-[76rem]:hidden"
-                                />
+                                <div className="mt-10 grid gap-4 min-[76rem]:hidden">
+                                    <PrincipleBoxes
+                                        app={app}
+                                        className="grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-4"
+                                    />
+                                    <HelpSectionLink app={app} />
+                                </div>
                             ),
                         }}
                         className="mt-8"
@@ -99,5 +103,17 @@ function PrincipleBoxes({ app, className }: { app: AboutApp; className: string }
                 </a>
             ))}
         </div>
+    );
+}
+
+// An app's help section has the app's slug as its id, such as /support/mail.
+function HelpSectionLink({ app }: { app: AboutApp }) {
+    return (
+        <a
+            href={`/support/${app.slug}`}
+            className="px-5 text-sm leading-snug text-muted-foreground transition-colors hover:text-foreground"
+        >
+            All {app.name} help articles&nbsp;<span aria-hidden>→</span>
+        </a>
     );
 }
