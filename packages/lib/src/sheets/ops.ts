@@ -1,4 +1,4 @@
-// The ops of the workbook model: seven kinds of edit, such as typing into cells, a format over a range, a record made
+// The ops of the workbook model: six kinds of edit, such as typing into cells, a format over a range, a record made
 // or changed, or rows inserted, and the cell, look and record shapes they carry. A writer builds them, the log holds
 // them in batches, and every reader applies them in order to the same state. They live in lib so the sheet engine, the
 // editor and the server share one vocabulary without React.
@@ -130,7 +130,6 @@ export type FormatOp =
           set?: LineAttrs;
           clear?: (keyof LineAttrs)[];
       };
-export type ResultOp = { kind: 'result'; sheet: string; cells: Placed<{ f: string; v?: Scalar; e?: 1 }>[] };
 // Distributive, so that a field of one kind of conditional-format rule can be set: the rule type is a union.
 type FieldsOf<R> = R extends unknown ? { [K in keyof R]?: R[K] | null } : never;
 export type RecordOp = {
@@ -147,7 +146,7 @@ export type LinesOp = {
 };
 export type MoveOp = { kind: 'move'; sheet: string; from: Rect; toSheet: string; toRow: number; toColumn: number };
 export type SheetOp = { kind: 'sheet'; add: SheetContent } | { kind: 'sheet'; delete: string };
-export type Op = InputOp | FormatOp | ResultOp | RecordOp | LinesOp | MoveOp | SheetOp;
+export type Op = InputOp | FormatOp | RecordOp | LinesOp | MoveOp | SheetOp;
 export type OpKind = Op['kind'];
 export type Batch = { g: number; ops: Op[] };
 export type OpReferences = { media: string[]; comments: string[] };
@@ -159,7 +158,6 @@ export function opReferences(op: Op): OpReferences {
     switch (op.kind) {
         case 'input':
         case 'format':
-        case 'result':
         case 'lines':
         case 'move':
             return names;
@@ -185,7 +183,6 @@ export function isStructural(op: Op): boolean {
             return true;
         case 'input':
         case 'format':
-        case 'result':
         case 'record':
             return false;
     }
