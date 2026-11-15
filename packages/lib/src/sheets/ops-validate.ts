@@ -10,7 +10,16 @@ import { isValidFractionalIndex } from '../vector/fractional-index';
 import { isSafeMediaName } from '../vector/media-refs';
 import { STROKE_STYLES } from '../vector/types';
 import { BORDER_STYLES } from './borders';
-import { MAX_BATCH_JSON, MAX_ID_LENGTH, MAX_ORDER_KEY, MAX_SHORT_TEXT, MAX_TEXT_LENGTH } from './limits';
+import {
+    MAX_BATCH_JSON,
+    MAX_ID_LENGTH,
+    MAX_ORDER_KEY,
+    MAX_RECORDS_PER_TYPE,
+    MAX_RUNS_PER_CELL,
+    MAX_SHORT_TEXT,
+    MAX_STYLE_RUNS,
+    MAX_TEXT_LENGTH,
+} from './limits';
 import type {
     Batch,
     CellAttrs,
@@ -32,7 +41,7 @@ type Check = (value: unknown) => boolean;
 type Entries = Record<string, unknown>;
 
 // A batch of ops from its JSON text, when the text parses, every op in it is valid and the text fits the batch budget,
-// else null. A batch of sheet ops alone is left out of the budget, since a sheet's add is bounded by the workbook's limits.
+// else null. A batch of sheet ops alone is left out of the budget, since a sheet's add has bounds of its own.
 export function readBatch(text: string): Batch | null {
     let value: unknown;
     try {
@@ -57,6 +66,7 @@ export function isSheetContent(value: unknown): value is SheetContent {
         isWhole(fields, SHEET_FIELDS) &&
         isCellList(cells, isCellRecord) &&
         Array.isArray(looks) &&
+        looks.length <= MAX_STYLE_RUNS &&
         looks.every(isLook) &&
         isBands(bands, looks.length) &&
         isLineRuns(rows, GRID_ROWS) &&
@@ -189,7 +199,7 @@ function isStoredKey(value: unknown): boolean {
 
 // The runs' texts join into the cell's value, so together they keep the bound of one text.
 function isRichText(value: unknown): boolean {
-    if (!Array.isArray(value)) return false;
+    if (!Array.isArray(value) || value.length > MAX_RUNS_PER_CELL) return false;
     let length = 0;
     for (const run of value) {
         if (!isRecord(run) || typeof run['v'] !== 'string') return false;
@@ -336,7 +346,11 @@ function isSheetRecords(value: unknown): boolean {
         const kind = type === 'sheet' ? undefined : RECORD_KINDS.get(type);
         const records = value[type];
         if (kind === undefined || !isRecord(records)) return false;
-        for (const id in records) if (!isId(id) || !kind.whole(records[id])) return false;
+        let count = 0;
+        for (const id in records) {
+            count += 1;
+            if (count > MAX_RECORDS_PER_TYPE || !isId(id) || !kind.whole(records[id])) return false;
+        }
     }
     return true;
 }

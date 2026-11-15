@@ -22,6 +22,11 @@ export const MAX_BATCH_JSON = 4 * 1024 * 1024;
 export const MAX_TEXT_LENGTH = MAX_STORED_LENGTH;
 export const MAX_SHORT_TEXT = 256;
 
+// PROVISIONAL, the owner hears the number: records of one type on one sheet, which `fits` does not weigh.
+export const MAX_RECORDS_PER_TYPE = 100_000;
+// PROVISIONAL, the owner hears the number: rich-text runs in one cell, which `fits` does not weigh.
+export const MAX_RUNS_PER_CELL = 1_000;
+
 export type WorkbookWeight = { readonly slots: number; readonly runs: number; readonly bands: number };
 
 export function fits(weight: WorkbookWeight): RefusalKey | null {

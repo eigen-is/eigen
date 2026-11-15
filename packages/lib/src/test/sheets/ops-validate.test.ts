@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { isRecord } from '../../core/guards';
-import { MAX_BATCH_JSON, MAX_ID_LENGTH, MAX_ORDER_KEY, MAX_SHORT_TEXT, MAX_TEXT_LENGTH } from '../../sheets/limits';
+import {
+    MAX_BATCH_JSON,
+    MAX_ID_LENGTH,
+    MAX_ORDER_KEY,
+    MAX_RECORDS_PER_TYPE,
+    MAX_RUNS_PER_CELL,
+    MAX_SHORT_TEXT,
+    MAX_STYLE_RUNS,
+    MAX_TEXT_LENGTH,
+} from '../../sheets/limits';
 import type { Batch, CellAttrKey, Op, SheetContent } from '../../sheets/ops';
 import { LOOK_KEYS } from '../../sheets/ops';
 import { isSheetContent, readBatch } from '../../sheets/ops-validate';
@@ -430,6 +439,14 @@ describe('4. values and formulas', () => {
         expect(accepts(cell({ s: [{ v: 'x'.repeat(MAX_TEXT_LENGTH) }, { v: 'y' }] }))).toBe(false);
     });
 
+    test('rich text has at most MAX_RUNS_PER_CELL runs, in an input and in a sheet add', () => {
+        const runs = (count: number) => ({ s: Array.from({ length: count }, () => ({ v: 'a' })) });
+        expect(accepts(cell(runs(MAX_RUNS_PER_CELL)))).toBe(true);
+        expect(accepts(cell(runs(MAX_RUNS_PER_CELL + 1)))).toBe(false);
+        expect(accepts(added({ cells: [[0, 0, runs(MAX_RUNS_PER_CELL)]] }))).toBe(true);
+        expect(accepts(added({ cells: [[0, 0, runs(MAX_RUNS_PER_CELL + 1)]] }))).toBe(false);
+    });
+
     test('a link and a quote prefix are content', () => {
         expect(accepts(cell({ v: 'x', link: { type: 'sheet', address: 's2' }, qp: 1 }))).toBe(true);
         expect(accepts(cell({ link: { type: 'email', address: 'a' } }))).toBe(false);
@@ -807,6 +824,19 @@ describe('the sheet content', () => {
         ).toBe(false);
         expect(rows([[[0, 3], { bl: 1 }]])).toBe(false);
         expect(isSheetContent({ ...SHEET, columns: [[[0, GRID_COLUMNS], { size: 3 }]] })).toBe(false);
+    });
+
+    test('has at most MAX_STYLE_RUNS looks', () => {
+        expect(isSheetContent({ ...SHEET, looks: new Array(MAX_STYLE_RUNS).fill({}), bands: [] })).toBe(true);
+        expect(isSheetContent({ ...SHEET, looks: new Array(MAX_STYLE_RUNS + 1).fill({}), bands: [] })).toBe(false);
+    });
+
+    test('has at most MAX_RECORDS_PER_TYPE records of each type', () => {
+        const comments = (count: number) =>
+            Object.fromEntries(Array.from({ length: count }, (_, index) => [`c${index}`, { row: 0, column: 0 }]));
+        const merges = { m1: { rect: [0, 0, 1, 1] } };
+        expect(accepts(added({ records: { comment: comments(MAX_RECORDS_PER_TYPE), merge: merges } }))).toBe(true);
+        expect(accepts(added({ records: { comment: comments(MAX_RECORDS_PER_TYPE + 1), merge: merges } }))).toBe(false);
     });
 
     test('has records by type, each whole', () => {
