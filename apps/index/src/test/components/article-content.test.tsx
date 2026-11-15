@@ -10,9 +10,9 @@ const { renderToString } = await import('react-dom/server');
 const { ArticleContent } = await import('../../components/article-content');
 const { renderMarkdown } = await import('../../../scripts/lib/render-markdown');
 
-const RealMatchMedia = globalThis.matchMedia;
+const RealMatchMedia = window.matchMedia;
 afterEach(() => {
-    globalThis.matchMedia = RealMatchMedia;
+    window.matchMedia = RealMatchMedia;
     jest.useRealTimers();
 });
 
@@ -24,7 +24,7 @@ function stubReducedMotion(reduce: boolean) {
         addEventListener: (_: string, listener: () => void) => listeners.add(listener),
         removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
     };
-    Object.assign(globalThis, { matchMedia: () => query });
+    Object.assign(window, { matchMedia: () => query });
     return (next: boolean) =>
         act(async () => {
             query.matches = next;
@@ -33,8 +33,8 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 async function renderVideo() {
-    const html = '<figure class="media-video"><video muted loop playsinline></video></figure>';
-    const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
+    const body = renderMarkdown('::: video src="/data/about/media/sheets-chart"\n:::');
+    const { container } = await renderInDocument(<ArticleContent body={body} />);
     const video = container.querySelector('video');
     if (!video) throw new Error('No video rendered');
     return video;
@@ -43,8 +43,7 @@ async function renderVideo() {
 // A carousel from the real build, three images unless the test writes its own. happy-dom lays nothing out, so each
 // slide gets its place 600px apart.
 async function renderCarousel(markdown = '::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::') {
-    const { html } = renderMarkdown(markdown);
-    const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
+    const { container } = await renderInDocument(<ArticleContent body={renderMarkdown(markdown)} />);
     for (const [i, slide] of container.querySelectorAll('.media-carousel-slide').entries()) {
         Object.defineProperty(slide, 'offsetLeft', { value: i * 600 });
     }
@@ -192,20 +191,20 @@ describe('autoplay carousel', () => {
 
 describe('page blocks', () => {
     test('each draws what the page gives for it where the Markdown put it', async () => {
-        const { html } = renderMarkdown(
+        const body = renderMarkdown(
             'Before\n\n::: apps\n:::\n\nBetween\n\n::: principles\n:::\n\nAfter',
             new Set(['apps', 'principles']),
         );
         const { container } = await renderInDocument(
-            <ArticleContent body={{ html, media: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
+            <ArticleContent body={body} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
         );
         expect(container.textContent?.replace(/\s+/g, ' ').trim()).toBe('Before Rows Between Panels After');
     });
 
     test('draw outside the prose, which holds the Markdown around them', async () => {
-        const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter', new Set(['apps']));
+        const body = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter', new Set(['apps']));
         const { container } = await renderInDocument(
-            <ArticleContent body={{ html, media: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
+            <ArticleContent body={body} blocks={{ apps: <p className="rows">Rows</p> }} />,
         );
         const prose = Array.from(container.querySelectorAll('.eigen-prose.site-prose'), (div) => div.textContent);
         expect(prose).toEqual(['Before\n', '\nAfter\n']);
@@ -282,8 +281,8 @@ describe('lightbox', () => {
     });
 
     test('a carousel image opens with the carousel as its group, at the image clicked', async () => {
-        const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
+        const body = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
         await clickOn(container, '.media-carousel-slide:nth-child(2) img');
         expect(lightbox()).toMatchObject({ src: '/b.webp', caption: 'b' });
         await act(async () => lightbox()?.next?.click());
@@ -298,8 +297,8 @@ describe('lightbox', () => {
     });
 
     test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
-        const { html } = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
+        const body = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
         await clickOn(container, '.media-carousel-slide video');
         const press = (target: Element | null | undefined, handled = false) =>
             act(async () => {
@@ -326,12 +325,26 @@ describe('lightbox', () => {
     });
 
     test('a click on the open picture leaves the group as it is', async () => {
-        const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
+        const body = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
         await clickOn(container, '.media-carousel-slide img');
         await act(async () => document.querySelector<HTMLElement>('[role="dialog"] img')?.click());
         expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp' });
         expect(lightbox()?.next).not.toBeNull();
+    });
+
+    test('a looping video opens alone, as a loop with its caption as text', async () => {
+        const body = renderMarkdown('::: video src="/data/about/media/sheets-chart" caption="A *bar* grows"\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        await clickOn(container, '.media-video video');
+        expect(lightbox()).toMatchObject({
+            count: 1,
+            src: '/data/about/media/sheets-chart.h264.mp4',
+            caption: 'A bar grows',
+            prev: null,
+            next: null,
+        });
+        expect(document.querySelector<HTMLVideoElement>('[role="dialog"] video')?.loop).toBe(true);
     });
 
     test('an image inside a link follows the link instead', async () => {
@@ -392,11 +405,11 @@ const PAGE = [
 describe('prerender', () => {
     test('the server markup holds every slide with its alt text and captions, and no film that starts itself', () => {
         const page = document.createElement('div');
-        page.innerHTML = renderToString(<ArticleContent body={{ html: renderMarkdown(PAGE).html, media: [] }} />);
+        page.innerHTML = renderToString(<ArticleContent body={renderMarkdown(PAGE)} />);
         expect(page.querySelector('.media-carousel-slide img[src="/a.webp"][alt="A table"]')).not.toBeNull();
         const captions = Array.from(page.querySelectorAll('figcaption'), (caption) => caption.innerHTML);
         expect(captions).toEqual(['A table', 'A film', 'The <em>budget</em>', 'A bar grows']);
-        expect(page.querySelector('.media-carousel-strip')?.getAttribute('aria-label')).toBe('The *budget*');
+        expect(page.querySelector('.media-carousel-strip')?.getAttribute('aria-label')).toBe('The budget');
         expect(page.querySelectorAll('.media-carousel-dot[aria-label="Slide 2 of 2"]').length).toBe(1);
         expect(page.querySelector('.media-carousel-prev')?.hasAttribute('disabled')).toBe(true);
         const videos = Array.from(page.querySelectorAll('video'));
@@ -418,10 +431,10 @@ describe('prerender', () => {
     });
 
     test('the first client render is the server markup, also for a reader who asked for less motion', async () => {
-        stubReducedMotion(true);
-        const element = <ArticleContent body={{ html: renderMarkdown(PAGE).html, media: [] }} />;
+        const element = <ArticleContent body={renderMarkdown(PAGE)} />;
         const page = document.createElement('div');
         page.innerHTML = renderToString(element);
+        stubReducedMotion(true);
         document.body.append(page);
         const complaints = spyOn(console, 'error');
         const mismatches: unknown[] = [];

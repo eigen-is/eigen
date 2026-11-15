@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
-import type { MediaGridData } from '../../../../scripts/lib/content-types';
+import type { MediaBlock } from '../../../../scripts/lib/content-types';
 import { markdownBlocks } from '../../../../scripts/lib/markdown-blocks';
 import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
 
@@ -19,7 +19,7 @@ afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
 
 // The HTML of the Markdown, and what each media block it left a marker for shows.
 function build(markdown: string, pageBlocks: ReadonlySet<string> = new Set()) {
-    const media: MediaGridData[] = [];
+    const media: MediaBlock[] = [];
     const html = new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir, pageBlocks, media }).render(markdown);
     return { html, media };
 }
@@ -38,13 +38,18 @@ describe('grid', () => {
         expect(html).toBe('<p>[BLOCK:0]</p>\n<p>Between</p>\n<p>[BLOCK:1]</p>\n');
         expect(media).toEqual([
             {
+                kind: 'grid',
                 columns: '3',
                 items: [
                     { src: '/mail.webp', type: 'image', caption: 'The inbox', thumbnail: '/mail-small.webp' },
-                    { src: '/plain.webp', type: 'image', caption: '', thumbnail: undefined },
+                    { src: '/plain.webp', type: 'image', caption: undefined, thumbnail: undefined },
                 ],
             },
-            { columns: '1', items: [{ src: '/film.mp4', type: 'video', caption: 'A film', poster: '/film.webp' }] },
+            {
+                kind: 'grid',
+                columns: '1',
+                items: [{ src: '/film.mp4', type: 'video', caption: 'A film', poster: '/film.webp' }],
+            },
         ]);
     });
 
@@ -57,14 +62,16 @@ describe('grid', () => {
 });
 
 describe('video', () => {
-    test('a video block is a muted loop with both encodes and a poster, which the page starts', () => {
-        const html = render('::: video src="/data/about/media/a" caption="Two people at once"\n:::');
-        expect(html).toContain('<figure class="media-video"><video muted loop playsinline preload="metadata"');
-        expect(html).not.toContain('autoplay');
-        expect(html).toContain('poster="/data/about/media/a.webp"');
-        expect(html).toContain('src="/data/about/media/a.av1.mp4"');
-        expect(html).toContain('src="/data/about/media/a.h264.mp4"');
-        expect(html).toContain('<figcaption>Two people at once</figcaption>');
+    test('a video block leaves a marker, its files and its caption, as Markdown and as text', () => {
+        const { html, media } = build('::: video src="/data/about/media/a" caption="Two *people* at once"\n:::');
+        expect(html).toBe('<p>[BLOCK:0]</p>\n');
+        expect(media).toEqual([
+            {
+                kind: 'video',
+                src: '/data/about/media/a',
+                caption: { html: 'Two <em>people</em> at once', text: 'Two people at once' },
+            },
+        ]);
     });
 
     test('a video whose files are missing fails the build', () => {
@@ -83,34 +90,42 @@ describe('video', () => {
 });
 
 describe('carousel and side by side', () => {
-    test('a carousel sets each image on a slide captioned with its alt text, with dots and buttons below', () => {
-        const html = render('::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n:::');
-        expect(html).toContain('<figure class="media-carousel">');
-        expect(html).toContain('<div class="media-carousel-strip" tabindex="0" aria-label="The budget">');
-        expect(html).toContain(
-            '<figure class="media-carousel-slide"><img src="/a.webp" alt="a"><figcaption>a</figcaption></figure>',
+    test('a carousel leaves a marker and a slide per image line, captioned with its alt text', () => {
+        const { html, media } = build(
+            '::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n\n![](/c.webp)\n:::',
         );
-        expect(html).toContain('<img src="/b.webp" alt="b bold"><figcaption>b <em>bold</em></figcaption>');
-        expect(html).toContain(
-            '<button type="button" class="media-carousel-dot" aria-label="Slide 1 of 2" aria-current="true"></button>',
-        );
-        expect(html).toContain('<button type="button" class="media-carousel-dot" aria-label="Slide 2 of 2"></button>');
-        expect(html).toContain('class="media-carousel-prev" aria-label="Previous slide" disabled>');
-        expect(html).toContain('class="media-carousel-next" aria-label="Next slide">');
-        expect(html.match(/<img /g)?.length).toBe(2);
-        expect(html).toContain('<figcaption>The budget</figcaption></figure>');
+        expect(html).toBe('<p>[BLOCK:0]</p>\n');
+        expect(media).toEqual([
+            {
+                kind: 'carousel',
+                slides: [
+                    { type: 'image', src: '/a.webp', caption: { html: 'a', text: 'a' } },
+                    { type: 'image', src: '/b.webp', caption: { html: 'b <em>bold</em>', text: 'b bold' } },
+                    { type: 'image', src: '/c.webp', caption: undefined },
+                ],
+                autoplay: false,
+                caption: { html: 'The budget', text: 'The budget' },
+            },
+        ]);
     });
 
-    test('an image line without a file ending is a video slide, a loop the page starts, captioned with its alt text', () => {
-        const html = render('::: carousel\n![Two at once](/data/about/media/a)\n![b](/b.webp)\n:::');
-        expect(html).toContain(
-            '<figure class="media-carousel-slide"><video muted loop playsinline preload="metadata" poster="/data/about/media/a.webp"><source src="/data/about/media/a.av1.mp4"',
-        );
-        expect(html).toContain(
-            '<source src="/data/about/media/a.h264.mp4" type="video/mp4"></video><figcaption>Two at once</figcaption></figure>',
-        );
-        expect(html).not.toContain('autoplay');
-        expect(html.match(/<img /g)?.length).toBe(1);
+    test('an image line without a file ending is a video slide, captioned with its alt text', () => {
+        const { media } = build('::: carousel\n![Two at once](/data/about/media/a)\n![b](/b.webp)\n:::');
+        expect(media).toEqual([
+            {
+                kind: 'carousel',
+                slides: [
+                    {
+                        type: 'video',
+                        src: '/data/about/media/a',
+                        caption: { html: 'Two at once', text: 'Two at once' },
+                    },
+                    { type: 'image', src: '/b.webp', caption: { html: 'b', text: 'b' } },
+                ],
+                autoplay: false,
+                caption: undefined,
+            },
+        ]);
     });
 
     test('a video slide whose files are missing fails the build', () => {
@@ -120,26 +135,24 @@ describe('carousel and side by side', () => {
     });
 
     test('an autoplay carousel says so to the page', () => {
-        expect(render('::: carousel autoplay caption="Shots"\n![a](/a.webp)\n:::')).toContain(
-            '<figure class="media-carousel" data-autoplay>',
-        );
-        expect(render('::: carousel\n![a](/a.webp)\n:::')).toContain('<figure class="media-carousel">');
+        expect(build('::: carousel autoplay caption="Shots"\n![a](/a.webp)\n:::').media).toMatchObject([
+            { autoplay: true, caption: { text: 'Shots' } },
+        ]);
     });
 
-    test('a carousel of one image has both buttons off', () => {
-        const html = render('::: carousel\n![a](/a.webp)\n:::');
-        expect(html).toContain('aria-label="Slides"');
-        expect(html).toContain('class="media-carousel-next" aria-label="Next slide" disabled>');
-    });
-
-    test('a carousel line that is not one image fails the build', () => {
+    test('a carousel line that is not one image, or a carousel with none, fails the build', () => {
         expect(() => render('::: carousel\n![a](/a.webp) and text\n:::')).toThrow('one image per line');
+        expect(() => render('::: carousel\n:::')).toThrow('needs an image');
     });
 
-    test('an app name in a caption is set as a ket', () => {
-        expect(renderMarkdown('::: carousel caption="eigen|sheets⟩ live"\n![a](/a.webp)\n:::').html).toContain(
-            '<figcaption><span class="ket-name">eigen|sheets⟩</span> live</figcaption>',
-        );
+    test('an app name in a caption is set as a ket, and stays plain in its text', () => {
+        const { media } = renderMarkdown('::: carousel caption="eigen|sheets⟩ live"\n![In eigen|mail⟩](/a.webp)\n:::');
+        expect(media).toMatchObject([
+            {
+                slides: [{ caption: { html: 'In <span class="ket-name">eigen|mail⟩</span>', text: 'In eigen|mail⟩' } }],
+                caption: { html: '<span class="ket-name">eigen|sheets⟩</span> live', text: 'eigen|sheets⟩ live' },
+            },
+        ]);
     });
 
     test('a side-by-side pair wraps its images', () => {
@@ -171,7 +184,7 @@ describe('mistakes fail the build', () => {
     });
 
     test('a block opener right after a paragraph still opens a block', () => {
-        expect(render('Intro text\n::: carousel\n![a](/a.webp)\n:::')).toContain('media-carousel');
+        expect(render('Intro text\n::: carousel\n![a](/a.webp)\n:::')).toBe('<p>Intro text</p>\n<p>[BLOCK:0]</p>\n');
     });
 
     test('a block with no closing fence names its line', () => {
