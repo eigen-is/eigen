@@ -106,8 +106,7 @@ describe('opReferences', () => {
     test('a comment moved to another cell or deleted names nothing: only its make brings the card in', () => {
         const moved: Op = { kind: 'record', sheet: 's1', type: 'comment', id: 'card-a', set: { row: 9 } };
         const deleted: Op = { kind: 'record', sheet: 's1', type: 'comment', id: 'card-a' };
-        const wholeWithNoSet: Op = { kind: 'record', sheet: 's1', type: 'comment', id: 'card-a', whole: 1 };
-        expect([moved, deleted, wholeWithNoSet].map(opReferences)).toEqual([NONE, NONE, NONE]);
+        expect([moved, deleted].map(opReferences)).toEqual([NONE, NONE]);
     });
 });
 
@@ -153,11 +152,19 @@ describe('the shapes an op may take', () => {
             { kind: 'result', sheet: 's', cells: [[0, 0, { f: '=NOW()', v: 1 }]] },
             // @ts-expect-error an input empties with null content, never with a list of rectangles
             { kind: 'input', sheet: 's', clear: [[0, 0, 1, 1]] },
+            // @ts-expect-error a record made whole holds every field of its type
+            { kind: 'record', sheet: 's', type: 'comment', id: 'c', whole: 1 },
+            // @ts-expect-error a rule changes only whole, so a field of one kind never lands in a rule of another
+            { kind: 'record', sheet: 's', type: 'conditionalFormat', id: 'r', set: { conditionValue: [6] } },
+            // @ts-expect-error a sheet's record is made only by a `sheet` op
+            { kind: 'record', sheet: 's', type: 'sheet', id: 's', whole: 1, set: { name: 'S', order: 'a' } },
+            // @ts-expect-error a sheet's record is never deleted by a record op
+            { kind: 'record', sheet: 's', type: 'sheet', id: 's' },
         ];
-        expect(rows.length).toBe(9);
+        expect(rows.length).toBe(13);
     });
 
-    test('a conditional-format rule is made with its own fields, and one of them edited alone', () => {
+    test('a conditional-format rule is made with its own fields, or deleted', () => {
         const rows: Op[] = [
             {
                 kind: 'record',
@@ -174,7 +181,7 @@ describe('the shapes an op may take', () => {
                     conditionValue: [5],
                 },
             },
-            { kind: 'record', sheet: 's', type: 'conditionalFormat', id: 'r', set: { conditionValue: [6] } },
+            { kind: 'record', sheet: 's', type: 'conditionalFormat', id: 'r' },
         ];
         expect(rows.length).toBe(2);
     });

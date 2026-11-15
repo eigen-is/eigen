@@ -988,10 +988,7 @@ describe('never throws', () => {
             else if (Array.isArray(node)) node.splice(Number(key ?? 0), 1);
             else delete node[String(key)];
             const text = JSON.stringify(batchOf(op)).replace(`"${INFINITE}"`, '1e400');
-            let batch: Batch | null = null;
-            expect(() => {
-                batch = readBatch(text);
-            }).not.toThrow();
+            const batch = readBatch(text);
             // A key no type lists, or a number no double holds, is never valid.
             if ((mutation === 0 && !Array.isArray(node)) || mutation === 2) expect(batch).toBeNull();
             if (batch === null) {

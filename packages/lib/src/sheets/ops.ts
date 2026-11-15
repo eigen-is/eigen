@@ -130,11 +130,24 @@ export type FormatOp =
           set?: LineAttrs;
           clear?: (keyof LineAttrs)[];
       };
-// Distributive, so that a field of one kind of conditional-format rule can be set: the rule type is a union.
-type FieldsOf<R> = R extends unknown ? { [K in keyof R]?: R[K] | null } : never;
-export type RecordOp = {
-    [T in RecordType]: { kind: 'record'; sheet: string; type: T; id: string; set?: FieldsOf<Records[T]>; whole?: 1 };
-}[RecordType];
+// A record made whole, or some of its fields set with null clearing one, or deleted with no `set`. A rule changes only
+// whole, so its fields always agree with its kind, and a sheet's record is made only by a `sheet` op.
+type Make<T extends RecordType> = { kind: 'record'; sheet: string; type: T; id: string; set: Records[T]; whole: 1 };
+type Change<T extends RecordType, S> = {
+    kind: 'record';
+    sheet: string;
+    type: T;
+    id: string;
+    set?: S;
+    whole?: undefined;
+};
+type FieldsOf<R> = { [K in keyof R]?: R[K] | null };
+type Remade = Exclude<RecordType, 'sheet' | 'conditionalFormat'>;
+export type RecordOp =
+    | { [T in Remade]: Make<T> | Change<T, FieldsOf<Records[T]>> }[Remade]
+    | Make<'conditionalFormat'>
+    | Change<'conditionalFormat', never>
+    | { kind: 'record'; sheet: string; type: 'sheet'; id: string; set: FieldsOf<SheetFields>; whole?: undefined };
 export type LinesOp = {
     kind: 'lines';
     sheet: string;
@@ -164,8 +177,8 @@ export function opReferences(op: Op): OpReferences {
         case 'move':
             return names;
         case 'record':
-            if (op.type === 'image' && typeof op.set?.mediaName === 'string') names.media.push(op.set.mediaName);
-            if (op.type === 'comment' && op.set && op.whole) names.comments.push(op.id);
+            if (op.type === 'image' && op.set?.mediaName) names.media.push(op.set.mediaName);
+            if (op.type === 'comment' && op.whole) names.comments.push(op.id);
             return names;
         case 'sheet':
             if ('add' in op) {
