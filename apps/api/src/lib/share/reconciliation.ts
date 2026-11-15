@@ -22,10 +22,10 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
         try {
             // A team source has no user row, and a team shares drive paths only.
             const parsed = parseOwnerId(fromUserId);
+            const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
             if (parsed.type === 'team') {
                 const team = await getTeam(parsed.id);
                 if (!team) continue;
-                const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
                 for (const path of paths) {
                     await sendToHome(user.id, { type: 'drive:acl-change', path, acl: path.acl, actorName: team.name });
                 }
@@ -35,7 +35,6 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             const owner = await getUserById(fromUserId);
             if (!owner) continue;
 
-            const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
             for (const path of paths) {
                 await sendToHome(user.id, {
                     type: 'drive:acl-change',
@@ -49,7 +48,7 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             // A guest's home has no calendar, so a pull would scan the owner's calendar for nothing.
             if (isGuest(user)) continue;
             const source = [fromUserId].filter(homeFolderExists);
-            const shares = await getFromHomes(source, 'calendar:shares', { email: user.email, teamIds });
+            const shares = await getFromHomes(source, 'calendar:shared-with', { email: user.email, teamIds });
             for (const result of shares.get(fromUserId) ?? []) {
                 await sendToHome(user.id, {
                     type: 'calendar:share',

@@ -5,7 +5,7 @@
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { calendarShareTag } from '@workspace/lib/notification/tags';
-import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarShare, SharedCalendar, SharedWithMeCalendar } from '@workspace/lib/types/calendar';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq, sql } from 'drizzle-orm';
@@ -157,7 +157,7 @@ export function getSharedWith(
     calendar: Calendar,
     userEmail: string,
     teamIds: readonly string[],
-): { calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[] {
+): SharedWithMeCalendar[] {
     return calendar.db
         .select()
         .from(schema.calendars)

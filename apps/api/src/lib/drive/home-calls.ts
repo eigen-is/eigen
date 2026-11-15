@@ -1,9 +1,8 @@
 // The questions another home may ask of a drive, such as which paths a user watches there, each with the handler that
-// answers it on the owner's Home. Callers ask through the home relay's getFromHomes. The relay spreads this table
-// into its own while it loads, so this file imports types only: a value import that led back to the relay would run
-// the relay first, and it would read this table before it exists.
+// answers it on the owner's Home. Callers ask through the home relay's getFromHomes. This file imports types only,
+// which `bun run check` gates.
 
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
 import type { Answerers } from '../home/home-relay';
 import type { Memberships, User } from '../user';
 
@@ -13,7 +12,7 @@ export type DriveQueries = {
         ask: {
             user: User;
             memberships: Memberships;
-            rows: readonly { ownerId: string; mountId: string; pathId: string }[];
+            rows: readonly DrivePathRef[];
             mimeTypePrefix: string;
         };
         answer: DrivePath[];

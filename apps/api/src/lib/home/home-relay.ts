@@ -4,7 +4,7 @@
 // slow. Today every call runs in this process. When homes live in several processes, only this file has to change.
 
 import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -30,7 +30,7 @@ import { TeamHome } from './team-home';
 // home does the whole job itself, its events and notifications included.
 type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
-    | { type: 'drive:recent-open'; ownerId: string; mountId: string; pathId: string }
+    | ({ type: 'drive:recent-open' } & DrivePathRef)
     | {
           type: 'calendar:share';
           ownerId: string;
@@ -195,7 +195,7 @@ export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
 // the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
 export async function broadcastToOwnerAndMembers(
     ownerId: string,
-    members: EffectiveMember[] | Promise<EffectiveMember[]>,
+    members: readonly EffectiveMember[] | Promise<readonly EffectiveMember[]>,
     event: SSEvent,
 ): Promise<void> {
     await sendToHome(ownerId, { type: 'broadcast', event });

@@ -10,6 +10,7 @@ import type {
     CalendarShare,
     FreeBusyBlock,
     SharedCalendar,
+    SharedWithMeCalendar,
 } from '@workspace/lib/types/calendar';
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
@@ -312,10 +313,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // `:ownerId` is the queried calendar owner, not the caller, and the answer holds only the caller's own shares.
     .get(
         '/calendar/:ownerId/shared-with-me',
-        async ({
-            params,
-            user,
-        }): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> => {
+        async ({ params, user }): Promise<SharedWithMeCalendar[]> => {
             requireNonGuest(user);
             const memberships = await getMemberships(user.id);
             const calendar = await routedCalendar(params.ownerId);

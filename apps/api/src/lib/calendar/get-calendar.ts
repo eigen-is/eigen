@@ -99,48 +99,47 @@ export async function routedCalendar(ownerId: string): Promise<Calendar | null> 
 export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     const { calendar } = await getHome(user.id);
     const { teamIds } = await getMemberships(user.id);
-    const asker = { email: user.email, teamIds };
-
     const ownTeams = teamIds.map(teamOwnerId);
     const teamOwners = ownTeams.filter(homeFolderExists);
-    const [calendarsOf, teamSharesOf] = await Promise.all([
-        getFromHomes(teamOwners, 'calendar:calendars', null),
-        getFromHomes(teamOwners, 'calendar:shares', asker),
-    ]);
-    // A null answer says the team has no calendar, which removes its entries. A team that gave no answer keeps them.
-    for (const [teamOwner, items] of calendarsOf) {
-        if (!items) {
-            await calendar.removeSharedEntriesForOwner(teamOwner);
-            continue;
-        }
-        // A team whose shares gave no answer is skipped whole: a default of read would lower a write share.
-        const shares = teamSharesOf.get(teamOwner);
-        if (!shares) continue;
-        for (const item of items) {
-            const permission = shares.find((share) => share.calendarId === item.id)?.permission ?? 'read';
-            await calendar.ensureSharedEntry(teamOwner, item.id, item.name, permission);
-        }
-    }
-
     // Joining or leaving a team runs no share propagation, so every entry of an owner outside the user's teams is
     // resolved again here, from the shares that owner still has for them.
     const entries = await calendar.getSharedCalendars();
     const otherOwners = [...new Set(entries.map((entry) => entry.ownerUserId))].filter(
         (ownerId) => !ownTeams.includes(ownerId),
     );
-    const sharesOf = await getFromHomes(otherOwners.filter(homeFolderExists), 'calendar:shares', asker);
+    const [calendarsOf, sharesOf] = await Promise.all([
+        getFromHomes(teamOwners, 'calendar:calendars', null),
+        getFromHomes([...teamOwners, ...otherOwners.filter(homeFolderExists)], 'calendar:shared-with', {
+            email: user.email,
+            teamIds,
+        }),
+    ]);
+    const permissionOf = (ownerId: string, calendarId: string) =>
+        sharesOf.get(ownerId)?.find((share) => share.calendarId === calendarId)?.permission;
+
+    // Only an answer removes an entry or sets its permission: a home that gave none keeps what the user has.
+    for (const [teamOwner, items] of calendarsOf) {
+        if (!items) {
+            await calendar.removeSharedEntriesForOwner(teamOwner);
+            continue;
+        }
+        if (!sharesOf.has(teamOwner)) continue;
+        for (const item of items) {
+            await calendar.ensureSharedEntry(teamOwner, item.id, item.name, permissionOf(teamOwner, item.id) ?? 'read');
+        }
+    }
+
     for (const entry of entries) {
         if (!otherOwners.includes(entry.ownerUserId)) continue;
-        const shares = sharesOf.get(entry.ownerUserId);
-        const resolved = shares?.find((share) => share.calendarId === entry.calendarId)?.permission;
+        const resolved = permissionOf(entry.ownerUserId, entry.calendarId);
         if (resolved) {
             if (resolved !== entry.permission) {
                 await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
             }
         } else if (parseOwnerId(entry.ownerUserId).type === 'team') {
-            // A team the user is not in: the entry goes when the team answers without it or is gone. A team that
-            // gave no answer keeps it, as a missed answer must not drop a share.
-            if (shares || !(await getOwnerExists(entry.ownerUserId))) await calendar.deleteSharedCalendar(entry.id);
+            if (sharesOf.has(entry.ownerUserId) || !(await getOwnerExists(entry.ownerUserId))) {
+                await calendar.deleteSharedCalendar(entry.id);
+            }
         }
     }
 

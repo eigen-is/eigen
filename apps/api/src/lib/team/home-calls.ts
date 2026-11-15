@@ -1,7 +1,6 @@
 // The questions another home may ask of a team's home, such as which mounts it has, each with the handler that answers
-// it on the team's Home. Callers ask through the home relay's getFromHomes, and ask only the teams the user belongs to.
-// The relay spreads this table into its own while it loads, so this file imports types only: a value import that led
-// back to the relay would run the relay first, and it would read this table before it exists.
+// it on the team's Home. Callers ask through the home relay's getFromHomes. This file imports types only, which
+// `bun run check` gates.
 
 import type { MyTeam, TeamQuotaOverrides } from '@workspace/lib/types/settings';
 import type { Answerers } from '../home/home-relay';
@@ -11,6 +10,7 @@ export type TeamQueries = {
     'team:quota-overrides': { ask: null; answer: TeamQuotaOverrides };
 };
 
+// No handler checks a user, since their callers ask only the teams the user belongs to.
 export const answerTeam: Answerers<TeamQueries> = {
     'team:mounts': (home) => {
         const mounts = Object.entries(home.settings.get().mounts ?? {}).filter(([, mount]) => mount.enabled);

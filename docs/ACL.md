@@ -144,7 +144,7 @@ PK: `(fromUserId, targetIdentifier)`. No share data, just the pair. Reconciliati
 Each trigger calls `reconcileShares(user, teamId?)` (`apps/api/src/lib/share/reconciliation.ts`), which reads the registry for the user's own address, or for the `team_<id>` they joined when it gets a `teamId`. Per source it asks the owner's home, through the home relay's `getFromHomes`:
 
 1. `'drive:shared-with'`: shared drive paths
-2. `'calendar:shares'`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
+2. `'calendar:shared-with'`: shared calendar entries, with the strongest permission the user holds by address or through any of their teams. The newcomer has already joined the default team when their address reconciles, so asking by address alone would store a weaker permission than the team gives.
 3. `'calendar:pending-invitations'`: calendar invites (creates linked event copies), without a `teamId` only. An invitation names an address, never a team, and an existing user got theirs when it was sent, so a team join reads none: a read would bring back an invitation the member had removed.
 
 The drive read (`Drive.getAllSharedWith`) includes paths in the trash, because a restore pushes nothing: a newcomer who arrives while a shared path or a folder above it is in the trash gets the row and the notice then, and the path shows in **Shared with me** from the restore on. Every other reader of the owner's shared paths, such as `/shared/by-me` and `Drive.getSharedWith`, leaves trashed paths out.
