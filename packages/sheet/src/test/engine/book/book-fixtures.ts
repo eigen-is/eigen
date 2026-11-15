@@ -3,7 +3,18 @@
 // form of a snapshot worked out here from plain data, without the workbook's own parts.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { CellAttrs, CellRecord, LineAttrs, Placed, Run, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import type {
+    CellAttrs,
+    CellRecord,
+    LineAttrs,
+    LinesOp,
+    MoveOp,
+    Placed,
+    Rect,
+    Run,
+    SheetContent,
+    Span,
+} from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { chartOf, formulaRule, ref } from './records-fixtures';
@@ -19,6 +30,16 @@ export function randomOf(seed: number): Random {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+}
+
+// The op of a line insert or delete on sheet S, its new lines plain when `like` is below 0.
+export function linesOp(rows: boolean, insert: boolean, index: number, count: number, like = -1): LinesOp {
+    return { kind: 'lines', sheet: 'S', rows, insert, index, count, ...(like >= 0 && { like }) };
+}
+
+// The op of a block of sheet S moved to (toRow, toColumn), on S or on `toSheet`.
+export function moveOp(from: Rect, toRow: number, toColumn: number, toSheet = 'S'): MoveOp {
+    return { kind: 'move', sheet: 'S', from, toSheet, toRow, toColumn };
 }
 
 export function below(random: Random, n: number): number {

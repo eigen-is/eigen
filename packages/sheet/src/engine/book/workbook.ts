@@ -23,7 +23,10 @@ import { SheetRecords } from './records';
 // its sheets in tab order.
 type Content = { g: number; now: number; seed: number; sheets: SheetContent[] };
 
-// The parts of one sheet. Its cells are the engine's, under the sheet's id, and its fields are its records'.
+// The parts of one sheet. Its cells are the engine's, under the sheet's id, and its fields are its records'. A part
+// takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an insert pushes
+// something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines` and `move`
+// return what they replaced, removed or covered, as the part's reads list it. Records plan an edit before it writes.
 type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;
@@ -95,7 +98,7 @@ export class Workbook {
         for (const [at, { id, fields, cells, rows, columns, records }] of ordered.entries()) {
             const extras = new Extras();
             for (const [row, column, { s, link, qp }] of cells) {
-                if (s || link || qp) extras.put(row, column, { s, link, qp });
+                if (s || link || qp) extras.write(row, column, { s, link, qp });
             }
             held.set(id, {
                 bands: bands[at],
@@ -144,7 +147,7 @@ export class Workbook {
                 };
                 // A cell that holds only a link or a mark is no cell of the engine's: it is listed in its place
                 // among them.
-                const marked = [...extras.cells()];
+                const marked = extras.content();
                 let next = 0;
                 const listMarkedBefore = (row: number, column: number) => {
                     for (; next < marked.length; next += 1) {
@@ -197,7 +200,7 @@ export class Workbook {
         }
         const moved = this.looks.sweep(worn);
         for (const { bands } of this.sheets.values()) {
-            bands.format([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1], (id) => moved[id]);
+            bands.write([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1], (id) => moved[id]);
         }
         this.swept = this.looks.size;
     }

@@ -26,7 +26,7 @@ describe('the store', () => {
         });
         const above = sheet.records('comment').get('above');
         const rule = sheet.records('validation').get('v');
-        const plan = sheet.planLines({ insert: true, index: 5, count: 1, sheet: 'S', rows: true });
+        const plan = sheet.planLines({ kind: 'lines', insert: true, index: 5, count: 1, sheet: 'S', rows: true });
         if (typeof plan === 'string') throw new Error(plan);
         plan.commit();
         expect(sheet.records('comment').get('above')).toBe(above);
@@ -71,7 +71,7 @@ describe('merges are read through an index', () => {
         expect(merges.merge(11, 9)).toEqual([10, 9, 11, 9]);
         merges.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'a' });
         expect(merges.merge(0, 0)).toBeUndefined();
-        const plan = merges.planLines({ insert: true, index: 0, count: 100, sheet: 'S', rows: true });
+        const plan = merges.planLines({ kind: 'lines', insert: true, index: 0, count: 100, sheet: 'S', rows: true });
         if (typeof plan === 'string') throw new Error(plan);
         plan.commit();
         expect(merges.merge(5, 2)).toBeUndefined();

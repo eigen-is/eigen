@@ -310,9 +310,9 @@ describe('engine/book/workbook — the look sweep', () => {
         wearUnused(book, 70);
         const late = book.looks.intern({ it: 1 });
         expect(late).toBe(73);
-        book.sheets.get('b')?.bands.format([0, 0, 9, 0], () => late);
+        book.sheets.get('b')?.bands.write([0, 0, 9, 0], () => late);
         // No cell wears bold any more, so every look that stays gets a lower id.
-        book.sheets.get('a')?.bands.format([0, 0, 4, 2], () => 0);
+        book.sheets.get('a')?.bands.write([0, 0, 4, 2], () => 0);
         const before = book.content();
 
         book.sweepLooks();
@@ -333,7 +333,7 @@ describe('engine/book/workbook — the look sweep', () => {
         // 99 more looks worn, each on its own row, so a sweep leaves 101 looks and plain.
         for (let row = 10; row < 109; row += 1) {
             const look = book.looks.intern({ ht: row });
-            book.sheets.get('a')?.bands.format([row, 0, row, 0], () => look);
+            book.sheets.get('a')?.bands.write([row, 0, row, 0], () => look);
         }
         wearUnused(book, 200);
         book.sweepLooks();

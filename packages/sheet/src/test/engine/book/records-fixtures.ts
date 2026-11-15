@@ -3,11 +3,11 @@
 // through the store's own writer.
 
 import { expect } from 'bun:test';
-import type { LineEdit } from '@workspace/formula/text';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, parseStored, printA1, printStored } from '@workspace/formula/text';
 import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type {
     ChartRecord,
+    LinesOp,
     MoveOp,
     RecordOp,
     Records,
@@ -26,15 +26,15 @@ export function sheetOf(records: SheetContent['records'] = {}, fields: Partial<S
     return new SheetRecords(id, { name: id, order: id, ...fields }, records);
 }
 
-export function rowsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LineEdit {
-    return { insert, index, count, sheet, rows: true };
+export function rowsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LinesOp {
+    return { kind: 'lines', insert, index, count, sheet, rows: true };
 }
 
-export function columnsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LineEdit {
-    return { insert, index, count, sheet, rows: false };
+export function columnsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LinesOp {
+    return { kind: 'lines', insert, index, count, sheet, rows: false };
 }
 
-export function inverseOf(edit: LineEdit): LineEdit {
+export function inverseOf(edit: LinesOp): LinesOp {
     return { ...edit, insert: !edit.insert };
 }
 
@@ -44,7 +44,7 @@ export function planned(result: Planned | string): Planned {
 }
 
 // Plans the edit on every sheet before any writes, as the applier does, and returns the record ops of all sheets.
-export function editLines(sheets: Iterable<SheetRecords>, edit: LineEdit): RecordOp[] {
+export function editLines(sheets: Iterable<SheetRecords>, edit: LinesOp): RecordOp[] {
     const plans = [...sheets].map((sheet) => planned(sheet.planLines(edit)));
     for (const plan of plans) plan.commit();
     return plans.flatMap((plan) => plan.restore);

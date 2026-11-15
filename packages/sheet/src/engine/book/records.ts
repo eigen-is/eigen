@@ -22,6 +22,7 @@ import { compareRules } from '@workspace/lib/sheets';
 import type {
     ConditionalFormatRecord,
     FieldsOf,
+    LinesOp,
     MoveOp,
     RecordOp,
     Records,
@@ -201,9 +202,9 @@ export class SheetRecords {
         return this.change(op.type, op.id, op.set);
     }
 
-    // Whether an insert of `count` lines would push a record off the grid's end: a comment or a merge on a pushed
-    // line, or a record range that starts or ends on one. A range that reaches the last line is open and passes.
-    public blocksPush(rows: boolean, count: number): boolean {
+    // Whether the insert would push a record off the grid's end: a comment or a merge on a pushed line, or a record
+    // range that starts or ends on one. A range that reaches the last line is open and passes.
+    public wouldPush({ rows, count }: LinesOp): boolean {
         const last = (rows ? GRID_ROWS : GRID_COLUMNS) - 1;
         const pushed = last + 1 - count;
         const spanPushed = (start: number, end: number) => start >= pushed || (end >= pushed && end !== last);
@@ -222,7 +223,7 @@ export class SheetRecords {
 
     // Lines inserted or deleted on this sheet or another: on this one every range, place and the frozen panes move;
     // on any, a rule's formula and a chart's refs follow the lines they name.
-    public planLines(edit: LineEdit): Planned | 'key-too-long' {
+    public planLines(edit: LinesOp): Planned | 'key-too-long' {
         const here = edit.sheet === this.sheet;
         const { rows } = edit;
         const axis: Edit = {
