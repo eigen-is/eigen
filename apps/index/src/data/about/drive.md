@@ -12,13 +12,14 @@ eigen|drive⟩ is where your files live in Eigen. You upload files, make folders
 
 ## Folders and previews
 
-A document, sheet or deck opens in its own editor. Images, PDFs, video, audio and text open in a preview, and so do contact, calendar and saved mail files, which read as their cards, events and message. Space opens a quick look without leaving the list, and the arrow keys move to the next file. From the preview an Excel, Word or PowerPoint file turns into a sheet, document or deck ([Preview a file](/support/drive/preview-a-file)).
+Show a folder as a list or as tiles with thumbnails, sorted by name, size or date ([Sort your files and switch views](/support/drive/sort-and-view)). A document, sheet or deck opens in its own editor. Images, PDFs, video, audio and text open in a preview, and so do contact, calendar and saved mail files, which read as their cards, events and message. Space opens a quick look without leaving the list, and the arrow keys move to the next file. From the preview an Excel, Word or PowerPoint file turns into a sheet, document or deck ([Preview a file](/support/drive/preview-a-file)).
 
 ## Sharing
 
 Share a file or a folder with people, a team or a link, as an Editor or a Viewer. A link still asks for a sign-in; there is no anonymous sharing. An owner can turn off Editors can share, so nobody else hands it on, and Email collaborators writes to everyone on the list with a link to the file ([Share a file or folder](/support/drive/share-a-file)).
 
 ::: carousel
+![The festival's photos as tiles](/data/about/media/drive-still-tiles.webp)
 ![Mees adds the local paper's reporter to the press release draft as a viewer, and cancels before he saves](/data/about/media/drive-share)
 ![The production folder selected, with who it is shared with and the comments on everything inside it](/data/about/media/drive-still-activity.webp)
 :::
