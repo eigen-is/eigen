@@ -725,7 +725,7 @@ describe('8. record', () => {
 
     test('an image names a media file and never a path', () => {
         expect(accepts(record('image', { set: { mediaName: 'a.png' } }))).toBe(true);
-        for (const mediaName of ['', '../a.png', 'a/b.png', 'a\\b', 'a\nb']) {
+        for (const mediaName of ['', '.', '..', '../a.png', 'a/b.png', 'a\\b', 'a\nb']) {
             expect(accepts(record('image', { set: { mediaName } }))).toBe(false);
         }
     });
