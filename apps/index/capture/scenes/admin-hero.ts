@@ -5,15 +5,16 @@
 import { ADMIN_LOCALPART, personaByKey, TEAM_NAME } from '../../../api/src/scripts/demo/content';
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 // The sidebar's empty foot, so the resting pointer lights up no row.
-const REST = { x: 130, y: 640 };
+const REST = { x: 91, y: 448 };
 
 export const adminHero = {
     name: 'admin-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['admin'],
     personas: [ADMIN_LOCALPART],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

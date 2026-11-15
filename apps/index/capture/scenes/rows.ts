@@ -13,6 +13,7 @@ import { ADMIN_LOCALPART, DOCS, KANBAN, SITE_PLAN, SPONSOR_DECK } from '../../..
 import { aboutRowStill } from '../../src/content/about-media';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openBudget } from './budget';
 import { openFestivalWeek } from './festival-week';
 
@@ -20,7 +21,7 @@ const row = (app: string, theme: Scene['theme'], run: Scene['run']): Scene => ({
     name: basename(aboutRowStill(app), '.webp'),
     kind: 'still',
     theme,
-    viewport: { width: 1280, height: 720 },
+    viewport: VIEWPORT,
     apps: [app],
     personas: ['anouk'],
     run,

@@ -1,9 +1,13 @@
 // What a capture scene is: a plain object that names its output, the apps and personas it needs and how it looks, and
-// a run that drives one page per persona. The scene list holds them; the CLI picks the ones named on its command line,
-// films each and hands it this context.
+// a run that drives one page per persona, and the one size most scenes film at. The scene list holds them; the CLI
+// picks the ones named on its command line, films each and hands it this context.
 
 import type { Page } from 'playwright-core';
 import type { Cursor } from './cursor';
+
+// Every scene of one window, film or still, is this size: still the apps' desktop layout, and small enough that their
+// text reads at the width the About column shows a take. Two windows side by side pick their own.
+export const VIEWPORT = { width: 1120, height: 630 };
 
 // The throwaway Eigen a scene films in, which startStack runs.
 export type Stack = {

@@ -4,15 +4,16 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openBudget } from './budget';
 
-const REST = { x: 1400, y: 760 };
+const REST = { x: 980, y: 532 };
 
 export const mailHero = {
     name: 'mail-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['mail', 'sheets'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

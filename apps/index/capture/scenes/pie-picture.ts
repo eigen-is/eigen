@@ -11,6 +11,7 @@ import type { Cursor, Point } from '../lib/cursor';
 import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene, SceneContext } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { openBudget } from './budget';
 import { openSponsorDeck } from './sponsor-deck';
@@ -25,7 +26,7 @@ const DRAWING = 'income picture';
 const pieScene: Pick<Scene, 'kind' | 'theme' | 'viewport'> = {
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
 };
 
 export const vectorPie = {
@@ -94,7 +95,7 @@ async function openCharts({ pages: [page], cursors: [cursor], stack }: SceneCont
     await openBudget(page, stack);
     await page.locator('text="Charts"').dispatchEvent('click');
     await Bun.sleep(2000);
-    await cursor.moveTo({ x: 900, y: 450 }, { duration: 1 });
+    await cursor.moveTo({ x: 630, y: 315 }, { duration: 1 });
 }
 
 async function copyPie({ pages: [page], cursors: [cursor] }: SceneContext): Promise<void> {
@@ -221,8 +222,9 @@ async function pieCircle(page: Page, before: ReadonlySet<string>): Promise<Point
     return { x: largest.x + r, y: largest.y + r, r };
 }
 
+// Over the properties panel, 256 pixels wide at the window's right edge.
 async function scrollPanel(page: Page, cursor: Cursor, direction: 1 | -1): Promise<void> {
-    await cursor.moveTo({ x: 1480, y: 600 }, { duration: 500 });
+    await cursor.moveTo({ x: VIEWPORT.width - 128, y: 420 }, { duration: 500 });
     for (let step = 0; step < 12; step++) {
         await page.mouse.wheel(0, direction * 150);
         await Bun.sleep(30);

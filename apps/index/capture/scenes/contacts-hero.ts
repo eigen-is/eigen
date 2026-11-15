@@ -4,16 +4,17 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
 // A letter heading in the list, so the resting pointer lights up no row.
-const REST = { x: 1100, y: 404 };
+const REST = { x: 770, y: 283 };
 
 export const contactsHero = {
     name: 'contacts-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['contacts'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

@@ -4,14 +4,15 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
-const REST = { x: 1300, y: 560 };
+const REST = { x: 910, y: 392 };
 
 export const calendarHero = {
     name: 'calendar-hero',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['calendar'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

@@ -10,13 +10,14 @@ export const docsCollabPair = {
     name: 'docs-collab-pair',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1000, height: 800 },
+    // Just wider than the page, so each window shows it at full size.
+    viewport: { width: 800, height: 630 },
     composite: 'side-by-side',
     apps: ['docs'],
     personas: ['saar', 'nour'],
     setup: async ({ pages, cursors: [saarCursor], stack }) => {
         await Promise.all(pages.map((page) => openProductionPlan(page, stack)));
-        await saarCursor.moveTo({ x: 700, y: 500 }, { duration: 1 });
+        await saarCursor.moveTo({ x: 560, y: 394 }, { duration: 1 });
     },
     run: async ({ pages: [saar, nour], cursors: [saarCursor, nourCursor] }) => {
         await Bun.sleep(800);
@@ -28,7 +29,7 @@ export const docsCollabPair = {
         await Bun.sleep(2500);
         await nour.keyboard.press('ControlOrMeta+z');
         await Bun.sleep(1500);
-        await saarCursor.moveTo({ x: 700, y: 500 }, { duration: 1000 });
+        await saarCursor.moveTo({ x: 560, y: 394 }, { duration: 1000 });
         await Bun.sleep(800);
     },
 } satisfies Scene;

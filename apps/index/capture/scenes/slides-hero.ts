@@ -3,6 +3,7 @@
 
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { openSponsorDeck, thumbnailPoint } from './sponsor-deck';
 
@@ -10,12 +11,12 @@ export const slidesHero = {
     name: 'slides-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['slides'],
     personas: ['mees'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openSponsorDeck(page, stack);
-        await cursor.moveTo({ x: 900, y: 500 }, { duration: 1 });
+        await cursor.moveTo({ x: 630, y: 350 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(800);
@@ -38,7 +39,7 @@ export const slidesHero = {
         await Bun.sleep(1200);
         await cursor.click(await thumbnailPoint(page, 'title'));
         await Bun.sleep(1000);
-        await cursor.moveTo({ x: 900, y: 500 }, { duration: 900 });
+        await cursor.moveTo({ x: 630, y: 350 }, { duration: 900 });
         await Bun.sleep(800);
     },
 } satisfies Scene;

@@ -10,7 +10,8 @@ export const sheetsCollabPair = {
     name: 'sheets-collab-pair',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1000, height: 800 },
+    // Wide enough for the table and the costs chart beside it, whole.
+    viewport: { width: 990, height: 800 },
     composite: 'side-by-side',
     apps: ['sheets'],
     personas: ['bram', 'anouk'],

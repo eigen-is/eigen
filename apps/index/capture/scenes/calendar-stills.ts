@@ -2,11 +2,12 @@
 // go/no-go and the festival weekend, in light; and the build day opened on its guests, in dark.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openFestivalWeek } from './festival-week';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['calendar'],
     personas: ['saar'],
 };

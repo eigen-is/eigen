@@ -2,12 +2,13 @@
 // a card under the message.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 export const mailStillInvite = {
     name: 'mail-still-invite',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['mail'],
     personas: ['bram'],
     run: async ({ pages: [page], stack }) => {

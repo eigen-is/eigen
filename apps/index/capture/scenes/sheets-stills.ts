@@ -2,11 +2,12 @@
 // in dark, each as it opens, with nothing open.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openBudget } from './budget';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['sheets'],
     personas: ['bram'],
 };

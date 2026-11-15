@@ -4,18 +4,19 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openSponsorDeck, slideIndex, thumbnailPoint } from './sponsor-deck';
 
 export const slidesPresent = {
     name: 'slides-present',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['slides'],
     personas: ['mees'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openSponsorDeck(page, stack);
-        await cursor.moveTo({ x: 900, y: 500 }, { duration: 1 });
+        await cursor.moveTo({ x: 630, y: 350 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         const present = await pointOn(page.getByRole('button', { name: 'Present' }));
@@ -30,7 +31,7 @@ export const slidesPresent = {
         await Bun.sleep(1200);
         await cursor.click(await thumbnailPoint(page, 'title'));
         await Bun.sleep(800);
-        await cursor.moveTo({ x: 900, y: 500 }, { duration: 900 });
+        await cursor.moveTo({ x: 630, y: 350 }, { duration: 900 });
         await Bun.sleep(800);
     },
 } satisfies Scene;

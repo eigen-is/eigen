@@ -2,6 +2,7 @@
 // chart beside the table grows that bar as the number lands. He undoes it, so the loop ends where it began.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { cellPoint, chartPoint, openBudget } from './budget';
 
@@ -9,7 +10,7 @@ export const sheetsChart = {
     name: 'sheets-chart',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['sheets'],
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

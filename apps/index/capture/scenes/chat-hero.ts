@@ -4,16 +4,17 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
 // The empty end of the room's title bar, where the resting pointer lights up no message.
-const REST = { x: 1250, y: 72 };
+const REST = { x: 875, y: 72 };
 
 export const chatHero = {
     name: 'chat-hero',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['chat'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

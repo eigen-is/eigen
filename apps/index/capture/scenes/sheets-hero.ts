@@ -3,6 +3,7 @@
 // where it began.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 import { cellPoint, chartPoint, openBudget } from './budget';
 
@@ -10,12 +11,12 @@ export const sheetsHero = {
     name: 'sheets-hero',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['sheets'],
     personas: ['bram'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openBudget(page, stack);
-        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1 });
+        await cursor.moveTo({ x: 560, y: 315 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(800);
@@ -36,7 +37,7 @@ export const sheetsHero = {
         await Bun.sleep(2000);
         await page.keyboard.press('ControlOrMeta+z');
         await Bun.sleep(1500);
-        await cursor.moveTo({ x: 800, y: 450 }, { duration: 1200 });
+        await cursor.moveTo({ x: 560, y: 315 }, { duration: 1200 });
         await Bun.sleep(600);
     },
 } satisfies Scene;

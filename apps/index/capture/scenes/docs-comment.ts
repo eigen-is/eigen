@@ -4,6 +4,7 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openProductionPlan } from './production-plan';
 
 const PASSAGE = 'short on crew for the build weekend';
@@ -12,12 +13,12 @@ export const docsComment = {
     name: 'docs-comment',
     kind: 'video',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['docs'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openProductionPlan(page, stack);
-        await cursor.moveTo({ x: 1100, y: 600 }, { duration: 1 });
+        await cursor.moveTo({ x: 770, y: 420 }, { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         const passage = await pointOn(page.locator('.ProseMirror [data-comment-id]', { hasText: PASSAGE }), 0.4);
@@ -31,7 +32,7 @@ export const docsComment = {
         // Opening the thread also opened the comments panel, which the loop's first frame does not have.
         await cursor.click(await pointOn(page.getByRole('button', { name: /^Comments/ })));
         await Bun.sleep(600);
-        await cursor.moveTo({ x: 1100, y: 600 }, { duration: 1000 });
+        await cursor.moveTo({ x: 770, y: 420 }, { duration: 1000 });
         await Bun.sleep(800);
     },
 } satisfies Scene;

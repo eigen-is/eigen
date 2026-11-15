@@ -3,12 +3,13 @@
 
 import { ADMIN_LOCALPART } from '../../../api/src/scripts/demo/content';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 export const adminStillSettings = {
     name: 'admin-still-settings',
     kind: 'still',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['admin'],
     personas: [ADMIN_LOCALPART],
     run: async ({ pages: [page], stack }) => {

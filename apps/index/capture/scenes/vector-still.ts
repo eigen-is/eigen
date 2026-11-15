@@ -3,13 +3,14 @@
 
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openSitePlan } from './site-plan';
 
 export const vectorStillSketch = {
     name: 'vector-still-sketch',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['vector'],
     personas: ['saar'],
     run: async ({ pages: [page], stack }) => {

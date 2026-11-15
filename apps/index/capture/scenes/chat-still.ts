@@ -2,12 +2,13 @@
 // attached to a message and the runner's cheers between the lines, in light.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 export const chatStillVolunteers = {
     name: 'chat-still-volunteers',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['chat'],
     personas: ['nour'],
     run: async ({ pages: [page], stack }) => {

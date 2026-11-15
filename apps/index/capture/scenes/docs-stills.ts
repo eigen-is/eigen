@@ -2,11 +2,12 @@
 // on the LaTeX, in dark; and the File menu open on Download, in light, the pointer resting on it.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openProductionPlan } from './production-plan';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['docs'],
     personas: ['saar'],
 };

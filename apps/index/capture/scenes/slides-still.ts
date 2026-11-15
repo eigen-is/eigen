@@ -3,13 +3,14 @@
 
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { openSponsorDeck, thumbnailPoint } from './sponsor-deck';
 
 export const slidesStillHeading = {
     name: 'slides-still-heading',
     kind: 'still',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['slides'],
     personas: ['mees'],
     run: async ({ pages: [page], stack }) => {

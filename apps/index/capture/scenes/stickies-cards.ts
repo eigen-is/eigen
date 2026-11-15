@@ -7,13 +7,14 @@ import { KANBAN } from '../../../api/src/scripts/demo/content';
 import { pointOn } from '../lib/cursor';
 import { openFile } from '../lib/open';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
 const CARD = 'Sunday wind cover';
-const REST = { x: 1450, y: 780 };
+const REST = { x: 1015, y: 546 };
 
 const board: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas' | 'setup'> = {
     kind: 'video',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['stickies'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
