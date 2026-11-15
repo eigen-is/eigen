@@ -168,17 +168,21 @@ export class SheetRecords {
 
     // Where two rules cover a cell, the last in order has it.
     public validation(row: number, column: number): ValidationRecord | undefined {
-        return this.rulesIn('validation', [row, column, row, column]).at(-1)?.rule;
+        let last: [string, ValidationRecord] | undefined;
+        for (const [id] of this.places.validation.meeting([row, column, row, column])) {
+            const rule = this.stored.validation.get(id);
+            if (rule && (!last || compareRules(rule.order, id, last[1].order, last[0]) > 0)) last = [id, rule];
+        }
+        return last?.[1];
     }
 
     // The rules with a range in the rectangle, in rule order, each with those ranges: what a paint of a screen reads.
     public rulesIn<T extends RuleKind>(type: T, rect: Rect): { id: string; rule: Records[T]; ranges: Rect[] }[] {
-        return [...Map.groupBy(this.places[type].meeting(rect), ([id]) => id)]
-            .flatMap(([id, found]) => {
-                const rule = this.stored[type].get(id);
-                return rule ? [{ id, rule, ranges: found.map(([, range]) => range) }] : [];
-            })
-            .sort((a, b) => compareRules(a.rule.order, a.id, b.rule.order, b.id));
+        const found = [...Map.groupBy(this.places[type].meeting(rect), ([id]) => id)].flatMap(([id, pairs]) => {
+            const rule = this.stored[type].get(id);
+            return rule ? [{ id, rule, ranges: pairs.map(([, range]) => range) }] : [];
+        });
+        return found.sort((a, b) => compareRules(a.rule.order, a.id, b.rule.order, b.id));
     }
 
     public comments(row: number, column: number): readonly string[] {
@@ -443,8 +447,7 @@ export class SheetRecords {
             for (const [id, rect] of this.places.merge.meeting(target)) {
                 if (oneSheet && carried.has(id)) continue;
                 if (!within(rect, target)) return 'merge-cut';
-                const merge = this.stored.merge.get(id);
-                if (merge) restore.push(this.restoreOp('merge', id, merge, true));
+                restore.push(this.wholeOp('merge', id, { rect }));
                 writes.push(() => this.replace('merge', id, undefined));
             }
         }
