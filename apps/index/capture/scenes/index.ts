@@ -19,7 +19,7 @@ import { docsHero } from './docs-hero';
 import { docsStillDownload, docsStillEquation } from './docs-stills';
 import { driveHero } from './drive-hero';
 import { driveShare } from './drive-share';
-import { driveStillActivity } from './drive-still';
+import { driveStillActivity, driveStillTiles } from './drive-still';
 import { mailHero } from './mail-hero';
 import { mailSearch } from './mail-search';
 import { mailStillInvite } from './mail-still';
@@ -75,6 +75,7 @@ export const SCENES: Scene[] = [
     driveHero,
     driveShare,
     driveStillActivity,
+    driveStillTiles,
     adminHero,
     adminBackup,
     adminStillSettings,
