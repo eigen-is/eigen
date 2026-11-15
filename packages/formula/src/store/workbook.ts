@@ -10,7 +10,7 @@ import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
 import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
-import { ERRORS, REF } from '../values/errors';
+import { ERRORS, errorOf, REF } from '../values/errors';
 import type { Scalar } from '../values/value';
 import type { Column } from './column';
 import { CellKind, KIND_MASK } from './column';
@@ -30,12 +30,13 @@ export type SheetSource = {
     readonly cells: (cell: CellSink) => void;
 };
 
-// A sheet as `read` leaves it: a text cell and a formula hold their number in the order of these lists, which
-// `adopt` turns into ids of the workbook's tables.
+// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold their number in the
+// order of these lists, which `adopt` turns into ids and codes of the workbook's tables.
 export type Draft = {
     readonly sheet: Sheet;
     readonly texts: ReadonlyMap<string, number>;
     readonly formulas: ReadonlyMap<string, number>;
+    readonly errors: ReadonlyMap<string, number>;
 };
 
 // A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
@@ -61,6 +62,9 @@ export function within(line: number, lines: number): boolean {
     return Number.isInteger(line) && line >= 0 && line < lines;
 }
 
+// The code of the first error only a file knows: their codes go on where the engine's own list ends.
+const CARRIED = ERRORS.length + 1;
+
 // A string table that weighs less, in characters, is not swept: the texts no cell holds then cost a few megabytes
 // at most, and a sweep reads every cell.
 export const SWEEP_FLOOR = 2 ** 22;
@@ -70,7 +74,7 @@ export class Workbook {
     public readonly strings = new StringTable();
     public readonly shapes = new ShapeTable();
     private readonly byId = new Map<string, Sheet>();
-    // The errors only a file knows, by their text. Their codes go on where the engine's own list ends.
+    // The errors only a file knows, by their text.
     private readonly carried: FormulaError[] = [];
     private readonly carriedCodes = new Map<string, number>();
     // The weight of the string table past which the next pass sweeps it: twice what it was after the last sweep or
@@ -116,8 +120,8 @@ export class Workbook {
         }
     }
 
-    // Reads one sheet from its description to the end, with the string and shape tables untouched: whatever the
-    // source does while it is read, such as a call of the engine, meets the workbook as it was.
+    // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
+    // does while it is read, such as a call of the engine, meets the workbook as it was.
     public read(source: SheetSource): Draft {
         const lengths: number[] = [];
         walk(source, (row, column) => {
@@ -127,6 +131,7 @@ export class Workbook {
         const sheet = new Sheet(source.id, source.name, lengths);
         const texts = new Map<string, number>();
         const formulas = new Map<string, number>();
+        const errors = new Map<string, number>();
         walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
             if (held === undefined || row >= held.length) {
@@ -134,22 +139,27 @@ export class Workbook {
             }
             if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
             if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
-            else if (value !== null) this.put(held, row, value);
+            else if (typeof value === 'object' && value !== null) {
+                held.put(row, CellKind.Error, 0, value.code || CARRIED + listed(errors, value.text));
+            } else if (value !== null) this.put(held, row, value);
             // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
             // which only computing it finds.
             if (formula !== null && (value === null || value === REF)) held.markDirty(row);
         });
-        return { sheet, texts, formulas };
+        return { sheet, texts, formulas, errors };
     }
 
     // Makes a sheet that was read one whose cells hold ids of the tables, in no place yet: `apply` adds it. Nothing
     // may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
-    public adopt({ sheet, texts, formulas }: Draft): Sheet {
+    public adopt({ sheet, texts, formulas, errors }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
+        const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
         for (const { kind, ref, shape, length } of sheet.columns) {
             for (let row = 0; row < length; row += 1) {
-                if ((kind[row] & KIND_MASK) === CellKind.Text) ref[row] = textIds[ref[row]];
+                const holds = kind[row] & KIND_MASK;
+                if (holds === CellKind.Text) ref[row] = textIds[ref[row]];
+                else if (holds === CellKind.Error && ref[row] >= CARRIED) ref[row] = errorCodes[ref[row] - CARRIED];
                 if (shape[row] !== 0) shape[row] = shapeIds[shape[row] - 1];
             }
         }
@@ -239,7 +249,7 @@ export class Workbook {
     }
 
     public error(code: number): FormulaError {
-        return code <= ERRORS.length ? ERRORS[code - 1] : this.carried[code - ERRORS.length - 1];
+        return code < CARRIED ? ERRORS[code - 1] : this.carried[code - CARRIED];
     }
 
     // Writes a value into a row the column already has. False when the cell already held it.
@@ -298,8 +308,8 @@ export class Workbook {
     private carry(error: FormulaError): number {
         let code = this.carriedCodes.get(error.text);
         if (code === undefined) {
+            code = CARRIED + this.carried.length;
             this.carried.push(error);
-            code = ERRORS.length + this.carried.length;
             this.carriedCodes.set(error.text, code);
         }
         return code;
