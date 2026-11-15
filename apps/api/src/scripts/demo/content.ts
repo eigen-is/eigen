@@ -451,7 +451,7 @@ export type DeckImage = {
 export type DeckChart = {
     type: ChartType;
     categories: string[];
-    series: { name: string; values: number[] }[];
+    series: { name: string; values: number[]; color?: string }[]; // color: default the palette's
     x: number;
     y: number;
     width: number;
@@ -591,7 +591,7 @@ export const SPONSOR_DECK = {
                 {
                     type: 'column',
                     categories: ['Friend', 'Partner', 'Stage partner'],
-                    series: [{ name: 'Sponsors so far', values: [8, 2, 1] }],
+                    series: [{ name: 'Sponsors so far', values: [8, 2, 1], color: '#0084d1' }],
                     x: 460,
                     y: 330,
                     width: 1000,

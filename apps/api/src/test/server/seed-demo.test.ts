@@ -547,7 +547,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 if (spec?.data.source !== 'inline') throw new Error(`${id} holds no inline data`);
                 expect(spec.chart.type).toBe(chart.type);
                 expect(spec.data.categories).toEqual(chart.categories);
-                expect(spec.data.series.map(({ name, values }) => ({ name, values }))).toEqual(chart.series);
+                expect(
+                    spec.data.series.map(({ id, name, values }) => ({ name, values, color: spec.series[id].color })),
+                ).toEqual(chart.series.map(({ name, values, color }) => ({ name, values, color: color ?? null })));
                 expect(spec.legend.position).toBe('none');
             }
 

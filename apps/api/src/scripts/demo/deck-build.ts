@@ -4,7 +4,7 @@
 // own writer, writeElementInDoc, so the doc reads back unchanged, and fixed ids and indices make a reseed identical.
 
 import { basename } from 'node:path';
-import { defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import type { NewVectorElement, StyleDefaults } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
@@ -74,7 +74,7 @@ function buildChart(c: DeckChart, slideKey: string, frameId: string, i: number):
     const defaults = defaultChartSpec(c.type, {
         source: 'inline',
         categories: c.categories,
-        series: c.series.map((series, n) => ({ ...series, id: `s-${n + 1}` })),
+        series: c.series.map(({ name, values }, n) => ({ id: `s-${n + 1}`, name, values })),
     });
     const element: NewVectorElement = {
         type: 'chart',
@@ -88,6 +88,9 @@ function buildChart(c: DeckChart, slideKey: string, frameId: string, i: number):
             ...defaults,
             chart: { ...defaults.chart, fontFamily: c.font ?? DECK_STYLE.fontFamily },
             legend: { position: 'none' },
+            series: Object.fromEntries(
+                c.series.map(({ color }, n) => [`s-${n + 1}`, { ...DEFAULT_CHART_SERIES_STYLE, color: color ?? null }]),
+            ),
         }),
     };
     return { id: `el-${slideKey}-chart-${i}`, element };
