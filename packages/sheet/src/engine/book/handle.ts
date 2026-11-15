@@ -19,6 +19,7 @@ import type {
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
 import { booleanDisplay } from '../format';
+import { contentOf } from './extras';
 import type { BookSheet, Workbook } from './workbook';
 
 export type Book = {
@@ -62,26 +63,12 @@ export class Sheet {
         return this.book.engine.valueOf(this.id, row, column);
     }
 
-    // What an input op would say to put the cell back: a value stands beside a formula only when the engine cannot
-    // compute it, so it came with the formula.
+    // What an input op would say to put the cell back.
     public content(row: number, column: number): CellContent | null {
         const { engine } = this.book;
-        const value = engine.valueOf(this.id, row, column);
         const formula = engine.formulaOf(this.id, row, column);
-        const extra = this.parts.extras.at(row, column);
-        if (value === null && formula === null && extra === undefined) return null;
-        const cell: CellContent = {};
-        if (extra?.s) cell.s = extra.s;
-        else if (value !== null && (formula === null || engine.isGiven(this.id, row, column))) {
-            if (typeof value === 'object') {
-                cell.v = value.text;
-                cell.e = 1;
-            } else cell.v = value;
-        }
-        if (formula !== null) cell.f = formula;
-        if (extra?.link) cell.link = extra.link;
-        if (extra?.qp) cell.qp = extra.qp;
-        return cell;
+        const given = formula !== null && engine.isGiven(this.id, row, column);
+        return contentOf(engine.valueOf(this.id, row, column), formula, given, this.parts.extras.at(row, column));
     }
 
     public hasFormula(row: number, column: number): boolean {

@@ -8,7 +8,7 @@ import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
 import type { CellContent, InputOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import type { Extra, Extras } from './extras';
-import { textOf } from './extras';
+import { contentOf, textOf } from './extras';
 import type { Workbook } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
@@ -192,28 +192,6 @@ function gather({ runs, cells }: Gathered, { top, left, bottom, right }: Group, 
 function inputOf(sheet: string, { runs, cells }: Gathered): InputOp {
     cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-}
-
-// The content an op says for what a cell held, null for an empty cell.
-function contentOf(
-    value: Literal | null,
-    formula: string | null,
-    given: boolean,
-    extra: Extra | undefined,
-): CellContent | null {
-    if (value === null && formula === null && extra === undefined) return null;
-    const content: CellContent = {};
-    if (extra?.s) content.s = extra.s;
-    else if (formula === null || given) {
-        if (typeof value === 'object' && value !== null) {
-            content.v = value.text;
-            content.e = 1;
-        } else if (value !== null) content.v = value;
-    }
-    if (formula !== null) content.f = formula;
-    if (extra?.link) content.link = extra.link;
-    if (extra?.qp) content.qp = extra.qp;
-    return content;
 }
 
 // The value a cell of this content holds, or null for none: the joined text of rich runs, an error literal, or the

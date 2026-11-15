@@ -1,10 +1,10 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
-// lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers read
-// and write a cell's entry, fill a block with one, and shift the entries when lines are inserted or deleted or a block
-// of cells moves, and its weight is kept as they write. The text of a rich cell is also the engine's value of that cell, which the workbook
-// keeps in step.
+// lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
+// fill and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text is the
+// engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
+import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 
@@ -21,6 +21,29 @@ export function placeOf(row: number, column: number): number {
 // The text a rich cell shows, which is the value the engine holds for it.
 export function textOf(runs: readonly Run[]): string {
     return runs.map((run) => run.v).join('');
+}
+
+// What an op would say a cell holds, null for an empty cell: its rich runs in place of its value, which stands beside
+// no formula or beside one whose value is given, an error as its text.
+export function contentOf(
+    value: Literal | null,
+    formula: string | null,
+    given: boolean,
+    extra: Extra | undefined,
+): CellContent | null {
+    if (value === null && formula === null && extra === undefined) return null;
+    const content: CellContent = {};
+    if (extra?.s) content.s = extra.s;
+    else if (formula === null || given) {
+        if (typeof value === 'object' && value !== null) {
+            content.v = value.text;
+            content.e = 1;
+        } else if (value !== null) content.v = value;
+    }
+    if (formula !== null) content.f = formula;
+    if (extra?.link) content.link = extra.link;
+    if (extra?.qp) content.qp = extra.qp;
+    return content;
 }
 
 export class Extras {
