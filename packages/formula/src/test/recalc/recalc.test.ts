@@ -13,7 +13,7 @@ const NO_CAP = Number.POSITIVE_INFINITY;
 
 // One sheet whose cells are reported by `cells`, for workbooks too large to write out.
 function sheetOf(cells: (cell: CellSink) => void): Engine {
-    return new Engine([{ id: 's1', name: 'Sheet1', cells }]);
+    return new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, false);
 }
 
 function loopsOf(engine: Engine): string[] {
@@ -24,11 +24,12 @@ function loopsOf(engine: Engine): string[] {
 }
 
 describe('recalc', () => {
-    test('a loaded formula keeps its stored value until a write reaches it', () => {
-        const engine = sheetOf((cell) => {
+    test('a formula of a computed load keeps its stored value until a write reaches it', () => {
+        const cells = (cell: CellSink) => {
             cell(0, 0, 5, null);
             cell(0, 1, 99, '=RC[-1]*2');
-        });
+        };
+        const engine = new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, true);
         expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'B1')).toBe(99);
         engine.setValue('s1', 0, 0, 6);
@@ -295,18 +296,21 @@ describe('depth', () => {
                 return 0;
             });
             const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
-            const workbook = new Workbook([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => {
-                        cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
-                        cell(1, 0, null, `=${deep}`);
-                        cell(0, 2, 1, null);
-                        for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+            const workbook = new Workbook(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
+                            cell(1, 0, null, `=${deep}`);
+                            cell(0, 2, 1, null);
+                            for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+                        },
                     },
-                },
-            ]);
+                ],
+                false,
+            );
             const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5);
             expect(recalc.pass(NO_CAP)).toMatchObject({ loops: [], stopped: false });
             const [column] = workbook.sheets[0].columns;

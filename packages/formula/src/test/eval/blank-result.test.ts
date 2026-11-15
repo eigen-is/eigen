@@ -113,29 +113,60 @@ describe('a blank result after an edit', () => {
 
 describe('a blank result after a load with cached values', () => {
     test('a formula that comes with no value is computed to a blank, and its readers are computed again', () => {
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    cell(0, 1, null, stored('=A1', 'B1'));
-                    cell(0, 2, false, stored('=ISBLANK(B1)', 'C1'));
-                    cell(0, 3, 7, stored('=1+6', 'D1'));
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        cell(0, 1, null, stored('=A1', 'B1'));
+                        cell(0, 2, false, stored('=ISBLANK(B1)', 'C1'));
+                        cell(0, 3, 7, stored('=1+6', 'D1'));
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            false,
+        );
         engine.recalc(NO_CAP);
         expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([null, true, 7]);
     });
 
+    test('a formula that comes with no value in a computed load is a blank result, and nothing is computed', () => {
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        cell(0, 1, null, stored('=A1', 'B1'));
+                        cell(0, 2, false, stored('=ISBLANK(B1)', 'C1'));
+                        cell(0, 3, 7, stored('=1+6', 'D1'));
+                    },
+                },
+            ],
+            0,
+            0,
+            true,
+        );
+        expect(engine.recalc(NO_CAP).changed).toEqual([]);
+        expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([null, false, 7]);
+    });
+
     test('a formula that comes with the 0 Excel cached keeps it until a write reaches it', () => {
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => cell(0, 1, 0, stored('=A1', 'B1')),
-            },
-        ]);
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => cell(0, 1, 0, stored('=A1', 'B1')),
+                },
+            ],
+            0,
+            0,
+            true,
+        );
         engine.recalc(NO_CAP);
         expect(valueAt(engine, 'B1')).toBe(0);
         engine.clear('s1', 0, 0);

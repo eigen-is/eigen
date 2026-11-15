@@ -29,9 +29,12 @@ function values(engine: Engine): { held: string[]; fresh: string[] } {
             else if (value !== null) cells.push([row, column, value, null]);
         }
     }
-    const loaded = new Loaded([
-        { id: 's1', name: 'Sheet1', cells: (cell) => cells.forEach((held) => void cell(...held)) },
-    ]);
+    const loaded = new Loaded(
+        [{ id: 's1', name: 'Sheet1', cells: (cell) => cells.forEach((held) => void cell(...held)) }],
+        0,
+        0,
+        false,
+    );
     loaded.recalc(NO_CAP);
     const fresh: string[] = [];
     for (let row = 0; row < 16; row += 1) {
@@ -97,7 +100,7 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
 
     test('a hundred row inserts above ten thousand formulas of their own shape keep two shapes a formula', () => {
         const count = 10_000;
-        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         for (let row = 1; row <= count; row += 1) recalc.fillFormula(sheet, row, 1, row, 1, `=R1C1+${row}`, null);
@@ -115,7 +118,7 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
     }, 60_000);
 
     test('thirty edits refused for a formula too long to store leave the shapes of one edit behind', () => {
-        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         for (let column = 1; column <= 50; column += 1) {
@@ -143,7 +146,7 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
     });
 
     test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
-        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         for (let i = 1; i <= 1000; i += 1) {

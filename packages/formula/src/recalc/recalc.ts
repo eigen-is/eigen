@@ -102,16 +102,15 @@ export class Recalc {
         this.evaluator = new Evaluator(workbook, functions, this);
         this.now = now;
         this.seed = seed;
-        // A formula that came without a value was never computed, which the ones that came with a value have to hear.
-        for (let s = 0; s < workbook.sheets.length; s += 1) {
-            const { columns } = workbook.sheets[s];
-            for (let c = 0; c < columns.length; c += 1) {
-                const { kind, length } = columns[c];
-                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
-                    if (kind[row] > SETTLED) extend(this.seeds, s, c, row);
-                }
-            }
+    }
+
+    // No seed waits, the clock is stamped, and no formula is flagged.
+    public settled(): boolean {
+        if (this.seeds.length > 0 || !this.stamped) return false;
+        for (const { columns } of this.workbook.sheets) {
+            for (const { pending } of columns) if (pending > 0) return false;
         }
+        return true;
     }
 
     // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.

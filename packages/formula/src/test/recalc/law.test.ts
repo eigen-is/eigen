@@ -1,33 +1,39 @@
 import { describe, expect, test } from 'bun:test';
 import type { Literal, SheetSource } from '../../index';
-import { Engine } from '../../index';
+import { Engine, REF } from '../../index';
 import { parseStored } from '../../text';
 import { random } from '../store/support';
 
-// The law of incremental recalc: after any sequence of writes with recalcs in between, stopped ones included, every
-// cell holds what a fresh engine computes from the same inputs, and the same cells are on a loop.
+// The law of incremental recalc: after any sequence of writes and clocks with recalcs in between, stopped ones
+// included, every cell holds what a fresh engine computes from the same inputs, and the same cells are on a loop.
+// And the reload law: a walk of an engine that is settled, loaded as computed, computes nothing and holds those
+// values, now and after later writes; a walk of one that is not, loaded as not computed, computes them.
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const SHEETS = ['s1', 's2'];
 const ROWS = 12;
 const COLUMNS = 6;
+// A formula this build cannot evaluate: it keeps the value it is written with.
+const KEPT = "='[1]Book'!R1C1+";
 
+// The value of a formula is the one it is written with, which only a formula this build cannot evaluate keeps.
 type Input = { readonly value: Literal | null; readonly formula: string | null };
 type Model = Map<string, Map<number, Input>>;
 
-function sources(model: Model, cached: Engine | null): SheetSource[] {
+function sources(model: Model): SheetSource[] {
     return SHEETS.map((id) => ({
         id,
         name: id,
         cells: (cell) => {
-            for (const [key, { value, formula }] of model.get(id) ?? []) {
-                const row = Math.floor(key / 100);
-                const column = key % 100;
-                if (formula === null) cell(row, column, value, null);
-                else cell(row, column, cached === null ? null : cached.valueOf(id, row, column), formula);
-            }
+            for (const [key, { value, formula }] of model.get(id) ?? [])
+                cell(Math.floor(key / 100), key % 100, value, formula);
         },
     }));
+}
+
+// The engine's own walk, the snapshot a host writes.
+function walked(engine: Engine): SheetSource[] {
+    return SHEETS.map((id) => ({ id, name: id, cells: (cell) => engine.cells(id, cell) }));
 }
 
 function values(engine: Engine): unknown[] {
@@ -59,7 +65,13 @@ function generator(next: () => number) {
     const columns = () => `${sheet()}${end('C', COLUMNS)}:${end('C', COLUMNS)}`;
     const rows = () => `${sheet()}${end('R', ROWS)}:${end('R', ROWS)}`;
     const formula = (): string => {
-        switch (pick(21)) {
+        switch (pick(24)) {
+            case 21:
+                return `=NOW()+${cell()}`;
+            case 22:
+                return `=IF(RAND()<2,${cell()})`;
+            case 23:
+                return `=${cell()}`;
             case 0:
                 return `=${cell()}+${cell()}`;
             case 1:
@@ -108,10 +120,23 @@ function generator(next: () => number) {
     return { pick, formula, literal };
 }
 
-function run(seed: number, steps: number): { compared: number; stops: number } {
+type Counts = {
+    compared: number;
+    stops: number;
+    // Reloads of a settled walk, and the formulas with no value they held; reloads after a stopped pass and after
+    // writes no pass followed.
+    computed: number;
+    blanks: number;
+    stopped: number;
+    written: number;
+};
+
+function run(seed: number, steps: number): Counts {
     const { pick, formula, literal } = generator(random(seed));
     const model: Model = new Map(SHEETS.map((id) => [id, new Map()]));
-    let engine = new Engine(sources(model, null));
+    let now = 0;
+    let clock = 0;
+    let engine = new Engine(sources(model), now, clock, false);
     const write = (id: string, row: number, column: number, input: Input | null) => {
         const cells = model.get(id);
         if (input === null) {
@@ -119,21 +144,50 @@ function run(seed: number, steps: number): { compared: number; stops: number } {
             engine.clear(id, row, column);
         } else {
             cells?.set(row * 100 + column, input);
-            if (input.formula !== null) engine.setFormula(id, row, column, input.formula);
+            if (input.formula !== null) engine.setFormula(id, row, column, input.formula, input.value);
             else if (input.value !== null) engine.setValue(id, row, column, input.value);
         }
     };
-    let compared = 0;
-    let stops = 0;
-    // An engine opened from cached values knows a loop only once a recalc has computed it again.
-    let knowsLoops = true;
+    const counts: Counts = { compared: 0, stops: 0, computed: 0, blanks: 0, stopped: 0, written: 0 };
+    const fresh = () => {
+        const engine = new Engine(sources(model), now, clock, false);
+        return { engine, result: engine.recalc(NO_CAP) };
+    };
+    // The workbook opened again from a walk of the engine, as a tab that joins: as computed exactly when it is settled.
+    const reopen = (counted: 'stopped' | 'written' | null) => {
+        const old = engine;
+        const settled = old.settled();
+        engine = new Engine(walked(old), now, clock, settled);
+        if (!settled) {
+            if (counted !== null) counts[counted] += 1;
+            return;
+        }
+        counts.computed += 1;
+        // A formula that holds #REF! is computed again, as it may be on a loop.
+        let refs = 0;
+        for (const id of SHEETS) {
+            old.cells(id, (_row, _column, value, text) => {
+                if (text !== null && value === null) counts.blanks += 1;
+                if (text !== null && value === REF) refs += 1;
+            });
+        }
+        const expected = fresh();
+        expect([seed, engine.settled(), engine.recalc(NO_CAP)]).toEqual([
+            seed,
+            refs === 0,
+            { loops: expected.result.loops, stopped: false, changed: [] },
+        ]);
+        expect([seed, ...values(engine)]).toEqual([seed, ...values(old)]);
+        expect([seed, ...values(engine)]).toEqual([seed, ...values(expected.engine)]);
+    };
     for (let step = 0; step < steps; step += 1) {
         const id = SHEETS[pick(2)];
         const row = pick(ROWS);
         const column = pick(COLUMNS);
         const kind = pick(20);
         if (kind < 7) write(id, row, column, { value: literal(), formula: null });
-        else if (kind < 12) write(id, row, column, { value: null, formula: formula() });
+        else if (kind < 11) write(id, row, column, { value: null, formula: formula() });
+        else if (kind < 12) write(id, row, column, { value: literal(), formula: `${KEPT}${pick(9)}` });
         else if (kind < 15) write(id, row, column, null);
         else {
             // A block of one input: a formula filled down, right or both, a pasted value, or a cleared area.
@@ -149,27 +203,38 @@ function run(seed: number, steps: number): { compared: number; stops: number } {
                 for (let c = column; c <= right; c += 1) write(id, r, c, input);
             }
         }
-        if (pick(5) < 3) continue;
+        if (pick(4) === 0) {
+            now = pick(1000);
+            clock = pick(1000);
+            engine.setClock(now, clock);
+        }
+        if (pick(5) < 3) {
+            if (pick(6) === 0) reopen('written');
+            continue;
+        }
         let result = engine.recalc(pick(4) === 0 ? pick(12) : NO_CAP);
         if (result.stopped) {
-            stops += 1;
+            counts.stops += 1;
             // More writes land before the stopped pass goes on, or it goes on in small steps.
-            if (pick(2) === 0) continue;
+            if (pick(2) === 0) {
+                if (pick(3) === 0) reopen('stopped');
+                continue;
+            }
             const cap = 1 + pick(6);
             while (result.stopped) result = engine.recalc(cap);
         }
-        const fresh = new Engine(sources(model, null));
-        const expected = fresh.recalc(NO_CAP);
-        expect([seed, step, ...values(engine)]).toEqual([seed, step, ...values(fresh)]);
-        if (knowsLoops) expect([seed, step, result.loops]).toEqual([seed, step, expected.loops]);
-        compared += 1;
-        // Now and then the workbook is opened again from its cached values, as a tab that joins.
-        if (pick(12) === 0) {
-            engine = new Engine(sources(model, engine));
-            knowsLoops = expected.loops.length === 0;
-        }
+        const expected = fresh();
+        expect([seed, step, engine.settled(), ...values(engine)]).toEqual([
+            seed,
+            step,
+            true,
+            ...values(expected.engine),
+        ]);
+        expect([seed, step, result.loops]).toEqual([seed, step, expected.result.loops]);
+        counts.compared += 1;
+        if (pick(3) === 0) reopen(null);
     }
-    return { compared, stops };
+    return counts;
 }
 
 describe('held against a fresh load', () => {
@@ -178,12 +243,17 @@ describe('held against a fresh load', () => {
         for (let i = 0; i < 500; i += 1) expect(parseStored(formula())).not.toHaveProperty('reason');
     });
 
-    test.each([[1], [2], [3], [4], [5], [6], [7], [8], [9], [10], [11], [12]])(
-        'after random writes and recalcs every cell equals a fresh full recalc: seed %i',
+    test.each(Array.from({ length: Number(process.env['LAW_SEEDS'] ?? 12) }, (_, seed) => [seed + 1]))(
+        'after random writes, clocks, recalcs and reloads every cell equals a fresh full recalc: seed %i',
         (seed) => {
-            const { compared, stops } = run(seed, 1500);
-            expect(compared).toBeGreaterThan(300);
-            expect(stops).toBeGreaterThan(10);
+            const counts = run(seed, 1500);
+            if (process.env['LAW_SEEDS'] !== undefined) console.log(JSON.stringify({ seed, ...counts }));
+            expect(counts.compared).toBeGreaterThan(300);
+            expect(counts.stops).toBeGreaterThan(10);
+            expect(counts.computed).toBeGreaterThan(50);
+            expect(counts.blanks).toBeGreaterThan(100);
+            expect(counts.stopped).toBeGreaterThan(2);
+            expect(counts.written).toBeGreaterThan(10);
         },
     );
 });

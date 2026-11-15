@@ -115,30 +115,36 @@ export function book(draw: () => number, lengths: readonly number[], mix: Mix): 
 
 // An engine that holds the book as its sheet Data and the formulas down column A of its first sheet, computed.
 export function computed(made: Book, texts: readonly string[]): Engine {
-    const engine = new Engine([
-        {
-            id: 's1',
-            name: 'Sheet1',
-            cells: (cell) => {
-                for (let row = 0; row < texts.length; row += 1) cell(row, 0, null, stored(texts[row], `A${row + 1}`));
+    const engine = new Engine(
+        [
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    for (let row = 0; row < texts.length; row += 1)
+                        cell(row, 0, null, stored(texts[row], `A${row + 1}`));
+                },
             },
-        },
-        {
-            id: 'data',
-            name: 'Data',
-            cells: (cell) => {
-                for (let column = 0; column < made.grid.length; column += 1) {
-                    const cells = made.grid[column] ?? [];
-                    for (let row = 0; row < cells.length; row += 1) {
-                        const formula = made.formulas.get(row * GRID_COLUMNS + column);
-                        const value = cells[row] ?? null;
-                        if (formula !== undefined) cell(row, column, null, stored(formula, 'A1'));
-                        else if (value !== null) cell(row, column, value, null);
+            {
+                id: 'data',
+                name: 'Data',
+                cells: (cell) => {
+                    for (let column = 0; column < made.grid.length; column += 1) {
+                        const cells = made.grid[column] ?? [];
+                        for (let row = 0; row < cells.length; row += 1) {
+                            const formula = made.formulas.get(row * GRID_COLUMNS + column);
+                            const value = cells[row] ?? null;
+                            if (formula !== undefined) cell(row, column, null, stored(formula, 'A1'));
+                            else if (value !== null) cell(row, column, value, null);
+                        }
                     }
-                }
+                },
             },
-        },
-    ]);
+        ],
+        0,
+        0,
+        false,
+    );
     engine.recalc(Number.POSITIVE_INFINITY);
     return engine;
 }

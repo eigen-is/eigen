@@ -21,7 +21,7 @@ import type { CellLink } from '@workspace/lib/sheets/types';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
 export type Random = () => number;
-export type Book = Omit<BookContent, 'computed'>;
+export type Book = BookContent;
 
 export function randomOf(seed: number): Random {
     let state = seed;
@@ -189,7 +189,8 @@ export function randomBook(random: Random): Book {
         const other = below(random, at + 1);
         [sheets[at], sheets[other]] = [sheets[other], sheets[at]];
     }
-    return { g: below(random, 9), now: 40_000 + below(random, 9000) / 7, seed: below(random, 2 ** 31), sheets };
+    const now = 40_000 + below(random, 9000) / 7;
+    return { g: below(random, 9), now, seed: below(random, 2 ** 31), computed: false, sheets };
 }
 
 function lookKey(look: CellAttrs): string {
@@ -243,13 +244,17 @@ function canonicalLines(runs: SheetContent['rows']): [Span, LineAttrs][] {
     return joined;
 }
 
-// What a workbook loaded from the snapshot walks back to, when every formula text is the engine's own spelling.
+// What a workbook loaded from the snapshot walks back to, when every formula text is the engine's own spelling. It
+// is computed while no formula waits: a load that is not computed computes every formula, and one that is computes a
+// formula that holds #REF!.
 export function canonical(book: Book): Book {
     const sheets = book.sheets.toSorted((a, b) =>
         a.fields.order !== b.fields.order ? (a.fields.order < b.fields.order ? -1 : 1) : a.id < b.id ? -1 : 1,
     );
+    const waits = ({ f, v, e }: CellRecord) => f !== undefined && (!book.computed || (e === 1 && v === '#REF!'));
     return {
         ...book,
+        computed: !sheets.some(({ cells }) => cells.some(([, , cell]) => waits(cell))),
         sheets: sheets.map((sheet) => ({
             ...sheet,
             ...canonicalBands(sheet),

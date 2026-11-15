@@ -20,7 +20,7 @@ for (let row = 0; row < ROWS; row += 1)
 // The formulas that a recalc computes after the rows of A are written in the order given, and the fastest of a few
 // such recalcs in milliseconds.
 function recalced(rows: readonly number[]): { computed: number[]; time: number } {
-    const engine = new Engine([source('s', CELLS)]);
+    const engine = new Engine([source('s', CELLS)], 0, 0, true);
     const computed: number[] = [];
     let time = Number.POSITIVE_INFINITY;
     for (let run = 0; run < 5; run += 1) {

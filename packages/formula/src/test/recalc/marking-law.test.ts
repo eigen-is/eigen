@@ -159,7 +159,10 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
     let stops = 0;
     for (let book = 0; book < books; book += 1) {
         const { pick, formula, tall } = generator(random(seed * 100003 + book));
-        const workbook = new Workbook(cellsOf(pick, formula, tall).map((cells, s) => source(SHEETS[s], cells)));
+        const workbook = new Workbook(
+            cellsOf(pick, formula, tall).map((cells, s) => source(SHEETS[s], cells)),
+            false,
+        );
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const index = new ReverseIndex();
         let readers: Reader[] = [];
@@ -227,8 +230,8 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
     return { markings, flagged, stops };
 }
 
-// Recalcs of workbooks whose formulas came with the text 'kept' or were never computed: a formula that shows
-// anything else was computed. The cells are written in runs down or up a column, some of them again from the same
+// Recalcs of computed workbooks whose formulas came with the text 'kept': a formula that shows anything else was
+// computed. The cells are written in runs down or up a column, some of them again from the same
 // row, from a row inside the run or from the row after it.
 function written(seed: number, books: number): { passes: number; computed: number } {
     let passes = 0;
@@ -240,19 +243,13 @@ function written(seed: number, books: number): { passes: number; computed: numbe
                 SHEETS[s],
                 cells.map(
                     ([row, column, value, text]): TestCell =>
-                        text === undefined ? [row, column, value] : [row, column, value === null ? null : KEPT, text],
+                        text === undefined ? [row, column, value] : [row, column, KEPT, text],
                 ),
             ),
         );
-        const workbook = new Workbook(sources);
+        const workbook = new Workbook(sources, true);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
-        // A formula that was never computed is a seed of the first recalc.
         const seeds: number[] = [];
-        for (const key of pendingOf(workbook)) {
-            const row = key % GRID_ROWS;
-            const column = Math.floor(key / GRID_ROWS) % GRID_COLUMNS;
-            seeds.push(Math.floor(key / GRID_ROWS / GRID_COLUMNS), column, row, row);
-        }
         for (let pass = 0; pass < 8; pass += 1) {
             const runs = pick(6);
             for (let run = 0; run < runs; run += 1) {
@@ -300,23 +297,26 @@ function written(seed: number, books: number): { passes: number; computed: numbe
 describe('a marking flags what the definition reaches, no less and no more', () => {
     test('the generator writes formulas that parse', () => {
         const { formula, tall } = generator(random(1));
-        const workbook = new Workbook([source('a', []), source('b', []), source('c', [])]);
+        const workbook = new Workbook([source('a', []), source('b', []), source('c', [])], false);
         for (let i = 0; i < 400; i += 1)
             workbook.fillFormula(workbook.sheets[0], i, 0, i, 0, i % 2 ? formula() : tall());
         for (let id = 1; id <= workbook.shapes.size; id += 1) expect(workbook.shapes.shape(id).tree).not.toBeNull();
     });
 
     test('the definition itself: a chain, a block and a reader of unnamed cells', () => {
-        const workbook = new Workbook([
-            source('a', [
-                [0, 0, 1],
-                [1, 0, 0, '=R[-1]C+1'],
-                [2, 0, 0, '=R[-1]C+1'],
-                [0, 2, 0, '=SUM(R1C1:R2C1)'],
-                [5, 5, 0, '=SUM(RC[-1]:INDEX(R1C1:R2C2,1,1))'],
-                [7, 7, 0, '=R[-9]C'],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('a', [
+                    [0, 0, 1],
+                    [1, 0, 0, '=R[-1]C+1'],
+                    [2, 0, 0, '=R[-1]C+1'],
+                    [0, 2, 0, '=SUM(R1C1:R2C1)'],
+                    [5, 5, 0, '=SUM(RC[-1]:INDEX(R1C1:R2C2,1,1))'],
+                    [7, 7, 0, '=R[-9]C'],
+                ]),
+            ],
+            true,
+        );
         const readers = readersOf(workbook, factsOf(workbook));
         const keys = (cells: [number, number][]) => new Set(cells.map(([row, column]) => cellKey(0, column, row)));
         expect(closure(workbook, readers, [0, 0, 1, 1])).toEqual(

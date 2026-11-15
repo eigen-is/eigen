@@ -42,7 +42,7 @@ const NOW = 46338.5;
 const SEED = 7;
 
 export class OursEngine implements CellEngine {
-    private engine = new Engine([]);
+    private engine = new Engine([], 0, 0, false);
     private ids: string[] = [];
     private find: (name: string) => { readonly id: string } | undefined = () => undefined;
 
@@ -69,7 +69,7 @@ export class OursEngine implements CellEngine {
                 },
             };
         });
-        this.engine = new Engine(sources);
+        this.engine = new Engine(sources, 0, 0, false);
     }
 
     public recalc(): void {

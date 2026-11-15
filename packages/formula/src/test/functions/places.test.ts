@@ -166,7 +166,10 @@ describe('the clock and the draw come from the batch', () => {
             }),
         );
         const formula = stored('=SUM(DRAW((B1:B1000="")*1))', 'A1');
-        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, formula) }]);
+        const workbook = new Workbook(
+            [{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, formula) }],
+            false,
+        );
         new Recalc(workbook, functions, 0, 0).pass(Number.POSITIVE_INFINITY);
         expect(calls).toBe(1000);
         expect(workbook.value(workbook.sheets[0].columns[0], 0)).toBe(500500);

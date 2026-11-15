@@ -240,18 +240,21 @@ describe('a walk of products that ends early leaves the next one right', () => {
             if (fail) throw new Error('a body that throws');
             return most;
         });
-        const workbook = new Workbook([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    for (let row = 0; row < 3000; row += 1) cell(row, 0, row + 1, null);
-                    for (let row = 0; row < 2000; row += 1) cell(row, 1, 2, null);
-                    cell(0, 13, null, stored('=THROWER(A:A,B:B)+SUMPRODUCT(A:A,B:B)', 'N1'));
-                    cell(1, 13, null, stored('=SUMPRODUCT(B:B,A:A)+THROWER(A1:B10,A1:B10)', 'N2'));
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        for (let row = 0; row < 3000; row += 1) cell(row, 0, row + 1, null);
+                        for (let row = 0; row < 2000; row += 1) cell(row, 1, 2, null);
+                        cell(0, 13, null, stored('=THROWER(A:A,B:B)+SUMPRODUCT(A:A,B:B)', 'N1'));
+                        cell(1, 13, null, stored('=SUMPRODUCT(B:B,A:A)+THROWER(A1:B10,A1:B10)', 'N2'));
+                    },
                 },
-            },
-        ]);
+            ],
+            false,
+        );
         const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [thrower.name, thrower]]), 0, 0);
         expect(() => recalc.pass(Number.POSITIVE_INFINITY)).toThrow('a body that throws');
         fail = false;

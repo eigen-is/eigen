@@ -51,7 +51,7 @@ const engine = new Engine([
             cell(2, 0, null, stored('=SUM(A1:A2)*1.21', 2, 0));
         },
     },
-]);
+], 0, 0, false);
 
 engine.recalc(Number.POSITIVE_INFINITY);
 console.log(engine.formulaOf('s1', 2, 0), engine.valueOf('s1', 2, 0));
@@ -75,13 +75,13 @@ if (typeof total === 'number') console.log(numberDisplay(total, '#,##0.00'));
 217.80
 ```
 
-The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The argument of `recalc` caps how many formulas one pass computes: it starts no formula once it has stored that many, the ones running then finish, and a later pass goes on where a capped one stopped. The clock comes in through `setClock(now, seed)`, which a host calls once for every batch of edits it applies: the next recalc computes every formula that reads the clock or draws again with it, so a recalc never reads the machine. A load takes the clock its values were computed with as `new Engine(sheets, now, seed)`.
+The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The argument of `recalc` caps how many formulas one pass computes: it starts no formula once it has stored that many, the ones running then finish, and a later pass goes on where a capped one stopped. The clock comes in through `setClock(now, seed)`, which a host calls once for every batch of edits it applies: the next recalc computes every formula that reads the clock or draws again with it, so a recalc never reads the machine. A load takes the clock its values were computed with and says whether a full pass computed them, `new Engine(sheets, now, seed, computed)`: a computed load is trusted whole, a formula with no value being its blank result, and computes nothing at the open; in one that is not, every formula is computed. `settled()` says which a walk is: no write, edit or clock waits for a pass and nothing is left flagged.
 
 `setFormula` and `fillFormula` take a value as their last argument, for the one kind of formula this build cannot evaluate, a 3-D reference or one into another workbook: the cell holds that value at once and keeps it, as an import or a paste brings it. For any other formula the value is ignored, and `isGiven` says which kind a cell holds.
 
 A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
 
-`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host walks for a snapshot only after a `recalc` whose result says `stopped` is false. The sink must not write to the engine. `nextCell(sheet, column, row, last)` is the same walk as a cursor, the first content row from `row` to `last` or -1, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host writes `settled()` beside a snapshot and loads it with that flag, never one set by hand: a `true` that is not so is never healed. A build that computes differently makes stored values stale whatever the flag says. The sink must not write to the engine. `nextCell(sheet, column, row, last)` is the same walk as a cursor, the first content row from `row` to `last` or -1, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
 
 ## The design in ten lines
 

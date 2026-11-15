@@ -23,7 +23,7 @@ type Shape = {
 
 // The fastest of a few markings of one workbook, in milliseconds, each from the state the load left.
 function marked(shape: Shape, n: number): number {
-    const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }]);
+    const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }], false);
     const index = new ReverseIndex();
     factsOf(workbook);
     index.rebuild(workbook);
@@ -209,15 +209,18 @@ describe('the work of a marking grows with the workbook, not with its square', (
     test('writes in no order under a window that moves with its host flag every host once', () => {
         const n = 3000;
         const next = random(7);
-        const workbook = new Workbook([
-            {
-                id: 's',
-                name: 's',
-                cells: (cell) => {
-                    for (let row = 0; row < n; row += 1) cell(row, 1, 0, '=SUM(R[-20]C[-1]:RC[-1])');
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        for (let row = 0; row < n; row += 1) cell(row, 1, 0, '=SUM(R[-20]C[-1]:RC[-1])');
+                    },
                 },
-            },
-        ]);
+            ],
+            true,
+        );
         const index = new ReverseIndex();
         factsOf(workbook);
         index.rebuild(workbook);
@@ -234,21 +237,24 @@ describe('the work of a marking grows with the workbook, not with its square', (
     });
 
     test('a marking flags what reads cells it does not name, and never a formula for drawing or reading the clock', () => {
-        const workbook = new Workbook([
-            {
-                id: 's',
-                name: 's',
-                cells: (cell) => {
-                    cell(0, 0, 5, null);
-                    cell(0, 1, 6, '=RC[-1]+1');
-                    cell(0, 2, 5, '=OFFSET(RC[-2],0,0)');
-                    cell(0, 3, 0.5, '=RAND()');
-                    cell(0, 4, 1, '=NOW()');
-                    cell(0, 5, 0.5, '=RC[-2]+0');
-                    cell(0, 6, 0.5, '=RAND()+RC[-6]');
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        cell(0, 0, 5, null);
+                        cell(0, 1, 6, '=RC[-1]+1');
+                        cell(0, 2, 5, '=OFFSET(RC[-2],0,0)');
+                        cell(0, 3, 0.5, '=RAND()');
+                        cell(0, 4, 1, '=NOW()');
+                        cell(0, 5, 0.5, '=RC[-2]+0');
+                        cell(0, 6, 0.5, '=RAND()+RC[-6]');
+                    },
                 },
-            },
-        ]);
+            ],
+            true,
+        );
         const index = new ReverseIndex();
         factsOf(workbook);
         index.rebuild(workbook);
@@ -292,24 +298,27 @@ describe('the shapes that take the clock', () => {
 
     test('the index lists the blocks of clock formulas, and none this build cannot evaluate', () => {
         const kept = storedText('=[1]Sheet1!A1+NOW()', 0, 4, find);
-        const workbook = new Workbook([
-            {
-                id: 's',
-                name: 's',
-                cells: (cell) => {
-                    cell(0, 0, 5, null);
-                    cell(0, 1, 6, '=RC[-1]+1');
-                    for (let row = 2; row <= 4; row += 1) {
-                        cell(row, 2, 0.5, '=RAND()+R1C1');
-                        cell(row, 3, 0.5, '=RAND()+R1C1');
-                    }
-                    cell(0, 4, 7, kept);
-                    cell(6, 4, '', '="NOW()"');
-                    cell(7, 4, 1, '=R[-5]C[-2]');
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        cell(0, 0, 5, null);
+                        cell(0, 1, 6, '=RC[-1]+1');
+                        for (let row = 2; row <= 4; row += 1) {
+                            cell(row, 2, 0.5, '=RAND()+R1C1');
+                            cell(row, 3, 0.5, '=RAND()+R1C1');
+                        }
+                        cell(0, 4, 7, kept);
+                        cell(6, 4, '', '="NOW()"');
+                        cell(7, 4, 1, '=R[-5]C[-2]');
+                    },
                 },
-            },
-            { id: 't', name: 't', cells: (cell) => cell(9, 1, 1, '=IF(R1C1,NOW(),1)') },
-        ]);
+                { id: 't', name: 't', cells: (cell) => cell(9, 1, 1, '=IF(R1C1,NOW(),1)') },
+            ],
+            false,
+        );
         const index = new ReverseIndex();
         factsOf(workbook);
         index.rebuild(workbook);

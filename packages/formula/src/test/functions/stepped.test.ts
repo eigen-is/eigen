@@ -89,7 +89,7 @@ test('a group that no element reaches is never evaluated, and a picked argument 
     const run = (formula: string) => {
         calls = 0;
         const text = stored(formula, 'A1');
-        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, text) }]);
+        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, text) }], false);
         new Recalc(workbook, functions, 0, 0).pass(Number.POSITIVE_INFINITY);
         return calls;
     };

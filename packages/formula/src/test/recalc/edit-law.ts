@@ -248,7 +248,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             }
             model = [...model, { id, name: `Sheet${id.slice(1)}`, cells }];
         }
-        const engine: EngineType = new Engine(sourcesOf(model));
+        const engine: EngineType = new Engine(sourcesOf(model), 0, 0, false);
         if (pick(2) === 0) engine.recalc(NO_CAP);
         // Whether something was written since the last edit or recalc, and how many edits since the last recalc.
         let unmarked = false;

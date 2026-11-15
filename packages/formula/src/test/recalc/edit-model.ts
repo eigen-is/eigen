@@ -94,7 +94,7 @@ const LOADED = new WeakMap<Model, Loaded>();
 export function fresh(model: Model): Loaded {
     let loaded = LOADED.get(model);
     if (loaded === undefined) {
-        const engine = new Engine(sourcesOf(model));
+        const engine = new Engine(sourcesOf(model), 0, 0, false);
         const { loops } = engine.recalc(Number.POSITIVE_INFINITY);
         loaded = { engine, loops: loops.map((cell) => `${cell.sheet}!${cell.row},${cell.column}`).sort() };
         LOADED.set(model, loaded);

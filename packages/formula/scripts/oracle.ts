@@ -365,7 +365,7 @@ function bookMode(file: string): BookReport {
             formulas.push({ sheet: place, cell, facts: found, rects });
         }
     }
-    const engine = new Engine(sourcesOf(book, true));
+    const engine = new Engine(sourcesOf(book, true), 0, 0, false);
     const { loops } = engine.recalc(Number.POSITIVE_INFINITY);
     const looped = new Set(loops.map((loop) => keyOf(ids.indexOf(loop.sheet), loop.row, loop.column)));
     const value = (sheet: number, row: number, column: number) => engine.valueOf(ids[sheet], row, column);
@@ -560,7 +560,7 @@ function blankResults(book: Book, engine: Engine, candidates: readonly Formula[]
             }
         },
     }));
-    const probe = new Engine(sources);
+    const probe = new Engine(sources, 0, 0, false);
     probe.recalc(Number.POSITIVE_INFINITY);
     const blank = candidates.filter(
         ({ sheet, cell }) => probe.valueOf(book.sheets[sheet].id, cell.row, cell.column) === true,

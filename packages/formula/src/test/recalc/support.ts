@@ -42,7 +42,12 @@ function source(id: string, cells: Cells): SheetSource {
 
 // An engine over sheets of typed cells: a text that starts with = is a formula that was never computed.
 export function engineOf(sheets: Readonly<Record<string, Cells>>): Engine {
-    return new Engine(Object.entries(sheets).map(([id, cells]) => source(id, cells)));
+    return new Engine(
+        Object.entries(sheets).map(([id, cells]) => source(id, cells)),
+        0,
+        0,
+        false,
+    );
 }
 
 export function valueAt(engine: Engine, label: string, sheet = 's1') {
@@ -60,7 +65,7 @@ export function evaluate(formula: string, cells: Cells = {}, host = 'N1') {
 // The values at `hosts` after a recalc of `cells` whose functions are those of this build and `rows`: for what
 // no function of this build does yet.
 export function valuesWith(rows: readonly Entry[], cells: Cells, hosts: readonly string[]) {
-    const workbook = new Workbook([source('s1', cells)]);
+    const workbook = new Workbook([source('s1', cells)], false);
     const functions = new Map([...FUNCTIONS, ...rows.map((entry) => [entry.name, entry] as const)]);
     new Recalc(workbook, functions, 0, 0).pass(Number.POSITIVE_INFINITY);
     return hosts.map((host) => workbook.value(workbook.sheets[0].columns[at(host)[1]], at(host)[0]));

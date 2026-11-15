@@ -50,7 +50,7 @@ describe('a block moved in the store', () => {
         const pick = random(11);
         let zeroed = 0;
         for (let run = 0; run < 3000; run += 1) {
-            const workbook = new Workbook([source('a'), source('b')]);
+            const workbook = new Workbook([source('a'), source('b')], false);
             for (const sheet of workbook.sheets) {
                 for (let i = pick(14); i > 0; i -= 1) {
                     const row = pick(9);
@@ -117,7 +117,7 @@ describe('a block moved in the store', () => {
         expect(zeroed).toBeGreaterThan(500);
     });
     test('shapes are written where the cells are before they move, so they travel with them', () => {
-        const workbook = new Workbook([source('a')]);
+        const workbook = new Workbook([source('a')], false);
         const [sheet] = workbook.sheets;
         workbook.fillFormula(sheet, 2, 1, 4, 2, '=R1C1');
         const other = workbook.shapes.intern('=R1C1+1', NO_SHEET);
@@ -137,7 +137,7 @@ describe('a block moved in the store', () => {
 
 describe('what lookups keep of a column across an edit', () => {
     test('columns that slide keep it, and a column whose rows moved or that a block left or landed on starts over', () => {
-        const workbook = new Workbook([source('a')]);
+        const workbook = new Workbook([source('a')], false);
         const [sheet] = workbook.sheets;
         for (let row = 0; row < 6; row += 1) workbook.setValue(sheet, row, 3, row % 3);
         workbook.setValue(sheet, 0, 5, 1);
@@ -190,13 +190,16 @@ describe('what lookups keep of a column across an edit', () => {
 
 describe('the sheets of a workbook', () => {
     test('come, go and change place, each knowing its place', () => {
-        const workbook = new Workbook([source('a'), source('b'), source('c')]);
+        const workbook = new Workbook([source('a'), source('b'), source('c')], false);
         const places = () => workbook.sheets.map((sheet) => `${sheet.id}${sheet.place}`).join(' ');
         workbook.apply({ kind: ChangeKind.MoveSheet, sheet: 'a', place: 2 }, []);
         expect(places()).toBe('b0 c1 a2');
         workbook.apply({ kind: ChangeKind.RemoveSheet, sheet: 'b' }, []);
         expect([places(), workbook.sheet('b')]).toEqual(['c0 a1', undefined]);
-        workbook.apply({ kind: ChangeKind.AddSheet, sheet: workbook.adopt(workbook.read(source('d'))), place: 1 }, []);
+        workbook.apply(
+            { kind: ChangeKind.AddSheet, sheet: workbook.adopt(workbook.read(source('d'), false)), place: 1 },
+            [],
+        );
         workbook.apply({ kind: ChangeKind.RenameSheet, sheet: 'd', name: 'Dee' }, []);
         expect([places(), workbook.known('d').name]).toEqual(['c0 d1 a2', 'Dee']);
         expect(() => workbook.known('b')).toThrow('No sheet b');

@@ -52,7 +52,7 @@ export class Workbook {
     // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
     // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
     // band said twice is.
-    public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
+    public constructor({ g, now, seed, computed, sheets }: Readonly<BookContent>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map((sheet) => this.partsOf(sheet));
         let slots = 0;
@@ -71,7 +71,7 @@ export class Workbook {
         const refusal = fits(weightOf(slots, parts));
         if (refusal) throw new Refusal(refusal);
 
-        this.engine = new Engine(ordered.map(sourceOf), now, seed);
+        this.engine = new Engine(ordered.map(sourceOf), now, seed, computed);
         for (const [at, { id }] of ordered.entries()) this.parts.set(id, parts[at]);
         this.g = g;
         this.now = now;
@@ -83,9 +83,9 @@ export class Workbook {
         return this.parts;
     }
 
-    // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
-    // a host walks only after a recalc that did not stop.
-    public content(): Omit<BookContent, 'computed'> {
+    // The document as a snapshot holds it. It says it is computed exactly when the engine's values are those of a
+    // finished pass, so a host writes what this gives and a snapshot cannot say more than is true.
+    public content(): BookContent {
         const sheets = [...this.parts].sort(([idA, a], [idB, b]) =>
             compareRules(a.records.fields.order, idA, b.records.fields.order, idB),
         );
@@ -93,6 +93,7 @@ export class Workbook {
             g: this.g,
             now: this.now,
             seed: this.seed,
+            computed: this.engine.settled(),
             sheets: sheets.map(([id, sheet]) => this.sheetContent(id, sheet)),
         };
     }
