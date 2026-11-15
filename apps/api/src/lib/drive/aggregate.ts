@@ -6,10 +6,10 @@
 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, RecentPath } from '@workspace/lib/types/drive';
-import { pullDriveSearch, pullFromEach, pullMimeContents, pullVisiblePaths } from '../home/home-relay';
+import { getFromHomes, pullDriveSearch, pullFromEach, pullMimeContents, pullVisiblePaths } from '../home/home-relay';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { getDrive, getSharedDrive } from './get-drive';
+import { getDrive } from './get-drive';
 import type { RecentRow } from './recent';
 
 const RECENT_PAGE = 100;
@@ -29,12 +29,11 @@ export async function aggregateWatches(user: User): Promise<DrivePath[]> {
     const covered = new Set([user.id, ...teamOwners]);
     const ownDrive = await getDrive(user);
     const sharedOwners = (await ownDrive.getSharedOwnerIds()).filter((id) => !covered.has(id));
-    const owners = [user.id, ...teamOwners, ...sharedOwners];
-
-    const lists = await pullFromEach(owners, (ownerId) =>
-        getSharedDrive(ownerId, user).then((drive) => drive.getWatches(user)),
-    );
-    return mergeById(lists);
+    const [own, others] = await Promise.all([
+        ownDrive.getWatches(user),
+        getFromHomes([...teamOwners, ...sharedOwners], 'drive:watches', { user }),
+    ]);
+    return mergeById([own, ...others.values()]);
 }
 
 // Each home keeps the full limit, so the newest files of all homes compete before the cut.
