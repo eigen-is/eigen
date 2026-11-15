@@ -30,7 +30,7 @@ import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
-import { parseIdList, readVectorFromDoc, serializeIdList } from '@workspace/lib/vector';
+import { parseIdList, serializeIdList } from '@workspace/lib/vector';
 import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
@@ -553,7 +553,7 @@ async function main(): Promise<void> {
                 attachments.push(upload.name);
             }
             // A whisper names its reader by email, as the chat client sends one.
-            const whisperTo = line.whisperTo && emailFor(line.whisperTo, MAIL_DOMAIN);
+            const whisperTo = line.whisperTo ? lookup(userByKey, line.whisperTo).email : undefined;
             const { id } = await room.postMessage(
                 author,
                 line.text,
@@ -634,7 +634,7 @@ async function main(): Promise<void> {
     }
 
     // --- The containers built straight into their Y.Doc from a typed spec, such as the site plan and the budget. A
-    // canvas comment follows the build in the editor's order: the thread, the card, then its id on the element. ---
+    // canvas comment is written in the editor's order: the thread, the card, then its id on the element. ---
     const seedBuiltContainer = async (
         spec: { folder: string; name: string; author: LeadRole; comments?: CanvasComment[] },
         type: 'vector' | 'slides' | 'sheets',
@@ -644,37 +644,46 @@ async function main(): Promise<void> {
         const author = userForRole(spec.author);
         const container = await teamDrive.create(teamMountId, lookup(folderId, spec.folder), spec.name, type, author);
         await uploadMedia(teamDrive, teamMountId, container, imageFiles, author);
-        const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
-        build(collab.doc);
+        const chatFolder = await teamDrive.getChildByName(teamMountId, container.id, CONTAINER_CHAT_FOLDER);
+        if (!chatFolder) throw new Error(`chat/ subfolder missing for ${container.name}`);
+        const cards: { elementId: string; card: CommentCard }[] = [];
         for (const comment of spec.comments ?? []) {
-            const elementId = `el-${comment.element}`;
-            const anchor = readVectorFromDoc(collab.doc).elements.find((element) => element.id === elementId);
-            if (!anchor) throw new Error(`"${spec.name}" has no element '${comment.element}' to comment on`);
             const commentAuthor = lookup(userByKey, comment.author);
-            const chatFolder = await teamDrive.getChildByName(teamMountId, container.id, CONTAINER_CHAT_FOLDER);
-            if (!chatFolder) throw new Error(`chat/ subfolder missing for ${container.name}`);
             const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
             const startedAt = await postThread(chat, comment.start, [
                 { author: comment.author, text: comment.text },
                 ...(comment.replies ?? []),
             ]);
-            const card: CommentCard = {
-                id: crypto.randomUUID(),
-                title: comment.title,
-                description: '',
-                color: DEFAULT_CARD_COLOR,
-                chatName: chat.name,
-                creator: commentAuthor.email,
-                createdAt: startedAt.getTime(),
-            };
-            collab.doc.transact(() => {
-                writeCommentCard(collab.doc, card);
-                collab.doc
-                    .getMap<Y.Map<unknown>>('elements')
-                    .get(elementId)
-                    ?.set('commentCardIds', serializeIdList([...parseIdList(anchor.commentCardIds), card.id]));
+            cards.push({
+                elementId: `el-${comment.element}`,
+                card: {
+                    id: crypto.randomUUID(),
+                    title: comment.title,
+                    description: '',
+                    color: DEFAULT_CARD_COLOR,
+                    chatName: chat.name,
+                    creator: commentAuthor.email,
+                    createdAt: startedAt.getTime(),
+                },
             });
         }
+        // The collab doc opens right before its one write, as a doc's does above.
+        const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
+        build(collab.doc);
+        const anchored = cards.map(({ elementId, card }) => {
+            const element = collab.doc.getMap('elements').get(elementId);
+            if (!(element instanceof Y.Map))
+                throw new Error(`"${spec.name}" has no element ${elementId} to comment on`);
+            return { element, card };
+        });
+        collab.doc.transact(() => {
+            for (const { element, card } of anchored) {
+                writeCommentCard(collab.doc, card);
+                const held = element.get('commentCardIds');
+                const ids = parseIdList(typeof held === 'string' ? held : '');
+                element.set('commentCardIds', serializeIdList([...ids, card.id]));
+            }
+        });
         await teamDrive.flushContainerDb(teamMountId, container.id);
         return container;
     };
