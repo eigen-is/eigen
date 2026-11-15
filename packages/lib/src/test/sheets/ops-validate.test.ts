@@ -6,16 +6,12 @@ import type { Batch, CellAttrKey, Op, SheetContent } from '../../sheets/ops';
 import { LOOK_KEYS } from '../../sheets/ops';
 import { isSheetContent, readBatch } from '../../sheets/ops-validate';
 
-// A list whose first item is a hole, as JSON never writes one.
-function holed(item: unknown): unknown[] {
-    const list = new Array(2);
-    list[1] = item;
-    return list;
-}
-
 const CLOCK = { now: 46000.5, seed: -7 };
 const batchOf = (...ops: unknown[]) => ({ g: 0, ...CLOCK, ops });
-const accepts = (op: unknown) => readBatch(batchOf(op)) !== null;
+const read = (value: unknown) => readBatch(JSON.stringify(value));
+const accepts = (op: unknown) => read(batchOf(op)) !== null;
+// An op's own text, for a number or a key that no object literal writes the way JSON reads it.
+const acceptsText = (op: string) => readBatch(`{"g":0,"now":1,"seed":0,"ops":[${op}]}`) !== null;
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
 
@@ -197,41 +193,48 @@ const EXAMPLES: Batch[] = [
 ];
 
 describe('readBatch', () => {
-    test('returns every example batch of the vocabulary', () => {
-        for (const batch of EXAMPLES) expect(readBatch(batch)).toEqual(batch);
+    test('returns every example batch of the vocabulary from its text', () => {
+        for (const batch of EXAMPLES) expect(read(batch)).toEqual(batch);
     });
 
-    test('reads a batch from its JSON', () => {
-        for (const batch of EXAMPLES) expect(readBatch(JSON.parse(JSON.stringify(batch)))).toEqual(batch);
+    test('reads its text alone, so two reads of one text share nothing', () => {
+        const text = JSON.stringify(EXAMPLES[0]);
+        const first = readBatch(text);
+        const second = readBatch(text);
+        expect(first).toEqual(second);
+        expect(first?.ops[0]).not.toBe(second?.ops[0]);
+    });
+
+    test('refuses a text that does not parse', () => {
+        const text = JSON.stringify(EXAMPLES[0]);
+        for (const bad of ['', 'x', '{', text.slice(0, -1), `${text},`, "{'g':0}", 'NaN', 'undefined']) {
+            expect(readBatch(bad)).toBeNull();
+        }
     });
 
     test('refuses anything but { g, now, seed, ops }', () => {
         for (const value of [null, 1, 'x', [], {}, { g: 0 }, { ops: [] }, { ...CLOCK, ops: [] }, { g: 0, ops: [] }]) {
-            expect(readBatch(value)).toBeNull();
+            expect(read(value)).toBeNull();
         }
-        expect(readBatch({ g: 0, ...CLOCK, ops: [], h: 1 })).toBeNull();
-        for (const g of [-1, 1.5, Number.NaN, '0', null]) expect(readBatch({ g, ...CLOCK, ops: [] })).toBeNull();
-        expect(readBatch({ g: 0, ...CLOCK, ops: {} })).toBeNull();
-        expect(readBatch({ g: 0, ...CLOCK, ops: [] })).toEqual({ g: 0, ...CLOCK, ops: [] });
+        expect(read({ g: 0, ...CLOCK, ops: [], h: 1 })).toBeNull();
+        for (const g of [-1, 1.5, Number.NaN, '0', null]) expect(read({ g, ...CLOCK, ops: [] })).toBeNull();
+        expect(read({ g: 0, ...CLOCK, ops: {} })).toBeNull();
+        expect(read({ g: 0, ...CLOCK, ops: [] })).toEqual({ g: 0, ...CLOCK, ops: [] });
     });
 
     test('takes the clock as a serial and the seed as a 32-bit integer', () => {
-        const clock = (now: unknown, seed: unknown) => readBatch({ g: 0, now, seed, ops: [] }) !== null;
+        const clock = (now: unknown, seed: unknown) => read({ g: 0, now, seed, ops: [] }) !== null;
         expect(clock(0, 0)).toBe(true);
         expect(clock(2958465.5, 2 ** 31 - 1)).toBe(true);
         expect(clock(1, -(2 ** 31))).toBe(true);
         for (const now of [-1, Number.NaN, Number.POSITIVE_INFINITY, '1']) expect(clock(now, 0)).toBe(false);
         for (const seed of [2 ** 31, -(2 ** 31) - 1, 0.5, Number.NaN, '1']) expect(clock(0, seed)).toBe(false);
+        expect(readBatch('{"g":0,"now":1e400,"seed":0,"ops":[]}')).toBeNull();
     });
 
     test('refuses a whole batch for one op that is not valid', () => {
         const [good] = EXAMPLES;
-        expect(readBatch({ ...good, ops: [...good.ops, { kind: 'paste' }] })).toBeNull();
-    });
-
-    test('reads a hole in a sparse op list as an op that is not valid', () => {
-        expect(readBatch({ g: 0, ...CLOCK, ops: holed(cell({ v: 1 })) })).toBeNull();
-        expect(readBatch({ g: 0, ...CLOCK, ops: new Array(3) })).toBeNull();
+        expect(read({ ...good, ops: [...good.ops, { kind: 'paste' }] })).toBeNull();
     });
 });
 
@@ -374,10 +377,8 @@ describe('3. closed shapes', () => {
     });
 
     test('refuse a prototype key in place of a listed one', () => {
-        expect(
-            accepts(JSON.parse('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":1,"__proto__":{"f":"=1"}}]]}')),
-        ).toBe(false);
-        expect(accepts(JSON.parse('{"kind":"sheet","delete":"s1","__proto__":{"add":{}}}'))).toBe(false);
+        expect(acceptsText('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":1,"__proto__":{"f":"=1"}}]]}')).toBe(false);
+        expect(acceptsText('{"kind":"sheet","delete":"s1","__proto__":{"add":{}}}')).toBe(false);
     });
 
     test('refuse a kind or a record type that does not exist', () => {
@@ -392,9 +393,8 @@ describe('4. values and formulas', () => {
     test('a value is a finite number, a boolean or text within the bound', () => {
         for (const v of [0, -2.5, 1e300, true, false, '', 'x'.repeat(MAX_TEXT_LENGTH)])
             expect(accepts(cell({ v }))).toBe(true);
-        for (const v of [Number.NaN, Number.POSITIVE_INFINITY, 'x'.repeat(MAX_TEXT_LENGTH + 1), null, [], {}, 10n]) {
-            expect(accepts(cell({ v }))).toBe(false);
-        }
+        for (const v of ['x'.repeat(MAX_TEXT_LENGTH + 1), null, [], {}]) expect(accepts(cell({ v }))).toBe(false);
+        expect(acceptsText('{"kind":"input","sheet":"s1","cells":[[0,0,{"v":1e400}]]}')).toBe(false);
     });
 
     test('an error is a known error literal beside e: 1', () => {
@@ -729,20 +729,20 @@ describe('10. lines', () => {
 });
 
 describe('11. the batch budget', () => {
-    test('refuses a batch past MAX_BATCH_JSON of JSON', () => {
-        const text = 'x'.repeat(100_000);
-        const count = Math.ceil(MAX_BATCH_JSON / text.length);
-        const fits = Array.from({ length: count - 2 }, (_, row) => [row, 0, { v: text }]);
-        expect(readBatch(batchOf(input({ cells: fits })))).not.toBeNull();
-        const past = Array.from({ length: count + 1 }, (_, row) => [row, 0, { v: text }]);
-        expect(readBatch(batchOf(input({ cells: past })))).toBeNull();
+    const text = 'x'.repeat(100_000);
+    const cells = Array.from({ length: Math.ceil(MAX_BATCH_JSON / text.length) }, (_, row) => [row, 0, { v: text }]);
+
+    test('refuses a batch whose text is past MAX_BATCH_JSON, to the code unit', () => {
+        expect(read(batchOf(input({ cells })))).toBeNull();
+        const small = JSON.stringify(EXAMPLES[0]);
+        const padded = (length: number) => `${small}${' '.repeat(length - small.length)}`;
+        expect(readBatch(padded(MAX_BATCH_JSON))).not.toBeNull();
+        expect(readBatch(padded(MAX_BATCH_JSON + 1))).toBeNull();
     });
 
-    test('leaves a sheet add out of the count', () => {
-        const text = 'x'.repeat(100_000);
-        const count = Math.ceil(MAX_BATCH_JSON / text.length) + 1;
-        const cells = Array.from({ length: count }, (_, row) => [row, 0, { v: text }]);
-        expect(readBatch(batchOf(added({ cells })))).not.toBeNull();
+    test('leaves a batch of sheet ops alone out of the count, and counts an add beside any other op', () => {
+        expect(read(batchOf(added({ cells }), { kind: 'sheet', delete: 's1' }))).not.toBeNull();
+        expect(read(batchOf(added({ cells }), cell({ v: 1 })))).toBeNull();
     });
 });
 
@@ -831,42 +831,20 @@ function random(seed: number): () => number {
     };
 }
 
-const ODD: unknown[] = [
-    null,
-    undefined,
-    true,
-    0,
-    -0,
-    -1,
-    1.5,
-    Number.NaN,
-    Number('1e400'),
-    -Number('1e400'),
-    2 ** 53,
-    10n,
-    '',
-    '0',
-    '=',
-    '#N/A',
-    '__proto__',
-    'constructor',
-    'x'.repeat(300),
-    [],
-    {},
-    holed(1),
-    Object.create(null),
-    JSON.parse('{"__proto__":{"kind":"input"}}'),
+// JSON texts of values no op holds, such as a number past a double or a prototype key.
+const ODD: string[] = [
+    ...['null', 'true', '0', '-0', '-1', '1.5', '1e400', '-1e400', String(2 ** 53)],
+    ...['""', '"0"', '"="', '"#N/A"', '"__proto__"', '"constructor"', JSON.stringify('x'.repeat(300))],
+    ...['[]', '{}', '[null,1]', '{"__proto__":{"kind":"input"}}'],
 ];
 
-function randomJson(next: () => number, depth: number): unknown {
+function randomJson(next: () => number, depth: number): string {
     const pick = Math.floor(next() * (depth > 3 ? 1 : 3));
     if (pick === 0) return ODD[Math.floor(next() * ODD.length)];
-    const length = Math.floor(next() * 5);
-    if (pick === 1) return Array.from({ length }, () => randomJson(next, depth + 1));
+    const items = Array.from({ length: Math.floor(next() * 5) }, () => randomJson(next, depth + 1));
+    if (pick === 1) return `[${items.join(',')}]`;
     const keys = ['kind', 'sheet', 'cells', 'runs', 'v', 'f', 'g', 'ops', 'set', 'id', 'type', 'add', 'x'];
-    return Object.fromEntries(
-        Array.from({ length }, () => [keys[Math.floor(next() * keys.length)], randomJson(next, depth + 1)]),
-    );
+    return `{${items.map((item) => `"${keys[Math.floor(next() * keys.length)]}":${item}`).join(',')}}`;
 }
 
 type Node = Record<string, unknown> | unknown[];
@@ -880,41 +858,60 @@ function nodesOf(value: unknown, into: Node[] = []): Node[] {
 }
 
 const VALID_OPS: Op[] = EXAMPLES.flatMap((batch) => batch.ops);
+const batchText = (ops: string) => `{"g":0,"now":1,"seed":0,"ops":[${ops}]}`;
+// A string a mutation writes, which the text then carries as a number no double holds.
+const INFINITE = '<infinite>';
 
 describe('never throws', () => {
     test('on odd values anywhere', () => {
         for (const value of ODD) {
-            expect(() => readBatch(value)).not.toThrow();
-            expect(() => readBatch({ g: 0, ...CLOCK, ops: [value] })).not.toThrow();
-            expect(() => readBatch({ g: value, ...CLOCK, ops: [] })).not.toThrow();
-            expect(() => readBatch(batchOf(cell(value)))).not.toThrow();
-            expect(() => readBatch(batchOf(added({ cells: [[0, 0, value]] })))).not.toThrow();
-            expect(() => isSheetContent(value)).not.toThrow();
+            for (const text of [
+                value,
+                batchText(value),
+                `{"g":${value},"now":1,"seed":0,"ops":[]}`,
+                batchText(`{"kind":"input","sheet":"s1","cells":[[0,0,${value}]]}`),
+                batchText(JSON.stringify(added({ cells: [[0, 0, INFINITE]] })).replace(`"${INFINITE}"`, value)),
+            ]) {
+                expect(() => readBatch(text)).not.toThrow();
+            }
+            expect(() => isSheetContent(JSON.parse(value))).not.toThrow();
         }
     });
 
     test('on deep nesting and huge arrays', () => {
-        let deep: unknown = 1;
-        for (let depth = 0; depth < 200_000; depth += 1) deep = [deep];
-        let object: unknown = 1;
-        for (let depth = 0; depth < 200_000; depth += 1) object = { v: object };
-        expect(readBatch({ g: 0, ...CLOCK, ops: [deep] })).toBeNull();
-        expect(readBatch(batchOf(cell(object)))).toBeNull();
-        expect(readBatch(batchOf(input({ cells: [[0, 0, { s: deep }]] })))).toBeNull();
-        expect(readBatch({ g: 0, ...CLOCK, ops: new Array(1_000_000).fill(7) })).toBeNull();
-        expect(readBatch(batchOf(input({ cells: new Array(1_000_000).fill([0, 0, null]) })))).toBeNull();
+        const deep = `${'['.repeat(200_000)}1${']'.repeat(200_000)}`;
+        expect(readBatch(batchText(deep))).toBeNull();
+        expect(readBatch(batchText(`{"kind":"input","sheet":"s1","cells":[[0,0,{"s":${deep}}]]}`))).toBeNull();
+        const object = `${'{"v":'.repeat(200_000)}1${'}'.repeat(200_000)}`;
+        expect(readBatch(batchText(`{"kind":"input","sheet":"s1","cells":[[0,0,${object}]]}`))).toBeNull();
+        expect(read({ g: 0, ...CLOCK, ops: new Array(1_000_000).fill(7) })).toBeNull();
+        expect(read(batchOf(input({ cells: new Array(1_000_000).fill([0, 0, null]) })))).toBeNull();
     });
 
-    test('on thousands of random JSON values', () => {
+    test('on thousands of random JSON texts, as a batch and as an op', () => {
         const next = random(1);
         for (let round = 0; round < 5_000; round += 1) {
-            const value = randomJson(next, 0);
-            expect(() => readBatch(value)).not.toThrow();
-            expect(() => readBatch({ g: 0, ...CLOCK, ops: [value] })).not.toThrow();
+            const text = randomJson(next, 0);
+            expect(() => readBatch(text)).not.toThrow();
+            expect(() => readBatch(batchText(text))).not.toThrow();
         }
     });
 
-    test('on valid ops with one random mutation, which is refused or reads back the same', () => {
+    test('on texts that do not parse, which are refused', () => {
+        const next = random(3);
+        const texts = VALID_OPS.map((op) => JSON.stringify(batchOf(op)));
+        const alphabet = '{}[]":,.-+eE0123456789 abtrufnlsx\\';
+        for (let round = 0; round < 5_000; round += 1) {
+            const text = texts[Math.floor(next() * texts.length)];
+            expect(readBatch(text.slice(0, Math.floor(next() * text.length)))).toBeNull();
+            const noise = Array.from({ length: Math.floor(next() * 40) }, () =>
+                alphabet.charAt(Math.floor(next() * alphabet.length)),
+            ).join('');
+            expect(() => readBatch(noise)).not.toThrow();
+        }
+    });
+
+    test('on texts of valid ops with one random mutation, which are refused or read as they parse', () => {
         const next = random(2);
         let refused = 0;
         for (let round = 0; round < 20_000; round += 1) {
@@ -929,22 +926,22 @@ describe('never throws', () => {
                 else node[String(key ?? 'x')] = value;
             };
             if (mutation === 0 && !Array.isArray(node)) node['zz'] = 1;
-            else if (mutation === 1) write(randomJson(next, 2));
-            else if (mutation === 2) write(Number.NaN);
+            else if (mutation === 1) write(JSON.parse(randomJson(next, 2)));
+            else if (mutation === 2) write(INFINITE);
             else if (Array.isArray(node)) node.splice(Number(key ?? 0), 1);
             else delete node[String(key)];
-            let read: Batch | null = null;
+            const text = JSON.stringify(batchOf(op)).replace(`"${INFINITE}"`, '1e400');
+            let batch: Batch | null = null;
             expect(() => {
-                read = readBatch(batchOf(op));
+                batch = readBatch(text);
             }).not.toThrow();
-            // A key no type lists, or a number JSON cannot carry, is never valid.
-            if ((mutation === 0 && !Array.isArray(node)) || mutation === 2) expect(read).toBeNull();
-            if (read === null) {
+            // A key no type lists, or a number no double holds, is never valid.
+            if ((mutation === 0 && !Array.isArray(node)) || mutation === 2) expect(batch).toBeNull();
+            if (batch === null) {
                 refused += 1;
                 continue;
             }
-            const json = JSON.stringify(read);
-            expect(JSON.stringify(readBatch(JSON.parse(json)))).toBe(json);
+            expect(batch).toEqual(JSON.parse(text));
         }
         expect(refused).toBeGreaterThan(5_000);
     });

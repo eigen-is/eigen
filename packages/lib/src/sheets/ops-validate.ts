@@ -31,19 +31,24 @@ import { isCellLinkType } from './types';
 type Check = (value: unknown) => boolean;
 type Entries = Record<string, unknown>;
 
-// A batch of ops when every op in it is valid and it fits the batch budget, else null. A sheet's add is left out of the
-// budget: the workbook's limits bound it.
-export function readBatch(value: unknown): Batch | null {
+// A batch of ops from its JSON text, when the text parses, every op in it is valid and the text fits the batch budget,
+// else null. A batch of sheet ops alone is left out of the budget, since a sheet's add is bounded by the workbook's limits.
+export function readBatch(text: string): Batch | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        return null;
+    }
     if (!isRecord(value) || !hasOnlyKeys(value, BATCH_KEYS)) return null;
     const { g, now, seed, ops } = value;
     if (!isCount(g, Number.MAX_SAFE_INTEGER) || !isFiniteNumber(now) || now < 0 || !isSeed(seed) || !isOpList(ops))
         return null;
-    let size = 0;
-    for (const op of ops) if (!(op.kind === 'sheet' && 'add' in op)) size += JSON.stringify(op).length;
-    return size <= MAX_BATCH_JSON ? { g, now, seed, ops } : null;
+    return text.length <= MAX_BATCH_JSON || ops.every((op) => op.kind === 'sheet') ? { g, now, seed, ops } : null;
 }
 
-// A sheet whole, as a `sheet` op adds it and a snapshot holds it.
+// A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value fresh from `JSON.parse`,
+// so no getter, hole or `undefined` can stand in it.
 export function isSheetContent(value: unknown): value is SheetContent {
     if (!isRecord(value) || !hasOnlyKeys(value, SHEET_CONTENT_KEYS)) return false;
     const { id, fields, cells, looks, bands, rows, columns, records } = value;
@@ -52,7 +57,7 @@ export function isSheetContent(value: unknown): value is SheetContent {
         isWhole(fields, SHEET_FIELDS) &&
         isCellList(cells, isCellRecord) &&
         Array.isArray(looks) &&
-        everyItem(looks, isLook) &&
+        looks.every(isLook) &&
         isBands(bands, looks.length) &&
         isLineRuns(rows, GRID_ROWS) &&
         isLineRuns(columns, GRID_COLUMNS) &&
@@ -61,7 +66,7 @@ export function isSheetContent(value: unknown): value is SheetContent {
 }
 
 function isOpList(value: unknown): value is Op[] {
-    return Array.isArray(value) && everyItem(value, isOp);
+    return Array.isArray(value) && value.every(isOp);
 }
 
 function isOp(value: unknown): value is Op {
@@ -97,7 +102,7 @@ function isCellFormatOp(op: Entries): boolean {
     const { ranges, set, clear } = op;
     return (
         Array.isArray(ranges) &&
-        everyItem(ranges, isRect) &&
+        ranges.every(isRect) &&
         (set === undefined || isLookOf(set, FORMAT_CHECKS)) &&
         (clear === undefined || isKeyList(clear, FORMAT_CHECKS)) &&
         namesAKey(set, clear)
@@ -111,7 +116,7 @@ function isLineFormatOp(op: Entries): boolean {
     const count = lines === 'rows' ? GRID_ROWS : GRID_COLUMNS;
     return (
         Array.isArray(spans) &&
-        everyItem(spans, (span) => isSpan(span, count)) &&
+        spans.every((span) => isSpan(span, count)) &&
         (set === undefined || isWhole(set, LINE_FIELDS)) &&
         (clear === undefined || isKeyList(clear, LINE_FIELDS.checks)) &&
         namesAKey(set, clear)
@@ -356,7 +361,6 @@ function isWhole(value: unknown, { checks, required }: Table): boolean {
     let present = 0;
     for (const key in value) {
         const item = value[key];
-        if (item === undefined) continue;
         if (!checks.get(key)?.(item)) return false;
         if (required.has(key)) present += 1;
     }
@@ -387,7 +391,7 @@ function isLook(value: unknown): value is CellAttrs {
 }
 
 function isKeyList(value: unknown, checks: ReadonlyMap<string, Check>): boolean {
-    return Array.isArray(value) && everyItem(value, (key) => typeof key === 'string' && checks.has(key));
+    return Array.isArray(value) && value.every((key) => typeof key === 'string' && checks.has(key));
 }
 
 function namesAKey(set: unknown, clear: unknown): boolean {
@@ -399,12 +403,6 @@ function isConditionalFormat(value: unknown): boolean {
     if (!isRecord(value) || !isWhole(value, DEFAULT_RULE_FIELDS)) return false;
     const { conditionName, conditionValue } = value;
     return conditionName !== 'formula' || (Array.isArray(conditionValue) && isStoredKey(conditionValue[0]));
-}
-
-// Every item is checked, holes of a sparse list included, which `every` would skip.
-function everyItem(list: readonly unknown[], check: Check): boolean {
-    for (const item of list) if (!check(item)) return false;
-    return true;
 }
 
 function hasOnlyKeys(value: Entries, keys: ReadonlySet<string>): boolean {
@@ -466,7 +464,7 @@ function isSortedSpans(value: unknown): boolean {
 }
 
 function isRanges(value: unknown): boolean {
-    return Array.isArray(value) && value.length > 0 && everyItem(value, isRange);
+    return Array.isArray(value) && value.length > 0 && value.every(isRange);
 }
 
 function isRange(value: unknown): boolean {
@@ -511,7 +509,7 @@ function isOrderKey(value: unknown): boolean {
 }
 
 function isTexts(value: unknown, check: Check): boolean {
-    return Array.isArray(value) && everyItem(value, check);
+    return Array.isArray(value) && value.every(check);
 }
 
 function isBorderSide(value: unknown): boolean {
