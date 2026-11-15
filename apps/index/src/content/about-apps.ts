@@ -2,27 +2,9 @@
 // registry's order, then Admin for the person who runs the server. An app's slug is its name in lower case and names
 // both its page's file and its URL, such as sheets.md and /about/sheets. Each app also says which of Eigen's three
 // principles hold for it and how, such as CalDAV for Calendar, for the boxes beside its page and the tags under the
-// landing page's blocks. The content build checks the About files against this list.
+// landing page's blocks. The content build checks the About files and the principles' app slugs against this list.
 
 import { adminApp, apps } from '@workspace/lib/apps';
-
-// The registry names its apps as plain strings, so the slugs are written out once here to give them a type; an app
-// the registry adds without one throws below.
-const aboutSlugs = [
-    'mail',
-    'drive',
-    'calendar',
-    'docs',
-    'sheets',
-    'slides',
-    'vector',
-    'stickies',
-    'chat',
-    'contacts',
-    'admin',
-] as const;
-
-type AboutSlug = (typeof aboutSlugs)[number];
 
 export const principles = ['Use your favorite apps', 'Office compatible', 'Built for data sovereignty'] as const;
 
@@ -130,13 +112,12 @@ export const appPrinciples = {
             article: 'self-hosting/back-up-and-restore',
         },
     ],
-} satisfies Partial<Record<AboutSlug, readonly AppPrinciple[]>>;
+} satisfies Record<string, readonly AppPrinciple[]>;
 
 const principlesBySlug = new Map<string, readonly AppPrinciple[]>(Object.entries(appPrinciples));
 
 export const aboutApps = [...apps.filter((app) => app.name !== 'Space'), adminApp].map((app) => {
-    const slug = aboutSlugs.find((entry) => entry === app.name.toLowerCase());
-    if (!slug) throw new Error(`${app.name} has no About slug`);
+    const slug = app.name.toLowerCase();
     return { ...app, slug, principles: principlesBySlug.get(slug) ?? [] };
 });
 

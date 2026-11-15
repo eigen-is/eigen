@@ -4,8 +4,14 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { aboutApps } from '../src/content/about-apps';
-import { aboutPageBlocks, aboutPageSlug, checkAboutRows, checkPrincipleArticles } from './lib/about-pages';
+import { aboutApps, appPrinciples } from '../src/content/about-apps';
+import {
+    aboutPageBlocks,
+    aboutPageSlug,
+    checkAboutRows,
+    checkPrincipleApps,
+    checkPrincipleArticles,
+} from './lib/about-pages';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
 import { aboutFrontmatterSchema, blogFrontmatterSchema, supportFrontmatterSchema } from './lib/content-types';
 import { parseContentFile } from './lib/frontmatter';
@@ -128,6 +134,7 @@ function main() {
     mkdirSync(OUT, { recursive: true });
     const blog = buildBlog();
     const support = buildSupport();
+    checkPrincipleApps(Object.keys(appPrinciples));
     checkPrincipleArticles(new Set(support.map((article) => article.slug)));
     const about = buildAbout();
     writeManifest('blog', blog);

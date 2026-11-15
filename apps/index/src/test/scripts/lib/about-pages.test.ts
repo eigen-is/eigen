@@ -3,10 +3,11 @@ import {
     aboutPageBlocks,
     aboutPageSlug,
     checkAboutRows,
+    checkPrincipleApps,
     checkPrincipleArticles,
 } from '../../../../scripts/lib/about-pages';
 import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
-import { aboutApps } from '../../../content/about-apps';
+import { aboutApps, appPrinciples } from '../../../content/about-apps';
 
 const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${app.name}`]));
 
@@ -46,6 +47,16 @@ describe('checkAboutRows', () => {
         const { sheets: _, ...missing } = allRows;
         expect(() => checkAboutRows(missing)).toThrow();
         expect(() => checkAboutRows({ ...allRows, space: 'Your workspace home' })).toThrow();
+    });
+});
+
+describe('checkPrincipleApps', () => {
+    test('passes the principle map, whose apps are all About apps', () => {
+        expect(() => checkPrincipleApps(Object.keys(appPrinciples))).not.toThrow();
+    });
+
+    test('fails naming an app the About pages do not describe', () => {
+        expect(() => checkPrincipleApps(['sheets', 'space'])).toThrow('space');
     });
 });
 
