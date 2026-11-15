@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type MarkdownIt from 'markdown-it';
 import type { MediaBlock, MediaCaption } from './content-types';
+import { gridColumns } from './content-types';
 
 const VIDEO_FILES = ['.av1.mp4', '.h264.mp4', '.webp'];
 
@@ -111,8 +112,8 @@ export function markdownBlocks(
                     caption: captionOf(attrs.get('caption')),
                 });
             } else {
-                const columns = attrs.get('columns');
-                if (!columns || !/^[1-6]$/.test(columns)) throw new Error(`${where} needs columns from 1 to 6`);
+                const columns = gridColumns.find((count) => count === attrs.get('columns'));
+                if (!columns) throw new Error(`${where} needs columns from 1 to 6`);
                 // An image's title is the small picture the grid shows for it: a thumbnail, or a film's poster.
                 const items = images().map(({ src, title, caption }) => {
                     checkFile(src);

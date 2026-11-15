@@ -76,7 +76,9 @@ export type MediaItem = {
     poster?: string;
 };
 
-export type MediaGridData = { columns: string; items: MediaItem[] };
+export const gridColumns = ['1', '2', '3', '4', '5', '6'] as const;
+
+export type MediaGridData = { columns: (typeof gridColumns)[number]; items: MediaItem[] };
 
 // A caption as the Markdown renders it, and as the plain text an alt text, a label and the lightbox take.
 export type MediaCaption = { html: string; text: string };
