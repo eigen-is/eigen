@@ -25,7 +25,7 @@ export const calendarHero = {
             // Whole inside the window, where a click can reach it.
             const box = await meeting.boundingBox();
             if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) break;
-            await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
+            await page.getByRole('button', { name: 'Next month' }).dispatchEvent('click');
             await Bun.sleep(800);
         }
         await Bun.sleep(2000);
