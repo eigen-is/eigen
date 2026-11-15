@@ -3,7 +3,7 @@
 // look and font, converts it to shapes, points a new box at the ticket slice with an arrow and pulls that slice out,
 // the arrow following. Both films end on the finished picture.
 
-import type { Page } from 'playwright-core';
+import type { Locator, Page } from 'playwright-core';
 import { DRIVE_TYPE_SLIDES, DRIVE_TYPE_VECTOR } from '../../../../packages/lib/src/types/drive';
 import { SPONSOR_DECK } from '../../../api/src/scripts/demo/content';
 import { elementPoint } from '../lib/canvas';
@@ -40,14 +40,14 @@ export const vectorPie = {
         await page.getByRole('button', { name: 'New vector' }).click();
         await page.getByLabel('Vector name').fill(DRAWING);
         await page.getByRole('button', { name: 'Create' }).click();
-        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
+        await insertMenu(page).waitFor();
         await openCharts(ctx);
     },
     run: async (ctx) => {
         const [page] = ctx.pages;
         await copyPie(ctx);
         await openFile(page, ctx.stack, DRIVE_TYPE_VECTOR, DRAWING);
-        await page.getByRole('button', { name: /^Rectangle/ }).waitFor();
+        await insertMenu(page).waitFor();
         await Bun.sleep(800);
         await drawPicture(ctx, await pasteChart(ctx));
     },
@@ -69,7 +69,7 @@ export const slidesPie = {
         await openFile(page, ctx.stack, DRIVE_TYPE_SLIDES, SPONSOR_DECK.name);
         await page.locator('[data-element-id="el-title-text-0"]').first().waitFor();
         await Bun.sleep(900);
-        await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'Insert', exact: true })));
+        await cursor.click(await pointOn(insertMenu(page)));
         await Bun.sleep(400);
         await cursor.click(await pointOn(page.getByRole('menuitem', { name: 'New slide', exact: true })));
         await Bun.sleep(700);
@@ -143,8 +143,7 @@ async function drawPicture(
     // A box up and to the right of the pie, clear of the slice labels.
     const corner = { x: pie.x + 2.5 * pie.r, y: pie.y - 1.05 * pie.r };
     const size = { x: 1.6 * pie.r, y: 0.62 * pie.r };
-    await cursor.click(await pointOn(page.getByRole('button', { name: /^Rectangle/ })));
-    await Bun.sleep(300);
+    await pickTool(page, cursor, /^Rectangle/);
     await cursor.moveTo(corner);
     await page.mouse.down();
     await cursor.moveTo({ x: corner.x + size.x, y: corner.y + size.y }, { duration: 700 });
@@ -158,8 +157,7 @@ async function drawPicture(
     await page.keyboard.press('Escape');
     await Bun.sleep(400);
 
-    await cursor.click(await pointOn(page.getByRole('button', { name: /^Arrow/ })));
-    await Bun.sleep(300);
+    await pickTool(page, cursor, /^Arrow/);
     await cursor.moveTo({ x: corner.x + 4, y: corner.y + 0.7 * size.y });
     await page.mouse.down();
     await cursor.moveTo(at(0.7, -0.15), { duration: 900 });
@@ -183,6 +181,18 @@ async function drawPicture(
     await page.keyboard.press('Escape');
     await cursor.moveTo({ x: pie.x + 1.6 * pie.r, y: pie.y + 1.5 * pie.r }, { duration: 700 });
     await Bun.sleep(1500);
+}
+
+// At the films' width the toolbar folds its shape tools into the Insert menu, where a person picks them.
+function insertMenu(page: Page): Locator {
+    return page.getByRole('menuitem', { name: 'Insert', exact: true });
+}
+
+async function pickTool(page: Page, cursor: Cursor, name: RegExp): Promise<void> {
+    await cursor.click(await pointOn(insertMenu(page)));
+    await Bun.sleep(400);
+    await cursor.click(await pointOn(page.getByRole('menuitem', { name })));
+    await Bun.sleep(300);
 }
 
 // The id of the converted label that reads the text, on the canvas rather than in a slide's thumbnail.

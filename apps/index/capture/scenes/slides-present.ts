@@ -22,7 +22,9 @@ export const slidesPresent = {
         const present = await pointOn(page.getByRole('button', { name: 'Present' }));
         await Bun.sleep(800);
         await cursor.click(present);
-        await Bun.sleep(2500);
+        // The pointer would rest on every slide's heading, so it moves to the corner the slides leave empty.
+        await cursor.moveTo({ x: VIEWPORT.width - 60, y: VIEWPORT.height - 40 }, { duration: 700 });
+        await Bun.sleep(1800);
         for (let slide = 1; slide <= slideIndex('sponsors'); slide++) {
             await page.keyboard.press('ArrowRight');
             await Bun.sleep(2000);

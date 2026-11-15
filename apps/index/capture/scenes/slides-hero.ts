@@ -25,7 +25,8 @@ export const slidesHero = {
         const body = await elementPoint(page, 'el-who-comes-text-1');
         await cursor.moveTo(body);
         await page.mouse.dblclick(body.x, body.y);
-        await Bun.sleep(400);
+        // Below the line, so the pointer does not cover the words as they arrive.
+        await cursor.moveTo(await elementPoint(page, 'el-who-comes-text-1', 0.5, 2.5), { duration: 400 });
         await page.keyboard.press('ControlOrMeta+ArrowDown');
         await page.keyboard.press('End');
         await Bun.sleep(500);
