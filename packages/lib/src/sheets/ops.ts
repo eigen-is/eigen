@@ -148,7 +148,9 @@ export type MoveOp = { kind: 'move'; sheet: string; from: Rect; toSheet: string;
 export type SheetOp = { kind: 'sheet'; add: SheetContent } | { kind: 'sheet'; delete: string };
 export type Op = InputOp | FormatOp | RecordOp | LinesOp | MoveOp | SheetOp;
 export type OpKind = Op['kind'];
-export type Batch = { g: number; ops: Op[] };
+// `now` is the author's clock as a serial of the engine's day line, days with the time of day as the fraction, and
+// `seed` a 32-bit integer the author drew: every reader recomputes the clock and random cells with them.
+export type Batch = { g: number; now: number; seed: number; ops: Op[] };
 export type OpReferences = { media: string[]; comments: string[] };
 
 // The media files and comment cards an op brings in, so a sweep keeps them: media an image record is set to, a card
