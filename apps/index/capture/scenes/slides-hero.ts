@@ -28,7 +28,7 @@ export const slidesHero = {
         await page.keyboard.press('ControlOrMeta+ArrowDown');
         await page.keyboard.press('End');
         await Bun.sleep(500);
-        await typeLikeAPerson(page, ', five minutes from the sea');
+        await typeLikeAPerson(page, ', and most stay the whole weekend');
         await Bun.sleep(1500);
         await page.keyboard.press('Escape');
         await Bun.sleep(1200);
