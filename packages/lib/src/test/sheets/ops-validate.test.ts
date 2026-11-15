@@ -809,8 +809,18 @@ describe('11. the batch budget', () => {
     });
 
     test('leaves a batch of sheet ops alone out of the count, and counts an add beside any other op', () => {
+        expect(read(batchOf(added({ cells })))).not.toBeNull();
         expect(read(batchOf(added({ cells }), { kind: 'sheet', delete: 's1' }))).not.toBeNull();
         expect(read(batchOf(added({ cells }), cell({ v: 1 })))).toBeNull();
+        expect(read(batchOf(added({ cells }), record('comment', { set: { row: 0, column: 0 } })))).toBeNull();
+    });
+
+    test('counts a batch of sheet ops with no add, however its text is padded', () => {
+        const pad = (batch: unknown) => `${JSON.stringify(batch)}${' '.repeat(MAX_BATCH_JSON)}`;
+        expect(readBatch(pad(batchOf({ kind: 'sheet', delete: 's1' })))).toBeNull();
+        expect(readBatch(pad(batchOf()))).toBeNull();
+        const deletes = ',"delete":"s1"'.repeat(400_000);
+        expect(readBatch(`{"g":0,"now":1,"seed":0,"ops":[{"kind":"sheet"${deletes}}]}`)).toBeNull();
     });
 });
 

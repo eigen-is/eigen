@@ -67,8 +67,8 @@ type Table<T> = {
     readonly of?: T;
 };
 
-// A batch of ops from its JSON text, when the text parses, every op in it is valid and the text fits the batch budget,
-// else null. A batch of sheet ops alone is left out of the budget, since a sheet's add has bounds of its own.
+// A batch of ops from its JSON text, when the text parses, fits the batch budget and every op in it is valid, else null.
+// The budget is read before any op, so a text past it costs no more than its parse.
 export function readBatch(text: string): Batch | null {
     let value: unknown;
     try {
@@ -76,8 +76,19 @@ export function readBatch(text: string): Batch | null {
     } catch {
         return null;
     }
-    if (!isOf(value, BATCH)) return null;
-    return text.length <= MAX_BATCH_JSON || value.ops.every((op) => op.kind === 'sheet') ? value : null;
+    if (text.length > MAX_BATCH_JSON && !addsSheets(value)) return null;
+    return isOf(value, BATCH) ? value : null;
+}
+
+// A batch of sheet ops alone, one of them an add, is left out of the budget, since a sheet's add has bounds of its own.
+// It reads the parsed value raw: the ops are checked after.
+function addsSheets(value: unknown): boolean {
+    const ops = isRecord(value) ? value['ops'] : undefined;
+    return (
+        Array.isArray(ops) &&
+        ops.every((op) => isRecord(op) && op['kind'] === 'sheet') &&
+        ops.some((op) => isRecord(op) && 'add' in op)
+    );
 }
 
 // A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value fresh from `JSON.parse`,
