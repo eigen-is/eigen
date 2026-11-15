@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Batch, CellContent, InputOp, Op, RecordOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
+import { inputOfBlocks } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
 import type { Book } from './book-fixtures';
@@ -501,5 +502,60 @@ describe('engine/book/apply-input — sizes', () => {
                 cells: cells.map(([row, column]) => [row, column, null]),
             }),
         );
+    });
+});
+
+describe('engine/book/apply-input — what blocks hold', () => {
+    const content = () =>
+        bookOf(
+            sheetOf('a', {
+                cells: [
+                    [2, 0, { v: 1 }],
+                    [3, 0, { v: 1 }],
+                    [2, 1, { v: 1 }],
+                    [3, 1, { v: 1 }],
+                    [9, 1, { f: '=R3C1+1' }],
+                    [4, 3, { link: LINK }],
+                    [5, 3, { v: 'q', qp: 1 }],
+                ],
+            }),
+        );
+
+    test('lists the cells the blocks hold and no empty one, runs of equal content joined', () => {
+        const blocks: Rect[] = [
+            [0, 0, 20, 1],
+            [4, 3, 5, 9],
+        ];
+        expect(inputOfBlocks(new Workbook(content()), 'a', blocks)).toEqual(
+            input({
+                runs: [[[2, 0, 3, 1], { v: 1 }]],
+                cells: [
+                    [9, 1, { f: '=R3C1+1' }],
+                    [4, 3, { link: LINK }],
+                    [5, 3, { v: 'q', qp: 1 }],
+                ],
+            }),
+        );
+    });
+
+    test('is none for blocks that hold nothing, for no block and for a sheet the book does not hold', () => {
+        const book = new Workbook(content());
+        expect(inputOfBlocks(book, 'a', [[0, 4, 50, 9]])).toBeUndefined();
+        expect(inputOfBlocks(book, 'a', [])).toBeUndefined();
+        expect(inputOfBlocks(book, 'nosheet', [[0, 0, 9, 9]])).toBeUndefined();
+    });
+
+    test('written onto the blocks once they are empty, gives back what they held', () => {
+        const book = new Workbook(content());
+        const before = bytes(book);
+        const blocks: Rect[] = [
+            [0, 0, 3, 0],
+            [9, 1, 9, 1],
+            [4, 2, 6, 3],
+        ];
+        const held = inputOfBlocks(book, 'a', blocks);
+        applyOps(book, [input({ runs: blocks.map((rect) => [rect, null]) })]);
+        if (held) applyOps(book, [held]);
+        expect(bytes(book)).toBe(before);
     });
 });

@@ -222,14 +222,16 @@ function literalOf({ v, e, s }: CellContent): Literal | null {
     return e && typeof v === 'string' ? errorOf(v) : v;
 }
 
-// What disjoint rectangles of a sheet hold, as the one op that writes it back, read as the inverse of an input reads
-// its runs: null where a rectangle is empty. None for no rectangle.
+// What disjoint rectangles of a sheet hold, as the one op that writes it back onto them once they are empty: their
+// cells that hold something, read as the inverse of an input reads its runs. None when they hold nothing.
 export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rect[]): InputOp | undefined {
     const part = book.sheets.get(sheet);
-    if (!part || rects.length === 0) return undefined;
+    if (!part) return undefined;
     const gathered: Gathered = { runs: [], cells: [] };
     for (const rect of rects) {
-        readBlock(book, sheet, part.extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
+        readBlock(book, sheet, part.extras, rect, (group) => {
+            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
+        });
     }
-    return inputOf(sheet, gathered);
+    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
 }
