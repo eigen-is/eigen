@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { Batch, CellAttrs, FormatOp, InputOp, MoveOp, Op, Rect, SheetContent } from '@workspace/lib/sheets/ops';
+import type {
+    Batch,
+    CellAttrs,
+    FormatOp,
+    InputOp,
+    LinesOp,
+    MoveOp,
+    Op,
+    Rect,
+    SheetContent,
+} from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -373,6 +383,51 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
         applyOps(book, [moveOf([10, 0, 10, 2], 5, 1)]);
         expect(book.sheets.get('a')?.records.records('merge').has('landed')).toBe(false);
         expectLaw2(bookOf(A, B), [moveOf([10, 0, 10, 2], 5, 1)]);
+    });
+});
+
+describe('engine/book/apply-move — beside the line edits of one batch', () => {
+    const linesOf = (rows: boolean, insert: boolean, index: number, count: number, sheet = 'a'): LinesOp => ({
+        kind: 'lines',
+        sheet,
+        rows,
+        insert,
+        index,
+        count,
+    });
+    // A filter from row 3 to the grid's last, with filtered rows, over the cells the moves cross.
+    const FILTERED = sheetOf('a', {
+        ...A,
+        records: {
+            ...A.records,
+            filter: { f: { rect: [2, 0, LAST_ROW, 4] } },
+            filterColumn: { k: { filter: 'f', column: 1, rows: [[3, 4]] } },
+        },
+    });
+
+    test('rows inserted through the block, then the block moved across them', () => {
+        expectLaw2(bookOf(A, B), [linesOf(true, true, 2, 2), moveOf([0, 0, 5, 1], 3, 1)]);
+    });
+
+    test('a column deleted through the block, then the block moved to another sheet', () => {
+        expectLaw2(bookOf(A, B), [linesOf(false, false, 1, 1), moveOf([0, 0, 4, 1], 1, 1, 'b')]);
+    });
+
+    test('a move, then rows deleted through where the block landed', () => {
+        expectLaw2(bookOf(A, B), [OVERLAP, linesOf(true, false, 3, 2)]);
+        expectLaw2(bookOf(A, B), [moveOf([0, 0, 3, 1], 0, 0, 'b'), linesOf(true, false, 1, 2, 'b')]);
+    });
+
+    test('a move, then a column inserted inside the landed block, then a move across it', () => {
+        expectLaw2(bookOf(A, B), [OVERLAP, linesOf(false, true, 2, 1), moveOf([2, 1, 5, 3], 8, 0)]);
+    });
+
+    test('a filter stays where a move leaves it, and its start then moves with a row inserted above', () => {
+        const content = bookOf(FILTERED, B);
+        const book = new Workbook(content);
+        applyOps(book, [moveOf([0, 0, 4, 1], 6, 6)]);
+        expect(book.content().sheets[0]?.records.filter).toEqual({ f: { rect: [2, 0, LAST_ROW, 4] } });
+        expectLaw2(content, [moveOf([0, 0, 4, 1], 6, 6), linesOf(true, true, 0, 1), moveOf([7, 6, 9, 7], 1, 2)]);
     });
 });
 
