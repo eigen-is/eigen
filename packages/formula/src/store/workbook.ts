@@ -114,6 +114,11 @@ export class Workbook {
         return found;
     }
 
+    // The sheet a name typed in a formula reads, in any case.
+    public named(name: string): Sheet | undefined {
+        return this.byName.get(sheetNameKey(name));
+    }
+
     // Throws when a sheet has the id: a host names a sheet by it.
     public checkId(id: string): void {
         if (this.byId.has(id)) throw new Error(`Sheet ${id} exists`);
@@ -122,7 +127,7 @@ export class Workbook {
     // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is
     // typed with would read either of them.
     public checkName(name: string, holder: Sheet | null): void {
-        const named = this.byName.get(sheetNameKey(name));
+        const named = this.named(name);
         if (named !== undefined && named !== holder) throw new Error(`Sheet name ${name} is in use`);
     }
 
@@ -170,10 +175,8 @@ export class Workbook {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         // A formula may name its own sheet, which the workbook does not hold yet when it is added.
         const own = sheetNameKey(sheet.name);
-        const named = (name: string): string | undefined => {
-            const key = sheetNameKey(name);
-            return key === own ? sheet.id : this.byName.get(key)?.id;
-        };
+        const named = (name: string): string | undefined =>
+            sheetNameKey(name) === own ? sheet.id : this.named(name)?.id;
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text, named));
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
         // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
@@ -308,7 +311,7 @@ export class Workbook {
 
     // One formula in its stored text in every cell of a block. It is to be computed: it holds no value until then.
     public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
-        const shape = this.shapes.intern(text, (name) => this.byName.get(sheetNameKey(name))?.id);
+        const shape = this.shapes.intern(text, (name) => this.named(name)?.id);
         for (let c = left; c <= right; c += 1) {
             const held = sheet.column(c);
             held.reach(bottom);

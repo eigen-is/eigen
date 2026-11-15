@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CellKind } from '../../store/column';
-import { Workbook } from '../../store/workbook';
+import { ChangeKind, Workbook } from '../../store/workbook';
 import { GRID_ROWS } from '../../text/a1';
 import { DIV0, NA } from '../../values/errors';
 import type { Scalar } from '../../values/value';
@@ -91,6 +91,28 @@ describe('the tables', () => {
         ]);
         expect(workbook.shapes.size).toBe(1);
         expect(new Set(sheetOf(workbook).columns[1].shape)).toEqual(new Set([1]));
+    });
+});
+
+describe('sheet names', () => {
+    test('a typed name finds the sheet of its key, under the name it has now, while it is there', () => {
+        const workbook = new Workbook([
+            { id: 's1', name: 'Data', cells: () => undefined },
+            { id: 's2', name: 'Σοφία', cells: () => undefined },
+        ]);
+        const named = (name: string) => workbook.named(name)?.id;
+        expect([named('Data'), named('data'), named('DATA'), named('Dat'), named('')]).toEqual([
+            's1',
+            's1',
+            's1',
+            undefined,
+            undefined,
+        ]);
+        expect([named('σοφία'), named('ΣΟΦΊΑ'), named('Σοφια')]).toEqual(['s2', 's2', undefined]);
+        workbook.apply({ kind: ChangeKind.RenameSheet, sheet: 's1', name: 'Later' }, []);
+        expect([named('Data'), named('later')]).toEqual([undefined, 's1']);
+        workbook.apply({ kind: ChangeKind.RemoveSheet, sheet: 's1' }, []);
+        expect([named('Later'), named('Σοφία')]).toEqual([undefined, 's2']);
     });
 });
 
