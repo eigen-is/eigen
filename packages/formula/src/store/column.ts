@@ -1,7 +1,8 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
-// the id of its shape. A column ends at its last cell, grows by doubling, and counts its errors, its formulas
-// still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
-// `kind` are the recalc's own flags, which move with the cell when rows do.
+// the id of its shape. A column ends at its last cell, is loaded at exactly its rows and grows to an eighth more
+// than it needs, and counts its errors, its formulas still to compute and its cells on a loop, so that a loop over
+// it can skip the per-cell checks. The high bits of `kind` are the recalc's own flags, which move with the cell
+// when rows do.
 
 import { firstPushed } from '../edit/map';
 import { GRID_ROWS } from '../text/a1';
@@ -16,6 +17,10 @@ export const LOOP = 32;
 export const SETTLED = 63;
 export const RUNNING = 64;
 export const DIRTY = 128;
+
+// The fewest and the most spare rows a column gets when it grows.
+const SLACK_MIN = 64;
+const SLACK_MAX = 65_536;
 
 export class Column {
     public kind: Uint8Array;
@@ -45,7 +50,7 @@ export class Column {
 
     // Makes `row` a row of the column.
     public reach(row: number): void {
-        if (row >= this.kind.length) this.resize(Math.max(row + 1, this.kind.length * 2));
+        if (row >= this.kind.length) this.resize(capacityFor(row + 1));
         if (row >= this.length) this.length = row + 1;
     }
 
@@ -117,7 +122,7 @@ export class Column {
         const dropped = this.cells(kept, this.length);
         this.tally(kept, this.length, -1);
         const length = kept > index ? kept + count : index;
-        if (length > this.kind.length) this.resize(Math.min(GRID_ROWS, Math.max(length, this.kind.length * 2)));
+        if (length > this.kind.length) this.resize(capacityFor(length));
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
             plane.copyWithin(index + count, index, kept);
             plane.fill(0, index, Math.min(index + count, this.length));
@@ -203,4 +208,10 @@ export class Column {
         this.ref.set(ref);
         this.shape.set(shape);
     }
+}
+
+// The rows to make room for in a column that grows to `length` rows: an eighth more, so that rows added one by one
+// seldom move it and one added row never doubles it.
+function capacityFor(length: number): number {
+    return Math.min(GRID_ROWS, length + Math.min(SLACK_MAX, Math.max(SLACK_MIN, length >> 3)));
 }

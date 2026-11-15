@@ -95,18 +95,21 @@ describe('the tables', () => {
 });
 
 describe('writes', () => {
-    test('a write past the end grows the column by doubling', () => {
+    test('a write past the end grows the column to its rows and an eighth, 64 rows at least', () => {
         const workbook = new Workbook([source('s1', [[9, 0, 1]])]);
         const sheet = sheetOf(workbook);
         workbook.setValue(sheet, 10, 0, 2);
         const column = sheet.columns[0];
         expect(column.length).toBe(11);
-        expect(column.kind.length).toBe(20);
-        workbook.setValue(sheet, 99, 0, 3);
-        expect(column.length).toBe(100);
-        expect(column.kind.length).toBe(100);
+        expect(column.kind.length).toBe(75);
+        workbook.setValue(sheet, 74, 0, 3);
+        expect(column.kind.length).toBe(75);
+        workbook.setValue(sheet, 999, 0, 3);
+        expect(column.length).toBe(1000);
+        expect(column.kind.length).toBe(1125);
         workbook.setValue(sheet, 3, 4, 'far');
-        expect(sheet.columns.map((held) => held.length)).toEqual([100, 0, 0, 0, 4]);
+        expect(sheet.columns.map((held) => held.length)).toEqual([1000, 0, 0, 0, 4]);
+        expect(sheet.columns[4].kind.length).toBe(68);
     });
 
     test('a formula counts as to be computed until it is replaced or cleared', () => {
@@ -290,6 +293,51 @@ describe('rows and columns', () => {
         expect(short.version).toBe(versions[1]);
         expect(read(workbook, 7, 0)).toBe(1);
         expect(read(workbook, 5, 0)).toBeNull();
+    });
+
+    test('one inserted row grows a loaded column by an eighth, not to twice its rows', () => {
+        const capacityAfterOneRow = (rows: number) => {
+            const workbook = new Workbook([source('s1', [[rows - 1, 0, 1]])]);
+            const sheet = sheetOf(workbook);
+            expect(sheet.columns[0].kind.length).toBe(rows);
+            sheet.insertRows(0, 1);
+            expect(sheet.columns[0].length).toBe(rows + 1);
+            return sheet.columns[0].kind.length;
+        };
+        expect(capacityAfterOneRow(100_000)).toBe(112_501);
+        expect(capacityAfterOneRow(10)).toBe(75);
+        expect(capacityAfterOneRow(600_000)).toBe(665_537);
+    });
+
+    test('a column never holds more rows than the grid has', () => {
+        const workbook = new Workbook([
+            source('s1', [
+                [999_999, 0, 1],
+                [999_999, 1, 1],
+            ]),
+        ]);
+        const sheet = sheetOf(workbook);
+        const [inserted, written] = sheet.columns;
+        workbook.setValue(sheet, 1_000_000, 1, 2);
+        expect(written.kind.length).toBe(GRID_ROWS);
+        sheet.insertRows(0, 1);
+        expect(inserted.length).toBe(1_000_001);
+        expect(inserted.kind.length).toBe(GRID_ROWS);
+    });
+
+    test('rows inserted one by one resize a column a few dozen times, not once a row', () => {
+        const workbook = new Workbook([source('s1', [[0, 0, 1]])]);
+        const sheet = sheetOf(workbook);
+        const column = sheet.columns[0];
+        let resizes = 0;
+        for (let i = 0; i < 20_000; i += 1) {
+            const capacity = column.kind.length;
+            sheet.insertRows(0, 1);
+            if (column.kind.length !== capacity) resizes += 1;
+            expect(column.kind.length).toBeLessThanOrEqual(column.length + Math.max(64, column.length >> 3));
+        }
+        expect(column.length).toBe(20_001);
+        expect(resizes).toBe(39);
     });
 
     test('rows pushed past the last row of the grid are gone, with their errors', () => {
