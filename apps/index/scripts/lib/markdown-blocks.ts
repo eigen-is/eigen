@@ -12,7 +12,7 @@ import type { MediaBlock, MediaCaption } from './content-types';
 
 const VIDEO_FILES = ['.av1.mp4', '.h264.mp4', '.webp'];
 
-const MEDIA_BLOCKS = new Set(['video', 'carousel', 'grid', 'side-by-side']);
+const MEDIA_BLOCKS = new Set(['video', 'carousel', 'grid']);
 
 // `pageBlocks` names the blocks the page draws itself where the Markdown puts them, such as the About overview's
 // `apps`. A page that draws none passes none, so such a block there fails the build as an unknown one. `media` takes
@@ -109,7 +109,7 @@ export function markdownBlocks(
                     autoplay: attrs.has('autoplay'),
                     caption: captionOf(attrs.get('caption')),
                 });
-            } else if (name === 'grid') {
+            } else {
                 const columns = attrs.get('columns');
                 if (!columns || !/^[1-6]$/.test(columns)) throw new Error(`${where} needs columns from 1 to 6`);
                 // An image's title is the small picture the grid shows for it: a thumbnail, or a film's poster.
@@ -119,14 +119,6 @@ export function markdownBlocks(
                         : { src, type: 'image' as const, caption: caption?.text, thumbnail: title },
                 );
                 mark({ kind: 'grid', columns, items });
-            } else {
-                html('<figure class="media-side-by-side">\n');
-                const lineMax = state.lineMax;
-                state.lineMax = closeLine;
-                state.md.block.tokenize(state, startLine + 1, closeLine);
-                state.lineMax = lineMax;
-                const caption = captionOf(attrs.get('caption'));
-                html(`${caption ? `<figcaption>${caption.html}</figcaption>` : ''}</figure>\n`);
             }
             state.line = closeLine + 1;
             return true;

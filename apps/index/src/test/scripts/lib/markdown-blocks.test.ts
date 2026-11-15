@@ -89,7 +89,7 @@ describe('video', () => {
     });
 });
 
-describe('carousel and side by side', () => {
+describe('carousel', () => {
     test('a carousel leaves a marker and a slide per image line, captioned with its alt text', () => {
         const { html, media } = build(
             '::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n\n![](/c.webp)\n:::',
@@ -155,12 +155,6 @@ describe('carousel and side by side', () => {
         ]);
     });
 
-    test('a side-by-side pair wraps its images', () => {
-        const html = render('::: side-by-side\n![a](/a.webp) ![b](/b.webp)\n:::');
-        expect(html).toContain('<figure class="media-side-by-side">');
-        expect(html.match(/<img /g)?.length).toBe(2);
-    });
-
     test('a block the page draws leaves a marker with its name', () => {
         const pageBlocks = new Set(['apps', 'principles']);
         expect(render('Intro\n\n::: apps\n:::\n\nAfter', pageBlocks)).toContain('<p>[BLOCK:apps]</p>');
@@ -176,6 +170,7 @@ describe('carousel and side by side', () => {
 describe('mistakes fail the build', () => {
     test('an unknown block name', () => {
         expect(() => render('::: nope\n:::')).toThrow('nope');
+        expect(() => render('::: side-by-side\n![a](/a.webp)\n:::')).toThrow('Unknown Markdown block');
     });
 
     test('a block of a page that draws none, such as a blog post', () => {
