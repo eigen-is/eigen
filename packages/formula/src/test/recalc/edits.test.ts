@@ -3,7 +3,7 @@ import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
 import type { LineEdit, Move, SheetSource } from '../../index';
 import { DIV0, Engine, ERROR, REF } from '../../index';
-import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
+import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
 
@@ -743,5 +743,24 @@ describe('a formula handed in a spelling that is not the stored one', () => {
         engine.setFormula('a', 0, 0, '==sum(');
         engine.recalc(NO_CAP);
         expect([engine.formulaOf('a', 0, 0), engine.valueOf('a', 0, 0)]).toEqual(['==sum(', ERROR]);
+    });
+
+    test('a formula whose stored text would be too long to read back is kept as it was handed', () => {
+        // .5 is stored as 0.5, so the text of this sum grows by a third and passes the longest a cell stores.
+        const long = `=${Array.from({ length: Math.floor(MAX_STORED_LENGTH / 3) }, () => '.5').join('+')}`;
+        const engine = new Engine([sheet((cell) => cell(0, 0, null, long))]);
+        engine.setFormula('a', 1, 0, long);
+        engine.setFormula('a', 2, 0, '=.5+.5');
+        engine.recalc(NO_CAP);
+        const read = [0, 1, 2].map((row) => engine.formulaOf('a', row, 0));
+        expect(read.map((text) => (text === long ? 'as handed' : text))).toEqual([
+            'as handed',
+            'as handed',
+            '=0.5+0.5',
+        ]);
+        expect([engine.valueOf('a', 0, 0), engine.valueOf('a', 1, 0)]).toEqual([21845, 21845]);
+        const again = new Engine([sheet((cell) => cell(0, 0, null, read[0]))]);
+        again.recalc(NO_CAP);
+        expect(again.valueOf('a', 0, 0)).toBe(21845);
     });
 });
