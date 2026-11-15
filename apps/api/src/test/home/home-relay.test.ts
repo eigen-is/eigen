@@ -37,12 +37,13 @@ import {
     getTestContext,
 } from '../setup';
 
-const MEMBER_COUNT = 20;
+// The cap tests need a few more cold homes than the relay opens at once.
+const MEMBER_COUNT = HOME_OPENS_AT_ONCE + 3;
 
 let ctx: TestContext;
 let teamOwner: string;
 let teamMountId: string;
-const members: TestUser[] = [];
+let members: TestUser[];
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -56,11 +57,13 @@ beforeAll(async () => {
     const teamId = await createTeam(ctx, orgId, 'Relay Team');
     teamOwner = teamOwnerId(teamId);
     await addMember(ctx, teamId, ctx.alice.user.id);
-    for (let i = 0; i < MEMBER_COUNT; i++) {
-        const member = await createTestUser(`relay-member-${i}@test.eigen.is`, 'testpassword123', `Member ${i}`);
-        await addMember(ctx, teamId, member.id);
-        members.push(member);
-    }
+    members = await Promise.all(
+        Array.from({ length: MEMBER_COUNT }, async (_, i) => {
+            const member = await createTestUser(`relay-member-${i}@test.eigen.is`, 'testpassword123', `Member ${i}`);
+            await addMember(ctx, teamId, member.id);
+            return member;
+        }),
+    );
     await addTeamMount(ctx, teamId, 'Relay Drive');
     teamMountId = await firstMountId(ctx.alice.user.sessionToken, teamOwner);
 });
