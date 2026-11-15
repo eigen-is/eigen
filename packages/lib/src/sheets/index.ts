@@ -47,6 +47,13 @@ export {
     wellFormedValidations,
 } from './range-rules';
 export {
+    isSheetName,
+    MAX_SHEET_NAME_LENGTH,
+    SHEET_NAME_END_QUOTES,
+    SHEET_NAME_FORBIDDEN,
+    SHEET_NAME_RULE,
+} from './sheet-name';
+export {
     decodeSheetsSnapshot,
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
