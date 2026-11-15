@@ -6,7 +6,7 @@
 import type { S3Config } from '@workspace/lib/types/mount';
 import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
+import type { MountSettings, TeamQuotaOverrides, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
 import { getTeamHomePath, PATHS } from '../config/paths';
 import { ApiError, JsonStore } from '../core';
@@ -51,6 +51,10 @@ export class TeamHome extends Home {
     // A team whose calendar is switched off has no calendar.
     public override get hasCalendar(): boolean {
         return this.settings.get().calendar?.enabled !== false;
+    }
+
+    public override get memberOverrides(): TeamQuotaOverrides {
+        return this.settings.get().memberOverrides ?? {};
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
