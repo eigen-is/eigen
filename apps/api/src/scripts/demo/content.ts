@@ -8,6 +8,7 @@ import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec
 import { escapeHtml } from '@workspace/lib/html';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type { Attendee } from '@workspace/lib/types/calendar';
+import type { ChartType } from '@workspace/lib/types/chart';
 import type {
     Arrowhead,
     Corners,
@@ -401,13 +402,26 @@ export type DeckImage = {
     height: number;
 };
 
-// Drawn bottom-up: images, then every text on top.
+// A chart of inline data, as Insert → Chart places one on a slide, with no title and no legend.
+export type DeckChart = {
+    type: ChartType;
+    categories: string[];
+    series: { name: string; values: number[] }[];
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    font?: string; // an EIGEN_FONTS name; default the deck's Inter
+};
+
+// Drawn bottom-up: images, then charts, then every text on top.
 export type DeckSlide = {
     key: string;
     name: string; // the slide's name in the rail
     background: FillPaint;
     texts: DeckText[];
     images?: DeckImage[];
+    charts?: DeckChart[];
 };
 
 // The deck's ink: every text box that does not name its own color is built in this.
@@ -418,8 +432,8 @@ const DECK_MUTED = '#444444';
 const DECK_HAND = 'Excalifont';
 // The same sunrise behind every slide.
 const DECK_BACKGROUND: FillPaint = { type: 'gradient', from: '#fff085', to: '#e17100', angle: 180 };
-// After the title, every slide is one layout: a heading over a single line of body copy, both centered
-// in a 1536px column. Only the words change.
+// Most slides after the title are one layout: a heading over a single line of body copy, both centered in a
+// 1536px column. The place moves the two into a column beside its photo; the sponsors slide lifts them over a chart.
 const DECK_HEADING = {
     x: 192,
     y: 340,
@@ -486,6 +500,21 @@ export const SPONSOR_DECK = {
             ],
         },
         {
+            key: 'the-place',
+            name: 'The place',
+            background: DECK_BACKGROUND,
+            images: [{ file: 'images/dune-sunset.webp', x: 992, y: 190, width: 736, height: 552 }],
+            texts: [
+                { ...DECK_HEADING, x: 192, width: 720, html: '<p>The place</p>' },
+                {
+                    ...DECK_BODY,
+                    x: 192,
+                    width: 720,
+                    html: '<p>A meadow behind the dunes at Hoeve Tuimelaar, five minutes from the sea</p>',
+                },
+            ],
+        },
+        {
             key: 'why-partner',
             name: 'Why partner with us',
             background: DECK_BACKGROUND,
@@ -506,6 +535,32 @@ export const SPONSOR_DECK = {
                 {
                     ...DECK_BODY,
                     html: '<p>Stage credit, on-site presence, and a mention in every announcement</p>',
+                },
+            ],
+        },
+        {
+            key: 'sponsors',
+            name: "This year's sponsors",
+            background: DECK_BACKGROUND,
+            charts: [
+                {
+                    type: 'column',
+                    categories: ['Friend', 'Partner', 'Stage partner'],
+                    series: [{ name: 'Sponsors so far', values: [8, 2, 1] }],
+                    x: 460,
+                    y: 330,
+                    width: 1000,
+                    height: 520,
+                    font: DECK_HAND,
+                },
+            ],
+            texts: [
+                { ...DECK_HEADING, y: 120, height: 120, html: "<p>This year's sponsors</p>" },
+                {
+                    ...DECK_BODY,
+                    y: 240,
+                    height: 80,
+                    html: '<p>Friend €250 · Partner €1,000 · Stage partner €2,000</p>',
                 },
             ],
         },

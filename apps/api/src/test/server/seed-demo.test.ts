@@ -448,7 +448,10 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const deckScene = readVectorFromDoc(deckDoc);
             expect(deckScene.frames.length).toBe(SPONSOR_DECK.slides.length);
             expect(deckScene.elements.length).toBe(
-                SPONSOR_DECK.slides.reduce((n, slide) => n + slide.texts.length + (slide.images?.length ?? 0), 0),
+                SPONSOR_DECK.slides.reduce(
+                    (n, slide) => n + slide.texts.length + (slide.images?.length ?? 0) + (slide.charts?.length ?? 0),
+                    0,
+                ),
             );
             const deckFrameIds = new Set(deckScene.frames.map((frame) => frame.id));
             for (const element of deckScene.elements) {
@@ -479,6 +482,22 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
             expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
+
+            // The sponsors slide's chart reads back as inline data under its fixed id, which a comment anchors on.
+            const deckCharts = SPONSOR_DECK.slides.flatMap((slide) =>
+                (slide.charts ?? []).map((chart, i) => ({ id: `el-${slide.key}-chart-${i}`, chart })),
+            );
+            expect(deckCharts.map(({ id }) => id)).toEqual(['el-sponsors-chart-0']);
+            for (const { id, chart } of deckCharts) {
+                const element = deckScene.elements.find((el) => el.id === id);
+                if (element?.type !== 'chart') throw new Error(`${id} is no chart on the deck`);
+                const { spec } = readChartSpec(element);
+                if (spec?.data.source !== 'inline') throw new Error(`${id} holds no inline data`);
+                expect(spec.chart.type).toBe(chart.type);
+                expect(spec.data.categories).toEqual(chart.categories);
+                expect(spec.data.series.map(({ name, values }) => ({ name, values }))).toEqual(chart.series);
+                expect(spec.legend.position).toBe('none');
+            }
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
