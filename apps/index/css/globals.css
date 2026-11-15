@@ -305,9 +305,8 @@
     .site-panel {
         margin-top: 2.75rem;
 
-        h2 {
+        > :first-child {
             margin-top: 0;
-            font-size: 1.25rem;
         }
 
         > :last-child {
