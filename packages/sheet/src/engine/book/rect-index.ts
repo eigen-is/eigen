@@ -68,6 +68,7 @@ export class RectIndex {
         const columnShift = Math.max(MIN_COLUMN_SHIFT, 32 - Math.clz32(right - left));
         const size = (rowShift << 4) | columnShift;
         const tiles = this.sizes.get(size) ?? new Map<number, Tile>();
+        this.sizes.set(size, tiles);
         for (let row = top >> rowShift; row <= bottom >> rowShift; row += 1) {
             for (let column = left >> columnShift; column <= right >> columnShift; column += 1) {
                 const key = row * TILES_ACROSS + column;
@@ -80,7 +81,5 @@ export class RectIndex {
                 else tiles.set(key, new Map([[id, [rect]]]));
             }
         }
-        if (tiles.size > 0) this.sizes.set(size, tiles);
-        else this.sizes.delete(size);
     }
 }

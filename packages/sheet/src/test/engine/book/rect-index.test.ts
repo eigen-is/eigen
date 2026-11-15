@@ -270,6 +270,13 @@ describe('what the index costs', () => {
         expect(reads(band, [40, 3, 40, 3])).toEqual({ found: 1, count: 1 });
     });
 
+    test('a delete leaves no empty tile behind for a read to look at', () => {
+        const { index } = built((i) => [i * 40, i, i * 40 + (i % 3) * 20, i]);
+        for (let i = 0; i < COUNT; i += 1) index.set(`r${i}`, [[i * 40, i, i * 40 + (i % 3) * 20, i]], undefined);
+        expect(reads(index, [0, 0, 0, 0])).toEqual({ found: 0, count: 0 });
+        expect(reads(index, [0, 0, 100, 30])).toEqual({ found: 0, count: 0 });
+    });
+
     test('a read of a large rectangle looks at the tiles in use, not at every tile it covers', () => {
         const small = built((i) => [i * 40, (i * 10) % 4000, i * 40, (i * 10) % 4000]).index;
         const whole = reads(small, [0, 0, LAST_ROW, LAST_COLUMN]);
