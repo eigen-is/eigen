@@ -190,9 +190,9 @@ A body that builds an array asks `ROOM` first, and the recalc refuses past `MOST
 
 Stored text writes a sheet as its id in brackets, `[id]!`, and reads a bracket by the table reference rule, so an id that holds `[` or `]` does not parse back. A quote is fine: `[a'b]!R1C1` reads and prints back as it is. The editor's ids are UUIDs. A host hands the engine no other id: one from a file or a peer is checked or remapped where it enters.
 
-## A source of cells never calls back into the engine
+## A load reads its source to the end before the workbook holds any of it
 
-`Engine` and `addSheet` read a sheet through its `SheetSource`, whose `cells` callback is called twice, once to size the columns and once to fill them, so a host walks its own cells and builds no list (`src/store/workbook.ts`). The callback must not call the engine: while it runs, its sheet is not the workbook's yet, so a recalc from inside it would sweep the texts and shapes the half-loaded sheet holds. The host is our own typed code, so the contract is stated, not guarded.
+`Engine` and `addSheet` read a sheet through its `SheetSource`, whose `cells` callback is called twice, once to size the columns and once to fill them, so a host walks its own cells and builds no list (`Workbook.read` in `src/store/workbook.ts`). While the source runs the sheet is a draft of its own: its texts and formulas are numbered in lists beside it, and the string table and the shape table take them only once the source has returned (`Workbook.adopt`). So a source that calls the engine, which it has no reason to do, meets the workbook as it was before the load: a recalc from inside it sweeps no text or shape of the half-read sheet. What `addSheet` refuses, such as an id in use, it checks after the source has run. Reading to the end was chosen over refusing a call from inside a load, which would need a flag that every method of `Engine` tests.
 
 ## Known differences from Excel
 

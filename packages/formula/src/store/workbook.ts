@@ -1,8 +1,8 @@
 // The cell store of one workbook: its sheets in tab order and by id, the string table and the shape table. It is
-// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a source
-// never calls back into the engine while its cells are read, as its sheet is not the workbook's yet. A host writes a
-// literal, a formula in its stored text, or a clear; the recalc writes each result into the same planes, so a reader
-// never sees where a value came from. `apply` is the one way cells move and sheets come and go.
+// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a sheet is
+// read from its source to the end before a table holds any of it. A host writes a literal, a formula in its stored
+// text, or a clear; the recalc writes each result into the same planes, so a reader never sees where a value came
+// from. `apply` is the one way cells move and sheets come and go.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -29,7 +29,15 @@ export type SheetSource = {
     readonly cells: (cell: CellSink) => void;
 };
 
-// A structural edit. A sheet is added as `load` made it, at a place among the tabs, and moved to one; both count
+// A sheet as `read` leaves it: a text cell and a formula hold their number in the order of these lists, which
+// `adopt` turns into ids of the workbook's tables.
+export type Draft = {
+    readonly sheet: Sheet;
+    readonly texts: ReadonlyMap<string, number>;
+    readonly formulas: ReadonlyMap<string, number>;
+};
+
+// A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
 // from 0.
 export const ChangeKind = { Lines: 0, Move: 1, AddSheet: 2, RemoveSheet: 3, RenameSheet: 4, MoveSheet: 5 } as const;
 
@@ -69,7 +77,7 @@ export class Workbook {
     private limit: number;
 
     public constructor(sources: readonly SheetSource[]) {
-        for (const source of sources) this.insert(this.load(source), this.held.length);
+        for (const source of sources) this.insert(this.adopt(this.read(source)), this.held.length);
         this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
     }
 
@@ -89,8 +97,9 @@ export class Workbook {
         return sheet;
     }
 
-    // One sheet from its description, in no place yet: `apply` adds it.
-    public load(source: SheetSource): Sheet {
+    // Reads one sheet from its description to the end, with the string and shape tables untouched: whatever the
+    // source does while it is read, such as a call of the engine, meets the workbook as it was.
+    public read(source: SheetSource): Draft {
         const lengths: number[] = [];
         source.cells((row, column, value, formula) => {
             if (value === null && formula === null) return;
@@ -99,12 +108,29 @@ export class Workbook {
             if (row >= lengths[column]) lengths[column] = row + 1;
         });
         const sheet = new Sheet(source.id, source.name, lengths);
+        const texts = new Map<string, number>();
+        const formulas = new Map<string, number>();
         source.cells((row, column, value, formula) => {
             const held = sheet.columns[column];
-            if (formula !== null) held.shape[row] = this.shapes.intern(formula);
-            if (value !== null) this.put(held, row, value);
+            if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
+            if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
+            else if (value !== null) this.put(held, row, value);
             else if (formula !== null) held.markDirty(row);
         });
+        return { sheet, texts, formulas };
+    }
+
+    // Makes a sheet that was read one whose cells hold ids of the tables, in no place yet: `apply` adds it. Nothing
+    // may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
+    public adopt({ sheet, texts, formulas }: Draft): Sheet {
+        const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
+        const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
+        for (const { kind, ref, shape, length } of sheet.columns) {
+            for (let row = 0; row < length; row += 1) {
+                if ((kind[row] & KIND_MASK) === CellKind.Text) ref[row] = textIds[ref[row]];
+                if (shape[row] !== 0) shape[row] = shapeIds[shape[row] - 1];
+            }
+        }
         return sheet;
     }
 
@@ -256,4 +282,11 @@ export class Workbook {
         }
         return code;
     }
+}
+
+// The number of a text in a list of distinct texts in the order they came, from 0.
+function listed(list: Map<string, number>, text: string): number {
+    let number = list.get(text);
+    if (number === undefined) list.set(text, (number = list.size));
+    return number;
 }

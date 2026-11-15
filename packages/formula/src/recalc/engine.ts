@@ -17,7 +17,7 @@ import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes'>;
+    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes' | 'read'>;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -68,8 +68,10 @@ export class Engine {
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
     // values they came with, and the result lists the formulas that now read a sheet by the name they were typed with.
     public addSheet(source: SheetSource, place: number): EditResult {
+        // The source is the host's code, so what is refused is checked once it has run.
+        const draft = this.workbook.read(source);
         if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
-        return this.calc.addSheet(source, place);
+        return this.calc.addSheet(draft, place);
     }
 
     // A formula that names the sheet keeps naming it, reads #REF!, and reads it again when the id comes back.
