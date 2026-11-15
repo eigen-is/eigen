@@ -7,7 +7,6 @@
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
 import type { CellContent, InputOp, Placed, Rect } from '@workspace/lib/sheets/ops';
-import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
 import { textOf } from './extras';
 import type { Workbook } from './workbook';
@@ -27,20 +26,18 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     const { engine } = book;
     const { sheet } = op;
     const { extras } = part;
-    const runs = op.runs ?? [];
     const gathered: Gathered = { runs: [], cells: [] };
-    for (const [rect] of runs) {
+    for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
     }
     for (const [row, column] of op.cells ?? []) {
-        if (runs.some(([rect]) => covers(rect, row, column))) continue;
         const formula = engine.formulaOf(sheet, row, column);
         const given = formula !== null && engine.isGiven(sheet, row, column);
         const content = contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
         gathered.cells.push([row, column, content]);
     }
 
-    for (const [rect, content] of runs) {
+    for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.fillFormula(sheet, top, left, bottom, right, content.f, value);

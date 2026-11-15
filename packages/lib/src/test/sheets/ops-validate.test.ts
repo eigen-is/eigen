@@ -152,7 +152,15 @@ const EXAMPLES: Batch[] = [
             },
             { kind: 'record', sheet: 's1', type: 'comment', id: 'card-9', whole: 1, set: { row: 1, column: 1 } },
             { kind: 'record', sheet: 's1', type: 'merge', id: 'm1', whole: 1, set: { rect: [0, 0, 1, 1] } },
-            { kind: 'input', sheet: 's1', runs: [[[0, 0, 1, 1], null]], cells: [[0, 0, { v: 'kept' }]] },
+            {
+                kind: 'input',
+                sheet: 's1',
+                runs: [
+                    [[1, 0, 1, 0], null],
+                    [[0, 1, 1, 1], null],
+                ],
+                cells: [[0, 0, { v: 'kept' }]],
+            },
             { kind: 'record', sheet: 's1', type: 'chart', id: 'c1', set: { fill: null, x: 10 } },
             { kind: 'record', sheet: 's1', type: 'sheet', id: 's1', set: { name: 'Sales', frozenRows: 1 } },
             { kind: 'record', sheet: 's1', type: 'image', id: 'i1' },
@@ -177,11 +185,11 @@ const EXAMPLES: Batch[] = [
             {
                 kind: 'input',
                 sheet: 's1',
-                runs: [[[0, 3, 1, 4], null]],
                 cells: [
                     [0, 3, { v: 1 }],
                     [1, 3, { f: '=R[-1]C*2' }],
                     [0, 4, { v: 'x', link: { type: 'webpage', address: 'https://eigen.is' } }],
+                    [1, 4, null],
                 ],
             },
         ],
@@ -344,6 +352,56 @@ describe('2. places', () => {
         expect(accepts(input({ runs: [run([0, 0, 9, 9]), run([3, 3, 4, 4])] }))).toBe(false);
         expect(accepts(input({ runs: [run([3, 0, 3, 9]), run([0, 5, 9, 5])] }))).toBe(false);
         expect(accepts(input({ runs: [run([0, 0, 0, 0]), run([0, 0, 0, 0])] }))).toBe(false);
+    });
+
+    test('in an input say a place once: a listed cell inside a run is refused, at every edge', () => {
+        const runs = [[[2, 3, 4, 5], null]];
+        const listing = (row: number, column: number) => input({ runs, cells: [[row, column, null]] });
+        for (const [row, column] of [
+            [2, 3],
+            [4, 3],
+            [2, 5],
+            [4, 5],
+            [3, 4],
+        ]) {
+            expect(accepts(listing(row, column))).toBe(false);
+        }
+        for (const [row, column] of [
+            [1, 4],
+            [5, 4],
+            [3, 2],
+            [3, 6],
+        ]) {
+            expect(accepts(listing(row, column))).toBe(true);
+        }
+        const two = [...runs, [[0, 9, 0, 9], null]];
+        const cells = (row: number) => [
+            [1, 3, null],
+            [row, 9, null],
+        ];
+        expect(accepts(input({ runs: two, cells: cells(0) }))).toBe(false);
+        expect(accepts(input({ runs: two, cells: cells(1) }))).toBe(true);
+    });
+
+    test('in an input of as many runs and cells as the budget holds are checked in milliseconds', () => {
+        // Runs two rows tall down 160 columns, and the cells of the row below each run and of the column beside it.
+        const count = 70_000;
+        const runs = Array.from({ length: count }, (_, at) => {
+            const [top, column] = [(at % 1_000) * 3, Math.floor(at / 1_000) * 2];
+            return [[top, column, top + 1, column], null];
+        });
+        const cells = Array.from({ length: 2 * count }, (_, at) => {
+            const [row, column] = [at % 1_000, Math.floor(at / 1_000)];
+            return [column % 2 === 0 ? row * 3 + 2 : row, column, null];
+        });
+        // The run at the top of column 138 holds its row 1.
+        const inside = cells.map((cell, at) => (at === 138 * 1_000 ? [1, 138, null] : cell));
+        const text = JSON.stringify(batchOf(input({ runs, cells })));
+        expect(text.length).toBeLessThanOrEqual(MAX_BATCH_JSON);
+        const started = performance.now();
+        expect(readBatch(text)).not.toBeNull();
+        expect(readBatch(JSON.stringify(batchOf(input({ runs, cells: inside }))))).toBeNull();
+        expect(performance.now() - started).toBeLessThan(1_000);
     });
 
     test('in many runs are checked in about linear time', () => {

@@ -97,19 +97,6 @@ describe('engine/book/apply-input — what an input writes', () => {
         expect(book.engine.valueOf('a', 7, 0)).toBe(12);
     });
 
-    test('the runs land before the cells, so a cell inside a run holds what the cell says', () => {
-        const book = new Workbook(bookOf(sheetOf('a')));
-        applyOps(book, [input({ runs: [[[0, 0, 2, 1], { v: 7 }]], cells: [[1, 1, { v: 8 }]] })]);
-        expect(cellsOf(book).map(([row, column, { v }]) => [row, column, v])).toEqual([
-            [0, 0, 7],
-            [1, 0, 7],
-            [2, 0, 7],
-            [0, 1, 7],
-            [1, 1, 8],
-            [2, 1, 7],
-        ]);
-    });
-
     test('a run of null empties its rectangle, links and marks included, and leaves the rest', () => {
         const cells: SheetContent['cells'] = [
             [0, 0, { v: 1 }],
@@ -349,7 +336,6 @@ describe('engine/book/apply-input — the inverse groups the old content into ru
                     [[0, 3, 1, 3], { v: 9 }],
                 ],
                 [
-                    [0, 0, { v: 4 }],
                     [5, 0, null],
                     [9, 1, { v: 5 }],
                 ],
@@ -494,5 +480,26 @@ describe('engine/book/apply-input — sizes', () => {
             input({ runs: [[rect, { f: '=RC[-1]*R1C2' }]] }),
         ]);
         expect(book.engine.columnLength('a', 3)).toBe(0);
+    });
+
+    test('an op of 50,000 runs and 100,000 cells beside them reads and writes each place once', () => {
+        const book = new Workbook(bookOf(sheetOf('a')));
+        const runs = Array.from({ length: 50_000 }, (_, at): [Rect, CellContent] => {
+            const [top, column] = [(at % 1_000) * 3, Math.floor(at / 1_000) * 2];
+            return [[top, column, top + 1, column], { v: 1 }];
+        });
+        const cells = Array.from({ length: 100_000 }, (_, at): [number, number, CellContent] => {
+            const [row, column] = [at % 1_000, Math.floor(at / 1_000)];
+            return [column % 2 === 0 ? row * 3 + 2 : row, column, { v: 2 }];
+        });
+        const started = performance.now();
+        const [inverse] = applyOps(book, [input({ runs, cells })]);
+        expect(performance.now() - started).toBeLessThan(3_000);
+        expect(inverse).toEqual(
+            input({
+                runs: runs.map(([rect]) => [rect, null]),
+                cells: cells.map(([row, column]) => [row, column, null]),
+            }),
+        );
     });
 });

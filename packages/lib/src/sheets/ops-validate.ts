@@ -111,7 +111,11 @@ function isOp(value: unknown): value is Op {
     if (!isRecord(value)) return false;
     switch (value['kind']) {
         case 'input':
-            return isOf(value, INPUT) && (value.runs?.length ?? 0) + (value.cells?.length ?? 0) > 0;
+            return (
+                isOf(value, INPUT) &&
+                (value.runs?.length ?? 0) + (value.cells?.length ?? 0) > 0 &&
+                listsNoRunCell(value)
+            );
         case 'format':
             if (!('lines' in value)) return isOf(value, CELL_FORMAT) && namesKeys(value.set, value.clear);
             // Every span is held to the rows, the longer line, so columns hold it to theirs here.
@@ -199,6 +203,52 @@ function isCellList(value: unknown, isCellAt: Check): boolean {
         if (column < lastColumn || (column === lastColumn && row <= lastRow)) return false;
         lastRow = row;
         lastColumn = column;
+    }
+    return true;
+}
+
+// An input says a place once, so no listed cell lies in a run. The cells come in column order: a sweep across the
+// columns adds them to a tree over their rows, and a run holds one when the cells in its rows left of its first column
+// are fewer than those up to its last.
+function listsNoRunCell({ runs = [], cells = [] }: InputOp): boolean {
+    if (runs.length === 0 || cells.length === 0) return true;
+    const rows = Float64Array.from(new Set(cells.map(([row]) => row))).sort();
+    const rank = (row: number) => {
+        let low = 0;
+        let high = rows.length;
+        while (low < high) {
+            const middle = (low + high) >> 1;
+            if (rows[middle] < row) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    };
+    const tree = new Int32Array(rows.length + 1);
+    const above = (row: number) => {
+        let count = 0;
+        for (let at = rank(row); at > 0; at -= at & -at) count += tree[at];
+        return count;
+    };
+    // An event counts the cells left of a column: a run's first, then the one after its last.
+    const count = runs.length * 2;
+    const events = new Float64Array(count);
+    for (const [run, [[, left, , right]]] of runs.entries()) {
+        events[run] = left * count + run;
+        events[run + runs.length] = (right + 1) * count + run + runs.length;
+    }
+    events.sort();
+    const before = new Int32Array(runs.length);
+    let next = 0;
+    for (const key of events) {
+        const event = key % count;
+        for (const column = (key - event) / count; next < cells.length && cells[next][1] < column; next += 1) {
+            for (let at = rank(cells[next][0]) + 1; at <= rows.length; at += at & -at) tree[at] += 1;
+        }
+        const run = event % runs.length;
+        const [[top, , bottom]] = runs[run];
+        const held = above(bottom + 1) - above(top);
+        if (event < runs.length) before[run] = held;
+        else if (held !== before[run]) return false;
     }
     return true;
 }
