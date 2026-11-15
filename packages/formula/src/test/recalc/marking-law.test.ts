@@ -160,7 +160,7 @@ function run(seed: number, books: number): { markings: number; flagged: number; 
     for (let book = 0; book < books; book += 1) {
         const { pick, formula, tall } = generator(random(seed * 100003 + book));
         const workbook = new Workbook(cellsOf(pick, formula, tall).map((cells, s) => source(SHEETS[s], cells)));
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const index = new ReverseIndex();
         let readers: Reader[] = [];
         const rebuild = () => {
@@ -245,7 +245,7 @@ function written(seed: number, books: number): { passes: number; computed: numbe
             ),
         );
         const workbook = new Workbook(sources);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         // A formula that was never computed is a seed of the first recalc.
         const seeds: number[] = [];
         for (const key of pendingOf(workbook)) {

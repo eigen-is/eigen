@@ -62,7 +62,7 @@ export function evaluate(formula: string, cells: Cells = {}, host = 'N1') {
 export function valuesWith(rows: readonly Entry[], cells: Cells, hosts: readonly string[]) {
     const workbook = new Workbook([source('s1', cells)]);
     const functions = new Map([...FUNCTIONS, ...rows.map((entry) => [entry.name, entry] as const)]);
-    new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
+    new Recalc(workbook, functions, 0, 0).pass(Number.POSITIVE_INFINITY);
     return hosts.map((host) => workbook.value(workbook.sheets[0].columns[at(host)[1]], at(host)[0]));
 }
 

@@ -26,7 +26,7 @@ These are decided, and each is said once. A row repeats a choice only where it i
 
 **A 3-D reference is not computed.** A formula with a reference across sheets, such as `Sheet1:Sheet3!A1`, or into another workbook keeps the value it was loaded with. One that has no value, such as a typed one, is `#REF!`, and a formula that reads it reads an error like any other: `=A1+1` over it is `#REF!` too, and `=IFERROR(A1,0)` is 0. Example: over three sheets with 1 in A1, a typed `=SUM(Sheet1:Sheet3!A1)` is 3 in Excel and `#REF!` in this engine.
 
-**Volatile functions are computed when the document is.** `RAND`, `RANDBETWEEN`, `NOW` and `TODAY` get a new value when the document is computed and when a cell they read changes, not after every unrelated edit. Example: type a number in an empty cell, and `=RAND()` draws again in Excel and keeps its value in this engine.
+**Every edit moves the clock, as in Excel.** `RAND`, `RANDBETWEEN`, `NOW` and `TODAY` get a new value with every edit of the document, whatever it wrote, and with nothing else: opening the document or waiting changes none, where Excel also computes them when a file opens. The time is the editor's, so everyone who has the document open sees the same `NOW()`. Example: type a number in an empty cell, and `=RAND()` draws again in Excel and in this engine.
 
 **Number display is the numfmt package.** `TEXT` and every cell's display go through numfmt: rounding and formats are Excel's, with the few known gaps listed under `TEXT`. Example: `=TEXT(0.52,"h:mm a/P")` is `12:28 P` in Excel and `12:28 a/P` in this engine.
 

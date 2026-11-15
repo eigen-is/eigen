@@ -73,7 +73,8 @@ export class OursEngine implements CellEngine {
     }
 
     public recalc(): void {
-        this.engine.recalc(Number.POSITIVE_INFINITY, NOW, SEED);
+        this.engine.setClock(NOW, SEED);
+        this.engine.recalc(Number.POSITIVE_INFINITY);
     }
 
     public read(sheet: number, row: number, column: number): Value {

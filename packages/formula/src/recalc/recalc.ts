@@ -1,8 +1,8 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach and computes
-// them: reading a cell still to be computed computes it first, so no order is worked out ahead. A cell met while it
-// is being computed is on a loop with every cell reading towards it. Nesting has one budget: past it the calls in
-// progress are dropped by a throw and the cells computed again from the list of cells in progress.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and with a new
+// clock those that read it, and computes them: reading a cell still to be computed computes it first, so no order
+// is worked out ahead. A cell met while it is being computed is on a loop with every cell reading towards it.
+// Nesting has one budget: past it the calls in progress are dropped by a throw and the cells computed again.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -86,8 +86,15 @@ export class Recalc {
     private readonly made: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
+    // The clock of the last batch of edits: its author's time as a serial, and what its draws are made of.
+    private now: number;
+    private seed: number;
+    // Whether the clock formulas were flagged since the clock was last set.
+    private stamped = true;
 
-    public constructor(workbook: Workbook, functions: Registry) {
+    public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
+        this.now = now;
+        this.seed = seed;
         this.workbook = workbook;
         this.functions = functions;
         this.facts = workbook.shapes.facts;
@@ -102,6 +109,13 @@ export class Recalc {
                 }
             }
         }
+    }
+
+    // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
+    public setClock(now: number, seed: number): void {
+        this.now = now;
+        this.seed = seed;
+        this.stamped = false;
     }
 
     public setValue(sheet: Sheet, row: number, c: number, value: Literal): void {
@@ -149,11 +163,25 @@ export class Recalc {
     }
 
     // Computes the formulas that the cells written since the last pass reach, those that read cells they do not
-    // name, and what an earlier pass left, in sheet, column, row order where the reads do not ask for another.
-    public pass(cap: number, now = 0, seed = 0): RecalcResult {
+    // name, the clock formulas when the clock was set, and what an earlier pass left, in sheet, column, row order
+    // where the reads do not ask for another.
+    public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
-        this.evaluator.clock(now, seed);
+        this.evaluator.clock(this.now, this.seed);
+        if (!this.stamped) {
+            // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
+            this.reach();
+            const { clocks } = this.index;
+            for (let i = 0; i < clocks.length; i += 5) {
+                const { columns } = workbook.sheets[clocks[i]];
+                for (let c = clocks[i + 1]; c <= clocks[i + 2]; c += 1) {
+                    for (let row = clocks[i + 3]; row <= clocks[i + 4]; row += 1) columns[c].markDirty(row);
+                    this.seeds.push(clocks[i], c, clocks[i + 3], clocks[i + 4]);
+                }
+            }
+            this.stamped = true;
+        }
         // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
         if (this.seeds.length > 0) {
             this.reach();

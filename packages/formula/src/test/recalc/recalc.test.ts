@@ -284,7 +284,8 @@ describe('depth', () => {
         const draws = sheetOf((cell) => {
             for (let row = 0; row < 10; row += 1) cell(row, 0, null, '=RAND()');
         });
-        draws.recalc(NO_CAP, 0, 5);
+        draws.setClock(0, 5);
+        draws.recalc(NO_CAP);
         const drawn = Array.from({ length: 10 }, (_, row) => draws.valueOf('s1', row, 0));
         for (const length of [1000, 4000]) {
             const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
@@ -294,7 +295,8 @@ describe('depth', () => {
                 cell(0, 2, 1, null);
                 for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
             });
-            expect(engine.recalc(NO_CAP, 0, 5)).toMatchObject({ loops: [], stopped: false });
+            engine.setClock(0, 5);
+            expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
             expect(drawn.indexOf(engine.valueOf('s1', 0, 0))).toBe(1);
             expect(engine.valueOf('s1', 1, 0)).toBe(2 * length);
         }

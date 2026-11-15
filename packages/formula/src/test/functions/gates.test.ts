@@ -54,7 +54,7 @@ function passOf(entry: Entry, cells: Readonly<Record<string, string | number>>) 
             },
         },
     ]);
-    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [entry.name, entry]]));
+    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [entry.name, entry]]), 0, 0);
     const value = (label: string) => workbook.value(workbook.sheets[0].columns[at(label)[1]], at(label)[0]);
     return { recalc, value };
 }

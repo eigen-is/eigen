@@ -41,7 +41,7 @@ describe('the string table weighs what the cells hold now, within the factor a s
                 },
             },
         ]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         recalc.fillFormula(sheet, 1, 2, count, 2, stored('=$B$1&A2', 'C2'));
         recalc.pass(NO_CAP);
@@ -67,7 +67,7 @@ describe('the string table weighs what the cells hold now, within the factor a s
 
     test('one joined text of thirty thousand characters, rewritten two thousand times', () => {
         const workbook = new Workbook([texts('a', 3000, (row) => `name ${row}`)]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
         recalc.fillFormula(sheet, 0, 2, 0, 2, stored('=TEXTJOIN(", ",TRUE,A1:A3000)', 'C1'));
         recalc.pass(NO_CAP);
@@ -86,7 +86,7 @@ describe('the string table weighs what the cells hold now, within the factor a s
     test('a removed sheet of a hundred thousand texts leaves what a load of the other sheet weighs', () => {
         const names = texts('a', 1000, (row) => `name ${row}`);
         const workbook = new Workbook([names, texts('b', 100_000, (row) => `Row ${row} ${'x'.repeat(88)}`)]);
-        const recalc = new Recalc(workbook, FUNCTIONS);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         recalc.pass(NO_CAP);
         expect(workbook.strings.weight).toBeGreaterThan(SWEEP_FLOOR);
         const before = megabytes();

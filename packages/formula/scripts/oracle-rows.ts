@@ -381,7 +381,8 @@ function evaluateAll(formulas: readonly string[], fixture: Fixture, named: reado
                 cells: (sink: CellSink) => fill(sink, cells),
             })),
         ]);
-        engine.recalc(Number.POSITIVE_INFINITY, NOW, 7);
+        engine.setClock(NOW, 7);
+        engine.recalc(Number.POSITIVE_INFINITY);
         return engine.valueOf('s1', hostRow, hostColumn);
     });
 }

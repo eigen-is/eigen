@@ -73,7 +73,7 @@ if (typeof total === 'number') console.log(numberDisplay(total, '#,##0.00'));
 217.80
 ```
 
-The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The first argument of `recalc` caps how many formulas one pass computes; a later pass goes on where a capped one stopped. The clock and the random draw come in as its other two arguments, so a recalc never reads the machine.
+The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The first argument of `recalc` caps how many formulas one pass computes; a later pass goes on where a capped one stopped. The clock comes in through `setClock(now, seed)`, which a host calls once for every batch of edits it applies: the next recalc computes every formula that reads the clock or draws again with it, so a recalc never reads the machine. A load takes the clock its values were computed with as `new Engine(sheets, now, seed)`.
 
 A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
 
@@ -90,7 +90,7 @@ A structural edit answers the formulas it rewrote. A block to move must lie on t
 - A structural edit is one transform of stored text, worked out once per stretch of hosts with one outcome, on top of `mapIndex` and `mapSpan`, the one rule for where an index goes (`edit/`).
 - A function is one row: a name, a list of parameter words and a body. The call wrapper reads, coerces and checks every argument, so the body only computes (`functions/registry.ts`, `eval/call.ts`).
 - Numbers compare and round on the 15 digits Excel holds, and text orders by the engine's own rule, so neither depends on the machine (`values/precision.ts`, `values/text-order.ts`). The trigonometric, logarithmic and hyperbolic functions use the runtime's `Math` and can differ in the last digit between runtimes.
-- No clock, no locale, no module-level state: the time and the draw of a pass are arguments of `recalc`.
+- No clock, no locale, no module-level state: the time and the seed of the draws come in with every batch of edits (`setClock`).
 
 ## Tests and type check
 
@@ -117,7 +117,7 @@ Tests live in `src/test/`, one folder per source folder. `src/test/functions/fun
 - A parameter is a word from `functions/registry.ts`, and that file is the whole vocabulary. Scalar words say how one value is read: `NUMBER`, `INTEGER`, `SERIAL` for a date, `TEXT`, `BOOLEAN`, `ANY`, `LAZY` for an argument evaluated only when picked. Range words say what a body gets of a range: a family that counts every value (`NUMBERS`, `COUNTED`, `FILLED`, `TRUTHS`, `FACTORS`, `NUMBERS_A`, `MODES`), `TEXTS`, `PAIRS`, `TABLE`, `WHERE` and `MATCHED` for criteria, `REFERENCE`. Modifiers such as `optional`, `skippable`, `defaulted`, `rest`, `strict` and `addin` say how an argument may be left out, repeat or refuse a boolean.
 - Before the body runs, the wrapper has checked the count, read every argument left to right, run the call once per element of an array, computed every cell of every range and found the first error. So a body never coerces, tests for an error or reads a cell: it returns a number, a text, a boolean, `null` for a blank, or an error constant for an input outside its domain.
 - A NaN or an infinity becomes `#NUM!`, a negative zero 0, and a text past 32,767 characters `#VALUE!`, without the body's help.
-- `NOW` and `RANDOM` hand a body the time and the draw of the pass. `ENGINE` hands it the few facts of the workbook no argument carries; its list is closed by a test (`src/test/functions/gates.test.ts`).
+- `NOW` and `RANDOM` hand a body the time of the last batch of edits and a draw. `ENGINE` hands it the few facts of the workbook no argument carries; its list is closed by a test (`src/test/functions/gates.test.ts`).
 - A family file imports only the registry, the error values and the kernels of `src/values/` and `src/format/`; a Biome rule refuses `eval/`, `store/` and `recalc/`. A row that breaks a rule of its own, such as a required parameter after an optional one, throws when the module loads.
 - First type the function in Excel with the inputs that tell the words apart: an empty argument, a boolean, a range, an error, an array. Its tests in `src/test/functions/` carry Excel's answers.
 - Then add the name to FUNCTIONS.md with its status, or `functions-list.test.ts` fails.
@@ -136,6 +136,5 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - No 255-character limit on texts that Excel refuses past 255.
 - Approximate searches assume sorted data, as Excel's documentation requires.
 - A 3-D reference is not computed: a loaded formula keeps its value and a typed one is `#REF!`.
-- Volatile functions are computed when the document is, not after every unrelated edit.
 - An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect `grid-end` from `editLines` only and `too-long` from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
 - Number display is numfmt's, with a few known gaps in `TEXT`.

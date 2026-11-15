@@ -1,5 +1,6 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, a recalc of what they reach, and the reads, such as the value of a cell and a walk of a sheet.
+// structural edits, the clock of each batch of them, a recalc of what they reach, and the reads, such as the value
+// of a cell and a walk of a sheet.
 // A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only
 // through the recalc. What a host can get wrong, such as a sheet that is not there or a cell off the grid, is
 // checked here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
@@ -24,10 +25,19 @@ export class Engine {
     >;
     private readonly calc: Recalc;
 
-    public constructor(sheets: readonly SheetSource[]) {
+    // A load, with the clock its values were computed with: a clock formula keeps the value it came with.
+    public constructor(sheets: readonly SheetSource[], now = 0, seed = 0) {
+        clocked(now, seed);
         const workbook = new Workbook(sheets);
         this.workbook = workbook;
-        this.calc = new Recalc(workbook, FUNCTIONS);
+        this.calc = new Recalc(workbook, FUNCTIONS, now, seed);
+    }
+
+    // The clock of a batch of edits, once per batch: its author's time as a serial and a whole number its draws are
+    // made of. The next recalc computes every formula that reads the clock or draws again, whatever was written.
+    public setClock(now: number, seed: number): void {
+        clocked(now, seed);
+        this.calc.setClock(now, seed);
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
@@ -101,8 +111,8 @@ export class Engine {
 
     // Computes the formulas the writes and edits since the last recalc reach: one that came with a value other than
     // #REF! and reads nothing written keeps it. After `cap` formulas the pass stops, and the next one goes on.
-    public recalc(cap: number, now = 0, seed = 0): RecalcResult {
-        return this.calc.pass(cap, now, seed);
+    public recalc(cap: number): RecalcResult {
+        return this.calc.pass(cap);
     }
 
     // The value a cell holds. For a formula that is the last one a recalc computed.
@@ -201,6 +211,11 @@ export class Engine {
         admit(row, column, value);
         return found;
     }
+}
+
+// Throws unless it is a clock: a time, and a whole number to draw from.
+function clocked(now: number, seed: number): void {
+    if (!Number.isFinite(now) || !Number.isInteger(seed)) throw new RangeError(`No clock ${now}, ${seed}`);
 }
 
 // Throws unless it counts lines: a whole number of them, and at least one.

@@ -770,12 +770,13 @@ describe('DATEVALUE and TIMEVALUE', () => {
     ]);
 });
 
-describe('the clock of the pass', () => {
+describe('the clock of the batch', () => {
     // 12 November 2026, 13:17:22, the day Excel batch 8 was recorded.
     const NOW = 46338.5537259259;
     const at = (formula: string) => {
         const engine = engineOf({ s1: { A1: formula } });
-        engine.recalc(Number.POSITIVE_INFINITY, NOW);
+        engine.setClock(NOW, 0);
+        engine.recalc(Number.POSITIVE_INFINITY);
         return valueAt(engine, 'A1');
     };
 
