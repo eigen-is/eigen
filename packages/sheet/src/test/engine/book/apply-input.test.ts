@@ -18,8 +18,6 @@ const SPAN = "=SUM('N:M'!R1C1)";
 // A sheet id as long as an id may be, so a formula bound to it grows.
 const LONG_ID = 'b'.repeat(60);
 
-type Applied = Parameters<typeof applyOps>[1][number];
-
 function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
     const fields = { name: id, order: 'a0' };
     return { id, fields, cells: [], looks: [], bands: [], rows: [], columns: [], records: {}, ...part };
@@ -45,7 +43,7 @@ function expectValid(ops: readonly Op[]): void {
 
 // LAW 2 on one batch: the inverse restores the bytes, passes the validators, and its own inverse the bytes after. The
 // model reads every place as the book does after the batch. Returns the inverse.
-function expectLaw2(content: Book, ops: readonly Applied[]): Applied[] {
+function expectLaw2(content: Book, ops: readonly Op[]): Op[] {
     const book = new Workbook(content);
     const before = bytes(book);
     const expected = modelAfter(modelOf(content), { now: content.now, seed: content.seed, ops: [...ops] });
@@ -440,7 +438,7 @@ describe('engine/book/apply-input — a rename that binds formulas typed with th
     });
 
     test('a rename back to a name typed after the rename binds again, and takes that back too', () => {
-        const ops: Applied[] = [
+        const ops: Op[] = [
             rename('b', 'Later'),
             input({ cells: [[5, 5, { f: "='B'!R1C1" }]] }),
             rename('b', 'B'),

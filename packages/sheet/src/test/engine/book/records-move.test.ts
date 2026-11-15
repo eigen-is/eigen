@@ -66,25 +66,50 @@ describe('comments', () => {
         comment: { in: { row: 2, column: 1 }, out: { row: 0, column: 0 }, landed: { row: 5, column: 5 } },
     });
 
-    test('a comment in the block moves with it; one outside it, or where it lands, stays', () => {
+    test('a comment in the block moves with it, one outside it stays, and one where it lands goes', () => {
         const { s, restore } = moved(comments(), move());
-        expect(s.comment).toEqual({
-            in: { row: 5, column: 4 },
-            out: { row: 0, column: 0 },
-            landed: { row: 5, column: 5 },
-        });
-        // The move back would take the landed-on comment along, so undo puts it back where it was.
+        expect(s.comment).toEqual({ in: { row: 5, column: 4 }, out: { row: 0, column: 0 } });
+        // The move back leaves the landed-on cell empty of comments, so undo makes the comment again after it.
         expect(restore).toEqual([
-            { kind: 'record', type: 'comment', sheet: 'S', id: 'landed', set: { row: 5, column: 5 } },
+            { kind: 'record', type: 'comment', sheet: 'S', id: 'landed', set: { row: 5, column: 5 }, whole: 1 },
         ]);
         roundTrips(comments(), move());
     });
 
-    test('to another sheet, a comment in the block goes to that sheet', () => {
-        const { s, t } = moved(comments(), move('T'), { comment: { there: { row: 4, column: 4 } } });
+    test('to another sheet, a comment in the block goes to that sheet and one where it lands goes', () => {
+        const onT = { comment: { there: { row: 4, column: 4 }, away: { row: 9, column: 9 } } };
+        const { s, t, restore } = moved(comments(), move('T'), onT);
         expect(s.comment).toEqual({ out: { row: 0, column: 0 }, landed: { row: 5, column: 5 } });
-        expect(t.comment).toEqual({ in: { row: 5, column: 4 }, there: { row: 4, column: 4 } });
-        roundTrips(comments(), move('T'), { comment: { there: { row: 4, column: 4 } } });
+        expect(t.comment).toEqual({ in: { row: 5, column: 4 }, away: { row: 9, column: 9 } });
+        expect(restore).toEqual([
+            { kind: 'record', type: 'comment', sheet: 'T', id: 'there', set: { row: 4, column: 4 }, whole: 1 },
+        ]);
+        roundTrips(comments(), move('T'), onT);
+    });
+});
+
+describe('ids the sheet a block lands on holds', () => {
+    const onS: Records = { merge: { m: { rect: [1, 1, 1, 2] } }, comment: { c: { row: 2, column: 2 } } };
+
+    test('a merge or a comment brought from another sheet under an id the sheet keeps elsewhere refuses the move', () => {
+        expect(refused(onS, move('T'), { merge: { m: { rect: [9, 9, 9, 10] } } })).toEqual([null, 'id-in-use']);
+        expect(refused(onS, move('T'), { comment: { c: { row: 9, column: 9 } } })).toEqual([null, 'id-in-use']);
+    });
+
+    test('the record of that id where the block lands goes, as any landed-on record does, and comes back', () => {
+        for (const onT of [
+            { merge: { m: { rect: [5, 4, 5, 5] } } },
+            { comment: { c: { row: 4, column: 4 } } },
+        ] as const) {
+            const { t } = moved(onS, move('T'), onT);
+            expect(t).toEqual({ merge: { m: { rect: [4, 4, 4, 5] } }, comment: { c: { row: 5, column: 5 } } });
+            roundTrips(onS, move('T'), onT);
+        }
+    });
+
+    test('on one sheet an id is the record itself', () => {
+        expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toEqual([null, null]);
+        roundTrips(onS, move('S', [1, 1, 2, 2], 2, 1));
     });
 });
 

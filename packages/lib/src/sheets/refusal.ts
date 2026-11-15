@@ -11,6 +11,7 @@ export type RefusalKey =
     | 'key-too-long'
     | 'merge-overlap'
     | 'merge-cut'
+    | 'id-in-use'
     | 'last-sheet';
 
 export class Refusal extends Error {

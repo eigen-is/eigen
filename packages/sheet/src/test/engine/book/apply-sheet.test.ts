@@ -13,8 +13,6 @@ import { bytes } from './bytes';
 import { expectReads, modelAfter, modelOf } from './model';
 import { formulaRule } from './records-fixtures';
 
-type Applied = Parameters<typeof applyOps>[1][number];
-
 const PARTS = newChartSpecParts(sampleChartSpec('column'));
 const LINK = { type: 'webpage', address: 'https://eigen.is' } as const;
 // An id as long as an id may be, so a formula bound to it grows.
@@ -109,7 +107,7 @@ function addOf(content: SheetContent): SheetOp {
 }
 
 // LAW 2 on one batch: the inverse passes the validators and restores the bytes, and its inverse gives the bytes after.
-function expectLaw2(content: Book, ops: Applied[]): Applied[] {
+function expectLaw2(content: Book, ops: Op[]): Op[] {
     const book = new Workbook(content);
     const before = bytes(book);
     const inverse = applyOps(book, ops);
@@ -274,7 +272,7 @@ describe('engine/book/apply-sheet — a delete', () => {
 
     test('the undo of a delete brings the sheet back under its own name, which an add in its batch took', () => {
         const content = bookOf(sheetOf('a'), fullSheet('b', { name: 'Data', order: 'a1' }));
-        const ops: Applied[] = [
+        const ops: Op[] = [
             { kind: 'sheet', delete: 'b' },
             addOf(sheetOf('c', { name: 'DATA', order: 'a2' }, { cells: [[0, 0, { v: 1 }]] })),
         ];

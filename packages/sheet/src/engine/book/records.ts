@@ -412,8 +412,9 @@ export class SheetRecords {
     }
 
     // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments and the merges wholly
-    // in it go along, on one sheet its rule ranges too; a merge it lands on whole goes, one it cuts anywhere refuses.
-    public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'key-too-long' {
+    // in it go along, on one sheet its rule ranges too. A merge or a comment it lands on goes, a merge it cuts anywhere
+    // refuses, and so does a record it brings whose id the sheet it lands on keeps.
+    public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'id-in-use' | 'key-too-long' {
         const block = op.from;
         const [top, left, bottom, right] = block;
         const rowShift = op.toRow - top;
@@ -448,22 +449,33 @@ export class SheetRecords {
         const near = toHere || fromHere;
         const carried = new Map(near ? source.places.merge.meeting(block) : []);
         if (fromHere && [...carried.values()].some((rect) => !within(rect, block))) return 'merge-cut';
+        const comments = near ? source.places.comment.meeting(block) : [];
         if (toHere) {
+            // What lies under where the block lands goes, merges and comments alike, but for what the block brings.
+            const moving = new Set(comments.map(([id]) => id));
+            const removed = { merge: new Set<string>(), comment: new Set<string>() };
             for (const [id, rect] of this.places.merge.meeting(target)) {
                 if (oneSheet && carried.has(id)) continue;
                 if (!within(rect, target)) return 'merge-cut';
+                removed.merge.add(id);
                 restore.push(this.wholeOp('merge', id, { rect }));
                 writes.push(() => this.replace('merge', id, undefined));
             }
-        }
-        const comments = near ? source.places.comment.meeting(block) : [];
-        if (toHere) {
-            const moving = new Set(comments.map(([id]) => id));
-            // The move back takes along what lies where the block landed, so undo puts it back after.
-            for (const [id, comment] of this.stored.comment) {
-                if (moving.has(id) || !covers(target, comment.row, comment.column)) continue;
-                if (!oneSheet) restore.push(MADE_OP.comment({ sheet: op.sheet, id }));
-                restore.push(this.restoreOp('comment', id, comment, !oneSheet));
+            for (const [id, [row, column]] of this.places.comment.meeting(target)) {
+                if (oneSheet && moving.has(id)) continue;
+                removed.comment.add(id);
+                restore.push(this.wholeOp('comment', id, { row, column }));
+                writes.push(() => this.replace('comment', id, undefined));
+            }
+            // Ids are a sheet's own, so a block from another sheet may bring one this sheet keeps for another record:
+            // it is refused, as a comment's id is its thread's outside the workbook.
+            if (!oneSheet) {
+                for (const id of carried.keys()) {
+                    if (this.stored.merge.has(id) && !removed.merge.has(id)) return 'id-in-use';
+                }
+                for (const id of moving) {
+                    if (this.stored.comment.has(id) && !removed.comment.has(id)) return 'id-in-use';
+                }
             }
             for (const [id, rect] of carried) writes.push(() => this.replace('merge', id, { rect: shifted(rect) }));
             for (const [id, [row, column]] of comments) {

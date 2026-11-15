@@ -26,8 +26,8 @@ import {
     randomEndOp,
     randomFormatOp,
     randomInputOp,
+    randomLineReaderOp,
     randomLinesOp,
-    randomReaderOp,
     randomRecordOp,
     randomSheetOp,
 } from './batches';
@@ -37,8 +37,6 @@ import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 import { chartOf, formulaRule, ref } from './records-fixtures';
-
-type Applied = Parameters<typeof applyOps>[1][number];
 
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
@@ -91,7 +89,7 @@ function wholeLook(sheet: string, ranges: Rect[], set: CellAttrs): FormatOp {
 // Lands the ops on a book of the content and holds the result to the laws: every place reads as the model after
 // them (law 8, with the bands in their one form, law 6), the inverse passes the validators and restores the bytes,
 // and its own inverse restores the bytes after the ops (LAW 2). Returns the inverse.
-function landed(content: Book, ...ops: Applied[]): Applied[] {
+function landed(content: Book, ...ops: Op[]): Op[] {
     const book = new Workbook(content);
     const before = bytes(book);
     const model = modelOf(content);
@@ -635,7 +633,7 @@ function base(part: Partial<SheetContent> = {}, other: Partial<SheetContent> = {
 }
 
 // Ops that land on `base` and change its bytes, a row delete among them, which moves what stands on the last rows.
-const LANDING: readonly Applied[] = [
+const LANDING: readonly Op[] = [
     { kind: 'input', sheet: 'a', cells: [[0, 3, { v: 'x', link: LINK }]] },
     lines(true, false, 1, 1),
     { kind: 'format', sheet: 'a', ranges: [[0, 0, 2, 2]], set: { it: 1 } },
@@ -974,14 +972,14 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
             const book = new Workbook(content);
             let model: Model = modelOf(content);
             for (let round = 0; round < 3; round += 1) {
-                const batch: Omit<Batch, 'ops'> & { ops: Applied[] } = batchOf(
+                const batch: Batch = batchOf(
                     random,
                     model,
-                    (r, m): Applied => {
+                    (r, m): Op => {
                         const draw = r();
                         if (draw < 0.45) return randomLinesOp(r, m);
                         if (draw < 0.57) return randomEndOp(r, m);
-                        if (draw < 0.67) return randomReaderOp(r, m);
+                        if (draw < 0.67) return randomLineReaderOp(r, m);
                         if (draw < 0.75) return randomInputOp(r, m);
                         if (draw < 0.83) return randomFormatOp(r, m);
                         return draw < 0.97 ? randomRecordOp(r, m) : randomSheetOp(r, m);

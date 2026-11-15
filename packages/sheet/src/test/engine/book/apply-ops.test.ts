@@ -2,7 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { BAND_WEIGHT, EXTRA_WEIGHT, MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
-import type { Batch, FormatOp, InputOp, RecordOp, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
+import type {
+    Batch,
+    CellContent,
+    FormatOp,
+    InputOp,
+    MoveOp,
+    Op,
+    Placed,
+    RecordOp,
+    Rect,
+    SheetContent,
+    SheetOp,
+} from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -22,9 +34,7 @@ import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
-
-type Applied = Parameters<typeof applyOps>[1][number];
-type AppliedBatch = Omit<Batch, 'ops'> & { ops: Applied[] };
+import { formulaRule } from './records-fixtures';
 
 const LAST_ROW = GRID_ROWS - 1;
 const LINK = { type: 'webpage', address: 'https://eigen.is' } as const;
@@ -42,7 +52,7 @@ function chartChange(set: Partial<typeof PARTS>): RecordOp {
 }
 
 // A batch as a host lands it: the ops, then the clock of the batch, which a refused batch never reaches.
-function land(book: Workbook, batch: AppliedBatch): Applied[] {
+function land(book: Workbook, batch: Batch): Op[] {
     const inverse = applyOps(book, batch.ops);
     book.setClock(batch.now, batch.seed);
     return inverse;
@@ -58,7 +68,7 @@ function refusalOf(run: () => unknown): RefusalKey | undefined {
     return undefined;
 }
 
-function batch(...ops: Applied[]): AppliedBatch {
+function batch(...ops: Op[]): Batch {
     return { g: 1, now: 46_000.25, seed: 99, ops };
 }
 
@@ -98,7 +108,7 @@ function twoSheets(): Book {
 }
 
 // Ops that land on `twoSheets`, each of which changes its bytes, and the later ones what the earlier ones wrote.
-const LANDING: readonly Applied[] = [
+const LANDING: readonly Op[] = [
     { kind: 'record', sheet: B, type: 'sheet', id: B, set: { name: 'Renamed', order: 'Zz' } },
     { kind: 'record', sheet: 'a', type: 'comment', id: 'c', set: { row: 5 } },
     { kind: 'record', sheet: 'a', type: 'comment', id: 'c', set: { row: 9 } },
@@ -138,8 +148,33 @@ const addOf = (id: string, part: Partial<SheetContent> = {}, name = id): SheetOp
     kind: 'sheet',
     add: sheetOf(id, { fields: { name, order: 'a2' }, ...part }),
 });
+// `twoSheets` with a cell of sheet a, a record of sheet a or a record of the second sheet more.
+function twoSheetsWith(
+    cell?: Placed<CellContent>,
+    onA: SheetContent['records'] = {},
+    onB: SheetContent['records'] = {},
+): Book {
+    const book = twoSheets();
+    const [a, b] = book.sheets;
+    const cells = cell ? [...a.cells, cell].sort((x, y) => x[1] - y[1] || x[0] - y[0]) : a.cells;
+    const sheets = [
+        { ...a, cells, records: { ...a.records, ...onA } },
+        { ...b, records: { ...b.records, ...onB } },
+    ];
+    return { ...book, sheets };
+}
+// A formula a cell stores as long as it may be, but for the id of the second sheet, which a move of R1C1 there adds.
+const NEAR_BOUND = `="${'a'.repeat(131_050)}"&R1C1`;
+const moveOf = (from: Rect, toRow: number, toColumn: number, toSheet = 'a'): MoveOp => ({
+    kind: 'move',
+    sheet: 'a',
+    from,
+    toSheet,
+    toRow,
+    toColumn,
+});
 // The refused op, and the book it is refused on when that is not `twoSheets`.
-const REFUSED: readonly [RefusalKey, Applied, Book?][] = [
+const REFUSED: readonly [RefusalKey, Op, Book?][] = [
     ['merge-overlap', { kind: 'record', sheet: 'a', type: 'merge', id: 'm2', set: { rect: [6, 6, 7, 7] }, whole: 1 }],
     ['last-sheet', { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { hide: 1 } }],
     ['last-sheet', { kind: 'sheet', delete: 'a' }],
@@ -159,6 +194,19 @@ const REFUSED: readonly [RefusalKey, Applied, Book?][] = [
             );
             return { ...book, sheets: [...book.sheets, ...more] };
         })(),
+    ],
+    ['merge-cut', moveOf([5, 5, 5, 6], 30, 30)],
+    ['merge-cut', moveOf([30, 30, 30, 30], 6, 6)],
+    [
+        'id-in-use',
+        moveOf([5, 5, 6, 6], 0, 3, B),
+        twoSheetsWith(undefined, {}, { merge: { m: { rect: [9, 9, 9, 10] } } }),
+    ],
+    ['key-too-long', moveOf([0, 0, 0, 0], 5, 5, B), twoSheetsWith([7, 0, { f: NEAR_BOUND }])],
+    [
+        'key-too-long',
+        moveOf([0, 0, 0, 0], 5, 5, B),
+        twoSheetsWith(undefined, { conditionalFormat: { r: formulaRule([[40, 0, 40, 0]], NEAR_BOUND) } }),
     ],
 ];
 
@@ -227,7 +275,7 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
     test('a sheet added past the limits and deleted in the same batch lands', () => {
         const book = new Workbook(twoSheets());
         const before = bytes(book);
-        const ops: Applied[] = [addOf('c', { cells: [...PAST_SLOTS] }), LANDING[1], { kind: 'sheet', delete: 'c' }];
+        const ops: Op[] = [addOf('c', { cells: [...PAST_SLOTS] }), LANDING[1], { kind: 'sheet', delete: 'c' }];
         expect(refusalOf(() => land(book, batch(...ops)))).toBeUndefined();
         expect(bytes(book)).not.toBe(before);
         expect(book.sheets.has('c')).toBe(false);
