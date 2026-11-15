@@ -26,6 +26,7 @@ import {
     authedRequest,
     chatPost,
     createTeam,
+    createTestGuest,
     createTestUser,
     driveGet,
     drivePost,
@@ -539,6 +540,20 @@ describe('An answer that asks the relay again', () => {
         const answers = await getFromHomes(teams, 'drive:mime-contents', { mimeType: 'text/plain' });
 
         for (const team of teams) expect(answers.get(team)?.map((path) => path.id)).toEqual([file.id]);
+    });
+});
+
+describe('A question about the calendars of a home', () => {
+    test('is answered with null by a team whose calendar is off and by a guest, and with a list by a user', async () => {
+        const guest = await createTestGuest('Relay Guest');
+        const owners = [teamOwner, guest.id, ctx.alice.user.id];
+
+        const answers = await getFromHomes(owners, 'calendar:calendars', null);
+
+        expect([...answers.keys()].sort()).toEqual([...owners].sort());
+        expect(answers.get(teamOwner)).toBeNull();
+        expect(answers.get(guest.id)).toBeNull();
+        expect(answers.get(ctx.alice.user.id)?.some((calendar) => calendar.isDefault)).toBe(true);
     });
 });
 

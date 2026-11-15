@@ -4,7 +4,8 @@
 // decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import { getFromHomes, pullCalendarShares, pullPendingInvitations, sendToHome } from '../home/home-relay';
+import { homeFolderExists } from '../config/paths';
+import { getFromHomes, sendToHome } from '../home/home-relay';
 import { getTeam } from '../team';
 import type { User } from '../user';
 import { getMemberships, getUserById, isGuest } from '../user';
@@ -47,7 +48,9 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
 
             // A guest's home has no calendar, so a pull would scan the owner's calendar for nothing.
             if (isGuest(user)) continue;
-            for (const result of await pullCalendarShares(fromUserId, user.email, teamIds)) {
+            const source = [fromUserId].filter(homeFolderExists);
+            const shares = await getFromHomes(source, 'calendar:shares', { email: user.email, teamIds });
+            for (const result of shares.get(fromUserId) ?? []) {
                 await sendToHome(user.id, {
                     type: 'calendar:share',
                     ownerId: fromUserId,
@@ -60,7 +63,8 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             }
 
             if (teamId) continue;
-            for (const request of await pullPendingInvitations(fromUserId, user.email)) {
+            const requests = await getFromHomes(source, 'calendar:pending-invitations', { attendeeEmail: user.email });
+            for (const request of requests.get(fromUserId) ?? []) {
                 await sendToHome(user.id, { type: 'calendar:request', ...request });
             }
         } catch (error) {

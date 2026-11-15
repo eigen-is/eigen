@@ -44,11 +44,13 @@ export class TeamHome extends Home {
     }
 
     public override get calendar(): Calendar {
-        const calendar = super.calendar;
-        if (this.settings.get().calendar?.enabled === false) {
-            throw new ApiError(404, 'Team calendar is disabled');
-        }
-        return calendar;
+        if (!this.hasCalendar) throw new ApiError(404, 'Team calendar is disabled');
+        return super.calendar;
+    }
+
+    // A team whose calendar is switched off has no calendar.
+    public override get hasCalendar(): boolean {
+        return this.settings.get().calendar?.enabled !== false;
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
