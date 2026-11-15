@@ -10,11 +10,19 @@ eigen|calendar⟩ is the [calendar app](/support/calendar/get-started) in Eigen.
 
 ## More than one calendar
 
-Everyone has a calendar of their own, and a team has one its members share. Each has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round. You can [share one of your calendars](/support/calendar/share-calendar) with people or a team, to edit, to view, or to see only when you are busy. An event [repeats](/support/calendar/recurring-events), such as daily, weekly or on weekdays, and you change one date or the whole series.
+Everyone has a calendar of their own, and a team has one its members share. The festival crew's calendar holds the build day, the go/no-go meeting and the weekend itself. Saar's site walk is in her own.
+
+Each calendar has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round.
+
+You can [share one of your calendars](/support/calendar/share-calendar) with people or a team, to edit, to view, or to see only when you are busy.
+
+An event [repeats](/support/calendar/recurring-events), such as daily, weekly or on weekdays, and you change one date or the whole series. The crew's production meeting is one event that comes back every week.
 
 ## Guests and their answers
 
-[Add guests](/support/calendar/invite-people) to an event by name or email address, and each one shows Pending until they answer Accepted, Maybe or Declined. Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
+[Add guests](/support/calendar/invite-people) to an event by name or email address, and each one shows Pending until they answer Accepted, Maybe or Declined. So whoever calls the go/no-go meeting sees who will be in the room before it starts.
+
+Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
 
 ::: carousel
 ![The festival week: a production meeting, the build day, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
@@ -23,7 +31,9 @@ Everyone has a calendar of their own, and a team has one its members share. Each
 
 ## People outside Eigen
 
-You can [invite any email address](/support/calendar/external-invitations). Someone on Google Calendar, Apple Calendar or Outlook gets an invitation email their app understands, and their answer comes back and updates your event. An invitation from them arrives in Mail as a card and goes into your calendar, as long as your server can verify who sent it. This needs an Eigen that hosts your email.
+You can [invite any email address](/support/calendar/external-invitations). Someone on Google Calendar, Apple Calendar or Outlook gets an invitation email their app understands, and their answer comes back and updates your event.
+
+An invitation from them arrives in Mail as a card and goes into your calendar, as long as your server can verify who sent it. This needs an Eigen that hosts your email.
 
 ## On your phone
 
