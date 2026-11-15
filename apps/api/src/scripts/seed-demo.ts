@@ -49,6 +49,7 @@ import type {
     SeededInvite,
     SeededMail,
     SeededTime,
+    SeededVCardFile,
     VCardSpec,
 } from './demo/content';
 import {
@@ -204,6 +205,14 @@ function injectCommentMark(json: JSONContent, anchor: string, cardId: string): b
     return false;
 }
 
+// A file a container keeps in its media/, such as a fixture photo or a vCard written at seed time.
+type MediaFile = { name: string; type: string; bytes: Buffer };
+
+function fixtureMedia(file: string): MediaFile {
+    const path = join(FIXTURES_DIR, file);
+    return { name: basename(path), type: Bun.file(path).type, bytes: readFileSync(path) };
+}
+
 // The demo docs are written as HTML; the editor's schema parses them into the JSON a doc stores.
 function htmlToDocJson(schema: Schema, html: string): JSONContent {
     const { document } = new JSDOM(`<!DOCTYPE html><html><body>${html}</body></html>`).window;
@@ -221,7 +230,7 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     if (card.chatName) entry.set('chatName', card.chatName);
     if (card.creator) entry.set('creator', card.creator);
     if (card.createdAt !== undefined) entry.set('createdAt', card.createdAt);
-    if (card.attachments?.length) entry.set('attachments', card.attachments);
+    if (card.attachments) entry.set('attachments', card.attachments);
     getItemMapRoot(doc, 'comments').set(card.id, entry);
 }
 
@@ -457,15 +466,16 @@ async function main(): Promise<void> {
             },
             `demo-${spec.email}`,
         );
+    const vcardMedia = (vcf: SeededVCardFile): MediaFile => ({
+        name: vcf.name,
+        type: VCARD_MIMES[0],
+        bytes: Buffer.from(seedVCard(vcf.card), 'utf8'),
+    });
+    const vcardFiles = new Map(VCARD_FILES.map((vcf) => [vcf.name, vcf]));
     for (const vcf of VCARD_FILES) {
-        await teamDrive.createFileFromData(
-            teamMountId,
-            lookup(folderId, vcf.folder),
-            vcf.name,
-            VCARD_MIMES[0],
-            Buffer.from(seedVCard(vcf.card), 'utf8'),
-            lookup(userByKey, vcf.uploader),
-        );
+        const { name, type, bytes } = vcardMedia(vcf);
+        const folder = lookup(folderId, vcf.folder);
+        await teamDrive.createFileFromData(teamMountId, folder, name, type, bytes, lookup(userByKey, vcf.uploader));
     }
 
     // A new eigendoc holding the JSON, written as one update to its live collab doc.
@@ -514,31 +524,20 @@ async function main(): Promise<void> {
         teamDocs.set('crew roster', docPath);
     }
 
-    // Fixture files into a container's media/ folder, where a doc's figures and a canvas's images find them by name,
-    // so the document stays whole.
+    // Files into a container's media/ folder, where a doc's figures, a canvas's images and a chat's attachments find
+    // them by name, so the document stays whole.
     const uploadMedia = async (
         drive: Drive,
         mountId: string,
         container: DrivePath,
-        files: string[],
+        files: readonly MediaFile[],
         author: User,
     ): Promise<DrivePath[]> => {
         const mediaFolder = await drive.getChildByName(mountId, container.id, CONTAINER_MEDIA_FOLDER);
         if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
         const uploads: DrivePath[] = [];
-        for (const file of files) {
-            const path = join(FIXTURES_DIR, file);
-            const bytes = readFileSync(path);
-            uploads.push(
-                await drive.createFileFromData(
-                    mountId,
-                    mediaFolder.id,
-                    basename(path),
-                    Bun.file(path).type,
-                    bytes,
-                    author,
-                ),
-            );
+        for (const { name, type, bytes } of files) {
+            uploads.push(await drive.createFileFromData(mountId, mediaFolder.id, name, type, bytes, author));
         }
         return uploads;
     };
@@ -551,27 +550,16 @@ async function main(): Promise<void> {
         const posted: { id: string; createdAt: Date }[] = [];
         for (const [i, line] of lines.entries()) {
             const author = lookup(userByKey, line.author);
-            const attachments: ChatAttachment[] = line.attach?.map(teamDocRef) ?? [];
             // An upload lands in the chat's own media/, where the thread resolves attachment names.
-            if (line.upload) {
-                const uploads = await uploadMedia(teamDrive, teamMountId, chat, line.upload, author);
-                attachments.push(...uploads.map((upload) => upload.name));
-            }
-            for (const name of line.attachVCards ?? []) {
-                const vcf = VCARD_FILES.find((file) => file.name === name);
-                if (!vcf) throw new Error(`A seeded message attaches unknown vCard file '${name}'`);
-                const chatMedia = await teamDrive.getChildByName(teamMountId, chat.id, CONTAINER_MEDIA_FOLDER);
-                if (!chatMedia) throw new Error(`media/ subfolder missing for ${chat.name}`);
-                const upload = await teamDrive.createFileFromData(
-                    teamMountId,
-                    chatMedia.id,
-                    vcf.name,
-                    VCARD_MIMES[0],
-                    Buffer.from(seedVCard(vcf.card), 'utf8'),
-                    author,
-                );
-                attachments.push(upload.name);
-            }
+            const files = [
+                ...(line.upload ?? []).map(fixtureMedia),
+                ...(line.attachVCards ?? []).map((name) => vcardMedia(lookup(vcardFiles, name))),
+            ];
+            const uploads = await uploadMedia(teamDrive, teamMountId, chat, files, author);
+            const attachments: ChatAttachment[] = [
+                ...(line.attach?.map(teamDocRef) ?? []),
+                ...uploads.map((upload) => upload.name),
+            ];
             // A whisper names its reader by email, as the chat client sends one.
             const whisperTo = line.whisperTo ? lookup(userByKey, line.whisperTo).email : undefined;
             const { id } = await room.postMessage(
@@ -594,6 +582,29 @@ async function main(): Promise<void> {
         return times[0];
     };
 
+    // A comment's thread, posted as a chat in its container's chat/, and the card that names it, as old as the thread.
+    const seedCommentThread = async (
+        chatFolder: DrivePath,
+        comment: Omit<CanvasComment, 'element' | 'start'> & { start: SeededTime | Date; attach?: string[] },
+    ): Promise<CommentCard & { chatName: string; createdAt: number }> => {
+        const author = lookup(userByKey, comment.author);
+        const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', author);
+        const startedAt = await postThread(chat, comment.start, [
+            { author: comment.author, text: comment.text },
+            ...(comment.replies ?? []),
+        ]);
+        return {
+            id: crypto.randomUUID(),
+            title: comment.title,
+            description: '',
+            color: DEFAULT_CARD_COLOR,
+            chatName: chat.name,
+            creator: author.email,
+            createdAt: startedAt.getTime(),
+            attachments: comment.attach?.map(teamDocRef),
+        };
+    };
+
     // --- Docs: each HTML spec becomes an eigendoc in one write, its comment marks anchored first. The container
     // comes before it: its chat/ holds the threads the marks point at, and its media/ the photos its figures show. ---
     for (const doc of DOCS) {
@@ -601,35 +612,19 @@ async function main(): Promise<void> {
         const parentId = lookup(folderId, doc.folder);
         const docPath = await teamDrive.create(teamMountId, parentId, doc.name, 'doc', author);
         teamDocs.set(doc.name, docPath);
-        await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
+        await uploadMedia(teamDrive, teamMountId, docPath, (doc.media ?? []).map(fixtureMedia), author);
 
-        // Comment threads are chats inside the container's chat/ subfolder.
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);
-        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard; chatName: string }[] = [];
+        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard & { chatName: string } }[] = [];
         for (const comment of doc.comments) {
-            const commentAuthor = lookup(userByKey, comment.author);
-            const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
-            const startedAt = await postThread(chat, comment.start, [
-                { author: comment.author, text: comment.text },
-                ...(comment.replies ?? []),
-            ]);
             // The title is the anchored text, as the editor makes it.
-            const card: CommentCard = {
-                id: crypto.randomUUID(),
-                title: comment.anchor.slice(0, 100),
-                description: '',
-                color: DEFAULT_CARD_COLOR,
-                chatName: chat.name,
-                creator: commentAuthor.email,
-                createdAt: startedAt.getTime(),
-                attachments: comment.attach?.map(teamDocRef),
-            };
+            const card = await seedCommentThread(chatFolder, { ...comment, title: comment.anchor.slice(0, 100) });
             if (!injectCommentMark(docJson, comment.anchor, card.id)) {
                 throw new Error(`Anchor "${comment.anchor}" not found in "${doc.name}"`);
             }
-            cards.push({ spec: comment, card, chatName: chat.name });
+            cards.push({ spec: comment, card });
         }
         // The collab doc opens right before the doc's one write, because a document that no socket joins closes a
         // minute after its open, and a write after that close is lost.
@@ -644,11 +639,11 @@ async function main(): Promise<void> {
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);
         });
-        for (const { spec, card, chatName } of cards) {
+        for (const { spec, card } of cards) {
             if (!spec.assignTo) continue;
             const commentAuthor = lookup(userByKey, spec.author);
-            const assignee = userForRole(spec.assignTo);
-            await teamDrive.assignComment(teamMountId, docPath.id, chatName, assignee.email, commentAuthor, card.title);
+            const assignee = userForRole(spec.assignTo).email;
+            await teamDrive.assignComment(teamMountId, docPath.id, card.chatName, assignee, commentAuthor, card.title);
         }
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
@@ -663,29 +658,12 @@ async function main(): Promise<void> {
     ): Promise<DrivePath> => {
         const author = userForRole(spec.author);
         const container = await teamDrive.create(teamMountId, lookup(folderId, spec.folder), spec.name, type, author);
-        await uploadMedia(teamDrive, teamMountId, container, imageFiles, author);
+        await uploadMedia(teamDrive, teamMountId, container, imageFiles.map(fixtureMedia), author);
         const chatFolder = await teamDrive.getChildByName(teamMountId, container.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${container.name}`);
         const cards: { elementId: string; card: CommentCard }[] = [];
         for (const comment of spec.comments ?? []) {
-            const commentAuthor = lookup(userByKey, comment.author);
-            const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
-            const startedAt = await postThread(chat, comment.start, [
-                { author: comment.author, text: comment.text },
-                ...(comment.replies ?? []),
-            ]);
-            cards.push({
-                elementId: `el-${comment.element}`,
-                card: {
-                    id: crypto.randomUUID(),
-                    title: comment.title,
-                    description: '',
-                    color: DEFAULT_CARD_COLOR,
-                    chatName: chat.name,
-                    creator: commentAuthor.email,
-                    createdAt: startedAt.getTime(),
-                },
-            });
+            cards.push({ elementId: `el-${comment.element}`, card: await seedCommentThread(chatFolder, comment) });
         }
         // The collab doc opens right before its one write, as a doc's does above.
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
@@ -751,31 +729,34 @@ async function main(): Promise<void> {
     teamDocs.set(KANBAN.name, boardPath);
 
     // A card's thread is a chat in the board's chat/, as old as the card. Its cover is an upload into the board's
-    // media/, named first on the card, as the card dialog stores one. The board's author hands a card out.
+    // media/ on its attachments, because a card's first image attachment is its cover. The board's author hands it out.
     const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, CONTAINER_CHAT_FOLDER);
     if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
     const boardCreatedAt = now.getTime() - 14 * 86_400_000;
     const boardCards: { chatName: string; createdAt: number; attachments: ChatAttachment[] }[] = [];
     for (const [i, card] of KANBAN.cards.entries()) {
-        const cardAuthor = lookup(userByKey, card.creator);
-        const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
-        const startedAt = await postThread(chat, card.start ?? new Date(boardCreatedAt + (i + 1) * 86_400_000), [
-            { author: card.creator, text: card.chatText },
-            ...(card.chatReplies ?? []),
-        ]);
-        const covers = card.cover ? await uploadMedia(teamDrive, teamMountId, boardPath, [card.cover], cardAuthor) : [];
+        const { chatName, createdAt } = await seedCommentThread(boardChatFolder, {
+            card: card.chat,
+            title: card.title,
+            author: card.creator,
+            text: card.chatText,
+            start: card.start ?? new Date(boardCreatedAt + (i + 1) * 86_400_000),
+            replies: card.chatReplies,
+        });
+        const cover = card.cover ? [fixtureMedia(card.cover)] : [];
+        const covers = await uploadMedia(teamDrive, teamMountId, boardPath, cover, lookup(userByKey, card.creator));
         boardCards.push({
-            chatName: chat.name,
-            createdAt: startedAt.getTime(),
-            attachments: [...covers.map((cover) => cover.name), ...(card.attach?.map(teamDocRef) ?? [])],
+            chatName,
+            createdAt,
+            attachments: [...covers.map((upload) => upload.name), ...(card.attach?.map(teamDocRef) ?? [])],
         });
         if (card.assignTo) {
             const assignee = emailForRole(card.assignTo);
-            await teamDrive.assignComment(teamMountId, boardId, chat.name, assignee, boardAuthor, card.title);
+            await teamDrive.assignComment(teamMountId, boardId, chatName, assignee, boardAuthor, card.title);
         }
         if (card.resolvedBy) {
             const resolver = lookup(userByKey, card.resolvedBy);
-            await teamDrive.setCommentStatus(teamMountId, boardId, chat.name, 'resolved', resolver, card.title);
+            await teamDrive.setCommentStatus(teamMountId, boardId, chatName, 'resolved', resolver, card.title);
         }
     }
 
@@ -1003,13 +984,15 @@ async function main(): Promise<void> {
                       : recipient.email;
                 // An invitation arrives as our MTA hands over a signed one, with its DKIM verdict, so delivery files it
                 // in the persona's calendar as a pending invitation.
-                const invite = external &&
-                    message.invite && {
-                        icalEvent: { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) },
-                        headers: {
-                            'Authentication-Results': `${MAIL_DOMAIN}; dkim=pass header.d=${external.email.split('@')[1]}`,
-                        },
-                    };
+                const invite =
+                    external && message.invite
+                        ? {
+                              icalEvent: { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) },
+                              headers: {
+                                  'Authentication-Results': `${MAIL_DOMAIN}; dkim=pass header.d=${external.email.split('@')[1]}`,
+                              },
+                          }
+                        : {};
                 // The persona's own message links documents as a send does that grants the outside party read access.
                 let html = message.html;
                 if (!external && message.attachDocs) {
@@ -1081,7 +1064,10 @@ async function main(): Promise<void> {
             // A new label takes the next accent color after the ones the book holds.
             labelIds.set(
                 name,
-                await contacts.addLabel({ name, color: EIGEN_ACCENT_COLORS_SHUFFLED[labelIds.size].value }),
+                await contacts.addLabel({
+                    name,
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[labelIds.size % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+                }),
             );
         }
         await contacts.addContact({
@@ -1131,7 +1117,7 @@ async function main(): Promise<void> {
     const personalDocs = [NOTES, TRYING_EIGEN].map((doc) => ({
         name: doc.name,
         json: htmlToDocJson(docSchema(), doc.html),
-        media: doc.media ?? [],
+        media: (doc.media ?? []).map(fixtureMedia),
     }));
     for (const persona of PERSONAS) {
         const owner = lookup(userByKey, persona.key);

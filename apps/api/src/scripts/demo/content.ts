@@ -157,9 +157,8 @@ export type ChatLine = {
     // Seeded team documents, posted as drive references. The seeder resolves them to ids at seed time, so a document
     // can only be attached from content seeded after it.
     attach?: string[];
-    // VCARD_FILES names and fixture paths, each uploaded into the chat's own media/ the way a user's upload lands.
-    attachVCards?: string[];
-    upload?: string[];
+    attachVCards?: string[]; // VCARD_FILES names, uploaded into the chat's own media/ as a user's upload lands
+    upload?: string[]; // fixture paths, uploaded into the chat's media/ the same way
     whisperTo?: string; // persona key: only they and the author read the text
     gap?: number;
     at?: SeededTime;
@@ -646,7 +645,7 @@ export type CardSpec = {
     start?: SeededTime; // left out, a day after the board per place in the list
     chatReplies?: ChatLine[];
     attach?: string[]; // seeded team documents pinned to the card
-    cover?: string; // fixture path, uploaded into the board's media/ and named first on the card
+    cover?: string; // fixture path, uploaded into the board's media/; the card's first image attachment is its cover
     assignTo?: LeadRole; // by the board's author
     resolvedBy?: string; // persona key
 };
