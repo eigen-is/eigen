@@ -4,8 +4,10 @@
 // no cell holds any more is forgotten when the holder of the cells says which are held, and its id is given out
 // again: so an id means one shape only for as long as a cell holds it.
 
+import type { SheetNamed } from '../edit/sheets';
+import { bindSheets, breakSheets } from '../edit/sheets';
 import { parseStored } from './parser';
-import { storedKey } from './printer';
+import { printStored, storedKey } from './printer';
 import type { FormulaNode } from './tree';
 import { NodeKind, SheetKind } from './tree';
 
@@ -40,16 +42,29 @@ export class ShapeTable {
         return this.shapes[id - 1];
     }
 
-    // The id of a formula in stored text as a host hands it. Its key is the text its tree prints, so another
-    // spelling of one formula, such as a name in lower case, is the same shape. Text that does not parse is kept as
-    // it is, and so is text whose key would not read back, with its tree.
-    public intern(text: string): number {
-        const known = this.ids.get(text);
-        if (known !== undefined) return known;
-        const parsed = parseStored(text);
-        if ('reason' in parsed) return this.add(text, null);
-        const key = storedKey(parsed);
-        return typeof key === 'string' ? this.keyed(key, parsed) : this.add(text, parsed);
+    // The id of a formula in stored text as a host hands it, in a workbook whose sheets `named` finds. Its key is
+    // the text its tree prints, so another spelling of one formula, such as a name in lower case, is the same shape.
+    // Text that does not parse is kept as it is, and so is text whose key would not read back: with its tree only
+    // when it names no sheet by its name, as no form of it that binds the name would fit a cell either.
+    public intern(text: string, named: SheetNamed): number {
+        let typed = this.ids.get(text);
+        if (typed === undefined) {
+            const parsed = parseStored(text);
+            if ('reason' in parsed) return this.add(text, null);
+            const key = storedKey(parsed);
+            if (typeof key !== 'string') return this.add(text, collect(parsed, []) ? null : parsed);
+            typed = this.keyed(key, parsed);
+        }
+        const { tree, namesSheet } = this.shapes[typed - 1];
+        if (tree === null || !namesSheet) return typed;
+        // What names a held sheet is the shape bound to it, or #REF! in its place where an id makes that too long:
+        // a name in quotes and the least that follows it are never shorter than #REF!, so that fits as the key did.
+        const bound = bindSheets(tree, named);
+        if (bound === tree) return typed;
+        const id = this.internTree(bound);
+        if (id !== 0) return id;
+        const broken = breakSheets(tree, named);
+        return this.keyed(printStored(broken), broken);
     }
 
     // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key. 0, with

@@ -389,11 +389,14 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     ({ rewrites } = engine.moveCells(op.move));
                     counts.moves += 1;
                     break;
-                case 'add':
-                    applied = applyAdd(model, op.sheet, op.place);
+                case 'add': {
+                    // What the sheet itself holds was bound as it entered, which no rewrite reports.
+                    const added = applyAdd(model, op.sheet, op.place);
+                    applied = { ...added, kept: added.kept.filter((cell) => cell.sheet !== op.sheet.id) };
                     ({ rewrites } = engine.addSheet(handed(op.sheet), op.place));
                     removed = removed.filter((sheet) => sheet.id !== op.sheet.id);
                     break;
+                }
                 case 'remove': {
                     const gone = model.find((sheet) => sheet.id === op.id);
                     if (gone !== undefined) removed = [...removed, gone];
@@ -601,8 +604,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 else if (cell.value !== null) engine.setValue(sheet, row, column, cell.value);
             }
             for (const rewrite of rewrites) {
-                // The texts a sheet lost when it was added went with the sheet.
-                if (rewrite.lost === null || (op.kind === 'add' && rewrite.sheet === op.sheet.id)) continue;
+                if (rewrite.lost === null) continue;
                 const { sheet, top, left, bottom, right } = back(rewrite);
                 engine.fillFormula(sheet, top, left, bottom, right, rewrite.lost);
             }

@@ -16,6 +16,9 @@ import {
 } from '../../text';
 import { ShapeTable } from '../../text/shapes';
 
+// What a shape table outside a workbook is handed: no sheet has a name.
+export const NO_SHEET = (): undefined => undefined;
+
 export const SHEETS = [
     { id: 's1', name: 'Sheet1' },
     { id: 's2', name: 'Sheet2' },
@@ -497,7 +500,7 @@ export function keepsLaws(
         // Text that fails as typed never comes back as a formula, and shows as it was typed.
         const kept = storedText(text, row, column, findSheet);
         const table = new ShapeTable();
-        const shape = table.shape(table.intern(kept));
+        const shape = table.shape(table.intern(kept, NO_SHEET));
         if (shape.tree !== null || !('reason' in parseStored(kept))) throw broke('unparsable text came alive', kept);
         if (typedText(shape, row, column, sheetName) !== text) throw broke('unparsable text changed', kept);
         return false;

@@ -494,7 +494,7 @@ describe('sheets', () => {
     });
     test('a sheet that comes with formulas typed with the name of a sheet that is there reads that sheet', () => {
         const engine = book();
-        // As a sheet comes back that was removed before the others got their names: nothing bound its texts.
+        // As a sheet comes back that was removed before the others got their names: they are bound as they enter.
         const added = engine.addSheet(
             {
                 id: 's3',
@@ -510,19 +510,9 @@ describe('sheets', () => {
             },
             1,
         );
-        expect(added.rewrites).toEqual([
-            { sheet: 's3', top: 0, left: 0, bottom: 1, right: 0, formula: '=[s2]!R1C2+1', lost: "='sheet2'!R1C2+1" },
-            {
-                sheet: 's3',
-                top: 0,
-                left: 1,
-                bottom: 0,
-                right: 1,
-                formula: '=[s3]!R[1]C+[s1]!R1C1',
-                lost: "='Third'!R[1]C+'Sheet1'!R1C1",
-            },
-        ]);
+        expect(added.rewrites).toEqual([]);
         expect(engine.formulaOf('s3', 1, 0)).toBe('=[s2]!R1C2+1');
+        expect(engine.formulaOf('s3', 0, 1)).toBe('=[s3]!R[1]C+[s1]!R1C1');
         engine.recalc(NO_CAP);
         expect([0, 1, 2].map((row) => engine.valueOf('s3', row, 0))).toEqual([10, 10, 1]);
         expect([engine.valueOf('s3', 0, 1), engine.valueOf('s3', 0, 2)]).toEqual([4, REF]);
@@ -547,7 +537,8 @@ describe('sheets', () => {
             },
             0,
         );
-        expect(added.rewrites.map((rewrite) => rewrite.formula)).toEqual(['=[a]!R1C1', '=[a]!R1C1', '=[c]!R1C1']);
+        expect(added.rewrites).toEqual([]);
+        expect([1, 2, 3].map((row) => engine.formulaOf('c', row, 0))).toEqual(['=[a]!R1C1', '=[a]!R1C1', '=[c]!R1C1']);
         engine.recalc(NO_CAP);
         expect([1, 2, 3].map((row) => engine.valueOf('c', row, 0))).toEqual([1, 1, 3]);
     });

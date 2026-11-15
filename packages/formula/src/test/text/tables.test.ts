@@ -18,7 +18,7 @@ import {
 } from '../../text';
 import { ShapeTable } from '../../text/shapes';
 import { engineOf, evaluate, valueAt } from '../recalc/support';
-import { at, dice, failure, findSheet, sheetName, shown, stored, treeA1, treeStored } from './support';
+import { at, dice, failure, findSheet, NO_SHEET, sheetName, shown, stored, treeA1, treeStored } from './support';
 import { intersected } from './xlsx-support';
 
 // Every form the corpus holds, with its count there, and the forms Excel shows a person.
@@ -138,7 +138,7 @@ describe('text/tables: a table reference is one leaf that keeps what was written
         const table = new ShapeTable();
         const id = table.internTree(treeA1('=SUM(Sales[Amount])', 'B2'));
         expect(table.internTree(treeA1('=SUM(Sales[Amount])', 'Z99'))).toBe(id);
-        expect(table.intern('=SUM(Sales[Amount])')).toBe(id);
+        expect(table.intern('=SUM(Sales[Amount])', NO_SHEET)).toBe(id);
         expect(table.internTree(treeA1('=SUM(sales[Amount])'))).not.toBe(id);
         expect(table.shape(id).refs).toEqual([]);
     });

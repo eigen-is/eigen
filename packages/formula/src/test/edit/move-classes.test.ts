@@ -3,6 +3,7 @@ import type { Move } from '../../edit/move';
 import { moveClasses } from '../../edit/move';
 import { GRID_COLUMNS, GRID_ROWS, printStored, transformMove } from '../../text';
 import { ShapeTable } from '../../text/shapes';
+import { NO_SHEET } from '../text/support';
 import { random } from './support';
 
 // Hosts, corners and blocks sit on the first and the last ten lines of both axes, where a class is cut by the grid.
@@ -34,7 +35,7 @@ describe('the classes of a move', () => {
         let lossy = 0;
         let atEnd = 0;
         for (let run = 0; run < 4000; run += 1) {
-            const shape = table.shape(table.intern(`=SUM(${reference()},${reference()})+@${reference()}`));
+            const shape = table.shape(table.intern(`=SUM(${reference()},${reference()})+@${reference()}`, NO_SHEET));
             if (shape.tree === null) throw new Error(shape.text);
             const sheets = ['s1', 's2'];
             const row = near(pick, GRID_ROWS);
@@ -118,7 +119,7 @@ describe('the classes of a move', () => {
     });
     test('a cell read by a filled column is a few classes, however long the column', () => {
         const table = new ShapeTable();
-        const shape = table.shape(table.intern('=R1C1+RC[-1]'));
+        const shape = table.shape(table.intern('=R1C1+RC[-1]', NO_SHEET));
         if (shape.tree === null) throw new Error(shape.text);
         const move: Move = {
             fromSheet: 's1',
@@ -139,7 +140,7 @@ describe('the classes of a move', () => {
     test('a reference that neither follows nor breaks is a seed when it reads a cell the block left or landed on', () => {
         const table = new ShapeTable();
         const seed = (text: string, move: Move) => {
-            const { tree } = table.shape(table.intern(text));
+            const { tree } = table.shape(table.intern(text, NO_SHEET));
             if (tree === null) throw new Error(text);
             const moved = transformMove(tree, move, 's1', 0, 5);
             return [moved.tree === tree, moved.recompute];

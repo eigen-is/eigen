@@ -7,6 +7,7 @@ import { ChangeKind, Workbook } from '../../store/workbook';
 import type { Move } from '../../text';
 import { DIV0 } from '../../values/errors';
 import { random } from '../edit/support';
+import { NO_SHEET } from '../text/support';
 
 type Held = { kind: number; num: number; ref: number; shape: number };
 
@@ -119,7 +120,7 @@ describe('a block moved in the store', () => {
         const workbook = new Workbook([source('a')]);
         const [sheet] = workbook.sheets;
         workbook.fillFormula(sheet, 2, 1, 4, 2, '=R1C1');
-        const other = workbook.shapes.intern('=R1C1+1');
+        const other = workbook.shapes.intern('=R1C1+1', NO_SHEET);
         workbook.apply({ kind: ChangeKind.Lines, edit: { insert: true, index: 3, count: 2, sheet: 'a', rows: true } }, [
             0,
             1,
