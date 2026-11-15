@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Engine } from '../../index';
+import type { Literal, SheetSource } from '../../index';
+import { Engine } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { engineOf, stored } from './support';
 
@@ -46,10 +47,29 @@ const numbers: [string, number][] = [
     ['negative', -1],
     ['a fraction', 1.5],
     ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
 ];
 const rowsOff: [string, number][] = [...numbers, ['past the last row', GRID_ROWS]];
 const columnsOff: [string, number][] = [...numbers, ['past the last column', GRID_COLUMNS]];
 const counts: [string, number][] = [...numbers, ['zero', 0]];
+const noNumbers: [string, number][] = [
+    ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['infinite below zero', Number.NEGATIVE_INFINITY],
+];
+
+// A sheet that comes with good cells around one more, which the store may refuse.
+function sheetWith(row: number, column: number, value: Literal | null, formula: string | null): SheetSource {
+    return {
+        id: 's9',
+        name: 'Later',
+        cells: (cell) => {
+            cell(0, 0, 'kept', '=1+1');
+            cell(row, column, value, formula);
+            cell(2, 2, 'more', null);
+        },
+    };
+}
 
 const REFUSED: [string, (engine: Engine) => unknown][] = [
     ['a value on a sheet that is gone', (engine) => engine.setValue('nope', 0, 0, 1)],
@@ -80,6 +100,11 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
         ],
         [`a move from a row that is ${what}`, (engine) => engine.moveCells({ ...block, row })],
         [`a move to a row that is ${what}`, (engine) => engine.moveCells({ ...block, toRow: row })],
+        [`a sheet with a value on a row that is ${what}`, (engine) => engine.addSheet(sheetWith(row, 1, 1, null), 0)],
+        [
+            `a sheet with a formula on a row that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(row, 1, null, '=1'), 0),
+        ],
     ]),
     ...columnsOff.flatMap(([what, column]): [string, (engine: Engine) => unknown][] => [
         [`a value on a column that is ${what}`, (engine) => engine.setValue('s1', 0, column, 1)],
@@ -90,6 +115,19 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
         [`columns at a line that is ${what}`, (engine) => engine.editLines({ ...lines, rows: false, index: column })],
         [`a move from a column that is ${what}`, (engine) => engine.moveCells({ ...block, column })],
         [`a move to a column that is ${what}`, (engine) => engine.moveCells({ ...block, toColumn: column })],
+        [
+            `a sheet with a value on a column that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(1, column, 1, null), 0),
+        ],
+        [
+            `a sheet with a formula on a column that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(1, column, null, '=1'), 0),
+        ],
+    ]),
+    ...noNumbers.flatMap(([what, value]): [string, (engine: Engine) => unknown][] => [
+        [`a value that is ${what}`, (engine) => engine.setValue('s1', 0, 0, value)],
+        [`a sheet with a value that is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, null), 0)],
+        [`a sheet with a formula whose value is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, '=1'), 0)],
     ]),
     ...counts.flatMap(([what, count]): [string, (engine: Engine) => unknown][] => [
         [`rows inserted, their count ${what}`, (engine) => engine.editLines({ ...lines, count })],
@@ -115,9 +153,27 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
         expect(read(engine)).toEqual(read(untouched));
     });
+    test.each([
+        ...rowsOff.map(([what, row]): [string, SheetSource] => [`a row that is ${what}`, sheetWith(row, 1, 1, null)]),
+        ...columnsOff.map(([what, column]): [string, SheetSource] => [
+            `a column that is ${what}`,
+            sheetWith(1, column, null, '=1'),
+        ]),
+        ...noNumbers.map(([what, value]): [string, SheetSource] => [
+            `a value that is ${what}`,
+            sheetWith(1, 1, value, null),
+        ]),
+    ])('a workbook is not loaded from a sheet with %s', (_, sheet) => {
+        expect(() => new Engine([sheet])).toThrow(RangeError);
+    });
+    test('a cell reported empty is no cell, wherever it is said to be', () => {
+        const engine = new Engine([sheetWith(Number.NaN, -1, null, null)]);
+        expect([engine.valueOf('s9', 0, 0), engine.valueOf('s9', 2, 2)]).toEqual(['kept', 'more']);
+    });
     test('the last cell of the grid, and lines that reach past it, are not refused', () => {
         const engine = workbook();
         engine.setValue('s1', GRID_ROWS - 1, GRID_COLUMNS - 1, 1);
+        engine.addSheet(sheetWith(GRID_ROWS - 1, GRID_COLUMNS - 1, Number.MAX_VALUE, null), 2);
         engine.fillFormula('s2', GRID_ROWS - 2, GRID_COLUMNS - 2, GRID_ROWS - 1, GRID_COLUMNS - 1, '=1');
         engine.clear('s1', GRID_ROWS - 1, GRID_COLUMNS - 1);
         expect(engine.editLines({ ...lines, index: GRID_ROWS - 1, count: 3 }).dropped).toBe(0);

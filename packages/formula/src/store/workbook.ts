@@ -6,6 +6,7 @@
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
 import type { FormulaError } from '../values/errors';
 import { ERRORS } from '../values/errors';
@@ -39,6 +40,17 @@ export type Change =
     | { readonly kind: typeof ChangeKind.RemoveSheet; readonly sheet: string }
     | { readonly kind: typeof ChangeKind.RenameSheet; readonly sheet: string; readonly name: string }
     | { readonly kind: typeof ChangeKind.MoveSheet; readonly sheet: string; readonly place: number };
+
+// The store's door for a cell a host hands it, in a write or in a load: throws unless the cell is on the grid and
+// its value, when a number, is one a cell can hold.
+export function admit(row: number, column: number, value: Literal | null): void {
+    if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+    if (typeof value === 'number' && !Number.isFinite(value)) throw new RangeError(`No number ${value}`);
+}
+
+export function within(line: number, lines: number): boolean {
+    return Number.isInteger(line) && line >= 0 && line < lines;
+}
 
 // A string table that weighs less, in characters, is not swept: the texts no cell holds then cost a few megabytes
 // at most, and a sweep reads every cell.
@@ -82,6 +94,7 @@ export class Workbook {
         const lengths: number[] = [];
         source.cells((row, column, value, formula) => {
             if (value === null && formula === null) return;
+            admit(row, column, value);
             while (lengths.length <= column) lengths.push(0);
             if (row >= lengths[column]) lengths[column] = row + 1;
         });

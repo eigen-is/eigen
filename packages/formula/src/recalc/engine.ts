@@ -10,7 +10,7 @@ import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { Literal, SheetSource } from '../store/workbook';
-import { ChangeKind, Workbook } from '../store/workbook';
+import { admit, ChangeKind, Workbook, within } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
 import type { EditResult, RecalcResult } from './recalc';
@@ -27,7 +27,7 @@ export class Engine {
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
-        this.calc.setValue(this.cell(sheet, row, column), row, column, value);
+        this.calc.setValue(this.cell(sheet, row, column, value), row, column, value);
     }
 
     // The formula in its stored text. It holds no value until a recalc computes it.
@@ -118,16 +118,12 @@ export class Engine {
         return this.workbook.sheets[place].id;
     }
 
-    // The sheet of a cell a host names, which must exist, as the cell must on the grid.
-    private cell(sheet: string, row: number, column: number): Sheet {
+    // The sheet of a cell a host names, which must exist, as the cell must on the grid, with the value it is to hold.
+    private cell(sheet: string, row: number, column: number, value: Literal | null = null): Sheet {
         const found = this.workbook.known(sheet);
-        if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+        admit(row, column, value);
         return found;
     }
-}
-
-function within(line: number, lines: number): boolean {
-    return Number.isInteger(line) && line >= 0 && line < lines;
 }
 
 // Throws unless it counts lines: a whole number of them, and at least one.
