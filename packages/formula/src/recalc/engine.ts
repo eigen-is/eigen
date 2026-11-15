@@ -17,7 +17,7 @@ import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes' | 'read'>;
+    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes' | 'read' | 'free'>;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -71,6 +71,7 @@ export class Engine {
         // The source is the host's code, so what is refused is checked once it has run.
         const draft = this.workbook.read(source);
         if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
+        this.workbook.free(source.name, null);
         return this.calc.addSheet(draft, place);
     }
 
@@ -81,7 +82,7 @@ export class Engine {
     }
 
     public renameSheet(sheet: string, name: string): EditResult {
-        this.workbook.known(sheet);
+        this.workbook.free(name, this.workbook.known(sheet));
         return this.calc.edit({ kind: ChangeKind.RenameSheet, sheet, name });
     }
 

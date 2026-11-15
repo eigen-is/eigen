@@ -84,6 +84,10 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
     ['a move from a sheet that is gone', (engine) => engine.moveCells({ ...block, fromSheet: 'nope' })],
     ['a move to a sheet that is gone', (engine) => engine.moveCells({ ...block, toSheet: 'nope' })],
     ['a sheet added under an id in use', (engine) => engine.addSheet({ ...none, id: 's2' }, 0)],
+    ['a sheet added under a name in use', (engine) => engine.addSheet({ ...none, name: 'Sheet2' }, 0)],
+    ['a sheet added under a name in use in another case', (engine) => engine.addSheet({ ...none, name: 'sHEET1' }, 0)],
+    ['a sheet renamed to the name of another', (engine) => engine.renameSheet('s1', 'Sheet2')],
+    ['a sheet renamed to the name of another in another case', (engine) => engine.renameSheet('s2', 'SHEET1')],
     ['a sheet that is gone removed', (engine) => engine.removeSheet('nope')],
     ['a sheet that is gone renamed', (engine) => engine.renameSheet('nope', 'Later')],
     ['a sheet that is gone moved', (engine) => engine.moveSheet('nope', 0)],
@@ -165,6 +169,24 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         ]),
     ])('a workbook is not loaded from a sheet with %s', (_, sheet) => {
         expect(() => new Engine([sheet])).toThrow(RangeError);
+    });
+    test.each([
+        ['the same', 'Data', 'Data'],
+        ['the same but for their case', 'Data', 'dATA'],
+        ['the same but for a Greek final sigma', 'όσος', 'ΌΣΟΣ'],
+    ])('a workbook is not loaded from two sheets whose names are %s', (_, first, second) => {
+        const sheets = [first, second].map((name, at) => ({ id: `s${at}`, name, cells: () => {} }));
+        expect(() => new Engine(sheets)).toThrow(`Sheet name ${second} is in use`);
+    });
+    test('two names a formula tells apart are two sheets, and a sheet takes its own name in another case', () => {
+        // Sheet names fold each character on its own, so ß is no ss.
+        const engine = new Engine(['Straße', 'STRASSE'].map((name) => ({ id: name, name, cells: () => {} })));
+        engine.addSheet({ id: 'third', name: 'Strasse 2', cells: () => {} }, 0);
+        expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
+        expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
+        expect(() => engine.renameSheet('third', 'strasse')).toThrow('Sheet name strasse is in use');
+        engine.removeSheet('STRASSE');
+        expect(engine.renameSheet('third', 'strasse').rewrites).toEqual([]);
     });
     test('a cell reported empty is no cell, wherever it is said to be', () => {
         const engine = new Engine([sheetWith(Number.NaN, -1, null, null)]);

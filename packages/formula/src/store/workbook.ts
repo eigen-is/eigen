@@ -8,6 +8,7 @@ import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
+import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
 import { ERRORS } from '../values/errors';
 import type { Scalar } from '../values/value';
@@ -77,7 +78,10 @@ export class Workbook {
     private limit: number;
 
     public constructor(sources: readonly SheetSource[]) {
-        for (const source of sources) this.insert(this.adopt(this.read(source)), this.held.length);
+        for (const source of sources) {
+            this.free(source.name, null);
+            this.insert(this.adopt(this.read(source)), this.held.length);
+        }
         this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
     }
 
@@ -95,6 +99,15 @@ export class Workbook {
         const sheet = this.byId.get(id);
         if (sheet === undefined) throw new Error(`No sheet ${id}`);
         return sheet;
+    }
+
+    // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is
+    // typed with would read either of them.
+    public free(name: string, holder: Sheet | null): void {
+        const key = sheetNameKey(name);
+        for (const sheet of this.held) {
+            if (sheet !== holder && sheetNameKey(sheet.name) === key) throw new Error(`Sheet name ${name} is in use`);
+        }
     }
 
     // Reads one sheet from its description to the end, with the string and shape tables untouched: whatever the
