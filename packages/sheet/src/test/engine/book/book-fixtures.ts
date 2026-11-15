@@ -162,11 +162,11 @@ function randomSheet(random: Random, at: number): SheetContent {
     }
     if (random() < 0.5) records.comment = { [`${id}c9`]: { row: 3, column: 1 }, [`${id}c10`]: { row: 3, column: 1 } };
     if (random() < 0.5) {
-        records.conditionalFormat = { r1: formulaRule([{ row: [0, 9], column: [0, 0] }], '=RC>1') };
+        records.conditionalFormat = { r1: formulaRule([[0, 0, 9, 0]], '=RC>1') };
     }
     if (random() < 0.5) {
         const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
-        records.validation = { v1: { ranges: [{ row: [0, 3], column: [2, 2] }], order: 'a1', rule } };
+        records.validation = { v1: { ranges: [[0, 2, 3, 2]], order: 'a1', rule } };
     }
     if (random() < 0.5) {
         records.image = { i1: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: `${id}.png` } };

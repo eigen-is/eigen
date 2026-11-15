@@ -2,7 +2,7 @@
 // refuses, and for every case that the reverse move and then the returned record ops give back the records.
 
 import { describe, expect, test } from 'bun:test';
-import type { DataValidationRule, SingleRange } from '@workspace/lib/sheets';
+import type { DataValidationRule } from '@workspace/lib/sheets';
 import type { MoveOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import {
     applyRecordOps,
@@ -126,10 +126,10 @@ describe('merges', () => {
 });
 
 describe('the ranges of rules', () => {
-    const inside: SingleRange = { row: [1, 2], column: [1, 1] };
-    const across: SingleRange = { row: [0, 2], column: [1, 1] };
-    const landed: SingleRange = { row: [4, 4], column: [4, 5] };
-    const rules = (ranges: SingleRange[]): Records => ({
+    const inside: Rect = [1, 1, 2, 1];
+    const across: Rect = [0, 1, 2, 1];
+    const landed: Rect = [4, 4, 4, 5];
+    const rules = (ranges: Rect[]): Records => ({
         validation: { v: { ranges, order: 'a0', rule: RULE } },
         conditionalFormat: {
             r: {
@@ -145,7 +145,7 @@ describe('the ranges of rules', () => {
 
     test('on one sheet, a range wholly in the block moves; one it cuts or lands on stays', () => {
         const { s } = moved(rules([inside, across, landed]), move());
-        const after = [{ row: [4, 5], column: [4, 4] }, across, landed];
+        const after: Rect[] = [[4, 4, 5, 4], across, landed];
         expect(s.validation?.v.ranges).toEqual(after);
         expect(s.conditionalFormat?.r.ranges).toEqual(after);
         expect(s.validation?.v.rule.value1).toBe('=$A$1:$A$3');
@@ -161,14 +161,14 @@ describe('the ranges of rules', () => {
 });
 
 describe('the formula of a conditional format', () => {
-    const rule = (ranges: SingleRange[], typed: string): Records => ({
-        conditionalFormat: { r: formulaRule(ranges, keyOf(typed, ranges[0].row[0], ranges[0].column[0])) },
+    const rule = (ranges: Rect[], typed: string): Records => ({
+        conditionalFormat: { r: formulaRule(ranges, keyOf(typed, ranges[0][0], ranges[0][1])) },
     });
     const keyAt = (records: Records, row: number, column: number) =>
         typedAt(String(keyOfRule(records.conditionalFormat?.r)), row, column);
 
     test('a rule outside the block that reads a moved cell follows it', () => {
-        const records = rule([{ row: [8, 9], column: [0, 0] }], '=$C$3+B2');
+        const records = rule([[8, 0, 9, 0]], '=$C$3+B2');
         const { s, restore } = moved(records, move());
         expect(keyAt(s, 8, 0)).toBe('=$F$6+E5');
         expect(restore).toEqual([]);
@@ -176,30 +176,39 @@ describe('the formula of a conditional format', () => {
     });
 
     test('a rule whose first range moves keeps reading the cells outside the block', () => {
-        const records = rule([{ row: [1, 2], column: [1, 1] }], '=A1+B2');
+        const records = rule([[1, 1, 2, 1]], '=A1+B2');
         const { s } = moved(records, move());
-        expect(s.conditionalFormat?.r.ranges).toEqual([{ row: [4, 5], column: [4, 4] }]);
+        expect(s.conditionalFormat?.r.ranges).toEqual([[4, 4, 5, 4]]);
         expect(keyAt(s, 4, 4)).toBe('=A1+E5');
         roundTrips(records, move());
     });
 
     test('a rule the block cuts is read where its cells stay, so it does not follow the block', () => {
-        const records = rule([{ row: [1, 9], column: [1, 1] }], '=$C$3+$A$1');
+        const records = rule([[1, 1, 9, 1]], '=$C$3+$A$1');
         const { s } = moved(records, move());
-        expect(s.conditionalFormat?.r.ranges).toEqual([{ row: [1, 9], column: [1, 1] }]);
+        expect(s.conditionalFormat?.r.ranges).toEqual([[1, 1, 9, 1]]);
         expect(keyAt(s, 1, 1)).toBe('=$F$6+$A$1');
         roundTrips(records, move());
     });
 
+    test('a rule the block cuts past its right or its bottom is read at the first cell it leaves there', () => {
+        const right = rule([[1, 1, 1, 5]], '=A2');
+        expect(keyAt(moved(right, move()).s, 1, 1)).toBe('=D5');
+        roundTrips(right, move());
+        const below = rule([[1, 1, 5, 1]], '=C1');
+        expect(keyAt(moved(below, move()).s, 1, 1)).toBe('=F4');
+        roundTrips(below, move());
+    });
+
     test('a rule on another sheet that reads the block follows it to where it lands', () => {
-        const onT = rule([{ row: [0, 0], column: [0, 0] }], '=S!B2');
+        const onT = rule([[0, 0, 0, 0]], '=S!B2');
         const { t } = moved({}, move('T'), onT);
         expect(keyAt(t, 0, 0)).toBe('=T!E5');
         roundTrips({}, move('T'), onT);
     });
 
     test('a rule that reads where the block lands reads #REF!, and the old rule comes back whole in the restore ops', () => {
-        const records = rule([{ row: [8, 8], column: [0, 0] }], '=$E$5');
+        const records = rule([[8, 0, 8, 0]], '=$E$5');
         const { s, restore } = moved(records, move());
         expect(keyAt(s, 8, 0)).toBe('=#REF!');
         expect(restore.map((op) => [op.type, op.whole])).toEqual([['conditionalFormat', 1]]);

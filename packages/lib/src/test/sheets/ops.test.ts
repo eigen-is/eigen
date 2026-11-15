@@ -17,8 +17,8 @@ const WHOLE: { [T in RecordType]: Records[T] } = {
     filter: { rect: [0, 0, 20, 4] },
     filterColumn: { filter: 'f1', column: 2, rows: [[3, 3]] },
     comment: { row: 1, column: 1 },
-    conditionalFormat: { ranges: [{ row: [0, 5], column: [0, 0] }], order: 'a', type: 'dataBar', format: ['#f00'] },
-    validation: { ranges: [{ row: [0, 5], column: [1, 1] }], order: 'a', rule: RULE },
+    conditionalFormat: { ranges: [[0, 0, 5, 0]], order: 'a', type: 'dataBar', format: ['#f00'] },
+    validation: { ranges: [[0, 1, 5, 1]], order: 'a', rule: RULE },
     image: { ...BOX, mediaName: 'photo.png' },
     chart: { ...BOX, ...SPEC },
 };
@@ -173,7 +173,7 @@ describe('the shapes an op may take', () => {
                 id: 'r',
                 whole: 1,
                 set: {
-                    ranges: [{ row: [0, 5], column: [0, 0] }],
+                    ranges: [[0, 0, 5, 0]],
                     order: 'a',
                     type: 'default',
                     format: { cellColor: '#f00' },

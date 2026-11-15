@@ -6,7 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '@workspace/lib/charts';
-import type { DataValidationRule, SingleRange } from '@workspace/lib/sheets';
+import type { DataValidationRule } from '@workspace/lib/sheets';
 import type { LinesOp, Rect, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
 import {
     applyRecordOps,
@@ -262,7 +262,7 @@ describe('the frozen panes', () => {
 
 describe('the ranges of a rule', () => {
     const RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: '=$A$1:$A$5', value2: '' };
-    const both = (ranges: SingleRange[]): Records => ({
+    const both = (ranges: Rect[]): Records => ({
         validation: { v: { ranges, order: 'a0', rule: RULE } },
         conditionalFormat: {
             r: {
@@ -275,8 +275,8 @@ describe('the ranges of a rule', () => {
             },
         },
     });
-    const rowsOf = (row: [number, number]): SingleRange => ({ row, column: [0, 1] });
-    const cases: [string, SingleRange[], LinesOp, SingleRange[]][] = [
+    const rowsOf = ([top, bottom]: [number, number]): Rect => [top, 0, bottom, 1];
+    const cases: [string, Rect[], LinesOp, Rect[]][] = [
         ['an insert inside grows a range', [rowsOf([2, 5])], rowsAt(true, 3, 2), [rowsOf([2, 7])]],
         ['an insert at its first line moves it', [rowsOf([2, 5])], rowsAt(true, 2, 2), [rowsOf([4, 7])]],
         ['an insert right after leaves it', [rowsOf([2, 5])], rowsAt(true, 6, 2), [rowsOf([2, 5])]],
@@ -288,7 +288,7 @@ describe('the ranges of a rule', () => {
             rowsAt(false, 0, 2),
             [rowsOf([2, 4])],
         ],
-        ['a column edit moves the columns', [rowsOf([2, 5])], columnsAt(true, 0), [{ row: [2, 5], column: [1, 2] }]],
+        ['a column edit moves the columns', [rowsOf([2, 5])], columnsAt(true, 0), [[2, 1, 5, 2]]],
         [
             'a range to the last row keeps it under a delete',
             [rowsOf([5, LAST_ROW])],
@@ -309,9 +309,9 @@ describe('the ranges of a rule', () => {
         ],
         [
             'a range to the last column keeps it under a column delete',
-            [{ row: [1, 1], column: [2, LAST_COLUMN] }],
+            [[1, 2, 1, LAST_COLUMN]],
             columnsAt(false, 0),
-            [{ row: [1, 1], column: [1, LAST_COLUMN] }],
+            [[1, 1, 1, LAST_COLUMN]],
         ],
     ];
     for (const [name, ranges, edit, after] of cases) {
@@ -349,11 +349,11 @@ describe('the ranges of a rule', () => {
 });
 
 describe('the formula of a conditional format', () => {
-    const rule = (ranges: SingleRange[], typed: string) => ({
-        conditionalFormat: { r: formulaRule(ranges, keyOf(typed, ranges[0].row[0], ranges[0].column[0])) },
+    const rule = (ranges: Rect[], typed: string) => ({
+        conditionalFormat: { r: formulaRule(ranges, keyOf(typed, ranges[0][0], ranges[0][1])) },
     });
     const at = (records: Records, edit: LinesOp) => edited(records, edit).content.records.conditionalFormat?.r;
-    const column = (row: [number, number]): SingleRange => ({ row, column: [0, 0] });
+    const column = ([top, bottom]: [number, number]): Rect => [top, 0, bottom, 0];
 
     test('rows inserted between two ranges move the second range, and the formula reads as it did', () => {
         const records = rule([column([0, 1]), column([4, 5])], '=A1>1');
@@ -508,7 +508,7 @@ describe('what an insert would push off the grid', () => {
             {
                 validation: {
                     v: {
-                        ranges: [{ row: [5, LAST_ROW - 1], column: [0, 0] }],
+                        ranges: [[5, 0, LAST_ROW - 1, 0]],
                         order: 'a',
                         rule: { type: 'x', type2: '', value1: '', value2: '' },
                     },
@@ -520,14 +520,14 @@ describe('what an insert would push off the grid', () => {
         ],
         [
             'a range that starts on a pushed row',
-            { conditionalFormat: { r: formulaRule([{ row: [LAST_ROW, LAST_ROW], column: [0, 0] }], '=1') } },
+            { conditionalFormat: { r: formulaRule([[LAST_ROW, 0, LAST_ROW, 0]], '=1') } },
             true,
             1,
             true,
         ],
         [
             'a range open to the last row',
-            { conditionalFormat: { r: formulaRule([{ row: [5, LAST_ROW], column: [0, 0] }], '=1') } },
+            { conditionalFormat: { r: formulaRule([[5, 0, LAST_ROW, 0]], '=1') } },
             true,
             9,
             false,

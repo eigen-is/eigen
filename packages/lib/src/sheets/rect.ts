@@ -1,9 +1,8 @@
 // The tests a sheet asks of its rectangles, such as whether two meet, whether one lies inside another and whether any
-// two of a list share a cell. The workbook asks them of merges, filters and the blocks an op names, and the op
+// two of a list share a cell. The workbook asks them of merges, rule ranges and the blocks an op names, and the op
 // validators of a batch's runs and a sheet's merges, so both read one rule.
 
 import type { Rect } from './ops';
-import type { SingleRange } from './types';
 
 export function meets(a: Rect, b: Rect): boolean {
     return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
@@ -13,8 +12,8 @@ export function within(inner: Rect, outer: Rect): boolean {
     return inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
 }
 
-export function covers({ row, column }: SingleRange, r: number, c: number): boolean {
-    return r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
+export function covers(rect: Rect, row: number, column: number): boolean {
+    return row >= rect[0] && row <= rect[2] && column >= rect[1] && column <= rect[3];
 }
 
 export function sameRect(a: Rect, b: Rect): boolean {

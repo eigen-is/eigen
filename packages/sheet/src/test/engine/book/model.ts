@@ -17,7 +17,6 @@ import {
     transformMove,
 } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '@workspace/lib/charts';
-import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
     Batch,
@@ -284,14 +283,6 @@ function inside(row: number, column: number, rect: Rect): boolean {
     return within([row, column, row, column], rect);
 }
 
-function rectOf({ row, column }: SingleRange): Rect {
-    return [row[0], column[0], row[1], column[1]];
-}
-
-function rangeOf([top, left, bottom, right]: Rect): SingleRange {
-    return { row: [top, bottom], column: [left, right] };
-}
-
 function applyOne(model: Model, op: Op): RefusalKey | null {
     switch (op.kind) {
         case 'input':
@@ -497,16 +488,13 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
     const { rows, insert, index, count } = op;
     const last = rows ? LAST_ROW : LAST_COLUMN;
     const lines = rows ? sheet.rows : sheet.columns;
-    const along = (range: SingleRange): [number, number] => {
-        const [start, end] = rows ? range.row : range.column;
-        return [start, end];
-    };
+    const along = ([top, left, bottom, right]: Rect): [number, number] => (rows ? [top, bottom] : [left, right]);
     if (insert) {
         // Every line the insert pushes off the grid's end must be empty: no content, no key, the look of the last
         // line that stays, no comment, no merge, and no range that starts or ends on it but an open one.
         const pushed = last + 1 - count;
         const offEnd = (start: number, end: number) => start >= pushed || (end >= pushed && end !== last);
-        const rangeOff = (range: SingleRange) => offEnd(...along(range));
+        const rangeOff = (range: Rect) => offEnd(...along(range));
         const { merge, comment, filter, filterColumn, conditionalFormat, validation } = sheet.records;
         const blocked =
             [...sheet.cells.keys()].some((place) => placeOf(place)[rows ? 0 : 1] >= pushed) ||
@@ -514,7 +502,7 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
             sheet.looks.wouldPush(rows, count) ||
             [...merge.values()].some(({ rect }) => rect[rows ? 2 : 3] >= pushed) ||
             [...comment.values()].some(({ row, column }) => (rows ? row : column) >= pushed) ||
-            [...filter.values()].some(({ rect }) => rangeOff(rangeOf(rect))) ||
+            [...filter.values()].some(({ rect }) => rangeOff(rect)) ||
             [...filterColumn.values()].some((column) =>
                 rows ? column.rows.some(([start, end]) => offEnd(start, end)) : column.column >= pushed,
             ) ||
@@ -552,11 +540,12 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
         sheet.fields = withFields(sheet.fields, { [field]: after || null });
     }
 
-    const ranges = (list: readonly SingleRange[]): SingleRange[] =>
-        list.flatMap((range) => {
+    const ranges = (list: readonly Rect[]): Rect[] =>
+        list.flatMap((range): Rect[] => {
+            const [top, left, bottom, right] = range;
             const after = spanAfter(op, ...along(range), true);
             if (!after) return [];
-            return [rows ? { ...range, row: after } : { ...range, column: after }];
+            return [rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]];
         });
     const { records } = sheet;
     for (const [id, { rect }] of records.merge) {
@@ -571,8 +560,8 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
     for (const [id, { rect }] of records.filter) {
         // The header row holds the filter's buttons, so a delete of it removes the filter.
         const header = rows && lineAfter(op, rect[0]) < 0;
-        const [range] = header ? [] : ranges([rangeOf(rect)]);
-        if (range) records.filter.set(id, { rect: rectOf(range) });
+        const [range] = header ? [] : ranges([rect]);
+        if (range) records.filter.set(id, { rect: range });
         else removeFilter(sheet, id);
     }
     for (const [id, column] of records.filterColumn) {
@@ -626,7 +615,7 @@ function linesOfRules(model: Model, op: LinesOp): RefusalKey | null {
     for (const sheet of model.sheets.values()) {
         const here = sheet.id === op.sheet;
         for (const [id, rule] of sheet.records.conditionalFormat) {
-            const starts = rule.ranges.map((range) => (op.rows ? range.row : range.column));
+            const starts = rule.ranges.map(([top, left, bottom, right]) => (op.rows ? [top, bottom] : [left, right]));
             const first = here ? starts.find(([start, end]) => spanAfter(op, start, end, true)) : starts[0];
             if (!first) continue;
             const host = here && lineAfter(op, first[0]) < 0 ? op.index + op.count : first[0];
@@ -712,8 +701,8 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     }
     // On one sheet the rule ranges wholly in the block go along too.
     if (from !== to) return null;
-    const moved = (ranges: readonly SingleRange[]): SingleRange[] =>
-        ranges.map((range) => (within(rectOf(range), block) ? rangeOf(shifted(rectOf(range))) : range));
+    const moved = (ranges: readonly Rect[]): Rect[] =>
+        ranges.map((range) => (within(range, block) ? shifted(range) : range));
     for (const [id, validation] of from.records.validation) {
         from.records.validation.set(id, { ...validation, ranges: moved(validation.ranges) });
     }
@@ -733,14 +722,14 @@ function moveOfRules(model: Model, op: MoveOp, move: Move): RefusalKey | null {
         const leaves = sheet.id === op.sheet;
         for (const [id, rule] of sheet.records.conditionalFormat) {
             const [first] = rule.ranges;
-            const goesAlong = leaves && op.sheet === op.toSheet && within(rectOf(first), block);
-            let host: [number, number] | undefined = [first.row[0], first.column[0]];
+            const goesAlong = leaves && op.sheet === op.toSheet && within(first, block);
+            let host: [number, number] | undefined = [first[0], first[1]];
             if (leaves && !goesAlong) {
                 host = undefined;
-                for (const { row, column } of rule.ranges) {
-                    if (!inside(row[0], column[0], block)) host = [row[0], column[0]];
-                    else if (column[1] > block[3]) host = [row[0], block[3] + 1];
-                    else if (row[1] > block[2]) host = [block[2] + 1, column[0]];
+                for (const [top, left, bottom, right] of rule.ranges) {
+                    if (!inside(top, left, block)) host = [top, left];
+                    else if (right > block[3]) host = [top, block[3] + 1];
+                    else if (bottom > block[2]) host = [block[2] + 1, left];
                     if (host) break;
                 }
             }

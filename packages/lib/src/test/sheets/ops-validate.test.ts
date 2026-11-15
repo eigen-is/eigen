@@ -13,7 +13,7 @@ import {
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
 } from '../../sheets/limits';
-import type { Batch, CellAttrKey, Op, SheetContent } from '../../sheets/ops';
+import type { Batch, CellAttrKey, Op, Rect, SheetContent } from '../../sheets/ops';
 import { LOOK_KEYS } from '../../sheets/ops';
 import { isSheetContent, readBatch } from '../../sheets/ops-validate';
 import { MAX_RULE_RANGES } from '../../sheets/range-rules';
@@ -33,7 +33,7 @@ const SPEC = {
     ...{ specChart: '{}', specTitle: '{}', specLegend: '{}', specAxes: '{}' },
     ...{ specPlots: '{}', specSeries: '{}', specPoints: '{}', specData: '{}' },
 };
-const RANGE = { row: [0, 5], column: [0, 0] };
+const RANGE: Rect = [0, 0, 5, 0];
 
 const input = (fields: object) => ({ kind: 'input', sheet: 's1', ...fields });
 const cell = (content: unknown) => input({ cells: [[0, 0, content]] });
@@ -759,22 +759,44 @@ describe('8. record', () => {
         ).toBe(false);
     });
 
-    test('a rule holds at most MAX_RULE_RANGES ranges, in each list', () => {
+    test('a rule holds at most MAX_RULE_RANGES ranges', () => {
         const ranges = (count: number) => Array.from({ length: count }, () => RANGE);
         const validation = (count: number) =>
             record('validation', { whole: 1, set: { ranges: ranges(count), order: 'a0', rule: RULE } });
         expect(accepts(validation(MAX_RULE_RANGES))).toBe(true);
         expect(accepts(validation(MAX_RULE_RANGES + 1))).toBe(false);
-        const rule = (key: string) =>
-            record('conditionalFormat', {
-                whole: 1,
-                set: {
-                    ...{ ranges: [RANGE], order: 'a0', type: 'default', format: {}, conditionName: 'equal' },
-                    ...{ conditionValue: [1], [key]: ranges(MAX_RULE_RANGES + 1) },
-                },
-            });
-        expect(accepts(rule('ranges'))).toBe(false);
-        expect(accepts(rule('conditionRange'))).toBe(false);
+        const rule = record('conditionalFormat', {
+            whole: 1,
+            set: {
+                ...{ ranges: ranges(MAX_RULE_RANGES + 1), order: 'a0', type: 'default', format: {} },
+                ...{ conditionName: 'equal', conditionValue: [1] },
+            },
+        });
+        expect(accepts(rule)).toBe(false);
+    });
+
+    test('a rule range is a rectangle, and a conditional format holds no condition range', () => {
+        const rect = [0, 0, 5, 0];
+        const old = { row: [0, 5], column: [0, 0] };
+        const validation = (ranges: unknown[]) => ({ ranges, order: 'a0', rule: RULE });
+        const rule = { ranges: [rect], order: 'a0', type: 'default', format: {}, conditionName: 'equal' };
+        const format = { ...rule, conditionValue: [1] };
+        const stored = (records: object) => isSheetContent({ ...SHEET, records });
+        expect(accepts(record('validation', { whole: 1, set: validation([rect]) }))).toBe(true);
+        expect(accepts(record('validation', { set: { ranges: [rect] } }))).toBe(true);
+        expect(accepts(record('conditionalFormat', { whole: 1, set: format }))).toBe(true);
+        expect(stored({ validation: { v1: validation([rect]) }, conditionalFormat: { cf1: format } })).toBe(true);
+        for (const range of [old, [5, 0, 0, 0], [0, 0, GRID_ROWS, 0], [0, 0, 5]]) {
+            expect(accepts(record('validation', { whole: 1, set: validation([range]) }))).toBe(false);
+            expect(accepts(record('validation', { set: { ranges: [range] } }))).toBe(false);
+            expect(accepts(record('conditionalFormat', { whole: 1, set: { ...format, ranges: [range] } }))).toBe(false);
+            expect(stored({ validation: { v1: validation([range]) } })).toBe(false);
+            expect(stored({ conditionalFormat: { cf1: { ...format, ranges: [range] } } })).toBe(false);
+        }
+        for (const conditionRange of [[], [rect], [old]]) {
+            expect(accepts(record('conditionalFormat', { whole: 1, set: { ...format, conditionRange } }))).toBe(false);
+            expect(stored({ conditionalFormat: { cf1: { ...format, conditionRange } } })).toBe(false);
+        }
     });
 
     test('a rule value is text of at most MAX_TEXT_LENGTH', () => {

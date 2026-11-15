@@ -23,7 +23,7 @@ describe('the store', () => {
     test('a line edit or a move leaves the records it does not change as they were', () => {
         const sheet = sheetOf({
             comment: { above: { row: 1, column: 1 }, below: { row: 9, column: 1 } },
-            validation: { v: { ranges: [{ row: [0, 2], column: [0, 0] }], order: 'a', rule: RULE } },
+            validation: { v: { ranges: [[0, 0, 2, 0]], order: 'a', rule: RULE } },
         });
         const above = sheet.records('comment').get('above');
         const rule = sheet.records('validation').get('v');
@@ -277,9 +277,9 @@ describe('the reads at a cell', () => {
     test('the validation of a cell is the last rule in order that covers it, ties by id', () => {
         const sheet = sheetOf({
             validation: {
-                b: { ranges: [{ row: [0, 9], column: [0, 0] }], order: 'a1', rule: { ...RULE, value1: 'b' } },
-                a: { ranges: [{ row: [0, 9], column: [0, 0] }], order: 'a1', rule: { ...RULE, value1: 'a' } },
-                c: { ranges: [{ row: [5, 5], column: [0, 0] }], order: 'a0', rule: { ...RULE, value1: 'c' } },
+                b: { ranges: [[0, 0, 9, 0]], order: 'a1', rule: { ...RULE, value1: 'b' } },
+                a: { ranges: [[0, 0, 9, 0]], order: 'a1', rule: { ...RULE, value1: 'a' } },
+                c: { ranges: [[5, 0, 5, 0]], order: 'a0', rule: { ...RULE, value1: 'c' } },
             },
         });
         expect(sheet.validation(5, 0)?.rule.value1).toBe('b');

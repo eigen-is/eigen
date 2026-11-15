@@ -29,6 +29,7 @@ import type {
     CellContent,
     CellRecord,
     ChartRecord,
+    ConditionalFormatRecord,
     FormatOp,
     ImageRecord,
     InputOp,
@@ -48,14 +49,7 @@ import type {
 import { MAX_RULE_RANGES } from './range-rules';
 import { disjoint } from './rect';
 import { isSheetName } from './sheet-name';
-import type {
-    BorderSide,
-    CellLink,
-    ConditionalFormatConditionName,
-    ConditionalFormatRule,
-    DataValidationRule,
-    SingleRange,
-} from './types';
+import type { BorderSide, CellLink, ConditionalFormatConditionName, DataValidationRule } from './types';
 import { isCellLinkType } from './types';
 
 type Check = (value: unknown) => boolean;
@@ -351,13 +345,8 @@ function isSpan(value: unknown, count: number): value is readonly number[] {
     return isCount(first, count - 1) && isCount(last, count - 1) && first <= last;
 }
 
-function isRanges(value: unknown): boolean {
-    return (
-        Array.isArray(value) &&
-        value.length > 0 &&
-        value.length <= MAX_RULE_RANGES &&
-        value.every((range) => isOf(range, RANGE))
-    );
+function isRuleRanges(value: unknown): boolean {
+    return Array.isArray(value) && value.length > 0 && value.length <= MAX_RULE_RANGES && value.every(isRect);
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -438,10 +427,6 @@ const LOOK_FIELDS: Fields<CellAttrs> = {
 const LOOK = table(LOOK_FIELDS);
 const LINK = table<CellLink>({ type: [isCellLinkType, true], address: [isLongText, true] });
 const LINE = table<LineAttrs>({ size: [isSize, false], custom: [isOne, false], hidden: [isOne, false] });
-const RANGE = table<SingleRange>({
-    row: [(value) => isSpan(value, GRID_ROWS), true],
-    column: [(value) => isSpan(value, GRID_COLUMNS), true],
-});
 
 const CONTENT_FIELDS: Fields<CellContent> = {
     v: [isScalar, false],
@@ -571,15 +556,15 @@ const CONDITION_NAMES: Record<ConditionalFormatConditionName, true> = {
     belowAverage: true,
     formula: true,
 };
-type DefaultRule = Extract<ConditionalFormatRule, { type: 'default' }>;
-const DATA_BAR = table<Extract<ConditionalFormatRule, { type: 'dataBar' }>>({
-    ranges: [isRanges, true],
+type DefaultRule = Extract<ConditionalFormatRecord, { type: 'default' }>;
+const DATA_BAR = table<Extract<ConditionalFormatRecord, { type: 'dataBar' }>>({
+    ranges: [isRuleRanges, true],
     order: [isOrderKey, true],
     type: [(value) => value === 'dataBar', true],
     format: [(value) => isListOf(value, isShort), true],
 });
-const COLOR_GRADATION = table<Extract<ConditionalFormatRule, { type: 'colorGradation' }>>({
-    ranges: [isRanges, true],
+const COLOR_GRADATION = table<Extract<ConditionalFormatRecord, { type: 'colorGradation' }>>({
+    ranges: [isRuleRanges, true],
     order: [isOrderKey, true],
     type: [(value) => value === 'colorGradation', true],
     format: [(value) => isListOf(value, isColor), true],
@@ -589,12 +574,11 @@ const COLORS = table<DefaultRule['format']>({
     cellColor: [(value) => value === null || isShort(value), false],
 });
 const DEFAULT_RULE = table<DefaultRule>({
-    ranges: [isRanges, true],
+    ranges: [isRuleRanges, true],
     order: [isOrderKey, true],
     type: [(value) => value === 'default', true],
     format: [(value) => isOf(value, COLORS), true],
     conditionName: [(value) => typeof value === 'string' && Object.hasOwn(CONDITION_NAMES, value), true],
-    conditionRange: [isRanges, false],
     conditionValue: [(value) => isListOf(value, (item) => isFiniteNumber(item) || isLongText(item)), true],
 });
 
@@ -652,7 +636,7 @@ const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat' | 'cha
     },
     comment: { row: [isRow, true], column: [isColumn, true] },
     validation: {
-        ranges: [isRanges, true],
+        ranges: [isRuleRanges, true],
         order: [isOrderKey, true],
         rule: [(value) => isOf(value, RULE), true],
     },

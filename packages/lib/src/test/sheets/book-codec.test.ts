@@ -4,10 +4,9 @@ import { isRecord } from '../../core/guards';
 import type { BookContent } from '../../sheets/book-codec';
 import { decodeBook, encodeBook } from '../../sheets/book-codec';
 import { MAX_RECORDS_PER_TYPE, MAX_SHEETS } from '../../sheets/limits';
-import type { CellAttrs, CellRecord, LineAttrs, Placed, SheetContent, Span } from '../../sheets/ops';
+import type { CellAttrs, CellRecord, LineAttrs, Placed, Rect, SheetContent, Span } from '../../sheets/ops';
 import { isSheetContent } from '../../sheets/ops-validate';
 import { encodeSheetsSnapshot } from '../../sheets/snapshot-codec';
-import type { SingleRange } from '../../sheets/types';
 
 // A seeded random number generator, so a failing case can be run again.
 function random(seed: number): () => number {
@@ -28,7 +27,7 @@ const SPEC = {
     ...{ specChart: '{}', specTitle: '{}', specLegend: '{}', specAxes: '{}' },
     ...{ specPlots: '{}', specSeries: '{}', specPoints: '{}', specData: '{}' },
 };
-const RANGE: SingleRange = { row: [0, 5], column: [0, 0] };
+const RANGE: Rect = [0, 0, 5, 0];
 const LINK = { type: 'webpage', address: 'https://eigen.is' } as const;
 const RECORDS: Required<SheetContent['records']> = {
     merge: { m1: { rect: [0, 0, 1, 1] } },

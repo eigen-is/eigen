@@ -27,8 +27,8 @@ describe('within', () => {
 });
 
 describe('covers', () => {
-    test('a range covers the cells on its edges and inside', () => {
-        const range = { row: [1, 3], column: [2, 4] };
+    test('a rectangle covers the cells on its edges and inside', () => {
+        const range: Rect = [1, 2, 3, 4];
         expect(covers(range, 1, 2)).toBe(true);
         expect(covers(range, 3, 4)).toBe(true);
         expect(covers(range, 0, 2)).toBe(false);

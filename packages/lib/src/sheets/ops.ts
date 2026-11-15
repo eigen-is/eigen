@@ -4,7 +4,7 @@
 // editor and the server share one vocabulary without React.
 
 import type { ChartLook, ChartSpecPartKey } from '../types/chart';
-import type { BorderSide, CellLink, ConditionalFormatRule, DataValidationRule, SingleRange } from './types';
+import type { BorderSide, CellLink, ConditionalFormatConditionName, DataValidationRule } from './types';
 
 export type Scalar = number | string | boolean;
 // What an op says a cell holds. `v` with `e: 1` is an error literal, and `f` is the stored key with its `=`. `v`
@@ -76,8 +76,18 @@ export type FilterColumnRecord = {
     rows: Span[];
 };
 export type CommentRecord = { row: number; column: number };
-export type ConditionalFormatRecord = ConditionalFormatRule;
-export type ValidationRecord = { ranges: SingleRange[]; order: string; rule: DataValidationRule };
+// `order` sorts a sheet's rules of one kind as a fractional key, and the last rule over a cell has it.
+type RuleRecord = { ranges: Rect[]; order: string };
+export type ConditionalFormatRecord =
+    | (RuleRecord & { type: 'dataBar'; format: string[] })
+    | (RuleRecord & { type: 'colorGradation'; format: string[] })
+    | (RuleRecord & {
+          type: 'default';
+          format: { textColor?: string | null; cellColor?: string | null };
+          conditionName: ConditionalFormatConditionName;
+          conditionValue: (string | number)[];
+      });
+export type ValidationRecord = RuleRecord & { rule: DataValidationRule };
 type Floating = { index: string; x: number; y: number; width: number; height: number; angle?: number };
 export type ImageRecord = Floating & { mediaName: string };
 export type ChartRecord = Floating & Partial<ChartLook> & Record<ChartSpecPartKey, string>;
