@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2366 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2367 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -351,10 +351,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (18)
+## Contexts, schemas & classes (19)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `EditRefusal` | `@workspace/formula` | packages/formula/src/recalc/edit-plan.ts |
 | `Engine` | `@workspace/formula` | packages/formula/src/recalc/engine.ts |
 | `AppError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |

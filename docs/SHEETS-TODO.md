@@ -352,7 +352,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Memory
 
-- [ ] **A column costs its last row**: 17 bytes a row, so one cell on row 1,048,576 reserves about 18 MB for its column, and an engine or an xlsx import has no cap. Measured on Bun and Node: 200 cells on the last row hold 50 to 74 MB resident at load and 3.4 GB after one row insert, which writes every slot; 100 cells 1.7 GB. A file of a few KB can do this, so step 1b closes it before a real file reaches the engine: a slot budget at the decoder and importer bounds it, sparse columns would remove it. **M**
+- [ ] **A column costs its last row**: 17 bytes a row, so one cell on row 1,048,576 reserves about 18 MB for its column, and an engine or an xlsx import has no cap. Measured on Bun and Node: 200 cells on the last row hold 54 to 75 MB resident at load, about 850 MB after the first rebuild of the reverse index, which reads the shape of every row (`ReverseIndex.rebuild`), and 3.4 GB after one row delete, which writes every slot; 100 cells 1.7 GB. An insert above them is refused. A file of a few KB can do this, so step 1b closes it before a real file reaches the engine: a slot budget at the decoder and importer bounds it, sparse columns would remove it. **M**
 - [ ] **One formula may still hold eight full arrays of references** under `MOST_STORED`: a lifted call such as `OFFSET(A1,ROW(A:A)-1,COLUMN(A1:P1)-1)` builds 2^24 references charged one slot each, not `REFERENCE_ROOM`'s 17, and one such array peaks at 1.9 to 2.2 GB resident on Bun and 2.0 GB on Node (measured), so eight would take about 15 GB. **S**
 
 ### Tests and checks
@@ -368,11 +368,9 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Code
 
-- [ ] **A structural edit can grow a stored key past the bound**: an edit cannot refuse a formula, so a key within a digit per reference of 131,072 characters, such as `=R[9]C+R[9]C+…` at A1, becomes `R[10]C` terms of 152,915 characters after a row inserted between, and the cell is `#ERROR!` after a reload. Accepted for now: no crash, one cell. **S**
 - [ ] **`ParseFailure` is exported by no entry**: `parseA1`, `parseXlsx`, `intersect` and `storedKey` answer it, and step 1b's importer needs the type to handle `intersect`'s failure. **S**
 - [ ] **`Book` keeps its fields private with `#`** where the package writes `private`, because `functions/gates.test.ts` pins at compile time that a body cannot reach a book's fields by a key in brackets either. The owner's call. **S**
 - [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**
-- [ ] **`within` is a generic name on a store export** (`store/workbook.ts`): rename it when the store is next touched. **S**
 - [ ] **Own math kernels or the runtime's**: `LN`, `LOG`, `EXP`, `ATAN2` and the trigonometric and hyperbolic functions use the runtime's `Math`, and Bun and Node differ in the last bit on about one call in ten, as `values/powers.ts` already avoids for `^`. Step 2 derives values on every reader, so it decides. **M**
 - [ ] **A loop loaded with Excel's values is not listed until it is computed**: the first pass after a load computes the formulas that came with no value or with `#REF!`, which finds every loop the engine stored, but Excel stores 0 on a loop, so `RecalcResult.loops` right after such an import misses it and the cells show 0 until a write reaches them. The importer could hand the formulas of a file with a loop without their values. **S**
 - [ ] **A date typed from 1 January to 28 February 1900 shows the day before**: `1900-01-15` shows `1900-01-14` at once. The sheet's input parse (`parseCellInput`, `dateToSerial`) still makes Excel's serial for those 59 days and the display reads the day line Google uses. No data is lost. Step 1b's typed-date parse decides it. **S**

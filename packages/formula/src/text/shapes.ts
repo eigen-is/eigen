@@ -5,7 +5,7 @@
 // again: so an id means one shape only for as long as a cell holds it.
 
 import { parseStored } from './parser';
-import { printStored, storedKey } from './printer';
+import { storedKey } from './printer';
 import type { FormulaNode } from './tree';
 import { NodeKind, SheetKind } from './tree';
 
@@ -52,9 +52,11 @@ export class ShapeTable {
         return typeof key === 'string' ? this.keyed(key, parsed) : this.add(text, parsed);
     }
 
-    // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key.
+    // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key. 0, with
+    // nothing kept, for a tree whose stored text would not read back.
     public internTree(tree: FormulaNode): number {
-        return this.keyed(printStored(tree), tree);
+        const key = storedKey(tree);
+        return typeof key === 'string' ? this.keyed(key, tree) : 0;
     }
 
     // Forgets every shape whose id is not set in `held`, which says for each id up to `size` whether a cell holds

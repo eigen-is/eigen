@@ -1,10 +1,10 @@
 // What a structural edit does to the formulas of a workbook, worked out before a cell moves: per block of cells of
 // one shape, the classes of hosts the transform gives one outcome. A class whose text changes gets its new shape,
 // a class undo cannot derive back is reported with the text it loses, and a class whose value can change is a seed
-// of the recompute. Everything is in the places before the edit, but the blocks reported to the host.
+// of the recompute. Everything is in the places before the edit, but the blocks reported to the host. A rewrite
+// too long for a cell to store refuses the whole edit, by a throw from here, before a cell moved.
 
 import { mapLeaves, sheetOf } from '../edit/leaves';
-import { firstPushed } from '../edit/map';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
 import { hostClasses } from '../edit/transform';
@@ -12,7 +12,7 @@ import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';
 import type { Change, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
-import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import type { ShapeTable } from '../text/shapes';
 import { findSheetByName } from '../text/sheet-name';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, RefKind, SheetKind } from '../text/tree';
@@ -30,6 +30,18 @@ export type Rewrite = {
     // The stored text they held, when the inverse edit does not bring it back. Else null.
     readonly lost: string | null;
 };
+
+// An edit the engine does not perform, as it would lose what no inverse edit brings back: a cell an insert pushes
+// past the last line of the grid, or a formula whose rewritten text is longer than a cell stores.
+export class EditRefusal extends Error {
+    public readonly reason: 'grid-end' | 'too-long';
+
+    public constructor(reason: 'grid-end' | 'too-long') {
+        super(`Edit refused: ${reason}`);
+        this.name = 'EditRefusal';
+        this.reason = reason;
+    }
+}
 
 type EditPlan = {
     // The blocks that get another shape: sheet, first and last column, first and last row, and shape.
@@ -67,7 +79,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
             across: number,
         ) => {
             const changed = next !== tree;
-            const shaped = changed ? shapes.internTree(next) : id;
+            const shaped = changed ? rewritten(shapes, next) : id;
             if (changed) plan.fills.push(place, block[1], block[3], block[0], block[2], shaped);
             if (changed || lossy) {
                 plan.rewrites.push({
@@ -91,18 +103,15 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                 const sized = (shapes.facts[id] & Fact.Sized) !== 0;
                 const edited = workbook.known(edit.sheet);
                 const distance = insert ? count : -count;
-                const lost = firstPushed(index, count, rows ? GRID_ROWS : GRID_COLUMNS);
                 const first = rows ? left : top;
                 const last = rows ? right : top;
                 for (const found of hostClasses(tree, refs, edit, host.id, rows ? top : left, rows ? bottom : right)) {
                     const { start, end } = found;
                     const shift = host === edited && start >= index ? distance : 0;
                     // The cells an insert moves keep their order and lose none, so a formula that only passes
-                    // over the empty ones answers as before: unless the insert pushed a cell off the grid.
+                    // over the empty ones answers as before.
                     const slides =
-                        found.slid &&
-                        holds(edited, refs, host.id, rows, index, first, last) &&
-                        (!insert || sized || holds(edited, refs, host.id, rows, lost, first, last));
+                        found.slid && (!insert || sized) && holds(edited, refs, host.id, rows, index, first, last);
                     const seed = found.recompute || (found.resized && sized) || slides;
                     if (rows) outcome(found.tree, found.lossy, seed, [start, left, end, right], host.id, shift, 0);
                     else outcome(found.tree, found.lossy, seed, [top, start, bottom, end], host.id, 0, shift);
@@ -165,7 +174,7 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                     return named === undefined ? node : bindSheet(node, node.sheet, named.id);
                 });
                 if (bound === shape.tree) continue;
-                const shaped = shapes.internTree(bound);
+                const shaped = rewritten(shapes, bound);
                 const bottom = row - 1;
                 column.fillShape(top, bottom, shaped);
                 const formula = shapes.shape(shaped).text;
@@ -174,6 +183,14 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
         }
     }
     return plan;
+}
+
+// The shape of a formula as the edit rewrote it. A text longer than a cell stores would not read back, so the
+// edit is refused.
+function rewritten(shapes: ShapeTable, tree: FormulaNode): number {
+    const shape = shapes.internTree(tree);
+    if (shape === 0) throw new EditRefusal('too-long');
+    return shape;
 }
 
 // Whether a whole column or row that a formula names on the edited sheet holds a cell at or past `line`, for some

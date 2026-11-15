@@ -187,17 +187,7 @@ export function applyLines(model: Model, edit: LineEdit): Applied {
     );
 }
 
-// The move as the engine performs it: what would land past the last line of the grid is not part of the block.
-export function clipped(move: Move): Move {
-    return {
-        ...move,
-        rows: Math.max(0, Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow)),
-        columns: Math.max(0, Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn)),
-    };
-}
-
-export function applyMove(model: Model, whole: Move): Applied {
-    const move = clipped(whole);
+export function applyMove(model: Model, move: Move): Applied {
     const down = move.toRow - move.row;
     const across = move.toColumn - move.column;
     const within = (top: number, left: number, row: number, column: number, row2: number, column2: number) =>
@@ -211,13 +201,7 @@ export function applyMove(model: Model, whole: Move): Applied {
             if (sheet === move.fromSheet && within(move.row, move.column, row, column, row, column)) {
                 return { sheet: move.toSheet, row: row + down, column: column + across };
             }
-            // A cell of the block that would leave the grid is cleared, and so is one the block lands on.
-            const inWhole =
-                row >= whole.row &&
-                row < whole.row + whole.rows &&
-                column >= whole.column &&
-                column < whole.column + whole.columns;
-            if (sheet === whole.fromSheet && inWhole) return null;
+            // A cell the block lands on is cleared.
             if (sheet === move.toSheet && within(move.toRow, move.toColumn, row, column, row, column)) return null;
             return { sheet, row, column };
         },

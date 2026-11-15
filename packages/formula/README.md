@@ -16,7 +16,7 @@ It computes 219 of Excel's 524 functions. Not built yet: spilled results and the
 
 | Import | What it exports |
 | --- | --- |
-| `@workspace/formula` | `Engine`; the function registry `FUNCTIONS`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
+| `@workspace/formula` | `Engine`; `EditRefusal`, the error an edit that would lose something throws; the function registry `FUNCTIONS`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
 | `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedKey`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `remapSheets`, `offGrid`, and the types `Edit`, `Span`, `LineEdit`, `Move`. Tables: the types `Table` and `TableFinder` that `resolveTables` takes. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS` |
 | `@workspace/formula/format` | `numberDisplay`, `isDateFormat`, `numberFormatError` |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` |
@@ -74,6 +74,10 @@ if (typeof total === 'number') console.log(numberDisplay(total, '#,##0.00'));
 ```
 
 The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The first argument of `recalc` caps how many formulas one pass computes; a later pass goes on where a capped one stopped. The clock and the random draw come in as its other two arguments, so a recalc never reads the machine.
+
+A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
+
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host walks for a snapshot only after a `recalc` whose result says `stopped` is false. The sink must not write to the engine. `nextCell` is the same walk as a cursor, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
 
 ## The design in ten lines
 
@@ -133,4 +137,5 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - Approximate searches assume sorted data, as Excel's documentation requires.
 - A 3-D reference is not computed: a loaded formula keeps its value and a typed one is `#REF!`.
 - Volatile functions are computed when the document is, not after every unrelated edit.
+- An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect `grid-end` from `editLines` only and `too-long` from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
 - Number display is numfmt's, with a few known gaps in `TEXT`.

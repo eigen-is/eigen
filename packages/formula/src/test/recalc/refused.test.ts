@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Literal, SheetSource } from '../../index';
-import { Engine } from '../../index';
-import { GRID_COLUMNS, GRID_ROWS } from '../../text';
+import { EditRefusal, Engine } from '../../index';
+import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '../../text';
 import { engineOf, stored } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
@@ -235,11 +235,226 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         engine.addSheet(sheetWith(GRID_ROWS - 1, GRID_COLUMNS - 1, Number.MAX_VALUE, null), 2);
         engine.fillFormula('s2', GRID_ROWS - 2, GRID_COLUMNS - 2, GRID_ROWS - 1, GRID_COLUMNS - 1, '=1');
         engine.clear('s1', GRID_ROWS - 1, GRID_COLUMNS - 1);
-        expect(engine.editLines({ ...lines, index: GRID_ROWS - 1, count: 3 }).dropped).toBe(0);
-        expect(engine.editLines({ ...lines, insert: false, index: GRID_ROWS - 1, count: 3 }).dropped).toBe(0);
-        const far = { ...block, fromSheet: 's2', row: GRID_ROWS - 2, column: GRID_COLUMNS - 2, rows: 5, columns: 5 };
-        expect(engine.moveCells({ ...far, toSheet: 's2' }).dropped).toBe(0);
+        expect(engine.editLines({ ...lines, index: GRID_ROWS - 1, count: 3 }).rewrites).toEqual([]);
+        expect(engine.editLines({ ...lines, insert: false, index: GRID_ROWS - 1, count: 3 }).rewrites).toEqual([]);
+        const far = { ...block, fromSheet: 's2', row: GRID_ROWS - 2, column: GRID_COLUMNS - 2, rows: 2, columns: 2 };
+        engine.moveCells({ ...far, toSheet: 's2' });
+        engine.moveCells({
+            ...far,
+            row: 3,
+            column: 3,
+            toSheet: 's2',
+            toRow: GRID_ROWS - 2,
+            toColumn: GRID_COLUMNS - 2,
+        });
         expect(engine.recalc(NO_CAP).stopped).toBe(false);
-        expect(engine.valueOf('s2', 3, 3)).toBe(1);
+        expect(engine.valueOf('s2', GRID_ROWS - 1, GRID_COLUMNS - 1)).toBe(1);
+    });
+});
+
+// Everything the engine holds: the tabs, every cell with its text, its value and whether it waits, and how far
+// each column reaches.
+function held(engine: Engine, sheets: readonly string[]): string[] {
+    const all = sheets.map((_, place) => engine.sheetAt(place));
+    for (const sheet of sheets) {
+        engine.cells(sheet, (row, column, value, formula) => {
+            const waits = engine.isPending(sheet, row, column);
+            all.push(`${sheet} ${row},${column} ${formula?.length} ${formula?.slice(0, 40)} ${show(value)} ${waits}`);
+        });
+        for (let column = 0; column <= engine.lastColumn(sheet) + 1; column += 1) {
+            all.push(`${sheet} column ${column} holds ${engine.columnLength(sheet, column)}`);
+        }
+    }
+    all.push(`slots ${engine.slots()}`);
+    return all;
+}
+
+// A formula whose stored text is as long as a cell stores, or shorter by `spare` characters: a sum of one
+// reference, so each digit an edit adds to the reference is added a few thousand times.
+function longest(reference: string, spare = 0): string {
+    const terms = Math.floor((MAX_STORED_LENGTH - spare) / (reference.length + 1));
+    const sum = Array.from({ length: terms }, () => reference).join('+');
+    return `=${sum}${'+1'.repeat((MAX_STORED_LENGTH - spare - 1 - sum.length) / 2)}`;
+}
+
+// A workbook whose sheet s1 holds a cell on row 10 and on column 4, and formulas no recalc has seen.
+function reaching(): Engine {
+    const engine = engineOf({
+        s1: { A1: 5, D10: 7, B11: '=A1+1', E3: '=SUM(A:A)', E4: 'last' },
+        s2: { A1: '=Sheet1!D10', B2: 2 },
+    });
+    engine.recalc(NO_CAP);
+    engine.setValue('s1', 0, 0, 6);
+    engine.setFormula('s2', 2, 2, '=R1C1*3');
+    return engine;
+}
+
+// A workbook with formulas a digit away from the longest a cell stores, in a workbook that waits for a recalc.
+function long(): Engine {
+    const later = "'Later'!R1C1";
+    const engine = new Engine([
+        {
+            id: 'first',
+            name: 'Sheet1',
+            cells: (cell) => {
+                cell(0, 0, 5, null);
+                cell(0, 1, 1, longest('R[9]C[9]'));
+                cell(1, 1, 2, longest(later));
+                cell(2, 1, 3, '=R1C1+1');
+                cell(9, 10, 4, null);
+            },
+        },
+        { id: 'second-sheet', name: 'Sheet2', cells: (cell) => cell(0, 0, 1, '=[first]!R1C1+1') },
+    ]);
+    engine.recalc(NO_CAP);
+    engine.setValue('first', 0, 0, 6);
+    engine.setFormula('second-sheet', 4, 4, '=R1C1*3');
+    return engine;
+}
+
+const named = (id: string, text: string): SheetSource => ({
+    id,
+    name: 'Later',
+    cells: (cell) => {
+        cell(0, 0, 'kept', '=1+1');
+        cell(1, 0, null, text);
+        cell(2, 2, 'more', null);
+    },
+});
+const blockOf = { fromSheet: 'first', row: 9, column: 10, rows: 1, columns: 1, toSheet: 'first' };
+
+const TOO_LONG: [string, (engine: Engine) => unknown][] = [
+    ['rows inserted', (engine) => engine.editLines({ ...lines, sheet: 'first', index: 5 })],
+    ['columns inserted', (engine) => engine.editLines({ ...lines, sheet: 'first', rows: false, index: 5 })],
+    ['a block moved a row down', (engine) => engine.moveCells({ ...blockOf, toRow: 10, toColumn: 10 })],
+    [
+        'a block moved to another sheet',
+        (engine) => engine.moveCells({ ...blockOf, toSheet: 'second-sheet', toRow: 9, toColumn: 10 }),
+    ],
+    [
+        'a sheet added under a name they were typed with',
+        (engine) => engine.addSheet(named('a-long-id-of-a-sheet', '=1'), 1),
+    ],
+    [
+        'a sheet added that holds one, typed with the name of a sheet that is there',
+        (engine) => engine.addSheet({ ...named('s9', longest("'Sheet2'!R1C1")), name: 'Other' }, 1),
+    ],
+    ['a sheet renamed to the name they were typed with', (engine) => engine.renameSheet('second-sheet', 'Later')],
+];
+
+describe('an edit that would lose a cell or a formula is refused, and changes nothing', () => {
+    const insert = { ...lines, index: 0 };
+    const PUSHES: [string, object, boolean][] = [
+        ['rows that push the last cell of a column off the grid', { count: GRID_ROWS - 10 }, true],
+        ['rows that push it onto the last row', { count: GRID_ROWS - 11 }, false],
+        ['rows at the last cell, as many as the grid has', { index: 10, count: GRID_ROWS }, true],
+        ['rows under the last cell, as many as the grid has', { index: 11, count: GRID_ROWS }, false],
+        [
+            'columns that push the last column that holds a cell off the grid',
+            { rows: false, count: GRID_COLUMNS - 4 },
+            true,
+        ],
+        ['columns that push it onto the last column', { rows: false, count: GRID_COLUMNS - 5 }, false],
+        ['columns at the last one that holds a cell', { rows: false, index: 4, count: GRID_COLUMNS }, true],
+        ['columns past the last one that holds a cell', { rows: false, index: 5, count: GRID_COLUMNS }, false],
+    ];
+    test.each(PUSHES)('%s', (_, edit, refused) => {
+        const engine = reaching();
+        const untouched = reaching();
+        const sheets = ['s1', 's2'];
+        if (!refused) {
+            engine.editLines({ ...insert, ...edit });
+            expect(engine.slots()).toBeGreaterThanOrEqual(untouched.slots());
+            engine.editLines({ ...insert, ...edit, insert: false });
+            engine.recalc(NO_CAP);
+            untouched.recalc(NO_CAP);
+            expect(held(engine, sheets)).toEqual(held(untouched, sheets));
+            return;
+        }
+        let thrown: unknown;
+        try {
+            engine.editLines({ ...insert, ...edit });
+        } catch (refusal) {
+            thrown = refusal;
+        }
+        expect(thrown).toBeInstanceOf(EditRefusal);
+        expect(thrown).toMatchObject({ reason: 'grid-end' });
+        expect(held(engine, sheets)).toEqual(held(untouched, sheets));
+        expect(engine.editLines(lines)).toEqual(untouched.editLines(lines));
+        expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
+        expect(held(engine, sheets)).toEqual(held(untouched, sheets));
+    });
+    test('an insert on another sheet than the one that is full is not refused', () => {
+        const engine = reaching();
+        engine.setValue('s1', GRID_ROWS - 1, 0, 1);
+        expect(() => engine.editLines({ ...insert, sheet: 's1' })).toThrow(EditRefusal);
+        expect(engine.editLines({ ...insert, sheet: 's2' }).rewrites).toHaveLength(2);
+        // Rows deleted make the room the insert lacked.
+        engine.editLines({ ...insert, insert: false, sheet: 's1' });
+        expect(engine.editLines({ ...insert, sheet: 's1' }).rewrites.length).toBeGreaterThan(0);
+    });
+
+    test.each(TOO_LONG)('a formula would be too long to store after %s', (_, edit) => {
+        const engine = long();
+        const untouched = long();
+        const sheets = ['first', 'second-sheet'];
+        let thrown: unknown;
+        try {
+            edit(engine);
+        } catch (refusal) {
+            thrown = refusal;
+        }
+        expect(thrown).toBeInstanceOf(EditRefusal);
+        expect(thrown).toMatchObject({ reason: 'too-long' });
+        expect(held(engine, sheets)).toEqual(held(untouched, sheets));
+        // The edits that take a digit away, and one that adds none, go through as on a workbook that met no refusal.
+        const shorter = { ...lines, sheet: 'first', insert: false, index: 5 };
+        expect(engine.editLines(shorter)).toEqual(untouched.editLines(shorter));
+        expect(engine.editLines({ ...lines, sheet: 'second-sheet' })).toEqual(
+            untouched.editLines({ ...lines, sheet: 'second-sheet' }),
+        );
+        expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
+        expect(held(engine, sheets)).toEqual(held(untouched, sheets));
+        for (const text of [engine.formulaOf('first', 0, 1), engine.formulaOf('first', 1, 1)]) {
+            expect(new Engine([named('s', text ?? '')]).formulaOf('s', 1, 0)).toBe(text);
+        }
+    });
+    test.each([
+        ['exactly as long as a cell stores is no refusal', MAX_STORED_LENGTH - 1, false],
+        ['one character longer is one', MAX_STORED_LENGTH, true],
+    ])('a formula that an insert makes %s', (_, length, refused) => {
+        // The row inserted between the formula and the cell it reads makes R[9]C one character longer.
+        const head = length % 2 === 0 ? '=R[9]C' : '=R[9]C+11';
+        const text = head + '+1'.repeat((length - head.length) / 2);
+        const engine = new Engine([{ id: 's', name: 'S', cells: (cell) => cell(0, 0, null, text) }]);
+        expect(engine.formulaOf('s', 0, 0)).toHaveLength(length);
+        const edit = () => engine.editLines({ insert: true, index: 5, count: 1, sheet: 's', rows: true });
+        if (refused) expect(edit).toThrow(EditRefusal);
+        else expect(edit().rewrites[0].formula).toHaveLength(MAX_STORED_LENGTH);
+    });
+
+    const off: [string, object][] = [
+        ['whose rows reach past the last row', { row: GRID_ROWS - 2, rows: 3 }],
+        ['whose columns reach past the last column', { column: GRID_COLUMNS - 1, columns: 2 }],
+        ['that lands with rows past the last row', { rows: 2, toRow: GRID_ROWS - 1 }],
+        ['that lands with columns past the last column', { columns: 3, toColumn: GRID_COLUMNS - 2 }],
+        ['as tall as the grid, a row down', { rows: GRID_ROWS, toRow: 1 }],
+        ['as wide as the grid, from the second column', { column: 1, columns: GRID_COLUMNS }],
+    ];
+    test.each(off)('a move of a block %s', (_, part) => {
+        const engine = workbook();
+        const untouched = workbook();
+        expect(() => engine.moveCells({ ...block, ...part })).toThrow(RangeError);
+        expect(read(engine)).toEqual(read(untouched));
+        expect(engine.moveCells(block)).toEqual(untouched.moveCells(block));
+        expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
+        expect(read(engine)).toEqual(read(untouched));
+    });
+    test('a block as tall or as wide as the grid moves when it stays on it', () => {
+        const engine = workbook();
+        engine.moveCells({ ...block, rows: GRID_ROWS, toRow: 0, toColumn: 5 });
+        engine.moveCells({ ...block, row: 2, columns: GRID_COLUMNS, toRow: 6, toColumn: 0 });
+        engine.recalc(NO_CAP);
+        expect([engine.valueOf('s1', 0, 5), engine.valueOf('s1', 6, 5)]).toEqual([6, 12]);
     });
 });

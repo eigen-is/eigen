@@ -3,7 +3,7 @@
 // model of edit-model.ts and a fresh engine loaded from it.
 
 import type { Engine as EngineType, LineEdit, Move, Rewrite, SheetSource } from '../../index';
-import { Engine } from '../../index';
+import { EditRefusal, Engine } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { random } from '../edit/support';
 import type { Applied, Cell, Formula, Kept, Model, ModelSheet, Ref } from './edit-model';
@@ -16,7 +16,6 @@ import {
     applyReorder,
     CELL,
     COLUMNS,
-    clipped,
     columnOf,
     fresh,
     keyOf,
@@ -110,6 +109,8 @@ export type Counts = {
     rewrites: number;
     several: number;
     refused: number;
+    // The inserts refused for a cell they would push off the grid.
+    pushing: number;
 };
 
 type Op =
@@ -161,10 +162,14 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         rewrites: 0,
         several: 0,
         refused: 0,
+        pushing: 0,
     };
     const rows = edge === Edge.Rows ? [...span(0, 5), ...span(GRID_ROWS - 6, 6)] : span(0, 10);
     const columns =
         edge === Edge.Columns ? [...span(0, 4), ...span(GRID_COLUMNS - 5, 5)] : span(0, edge === Edge.Rows ? 2 : 6);
+    // Where a cell is written: not on the very last lines, which only references name, so that an insert has room.
+    const cellRows = edge === Edge.Rows ? rows.slice(0, -2) : rows;
+    const cellColumns = edge === Edge.Columns ? columns.slice(0, -2) : columns;
     // Where a cell can end up: the lines in use and a few past the first ones.
     const scanRows = edge === Edge.Rows ? [...span(0, 11), ...span(GRID_ROWS - 6, 6)] : span(0, 16);
     const scanColumns = edge === Edge.Columns ? [...span(0, 9), ...span(GRID_COLUMNS - 5, 5)] : span(0, 10);
@@ -229,10 +234,10 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         for (const id of ['s1', 's2', 's3']) {
             const cells = new Map<number, Cell>();
             for (let i = 0; i < 22; i += 1)
-                cells.set(keyOf(one(rows), one(columns)), pick(2) === 0 ? value() : formula());
+                cells.set(keyOf(one(cellRows), one(cellColumns)), pick(2) === 0 ? value() : formula());
             for (let block = 0; block < 2; block += 1) {
-                const top = one(rows);
-                const left = one(columns);
+                const top = one(cellRows);
+                const left = one(cellColumns);
                 const first = formula();
                 for (let down = 0; down < 1 + pick(4) && top + down < GRID_ROWS; down += 1) {
                     for (let across = 0; across < 1 + pick(2) && left + across < GRID_COLUMNS; across += 1) {
@@ -355,36 +360,35 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             }
             counts.rewrites += rewrites.length;
         };
-        // Performs an edit on the engine and on the model, and holds the one against the other.
-        const perform = (op: Op): { applied: Applied; rewrites: readonly Rewrite[] } => {
+        // Performs an edit on the engine and on the model, and holds the one against the other. Null for an insert
+        // that would push a cell of the model off the grid: the engine refuses it, and holds what it held.
+        const perform = (op: Op): { applied: Applied; rewrites: readonly Rewrite[] } | null => {
             log.push(JSON.stringify(op, (key, held) => (key === 'cells' ? undefined : held)));
             let applied: Applied;
             let rewrites: readonly Rewrite[] = [];
-            let dropped = 0;
-            let expected = 0;
             switch (op.kind) {
                 case 'lines':
                     applied = applyLines(model, op.edit);
-                    if (op.edit.insert) expected = applied.gone.length;
-                    ({ rewrites, dropped } = engine.editLines(op.edit));
+                    if (op.edit.insert && applied.gone.length > 0) {
+                        let reason = 'none';
+                        try {
+                            engine.editLines(op.edit);
+                        } catch (thrown) {
+                            if (thrown instanceof EditRefusal) reason = thrown.reason;
+                        }
+                        if (reason !== 'grid-end') fail(`an insert that pushes a cell off the grid: ${reason}`);
+                        inputs();
+                        counts.pushing += 1;
+                        return null;
+                    }
+                    ({ rewrites } = engine.editLines(op.edit));
                     counts.lineEdits += 1;
                     break;
-                case 'move': {
+                case 'move':
                     applied = applyMove(model, op.move);
-                    const fit = clipped(op.move);
-                    expected = applied.gone.filter(
-                        (cell) =>
-                            cell.sheet === op.move.fromSheet &&
-                            cell.row >= op.move.row &&
-                            cell.row < op.move.row + op.move.rows &&
-                            cell.column >= op.move.column &&
-                            cell.column < op.move.column + op.move.columns &&
-                            (cell.row - op.move.row >= fit.rows || cell.column - op.move.column >= fit.columns),
-                    ).length;
-                    ({ rewrites, dropped } = engine.moveCells(op.move));
+                    ({ rewrites } = engine.moveCells(op.move));
                     counts.moves += 1;
                     break;
-                }
                 case 'add':
                     applied = applyAdd(model, op.sheet, op.place);
                     ({ rewrites } = engine.addSheet(handed(op.sheet), op.place));
@@ -406,7 +410,6 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     engine.moveSheet(op.id, op.place);
             }
             if (op.kind !== 'lines' && op.kind !== 'move') counts.sheetEdits += 1;
-            if (dropped !== expected) fail(`dropped ${dropped}, the model ${expected}`);
             model = applied.model;
             inputs();
             cover(applied, rewrites);
@@ -429,15 +432,20 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             const toSheet = pick(3) === 0 ? present() : fromSheet;
             const tall = pick(40) === 0;
             const wide = !tall && pick(40) === 0;
+            const row = tall ? 0 : one(rows);
+            const column = wide ? 0 : one(columns);
+            const toRow = tall ? 0 : one(rows);
+            const toColumn = wide ? 0 : one(columns);
+            // The block lies on the grid where it is and where it goes.
             const move: Move = {
                 fromSheet,
-                row: tall ? 0 : one(rows),
-                column: wide ? 0 : one(columns),
-                rows: tall ? GRID_ROWS : 1 + pick(3),
-                columns: wide ? GRID_COLUMNS : 1 + pick(2),
+                row,
+                column,
+                rows: tall ? GRID_ROWS : Math.min(1 + pick(3), GRID_ROWS - row, GRID_ROWS - toRow),
+                columns: wide ? GRID_COLUMNS : Math.min(1 + pick(2), GRID_COLUMNS - column, GRID_COLUMNS - toColumn),
                 toSheet,
-                toRow: tall ? 0 : one(rows),
-                toColumn: wide ? 0 : one(columns),
+                toRow,
+                toColumn,
             };
             return { kind: 'move', move };
         };
@@ -484,6 +492,16 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 () => engine.editLines({ insert: true, index: one(columns), count: 0, sheet: present(), rows: false }),
                 () => engine.moveCells({ ...from, toSheet: gone, toRow: one(rows), toColumn: one(columns) }),
                 () => engine.moveCells({ ...from, toSheet: present(), toRow: GRID_ROWS, toColumn: one(columns) }),
+                () => engine.moveCells({ ...from, rows: 2, toSheet: present(), toRow: GRID_ROWS - 1, toColumn: 0 }),
+                () =>
+                    engine.moveCells({
+                        ...from,
+                        column: GRID_COLUMNS - 2,
+                        columns: 3,
+                        toSheet: gone,
+                        toRow: 0,
+                        toColumn: 0,
+                    }),
                 () => engine.renameSheet(gone, 'Later'),
                 () => engine.removeSheet(gone),
                 () => engine.moveSheet(gone, 0),
@@ -529,7 +547,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                     break;
                 }
                 case 'move': {
-                    const move = clipped(op.move);
+                    const { move } = op;
                     const down = move.toRow - move.row;
                     const across = move.toColumn - move.column;
                     engine.moveCells({
@@ -602,8 +620,8 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             const drawn = pick(16);
             if (drawn < 4) {
                 const sheet = present();
-                const row = one(rows);
-                const column = one(columns);
+                const row = one(cellRows);
+                const column = one(cellColumns);
                 const what = pick(6);
                 if (what === 0 && row + 2 < GRID_ROWS && column + 1 < GRID_COLUMNS) {
                     const first = formula();
@@ -635,9 +653,10 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 if (unmarked) recalc(NO_CAP);
                 const before = model;
                 const op = anyEdit();
-                const { applied, rewrites } = perform(op);
+                const done = perform(op);
+                if (done === null) continue;
                 if (pick(2) === 0) recalc(NO_CAP);
-                undo(op, before, applied, rewrites);
+                undo(op, before, done.applied, done.rewrites);
                 perform(op);
                 recalc(NO_CAP);
             }

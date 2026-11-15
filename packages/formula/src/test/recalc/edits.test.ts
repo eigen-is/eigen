@@ -106,7 +106,7 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         (formula) => {
             const engine = computed({ s1: { ...counting('A1', 50), ...readers(formula, 300) } });
             const before = valueAt(engine, 'C1');
-            expect(engine.editLines(rows(true, 10, 2)).dropped).toBe(0);
+            engine.editLines(rows(true, 10, 2));
             expect(waiting(engine, 300)).toBe(0);
             expect(valueAt(engine, 'C1')).toBe(before);
             // A row deleted takes a cell away, and the reader on it.
@@ -139,43 +139,6 @@ describe('a whole column read by many formulas, and a row inserted', () => {
         expect([pending(engine, 'A5'), pending(engine, 'A6')]).toEqual([true, true]);
         engine.recalc(NO_CAP);
         expect([valueAt(engine, 'A5'), valueAt(engine, 'A6')]).toEqual([6 + 3, 2]);
-    });
-    test('a row inserted into a full column pushes its last cell off the grid, and every reader is computed', () => {
-        const last = `A${GRID_ROWS}`;
-        const cells = { A1: 1, B5: 7, [last]: 5, C1: '=SUM(A:A)', C2: '=COUNTA(A:B)', D1: '=SUM($B:$B)' };
-        const engine = computed({ s1: cells, s2: { A1: '=SUM(Sheet1!A:A)+MAX(Sheet1!$A:$A)' } });
-        expect([valueAt(engine, 'C1'), valueAt(engine, 'C2'), valueAt(engine, 'A1', 's2')]).toEqual([6, 3, 11]);
-        expect(engine.editLines(rows(true, 3)).dropped).toBe(1);
-        // Column B loses nothing, so its sum stays.
-        expect(['C1', 'C2', 'D1'].map((host) => pending(engine, host))).toEqual([true, true, false]);
-        expect(pending(engine, 'A1', 's2')).toBe(true);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'C1'), valueAt(engine, 'C2'), valueAt(engine, 'A1', 's2')]).toEqual([1, 2, 2]);
-    });
-    test('a column inserted into a full row pushes its last cell off the grid, and every reader is computed', () => {
-        const cells = { A3: 1, XFD3: 5, C6: 7, A8: '=SUM(3:3)', A9: '=COUNTA(3:4)', A10: '=SUM(6:6)' };
-        const engine = computed({ s1: cells });
-        expect([valueAt(engine, 'A8'), valueAt(engine, 'A9')]).toEqual([6, 2]);
-        expect(engine.editLines(columns(true, 'B')).dropped).toBe(1);
-        expect(['A8', 'A9', 'A10'].map((host) => pending(engine, host))).toEqual([true, true, false]);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'A8'), valueAt(engine, 'A9'), valueAt(engine, 'A10')]).toEqual([1, 1, 7]);
-    });
-    test('a row inserted under one formula filled across columns computes each host whose own column lost a cell', () => {
-        // D1 and E1 hold one stored text: it reads column A at D1 and column B at E1, and only B is full.
-        const engine = computed({ s1: { A1: 1, B1: 2, [`B${GRID_ROWS}`]: 5, D1: '=SUM(A:A)', E1: '=SUM(B:B)' } });
-        expect([text(engine, 'D1'), valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([text(engine, 'E1'), 1, 7]);
-        expect(engine.editLines(rows(true, 3)).dropped).toBe(1);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'D1'), valueAt(engine, 'E1')]).toEqual([1, 2]);
-    });
-    test('a column inserted beside one formula filled down rows computes each host whose own row lost a cell', () => {
-        // Only row 1 is full, which the first host reads.
-        const engine = computed({ s1: { B1: 1, B2: 2, XFD1: 5, A4: '=SUM(1:1)', A5: '=SUM(2:2)' } });
-        expect([text(engine, 'A4'), valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([text(engine, 'A5'), 6, 2]);
-        expect(engine.editLines(columns(true, 'D')).dropped).toBe(1);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'A4'), valueAt(engine, 'A5')]).toEqual([1, 2]);
     });
 });
 
@@ -314,26 +277,7 @@ describe('a block that moves', () => {
             false,
         ]);
     });
-    test('what would land past the last line is cleared and counted, and its readers are computed again', () => {
-        const engine = computed({ s1: { A1: 1, A2: 2, B1: 3, D1: '=A2+B1', D2: '=SUM(A1:B2)' } });
-        const last = GRID_ROWS - 1;
-        const { dropped } = engine.moveCells({
-            fromSheet: 's1',
-            row: 0,
-            column: 0,
-            rows: 2,
-            columns: 2,
-            toSheet: 's1',
-            toRow: last,
-            toColumn: GRID_COLUMNS - 1,
-        });
-        expect(dropped).toBe(2);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'D1'), valueAt(engine, 'D2'), engine.valueOf('s1', last, GRID_COLUMNS - 1)]).toEqual([
-            0, 0, 1,
-        ]);
-    });
-    test('a block that reaches past the last row is the part of it on the grid, and pulls no reference onto the grid', () => {
+    test('a block moved on the last rows pulls no reference that is off the grid onto it', () => {
         const last = GRID_ROWS - 1;
         const engine = engineOf({ s1: { [`A${GRID_ROWS}`]: 4 } });
         // From the last row but two, three rows down is past the grid: the formula reads #REF!.
@@ -343,7 +287,7 @@ describe('a block that moves', () => {
             fromSheet: 's1',
             row: last,
             column: 0,
-            rows: 3,
+            rows: 1,
             columns: 1,
             toSheet: 's1',
             toRow: last - 1,
@@ -419,20 +363,81 @@ describe('rows and columns', () => {
         engine.recalc(NO_CAP);
         expect([text(engine, 'C3'), valueAt(engine, 'C3')]).toEqual([kept, 10]);
     });
-    test('cells an insert pushes off the grid are gone and counted, and their readers read #REF!', () => {
-        const engine = computed({
-            s1: { [`A${GRID_ROWS}`]: 1, [`B${GRID_ROWS - 1}`]: 2, C1: `=A${GRID_ROWS}+1`, C2: `=B${GRID_ROWS - 1}` },
-        });
-        expect(engine.editLines(rows(true, 5)).dropped).toBe(1);
-        engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'C1'), valueAt(engine, 'C2'), engine.valueOf('s1', GRID_ROWS - 1, 1)]).toEqual([
-            REF,
-            2,
-            2,
-        ]);
-        expect(engine.editLines(columns(true, 'A', GRID_COLUMNS - 1)).dropped).toBe(3);
-        expect(engine.editLines(rows(false, GRID_ROWS - 2, 3)).dropped).toBe(0);
-    });
+    test.each([
+        [
+            'rows',
+            true,
+            `R1C1:R${GRID_ROWS}C1`,
+            `R1C1:R${GRID_ROWS - 5}C1`,
+            `R${GRID_ROWS}C1`,
+            `R${GRID_ROWS - 5}C1`,
+            `R1C1:R${GRID_ROWS - 4}C1`,
+        ],
+        [
+            'columns',
+            false,
+            `R1C1:R1C${GRID_COLUMNS}`,
+            `R1C1:R1C${GRID_COLUMNS - 5}`,
+            `R1C${GRID_COLUMNS}`,
+            `R1C${GRID_COLUMNS - 5}`,
+            `R1C1:R1C${GRID_COLUMNS - 4}`,
+        ],
+    ])(
+        'a reference that inserted %s stop at the last line is reported as lost, and undo puts it back',
+        (_, onRows, range, shorter, cell, near, close) => {
+            // No cell holds anything near the last line, so the insert pushes nothing off: only references reach there.
+            const formulas = [
+                `=SUM(${range})`,
+                `=${cell}`,
+                `=SUM([s1]!${range})+1`,
+                `=${near}`,
+                `=SUM(${onRows ? 'C1' : 'R1'})`,
+            ];
+            const engine = new Engine([
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => formulas.forEach((formula, at) => void cell(20 + at, 20 + at, null, formula)),
+                },
+                { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, `=SUM([s1]!${close})`) },
+            ]);
+            const read = () => [
+                ...formulas.map((_, at) => engine.formulaOf('s1', 20 + at, 20 + at)),
+                engine.formulaOf('s2', 0, 0),
+            ];
+            const before = read();
+            expect(before).toEqual([...formulas, `=SUM([s1]!${close})`]);
+            const edit = { insert: true, index: 10, count: 5, sheet: 's1', rows: onRows };
+            const { rewrites } = engine.editLines(edit);
+            // A range to the last line ends where it ended, and one that ends four lines short of it ends there too:
+            // each names fewer cells than it did, and the cell on the last line is gone. The inverse delete brings
+            // none of them back. The reference five lines short of the end just moved.
+            expect(rewrites.map((rewrite) => [rewrite.sheet, rewrite.formula, rewrite.lost])).toEqual([
+                ['s1', before[0], before[0]],
+                ['s1', '=#REF!', before[1]],
+                ['s1', before[2], before[2]],
+                ['s1', `=${cell}`, null],
+                ['s2', `=SUM([s1]!${range})`, before[5]],
+            ]);
+            engine.editLines({ ...edit, insert: false });
+            expect(read()).toEqual([
+                `=SUM(${shorter})`,
+                '=#REF!',
+                `=SUM([s1]!${shorter})+1`,
+                before[3],
+                before[4],
+                `=SUM([s1]!${shorter})`,
+            ]);
+            for (const { sheet: id, top, left, bottom, right, lost } of rewrites) {
+                // The rows and columns of the rewrites are those after the insert, 5 lines further on sheet s1.
+                const back = id === 's1' ? 5 : 0;
+                if (lost === null) continue;
+                if (onRows) engine.fillFormula(id, top - back, left, bottom - back, right, lost);
+                else engine.fillFormula(id, top, left - back, bottom, right - back, lost);
+            }
+            expect(read()).toEqual(before);
+        },
+    );
 });
 
 describe('sheets', () => {

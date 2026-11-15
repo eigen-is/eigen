@@ -23,21 +23,22 @@ export type Literal = number | string | boolean | FormulaError;
 export type CellSink = (row: number, column: number, value: Literal | null, formula: string | null) => void;
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
-// twice, to report the same cells: once to size the columns and once to fill them. So a host walks its own cells
-// and builds no list.
+// twice with the same cells, to size the columns and then to fill them: a host walks its own and builds no list.
 export type SheetSource = {
     readonly id: string;
     readonly name: string;
     readonly cells: (cell: CellSink) => void;
 };
 
-// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold their number in the
-// order of these lists, which `adopt` turns into ids and codes of the workbook's tables.
+// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold the complement of their
+// number in these lists, below 0 where no id or code is, which `adopt` turns into ids and codes of the tables.
 export type Draft = {
     readonly sheet: Sheet;
     readonly texts: ReadonlyMap<string, number>;
     readonly formulas: ReadonlyMap<string, number>;
     readonly errors: ReadonlyMap<string, number>;
+    // Per column, the rows of the cells that may hold such a number, as the source reported them.
+    readonly numbered: readonly (readonly number[])[];
 };
 
 // A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
@@ -55,11 +56,11 @@ export type Change =
 // The store's door for a cell a host hands it, in a write or in a load: throws unless the cell is on the grid and
 // its value, when a number, is one a cell can hold.
 export function admit(row: number, column: number, value: Literal | null): void {
-    if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+    if (!isLine(row, GRID_ROWS) || !isLine(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
     if (typeof value === 'number' && !Number.isFinite(value)) throw new RangeError(`No number ${value}`);
 }
 
-export function within(line: number, lines: number): boolean {
+export function isLine(line: number, lines: number): boolean {
     return Number.isInteger(line) && line >= 0 && line < lines;
 }
 
@@ -133,45 +134,56 @@ export class Workbook {
         const texts = new Map<string, number>();
         const formulas = new Map<string, number>();
         const errors = new Map<string, number>();
+        const numbered = lengths.map((): number[] => []);
         walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
             if (held === undefined || row >= held.length) {
                 throw new Error(`Sheet ${source.id} reported cell ${row},${column} only when it was read again`);
             }
-            if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
-            if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
+            if (formula !== null) held.shape[row] = ~listed(formulas, formula);
+            if (typeof value === 'string') held.put(row, CellKind.Text, 0, ~listed(texts, value));
             else if (typeof value === 'object' && value !== null) {
-                held.put(row, CellKind.Error, 0, value.code || CARRIED + listed(errors, value.text));
+                held.put(row, CellKind.Error, 0, value.code || ~listed(errors, value.text));
             } else if (value !== null) this.put(held, row, value);
+            // A number or a boolean with no formula is stored as it stays.
+            if (formula !== null || (typeof value !== 'number' && typeof value !== 'boolean')) {
+                numbered[column].push(row);
+            }
             // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
             // which only computing it finds. A host's error is told by its code, as the cell stores it.
             if (formula !== null && (value === null || (typeof value === 'object' && value.code === REF.code))) {
                 held.markDirty(row);
             }
         });
-        return { sheet, texts, formulas, errors };
+        // The first walk sized the columns, and a source may not report its last cells again.
+        for (const column of sheet.columns) column.trim();
+        return { sheet, texts, formulas, errors, numbered };
     }
 
     // Makes a sheet that was read one whose cells hold ids and codes of the tables, in no place yet: `apply` adds
     // it. Nothing may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
-    public adopt({ sheet, texts, formulas, errors }: Draft): Sheet {
+    public adopt({ sheet, texts, formulas, errors, numbered }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
-        for (const { kind, ref, shape, length } of sheet.columns) {
-            for (let row = 0; row < length; row += 1) {
-                const holds = kind[row] & KIND_MASK;
-                if (holds === CellKind.Text) ref[row] = textIds[ref[row]];
-                else if (holds === CellKind.Error && ref[row] >= CARRIED) ref[row] = errorCodes[ref[row] - CARRIED];
-                if (shape[row] !== 0) shape[row] = shapeIds[shape[row] - 1];
+        // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
+        // reported twice is listed twice, and holds an id once it was met.
+        for (let c = 0; c < numbered.length; c += 1) {
+            const { kind, ref, shape } = sheet.columns[c];
+            for (const row of numbered[c]) {
+                const number = ~ref[row];
+                if (number >= 0) {
+                    ref[row] = (kind[row] & KIND_MASK) === CellKind.Text ? textIds[number] : errorCodes[number];
+                }
+                if (shape[row] < 0) shape[row] = shapeIds[~shape[row]];
             }
         }
         return sheet;
     }
 
     // Writes the new shape of each block of formulas an edit rewrites, in the places before the edit, then performs
-    // the edit, so the shapes travel with their cells. Returns how many cells the edit pushed off the grid.
-    public apply(change: Change, fills: readonly number[]): number {
+    // the edit, so the shapes travel with their cells.
+    public apply(change: Change, fills: readonly number[]): void {
         for (let f = 0; f < fills.length; f += 6) {
             const { columns } = this.held[fills[f]];
             for (let c = fills[f + 1]; c <= fills[f + 2]; c += 1) {
@@ -182,13 +194,15 @@ export class Workbook {
             case ChangeKind.Lines: {
                 const { insert, index, count, rows } = change.edit;
                 const sheet = this.known(change.edit.sheet);
-                if (insert) return rows ? sheet.insertRows(index, count) : sheet.insertColumns(index, count);
-                if (rows) sheet.deleteRows(index, count);
+                if (insert && rows) sheet.insertRows(index, count);
+                else if (insert) sheet.insertColumns(index, count);
+                else if (rows) sheet.deleteRows(index, count);
                 else sheet.deleteColumns(index, count);
-                return 0;
+                return;
             }
             case ChangeKind.Move:
-                return this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+                this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+                return;
             case ChangeKind.AddSheet:
                 // Whatever values its formulas came with were computed against another workbook than this one.
                 for (const column of change.sheet.columns) {
@@ -197,23 +211,22 @@ export class Workbook {
                     }
                 }
                 this.insert(change.sheet, change.place);
-                return 0;
+                return;
             case ChangeKind.RemoveSheet: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.byId.delete(sheet.id);
                 this.limit = 0;
                 for (let s = sheet.place; s < this.held.length; s += 1) this.held[s].place = s;
-                return 0;
+                return;
             }
             case ChangeKind.RenameSheet:
                 this.known(change.sheet).name = change.name;
-                return 0;
+                return;
             default: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.insert(sheet, change.place);
-                return 0;
             }
         }
     }
