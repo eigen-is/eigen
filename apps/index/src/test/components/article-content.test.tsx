@@ -223,11 +223,24 @@ describe('ArticleContent', () => {
     test('shows controls when the browser refuses to start a video', async () => {
         stubReducedMotion(false);
         const { play } = HTMLMediaElement.prototype;
-        HTMLMediaElement.prototype.play = () => Promise.reject(new Error('NotAllowedError'));
+        HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException('Refused', 'NotAllowedError'));
         try {
             const video = await renderVideo();
             await act(async () => {});
             expect(video.controls).toBe(true);
+        } finally {
+            HTMLMediaElement.prototype.play = play;
+        }
+    });
+
+    test('keeps a video without controls when a pause cuts its start short', async () => {
+        stubReducedMotion(false);
+        const { play } = HTMLMediaElement.prototype;
+        HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException('Paused', 'AbortError'));
+        try {
+            const video = await renderVideo();
+            await act(async () => {});
+            expect(video.controls).toBe(false);
         } finally {
             HTMLMediaElement.prototype.play = play;
         }

@@ -30,8 +30,14 @@ export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
     useEffect(() => {
         const video = ref.current;
         if (!video) return;
-        if (reduceMotion || !playing) video.pause();
-        else video.play().catch(() => setRefused(true));
+        if (reduceMotion || !playing) {
+            video.pause();
+            return;
+        }
+        // A pause before playback starts rejects the play too, with an AbortError: only a NotAllowedError is a refusal.
+        video.play().catch((error) => {
+            if (error instanceof DOMException && error.name === 'NotAllowedError') setRefused(true);
+        });
     }, [reduceMotion, playing]);
 
     // Every video stays within AV1 level 4.0, about 2048×1088, so a browser that says yes to it can decode it.
