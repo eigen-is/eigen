@@ -5,7 +5,7 @@
 
 import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
-import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
@@ -18,8 +18,6 @@ import type { DriveQueries } from '../drive/home-calls';
 import { answerDrive } from '../drive/home-calls';
 import type { TeamQueries } from '../team/home-calls';
 import { answerTeam } from '../team/home-calls';
-import type { User } from '../user';
-import { getUsersByEmails } from '../user';
 import { getHome, loadedHome } from './get-home';
 import type { Home } from './home';
 import { TeamHome } from './team-home';
@@ -56,11 +54,7 @@ type HomeMessage =
           status: Attendee['status'];
           recurrenceDate?: string;
       }
-    | { type: 'broadcast'; event: SSEvent }
     | { type: 'notification'; notification: NotificationPersistInput };
-
-// A broadcast opens no home, so it never becomes a delivery.
-type DeliveredMessage = Exclude<HomeMessage, { type: 'broadcast' }>;
 
 // Every push still delivering. Most of them run after their request answered, so nobody waits for them. A delivery
 // opens its recipient's home, so a shutdown drains them first.
@@ -71,15 +65,10 @@ const deliveries = new Set<Promise<void>>();
 const lastInOrder = new Map<string, Promise<void>>();
 
 export async function sendToHome(targetId: string, message: HomeMessage): Promise<void> {
-    // A broadcast only reaches tabs that have the home open. It never opens a home or keeps one open.
-    if (message.type === 'broadcast') {
-        loadedHome(targetId)?.broadcast(message.event);
-        return;
-    }
     await tracked(deliver(targetId, message));
 }
 
-async function deliver(targetId: string, message: DeliveredMessage): Promise<void> {
+async function deliver(targetId: string, message: HomeMessage): Promise<void> {
     const home = await getHome(targetId);
     // A home without a calendar, such as a guest's, ignores every calendar message.
     if (message.type.startsWith('calendar:') && !home.hasCalendar) return;
@@ -149,7 +138,7 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
 
 // One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
 // whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
-export async function sendToUserHomes(userIds: Iterable<string>, message: DeliveredMessage): Promise<void> {
+export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
     const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
     const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
     const fanOut = tracked(deliverToEach(userIds, message, previous));
@@ -160,7 +149,7 @@ export async function sendToUserHomes(userIds: Iterable<string>, message: Delive
 
 async function deliverToEach(
     userIds: Iterable<string>,
-    message: DeliveredMessage,
+    message: HomeMessage,
     previous: Promise<void> | undefined,
 ): Promise<void> {
     await previous;
@@ -191,24 +180,11 @@ export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
     console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home deliveries left`);
 }
 
-// Tells the open tabs of the owner and of each member who can read the path: a member without read cannot list it, so
-// the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
-export async function broadcastToOwnerAndMembers(
-    ownerId: string,
-    members: readonly EffectiveMember[] | Promise<readonly EffectiveMember[]>,
-    event: SSEvent,
-): Promise<void> {
-    await sendToHome(ownerId, { type: 'broadcast', event });
-    let readers: User[];
-    try {
-        const emails = (await members).filter((member) => member.read).map((member) => member.email);
-        readers = await getUsersByEmails([...new Set(emails)]);
-    } catch {
-        return;
-    }
-    await Promise.all(
-        readers.filter((user) => user.id !== ownerId).map((user) => sendToHome(user.id, { type: 'broadcast', event })),
-    );
+// --- Broadcasts ---
+
+// A closed home has no tab to tell, so this opens no home and stores nothing.
+export function broadcastToHomes(ownerIds: Iterable<string>, event: SSEvent): void {
+    for (const ownerId of ownerIds) loadedHome(ownerId)?.broadcast(event);
 }
 
 // --- Reads across homes ---

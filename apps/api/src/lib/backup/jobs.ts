@@ -7,7 +7,7 @@ import { homeBackupUnverifiedTag } from '@workspace/lib/notification/tags';
 import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { snapshotHomeHeld } from '../home/home-jobs';
-import { sendToHome } from '../home/home-relay';
+import { broadcastToHomes } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
 import { packFolder, readUnpackedHome } from './archive';
@@ -235,7 +235,8 @@ function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
     const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
     recipients
-        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
+        .then((users) => users.map((user) => user.id))
+        .then((userIds) => broadcastToHomes(userIds, event))
         .catch(() => {});
 }
 

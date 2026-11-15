@@ -7,7 +7,7 @@ import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { broadcastToHomes, sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getMemberships, getUserByEmail } from '../user';
@@ -29,13 +29,7 @@ export async function notifySharedCalendarUsers(
 
     userIds.delete(ownerHome.user.id);
 
-    for (const userId of userIds) {
-        try {
-            await sendToHome(userId, { type: 'broadcast', event });
-        } catch (error) {
-            console.error('Failed to notify shared calendar user:', error);
-        }
-    }
+    broadcastToHomes(userIds, event);
 }
 
 export async function propagateCalendarShare(

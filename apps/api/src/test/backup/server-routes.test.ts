@@ -125,8 +125,9 @@ describe('Server backup routes', () => {
         'an admin neither sees nor hears of a server backup, and the owner does',
         async () => {
             const held = holdCaptures();
+            const pokes = spyOn(homeRelay, 'broadcastToHomes');
+            pokes.mockClear();
             try {
-                send.mockClear();
                 const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 const id = data!.jobId;
                 const ids = async (api: typeof adminApi) =>
@@ -138,10 +139,11 @@ describe('Server backup routes', () => {
                 held.release();
                 await waitForJob(id);
                 await Bun.sleep(100);
-                const poked = send.mock.calls.filter(([, message]) => message.type === 'broadcast');
+                const poked = pokes.mock.calls.flatMap(([ownerIds]) => [...ownerIds]);
                 expect(poked.length).toBeGreaterThan(0);
-                expect(new Set(poked.map(([userId]) => userId))).toEqual(new Set([ctx.alice.user.id]));
+                expect(new Set(poked)).toEqual(new Set([ctx.alice.user.id]));
             } finally {
+                pokes.mockRestore();
                 held.restore();
             }
         },
