@@ -19,9 +19,11 @@ type Applied = Exclude<Op, { kind: Unbuilt }>;
 // Returns the inverse batch: the inverse ops of every op, the newest op's first, each restoring the state before
 // its op. It throws a `Refusal` with the workbook as it was; any other throw leaves the workbook to be reloaded.
 export function applyOps(book: Workbook, ops: readonly Applied[]): Applied[] {
-    const inverse: Applied[] = [];
+    // Each op's inverse ops, in the order the ops landed. They are flattened once, as a spread of a long list passes
+    // JavaScript's limit on arguments.
+    const landed: Applied[][] = [];
     try {
-        for (const op of ops) inverse.unshift(...applyOne(book, op));
+        for (const op of ops) landed.push(applyOne(book, op));
         const over = fits(book.weight());
         if (over) throw new Refusal(over);
     } catch (error) {
@@ -31,14 +33,14 @@ export function applyOps(book: Workbook, ops: readonly Applied[]): Applied[] {
                 ? new Refusal(error.reason === 'grid-end' ? 'grid-end' : 'key-too-long')
                 : error;
         if (refusal instanceof Refusal) {
-            for (const op of inverse) applyOne(book, op);
+            for (const op of landed.reverse().flat()) applyOne(book, op);
             book.sweepLooks();
         }
         throw refusal;
     }
     // The sweep renumbers the looks, so it runs between batches, when no applier holds a look id.
     book.sweepLooks();
-    return inverse;
+    return landed.reverse().flat();
 }
 
 // An applier checks what its op can be refused for and reads what the inverse needs, throwing before its first
