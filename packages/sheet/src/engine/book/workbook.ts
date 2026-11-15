@@ -24,7 +24,7 @@ import { SheetRecords } from './records';
 // takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an insert pushes
 // something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines` and `move`
 // return what they replaced, removed or covered, as the part's reads list it. Records plan an edit before it writes.
-type BookSheet = {
+export type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;
     readonly columns: LineRuns;
