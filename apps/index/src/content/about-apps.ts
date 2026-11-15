@@ -22,7 +22,7 @@ const aboutSlugs = [
     'admin',
 ] as const;
 
-export type AboutSlug = (typeof aboutSlugs)[number];
+type AboutSlug = (typeof aboutSlugs)[number];
 
 export const principles = ['Use your favorite apps', 'Office compatible', 'Built for data sovereignty'] as const;
 
