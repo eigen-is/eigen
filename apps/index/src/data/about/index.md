@@ -36,7 +36,7 @@ You can try it without installing anything at [demo.eigen.is](https://demo.eigen
 
 ## The apps
 
-Ten apps on one server, behind one login. Each does the everyday part of the Google app it replaces. The last row is for whoever runs the server.
+Ten apps for making things together: write a plan, sketch a site, run the numbers, put it on slides and talk it over, live, with the people you work with. They share one login and one look, so once you know one, you know them all. The last row is for whoever runs the server.
 
 ::: apps
 :::
