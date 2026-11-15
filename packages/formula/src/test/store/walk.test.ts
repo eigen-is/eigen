@@ -207,6 +207,33 @@ describe('the extents of a sheet', () => {
         expect([engine.lastRow('s1'), engine.slots()]).toEqual([GRID_ROWS - 1, GRID_ROWS + 15 + 10]);
     });
 
+    test('a column ends at its last cell when a load is told of a cell below it only the first time', () => {
+        let walks = 0;
+        const engine = new Engine([
+            {
+                id: 's1',
+                name: 's1',
+                cells: (cell) => {
+                    walks += 1;
+                    cell(0, 0, 1, null);
+                    cell(2, 1, null, '=R1C1+1');
+                    if (walks > 1) return;
+                    cell(GRID_ROWS - 1, 0, 2, null);
+                    cell(5, 1, 'gone', null);
+                    cell(0, 3, 3, null);
+                },
+            },
+        ]);
+        expect([0, 1, 2, 3].map((column) => engine.columnLength('s1', column))).toEqual([1, 3, 0, 0]);
+        expect([engine.lastRow('s1'), engine.lastColumn('s1'), engine.slots()]).toEqual([2, 1, 4]);
+        expect(walked(engine, 's1')).toEqual([
+            [0, 0, 1, null],
+            [2, 1, null, '=R1C1+1'],
+        ]);
+        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 0, count: 1 });
+        expect([engine.lastRow('s1'), engine.slots()]).toEqual([3, 6]);
+    });
+
     test('slots are the lengths of the columns, not the room a column that grew has', () => {
         const engine = new Engine([source('s1', [])]);
         for (let row = 0; row < 100; row += 1) engine.setValue('s1', row, 0, row);

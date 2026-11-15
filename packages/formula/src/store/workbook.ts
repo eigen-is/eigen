@@ -23,8 +23,7 @@ export type Literal = number | string | boolean | FormulaError;
 export type CellSink = (row: number, column: number, value: Literal | null, formula: string | null) => void;
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
-// twice, to report the same cells: once to size the columns and once to fill them. So a host walks its own cells
-// and builds no list.
+// twice with the same cells, to size the columns and then to fill them: a host walks its own and builds no list.
 export type SheetSource = {
     readonly id: string;
     readonly name: string;
@@ -156,6 +155,8 @@ export class Workbook {
                 held.markDirty(row);
             }
         });
+        // The first walk sized the columns, and a source may not report its last cells again.
+        for (const column of sheet.columns) column.trim();
         return { sheet, texts, formulas, errors, numbered };
     }
 
