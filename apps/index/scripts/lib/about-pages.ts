@@ -1,8 +1,7 @@
 // Checks the About files against the apps the About pages describe: a page's file is named after an app, the
 // overview's rows hold one line for each app, and the principle map names only those apps and links help articles
 // that exist. The content build calls these, so a page or principle named after no app, a missing row or a mistyped
-// article fails the build. It
-// also names the blocks a page draws itself, such as the overview's app rows.
+// article fails the build. It also names the blocks a page draws itself, such as the overview's app rows.
 
 import { aboutApps } from '../../src/content/about-apps';
 
