@@ -551,13 +551,8 @@ export class SharedDrive {
         return this.drive.getWatchStatus(mountId, pathId, this.user);
     }
 
-    // A revoked share keeps its watch rows, so the paths the caller can no longer read drop out here.
     public async getWatches(): Promise<DrivePath[]> {
-        const breadcrumbs = await this.drive.getWatchedBreadcrumbs(this.user);
-        const memberships = await getMemberships(this.user.id);
-        return breadcrumbs
-            .filter((ancestors) => canReadFromAncestors(ancestors, this.user, memberships))
-            .flatMap((ancestors) => ancestors.slice(-1));
+        return this.drive.getWatches(this.user);
     }
 
     // ---- Document databases ----
