@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
-import type { CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
@@ -134,10 +134,16 @@ describe('A calendar route on a team', () => {
         const calendar = `/calendar/${owner}/calendars/some-calendar`;
         expect(await statusAndMessage(await authedRequest(token, `${calendar}/events/some-event`))).toEqual(DISABLED);
         expect(await statusAndMessage(await authedRequest(token, `${calendar}/access`))).toEqual(DISABLED);
-        expect(await statusAndMessage(await authedRequest(token, `/calendar/${owner}/shared-with-me`))).toEqual(
-            DISABLED,
-        );
         expect(await statusAndMessage(await createEvent(token, owner, 'some-calendar'))).toEqual(DISABLED);
+    });
+
+    // A team whose calendar is off has no calendar, so it shares none.
+    test('gives a member no shares while the team calendar is off', async () => {
+        const owner = teamOwnerId(await createTeamFor('bob'));
+        await getHome(owner);
+        const shared = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${owner}/shared-with-me`);
+        expect(shared.status).toBe(200);
+        expect(await shared.json()).toEqual([]);
     });
 
     test('gives a member of a team without a home folder no shares, and a write or a read opens the home', async () => {
@@ -256,14 +262,43 @@ describe("A calendar collection route on another user's id", () => {
     });
 });
 
+describe('The list of calendars shared with a user', () => {
+    function sharedWithBob(): Promise<Response> {
+        return authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+    }
+
+    test('asks no team that has no home folder, and creates none', async () => {
+        const teamId = await createTeamFor('bob');
+        expect((await sharedWithBob()).status).toBe(200);
+        expect(fs.existsSync(getTeamHomePath(teamId))).toBe(false);
+        expect(atHome(teamOwnerId(teamId))).toBe(false);
+    });
+
+    test('asks no user who has no home folder, and creates none', async () => {
+        const ownerId = await createUserWithoutSignIn('user');
+        const share = { type: 'calendar:share', ownerId, calendarId: 'some-calendar', name: 'Never opened' } as const;
+        await sendToHome(ctx.bob.user.id, { ...share, permission: 'read' });
+        try {
+            const shared = await assertJson<SharedCalendar[]>(await sharedWithBob());
+            expect(shared.some((entry) => entry.ownerUserId === ownerId)).toBe(true);
+            expect(fs.existsSync(getUserHomePath(ownerId))).toBe(false);
+            expect(atHome(ownerId)).toBe(false);
+        } finally {
+            await sendToHome(ctx.bob.user.id, { ...share, permission: null });
+        }
+    });
+});
+
 describe('A calendar message to a home without a calendar', () => {
+    const rsvp = { type: 'calendar:rsvp', eventId: 'some-event', status: 'accepted' } as const;
+
     test('is ignored by a guest home', async () => {
         const guestId = await createUserWithoutSignIn('guest');
-        await sendToHome(guestId, {
-            type: 'calendar:rsvp',
-            eventId: 'some-event',
-            attendeeEmail: ctx.bob.user.email,
-            status: 'accepted',
-        });
+        await sendToHome(guestId, { ...rsvp, attendeeEmail: ctx.bob.user.email });
+    });
+
+    test('is ignored by a team home whose calendar is off', async () => {
+        const owner = teamOwnerId(await createTeamFor('nobody'));
+        await sendToHome(owner, { ...rsvp, attendeeEmail: ctx.bob.user.email });
     });
 });

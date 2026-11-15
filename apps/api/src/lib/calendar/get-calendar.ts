@@ -4,16 +4,15 @@
 // routedCalendar opens it with no check on the caller. syncTeamCalendars brings the caller's list of calendars
 // shared with them up to date.
 
-import * as fs from 'node:fs';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { requireSelf, requireTeamAdmin } from '../auth/access';
-import { getDataRoot, homeDirUnder } from '../config/paths';
+import { homeFolderExists } from '../config/paths';
 import { ApiError } from '../core';
 import { getHome } from '../home';
-import { pullCalendarPermission, pullCalendars } from '../home/home-relay';
+import { getFromHomes } from '../home/home-relay';
 import type { User } from '../user';
-import { getMemberships } from '../user';
+import { getMemberships, getOwnerExists } from '../user';
 import type { Calendar } from './calendar';
 
 export async function resolveCalendar(user: User, ownerId: string): Promise<Calendar> {
@@ -92,51 +91,55 @@ export async function resolveListedCalendar(user: User, ownerId: string): Promis
 // It does not check the caller, so a route may read from it only what the calendar's own shares give them.
 // An owner with no home folder or no calendar answers null, so asking neither creates a home nor tells who exists.
 export async function routedCalendar(ownerId: string): Promise<Calendar | null> {
-    if (!fs.existsSync(homeDirUnder(getDataRoot(), ownerId))) return null;
+    if (!homeFolderExists(ownerId)) return null;
     const home = await getHome(ownerId);
     return home.hasCalendar ? home.calendar : null;
 }
 
 export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     const { calendar } = await getHome(user.id);
-    const memberships = await getMemberships(user.id);
+    const { teamIds } = await getMemberships(user.id);
+    const asker = { email: user.email, teamIds };
 
-    for (const teamId of memberships.teamIds) {
-        const teamOwner = teamOwnerId(teamId);
-        try {
-            const teamCalendars = await pullCalendars(teamOwner);
-            for (const teamCalendar of teamCalendars) {
-                const permission =
-                    (await pullCalendarPermission(teamOwner, teamCalendar.id, user.email, memberships.teamIds)) ||
-                    'read';
-                await calendar.ensureSharedEntry(teamOwner, teamCalendar.id, teamCalendar.name, permission);
-            }
-        } catch (error) {
-            // Only a 404 removes: any other failure says nothing about the share, so the entries stay.
-            if (error instanceof ApiError && error.status === 404) {
-                await calendar.removeSharedEntriesForOwner(teamOwner);
-                continue;
-            }
-            console.warn(`calendar: could not read the calendars of ${teamOwner}`, error);
+    const ownTeams = teamIds.map(teamOwnerId);
+    const teamOwners = ownTeams.filter(homeFolderExists);
+    const [calendarsOf, teamSharesOf] = await Promise.all([
+        getFromHomes(teamOwners, 'calendar:calendars', null),
+        getFromHomes(teamOwners, 'calendar:shares', asker),
+    ]);
+    // A null answer says the team has no calendar, which removes its entries. A team that gave no answer keeps them.
+    for (const [teamOwner, items] of calendarsOf) {
+        if (!items) {
+            await calendar.removeSharedEntriesForOwner(teamOwner);
+            continue;
+        }
+        // A team whose shares gave no answer is skipped whole: a default of read would lower a write share.
+        const shares = teamSharesOf.get(teamOwner);
+        if (!shares) continue;
+        for (const item of items) {
+            const permission = shares.find((share) => share.calendarId === item.id)?.permission ?? 'read';
+            await calendar.ensureSharedEntry(teamOwner, item.id, item.name, permission);
         }
     }
 
-    // Joining or leaving a team runs no share propagation, so a user-owned share's cached permission is re-resolved here.
-    const sharedCalendars = await calendar.getSharedCalendars();
-    for (const shared of sharedCalendars) {
-        if (parseOwnerId(shared.ownerUserId).type === 'team') continue;
-        try {
-            const resolved = await pullCalendarPermission(
-                shared.ownerUserId,
-                shared.calendarId,
-                user.email,
-                memberships.teamIds,
-            );
-            if (resolved && resolved !== shared.permission) {
-                await calendar.ensureSharedEntry(shared.ownerUserId, shared.calendarId, shared.calendarName, resolved);
+    // Joining or leaving a team runs no share propagation, so every entry of an owner outside the user's teams is
+    // resolved again here, from the shares that owner still has for them.
+    const entries = await calendar.getSharedCalendars();
+    const otherOwners = [...new Set(entries.map((entry) => entry.ownerUserId))].filter(
+        (ownerId) => !ownTeams.includes(ownerId),
+    );
+    const sharesOf = await getFromHomes(otherOwners.filter(homeFolderExists), 'calendar:shares', asker);
+    for (const entry of entries) {
+        if (!otherOwners.includes(entry.ownerUserId)) continue;
+        const shares = sharesOf.get(entry.ownerUserId);
+        const resolved = shares?.find((share) => share.calendarId === entry.calendarId)?.permission;
+        if (resolved) {
+            if (resolved !== entry.permission) {
+                await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
             }
-        } catch {
-            // Owner home not available, skip
+        } else if (parseOwnerId(entry.ownerUserId).type === 'team') {
+            // The user left this team. Its entry goes once the team says it shares nothing with them, or is gone.
+            if (shares || !(await getOwnerExists(entry.ownerUserId))) await calendar.deleteSharedCalendar(entry.id);
         }
     }
 

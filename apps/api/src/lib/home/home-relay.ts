@@ -1,11 +1,10 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
 // another home. getFromHomes asks many homes one question, such as which paths a user watches there, and the domain
 // that owns the question keeps its handler. It opens at most a few homes at once and leaves out a home that is too
-// slow. The other reads, each pull and pullFromEach, open their homes with no such limit. Today every call runs in
-// this process. When homes live in several processes, only this file has to change.
+// slow. A team's quota overrides are still read apart from it, with no such limit. Today every call runs in this
+// process. When homes live in several processes, only this file has to change.
 
-import * as fs from 'node:fs';
-import type { Attendee, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
@@ -13,9 +12,9 @@ import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
 import { settlesWithin } from '../../utils/timing';
-import type { Calendar } from '../calendar/calendar';
+import type { CalendarQueries } from '../calendar/home-calls';
+import { answerCalendar } from '../calendar/home-calls';
 import type { InvitationRequest } from '../calendar/types';
-import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core';
 import type { DriveQueries } from '../drive/home-calls';
 import { answerDrive } from '../drive/home-calls';
@@ -221,9 +220,9 @@ export type Answerers<Q extends { [K in keyof Q]: { ask: unknown; answer: unknow
     [K in keyof Q]: (home: Home, ask: Q[K]['ask']) => Promise<Q[K]['answer']>;
 };
 
-type HomeQueries = DriveQueries & TeamQueries;
+type HomeQueries = DriveQueries & CalendarQueries & TeamQueries;
 
-const answerers: Answerers<HomeQueries> = { ...answerDrive, ...answerTeam };
+const answerers: Answerers<HomeQueries> = { ...answerDrive, ...answerCalendar, ...answerTeam };
 
 export const HOME_OPENS_AT_ONCE = 4;
 
@@ -273,59 +272,6 @@ function cappedOpen(ownerId: string): Promise<Home> {
         opening.set(ownerId, open);
     }
     return open;
-}
-
-// A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
-export async function pullFromEach<T>(
-    ownerIds: readonly string[],
-    pull: (ownerId: string) => Promise<T>,
-): Promise<T[]> {
-    const results = await Promise.all(
-        ownerIds.map((ownerId) =>
-            getOwnerExists(ownerId)
-                .then((exists) => (exists ? pull(ownerId) : null))
-                .catch((err) => {
-                    console.error(`home-relay: reading ${ownerId} failed:`, err);
-                    return null;
-                }),
-        ),
-    );
-    return results.filter((result) => result !== null);
-}
-
-// --- Calendar ---
-
-// The calendar of a home that has one. Every other owner answers as if the caller may not see the calendar, so asking
-// never creates a home, and the answer doesn't tell which owners exist.
-async function calendarOf(ownerId: string): Promise<Calendar | null> {
-    if (!fs.existsSync(homeDirUnder(getDataRoot(), ownerId))) return null;
-    const home = await getHome(ownerId);
-    return home.hasCalendar ? home.calendar : null;
-}
-
-export async function pullCalendars(ownerId: string): Promise<CalendarItem[]> {
-    return (await calendarOf(ownerId))?.getCalendars() ?? [];
-}
-
-export async function pullCalendarPermission(
-    ownerId: string,
-    calendarId: string,
-    email: string,
-    teamIds: string[],
-): Promise<CalendarShare['permission'] | null> {
-    return (await calendarOf(ownerId))?.checkPermission(calendarId, email, teamIds) ?? null;
-}
-
-export async function pullCalendarShares(
-    ownerId: string,
-    email: string,
-    teamIds: string[],
-): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
-    return (await calendarOf(ownerId))?.getSharedWith(email, teamIds) ?? [];
-}
-
-export async function pullPendingInvitations(ownerId: string, attendeeEmail: string): Promise<InvitationRequest[]> {
-    return (await calendarOf(ownerId))?.pendingInvitations(attendeeEmail) ?? [];
 }
 
 // --- Teams ---
