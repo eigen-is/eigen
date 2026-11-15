@@ -25,7 +25,7 @@ An event [repeats](/support/calendar/recurring-events), such as daily, weekly or
 Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
 
 ::: carousel
-![The festival week: a production meeting, the build day, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
+![The festival week: a production meeting, the build day, load-in and soundchecks, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
 ![The build day opened on its three guests](/data/about/media/calendar-still-build.webp)
 :::
 
