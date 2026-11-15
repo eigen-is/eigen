@@ -40,11 +40,13 @@ export class ShapeTable {
         return this.shapes[id - 1];
     }
 
+    // The id of a formula in stored text as a host hands it. Its key is the text its tree prints, so another
+    // spelling of one formula, such as a name in lower case, is the same shape.
     public intern(text: string): number {
         const known = this.ids.get(text);
         if (known !== undefined) return known;
         const parsed = parseStored(text);
-        return this.add(text, 'reason' in parsed ? null : parsed);
+        return 'reason' in parsed ? this.add(text, null) : this.internTree(parsed);
     }
 
     // The id of a tree already parsed, such as a formula typed at a cell: its stored text is the key.

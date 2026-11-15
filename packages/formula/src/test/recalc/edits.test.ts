@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
-import type { LineEdit, Move } from '../../index';
-import { Engine, REF } from '../../index';
+import type { LineEdit, Move, SheetSource } from '../../index';
+import { Engine, ERROR, REF } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
@@ -688,5 +688,48 @@ describe('the facts an edit asks of a shape', () => {
                 expect([name, slot.family === null || (slot.family.kinds & 1) === 0]).toEqual([name, true]);
             }
         }
+    });
+});
+
+describe('a formula handed in a spelling that is not the stored one', () => {
+    // The stored text has one spelling of a function's name, of a number, of TRUE and of an offset of none.
+    const SPELLINGS = [
+        '=sum(R[5]C,1.0)*[a]!R1C1=true',
+        '=Sum(R[5]C[0],1)*[a]!R1C1=TRUE',
+        '=SUM(R[5]C,1E0)*[a]!R1C1=True',
+    ];
+    const KEY = '=SUM(R[5]C,1)*[a]!R1C1=TRUE';
+    const sheet = (cells: SheetSource['cells']) => ({ id: 'a', name: 'a', cells });
+
+    test('a written, a filled and a loaded formula read back as the one stored text', () => {
+        const engine = new Engine([
+            sheet((cell) => {
+                for (const [row, text] of SPELLINGS.entries()) cell(row, 0, null, text);
+            }),
+        ]);
+        engine.setFormula('a', 0, 1, SPELLINGS[0]);
+        engine.setFormula('a', 1, 1, SPELLINGS[1]);
+        engine.fillFormula('a', 2, 1, 2, 2, SPELLINGS[2]);
+        engine.addSheet({ id: 'b', name: 'b', cells: (cell) => cell(0, 0, null, SPELLINGS[0]) }, 1);
+        for (const [row, column] of [0, 1, 2].flatMap((row) => [0, 1].map((column) => [row, column]))) {
+            expect(engine.formulaOf('a', row, column)).toBe(KEY);
+        }
+        expect([engine.formulaOf('a', 2, 2), engine.formulaOf('b', 0, 0)]).toEqual([KEY, KEY]);
+    });
+
+    test('the spellings are one shape: an edit rewrites them as one block', () => {
+        const engine = new Engine([sheet(() => {})]);
+        for (const [row, text] of SPELLINGS.entries()) engine.setFormula('a', row, 0, text);
+        const { rewrites } = engine.editLines({ insert: true, index: 4, count: 2, sheet: 'a', rows: true });
+        expect(rewrites).toEqual([
+            { sheet: 'a', top: 0, left: 0, bottom: 2, right: 0, formula: '=SUM(R[7]C,1)*[a]!R1C1=TRUE', lost: null },
+        ]);
+    });
+
+    test('text that does not parse is kept as it was handed', () => {
+        const engine = new Engine([sheet(() => {})]);
+        engine.setFormula('a', 0, 0, '==sum(');
+        engine.recalc(NO_CAP);
+        expect([engine.formulaOf('a', 0, 0), engine.valueOf('a', 0, 0)]).toEqual(['==sum(', ERROR]);
     });
 });
