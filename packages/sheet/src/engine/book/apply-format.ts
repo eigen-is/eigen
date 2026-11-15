@@ -176,7 +176,7 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
 
 // The rectangles of the cells that held one old value. They come band by band, rows down within a band, so a span
 // joins the one above it as it comes, and once all are in, neighbours across bands over the same rows join.
-class Areas {
+export class Areas {
     private readonly rects: [top: number, left: number, bottom: number, right: number][] = [];
 
     public add(top: number, left: number, bottom: number, right: number): void {

@@ -78,7 +78,7 @@ describe('engine/book — the model and the batches the appliers are held to', (
             }
         }
         expect(applied).toBeGreaterThan(600);
-        expect([...refusals].sort()).toEqual(['grid-end', 'last-sheet', 'merge-cut', 'merge-overlap']);
+        expect([...refusals].sort()).toEqual(['grid-end', 'id-in-use', 'last-sheet', 'merge-cut', 'merge-overlap']);
     }, 30_000);
 
     // The record store is tested on its own, by tables. Here it and the model, written apart, are held to each other.
@@ -101,6 +101,10 @@ describe('engine/book — the model and the batches the appliers are held to', (
             const op = random() < 0.5 ? randomLinesOp(random, model) : randomMoveOp(random, model);
             const source = stores.get(op.sheet);
             if (!source || (op.kind === 'move' && !stores.has(op.toSheet))) continue;
+            // The applier plans no move of a block onto itself, which changes nothing.
+            const still =
+                op.kind === 'move' && op.sheet === op.toSheet && op.toRow === op.from[0] && op.toColumn === op.from[1];
+            if (still) continue;
             const expected = modelAfter(model, { now: 1, seed: 1, ops: [op] });
             const plans = [...stores.values()].map((store) =>
                 op.kind === 'move' ? store.planMove(op, source) : store.planLines(op),

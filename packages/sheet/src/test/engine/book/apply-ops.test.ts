@@ -2,7 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { BAND_WEIGHT, EXTRA_WEIGHT, MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
-import type { Batch, FormatOp, InputOp, RecordOp, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
+import type {
+    Batch,
+    CellContent,
+    FormatOp,
+    InputOp,
+    MoveOp,
+    Placed,
+    RecordOp,
+    Rect,
+    SheetContent,
+    SheetOp,
+} from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -14,6 +25,7 @@ import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
+import { formulaRule } from './records-fixtures';
 
 type Applied = Parameters<typeof applyOps>[1][number];
 type AppliedBatch = Omit<Batch, 'ops'> & { ops: Applied[] };
@@ -130,6 +142,31 @@ const addOf = (id: string, part: Partial<SheetContent> = {}, name = id): SheetOp
     kind: 'sheet',
     add: sheetOf(id, { fields: { name, order: 'a2' }, ...part }),
 });
+// `twoSheets` with a cell of sheet a, a record of sheet a or a record of the second sheet more.
+function twoSheetsWith(
+    cell?: Placed<CellContent>,
+    onA: SheetContent['records'] = {},
+    onB: SheetContent['records'] = {},
+): Book {
+    const book = twoSheets();
+    const [a, b] = book.sheets;
+    const cells = cell ? [...a.cells, cell].sort((x, y) => x[1] - y[1] || x[0] - y[0]) : a.cells;
+    const sheets = [
+        { ...a, cells, records: { ...a.records, ...onA } },
+        { ...b, records: { ...b.records, ...onB } },
+    ];
+    return { ...book, sheets };
+}
+// A formula a cell stores as long as it may be, but for the id of the second sheet, which a move of R1C1 there adds.
+const NEAR_BOUND = `="${'a'.repeat(131_050)}"&R1C1`;
+const moveOf = (from: Rect, toRow: number, toColumn: number, toSheet = 'a'): MoveOp => ({
+    kind: 'move',
+    sheet: 'a',
+    from,
+    toSheet,
+    toRow,
+    toColumn,
+});
 // The refused op, and the book it is refused on when that is not `twoSheets`.
 const REFUSED: readonly [RefusalKey, Applied, Book?][] = [
     ['merge-overlap', { kind: 'record', sheet: 'a', type: 'merge', id: 'm2', set: { rect: [6, 6, 7, 7] }, whole: 1 }],
@@ -151,6 +188,19 @@ const REFUSED: readonly [RefusalKey, Applied, Book?][] = [
             );
             return { ...book, sheets: [...book.sheets, ...more] };
         })(),
+    ],
+    ['merge-cut', moveOf([5, 5, 5, 6], 30, 30)],
+    ['merge-cut', moveOf([30, 30, 30, 30], 6, 6)],
+    [
+        'id-in-use',
+        moveOf([5, 5, 6, 6], 0, 3, B),
+        twoSheetsWith(undefined, {}, { merge: { m: { rect: [9, 9, 9, 10] } } }),
+    ],
+    ['key-too-long', moveOf([0, 0, 0, 0], 5, 5, B), twoSheetsWith([7, 0, { f: NEAR_BOUND }])],
+    [
+        'key-too-long',
+        moveOf([0, 0, 0, 0], 5, 5, B),
+        twoSheetsWith(undefined, { conditionalFormat: { r: formulaRule([[40, 0, 40, 0]], NEAR_BOUND) } }),
     ],
 ];
 
