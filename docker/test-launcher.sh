@@ -556,6 +556,14 @@ for SHELL_NAME in dash busybox host; do
             else
                 fail "$SHELL_NAME: restart in group 4242 with a primary user: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
             fi
+            # As Alpine's and Fedora's halt has root's group.
+            printf 'root:x:0:0::/root:/bin/sh\nhalt:x:7:4242::/sbin:/sbin/halt\n' >"$FIX/passwd"
+            LAUNCH_GROUP=$FIX/group LAUNCH_PASSWD=$FIX/passwd launch release restart
+            if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -qF -- "$SHARE 4242"; then
+                ok "$SHELL_NAME: a system account, below uid 1000, that has the group as primary does not share it"
+            else
+                fail "$SHELL_NAME: restart in group 4242 with a system account: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+            fi
         fi
         # Two restarts in one command, the swap's and the command's own, say it once.
         regroup release 100
