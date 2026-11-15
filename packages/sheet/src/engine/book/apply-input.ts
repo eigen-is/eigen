@@ -46,9 +46,9 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
         if (content?.f !== undefined) engine.fillFormula(sheet, top, left, bottom, right, content.f, value);
         else if (value === null) {
             for (let column = left; column <= right; column += 1) {
-                for (let row = engine.nextCell(sheet, column, top); row >= 0 && row <= bottom; ) {
+                for (let row = engine.nextCell(sheet, column, top, bottom); row >= 0; ) {
                     engine.clear(sheet, row, column);
-                    row = engine.nextCell(sheet, column, row + 1);
+                    row = engine.nextCell(sheet, column, row + 1, bottom);
                 }
             }
         } else {

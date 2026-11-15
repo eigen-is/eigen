@@ -177,12 +177,13 @@ export class Engine {
         }
     }
 
-    // The first row at or after `row` where a column holds a value or a formula, or -1.
-    public nextCell(sheet: string, column: number, row: number): number {
+    // The first row from `row` to `last` where a column holds a value or a formula, or -1.
+    public nextCell(sheet: string, column: number, row: number, last: number): number {
         const cells = this.workbook.known(sheet).columns[column];
         if (cells === undefined || !isLine(row, GRID_ROWS)) return -1;
         const { kind, shape, length } = cells;
-        for (let at = row; at < length; at += 1) {
+        const end = Math.min(last + 1, length);
+        for (let at = row; at < end; at += 1) {
             if (kind[at] !== 0 || shape[at] !== 0) return at;
         }
         return -1;

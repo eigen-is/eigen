@@ -32,7 +32,12 @@ function read(engine: Engine, sheet: string, top: number, left: number, bottom: 
 // The content rows of a column as the cursor finds them.
 function stepped(engine: Engine, sheet: string, column: number): number[] {
     const rows: number[] = [];
-    for (let row = engine.nextCell(sheet, column, 0); row >= 0; row = engine.nextCell(sheet, column, row + 1)) {
+    const last = GRID_ROWS - 1;
+    for (
+        let row = engine.nextCell(sheet, column, 0, last);
+        row >= 0;
+        row = engine.nextCell(sheet, column, row + 1, last)
+    ) {
         rows.push(row);
     }
     return rows;
@@ -148,18 +153,37 @@ describe('the walk of a sheet', () => {
 
     test('the cursor finds the first cell at or after a row, and none past the last', () => {
         const engine = new Engine([source('s1', BOOK)]);
-        expect(engine.nextCell('s1', 0, 0)).toBe(0);
-        expect(engine.nextCell('s1', 0, 1)).toBe(4);
-        expect(engine.nextCell('s1', 0, 4)).toBe(4);
-        expect(engine.nextCell('s1', 0, 5)).toBe(-1);
-        expect(engine.nextCell('s1', 2, 0)).toBe(-1);
-        expect(engine.nextCell('s1', 9, 0)).toBe(-1);
+        const last = GRID_ROWS - 1;
+        expect(engine.nextCell('s1', 0, 0, last)).toBe(0);
+        expect(engine.nextCell('s1', 0, 1, last)).toBe(4);
+        expect(engine.nextCell('s1', 0, 4, last)).toBe(4);
+        expect(engine.nextCell('s1', 0, 5, last)).toBe(-1);
+        expect(engine.nextCell('s1', 2, 0, last)).toBe(-1);
+        expect(engine.nextCell('s1', 9, 0, last)).toBe(-1);
+    });
+
+    test('the cursor looks no further than the last row it is given', () => {
+        const engine = new Engine([
+            source('s1', [
+                [0, 0, 1],
+                [4, 0, 2],
+                [GRID_ROWS - 1, 1, 3],
+            ]),
+        ]);
+        expect(engine.nextCell('s1', 0, 1, 4)).toBe(4);
+        expect(engine.nextCell('s1', 0, 1, 3)).toBe(-1);
+        expect(engine.nextCell('s1', 0, 4, 4)).toBe(4);
+        expect(engine.nextCell('s1', 0, 1, 0)).toBe(-1);
+        expect(engine.nextCell('s1', 0, 0, 0)).toBe(0);
+        expect(engine.nextCell('s1', 1, 0, GRID_ROWS - 2)).toBe(-1);
+        expect(engine.nextCell('s1', 1, 0, GRID_ROWS - 1)).toBe(GRID_ROWS - 1);
+        expect(engine.nextCell('s1', 1, 0, GRID_ROWS)).toBe(GRID_ROWS - 1);
     });
 
     test('a sheet that is not there is refused by every question', () => {
         const engine = new Engine([source('s1', BOOK)]);
         expect(() => engine.cells('nope', () => {})).toThrow('No sheet nope');
-        expect(() => engine.nextCell('nope', 0, 0)).toThrow('No sheet nope');
+        expect(() => engine.nextCell('nope', 0, 0, 0)).toThrow('No sheet nope');
         expect(() => engine.columnLength('nope', 0)).toThrow('No sheet nope');
         expect(() => engine.lastRow('nope')).toThrow('No sheet nope');
         expect(() => engine.lastColumn('nope')).toThrow('No sheet nope');

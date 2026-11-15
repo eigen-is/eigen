@@ -81,7 +81,7 @@ The stored text holds offsets from the formula's own cell, so inserting a row ab
 
 A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
 
-`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host walks for a snapshot only after a `recalc` whose result says `stopped` is false. The sink must not write to the engine. `nextCell` is the same walk as a cursor, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host walks for a snapshot only after a `recalc` whose result says `stopped` is false. The sink must not write to the engine. `nextCell(sheet, column, row, last)` is the same walk as a cursor, the first content row from `row` to `last` or -1, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
 
 ## The design in ten lines
 

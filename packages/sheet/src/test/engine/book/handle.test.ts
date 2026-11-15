@@ -231,6 +231,28 @@ describe('engine/book/handle — a cell', () => {
         ]);
     });
 
+    test('values stop at the rectangle’s bottom row, however far the next cell lies', () => {
+        const far = only(
+            new Workbook(
+                bookOf(
+                    sheetOf('a', {
+                        cells: [
+                            [0, 0, { v: 1 }],
+                            [3, 0, { v: 2 }],
+                            [LAST_ROW, 0, { v: 3 }],
+                        ],
+                    }),
+                ),
+            ),
+        );
+        expect([...far.values([0, 0, 3, 0])]).toEqual([
+            { r: 0, c: 0 },
+            { r: 3, c: 0 },
+        ]);
+        expect([...far.values([1, 0, 2, 0])]).toEqual([]);
+        expect([...far.values([4, 0, LAST_ROW, 0])]).toEqual([{ r: LAST_ROW, c: 0 }]);
+    });
+
     test('lookSpans tile a rectangle with the interned looks', () => {
         expect([...sheet.lookSpans([9, 0, 12, 1])]).toEqual([
             { c0: 0, c1: 1, r0: 9, r1: 9, look: { fa: '0.00' } },
