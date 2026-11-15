@@ -1,6 +1,6 @@
 // Builders for the record store's tests: a sheet's records from plain data, the line edits and moves as the applier
 // runs them on every sheet, the store's records as plain data to compare whole, and the record ops of an undo applied
-// through the store's own writers.
+// through the store's own writer.
 
 import { expect } from 'bun:test';
 import type { LineEdit } from '@workspace/formula/text';
@@ -16,7 +16,7 @@ import type {
     SheetFields,
 } from '@workspace/lib/sheets/ops';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
-import type { Planned, WholeRecord } from '../../../engine/book/records';
+import type { Planned } from '../../../engine/book/records';
 import { SheetRecords } from '../../../engine/book/records';
 
 export const LAST_ROW = GRID_ROWS - 1;
@@ -87,49 +87,21 @@ export function contentOf(sheet: SheetRecords) {
     return { fields: sheet.fields, records };
 }
 
-// Applies the record ops of an undo through the store's writers. A whole make must carry the record the sheet held
-// before, which is what the test hands to `put`.
+// Applies the record ops of an undo through the store's writer and returns the inverses it hands back. A whole make
+// must carry the record the sheet held before.
 export function applyRecordOps(
     sheets: ReadonlyMap<string, SheetRecords>,
     before: ReadonlyMap<string, SheetRecords>,
     ops: readonly RecordOp[],
-) {
+): RecordOp[] {
+    const inverses: RecordOp[] = [];
     for (const op of ops) {
-        const sheet = sheetNamed(sheets, op.sheet);
-        const written = op.whole ? sheet.put(wholeOf(sheetNamed(before, op.sheet), op)) : sheet.write(op);
-        expect(written).not.toBe('merge-overlap');
+        if (op.whole) expect(sheetNamed(before, op.sheet).records(op.type).get(op.id)).toEqual(op.set);
+        const written = sheetNamed(sheets, op.sheet).write(op);
+        if (written === 'merge-overlap') throw new Error('merge-overlap');
+        inverses.push(...written);
     }
-}
-
-function wholeOf(before: SheetRecords, op: RecordOp): WholeRecord {
-    const { id } = op;
-    switch (op.type) {
-        case 'sheet':
-            throw new Error('a sheet record is never made whole');
-        case 'merge':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'filter':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'filterColumn':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'comment':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'conditionalFormat':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'validation':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'image':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-        case 'chart':
-            return { type: op.type, id, set: heldBefore(before.records(op.type), op) };
-    }
-}
-
-function heldBefore<R>(records: ReadonlyMap<string, R>, op: RecordOp): R {
-    const record = records.get(op.id);
-    if (!record) throw new Error(`no ${op.type} ${op.id} before`);
-    expect(op.set).toEqual(record);
-    return record;
+    return inverses;
 }
 
 const findSheet = (name: string) => (name === 'S' || name === 'T' ? { id: name } : undefined);
