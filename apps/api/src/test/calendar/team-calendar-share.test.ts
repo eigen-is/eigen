@@ -694,6 +694,16 @@ describe("A team that is no longer among the member's teams", () => {
         const entries = await bobsEntriesOf(owner);
 
         expect(entries.map((entry) => [entry.calendarId, entry.permission])).toEqual([[calendarId, 'write']]);
+
+        // A team that gives no answer says nothing about the share either.
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        markHomeRestoring(owner);
+        try {
+            expect(await bobsEntriesOf(owner)).toEqual(entries);
+        } finally {
+            clearHomeRestoring(owner);
+            errors.mockRestore();
+        }
     });
 
     test('a member removed from a team keeps the one team calendar shared with them by name', async () => {

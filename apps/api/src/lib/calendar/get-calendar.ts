@@ -12,7 +12,7 @@ import { ApiError } from '../core';
 import { getHome } from '../home';
 import { getFromHomes } from '../home/home-relay';
 import type { User } from '../user';
-import { getMemberships } from '../user';
+import { getMemberships, getOwnerExists } from '../user';
 import type { Calendar } from './calendar';
 
 export async function resolveCalendar(user: User, ownerId: string): Promise<Calendar> {
@@ -101,7 +101,8 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     const { teamIds } = await getMemberships(user.id);
     const asker = { email: user.email, teamIds };
 
-    const teamOwners = teamIds.map(teamOwnerId).filter(homeFolderExists);
+    const ownTeams = teamIds.map(teamOwnerId);
+    const teamOwners = ownTeams.filter(homeFolderExists);
     const [calendarsOf, teamSharesOf] = await Promise.all([
         getFromHomes(teamOwners, 'calendar:calendars', null),
         getFromHomes(teamOwners, 'calendar:shares', asker),
@@ -121,17 +122,24 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
         }
     }
 
-    // Joining or leaving a team runs no share propagation, so a user-owned share's cached permission is re-resolved here.
+    // Joining or leaving a team runs no share propagation, so every entry of an owner outside the user's teams is
+    // resolved again here, from the shares that owner still has for them.
     const entries = await calendar.getSharedCalendars();
-    const userOwners = [...new Set(entries.map((entry) => entry.ownerUserId))].filter(
-        (ownerId) => parseOwnerId(ownerId).type !== 'team',
+    const otherOwners = [...new Set(entries.map((entry) => entry.ownerUserId))].filter(
+        (ownerId) => !ownTeams.includes(ownerId),
     );
-    const sharesOf = await getFromHomes(userOwners.filter(homeFolderExists), 'calendar:shares', asker);
+    const sharesOf = await getFromHomes(otherOwners.filter(homeFolderExists), 'calendar:shares', asker);
     for (const entry of entries) {
+        if (!otherOwners.includes(entry.ownerUserId)) continue;
         const shares = sharesOf.get(entry.ownerUserId);
         const resolved = shares?.find((share) => share.calendarId === entry.calendarId)?.permission;
-        if (resolved && resolved !== entry.permission) {
-            await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
+        if (resolved) {
+            if (resolved !== entry.permission) {
+                await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
+            }
+        } else if (parseOwnerId(entry.ownerUserId).type === 'team') {
+            // The user left this team. Its entry goes once the team says it shares nothing with them, or is gone.
+            if (shares || !(await getOwnerExists(entry.ownerUserId))) await calendar.deleteSharedCalendar(entry.id);
         }
     }
 
