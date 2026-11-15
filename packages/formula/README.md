@@ -89,7 +89,7 @@ A structural edit answers the formulas it rewrote. A block to move must lie on t
 - A sheet's cells are typed column planes: parallel typed arrays of values and shape ids, and texts as ids into one string table per workbook (`store/`).
 - One recursive evaluator walks a shape's tree with the formula's cell as an argument (`eval/evaluator.ts`).
 - Recalc is on demand: reading a cell that is still to be computed computes it first, so the order and the loops come from the reads (`recalc/recalc.ts`).
-- Arrays are always on: an operator or a scalar parameter given an array runs once per element, and an array stores one element for a run of equal ones, so a whole column costs its cells (`eval/lift.ts`, `values/value.ts`).
+- Arrays are always on: an operator or a scalar parameter given an array runs once per element, and an array stores one element for a run of equal ones, so a whole column costs its cells (`eval/elementwise.ts` for an operator, which reads a range from its columns, `eval/lift.ts` for a call, `values/value.ts`).
 - The reverse index, which formulas read a cell, has entries per block of cells of one shape, not per cell, and is rebuilt whole when a formula comes or goes (`recalc/reverse-index.ts`).
 - A structural edit is one transform of stored text, worked out once per stretch of hosts with one outcome, on top of `mapIndex` and `mapSpan`, the one rule for where an index goes (`edit/`).
 - A function is one row: a name, a list of parameter words and a body. The call wrapper reads, coerces and checks every argument, so the body only computes (`functions/registry.ts`, `eval/call.ts`).
