@@ -17,7 +17,7 @@ const H3_LABEL = /<h3 [^>]*>(.*?) <a [\s\S]*?<\/a><\/h3>/g;
 // The page renders its own h1, so everything before the first version heading is dropped.
 export function renderChangelog(raw: string): ChangelogBody {
     const start = raw.search(/^## /m);
-    const { html } = renderMarkdown(start >= 0 ? raw.slice(start) : raw);
+    const { html, media } = renderMarkdown(start >= 0 ? raw.slice(start) : raw);
     const versions: ChangelogVersion[] = [];
 
     const releases = html.split(/(?=<h2 )/).map((release) => {
@@ -40,7 +40,7 @@ export function renderChangelog(raw: string): ChangelogBody {
             const ends = /[.!?:]$/.test(text.replace(/<[^>]*>/g, '').trimEnd());
             return `<li>${open}<strong class="lead">${title}</strong> ${text}${ends ? '' : '.'}${close}`;
         });
-    return { html: body, mediaGrids: [], versions };
+    return { html: body, media, versions };
 }
 
 // Run only when executed directly (bun run scripts/build-changelog.ts), not when the

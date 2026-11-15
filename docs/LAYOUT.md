@@ -161,6 +161,10 @@ Pink `#f6339a` (`packages/lib/src/constants/colors.ts`) comes first in `EIGEN_AC
 
 A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the nearest palette color by OKLab distance, and in doubt the lighter, less saturated step, because the originals are muted.
 
+## A document stays white in dark mode
+
+Dark mode themes the app around a document, never the document. The page in Docs, the grid in Sheets, the slide in Slides and the canvas in Vector stay white in either theme, while the bars, panels and menus around them follow it. This is intended (the owner, 14 Nov 2026). `.eigen-paper` pins the light palette on such a surface ([CANVAS.md](CANVAS.md)).
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way, so a user reads every Eigen menu alike, and a screen reader hears each row as checked or not.

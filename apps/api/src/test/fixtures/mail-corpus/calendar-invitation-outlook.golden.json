@@ -1,0 +1,34 @@
+{
+  "subject": "Invitation: Grant talk",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "",
+        "address": "organizer@example.com"
+      }
+    ],
+    "text": "organizer@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "",
+        "address": "attendee@example.com"
+      }
+    ],
+    "text": "attendee@example.com"
+  },
+  "text": "You are invited.",
+  "html": "<p>You are invited.</p>",
+  "textAsHtml": "<p>You are invited.</p>",
+  "attachments": [
+    {
+      "index": 0,
+      "contentType": "text/calendar",
+      "calendarMethod": "REQUEST",
+      "sha256": "c7f325c3d948e7d592f379d2bad84d406b787ef008324c29683072cb40be7e12",
+      "size": 181
+    }
+  ]
+}

@@ -149,6 +149,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 |---|---|---|
 | **Domain docs** | `.claude/skills/domain-doc/SKILL.md` | How a domain doc is written and checked |
 | **Help center** | `.claude/skills/support-article/SKILL.md`, `apps/index/src/data/support/` | How an article is written ([HELP-CENTER.md](HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md)) |
+| **Demo capture** | `apps/index/capture/` | `cd apps/index/capture && bun run capture` films the seeded demo world into the About pages' videos and stills, with its own install ([HELP-CENTER.md](HELP-CENTER.md#filming-the-demo)) |
 | **App build** | `vite.shared.config.ts` | `createAppConfig()`, every app's Vite config; chunk groups name third-party packages only, since a workspace-package group drags its ui and lib imports into every page |
 | **Release** | `scripts/release.ts` | `bun run release` bumps the version and drafts the GitHub Release ([TESTING.md](TESTING.md#a-github-release-says-what-changed-in-a-few-lines)) |
 | **Release gate** | `docker/test-release.sh`, `.github/workflows/publish.yml` | Updates the previous release to the candidate images and back before they publish ([TESTING.md](TESTING.md#a-release-publishes-only-the-images-its-gates-tested)) |

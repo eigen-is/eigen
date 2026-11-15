@@ -99,13 +99,28 @@ Every article is exactly **one** [Diátaxis](https://diataxis.fr) type, matching
 
   </div>
   ```
-- **Screenshots**, when they help, in a media grid of one to three columns. Put the image files in `apps/index/public/data/support/media/<section>/<slug>/`; each `src` is their served path under `/data/support/media/…`:
+- **Screenshots**, when they help, in a media grid of one to three columns. Put the image files in `apps/index/public/data/support/media/<section>/<slug>/`; each src is their served path under `/data/support/media/…`. A grid is a `::: grid` block with one image per line, and the alt text is the caption under the thumbnail:
 
-  ```html
-  <media-grid columns="2">
-    <media src="/data/support/media/drive/share-a-file/share-dialog.webp" type="image" caption="The Share dialog" />
-    <media src="/data/support/media/drive/share-a-file/general-access.webp" type="image" caption="General access" />
-  </media-grid>
+  ```markdown
+  ::: grid columns="2"
+  ![The Share dialog](/data/support/media/drive/share-a-file/share-dialog.webp)
+  ![General access](/data/support/media/drive/share-a-file/general-access.webp)
+  :::
+  ```
+
+  A media grid suits a set of screenshots shown small, since a click opens one full size in the lightbox, which pages through the grid. An image's title, the quoted path after its src as in `![The Share dialog](/…/share-dialog.webp "/…/share-dialog-small.webp")`, is a smaller file the grid shows in its place. A src that ends in `.mp4` is a film, and its title is the poster.
+- **A media block** shows media at the column's full width. Like every picture and film in an article, a click opens it bigger in the lightbox. It opens with `::: <name>` and closes with a `:::` line, and its optional `caption` is plain Markdown, so an app name in it is set like the prose. A misspelled block, a missing closing line or a missing video file fails the build. Pick by what the reader should see:
+  - `::: video` for a short muted loop that shows something happening, such as a total updating as a number is typed. Its `src` names the files without their endings: `clip.av1.mp4`, `clip.h264.mp4` and the poster `clip.webp` must all be under `apps/index/public/`. It takes no body. A reader who prefers less motion gets it paused, with controls.
+  - `::: carousel` for a few stills of one subject that the reader pages through, one at a time, such as a light and a dark view. Its body is the images, one per line, and each image's alt text is its caption on the slide, so write it as a short caption a sighted reader reads too. The block's own `caption` sits under the whole carousel. A slide can be a looping video: an image whose src has no file ending, such as `![Two people at once](/data/about/media/sheets-collab-pair)`, names a video's files as `::: video` does, and only the slide in view plays. `::: carousel autoplay` steps on by itself every seven seconds, back to the first after the last; it waits while the reader points at it or is inside it, stops for good once they use it, and never moves for a reader who prefers less motion. Keep it for a showcase such as the About overview, not for a how-to.
+
+  ```markdown
+  ::: video src="/data/about/media/sheets-chart" caption="A cost changes, and its bar grows."
+  :::
+
+  ::: carousel caption="The budget, and its pie chart in dark mode."
+  ![The budget table](/data/about/media/sheets-still-budget.webp)
+  ![A pie chart in dark mode](/data/about/media/sheets-still-chart.webp)
+  :::
   ```
 
 ## 6. Mechanics
