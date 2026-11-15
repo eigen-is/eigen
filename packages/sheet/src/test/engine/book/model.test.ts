@@ -13,7 +13,7 @@ import type { Model } from './model';
 import { contentOfModel, expectReads, modelAfter, modelOf } from './model';
 import { chartOf, ref } from './records-fixtures';
 
-const SEEDS = Array.from({ length: 300 }, (_, at) => at + 1);
+const SEEDS = Array.from({ length: 400 }, (_, at) => at + 1);
 
 function sheetOf(id: string, fields: Partial<SheetFields> = {}, part: Partial<SheetContent> = {}): SheetContent {
     const all = { name: id, order: 'a0', ...fields };
@@ -79,7 +79,7 @@ describe('engine/book — the model and the batches the appliers are held to', (
         }
         expect(applied).toBeGreaterThan(600);
         expect([...refusals].sort()).toEqual(['grid-end', 'last-sheet', 'merge-cut', 'merge-overlap']);
-    });
+    }, 30_000);
 
     // The record store is tested on its own, by tables. Here it and the model, written apart, are held to each other.
     test('the model moves records under lines and moves as the record store does', () => {

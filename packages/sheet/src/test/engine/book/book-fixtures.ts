@@ -183,8 +183,12 @@ function randomSheet(random: Random, at: number): SheetContent {
 
 export function randomBook(random: Random): Book {
     const sheets = Array.from({ length: 1 + below(random, 4) }, (_, at) => randomSheet(random, at));
-    // The sheets come in any order: their fields say where their tabs stand.
-    sheets.sort(() => random() - 0.5);
+    // The sheets come in any order: their fields say where their tabs stand. A shuffle draws once per sheet, where a
+    // sort by a random comparison draws as often as the runtime's sort asks, so a seed gave no one book.
+    for (let at = sheets.length - 1; at > 0; at -= 1) {
+        const other = below(random, at + 1);
+        [sheets[at], sheets[other]] = [sheets[other], sheets[at]];
+    }
     return { g: below(random, 9), now: 40_000 + below(random, 9000) / 7, seed: below(random, 2 ** 31), sheets };
 }
 
