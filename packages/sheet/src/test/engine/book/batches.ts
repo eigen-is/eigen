@@ -502,7 +502,12 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
                       if (placed.length === 0) return smallRect(random);
                       const [top, left, bottom, right] = pick(random, placed);
                       const grow = random() < 0.5 ? 0 : 1;
-                      return [Math.max(0, top - grow), Math.max(0, left - grow), bottom + grow, right + grow];
+                      return [
+                          Math.max(0, top - grow),
+                          Math.max(0, left - grow),
+                          Math.min(GRID_ROWS - 1, bottom + grow),
+                          Math.min(GRID_COLUMNS - 1, right + grow),
+                      ];
                   },
                   () =>
                       random() < 0.5
