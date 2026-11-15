@@ -53,13 +53,7 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
                 for (let row = top; row <= bottom; row += 1) engine.setValue(sheet, row, column, value);
             }
         }
-        if (content?.s || content?.link || content?.qp) {
-            for (let column = left; column <= right; column += 1) {
-                for (let row = top; row <= bottom; row += 1) extras.write(row, column, content);
-            }
-        } else {
-            for (const [row, column] of [...extras.cells(rect)]) extras.write(row, column, {});
-        }
+        extras.fill(rect, content ?? {});
     }
     for (const [row, column, content] of op.cells ?? []) {
         const value = content === null ? null : literalOf(content);

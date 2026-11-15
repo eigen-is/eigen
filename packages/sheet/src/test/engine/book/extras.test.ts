@@ -100,6 +100,60 @@ describe('engine/book/extras — Extras', () => {
         expect(extras.weight()).toBe(2);
     });
 
+    test('a fill puts one entry in every cell of a block over what they held, and with none empties it', () => {
+        const extras = extrasOf([
+            [1, 0, QUOTED],
+            [0, 1, RICH],
+            [2, 1, QUOTED],
+            [5, 1, LINK],
+            [1, 2, LINK],
+            [0, 3, QUOTED],
+        ]);
+        extras.fill([1, 1, 2, 2], { s: undefined, link: LINK.link, qp: undefined });
+        expect(extras.content()).toEqual([
+            [1, 0, QUOTED],
+            [0, 1, RICH],
+            [1, 1, LINK],
+            [2, 1, LINK],
+            [5, 1, LINK],
+            [1, 2, LINK],
+            [2, 2, LINK],
+            [0, 3, QUOTED],
+        ]);
+        expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
+        expect(extras.weight()).toBe(2 + 7 + 4 * 5 + 5 + 2);
+        extras.fill([0, 1, 5, 1], {});
+        expect(extras.content()).toEqual([
+            [1, 0, QUOTED],
+            [1, 2, LINK],
+            [2, 2, LINK],
+            [0, 3, QUOTED],
+        ]);
+        expect(extras.weight()).toBe(2 + 2 * 5 + 2);
+        extras.fill([0, 0, LAST_ROW, LAST_COLUMN], {});
+        expect(extras.content()).toEqual([]);
+        expect(extras.weight()).toBe(0);
+    });
+
+    test('a fill of 150,000 cells over entries and among 150,000 right of it and below is one pass', () => {
+        const extras = new Extras();
+        extras.fill([0, 1, 74_999, 1], QUOTED);
+        extras.fill([200_000, 0, 274_999, 0], QUOTED);
+        extras.fill([100_000, 0, 100_009, 0], QUOTED);
+        const started = performance.now();
+        extras.fill([0, 0, 149_999, 0], LINK);
+        expect(performance.now() - started).toBeLessThan(500);
+        expect(extras.weight()).toBe(150_000 * 5 + 150_000 * 2);
+        expect([extras.at(74_999, 1), extras.at(75_000, 1)]).toEqual([QUOTED, undefined]);
+        const filled = [...extras.cells([0, 0, 149_999, 0])];
+        expect(filled.length).toBe(150_000);
+        expect(filled.every(([row, , extra], at) => row === at && extra.link === LINK.link)).toBe(true);
+        expect([...extras.cells([149_999, 0, 200_000, 0])]).toEqual([
+            [149_999, 0, LINK],
+            [200_000, 0, QUOTED],
+        ]);
+    });
+
     test('inserted lines hold nothing and push the entries after them', () => {
         const extras = extrasOf([
             [2, 0, LINK],
@@ -251,14 +305,17 @@ function randomBlock(random: Random): Rect {
 
 describe('engine/book/extras — the entries are the per-cell model’s entries', () => {
     for (const seed of [5, 23, 2026]) {
-        test(`random writes, shifts and moves with their inverses, seed ${seed}`, () => {
+        test(`random writes, fills, shifts and moves with their inverses, seed ${seed}`, () => {
             const random = randomOf(seed);
             const sheets = [0, 1].map(() => ({ extras: new Extras(), model: new CellsModel() }));
-            const counts = { put: 0, insert: 0, remove: 0, moveOver: 0, moveAcross: 0, carried: 0, covered: 0 };
+            const counts = {
+                ...{ put: 0, fill: 0, filled: 0, cleared: 0, replaced: 0, insert: 0, remove: 0 },
+                ...{ moveOver: 0, moveAcross: 0, carried: 0, covered: 0 },
+            };
             for (let step = 0; step < 4000; step += 1) {
                 const { extras, model } = sheets[below(random, 2)];
                 const before = sheets.map((sheet) => [...sheet.extras.content()]);
-                const kind = below(random, 10);
+                const kind = below(random, 12);
                 const rows = random() < 0.5;
                 // Index 0, inside, on the last line that holds an entry and past it.
                 const lines = rows ? ROWS : COLUMNS;
@@ -300,6 +357,21 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     undo = () => {
                         extras.lines(linesOp(rows, true, index, count));
                         for (const [row, column, extra] of removed) extras.write(row, column, extra);
+                    };
+                } else if (kind >= 10) {
+                    counts.fill += 1;
+                    const block = randomBlock(random);
+                    const extra = random() < 0.5 ? undefined : ENTRIES[below(random, ENTRIES.length)];
+                    const covered = model.within(block);
+                    counts[extra ? 'filled' : 'cleared'] += 1;
+                    counts.replaced += covered.length;
+                    extras.fill(block, extra ?? {});
+                    for (let row = block[0]; row <= block[2]; row += 1) {
+                        for (let column = block[1]; column <= block[3]; column += 1) model.put(row, column, extra);
+                    }
+                    undo = () => {
+                        extras.fill(block, {});
+                        for (const [row, column, old] of covered) extras.write(row, column, old);
                     };
                 } else {
                     const across = kind > 7;
