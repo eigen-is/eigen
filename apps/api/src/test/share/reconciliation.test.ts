@@ -231,7 +231,7 @@ describe('share reconciliation', () => {
         const calendar = await aliceCalendar('Shared with a team', [
             { targetId: teamOwnerId(teamId), permission: 'read' },
         ]);
-        const invitations = spyOn(relay, 'pullPendingInvitations');
+        const invitations = spyOn((await getHome(ctx.alice.user.id)).calendar, 'pendingInvitations');
         spies.push(invitations);
 
         await addMember(ctx, teamId, ctx.bob.user.id);
@@ -266,8 +266,9 @@ describe('share reconciliation', () => {
         );
         expect(acl.status).toBe(200);
         const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        const calendarShares = spyOn(relay, 'pullCalendarShares');
-        const invitations = spyOn(relay, 'pullPendingInvitations');
+        const aliceCalendars = (await getHome(ctx.alice.user.id)).calendar;
+        const calendarShares = spyOn(aliceCalendars, 'getSharedWith');
+        const invitations = spyOn(aliceCalendars, 'pendingInvitations');
         spies.push(sent, calendarShares, invitations);
 
         await requestOtp(email, '192.0.2.71');
@@ -385,12 +386,11 @@ describe('share reconciliation', () => {
         });
         const share = { calendarId: `gated-${stamp}`, name: 'Gated', color: '#000000', permission: 'read' as const };
         spies.push(
-            spyOn(relay, 'pullCalendarShares').mockImplementation(async () => {
+            spyOn((await getHome(owner.id)).calendar, 'getSharedWith').mockImplementation(async () => {
                 reached();
                 await gate;
                 return [share];
             }),
-            spyOn(relay, 'pullPendingInvitations').mockResolvedValue([]),
         );
 
         const running = reconcileShares(user);

@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
-import * as relay from '../../lib/home/home-relay';
+import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
 import * as mailer from '../../lib/mailer/mailer';
 import { makeSyntheticUser } from '../../lib/user';
 import { addMember, assertJson, authedRequest, createTeam, eventually, findOrFail, getTestContext } from '../setup';
@@ -174,17 +174,23 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(teamCal2).toBeDefined();
     });
 
-    // A relay failure says nothing about the share: only an answer — a team with no calendar — removes.
-    test('a relay failure leaves the shared entries alone', async () => {
+    // A team that gives no answer says nothing about the share: only an answer, a team with no calendar, removes.
+    test('a team home that gives no answer leaves the shared entries alone', async () => {
         const before = await assertJson<SharedCalendar[]>(
             await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
         );
         expect(before.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
 
-        const spy = spyOn(relay, 'pullCalendars').mockRejectedValue(new Error('the team home is unreachable'));
-        const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        markHomeRestoring(teamOwnerId(teamId));
+        let sharedRes: Response;
+        try {
+            sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        } finally {
+            clearHomeRestoring(teamOwnerId(teamId));
+            errors.mockRestore();
+        }
         const shared = await assertJson<SharedCalendar[]>(sharedRes);
-        spy.mockRestore();
 
         expect(shared.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
     });
@@ -356,6 +362,27 @@ describe('Regression: Team calendar permission enforcement', () => {
         );
         const event = await assertJson<CalendarEvent>(createRes);
         expect(event.title).toBe('Permitted Event');
+    });
+
+    // A default of read for a team whose shares gave no answer would lower the write share the member holds.
+    test("a team that answers its calendars but not its shares keeps the member's write permission", async () => {
+        const owner = teamOwnerId(permTeamId);
+        const teamHome = await getHome(owner);
+        const shares = spyOn(teamHome.calendar, 'getSharedWith').mockRejectedValue(new Error('unreadable'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        let sharedRes: Response;
+        try {
+            sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+            expect(errors).toHaveBeenCalledWith(`home-relay: calendar:shares from ${owner} failed:`, expect.anything());
+        } finally {
+            shares.mockRestore();
+            errors.mockRestore();
+        }
+        const shared = await assertJson<SharedCalendar[]>(sharedRes);
+
+        expect(findOrFail(shared, (s) => s.ownerUserId === owner && s.calendarId === permTeamCalId).permission).toBe(
+            'write',
+        );
     });
 
     test('downgrading back to read revokes write access', async () => {
