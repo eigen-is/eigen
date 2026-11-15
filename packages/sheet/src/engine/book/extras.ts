@@ -1,8 +1,9 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
 // lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers read
-// and write a cell's entry and shift the entries when lines are inserted or deleted or a block of cells moves. The
-// text of a rich cell is also the engine's value of that cell, which the workbook keeps in step.
+// and write a cell's entry and shift the entries when lines are inserted or deleted or a block of cells moves, and its
+// weight is kept as they write. The text of a rich cell is also the engine's value of that cell, which the workbook
+// keeps in step.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
@@ -22,6 +23,12 @@ export function textOf(runs: readonly Run[]): string {
 export class Extras {
     private places: number[] = [];
     private held: Extra[] = [];
+    private units = 0;
+
+    // What the limits count of the entries, in units of `EXTRA_WEIGHT`.
+    public weight(): number {
+        return this.units;
+    }
 
     public at(row: number, column: number): Extra | undefined {
         const place = placeOf(row, column);
@@ -56,6 +63,7 @@ export class Extras {
         const at = this.search(place);
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
+        this.units += unitsOf({ s, link, qp }) - (old ? unitsOf(old) : 0);
         if (s || link || qp) {
             this.places.splice(at, replaced, place);
             this.held.splice(
@@ -84,6 +92,7 @@ export class Extras {
         let at = 0;
         // Both lists ascend, and a block shifted whole still does, so one pass merges them.
         for (const [row, column, extra] of block) {
+            this.units += unitsOf(extra);
             const place = placeOf(row, column) + shift;
             for (; at < this.places.length && this.places[at] < place; at += 1) {
                 places.push(this.places[at]);
@@ -134,6 +143,7 @@ export class Extras {
             const row = places[at] % GRID_ROWS;
             const column = (places[at] - row) / GRID_ROWS;
             if (row >= top && row <= bottom && column >= left && column <= right) {
+                this.units -= unitsOf(held[at]);
                 taken.push([row, column, held[at]]);
                 continue;
             }
@@ -157,4 +167,11 @@ export class Extras {
         }
         return low;
     }
+}
+
+// An entry weighs two units, its place and its object, its link three more and each run of its text one: a unit is
+// about the bytes one run of a rich text costs.
+function unitsOf({ s, link, qp }: Extra): number {
+    if (!s && !link && !qp) return 0;
+    return 2 + (link ? 3 : 0) + (s?.length ?? 0);
 }
