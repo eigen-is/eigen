@@ -340,12 +340,13 @@ describe('engine/book — the model, rule by rule', () => {
                                 const places = axis.flatMap((line, place) =>
                                     line !== null && line >= start && line <= (open ? LINES + 3 : end) ? [place] : [],
                                 );
-                                // A range of the whole axis stays whole: lines inserted at its start are in it.
-                                const first = open && start === 0 ? 0 : places[0];
-                                const span =
+                                const lines =
                                     places.length > 0
-                                        ? ([first, open ? last : places[places.length - 1]] as const)
+                                        ? ([places[0], open ? last : places[places.length - 1]] as const)
                                         : null;
+                                // A rule's range of the whole axis stays whole: lines inserted at its start are in
+                                // it. Filtered rows are lines, so they move.
+                                const span = lines && open && start === 0 ? ([0, last] as const) : lines;
                                 const rect = (a: number, b: number) =>
                                     rows ? ([a, 2, b, 3] as const) : ([2, a, 3, b] as const);
                                 const records: SheetContent['records'] = {
@@ -373,7 +374,7 @@ describe('engine/book — the model, rule by rule', () => {
                                 // A delete of the filter's first row takes the filter, and its columns with it.
                                 const header = rows && !insert && index === 0;
                                 if (rows && !header)
-                                    expect(sheet.records.filterColumn?.k?.rows).toEqual(span ? [span] : []);
+                                    expect(sheet.records.filterColumn?.k?.rows).toEqual(lines ? [lines] : []);
                                 checked += 1;
                             }
                         }

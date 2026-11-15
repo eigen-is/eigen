@@ -70,7 +70,8 @@ function pick<T>(random: Random, list: readonly T[]): T {
     return list[below(random, list.length)];
 }
 
-// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there.
+// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there, and its
+// filter, where it has one, often from the first line or to the last.
 export function randomBookContent(random: Random): Book {
     const book = randomBook(random);
     return {
@@ -83,7 +84,16 @@ export function randomBookContent(random: Random): Book {
             });
             if (random() < 0.5) cells.push([70, 3, { f: TYPED_WITH_NAME }]);
             cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-            return { ...sheet, cells };
+            const { filter } = sheet.records;
+            if (!filter?.f) return { ...sheet, cells };
+            // A filter often runs from the first line, or to the last, where its header moves and its end stays.
+            const rect = pick<Rect>(random, [
+                [2, 0, 20, 4],
+                [0, 0, GRID_ROWS - 1, 4],
+                [2, 0, GRID_ROWS - 1, 4],
+                [0, 0, 20, GRID_COLUMNS - 1],
+            ]);
+            return { ...sheet, cells, records: { ...sheet.records, filter: { f: { rect } } } };
         }),
     };
 }
@@ -266,14 +276,25 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
         case 2: {
             const id = idOf(records.merge.keys(), fresh('m'));
             const [top, left, bottom, right] = smallRect(random);
-            const rect: Rect = [top, left, bottom, right + 1];
+            // Now and then over another merge of the sheet, which it may not overlap.
+            const others = [...records.merge].filter(([other]) => other !== id);
+            const rect: Rect =
+                others.length > 0 && random() < 0.3 ? pick(random, others)[1].rect : [top, left, bottom, right + 1];
             if (mode === 0) return { kind: 'record', sheet, type: 'merge', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'merge', id, set: { rect } };
             return { kind: 'record', sheet, type: 'merge', id, set: { rect }, whole: 1 };
         }
         case 3: {
             const id = idOf(records.filter.keys(), fresh('f'));
-            const rect = reaching();
+            // Often from the first row or column to the last, where the header moves and the end stays.
+            const [top, left, bottom, right] = smallRect(random);
+            const rect = pick<() => Rect>(random, [
+                reaching,
+                () => [0, left, GRID_ROWS - 1, right],
+                () => [top, 0, bottom, GRID_COLUMNS - 1],
+                () => [0, left, bottom, right],
+                () => [top, left, GRID_ROWS - 1, right],
+            ])();
             if (mode === 0) return { kind: 'record', sheet, type: 'filter', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'filter', id, set: { rect } };
             return { kind: 'record', sheet, type: 'filter', id, set: { rect }, whole: 1 };

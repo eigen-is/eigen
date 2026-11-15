@@ -198,6 +198,19 @@ describe('a filter and its columns', () => {
         expect(contentOf(sheet).records).toEqual(open());
         roundTrips(open(), rowsAt(false, 0, 10));
     });
+
+    test('its first row and the rows its columns hide are lines: an insert at the top moves them, the end stays', () => {
+        const open = (): Records => ({
+            filter: { f: { rect: [0, 0, LAST_ROW, 3] } },
+            filterColumn: { c: { filter: 'f', column: 0, rows: [[0, LAST_ROW]] } },
+        });
+        const { content } = edited(open(), rowsAt(true, 0, 2));
+        expect(content.records).toEqual({
+            filter: { f: { rect: [2, 0, LAST_ROW, 3] } },
+            filterColumn: { c: { filter: 'f', column: 0, rows: [[2, LAST_ROW]] } },
+        });
+        roundTrips(open(), rowsAt(true, 0, 2));
+    });
 });
 
 describe('a comment', () => {

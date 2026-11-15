@@ -12,6 +12,7 @@ import type {
     Rect,
     SheetContent,
     SheetFields,
+    Span,
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
@@ -528,6 +529,81 @@ describe('engine/book/apply-lines — a delete', () => {
     });
 });
 
+describe('engine/book/apply-lines — a filter’s first line moves as a line, its end on the grid’s last stays', () => {
+    test('a filter over every row: an insert at row 0 moves its header down, and the undo gives it back', () => {
+        const book = bookOf(sheetOf('a', { records: { filter: { f: { rect: [0, 0, LAST_ROW, 4] } } } }));
+        const inverse = landed(book, lines(true, true, 0, 1));
+        expect(inverse).toEqual([lines(true, false, 0, 1)]);
+        const after = new Workbook(book);
+        applyOps(after, [lines(true, true, 0, 1)]);
+        expect(after.sheets.get('a')?.records.records('filter').get('f')).toEqual({ rect: [1, 0, LAST_ROW, 4] });
+    });
+
+    test('a filter from row 2 to the last row: a delete above it, its undo and the undo of that', () => {
+        const book = bookOf(sheetOf('a', { records: { filter: { f: { rect: [2, 0, LAST_ROW, 4] } } } }));
+        landed(book, lines(true, false, 0, 2));
+        const after = new Workbook(book);
+        applyOps(after, [lines(true, false, 0, 2)]);
+        expect(after.sheets.get('a')?.records.records('filter').get('f')).toEqual({ rect: [0, 0, LAST_ROW, 4] });
+    });
+
+    // The filter's span along the edited axis before and after, at, above and below its first line and at the grid's
+    // end; on rows a delete of the first line, the header, removes it, on columns it clips it.
+    const LAST = 'last';
+    type Along = [number, number | typeof LAST];
+    const cases: [string, Along, boolean, number, number, Along | null, Along][] = [
+        ['every line, an insert at its first', [0, LAST], true, 0, 1, [1, LAST], [1, LAST]],
+        ['every line, an insert below its first', [0, LAST], true, 4, 2, [0, LAST], [0, LAST]],
+        ['every line, an insert at the grid’s end', [0, LAST], true, -1, 1, [0, LAST], [0, LAST]],
+        ['every line, a delete of its first', [0, LAST], false, 0, 1, null, [0, LAST]],
+        ['every line, a delete below its first', [0, LAST], false, 4, 2, [0, LAST], [0, LAST]],
+        ['every line, a delete at the grid’s end', [0, LAST], false, -2, 2, [0, LAST], [0, LAST]],
+        ['to the end, an insert at its first', [3, LAST], true, 3, 1, [4, LAST], [4, LAST]],
+        ['to the end, an insert above', [3, LAST], true, 0, 2, [5, LAST], [5, LAST]],
+        ['to the end, an insert below its first', [3, LAST], true, 5, 1, [3, LAST], [3, LAST]],
+        ['to the end, an insert at the grid’s end', [3, LAST], true, -1, 1, [3, LAST], [3, LAST]],
+        ['to the end, a delete above', [3, LAST], false, 0, 2, [1, LAST], [1, LAST]],
+        ['to the end, a delete of its first', [3, LAST], false, 3, 1, null, [3, LAST]],
+        ['to the end, a delete across its first', [3, LAST], false, 2, 3, null, [2, LAST]],
+        ['to the end, a delete below its first', [3, LAST], false, 5, 1, [3, LAST], [3, LAST]],
+        ['to the end, a delete at the grid’s end', [3, LAST], false, -2, 2, [3, LAST], [3, LAST]],
+        ['closed, an insert at its first', [3, 9], true, 3, 1, [4, 10], [4, 10]],
+        ['closed, an insert above', [3, 9], true, 0, 1, [4, 10], [4, 10]],
+        ['closed, an insert below its first', [3, 9], true, 5, 1, [3, 10], [3, 10]],
+        ['closed, an insert at the grid’s end', [3, 9], true, -1, 1, [3, 9], [3, 9]],
+        ['closed, a delete above', [3, 9], false, 0, 2, [1, 7], [1, 7]],
+        ['closed, a delete of its first', [3, 9], false, 3, 1, null, [3, 8]],
+        ['closed, a delete below its first', [3, 9], false, 5, 1, [3, 8], [3, 8]],
+        ['closed, a delete at the grid’s end', [3, 9], false, -2, 2, [3, 9], [3, 9]],
+    ];
+    for (const [name, [start, end], insert, at, count, onRows, onColumns] of cases) {
+        for (const rows of [true, false]) {
+            test(`${rows ? 'rows' : 'columns'}: ${name}`, () => {
+                const last = rows ? LAST_ROW : LAST_COLUMN;
+                const line = (along: number | typeof LAST) => (along === LAST ? last : along);
+                const rect = ([first, final]: Along): Rect =>
+                    rows ? [first, 1, line(final), 4] : [1, first, 4, line(final)];
+                const index = at < 0 ? last + 1 + at : at;
+                // A column of the filter that hides two rows of it.
+                const column: { column: number; rows: Span[] } = rows
+                    ? { column: 2, rows: [[start + 2, start + 3]] }
+                    : { column: start + 2, rows: [[2, 3]] };
+                const records = {
+                    filter: { f: { rect: rect([start, end]) } },
+                    filterColumn: { k: { filter: 'f', ...column } },
+                };
+                const book = bookOf(sheetOf('a', { records }));
+                landed(book, lines(rows, insert, index, count));
+                const after = new Workbook(book);
+                applyOps(after, [lines(rows, insert, index, count)]);
+                const expected = rows ? onRows : onColumns;
+                const filter = after.sheets.get('a')?.records.records('filter').get('f');
+                expect(filter).toEqual(expected ? { rect: rect(expected) } : undefined);
+            });
+        }
+    }
+});
+
 // A book with something of every part near the top, on which the landing ops land whatever stands on its last lines.
 function base(part: Partial<SheetContent> = {}, other: Partial<SheetContent> = {}): Book {
     return bookOf(
@@ -866,6 +942,13 @@ describe('engine/book/apply-lines — the cases of the falsifier’s bounds', ()
 describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books and batches', () => {
     test('1,800 batches of line edits mixed with every other kind built', () => {
         const count = { rowInsert: 0, rowDelete: 0, columnInsert: 0, columnDelete: 0, liked: 0, atEnd: 0 };
+        // Line edits at or above the first line of a filter that reaches the grid's last line.
+        let filterToEnd = 0;
+        const reachesUnder = (book: Workbook, { sheet, rows, index }: LinesOp) =>
+            [...(book.sheets.get(sheet)?.records.records('filter').values() ?? [])].some(
+                ({ rect: [top, left, bottom, right] }) =>
+                    rows ? index <= top && bottom === LAST_ROW : index <= left && right === LAST_COLUMN,
+            );
         // What the inverses of the lines ops held beyond the lines op itself.
         const parts = { looks: 0, lineKeys: 0, content: 0, records: 0, lost: 0, insertLost: 0 };
         const refused = new Map<string, number>();
@@ -901,7 +984,10 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
                     continue;
                 }
                 // Each op alone, so the inverse of each lines op is seen as it is.
-                const inverses = batch.ops.map((op) => applyOps(book, [op]));
+                const inverses = batch.ops.map((op) => {
+                    if (op.kind === 'lines' && reachesUnder(book, op)) filterToEnd += 1;
+                    return applyOps(book, [op]);
+                });
                 book.setClock(batch.now, batch.seed);
                 landedBatches += 1;
                 expectReads(book, expected);
@@ -955,6 +1041,7 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
         expect(landedBatches + [...refused.values()].reduce((sum, n) => sum + n, 0)).toBe(1800);
         expect(landedBatches).toBeGreaterThan(1000);
         for (const n of Object.values(count)) expect(n).toBeGreaterThan(100);
+        expect(filterToEnd).toBeGreaterThan(20);
         for (const n of Object.values(parts)) expect(n).toBeGreaterThan(20);
         expect(refused.get('grid-end') ?? 0).toBeGreaterThan(50);
     }, 300_000);

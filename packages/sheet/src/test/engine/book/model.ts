@@ -527,14 +527,19 @@ function lineAfter({ insert, index, count }: LinesOp, line: number): number {
 
 // The lines `start` to `end` after the edit, or null when none is left, worked out line by line: the first and the
 // last of them that the edit leaves, where they stand after it, so an insert between them grows the span. With `open`,
-// an end on the axis's last line stays there, and the whole axis stays whole.
+// an end on the axis's last line stays there: the lines that enter there join the span.
 function spanAfter(op: LinesOp, start: number, end: number, open: boolean): [number, number] | null {
     const last = op.rows ? LAST_ROW : LAST_COLUMN;
-    if (open && start === 0 && end === last) return [start, end];
     const first = lineAfter(op, start) < 0 ? op.index + op.count : start;
     const final = lineAfter(op, end) < 0 ? op.index - 1 : end;
     if (first > final) return null;
     return [lineAfter(op, first), open && end === last ? last : lineAfter(op, final)];
+}
+
+// A rule's or a chart's range over the whole axis, Excel's `A:A`, names the axis rather than lines, so it stays whole.
+function rangeAfter(op: LinesOp, start: number, end: number): [number, number] | null {
+    const whole = start === 0 && end === (op.rows ? LAST_ROW : LAST_COLUMN);
+    return whole ? [start, end] : spanAfter(op, start, end, true);
 }
 
 function applyLines(model: Model, op: LinesOp): RefusalKey | null {
@@ -598,7 +603,7 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
     const ranges = (list: readonly Rect[]): Rect[] =>
         list.flatMap((range): Rect[] => {
             const [top, left, bottom, right] = range;
-            const after = spanAfter(op, ...along(range), true);
+            const after = rangeAfter(op, ...along(range));
             if (!after) return [];
             return [rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]];
         });
@@ -613,10 +618,15 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
         put(sheet, 'merge', id, next && !single ? { rect: next } : undefined);
     }
     for (const [id, { rect }] of records.filter) {
-        // The header row holds the filter's buttons, so a delete of it removes the filter.
-        const header = rows && lineAfter(op, rect[0]) < 0;
-        const [range] = header ? [] : ranges([rect]);
-        if (range) records.filter.set(id, { rect: range });
+        // The filter covers the lines of its rectangle, its first one on rows the header that holds its buttons, so a
+        // delete of the header removes it; one that reaches the grid's end takes in the lines that enter there.
+        const [top, left, bottom, right] = rect;
+        const header = rows && lineAfter(op, top) < 0;
+        const after = header ? null : spanAfter(op, ...along(rect), true);
+        if (after)
+            records.filter.set(id, {
+                rect: rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]],
+            });
         else removeFilter(sheet, id);
     }
     for (const [id, column] of records.filterColumn) {
@@ -652,7 +662,7 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
         for (const [id, chart] of other.records.chart) {
             const next = mapChartRefs(chart, (ref) => {
                 if (ref.sheetId !== op.sheet) return ref;
-                const after = spanAfter(op, ...(rows ? ref.row : ref.column), true);
+                const after = rangeAfter(op, ...(rows ? ref.row : ref.column));
                 if (!after) return null;
                 return rows ? { ...ref, row: after } : { ...ref, column: after };
             });
@@ -671,7 +681,7 @@ function linesOfRules(model: Model, op: LinesOp): RefusalKey | null {
         const here = sheet.id === op.sheet;
         for (const [id, rule] of sheet.records.conditionalFormat) {
             const starts = rule.ranges.map(([top, left, bottom, right]) => (op.rows ? [top, bottom] : [left, right]));
-            const first = here ? starts.find(([start, end]) => spanAfter(op, start, end, true)) : starts[0];
+            const first = here ? starts.find(([start, end]) => rangeAfter(op, start, end)) : starts[0];
             if (!first) continue;
             const host = here && lineAfter(op, first[0]) < 0 ? op.index + op.count : first[0];
             const next = ruleThrough(rule, (tree) => transformLines(tree, edit, sheet.id, host).tree);
