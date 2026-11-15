@@ -1,7 +1,7 @@
 // Renders the site's Markdown, such as help articles, blog posts and the changelog, to HTML at build time. Each h2
 // and h3 gets a slug id and a link icon, and is collected for the page's table of contents. Raw HTML passes through,
 // since every source is written in this repo, each app name in the text is marked to be set in the mono font, and
-// media blocks such as a looping video or a carousel become figures.
+// a media block such as a looping video or a carousel leaves a marker, with what it shows in `media`.
 
 import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
