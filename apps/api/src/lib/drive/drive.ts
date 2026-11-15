@@ -1200,18 +1200,17 @@ export class Drive {
         return this.getMount(mountId).history.getWatchStatus(pathId, user.id);
     }
 
+    // A revoked share keeps its watch rows, so the paths the user can no longer read drop out here.
     public async getWatches(user: User): Promise<DrivePath[]> {
-        return (await this.getWatchedBreadcrumbs(user)).flatMap((crumbs) => crumbs.slice(-1));
-    }
-
-    // The breadcrumb of every path the user watches, with the path itself last, so read access can be checked on it.
-    // A path that no longer exists has an empty breadcrumb.
-    public async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
-        const crumbs: DrivePath[][] = [];
+        const memberships = await getMemberships(user.id);
+        const watched: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            crumbs.push(...(await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))));
+            // Each breadcrumb ends in the watched path. A path that no longer exists has an empty one.
+            for (const ancestors of await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))) {
+                if (canReadFromAncestors(ancestors, user, memberships)) watched.push(...ancestors.slice(-1));
+            }
         }
-        return crumbs;
+        return watched;
     }
 
     // ---- Document databases ----

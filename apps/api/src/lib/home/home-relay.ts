@@ -1,7 +1,8 @@
 // Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
-// another home, each pull reads one answer from one, such as the paths shared with a user, and pullFromEach runs a
-// pull against many homes at once. Today every call runs in this process. When homes live in several processes, only
-// this file has to change.
+// another home. getFromHomes asks many homes one question, such as which paths a user watches there, and the domain
+// that owns the question keeps its handler. It opens at most a few homes at once and leaves out a home that is too
+// slow. The other reads, each pull and pullFromEach, open their homes with no such limit. Today every call runs in
+// this process. When homes live in several processes, only this file has to change.
 
 import * as fs from 'node:fs';
 import type { Attendee, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
@@ -10,14 +11,19 @@ import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-acces
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { MyTeam, TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { Semaphore } from '../../utils/semaphore';
 import { settlesWithin } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
 import type { InvitationRequest } from '../calendar/types';
 import { getDataRoot, homeDirUnder } from '../config/paths';
+import { ApiError } from '../core';
 import type { VisiblePath } from '../drive/drive';
+import type { DriveQueries } from '../drive/home-calls';
+import { answerDrive } from '../drive/home-calls';
 import type { Memberships, User } from '../user';
 import { getOwnerExists, getUsersByEmails } from '../user';
 import { getHome, getTeamHome, loadedHome } from './get-home';
+import type { Home } from './home';
 import { TeamHome } from './team-home';
 
 // --- Pushes ---
@@ -208,6 +214,65 @@ export async function broadcastToOwnerAndMembers(
 }
 
 // --- Reads across homes ---
+
+// A domain's table of questions: for each kind, the handler that answers it on the Home that was asked.
+export type Answerers<Q extends { [K in keyof Q]: { ask: unknown; answer: unknown } }> = {
+    [K in keyof Q]: (home: Home, ask: Q[K]['ask']) => Promise<Q[K]['answer']>;
+};
+
+type HomeQueries = DriveQueries;
+
+const answerers: Answerers<HomeQueries> = { ...answerDrive };
+
+export const HOME_OPENS_AT_ONCE = 4;
+
+// Covers the wait for a slot and the open itself.
+export const HOME_OPEN_DEADLINE_MS = 4000;
+
+const opens = new Semaphore(HOME_OPENS_AT_ONCE);
+
+// The capped opens still running. Every caller of one owner waits for the same open, so a home that hangs takes one
+// slot however many ask for it.
+const opening = new Map<string, Promise<Home>>();
+
+// A gone owner is skipped. A home that fails, or that doesn't open within the deadline, is logged and left out, so the
+// others still answer and this never rejects.
+export async function getFromHomes<K extends keyof HomeQueries>(
+    ownerIds: readonly string[],
+    kind: K,
+    ask: HomeQueries[K]['ask'],
+): Promise<Map<string, HomeQueries[K]['answer']>> {
+    const answers = new Map<string, HomeQueries[K]['answer']>();
+    await Promise.all(
+        ownerIds.map(async (ownerId) => {
+            try {
+                if (!(await getOwnerExists(ownerId))) return;
+                const home = await openUnderCap(ownerId);
+                answers.set(ownerId, await answerers[kind](home, ask));
+            } catch (err) {
+                console.error(`home-relay: ${kind} from ${ownerId} failed:`, err);
+            }
+        }),
+    );
+    return answers;
+}
+
+// A loaded home skips the queue, so a read of it never waits behind homes that are opening. The deadline only ends
+// this caller's wait: an open cannot be cancelled, so it keeps its slot until it settles.
+async function openUnderCap(ownerId: string): Promise<Home> {
+    const home = loadedHome(ownerId) ? getHome(ownerId) : cappedOpen(ownerId);
+    if (await settlesWithin(home, HOME_OPEN_DEADLINE_MS)) return home;
+    throw new ApiError(503, `Home ${ownerId} did not open within ${HOME_OPEN_DEADLINE_MS} ms`);
+}
+
+function cappedOpen(ownerId: string): Promise<Home> {
+    let open = opening.get(ownerId);
+    if (!open) {
+        open = opens.run(() => getHome(ownerId)).finally(() => opening.delete(ownerId));
+        opening.set(ownerId, open);
+    }
+    return open;
+}
 
 // A gone owner is skipped, and a failed read is logged and leaves that owner out, so the others still answer.
 export async function pullFromEach<T>(

@@ -1,16 +1,21 @@
-import { afterEach, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, jest, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
+import { Drive } from '../../lib/drive/drive';
 import * as getHomeModule from '../../lib/home/get-home';
 import {
     drainDeliveriesWithin,
     drainHomeDeliveries,
+    getFromHomes,
+    HOME_OPEN_DEADLINE_MS,
+    HOME_OPENS_AT_ONCE,
     pullVisiblePaths,
     sendToHome,
     sendToUserHomes,
 } from '../../lib/home/home-relay';
+import type { User } from '../../lib/user';
 import { getMemberships } from '../../lib/user';
 import type { TestContext, TestUser } from '../setup';
 import {
@@ -23,6 +28,7 @@ import {
     createTestUser,
     driveGet,
     drivePost,
+    drivePut,
     driveUpload,
     eventually,
     firstMountId,
@@ -64,9 +70,9 @@ async function notificationsWithTag(member: TestUser, tag: string): Promise<Noti
     return rows.filter((row) => row.tag === tag);
 }
 
-// Holds every member's home at its opening until release(), and counts how many are opening at once.
-function holdMemberHomes(): { peak: () => number; release: () => void } {
-    const memberIds = new Set(members.map((member) => member.id));
+// Holds the homes of these members at their opening until release(), and counts how many are opening at once.
+function holdMemberHomes(held: readonly TestUser[] = members): { peak: () => number; release: () => void } {
+    const memberIds = new Set(held.map((member) => member.id));
     const openHome = getHomeModule.getHome;
     let release!: () => void;
     const released = new Promise<void>((resolve) => {
@@ -253,6 +259,229 @@ describe('A read of the paths rows name', () => {
 
         expect(aliceAsks.mock.calls.map((call) => call[2])).toEqual([[rows[0], rows[2]]]);
         expect(bobAsks.mock.calls.map((call) => call[2])).toEqual([[rows[1]]]);
+    });
+});
+
+describe('A get from many homes', () => {
+    let viewer: User;
+
+    beforeAll(async () => {
+        viewer = (await getHomeModule.getHome(ctx.alice.user.id)).user;
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+        mock.restore();
+    });
+
+    function watchesOf(owners: readonly { id: string }[]): Promise<Map<string, DrivePath[]>> {
+        return getFromHomes(
+            owners.map((owner) => owner.id),
+            'drive:watches',
+            { user: viewer },
+        );
+    }
+
+    function sortedIds(owners: readonly { id: string }[]): string[] {
+        return owners.map((owner) => owner.id).sort();
+    }
+
+    async function closeHomes(owners: readonly TestUser[]): Promise<void> {
+        for (const owner of owners) await getHomeModule.evictHome(owner.id);
+    }
+
+    // One turn of the event loop. Fake timers leave setImmediate alone, so it also passes while they are on.
+    function loopTurn(): Promise<void> {
+        return new Promise((resolve) => setImmediate(resolve));
+    }
+
+    // Moves the fake clock past the deadline until the get has given up on every home it still waits for. The turns
+    // before each move let the homes that can answer do so first.
+    async function pastDeadline<T>(get: Promise<T>): Promise<T> {
+        let settled = false;
+        get.finally(() => {
+            settled = true;
+        });
+        while (!settled) {
+            for (let turn = 0; turn < 20; turn++) await loopTurn();
+            jest.advanceTimersByTime(HOME_OPEN_DEADLINE_MS);
+            await loopTurn();
+        }
+        return get;
+    }
+
+    test("answers a user's watches from the owner's drive, without a path whose share was revoked", async () => {
+        const { alice, bob } = ctx;
+        const mountId = await firstMountId(alice.user.sessionToken, alice.user.id);
+        const root = await driveGet<DrivePath>(alice.user.sessionToken, alice.user.id, mountId, 'root');
+        const folder = (name: string) =>
+            drivePost(alice.user.sessionToken, alice.user.id, mountId, `folder/${root.id}`, { folderName: name });
+        const kept = await folder('RelayWatchKept');
+        const revoked = await folder('RelayWatchRevoked');
+        for (const path of [kept, revoked]) {
+            await drivePut(alice.user.sessionToken, alice.user.id, mountId, `path/${path.id}/acl`, {
+                add: [{ id: bob.user.email, read: true, write: false }],
+            });
+            const watched = await authedRequest(
+                bob.user.sessionToken,
+                `/drive/${alice.user.id}/${mountId}/path/${path.id}/watch`,
+                { method: 'POST' },
+            );
+            expect(watched.status).toBe(200);
+        }
+        await drivePut(alice.user.sessionToken, alice.user.id, mountId, `path/${revoked.id}/acl`, {
+            remove: [bob.user.email],
+        });
+
+        const user = (await getHomeModule.getHome(bob.user.id)).user;
+        const answers = await getFromHomes([alice.user.id], 'drive:watches', { user });
+
+        expect([...answers.keys()]).toEqual([alice.user.id]);
+        expect(answers.get(alice.user.id)?.map((path) => path.id)).toEqual([kept.id]);
+    });
+
+    test('leaves out a home that fails, logs it, and the others still answer', async () => {
+        const [failing, ...others] = [members[0], members[1], ctx.alice.user];
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        getHomeModule.markHomeRestoring(failing.id);
+        let answers: Map<string, DrivePath[]>;
+        try {
+            answers = await watchesOf([failing, ...others]);
+        } finally {
+            getHomeModule.clearHomeRestoring(failing.id);
+        }
+
+        expect([...answers.keys()].sort()).toEqual(sortedIds(others));
+        expect(errors).toHaveBeenCalledWith(`home-relay: drive:watches from ${failing.id} failed:`, expect.anything());
+    });
+
+    test('skips an owner who is gone, with no error logged', async () => {
+        const gone = { id: crypto.randomUUID().replaceAll('-', '') };
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+
+        const answers = await watchesOf([gone, ctx.alice.user]);
+
+        expect([...answers.keys()]).toEqual([ctx.alice.user.id]);
+        expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes(gone.id)))).toBe(false);
+    });
+
+    test('leaves out a home that does not open within the deadline, and the others still answer', async () => {
+        const [hung, ...others] = [members[0], members[1], ctx.alice.user];
+        for (const owner of others) await getHomeModule.getHome(owner.id);
+        const held = holdMemberHomes([hung]);
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        jest.useFakeTimers();
+        let answers: Map<string, DrivePath[]>;
+        try {
+            answers = await pastDeadline(watchesOf([hung, ...others]));
+        } finally {
+            jest.useRealTimers();
+            held.release();
+        }
+
+        expect([...answers.keys()].sort()).toEqual(sortedIds(others));
+        expect(errors).toHaveBeenCalledWith(
+            `home-relay: drive:watches from ${hung.id} failed:`,
+            expect.objectContaining({ status: 503 }),
+        );
+        expect([...(await watchesOf([hung])).keys()]).toEqual([hung.id]);
+    });
+
+    test('never opens more homes at once than the cap, also once the deadline has passed', async () => {
+        const cold = members.slice(0, HOME_OPENS_AT_ONCE + 3);
+        await closeHomes(cold);
+        const held = holdMemberHomes(cold);
+        spyOn(console, 'error').mockImplementation(() => {});
+        jest.useFakeTimers();
+        let answers: Map<string, DrivePath[]>;
+        try {
+            answers = await pastDeadline(watchesOf(cold));
+            for (let turn = 0; turn < 20; turn++) await loopTurn();
+            expect(held.peak()).toBe(HOME_OPENS_AT_ONCE);
+        } finally {
+            jest.useRealTimers();
+            held.release();
+        }
+        expect(answers.size).toBe(0);
+
+        expect([...(await watchesOf(cold)).keys()].sort()).toEqual(sortedIds(cold));
+        expect(held.peak()).toBe(HOME_OPENS_AT_ONCE);
+    });
+
+    test('many callers of one home that hangs leave the other slots free', async () => {
+        const [hung, healthy] = members;
+        await closeHomes([hung, healthy]);
+        const held = holdMemberHomes([hung]);
+        const waiting = Array.from({ length: HOME_OPENS_AT_ONCE }, () => watchesOf([hung]));
+        let answers: Map<string, DrivePath[]>;
+        try {
+            await eventually(async () => held.peak() > 0 || undefined, 'the open of the hung home');
+            await Bun.sleep(50);
+            answers = await watchesOf([healthy]);
+        } finally {
+            held.release();
+        }
+
+        expect([...answers.keys()]).toEqual([healthy.id]);
+        for (const answer of await Promise.all(waiting)) expect([...answer.keys()]).toEqual([hung.id]);
+    });
+
+    test('a loaded home answers while every slot is taken', async () => {
+        const cold = members.slice(0, HOME_OPENS_AT_ONCE);
+        await closeHomes(cold);
+        const held = holdMemberHomes(cold);
+        const waiting = watchesOf(cold);
+        let answers: Map<string, DrivePath[]>;
+        try {
+            await eventually(async () => held.peak() === HOME_OPENS_AT_ONCE || undefined, 'every slot taken');
+            answers = await watchesOf([ctx.alice.user]);
+        } finally {
+            held.release();
+        }
+
+        expect([...answers.keys()]).toEqual([ctx.alice.user.id]);
+        expect([...(await waiting).keys()].sort()).toEqual(sortedIds(cold));
+    });
+});
+
+describe('An answer that is slow to come', () => {
+    afterEach(() => {
+        mock.restore();
+    });
+
+    test('holds no slot, so a closed home still opens and answers', async () => {
+        const slow = members.slice(0, HOME_OPENS_AT_ONCE);
+        const closed = members[HOME_OPENS_AT_ONCE];
+        for (const owner of [...slow, closed]) await getHomeModule.evictHome(owner.id);
+        const slowAsker = (await getHomeModule.getHome(ctx.bob.user.id)).user;
+        const quickAsker = (await getHomeModule.getHome(ctx.alice.user.id)).user;
+        const getWatches = Drive.prototype.getWatches;
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const asked = spyOn(Drive.prototype, 'getWatches').mockImplementation(async function (this: Drive, user) {
+            if (user.id === slowAsker.id) await released;
+            return getWatches.call(this, user);
+        });
+        const waiting = getFromHomes(
+            slow.map((owner) => owner.id),
+            'drive:watches',
+            { user: slowAsker },
+        );
+        let answers: Map<string, DrivePath[]>;
+        try {
+            await eventually(
+                async () => asked.mock.calls.length === HOME_OPENS_AT_ONCE || undefined,
+                'every slow answer running',
+            );
+            answers = await getFromHomes([closed.id], 'drive:watches', { user: quickAsker });
+        } finally {
+            release();
+        }
+
+        expect([...answers.keys()]).toEqual([closed.id]);
+        expect((await waiting).size).toBe(HOME_OPENS_AT_ONCE);
     });
 });
 
