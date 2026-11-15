@@ -21,6 +21,8 @@ It computes 219 of Excel's 524 functions. Not built yet: spilled results and the
 | `@workspace/formula/format` | `numberDisplay`, `isDateFormat`, `numberFormatError` |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` |
 
+In the product only `packages/sheet/src/engine/book/`, where the sheet workbook holds the engine, imports the root entry; a Biome rule refuses it in the rest of `packages/sheet`, so a page loads the engine only through that folder.
+
 The package is a workspace package and is not published. A workspace that needs it lists `"@workspace/formula": "workspace:*"` in its `package.json`.
 
 ## Using it

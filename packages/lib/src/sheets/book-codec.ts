@@ -55,8 +55,8 @@ export function encodeBook(book: BookContent): string {
     return JSON.stringify({ f: FORMAT, g, now, seed, computed, formulas, sheets });
 }
 
-// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, a formula index
-// past the list, or a sheet the guard refuses. It never throws.
+// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet, a
+// formula index past the list, or a sheet the guard refuses. It never throws.
 export function decodeBook(text: string): BookContent | null {
     let value: unknown;
     try {
@@ -67,7 +67,7 @@ export function decodeBook(text: string): BookContent | null {
     if (!isRecord(value) || Object.keys(value).length !== 7) return null;
     const { f, g, now, seed, computed, formulas, sheets } = value;
     if (f !== FORMAT || !isGeneration(g) || !isNow(now) || !isSeed(seed) || typeof computed !== 'boolean') return null;
-    if (!Array.isArray(formulas) || !Array.isArray(sheets)) return null;
+    if (!Array.isArray(formulas) || !Array.isArray(sheets) || sheets.length === 0) return null;
     const decoded: SheetContent[] = [];
     for (const sheet of sheets) {
         if (!isRecord(sheet) || !Array.isArray(sheet['cells'])) return null;

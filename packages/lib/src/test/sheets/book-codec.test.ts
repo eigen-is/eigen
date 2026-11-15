@@ -440,6 +440,11 @@ describe('refusal', () => {
         expect(edited((book) => Object.assign(book, { sheets: {} }))).toBeNull();
     });
 
+    test('of a book with no sheet', () => {
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [] }))).toBeNull();
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [BOOK.sheets[1]] }))).not.toBeNull();
+    });
+
     test('of a clock, a generation or a head out of range', () => {
         const heads: [string, unknown][] = [
             ...[-1, LAST_DATE_SERIAL + 1, '1', null].map((now): [string, unknown] => ['now', now]),

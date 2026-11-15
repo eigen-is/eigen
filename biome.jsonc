@@ -79,8 +79,72 @@
       "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
     },
     {
+      // The formula engine's root entry holds the whole engine: sheet imports it only under src/engine/book/ and its tests, where the workbook holds it. The three overrides on sheet's source each restate the rule, since a later one replaces an earlier one whole.
+      "includes": ["packages/sheet/src/**", "!packages/sheet/src/engine/**", "!packages/sheet/src/test/engine/book/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@workspace/formula": {
+                    "message": "sheet imports the formula engine's root entry only under src/engine/book/ and its tests, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
+                  }
+                },
+                // Overrides replace the root rule options wholesale — restate the suffix ban.
+                "patterns": [
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       // The sheet engine is imported by apps/api — it MUST stay React-free.
-      "includes": ["packages/sheet/src/engine/**"],
+      "includes": ["packages/sheet/src/engine/**", "!packages/sheet/src/engine/book/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "react": { "message": "engine/ is imported by the backend and must stay React-free." },
+                  "react-dom": { "message": "engine/ is imported by the backend and must stay React-free." },
+                  "@workspace/formula": {
+                    "message": "sheet imports the formula engine's root entry only under src/engine/book/ and its tests, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
+                  }
+                },
+                // Overrides replace the root rule options wholesale — restate the suffix ban.
+                "patterns": [
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The workbook model: React-free as the rest of engine/, and the one place that imports the formula engine's root entry.
+      "includes": ["packages/sheet/src/engine/book/**"],
       "linter": {
         "rules": {
           "style": {
