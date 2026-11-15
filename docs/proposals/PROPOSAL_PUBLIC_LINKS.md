@@ -4,7 +4,7 @@ This proposal lets a user share a file, a folder or a collab document with anyon
 
 A public link is view-only. Viewing covers what users ask for: "have a look at this", "download this". Edit links are a possible phase 2, at the end.
 
-**Status:** not built. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md).
+**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row in P1. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md).
 
 > **TLDR:** A public link is a guest account that stands for the link instead of a person. Turning the link on creates a `role: 'guest'` user with a reserved address, `<linkId>@link.invalid`, and puts that address in the path's ACL with read only. Opening `/s/<linkId>` signs the visitor in as the link account at once. A link with a password asks for it first, and the password is that account's password. Either way it is a real session, minted the way guests and the demo get theirs (`signInWithScopedPassword`). From there everything is the existing guest path: `SharedDrive` checks the ACL, the collab socket refuses every write, a revoke closes open sockets, and a guest can't share, mail or reach mail, contacts and calendar. A visitor sees the item alone, with no top bar and no sidebar, and no names or addresses of the people who work on it. No schema change: the link lives in rows and files that exist already. It needs two public routes, a link field on the ACL route, one guard in the mailer, a visitor view, a section in the share dialog, and a sweep of every place that lists users so link accounts stay out of them. Size M.
 

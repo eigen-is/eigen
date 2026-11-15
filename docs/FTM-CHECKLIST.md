@@ -4,7 +4,7 @@
 
 The checklist is the public sheet [Checklist Google Workspace-alternatieven](https://docs.google.com/spreadsheets/d/1J4jPJWUT8hyIvvoR8Qvuv2nEQOTDX1mJsSNM5ZBdw6w/edit?gid=0#gid=0), first published 14 October 2026 and updated 21 October 2026. Follow the Money wrote it from their own needs, for an organisation of about 80 people. It holds no scores and no priorities, so the score says only whether Eigen does a thing, not how much it matters. The requirements in the tables are short English renderings of the Dutch rows. The numbers count from the first requirement, so number 1 is row 7 of the sheet.
 
-Each row was checked in the code, not only in the docs, at commit `989411aa0` on branch `home-relay`, which is develop plus the home-relay work. A status means:
+Each row was checked in the code, not only in the docs, at commit `989411aa0` on branch `home-relay`; the 106 newer commits on develop change only row 93. A status means:
 
 | Status | Meaning |
 |---|---|
@@ -49,38 +49,58 @@ Most gaps have no plan. The proposals that do exist cover a handful of rows each
 | [PROPOSAL_AI.md](proposals/PROPOSAL_AI.md) | Research only; ROADMAP-POST-1.md shelves it (size XL, needs a GPU sidecar, kept as a grant narrative) | AI that runs in the browser or on the server, so nothing leaves the instance: writing help and summaries (row 201), semantic search (row 202) | It has a per-user setting, not an admin switch (row 203) |
 | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md) | Not built; ROADMAP.md row "Team mail addresses" | A team gets an address whose mail reaches every member (rows 18 and 60); phase 2 lets members send as the team (rows 19, 59 and 61, in part). It also lets a team calendar invite outside guests properly | Each member gets their own copy, so it is no shared mailbox with one read state. Personal aliases (rows 20 and 59) stay open |
 | [PROPOSAL_RSPAMD.md](proposals/PROPOSAL_RSPAMD.md) | Not built, 1 to 2 days; ROADMAP.md row "rspamd sidecar + spam learn-loop" | Spam scoring and learning from Report spam (row 9), and SPF, DKIM and DMARC checks on mail that arrives (row 7) | Malware scanning (row 10) |
-| [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md) | Not built, and no roadmap row | A view-only link that needs no account (row 106) | Edit links are a possible phase 2 |
+| [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md) | Not built; ROADMAP.md row "Public links" in P1, raised by the owner because users ask for it again and again | A view-only link that needs no account (row 106) | Edit links are a possible phase 2 |
 | [PROPOSAL_CALENDAR_IMPORT.md](proposals/PROPOSAL_CALENDAR_IMPORT.md) | File import built, subscriptions not; ROADMAP.md row "Calendar subscriptions" | Subscribing to an outside calendar feed (row 82) | Sharing a calendar with outside people (row 81) |
 | [PROPOSAL_PORTABLE_DOCUMENTS.md](proposals/PROPOSAL_PORTABLE_DOCUMENTS.md) | Not built; ROADMAP.md row | A document downloaded as one file and uploaded on any Eigen server (row 55, in part) | Chat rooms have no export, and Drive has no folder download as zip |
 | [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) | Not built, waits for SSO; ROADMAP-POST-1.md | Eigen's Mail on a mailbox at another provider, which eases a migration | A one-shot IMAP import (row 220), which it calls separate, smaller work |
 | [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md) | Not built; ROADMAP-POST-1.md advises waiting until a user asks for JMAP | Its open questions list Sieve, which would bring mail rules and an away reply (rows 63 and 65) | Sieve is deferred inside the proposal too |
 | [DOCS-TODO.md](DOCS-TODO.md) "Suggesting mode (track changes)" | Not built, size XL | Suggested changes in Docs (row 128), and part of who changed what (row 112) | |
-| ROADMAP.md "Search: full chat history", "Search: calendar events", "Comments: a mention sends no mail", "Event times use a 12-hour clock" | Not built, each small | Rows 187, 92, 127 and part of 93 | |
+| ROADMAP.md "Search: full chat history", "Search: calendar events", "Comments: a mention sends no mail" | Not built, each small | Rows 187, 92 and 127 | |
 
-These gaps have no proposal and no roadmap row:
+On 15 November 2026 the owner turned the gaps an organisation meets first into roadmap rows: public links, a view-and-comment role and CSV in Sheets in P1, and four packs between P1 and P2 ([ROADMAP.md § Packs from the Follow the Money checklist](ROADMAP.md#packs-from-the-follow-the-money-checklist)):
 
-- **Security and admin:** hardware keys and passkeys, an Advanced Protection mode, encryption at rest, end-to-end encryption, malware scanning, deactivating a user, bulk user actions, more than one mail domain, a quota per user, removing 2FA for a user who lost it, an audit log, failed sign-ins, who lacks 2FA, security alerts, enforcing 2FA, a password policy and expiry, an org-wide mail log, and handing a leaver's data to someone else.
-- **Mail and calendar:** forwarding, rules, an away reply, conversation view, search by date or attachment, working hours, private events, rooms, booking pages, and a date-format and week-start setting.
-- **Documents:** a commenter role (commenting needs write access, so "view and comment" cannot be given without edit), transferring ownership of files and folders, and OpenDocument and CSV files (.odt, .ods, .odp, .csv): every Office round trip uses only Microsoft's formats.
+| Pack | What it brings | Checklist rows |
+|---|---|---|
+| [Security pack](ROADMAP.md#security-pack) | 2FA status, enforcement and removal, forgot password by mail, passkeys and hardware keys, a log of sign-ins and admin actions, password rules, malware scanning | 2, 8, 10, 28 to 37 |
+| [Mail pack](ROADMAP.md#mail-pack) | Spam filtering, team addresses and personal aliases, search by date and attachment, folders in the web app, forwarding, an away reply and rules, conversation view, Autoconfig and Autodiscover | 9, 18 to 20, 59 to 65, 67, 70, 74, 75, 217, 218 |
+| [Admin pack](ROADMAP.md#admin-pack) | Sign out everywhere, deactivate a user, bulk import, a quota per user, handing a leaver's files to someone else | 16, 22, 25, 27, 39, 113, 114, 219 |
+| [Calendar pack](ROADMAP.md#calendar-pack) | Every other week, reminders, a video link to an outside meeting server, private and free events, colleagues' free time, working hours, week start, subscriptions, search | 82, 84 to 87, 89, 90, 92, 93, 174 |
+
+These gaps still have no proposal and no roadmap row:
+
+- **Security and admin:** an Advanced Protection mode, encryption at rest (an operator can encrypt the disk or bucket), end-to-end encryption, more than one mail domain, and an org-wide mail log.
+- **Calendar and contacts:** sharing a calendar with outside people, rooms, booking pages, a contact card in Mail, and tasks with due dates.
+- **Documents:** OpenDocument files (.odt, .ods, .odp): every Office round trip uses only Microsoft's formats.
 - **Sheets and slides:** pivot tables, protected ranges, slide layouts, speaker notes, a presenter view, tables on slides.
-- **Video meetings:** all 18 rows. Eigen has no video code at all, and an event cannot even carry a meeting link as a link.
+- **Video meetings:** video in Eigen itself. The calendar pack links events to an outside server instead.
 - **Chat:** threads (the `replyTo` column exists, with no interface), pinning, a list of a chat's files, mute, presence, formatting, code blocks, reactions, calls, custom emoji and retention.
-- **Platforms and integrations:** desktop and mobile apps, push notifications, Outlook's Autodiscover, bulk account import, Eigen as an identity provider, and webhooks into Chat.
+- **Platforms and integrations:** desktop and mobile apps, push notifications, Eigen as an identity provider, and webhooks into Chat.
+
+## What to work on, and what to leave
+
+Not every gap is worth closing. The checklist measures Google Workspace parity, and part of it is not what Eigen is for. The gaps fall in four groups.
+
+- **Small fixes every organisation expects.** Each is a small unit, and most build on what exists: search mail by date and attachment (the index stores both), folders in the web app, every other week and reminders in Calendar, the 2FA column and its removal, forgot password by mail, CSV in Sheets, and Autoconfig on the mail domain. They are spread over the packs and P1 so each lands with its domain.
+- **What blocks an organisation of 80 people.** Spam filtering, aliases and team addresses, forwarding and an away reply, a view-and-comment role, deactivating a user and handing over a leaver's files, and public links, which users ask for more than anything else. These are the larger rows of the packs and P1.
+- **Connect, don't build.** Video is a link to a Jitsi or BigBlueButton server the admin names (calendar pack). AI is phase 5 of [PROPOSAL_SCRIPTING_PLATFORM.md](proposals/PROPOSAL_SCRIPTING_PLATFORM.md): the user's own assistant works on their data over MCP, under their rights, and Eigen sends nothing to a provider it chose. Notifications on desktop and phone come from a service worker with web push, not from native apps.
+- **Say no out loud.** Native desktop and mobile apps, ISO certification, failover, end-to-end encryption, booking pages, custom emoji, live transcription and password expiry. The supplier rows are not a code question: who stands behind Eigen, a hosting partner or funding, decides them.
+
+For a newsroom like Follow the Money the security rows weigh most, which is why the security pack comes first.
 
 ## Security
 
 | # | Requirement | Eigen | What is there, what is missing | Plan |
 |---|---|---|---|---|
 | 1 | 2FA with an authenticator app | Yes | better-auth's `twoFactor` plugin, set up in Space under Security, with backup codes, a code by mail and "Trust this device" | |
-| 2 | Hardware security keys | No | No passkey or WebAuthn plugin | None |
+| 2 | Hardware security keys | No | No passkey or WebAuthn plugin | [Security pack](ROADMAP.md#security-pack) |
 | 3 | An equivalent of Advanced Protection for high-risk accounts | No | No stricter mode per account | None |
 | 4 | Encryption in transit | Yes | Caddy serves HTTPS with Let's Encrypt. Mail submission and IMAP require TLS; server-to-server mail on port 25 uses TLS when the other side offers it | |
 | 5 | Encryption at rest | No | Eigen encrypts nothing it stores: files are plain on disk, S3 gets no server-side encryption setting, and backup archives are not encrypted. Disk or bucket encryption is left to the operator | None |
 | 6 | End-to-end encryption | No | None in mail, files or chat; no S/MIME or PGP | None |
 | 7 | SPF, DKIM and DMARC for the mail domains | Yes | Outgoing mail is DKIM-signed by OpenDKIM, and the help center lists the SPF, DKIM and DMARC records. Mail that arrives gets no SPF or DMARC check | [PROPOSAL_RSPAMD.md](proposals/PROPOSAL_RSPAMD.md) adds the checks on arrival |
-| 8 | A process for account recovery | Partly | Backup codes for 2FA, and an admin or `./eigen reset-password` can set a new password. There is no "forgot password" mail a user can request themselves | None |
-| 9 | Spam filtering of incoming mail | No | Postfix rejects unknown sender domains and the like, but scores nothing. Report spam moves a message to Junk and teaches nothing | [PROPOSAL_RSPAMD.md](proposals/PROPOSAL_RSPAMD.md) |
-| 10 | Malware scanning of mail and stored files | No | No ClamAV or similar | None |
+| 8 | A process for account recovery | Partly | Backup codes for 2FA, and an admin or `./eigen reset-password` can set a new password. There is no "forgot password" mail a user can request themselves | [Security pack](ROADMAP.md#security-pack) |
+| 9 | Spam filtering of incoming mail | No | Postfix rejects unknown sender domains and the like, but scores nothing. Report spam moves a message to Junk and teaches nothing | [PROPOSAL_RSPAMD.md](proposals/PROPOSAL_RSPAMD.md); [Mail pack](ROADMAP.md#mail-pack) |
+| 10 | Malware scanning of mail and stored files | No | No ClamAV or similar | [Security pack](ROADMAP.md#security-pack) |
 | 11 | Backups in more than one physically separate place | Operator | One server backup per day, with retention, which can go to an S3 bucket of its own ([BACKUP.md](BACKUP.md)). Where that bucket lives is up to the operator | |
 | 12 | Failover to another location when a data center fails | Operator | No replication or failover. A server archive can be restored onto another machine by hand | None |
 | 13 | Regular (security) updates | Yes | Frequent releases, installed with `./eigen update`, which backs up first, and undone with `./eigen rollback`. The operator runs it; nothing updates itself | |
@@ -91,30 +111,30 @@ These gaps have no proposal and no roadmap row:
 |---|---|---|---|---|
 | 14 | A central admin console | Yes | The Admin app: users, guests, teams, server settings, waitlist and backups | |
 | 15 | Create and delete users | Yes | | |
-| 16 | (Temporarily) deactivate users | No | better-auth's ban routes are turned off on purpose ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)). The only way to lock someone out is a new password or deleting the account | None |
+| 16 | (Temporarily) deactivate users | No | better-auth's ban routes are turned off on purpose ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)). The only way to lock someone out is a new password or deleting the account | [Admin pack](ROADMAP.md#admin-pack) |
 | 17 | Groups to share files and folders with | Yes | Teams, which a file or folder can be shared with | |
-| 18 | Distribution lists | No | A team has no mail address | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 1 |
-| 19 | Shared mailboxes | No | One mailbox per user, and a user can send only as themselves | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 2, as a copy per member rather than one shared mailbox |
-| 20 | Mail aliases for users | No | One address per user, no aliases and no send-as (`docker/postfix/sender_login.regexp`) | None |
+| 18 | Distribution lists | No | A team has no mail address | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 1; [Mail pack](ROADMAP.md#mail-pack) |
+| 19 | Shared mailboxes | No | One mailbox per user, and a user can send only as themselves | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 2, as a copy per member rather than one shared mailbox; [Mail pack](ROADMAP.md#mail-pack) |
+| 20 | Mail aliases for users | No | One address per user, no aliases and no send-as (`docker/postfix/sender_login.regexp`) | [Mail pack](ROADMAP.md#mail-pack) |
 | 21 | Set other users' rights centrally | Partly | An admin sets a member's role (admin or member) and their teams, which decide team-drive access. Nothing finer | None |
-| 22 | Manage users in bulk | No | No multi-select, import or bulk edit | None |
+| 22 | Manage users in bulk | No | No multi-select, import or bulk edit | [Admin pack](ROADMAP.md#admin-pack) |
 | 23 | Add more than one domain | No | One mail domain, fixed at setup (`MAIL_DOMAIN`) | None |
 | 24 | Storage use per user | Yes | A disk column in the users table and usage bars per user | |
-| 25 | A storage quota per user | Partly | A server-wide default and per-team overrides ([QUOTA.md](QUOTA.md)); no quota per user | None |
+| 25 | A storage quota per user | Partly | A server-wide default and per-team overrides ([QUOTA.md](QUOTA.md)); no quota per user | [Admin pack](ROADMAP.md#admin-pack) |
 | 26 | Manage access to shared team folders centrally | Yes | Admins add team drives and team members | |
-| 27 | End a user's sessions remotely | Partly | A new password or a deleted account ends every session and app password. The Admin app has no button for it alone | ROADMAP.md "A password reset leaves an open IMAP session up" |
-| 28 | Help a user back in who lost their sign-in | Partly | An admin can set a new password, but 2FA stays on, and nothing removes 2FA for a user who lost both authenticator and backup codes | None |
-| 29 | Audit or admin logs | No | Nothing records admin actions | None |
-| 30 | Suspicious or failed sign-ins | No | Rate limits and the optional fail2ban block attempts, but an admin sees only "Last active" | None |
-| 31 | Accounts with weak security, such as no 2FA | No | The Admin app shows no 2FA status | None |
-| 32 | Alerts on possible incidents or compromised accounts | No | The owner is alerted only about backups and the mail queue | None |
-| 33 | Require 2FA for everyone or for some groups | No | No setting | None |
-| 34 | Require hardware keys for some users | No | Hardware keys are not supported (row 2) | None |
-| 35 | A central password policy | No | Only a fixed minimum of 8 characters | None |
-| 36 | Password expiry | No | | None |
-| 37 | Force a user to change their password | No | An admin can only set a new password for them | None |
+| 27 | End a user's sessions remotely | Partly | A new password or a deleted account ends every session and app password. The Admin app has no button for it alone | [Admin pack](ROADMAP.md#admin-pack) |
+| 28 | Help a user back in who lost their sign-in | Partly | An admin can set a new password, but 2FA stays on, and nothing removes 2FA for a user who lost both authenticator and backup codes | [Security pack](ROADMAP.md#security-pack) |
+| 29 | Audit or admin logs | No | Nothing records admin actions | [Security pack](ROADMAP.md#security-pack) |
+| 30 | Suspicious or failed sign-ins | No | Rate limits and the optional fail2ban block attempts, but an admin sees only "Last active" | [Security pack](ROADMAP.md#security-pack) |
+| 31 | Accounts with weak security, such as no 2FA | No | The Admin app shows no 2FA status | [Security pack](ROADMAP.md#security-pack) |
+| 32 | Alerts on possible incidents or compromised accounts | No | The owner is alerted only about backups and the mail queue | [Security pack](ROADMAP.md#security-pack) |
+| 33 | Require 2FA for everyone or for some groups | No | No setting | [Security pack](ROADMAP.md#security-pack) |
+| 34 | Require hardware keys for some users | No | Hardware keys are not supported (row 2) | [Security pack](ROADMAP.md#security-pack) |
+| 35 | A central password policy | No | Only a fixed minimum of 8 characters | [Security pack](ROADMAP.md#security-pack) |
+| 36 | Password expiry | No | Left out on purpose: NIST SP 800-63B advises against forced periodic changes | [Security pack](ROADMAP.md#security-pack) |
+| 37 | Force a user to change their password | No | An admin can only set a new password for them | [Security pack](ROADMAP.md#security-pack) |
 | 38 | An org-wide view of sent and received mail with delivery status | No | Only the Postfix logs (`./eigen logs postfix`) and the queue monitor | None |
-| 39 | Keep a leaver's mail, calendars and files and hand them to someone | Partly | An admin can download a leaver's home as an archive before deleting them. Nothing hands that data to another user, and deleting a user deletes their home | None |
+| 39 | Keep a leaver's mail, calendars and files and hand them to someone | Partly | An admin can download a leaver's home as an archive before deleting them. Nothing hands that data to another user, and deleting a user deletes their home | [Admin pack](ROADMAP.md#admin-pack) |
 
 ## Supplier
 
@@ -146,23 +166,23 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 
 | # | Requirement | Eigen | What is there, what is missing | Plan |
 |---|---|---|---|---|
-| 59 | Send and receive with an alias on your account | No | One address per user | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md) gives team addresses, not personal aliases |
-| 60 | Send to and receive through a distribution list | No | Only `postmaster@` reaches the admins | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 1 |
-| 61 | Open a shared mailbox and read and send from it | No | Mail is one personal mailbox per user; a team has none | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), as a copy per member |
-| 62 | Forward mail automatically | No | Forward is a button only | None |
-| 63 | Rules to tag or forward mail | No | No Sieve and no rules | [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md) lists Sieve as deferred |
-| 64 | Folders and/or labels | Partly | Folders show and take messages by move or drag, but a new folder can be made only in an IMAP client. No labels | None |
-| 65 | An automatic away reply | No | | None |
+| 59 | Send and receive with an alias on your account | No | One address per user | [Mail pack](ROADMAP.md#mail-pack) |
+| 60 | Send to and receive through a distribution list | No | Only `postmaster@` reaches the admins | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), phase 1; [Mail pack](ROADMAP.md#mail-pack) |
+| 61 | Open a shared mailbox and read and send from it | No | Mail is one personal mailbox per user; a team has none | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md), as a copy per member; [Mail pack](ROADMAP.md#mail-pack) |
+| 62 | Forward mail automatically | No | Forward is a button only | [Mail pack](ROADMAP.md#mail-pack) |
+| 63 | Rules to tag or forward mail | No | No Sieve and no rules | [Mail pack](ROADMAP.md#mail-pack) |
+| 64 | Folders and/or labels | Partly | Folders show and take messages by move or drag, but a new folder can be made only in an IMAP client. No labels | [Mail pack](ROADMAP.md#mail-pack) |
+| 65 | An automatic away reply | No | | [Mail pack](ROADMAP.md#mail-pack) |
 | 66 | A mail signature | Yes | Set in Space under Mail | |
-| 67 | Conversation view | No | The list is flat, one row per message | None |
+| 67 | Conversation view | No | The list is flat, one row per message | [Mail pack](ROADMAP.md#mail-pack) |
 | 68 | Full-text search of the mailbox | Yes | SQLite full-text search, from the folder's search box and ⌘K | |
 | 69 | Filter search results by sender and recipient | Yes | `from:` and `to:` | |
-| 70 | Filter search results by date and attachments | No | The index stores both, but search takes neither | None |
+| 70 | Filter search results by date and attachments | No | The index stores both, but search takes neither | [Mail pack](ROADMAP.md#mail-pack) |
 | 71 | Add attachments | Yes | From the device, from Drive or by paste | |
 | 72 | Preview received attachments | Yes | Images, PDF, video, audio, text, .vcf, .eml and .ics | |
 | 73 | Download received attachments | Yes | Download, Save to Drive and Save all | |
-| 74 | See and use a sender's or recipient's contact details from the mail | Partly | Addresses open a new mail and the composer suggests contacts. No contact card and no "add to contacts" | None |
-| 75 | View and accept or decline an invitation from the mail | Partly | The mail shows the invitation with "View in Calendar"; accepting happens in Calendar | None |
+| 74 | See and use a sender's or recipient's contact details from the mail | Partly | Addresses open a new mail and the composer suggests contacts. No contact card and no "add to contacts" | [Mail pack](ROADMAP.md#mail-pack) |
+| 75 | View and accept or decline an invitation from the mail | Partly | The mail shows the invitation with "View in Calendar"; accepting happens in Calendar | [Mail pack](ROADMAP.md#mail-pack) |
 | 76 | Drag attachments into the mail | Yes | | |
 | 77 | Stop senders seeing through images and tracking pixels whether a mail was opened | Yes | Remote images wait until the reader clicks Load images ([MAIL.md](MAIL.md)) | |
 
@@ -174,18 +194,18 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 | 79 | Share a calendar with colleagues | Yes | With people or a team | |
 | 80 | Calendars shared with the whole organisation | Yes | An admin turns on a team calendar, and the default team holds every user | |
 | 81 | Share a calendar with outside people | No | Shares reach only Eigen users; guests have no calendar, and there is no public feed | None |
-| 82 | Subscribe to outside calendars by iCal link | No | Only a one-off .ics import | [PROPOSAL_CALENDAR_IMPORT.md](proposals/PROPOSAL_CALENDAR_IMPORT.md); ROADMAP.md "Calendar subscriptions" |
+| 82 | Subscribe to outside calendars by iCal link | No | Only a one-off .ics import | [PROPOSAL_CALENDAR_IMPORT.md](proposals/PROPOSAL_CALENDAR_IMPORT.md); ROADMAP.md "Calendar subscriptions"; [Calendar pack](ROADMAP.md#calendar-pack) |
 | 83 | Who may view or edit, per calendar | Yes | Free/busy, read or write, per person or team | |
-| 84 | Working hours and work location | No | | None |
-| 85 | See colleagues' availability when planning | Partly | Only when a colleague has shared their calendar with you, at least as free/busy. The guest picker shows no availability | None |
-| 86 | Visibility per event | No | No private events and no free/busy flag per event | None |
-| 87 | Repeating events: daily, weekly, monthly, every other week | Partly | Daily, weekly, monthly, yearly and weekdays. "Every other week" can't be made in the web app | None |
+| 84 | Working hours and work location | No | | [Calendar pack](ROADMAP.md#calendar-pack) |
+| 85 | See colleagues' availability when planning | Partly | Only when a colleague has shared their calendar with you, at least as free/busy. The guest picker shows no availability | [Calendar pack](ROADMAP.md#calendar-pack) |
+| 86 | Visibility per event | No | No private events and no free/busy flag per event | [Calendar pack](ROADMAP.md#calendar-pack) |
+| 87 | Repeating events: daily, weekly, monthly, every other week | Partly | Daily, weekly, monthly, yearly and weekdays. "Every other week" can't be made in the web app | [Calendar pack](ROADMAP.md#calendar-pack) |
 | 88 | Accept or decline invitations in the calendar | Yes | Accept, Maybe or Decline, for one date or the series | |
-| 89 | Reminders | Partly | The API and CalDAV keep reminders, so a phone's calendar shows them, but the web form has no reminder field | None |
-| 90 | A video meeting link on an event | No | A link can be typed into Location or Description, and shows as text, not as a link | None |
+| 89 | Reminders | Partly | The API and CalDAV keep reminders, so a phone's calendar shows them, but the web form has no reminder field | [Calendar pack](ROADMAP.md#calendar-pack) |
+| 90 | A video meeting link on an event | No | A link can be typed into Location or Description, and shows as text, not as a link | [Calendar pack](ROADMAP.md#calendar-pack) |
 | 91 | Pick a meeting room | No | Location is free text; no rooms or resources | None |
-| 92 | Search events by address and title | No | Calendars are not searchable | ROADMAP.md "Search: calendar events" |
-| 93 | Choose the date and time format and the first day of the week | No | Fixed: a 12-hour clock and weeks starting on Monday | ROADMAP.md "Event times use a 12-hour clock", for the clock only |
+| 92 | Search events by address and title | No | Calendars are not searchable | ROADMAP.md "Search: calendar events"; [Calendar pack](ROADMAP.md#calendar-pack) |
+| 93 | Choose the date and time format and the first day of the week | No | Fixed: every time reads on a 24-hour clock, by the owner's ruling, and weeks start on Monday | [Calendar pack](ROADMAP.md#calendar-pack) |
 | 94 | A booking page where others pick a time | No | | None |
 
 ## Contacts and tasks
@@ -206,17 +226,17 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 | 101 | Share with colleagues | Yes | | |
 | 102 | Share with outside people | Yes | An outside address becomes a guest, who signs in with a code by mail ([GUEST-ACCESS.md](GUEST-ACCESS.md)) | |
 | 103 | Share with groups | Yes | With a team | |
-| 104 | Rights per document: view, comment, edit | Partly | View and edit only. Commenting needs write access, so nobody can comment without being able to edit | None |
-| 105 | Rights per folder: view, comment, edit | Partly | Folder rights pass to everything inside, with the same two levels | None |
-| 106 | Share through a public link | No | "Anyone with the link" still needs an Eigen account | [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md), with no roadmap row |
+| 104 | Rights per document: view, comment, edit | Partly | View and edit only. Commenting needs write access, so nobody can comment without being able to edit | [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "A view-and-comment role" |
+| 105 | Rights per folder: view, comment, edit | Partly | Folder rights pass to everything inside, with the same two levels | [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "A view-and-comment role" |
+| 106 | Share through a public link | No | "Anyone with the link" still needs an Eigen account | [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md); [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "Public links" |
 | 107 | Download documents | Yes | Uploaded files as they are; Eigen documents as docx, xlsx, pptx, PDF or HTML | |
 | 108 | Team folders the organisation owns | Yes | Team drives, owned by the team | |
 | 109 | Edit together at the same time | Yes | Docs, sheets, slides, boards and drawings, with live cursors ([COLLAB.md](COLLAB.md)) | |
 | 110 | View earlier versions | Partly | Version history lists versions by time, and picking one asks to restore it. An old version can't be looked at first, and uploaded files have no versions | ROADMAP.md "File History: email digests + version-history unification" |
 | 111 | Restore earlier versions | Yes | A restore saves the current state as a version first | |
 | 112 | See who made which change | Partly | The Activity panel shows who edited and when. Nothing shows who wrote which text, and versions can't be compared | [DOCS-TODO.md](DOCS-TODO.md) "Suggesting mode (track changes)" |
-| 113 | Transfer ownership of documents | No | A move never leaves its drive; a copy to another drive is a new file with new sharing | None |
-| 114 | Transfer ownership of folders | No | Same as row 113 | None |
+| 113 | Transfer ownership of documents | No | A move never leaves its drive; a copy to another drive is a new file with new sharing | [Admin pack](ROADMAP.md#admin-pack) |
+| 114 | Transfer ownership of folders | No | Same as row 113 | [Admin pack](ROADMAP.md#admin-pack) |
 | 115 | A trash for deleted documents | Yes | Kept 30 days by default ([SOFT-DELETE.md](SOFT-DELETE.md)) | |
 | 116 | Find documents by name | Yes | | |
 | 117 | Find documents by the text inside | Partly | ⌘K searches the text of your own drives and your teams' drives, up to about 100 KB per file. Files others shared with you are not searched ([SEARCH.md](SEARCH.md)) | None |
@@ -233,7 +253,7 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 | 123 | Import, edit and export .docx | Yes | Comments are not carried either way | [DOCS-TODO.md](DOCS-TODO.md) "Docx: comments in export and import" |
 | 124 | Export to PDF | Yes | Through WeasyPrint, from the same HTML as the editor ([EXPORT.md](EXPORT.md)) | |
 | 125 | Font, size, colour, alignment, lists, headings, tables | Yes | Four fonts to choose from | |
-| 126 | Comments | Yes | Needs write access | |
+| 126 | Comments | Yes | Needs write access |; [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "A view-and-comment role" |
 | 127 | Mention people in comments to notify them | Yes | An in-app notification. No mail is sent, so someone who isn't signed in hears nothing | ROADMAP.md "Comments: a mention sends no mail" |
 | 128 | Suggest changes for another user to accept or reject | No | A docx import accepts tracked changes outright | [DOCS-TODO.md](DOCS-TODO.md) "Suggesting mode (track changes)", size XL |
 | 129 | Word count | Yes | No page count | [DOCS-TODO.md](DOCS-TODO.md) "A page count in Word count" |
@@ -246,7 +266,7 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 | 131 | Create and edit spreadsheets | Yes | [SHEETS.md](SHEETS.md) | |
 | 132 | Import, edit and export .xlsx | Yes | | |
 | 133 | Import, edit and export .ods | No | | None |
-| 134 | Import, edit and export .csv | No | A .csv previews as text only. Copy and paste carry cells as tab-separated text | None |
+| 134 | Import, edit and export .csv | No | A .csv previews as text only. Copy and paste carry cells as tab-separated text | [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "CSV import and export in Sheets" |
 | 135 | Export to PDF | Yes | | |
 | 136 | Font, colour, borders, alignment, number formats | Yes | | |
 | 137 | Formulas and functions | Yes | [FORMULA.md](FORMULA.md) | |
@@ -278,7 +298,7 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 
 ## Video meetings
 
-Eigen has no video meetings and no code toward them: no WebRTC, no screen sharing, and no tie to Jitsi, BigBlueButton or similar. A calendar event can't even carry a meeting link as a link (row 90). No proposal or roadmap row covers any of these 18 rows.
+Eigen has no video meetings and no code toward them: no WebRTC, no screen sharing, and no tie to Jitsi, BigBlueButton or similar. A calendar event can't even carry a meeting link as a link (row 90). The [Calendar pack](ROADMAP.md#calendar-pack) gives events a video link to a Jitsi or BigBlueButton server the admin names, which answers rows 158, 159 and 174 in part; nothing plans video in Eigen itself.
 
 | # | Requirement | Eigen |
 |---|---|---|
@@ -356,14 +376,14 @@ Eigen has no video meetings and no code toward them: no WebRTC, no screen sharin
 | 214 | Mail in Outlook, Apple Mail and Thunderbird | Yes | Standard IMAP and SMTP. The help center covers Thunderbird and Apple Mail; Outlook is untested | |
 | 215 | Calendar in Outlook, Apple Calendar and Thunderbird | Partly | Apple Calendar and Thunderbird. Outlook has no CalDAV, so only .ics files work there | None |
 | 216 | Contacts in Outlook, Apple Contacts and Thunderbird | Partly | Apple Contacts and DAVx5 are documented; Thunderbird works without a guide. Outlook has no CardDAV, so only .vcf files | None |
-| 217 | Automatic mail setup through Autoconfig | Partly | Caddy serves the Autoconfig file on the web domain only, so it fails when the mail domain differs | None |
-| 218 | Automatic setup in Outlook through Autodiscover | No | | None |
+| 217 | Automatic mail setup through Autoconfig | Partly | Caddy serves the Autoconfig file on the web domain only, so it fails when the mail domain differs | [Mail pack](ROADMAP.md#mail-pack) |
+| 218 | Automatic setup in Outlook through Autodiscover | No | | [Mail pack](ROADMAP.md#mail-pack) |
 
 ## Migration
 
 | # | Requirement | Eigen | What is there, what is missing | Plan |
 |---|---|---|---|---|
-| 219 | Migrate user accounts in bulk | No | Admins add members one at a time. Only a restore of a whole Eigen server moves every account | [PROPOSAL_SSO.md](proposals/PROPOSAL_SSO.md) makes accounts on first sign-in |
+| 219 | Migrate user accounts in bulk | No | Admins add members one at a time. Only a restore of a whole Eigen server moves every account | [PROPOSAL_SSO.md](proposals/PROPOSAL_SSO.md) makes accounts on first sign-in; [Admin pack](ROADMAP.md#admin-pack) |
 | 220 | Migrate mail with its folders or labels | Partly | The web app imports single .eml files. Folders move over IMAP with a client or `imapsync`, with no guide | [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) names a one-shot IMAP import as separate work |
 | 221 | Migrate calendars and contacts | Yes | .ics and .vcf import per user, and CalDAV and CardDAV. No bulk tool | |
 | 222 | Migrate files and folder trees | Partly | No Google Drive import and no folder upload in the browser; folder trees copy over WebDAV or rclone ([WEBDAV.md](WEBDAV.md)). Office files convert one at a time | None |
