@@ -10,11 +10,15 @@ eigen|mail⟩ is the [email app](/support/mail/get-started) in Eigen. Your mailb
 
 ## Reading and replying
 
-A reply quotes the message it answers, so the last mail in a thread carries the whole conversation. Pictures a message loads from the internet stay hidden until you click Load images, so a sender can't tell when you read it. [Reply, Reply all and Forward](/support/mail/read-and-reply) only open a draft: nothing goes out until you click Send.
+A reply quotes the message it answers, so the last mail in a thread carries the whole conversation. Saar's thread with the generator hire reads that way: his quote, her question whether the backup can run the second stage alone, and his yes.
+
+Pictures a message loads from the internet stay hidden until you click Load images, so a sender can't tell when you read it. [Reply, Reply all and Forward](/support/mail/read-and-reply) only open a draft: nothing goes out until you click Send.
 
 The sidebar holds [six mailboxes](/support/mail/get-started), with any folders you made in another mail app below them.
 
 ## Attachments land in Drive
+
+The generator quote came as an Excel file. Saar turned it into a sheet in the team drive, and from then on the crew works in that one sheet.
 
 Click an attachment to preview it. A contact file reads as its cards and a calendar file as its events. From there you [save it to a folder in Drive](/support/mail/save-attachments), or turn an `.xlsx` into a sheet, a `.docx` into a document or a `.pptx` into slides, and the copy opens straight away.
 
@@ -22,7 +26,9 @@ It works the other way too. [Attach a file from Drive](/support/mail/attach-file
 
 ## Finding mail
 
-The box above the list filters the folder you're in, by sender, recipients, subject and text. The search at the top of the window [looks through all your mail](/support/mail/search-your-email) at once, and `from:` and `to:` narrow it to a person. An invitation from someone's calendar shows as [a card in the message](/support/mail/get-started), with a button that opens it in Calendar.
+The box above the list filters the folder you're in, by sender, recipients, subject and text. The search at the top of the window [looks through all your mail](/support/mail/search-your-email) at once, and `from:` and `to:` narrow it to a person.
+
+An invitation from someone's calendar shows as [a card in the message](/support/mail/get-started), with a button that opens it in Calendar. The culture fund invited Bram to walk the field that way.
 
 ::: carousel
 ![Saar searches her inbox for the generator and opens the last reply](/data/about/media/mail-search)
