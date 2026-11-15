@@ -5,10 +5,10 @@
 // plain sheets, so the editor and the server share it, for example in the op replay and the recalc.
 
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { MAX_SHEET_NAME_LENGTH } from '@workspace/lib/sheets';
 import {
     a1RangeRef,
     extractLabel,
-    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     sheetNameKey,
     sheetRefName,

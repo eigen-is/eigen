@@ -4,16 +4,15 @@
 // the API does, and a live tab renames and deletes as the op replay does.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { stripNonXmlChars } from '@workspace/lib/xml';
 import {
     isSheetName,
     MAX_SHEET_NAME_LENGTH,
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
     SHEET_NAME_RULE,
-    sheetFinder,
-    sheetNameKey,
-} from './a1-notation';
+} from '@workspace/lib/sheets';
+import { stripNonXmlChars } from '@workspace/lib/xml';
+import { sheetFinder, sheetNameKey } from './a1-notation';
 import { breakSheetRefs, mapSheetCells, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
 import { error } from './validation';

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { findSheetByName, isSheetName, sheetFinder, sheetNameKey } from '../../engine/a1-notation';
+import { isSheetName } from '@workspace/lib/sheets';
+import { findSheetByName, sheetFinder, sheetNameKey } from '../../engine/a1-notation';
 import { copySheetName, legalSheetNames } from '../../engine/sheet-name';
 
 describe('engine/sheet-name — copySheetName', () => {

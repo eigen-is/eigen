@@ -1,5 +1,5 @@
 // A1 notation, the text form of a cell or a range such as Sheet1!$A$1:B3: parsing it, writing it, and the rules a
-// sheet name follows in it. The formula parser's helpers and lib own the low-level pieces, and this module re-exports
+// sheet name follows in it. The formula parser's helpers own the low-level pieces, and this module re-exports
 // them. The API imports it too, for example to read an Office chart's refs, so it stays free of React and the sheet's
 // state.
 
@@ -12,13 +12,6 @@ import {
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 
-export {
-    isSheetName,
-    MAX_SHEET_NAME_LENGTH,
-    SHEET_NAME_END_QUOTES,
-    SHEET_NAME_FORBIDDEN,
-    SHEET_NAME_RULE,
-} from '@workspace/lib/sheets';
 export {
     extractLabel,
     findSheetByName,
