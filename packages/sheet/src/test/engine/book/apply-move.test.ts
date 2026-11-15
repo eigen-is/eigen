@@ -360,6 +360,14 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
         expect(refusalOf(book, [moveOf([0, 0, 1, 2], 4, 4, 'b')])).toBe('merge-cut');
     });
 
+    test('the sheet the block leaves plans whole first, so its rule past the bound refuses before a cut where it lands', () => {
+        const source = sheetOf('a', { records: { conditionalFormat: { r: formulaRule([[40, 0, 40, 0]], LONG) } } });
+        const content = bookOf(source, sheetOf(ID, { records: { merge: { m: { rect: [5, 5, 5, 6] } } } }));
+        const op = moveOf([0, 0, 0, 0], 5, 5, ID);
+        expect(refusalOf(new Workbook(content), [op])).toBe('key-too-long');
+        expect(modelAfter(modelOf(content), { now: 1, seed: 1, ops: [op] })).toBe('key-too-long');
+    });
+
     test('a merge the block lands on whole is removed and comes back', () => {
         const book = new Workbook(bookOf(A, B));
         applyOps(book, [moveOf([10, 0, 10, 2], 5, 1)]);

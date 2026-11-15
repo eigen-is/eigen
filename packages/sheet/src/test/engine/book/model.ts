@@ -721,7 +721,6 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     const covered = [...to.records.merge].filter(
         ([id, { rect }]) => meets(rect, target) && !(from === to && carried.some(([other]) => other === id)),
     );
-    if (covered.some(([, { rect }]) => !within(rect, target))) return 'merge-cut';
     // The comments the block lands on go too, but for those it brings. A record it brings from another sheet whose id
     // that sheet keeps for another record refuses.
     const brought = [...from.records.comment].filter(([, { row, column }]) => inside(row, column, block));
@@ -729,14 +728,12 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         ([id, { row, column }]) =>
             inside(row, column, target) && !(from === to && brought.some(([other]) => other === id)),
     );
-    if (from !== to) {
-        const keeps = (held: ReadonlyMap<string, unknown>, gone: readonly [string, unknown][], id: string) =>
-            held.has(id) && !gone.some(([other]) => other === id);
-        const clash =
-            carried.some(([id]) => keeps(to.records.merge, covered, id)) ||
-            brought.some(([id]) => keeps(to.records.comment, landed, id));
-        if (clash) return 'id-in-use';
-    }
+    const keeps = (held: ReadonlyMap<string, unknown>, gone: readonly [string, unknown][], id: string) =>
+        held.has(id) && !gone.some(([other]) => other === id);
+    const clash =
+        from !== to &&
+        (carried.some(([id]) => keeps(to.records.merge, covered, id)) ||
+            brought.some(([id]) => keeps(to.records.comment, landed, id)));
     const move: Move = {
         fromSheet: op.sheet,
         row: top,
@@ -747,13 +744,20 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         toRow: op.toRow,
         toColumn: op.toColumn,
     };
+    // The sheets refuse one by one, the one the block leaves first and the one it lands on next, as every reader asks
+    // them; the engine moves the cells after. Where the block lands a cut refuses first, then a clash, then a rule.
+    for (const sheet of new Set([from, to, ...model.sheets.values()])) {
+        if (sheet === to && covered.some(([, { rect }]) => !within(rect, target))) return 'merge-cut';
+        if (sheet === to && clash) return 'id-in-use';
+        const refusal = moveOfRules(sheet, op, move);
+        if (refusal) return refusal;
+    }
     // A formula the block lands on is gone, so it is not asked.
-    const refusal =
-        rewrite(model.sheets.values(), (tree, host, row, column) =>
-            host === to && inside(row, column, target) && !(host === from && inside(row, column, block))
-                ? null
-                : transformMove(tree, move, host.id, row, column).tree,
-        ) ?? moveOfRules(model, op, move);
+    const refusal = rewrite(model.sheets.values(), (tree, host, row, column) =>
+        host === to && inside(row, column, target) && !(host === from && inside(row, column, block))
+            ? null
+            : transformMove(tree, move, host.id, row, column).tree,
+    );
     if (refusal) return refusal;
 
     const taken: [string, CellContent][] = [];
@@ -794,33 +798,31 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     return null;
 }
 
-// The formula of every rule through the move, before the ranges move. A rule's formula is read at the top left of its
+// The formula of every rule of a sheet through the move, before the ranges move. A rule's formula is read at the top left of its
 // first range. When the block leaves the rule's sheet with cells of the rule but without its first range whole, the
 // formula stays with the cells the block leaves, so it is read at the first of those; a rule the block holds whole on
 // a sheet it leaves for another keeps its text.
-function moveOfRules(model: Model, op: MoveOp, move: Move): RefusalKey | null {
+function moveOfRules(sheet: ModelSheet, op: MoveOp, move: Move): RefusalKey | null {
     const block = op.from;
-    for (const sheet of model.sheets.values()) {
-        const leaves = sheet.id === op.sheet;
-        for (const [id, rule] of sheet.records.conditionalFormat) {
-            const [first] = rule.ranges;
-            const goesAlong = leaves && op.sheet === op.toSheet && within(first, block);
-            let host: [number, number] | undefined = [first[0], first[1]];
-            if (leaves && !goesAlong) {
-                host = undefined;
-                for (const [top, left, bottom, right] of rule.ranges) {
-                    if (!inside(top, left, block)) host = [top, left];
-                    else if (right > block[3]) host = [top, block[3] + 1];
-                    else if (bottom > block[2]) host = [block[2] + 1, left];
-                    if (host) break;
-                }
+    const leaves = sheet.id === op.sheet;
+    for (const [id, rule] of sheet.records.conditionalFormat) {
+        const [first] = rule.ranges;
+        const goesAlong = leaves && op.sheet === op.toSheet && within(first, block);
+        let host: [number, number] | undefined = [first[0], first[1]];
+        if (leaves && !goesAlong) {
+            host = undefined;
+            for (const [top, left, bottom, right] of rule.ranges) {
+                if (!inside(top, left, block)) host = [top, left];
+                else if (right > block[3]) host = [top, block[3] + 1];
+                else if (bottom > block[2]) host = [block[2] + 1, left];
+                if (host) break;
             }
-            if (!host) continue;
-            const [row, column] = host;
-            const next = ruleThrough(rule, (tree) => transformMove(tree, move, sheet.id, row, column).tree);
-            if (next === 'key-too-long') return next;
-            sheet.records.conditionalFormat.set(id, next);
         }
+        if (!host) continue;
+        const [row, column] = host;
+        const next = ruleThrough(rule, (tree) => transformMove(tree, move, sheet.id, row, column).tree);
+        if (next === 'key-too-long') return next;
+        sheet.records.conditionalFormat.set(id, next);
     }
     return null;
 }
