@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
 - **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
+- **Lists across many drives** — **Shared with me**, **Recent** and **Watched** open at most four other people's or teams' drives at a time, so one long list doesn't stall the server for everyone. A drive that takes over four seconds to open is left out of that load
 - **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
@@ -42,6 +43,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
 - **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
+- **Calendars of a team you left** — the calendars of a team you left, or of a deleted team, leave your calendar list, unless that team still shares them with you
+- **Your name from your contact card** — editing your own card in Contacts with no last name leaves no trailing space after your name
 - **Merged cells and row or column changes in Sheets** — a row inserted right below a merged cell one row high stays out of the merge, as does a column inserted right of one a column wide, and a merge that a delete leaves with one cell becomes a plain cell
 - **Filters and deleted rows in Sheets** — deleting rows keeps a column's filter set, also when they are the last rows it hides
 - **Filters and deleted headers in Sheets** — deleting a filter's header row or its columns shows the rows it hid again, instead of leaving them hidden with no filter to bring them back
