@@ -98,9 +98,6 @@ export type ContentWriteResult = { path: DrivePath; etag: string };
 // The folder a copy lands in, reached as the copying user reaches it.
 export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
 
-// A path another home's row names, such as a Recent or Shared with me row, with the row that named it.
-export type VisiblePath<Row> = { readonly row: Row; readonly path: DrivePath };
-
 const UNKNOWN_TYPE = 'application/octet-stream';
 
 export class Drive {
@@ -1015,25 +1012,25 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still read, each with its row. It
-    // deletes no row, as a failed read looks like a deleted file.
-    public async getVisiblePaths<Row extends { mountId: string; pathId: string }>(
+    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a failed
+    // read looks like a deleted file.
+    public async getVisiblePaths(
         user: User,
         memberships: Memberships,
-        rows: readonly Row[],
-        mimeTypePrefix = '',
-    ): Promise<VisiblePath<Row>[]> {
-        const found: VisiblePath<Row>[] = [];
+        rows: readonly { mountId: string; pathId: string }[],
+        mimeTypePrefix: string,
+    ): Promise<DrivePath[]> {
+        const found: DrivePath[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
-            for (const [i, chain] of chains.entries()) {
+            for (const chain of chains) {
                 const path = chain.at(-1);
                 if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
                 if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
-                found.push({ row: mountRows[i], path });
+                found.push(path);
             }
         }
         return found;

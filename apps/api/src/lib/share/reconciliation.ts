@@ -4,7 +4,7 @@
 // decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
+import { getFromHomes, pullCalendarShares, pullPendingInvitations, sendToHome } from '../home/home-relay';
 import { getTeam } from '../team';
 import type { User } from '../user';
 import { getMemberships, getUserById, isGuest } from '../user';
@@ -24,7 +24,8 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             if (parsed.type === 'team') {
                 const team = await getTeam(parsed.id);
                 if (!team) continue;
-                for (const path of await pullSharedPaths(fromUserId, user)) {
+                const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
+                for (const path of paths) {
                     await sendToHome(user.id, { type: 'drive:acl-change', path, acl: path.acl, actorName: team.name });
                 }
                 continue;
@@ -33,7 +34,8 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             const owner = await getUserById(fromUserId);
             if (!owner) continue;
 
-            for (const path of await pullSharedPaths(fromUserId, user)) {
+            const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
+            for (const path of paths) {
                 await sendToHome(user.id, {
                     type: 'drive:acl-change',
                     path,

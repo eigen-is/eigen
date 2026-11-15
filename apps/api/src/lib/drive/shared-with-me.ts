@@ -9,9 +9,9 @@ import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@works
 import type { DriveACL } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { Home } from '../home';
-import { pullVisiblePaths } from '../home/home-relay';
+import { getFromHomes } from '../home/home-relay';
 import type { User } from '../user';
 import { actorDisplayName, getMemberships } from '../user';
 import { matchesACL } from './acl';
@@ -85,10 +85,13 @@ export async function receiveSharedPathChange(
 }
 
 export async function listSharedWithMe(sharedDb: SharedDb, user: User, mimeTypePrefix = ''): Promise<DrivePath[]> {
-    const rows = sharedDb.select().from(sharedPaths).all();
+    const rows = sharedDb.select().from(sharedPaths).orderBy(asc(sharedPaths.sharedAt)).all();
     if (rows.length === 0) return [];
-    const visible = await pullVisiblePaths(user, await getMemberships(user.id), rows, mimeTypePrefix);
-    return visible.sort((a, b) => a.row.sharedAt.getTime() - b.row.sharedAt.getTime()).map(({ path }) => path);
+    const owners = [...new Set(rows.map((row) => row.ownerId))];
+    const memberships = await getMemberships(user.id);
+    const answers = await getFromHomes(owners, 'drive:visible-paths', { user, memberships, rows, mimeTypePrefix });
+    const paths = new Map([...answers.values()].flat().map((path) => [path.id, path]));
+    return rows.flatMap((row) => paths.get(row.pathId) ?? []);
 }
 
 // The owners who shared at least one path with this home, so a view across owners, such as Watched, asks only

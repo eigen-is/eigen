@@ -391,7 +391,6 @@ describe('share reconciliation', () => {
                 return [share];
             }),
             spyOn(relay, 'pullPendingInvitations').mockResolvedValue([]),
-            spyOn(relay, 'pullSharedPaths').mockResolvedValue([]),
         );
 
         const running = reconcileShares(user);

@@ -162,6 +162,16 @@ describe('Shared with me reads each row from its owner', () => {
         expect(await listed(file.id)).toBeDefined();
     });
 
+    test('the listing of one type holds only the shared paths of that type', async () => {
+        const file = await sharedWithBob();
+        const folder = await newFolder();
+        await shareWithBob(folder.id);
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/mime/text-plain`);
+        const ids = (await assertJson<DrivePath[]>(res)).map((path) => path.id);
+        expect(ids).toContain(file.id);
+        expect(ids).not.toContain(folder.id);
+    });
+
     test('a home nobody shared with reads no memberships', async () => {
         const loner = await createTestUser('shared-with-me-loner@test.eigen.is', 'testpassword123', 'Loner');
         const home = await getHome(loner.id);

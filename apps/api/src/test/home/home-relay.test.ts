@@ -2,8 +2,10 @@ import { afterEach, beforeAll, describe, expect, jest, mock, spyOn, test } from 
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
-import { getServerConfig } from '../../lib/config/server-config';
+import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { Drive } from '../../lib/drive/drive';
+import { getSharedDatabase } from '../../lib/drive/shared';
+import { sharedPaths } from '../../lib/drive/shared-schema';
 import * as getHomeModule from '../../lib/home/get-home';
 import {
     drainDeliveriesWithin,
@@ -11,7 +13,6 @@ import {
     getFromHomes,
     HOME_OPEN_DEADLINE_MS,
     HOME_OPENS_AT_ONCE,
-    pullVisiblePaths,
     sendToHome,
     sendToUserHomes,
 } from '../../lib/home/home-relay';
@@ -255,10 +256,31 @@ describe('A read of the paths rows name', () => {
         const rows = [row(ctx.alice.user.id), row(ctx.bob.user.id), row(ctx.alice.user.id)];
         const viewer = aliceHome.user;
 
-        await pullVisiblePaths(viewer, await getMemberships(viewer.id), rows);
+        const memberships = await getMemberships(viewer.id);
+        await getFromHomes([ctx.alice.user.id, ctx.bob.user.id], 'drive:visible-paths', {
+            user: viewer,
+            memberships,
+            rows,
+            mimeTypePrefix: '',
+        });
 
         expect(aliceAsks.mock.calls.map((call) => call[2])).toEqual([[rows[0], rows[2]]]);
         expect(bobAsks.mock.calls.map((call) => call[2])).toEqual([[rows[1]]]);
+    });
+});
+
+describe('A search of a team drive', () => {
+    test('answers no more paths than the limit it was asked for', async () => {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+        for (const name of ['relaylimit-a.txt', 'relaylimit-b.txt']) {
+            await driveUpload(ctx.alice.user.sessionToken, teamOwner, teamMountId, root.id, new File(['x'], name));
+        }
+
+        const all = await getFromHomes([teamOwner], 'drive:search', { q: 'relaylimit', limit: 10 });
+        const one = await getFromHomes([teamOwner], 'drive:search', { q: 'relaylimit', limit: 1 });
+
+        expect(all.get(teamOwner)).toHaveLength(2);
+        expect(one.get(teamOwner)).toHaveLength(1);
     });
 });
 
@@ -482,6 +504,41 @@ describe('An answer that is slow to come', () => {
 
         expect([...answers.keys()]).toEqual([closed.id]);
         expect((await waiting).size).toBe(HOME_OPENS_AT_ONCE);
+    });
+});
+
+describe('An answer that asks the relay again', () => {
+    // More teams than slots, each listing a path of a closed home, so every answer needs one more open.
+    test('finishes while every slot is busy', async () => {
+        const sharer = await createTestUser(
+            `relay-sharer-${crypto.randomUUID()}@test.eigen.is`,
+            'testpassword123',
+            'Sharer',
+        );
+        const root = await driveGet<DrivePath>(sharer.sessionToken, sharer.id, 'default', 'root');
+        const file = await driveUpload(
+            sharer.sessionToken,
+            sharer.id,
+            'default',
+            root.id,
+            new File(['x'], 'nested.txt', { type: 'text/plain' }),
+        );
+        await drivePut(sharer.sessionToken, sharer.id, 'default', `path/${file.id}/acl`, { visibility: 'public-read' });
+        const teams: string[] = [];
+        for (let i = 0; i <= HOME_OPENS_AT_ONCE; i++) {
+            const team = teamOwnerId(await createTeam(ctx, getPublicConfig().orgId, `Nested ${crypto.randomUUID()}`));
+            const sharedDb = await getSharedDatabase(await getHomeModule.getHome(team));
+            sharedDb
+                .insert(sharedPaths)
+                .values({ ownerId: sharer.id, mountId: 'default', pathId: file.id, sharedAt: new Date() })
+                .run();
+            teams.push(team);
+        }
+        for (const ownerId of [sharer.id, ...teams]) await getHomeModule.evictHome(ownerId);
+
+        const answers = await getFromHomes(teams, 'drive:mime-contents', { mimeType: 'text/plain' });
+
+        for (const team of teams) expect(answers.get(team)?.map((path) => path.id)).toEqual([file.id]);
     });
 });
 
