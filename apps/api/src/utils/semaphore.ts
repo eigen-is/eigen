@@ -6,7 +6,6 @@ export class Semaphore {
 
     public constructor(private readonly max: number) {}
 
-    // The callers queued behind the running ones.
     public get waiting(): number {
         return this.waiters.length;
     }
@@ -44,7 +43,7 @@ export class Semaphore {
     private release(): void {
         const next = this.waiters.shift();
         if (next) {
-            next(); // hand the slot straight to the next waiter; active count unchanged
+            next();
         } else {
             this.active--;
         }

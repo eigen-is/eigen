@@ -48,7 +48,6 @@ export class TeamHome extends Home {
         return super.calendar;
     }
 
-    // A team whose calendar is switched off has no calendar.
     public override get hasCalendar(): boolean {
         return this.settings.get().calendar?.enabled !== false;
     }
