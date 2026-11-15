@@ -6,7 +6,7 @@ import { VIEWPORT } from '../lib/scene';
 import { openSitePlan } from './site-plan';
 
 // Ctrl-wheel steps zoom about the pointer, so the same steps back land on the same view.
-const STEPS = 18;
+const STEPS = 22;
 const DELTA = 5;
 
 export const vectorZoom = {
