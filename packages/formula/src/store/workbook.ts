@@ -1,14 +1,16 @@
 // The cell store of one workbook: its sheets in tab order and by id, the string table and the shape table. It is
-// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a source
-// never calls back into the engine while its cells are read, as its sheet is not the workbook's yet. A host writes a
-// literal, a formula in its stored text, or a clear; the recalc writes each result into the same planes, so a reader
-// never sees where a value came from. `apply` is the one way cells move and sheets come and go.
+// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a sheet is
+// read from its source to the end before a table holds any of it. A host writes a literal, a formula in its stored
+// text, or a clear; the recalc writes each result into the same planes, so a reader never sees where a value came
+// from. `apply` is the one way cells move and sheets come and go.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
+import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
+import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
-import { ERRORS } from '../values/errors';
+import { ERRORS, errorOf, REF } from '../values/errors';
 import type { Scalar } from '../values/value';
 import type { Column } from './column';
 import { CellKind, KIND_MASK } from './column';
@@ -21,14 +23,24 @@ export type Literal = number | string | boolean | FormulaError;
 export type CellSink = (row: number, column: number, value: Literal | null, formula: string | null) => void;
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
-// twice: once to size the columns and once to fill them. So a host walks its own cells and builds no list.
+// twice, to report the same cells: once to size the columns and once to fill them. So a host walks its own cells
+// and builds no list.
 export type SheetSource = {
     readonly id: string;
     readonly name: string;
     readonly cells: (cell: CellSink) => void;
 };
 
-// A structural edit. A sheet is added as `load` made it, at a place among the tabs, and moved to one; both count
+// A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold their number in the
+// order of these lists, which `adopt` turns into ids and codes of the workbook's tables.
+export type Draft = {
+    readonly sheet: Sheet;
+    readonly texts: ReadonlyMap<string, number>;
+    readonly formulas: ReadonlyMap<string, number>;
+    readonly errors: ReadonlyMap<string, number>;
+};
+
+// A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
 // from 0.
 export const ChangeKind = { Lines: 0, Move: 1, AddSheet: 2, RemoveSheet: 3, RenameSheet: 4, MoveSheet: 5 } as const;
 
@@ -40,6 +52,20 @@ export type Change =
     | { readonly kind: typeof ChangeKind.RenameSheet; readonly sheet: string; readonly name: string }
     | { readonly kind: typeof ChangeKind.MoveSheet; readonly sheet: string; readonly place: number };
 
+// The store's door for a cell a host hands it, in a write or in a load: throws unless the cell is on the grid and
+// its value, when a number, is one a cell can hold.
+export function admit(row: number, column: number, value: Literal | null): void {
+    if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+    if (typeof value === 'number' && !Number.isFinite(value)) throw new RangeError(`No number ${value}`);
+}
+
+export function within(line: number, lines: number): boolean {
+    return Number.isInteger(line) && line >= 0 && line < lines;
+}
+
+// The code of the first error only a file knows: their codes go on where the engine's own list ends.
+const CARRIED = ERRORS.length + 1;
+
 // A string table that weighs less, in characters, is not swept: the texts no cell holds then cost a few megabytes
 // at most, and a sweep reads every cell.
 export const SWEEP_FLOOR = 2 ** 22;
@@ -49,7 +75,7 @@ export class Workbook {
     public readonly strings = new StringTable();
     public readonly shapes = new ShapeTable();
     private readonly byId = new Map<string, Sheet>();
-    // The errors only a file knows, by their text. Their codes go on where the engine's own list ends.
+    // The errors only a file knows, by their text.
     private readonly carried: FormulaError[] = [];
     private readonly carriedCodes = new Map<string, number>();
     // The weight of the string table past which the next pass sweeps it: twice what it was after the last sweep or
@@ -57,7 +83,11 @@ export class Workbook {
     private limit: number;
 
     public constructor(sources: readonly SheetSource[]) {
-        for (const source of sources) this.insert(this.load(source), this.held.length);
+        for (const source of sources) {
+            this.checkId(source.id);
+            this.checkName(source.name, null);
+            this.insert(this.adopt(this.read(source)), this.held.length);
+        }
         this.limit = Math.max(SWEEP_FLOOR, 2 * this.strings.weight);
     }
 
@@ -70,28 +100,72 @@ export class Workbook {
         return this.byId.get(id);
     }
 
-    // The sheet of an id a host gave, which must exist.
-    public known(id: string): Sheet {
-        const sheet = this.byId.get(id);
-        if (sheet === undefined) throw new Error(`No sheet ${id}`);
-        return sheet;
+    // The sheet a host names, by its id or by its place among the tabs, which must exist.
+    public known(sheet: string | number): Sheet {
+        const found = typeof sheet === 'string' ? this.byId.get(sheet) : this.held[sheet];
+        if (found === undefined) throw new Error(`No sheet ${sheet}`);
+        return found;
     }
 
-    // One sheet from its description, in no place yet: `apply` adds it.
-    public load(source: SheetSource): Sheet {
+    // Throws when a sheet has the id: a host names a sheet by it.
+    public checkId(id: string): void {
+        if (this.byId.has(id)) throw new Error(`Sheet ${id} exists`);
+    }
+
+    // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is
+    // typed with would read either of them.
+    public checkName(name: string, holder: Sheet | null): void {
+        const key = sheetNameKey(name);
+        for (const sheet of this.held) {
+            if (sheet !== holder && sheetNameKey(sheet.name) === key) throw new Error(`Sheet name ${name} is in use`);
+        }
+    }
+
+    // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
+    // does while it is read, such as a call of the engine, meets the workbook as it was.
+    public read(source: SheetSource): Draft {
         const lengths: number[] = [];
-        source.cells((row, column, value, formula) => {
-            if (value === null && formula === null) return;
+        walk(source, (row, column) => {
             while (lengths.length <= column) lengths.push(0);
             if (row >= lengths[column]) lengths[column] = row + 1;
         });
         const sheet = new Sheet(source.id, source.name, lengths);
-        source.cells((row, column, value, formula) => {
+        const texts = new Map<string, number>();
+        const formulas = new Map<string, number>();
+        const errors = new Map<string, number>();
+        walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
-            if (formula !== null) held.shape[row] = this.shapes.intern(formula);
-            if (value !== null) this.put(held, row, value);
-            else if (formula !== null) held.markDirty(row);
+            if (held === undefined || row >= held.length) {
+                throw new Error(`Sheet ${source.id} reported cell ${row},${column} only when it was read again`);
+            }
+            if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
+            if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
+            else if (typeof value === 'object' && value !== null) {
+                held.put(row, CellKind.Error, 0, value.code || CARRIED + listed(errors, value.text));
+            } else if (value !== null) this.put(held, row, value);
+            // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
+            // which only computing it finds. A host's error is told by its code, as the cell stores it.
+            if (formula !== null && (value === null || (typeof value === 'object' && value.code === REF.code))) {
+                held.markDirty(row);
+            }
         });
+        return { sheet, texts, formulas, errors };
+    }
+
+    // Makes a sheet that was read one whose cells hold ids and codes of the tables, in no place yet: `apply` adds
+    // it. Nothing may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
+    public adopt({ sheet, texts, formulas, errors }: Draft): Sheet {
+        const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
+        const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
+        const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
+        for (const { kind, ref, shape, length } of sheet.columns) {
+            for (let row = 0; row < length; row += 1) {
+                const holds = kind[row] & KIND_MASK;
+                if (holds === CellKind.Text) ref[row] = textIds[ref[row]];
+                else if (holds === CellKind.Error && ref[row] >= CARRIED) ref[row] = errorCodes[ref[row] - CARRIED];
+                if (shape[row] !== 0) shape[row] = shapeIds[shape[row] - 1];
+            }
+        }
         return sheet;
     }
 
@@ -178,7 +252,7 @@ export class Workbook {
     }
 
     public error(code: number): FormulaError {
-        return code <= ERRORS.length ? ERRORS[code - 1] : this.carried[code - ERRORS.length - 1];
+        return code < CARRIED ? ERRORS[code - 1] : this.carried[code - CARRIED];
     }
 
     // Writes a value into a row the column already has. False when the cell already held it.
@@ -237,10 +311,27 @@ export class Workbook {
     private carry(error: FormulaError): number {
         let code = this.carriedCodes.get(error.text);
         if (code === undefined) {
+            code = CARRIED + this.carried.length;
             this.carried.push(error);
-            code = ERRORS.length + this.carried.length;
             this.carriedCodes.set(error.text, code);
         }
         return code;
     }
+}
+
+// Reports the cells of a source that hold something, each through the store's door: both walks of a load meet
+// the same refusals, as a source may report other cells the second time.
+function walk(source: SheetSource, cell: CellSink): void {
+    source.cells((row, column, value, formula) => {
+        if (value === null && formula === null) return;
+        admit(row, column, value);
+        cell(row, column, value, formula);
+    });
+}
+
+// The number of a text in a list of distinct texts in the order they came, from 0.
+function listed(list: Map<string, number>, text: string): number {
+    let number = list.get(text);
+    if (number === undefined) list.set(text, (number = list.size));
+    return number;
 }

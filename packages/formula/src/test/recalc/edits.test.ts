@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
-import type { LineEdit, Move } from '../../index';
-import { Engine, REF } from '../../index';
-import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
+import type { LineEdit, Move, SheetSource } from '../../index';
+import { DIV0, Engine, ERROR, REF } from '../../index';
+import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
 
@@ -522,25 +522,24 @@ describe('sheets', () => {
         engine.recalc(NO_CAP);
         expect(engine.valueOf('s3', 0, 0)).toBe(21);
     });
-    test('a sheet that comes beside one whose name differs only in case reads each as a typed name does', () => {
+    test('a sheet that comes reads a name typed in any case, its own name too', () => {
         const engine = new Engine([{ id: 'a', name: 'data', cells: (cell) => cell(0, 0, 1, null) }]);
         const added = engine.addSheet(
             {
                 id: 'c',
-                name: 'Data',
+                name: 'Other',
                 cells: (cell) => {
                     cell(0, 0, 3, null);
                     cell(1, 0, null, "='data'!R1C1");
-                    cell(2, 0, null, "='Data'!R1C1");
-                    cell(3, 0, null, "='DATA'!R1C1");
+                    cell(2, 0, null, "='DATA'!R1C1");
+                    cell(3, 0, null, "='oTHER'!R1C1");
                 },
             },
             0,
         );
-        // The sheet of exactly that name, else the first in another case, the new sheet before the others.
-        expect(added.rewrites.map((rewrite) => rewrite.formula)).toEqual(['=[a]!R1C1', '=[c]!R1C1', '=[c]!R1C1']);
+        expect(added.rewrites.map((rewrite) => rewrite.formula)).toEqual(['=[a]!R1C1', '=[a]!R1C1', '=[c]!R1C1']);
         engine.recalc(NO_CAP);
-        expect([1, 2, 3].map((row) => engine.valueOf('c', row, 0))).toEqual([1, 3, 3]);
+        expect([1, 2, 3].map((row) => engine.valueOf('c', row, 0))).toEqual([1, 1, 3]);
     });
     test('a sheet whose cells cannot be read is not added, and nothing changes', () => {
         const engine = book();
@@ -599,7 +598,7 @@ describe('what a host reads back', () => {
         ]);
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 50, 99, 0, 2, 0, 99]);
     });
-    test('a loop that came with its values is listed once a cell of it is computed again, and not before', () => {
+    test('a loop that came with #REF! is listed by the first pass, one that came with other values once computed', () => {
         const engine = new Engine([
             {
                 id: 's1',
@@ -609,17 +608,29 @@ describe('what a host reads back', () => {
                     cell(1, 0, REF, '=R[-1]C');
                     cell(0, 2, 5, null);
                     cell(0, 3, 6, '=RC[-1]+1');
+                    // As a file of Excel's brings a loop: with the 0 it shows there.
+                    cell(0, 5, 0, '=R[1]C');
+                    cell(1, 5, 0, '=R[-1]C');
+                    cell(0, 7, DIV0, '=1/0');
                 },
             },
         ]);
-        // A load brings values and no word on loops, and nothing here is to be computed.
-        expect(engine.recalc(NO_CAP).loops).toEqual([]);
-        engine.setValue('s1', 0, 2, 7);
-        expect(engine.recalc(NO_CAP).loops).toEqual([]);
-        engine.setFormula('s1', 0, 0, '=R[1]C');
-        expect(engine.recalc(NO_CAP).loops).toEqual([
+        const first = [
             { sheet: 's1', row: 0, column: 0 },
             { sheet: 's1', row: 1, column: 0 },
+        ];
+        expect(engine.isPending('s1', 0, 0)).toBe(true);
+        // Only #REF! can stand for a loop: a formula that came with any other value is taken as computed.
+        const settled = [3, 5, 7].map((column) => engine.isPending('s1', 0, column));
+        expect(settled).toEqual([false, false, false]);
+        expect(engine.recalc(NO_CAP)).toEqual({ loops: first, stopped: false, changed: [] });
+        engine.setValue('s1', 0, 2, 7);
+        expect(engine.recalc(NO_CAP).loops).toEqual(first);
+        engine.setFormula('s1', 0, 5, '=R[1]C');
+        expect(engine.recalc(NO_CAP).loops).toEqual([
+            ...first,
+            { sheet: 's1', row: 0, column: 5 },
+            { sheet: 's1', row: 1, column: 5 },
         ]);
     });
     test('the stored text of a cell, and a block filled with one', () => {
@@ -689,5 +700,67 @@ describe('the facts an edit asks of a shape', () => {
                 expect([name, slot.family === null || (slot.family.kinds & 1) === 0]).toEqual([name, true]);
             }
         }
+    });
+});
+
+describe('a formula handed in a spelling that is not the stored one', () => {
+    // The stored text has one spelling of a function's name, of a number, of TRUE and of an offset of none.
+    const SPELLINGS = [
+        '=sum(R[5]C,1.0)*[a]!R1C1=true',
+        '=Sum(R[5]C[0],1)*[a]!R1C1=TRUE',
+        '=SUM(R[5]C,1E0)*[a]!R1C1=True',
+    ];
+    const KEY = '=SUM(R[5]C,1)*[a]!R1C1=TRUE';
+    const sheet = (cells: SheetSource['cells']) => ({ id: 'a', name: 'a', cells });
+
+    test('a written, a filled and a loaded formula read back as the one stored text', () => {
+        const engine = new Engine([
+            sheet((cell) => {
+                for (const [row, text] of SPELLINGS.entries()) cell(row, 0, null, text);
+            }),
+        ]);
+        engine.setFormula('a', 0, 1, SPELLINGS[0]);
+        engine.setFormula('a', 1, 1, SPELLINGS[1]);
+        engine.fillFormula('a', 2, 1, 2, 2, SPELLINGS[2]);
+        engine.addSheet({ id: 'b', name: 'b', cells: (cell) => cell(0, 0, null, SPELLINGS[0]) }, 1);
+        for (const [row, column] of [0, 1, 2].flatMap((row) => [0, 1].map((column) => [row, column]))) {
+            expect(engine.formulaOf('a', row, column)).toBe(KEY);
+        }
+        expect([engine.formulaOf('a', 2, 2), engine.formulaOf('b', 0, 0)]).toEqual([KEY, KEY]);
+    });
+
+    test('the spellings are one shape: an edit rewrites them as one block', () => {
+        const engine = new Engine([sheet(() => {})]);
+        for (const [row, text] of SPELLINGS.entries()) engine.setFormula('a', row, 0, text);
+        const { rewrites } = engine.editLines({ insert: true, index: 4, count: 2, sheet: 'a', rows: true });
+        expect(rewrites).toEqual([
+            { sheet: 'a', top: 0, left: 0, bottom: 2, right: 0, formula: '=SUM(R[7]C,1)*[a]!R1C1=TRUE', lost: null },
+        ]);
+    });
+
+    test('text that does not parse is kept as it was handed', () => {
+        const engine = new Engine([sheet(() => {})]);
+        engine.setFormula('a', 0, 0, '==sum(');
+        engine.recalc(NO_CAP);
+        expect([engine.formulaOf('a', 0, 0), engine.valueOf('a', 0, 0)]).toEqual(['==sum(', ERROR]);
+    });
+
+    test('a formula whose stored text would be too long to read back is kept as it was handed', () => {
+        // .5 is stored as 0.5, so the text of this sum grows by a third and passes the longest a cell stores.
+        const long = `=${Array.from({ length: Math.floor(MAX_STORED_LENGTH / 3) }, () => '.5').join('+')}`;
+        const engine = new Engine([sheet((cell) => cell(0, 0, null, long))]);
+        engine.setFormula('a', 1, 0, long);
+        engine.setFormula('a', 2, 0, '=.5+.5');
+        engine.recalc(NO_CAP);
+        const read = [0, 1, 2].map((row) => engine.formulaOf('a', row, 0));
+        expect(read.map((text) => (text === long ? 'as handed' : text))).toEqual([
+            'as handed',
+            'as handed',
+            '=0.5+0.5',
+        ]);
+        expect([engine.valueOf('a', 0, 0), engine.valueOf('a', 1, 0)]).toEqual([21845, 21845]);
+        const again = new Engine([sheet((cell) => cell(0, 0, null, read[0]))]);
+        again.recalc(NO_CAP);
+        expect(again.valueOf('a', 0, 0)).toBe(21845);
     });
 });

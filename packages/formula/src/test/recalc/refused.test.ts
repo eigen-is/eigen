@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Engine } from '../../index';
+import type { Literal, SheetSource } from '../../index';
+import { Engine } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { engineOf, stored } from './support';
 
@@ -46,10 +47,52 @@ const numbers: [string, number][] = [
     ['negative', -1],
     ['a fraction', 1.5],
     ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
 ];
 const rowsOff: [string, number][] = [...numbers, ['past the last row', GRID_ROWS]];
 const columnsOff: [string, number][] = [...numbers, ['past the last column', GRID_COLUMNS]];
 const counts: [string, number][] = [...numbers, ['zero', 0]];
+const noNumbers: [string, number][] = [
+    ['not a number', Number.NaN],
+    ['infinite', Number.POSITIVE_INFINITY],
+    ['infinite below zero', Number.NEGATIVE_INFINITY],
+];
+
+// A sheet that comes with good cells around one more, which the store may refuse.
+function sheetWith(row: number, column: number, value: Literal | null, formula: string | null): SheetSource {
+    return {
+        id: 's9',
+        name: 'Later',
+        cells: (cell) => {
+            cell(0, 0, 'kept', '=1+1');
+            cell(row, column, value, formula);
+            cell(2, 2, 'more', null);
+        },
+    };
+}
+
+// A sheet whose source reports one more cell the second time it is walked, when the columns are sized.
+function sheetThatDiffers(row: number, column: number, value: Literal): SheetSource {
+    let walks = 0;
+    return {
+        id: 's9',
+        name: 'Later',
+        cells: (cell) => {
+            walks += 1;
+            cell(0, 0, 'kept', '=1+1');
+            cell(1, 0, 1, null);
+            if (walks === 2) cell(row, column, value, null);
+        },
+    };
+}
+
+const DIFFERS: [string, number, number, Literal, string][] = [
+    ['a number that is not one', 0, 0, Number.NaN, 'No number NaN'],
+    ['a row that is a fraction', 0.5, 0, 3, 'No cell 0.5,0'],
+    ['a column that is negative', 0, -1, 3, 'No cell 0,-1'],
+    ['a column it did not report', 0, 5, 2, 'Sheet s9 reported cell 0,5 only when it was read again'],
+    ['a row past the last it reported', 7, 0, 2, 'Sheet s9 reported cell 7,0 only when it was read again'],
+];
 
 const REFUSED: [string, (engine: Engine) => unknown][] = [
     ['a value on a sheet that is gone', (engine) => engine.setValue('nope', 0, 0, 1)],
@@ -64,6 +107,10 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
     ['a move from a sheet that is gone', (engine) => engine.moveCells({ ...block, fromSheet: 'nope' })],
     ['a move to a sheet that is gone', (engine) => engine.moveCells({ ...block, toSheet: 'nope' })],
     ['a sheet added under an id in use', (engine) => engine.addSheet({ ...none, id: 's2' }, 0)],
+    ['a sheet added under a name in use', (engine) => engine.addSheet({ ...none, name: 'Sheet2' }, 0)],
+    ['a sheet added under a name in use in another case', (engine) => engine.addSheet({ ...none, name: 'sHEET1' }, 0)],
+    ['a sheet renamed to the name of another', (engine) => engine.renameSheet('s1', 'Sheet2')],
+    ['a sheet renamed to the name of another in another case', (engine) => engine.renameSheet('s2', 'SHEET1')],
     ['a sheet that is gone removed', (engine) => engine.removeSheet('nope')],
     ['a sheet that is gone renamed', (engine) => engine.renameSheet('nope', 'Later')],
     ['a sheet that is gone moved', (engine) => engine.moveSheet('nope', 0)],
@@ -80,6 +127,11 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
         ],
         [`a move from a row that is ${what}`, (engine) => engine.moveCells({ ...block, row })],
         [`a move to a row that is ${what}`, (engine) => engine.moveCells({ ...block, toRow: row })],
+        [`a sheet with a value on a row that is ${what}`, (engine) => engine.addSheet(sheetWith(row, 1, 1, null), 0)],
+        [
+            `a sheet with a formula on a row that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(row, 1, null, '=1'), 0),
+        ],
     ]),
     ...columnsOff.flatMap(([what, column]): [string, (engine: Engine) => unknown][] => [
         [`a value on a column that is ${what}`, (engine) => engine.setValue('s1', 0, column, 1)],
@@ -90,6 +142,23 @@ const REFUSED: [string, (engine: Engine) => unknown][] = [
         [`columns at a line that is ${what}`, (engine) => engine.editLines({ ...lines, rows: false, index: column })],
         [`a move from a column that is ${what}`, (engine) => engine.moveCells({ ...block, column })],
         [`a move to a column that is ${what}`, (engine) => engine.moveCells({ ...block, toColumn: column })],
+        [
+            `a sheet with a value on a column that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(1, column, 1, null), 0),
+        ],
+        [
+            `a sheet with a formula on a column that is ${what}`,
+            (engine) => engine.addSheet(sheetWith(1, column, null, '=1'), 0),
+        ],
+    ]),
+    ...noNumbers.flatMap(([what, value]): [string, (engine: Engine) => unknown][] => [
+        [`a value that is ${what}`, (engine) => engine.setValue('s1', 0, 0, value)],
+        [`a sheet with a value that is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, null), 0)],
+        [`a sheet with a formula whose value is ${what}`, (engine) => engine.addSheet(sheetWith(1, 1, value, '=1'), 0)],
+    ]),
+    ...DIFFERS.map(([what, row, column, value]): [string, (engine: Engine) => unknown] => [
+        `a sheet that reports ${what} when it is read again`,
+        (engine) => engine.addSheet(sheetThatDiffers(row, column, value), 0),
     ]),
     ...counts.flatMap(([what, count]): [string, (engine: Engine) => unknown][] => [
         [`rows inserted, their count ${what}`, (engine) => engine.editLines({ ...lines, count })],
@@ -115,9 +184,55 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
         expect(read(engine)).toEqual(read(untouched));
     });
+    test.each([
+        ...rowsOff.map(([what, row]): [string, SheetSource] => [`a row that is ${what}`, sheetWith(row, 1, 1, null)]),
+        ...columnsOff.map(([what, column]): [string, SheetSource] => [
+            `a column that is ${what}`,
+            sheetWith(1, column, null, '=1'),
+        ]),
+        ...noNumbers.map(([what, value]): [string, SheetSource] => [
+            `a value that is ${what}`,
+            sheetWith(1, 1, value, null),
+        ]),
+    ])('a workbook is not loaded from a sheet with %s', (_, sheet) => {
+        expect(() => new Engine([sheet])).toThrow(RangeError);
+    });
+    test.each(DIFFERS)(
+        'a workbook is not loaded from a sheet that reports %s when it is read again',
+        (_, row, column, value, error) => {
+            expect(() => new Engine([sheetThatDiffers(row, column, value)])).toThrow(error);
+        },
+    );
+    test.each([
+        ['the same', 'Data', 'Data'],
+        ['the same but for their case', 'Data', 'dATA'],
+        ['the same but for a Greek final sigma', 'όσος', 'ΌΣΟΣ'],
+    ])('a workbook is not loaded from two sheets whose names are %s', (_, first, second) => {
+        const sheets = [first, second].map((name, at) => ({ id: `s${at}`, name, cells: () => {} }));
+        expect(() => new Engine(sheets)).toThrow(`Sheet name ${second} is in use`);
+    });
+    test('a workbook is not loaded from two sheets with one id', () => {
+        const sheets = ['Data', 'Other'].map((name) => ({ id: 's1', name, cells: () => {} }));
+        expect(() => new Engine(sheets)).toThrow('Sheet s1 exists');
+    });
+    test('two names a formula tells apart are two sheets, and a sheet takes its own name in another case', () => {
+        // Sheet names fold each character on its own, so ß is no ss.
+        const engine = new Engine(['Straße', 'STRASSE'].map((name) => ({ id: name, name, cells: () => {} })));
+        engine.addSheet({ id: 'third', name: 'Strasse 2', cells: () => {} }, 0);
+        expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
+        expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
+        expect(() => engine.renameSheet('third', 'strasse')).toThrow('Sheet name strasse is in use');
+        engine.removeSheet('STRASSE');
+        expect(engine.renameSheet('third', 'strasse').rewrites).toEqual([]);
+    });
+    test('a cell reported empty is no cell, wherever it is said to be', () => {
+        const engine = new Engine([sheetWith(Number.NaN, -1, null, null)]);
+        expect([engine.valueOf('s9', 0, 0), engine.valueOf('s9', 2, 2)]).toEqual(['kept', 'more']);
+    });
     test('the last cell of the grid, and lines that reach past it, are not refused', () => {
         const engine = workbook();
         engine.setValue('s1', GRID_ROWS - 1, GRID_COLUMNS - 1, 1);
+        engine.addSheet(sheetWith(GRID_ROWS - 1, GRID_COLUMNS - 1, Number.MAX_VALUE, null), 2);
         engine.fillFormula('s2', GRID_ROWS - 2, GRID_COLUMNS - 2, GRID_ROWS - 1, GRID_COLUMNS - 1, '=1');
         engine.clear('s1', GRID_ROWS - 1, GRID_COLUMNS - 1);
         expect(engine.editLines({ ...lines, index: GRID_ROWS - 1, count: 3 }).dropped).toBe(0);

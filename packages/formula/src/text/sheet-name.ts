@@ -26,8 +26,8 @@ export function sheetNameKey(name: string): string {
     return upperCase(name);
 }
 
-// The sheet a name reads: the one of exactly that name, else one in another case. A workbook can hold Data and
-// data, and then each name keeps reading its own sheet.
+// The sheet a name reads: the one of exactly that name, else one in another case. The engine refuses two names that
+// differ only in case, but a file or a host that reads names here can hold Data and data: then each reads its own.
 export function findSheetByName<S extends { readonly name: string }>(
     sheets: readonly S[],
     name: string,

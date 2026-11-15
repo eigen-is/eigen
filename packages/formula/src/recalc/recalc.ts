@@ -10,7 +10,7 @@ import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
 import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
-import type { Change, Literal, SheetSource, Workbook } from '../store/workbook';
+import type { Change, Draft, Literal, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
 import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
@@ -22,7 +22,7 @@ type CellAddress = { readonly sheet: string; readonly row: number; readonly colu
 
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
-    // `stopped` is false, and a loop is listed once one of its cells was computed: only computing finds it.
+    // `stopped` is false. Only computing finds a loop, so one loaded with other values than #REF! shows once computed.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;
@@ -125,11 +125,11 @@ export class Recalc {
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
     }
 
-    // Adds a sheet from its description. The index is brought up to date before the sheet is loaded, as that
-    // forgets the shapes no cell of the workbook holds, and the cells of the new sheet are not the workbook's yet.
-    public addSheet(source: SheetSource, place: number): EditResult {
+    // Adds a sheet that was read from its description. The index is brought up to date before the tables take the
+    // sheet's texts and shapes, as that forgets the shapes no cell of the workbook holds, and these are not yet.
+    public addSheet(draft: Draft, place: number): EditResult {
         this.reach();
-        return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.load(source), place });
+        return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.adopt(draft), place });
     }
 
     // Performs a structural edit. What it can change is flagged, with the cells written since the last pass, while
@@ -368,7 +368,7 @@ export class Recalc {
         this.made[at] = 0;
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
-            ? null
+            ? (this.workbook.value(column, row) ?? REF)
             : tree === null
               ? ERROR
               : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
@@ -379,7 +379,7 @@ export class Recalc {
         // stops before its first store: a formula that costs more than the cap alone would hold every pass up.
         if (this.cost >= this.cap && this.stored) throw STOP;
         this.stored = true;
-        if ((column.kind[row] & LOOP) === 0 && !kept && this.workbook.put(column, row, value)) {
+        if ((column.kind[row] & LOOP) === 0 && this.workbook.put(column, row, value)) {
             extend(this.changed, this.sheets[at].place, this.places[at], row);
         }
         for (let i = at; i < this.size; i += 1) {

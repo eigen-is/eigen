@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Engine, errorOf, NA } from '../../index';
+import type { SheetSource } from '../../store/workbook';
+import { Workbook } from '../../store/workbook';
+import { GRID_ROWS } from '../../text';
+import { ERRORS } from '../../values/errors';
 import { stored } from '../recalc/support';
 import type { TestCell } from './support';
 import { source } from './support';
@@ -36,6 +40,107 @@ describe('load', () => {
         expect(engine.valueOf('s1', 3, 0)).toBeNull();
         expect(engine.valueOf('s1', 1000000, 0)).toBeNull();
         expect(engine.valueOf('s1', 0, 5)).toBeNull();
+    });
+
+    test.each([
+        ['a row above the first', -1, 0],
+        ['a row that is a fraction', 0.5, 0],
+        ['a row that is not a number', Number.NaN, 0],
+        ['a row past the grid', GRID_ROWS, 0],
+        ['a column left of the first', 0, -1],
+        ['a column that is a fraction', 0, 0.5],
+        ['a column that is not a number', 0, Number.NaN],
+        ['a column that is infinite', 0, Number.POSITIVE_INFINITY],
+    ])('a read of %s is empty', (_, row, column) => {
+        const engine = new Engine([
+            source('s1', [
+                [0, 0, 1, '=1+1'],
+                [1, 0, null, '=2+2'],
+            ]),
+        ]);
+        const read = () => [
+            engine.valueOf('s1', row, column),
+            engine.formulaOf('s1', row, column),
+            engine.isPending('s1', row, column),
+        ];
+        expect(read()).toEqual([null, null, false]);
+        engine.recalc(ALL);
+        expect(read()).toEqual([null, null, false]);
+    });
+
+    test.each([
+        ['past the last sheet', 2],
+        ['before the first', -1],
+        ['a fraction', 0.5],
+        ['not a number', Number.NaN],
+    ])('a place among the tabs that is %s holds no sheet, as an id no sheet has', (_, place) => {
+        const engine = new Engine([source('s1', []), source('s2', [])]);
+        expect(() => engine.sheetAt(place)).toThrow(`No sheet ${place}`);
+        expect(() => engine.valueOf('s3', 0, 0)).toThrow('No sheet s3');
+        expect([engine.sheetAt(0), engine.sheetAt(1)]).toEqual(['s1', 's2']);
+    });
+
+    test('an error only a file knows is one object, from whichever sheet it came', () => {
+        const engine = new Engine([
+            source('s1', [
+                [0, 0, errorOf('#BUSY!')],
+                [1, 0, NA],
+                [2, 0, errorOf('#FIELD!')],
+                [3, 0, errorOf('#BUSY!')],
+                [4, 0, errorOf('#FIELD!'), '=1/0'],
+                [5, 0, null, '=R[-3]C'],
+            ]),
+            source('s2', [[0, 0, errorOf('#FIELD!')]]),
+        ]);
+        engine.addSheet(
+            source('s3', [
+                [0, 0, errorOf('#BLOCKED!')],
+                [1, 0, errorOf('#BUSY!')],
+                [2, 0, NA],
+            ]),
+            0,
+        );
+        engine.setValue('s2', 1, 0, errorOf('#BLOCKED!'));
+        engine.recalc(ALL);
+        const texts = (sheet: string, rows: number[]) =>
+            rows
+                .map((row) => engine.valueOf(sheet, row, 0))
+                .map((value) => (typeof value === 'object' ? value?.text : value));
+        expect(texts('s1', [0, 1, 2, 3, 4, 5])).toEqual(['#BUSY!', '#N/A', '#FIELD!', '#BUSY!', '#FIELD!', '#FIELD!']);
+        expect(texts('s2', [0, 1])).toEqual(['#FIELD!', '#BLOCKED!']);
+        expect(texts('s3', [0, 1, 2])).toEqual(['#BLOCKED!', '#BUSY!', '#N/A']);
+        const same = [
+            ['s3', 1, 's1', 0],
+            ['s1', 3, 's1', 0],
+            ['s2', 0, 's1', 2],
+            ['s1', 5, 's1', 2],
+            ['s2', 1, 's3', 0],
+        ] as const;
+        for (const [sheet, row, other, otherRow] of same) {
+            expect(engine.valueOf(sheet, row, 0)).toBe(engine.valueOf(other, otherRow, 0));
+        }
+    });
+
+    test('a sheet that is read and not taken leaves no text, formula or error in the tables', () => {
+        const workbook = new Workbook([source('s1', [[0, 0, 'one', '=1+1']])]);
+        const tables = () => [workbook.strings.size, workbook.shapes.size, workbook.error(ERRORS.length + 1)];
+        const before = tables();
+        let walks = 0;
+        const stops: SheetSource = {
+            id: 's2',
+            name: 's2',
+            cells: (cell) => {
+                walks += 1;
+                cell(0, 0, 'fresh', '=2+2');
+                cell(1, 0, errorOf('#BUSY!'), null);
+                if (walks === 2) throw new Error('stopped');
+            },
+        };
+        expect(() => workbook.read(stops)).toThrow('stopped');
+        expect(tables()).toEqual(before);
+        workbook.read(source('s3', [[0, 0, errorOf('#FIELD!'), '=3+3']]));
+        expect(tables()).toEqual(before);
+        expect(before[2]).toBeUndefined();
     });
 
     test('a formula that came without a value is empty until a recalc computes it', () => {

@@ -12,7 +12,7 @@ import type { Param } from './signature';
 import { ANYWHERE, Read, slotOf } from './signature';
 
 export const Fact = {
-    // A reference into another workbook or across sheets: the cell keeps the value it came with.
+    // A reference into another workbook or across sheets: the cell keeps the value it has, and is #REF! with none.
     Kept: 1,
     // A call of a row that picks another row, such as SUBTOTAL: an outer such call passes the cell over.
     Chosen: 2,

@@ -24,6 +24,8 @@ These are decided, and each is said once. A row repeats a choice only where it i
 
 **Approximate searches assume sorted data.** `MATCH` types 1 and -1, `LOOKUP`, and `VLOOKUP` and `HLOOKUP` with an approximate match halve the list, as Excel's documentation requires the list to be sorted. On a list that is not sorted Excel also reads on cell by cell and can answer another position. On sorted data, runs of equal values included, the answers agree. Example: `=MATCH(4,{6,4,2},1)` is 2 in Excel and 3 in this engine. 47 recorded rows differ this way, all on unsorted lists.
 
+**A 3-D reference is not computed.** A formula with a reference across sheets, such as `Sheet1:Sheet3!A1`, or into another workbook keeps the value it was loaded with. One that has no value, such as a typed one, is `#REF!`, and a formula that reads it reads an error like any other: `=A1+1` over it is `#REF!` too, and `=IFERROR(A1,0)` is 0. Example: over three sheets with 1 in A1, a typed `=SUM(Sheet1:Sheet3!A1)` is 3 in Excel and `#REF!` in this engine.
+
 **Volatile functions are computed when the document is.** `RAND`, `RANDBETWEEN`, `NOW` and `TODAY` get a new value when the document is computed and when a cell they read changes, not after every unrelated edit. Example: type a number in an empty cell, and `=RAND()` draws again in Excel and keeps its value in this engine.
 
 **Number display is the numfmt package.** `TEXT` and every cell's display go through numfmt: rounding and formats are Excel's, with the few known gaps listed under `TEXT`. Example: `=TEXT(0.52,"h:mm a/P")` is `12:28 P` in Excel and `12:28 a/P` in this engine.

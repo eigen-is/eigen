@@ -5,7 +5,7 @@
 // again: so an id means one shape only for as long as a cell holds it.
 
 import { parseStored } from './parser';
-import { printStored } from './printer';
+import { printStored, storedKey } from './printer';
 import type { FormulaNode } from './tree';
 import { NodeKind, SheetKind } from './tree';
 
@@ -40,17 +40,21 @@ export class ShapeTable {
         return this.shapes[id - 1];
     }
 
+    // The id of a formula in stored text as a host hands it. Its key is the text its tree prints, so another
+    // spelling of one formula, such as a name in lower case, is the same shape. Text that does not parse is kept as
+    // it is, and so is text whose key would not read back, with its tree.
     public intern(text: string): number {
         const known = this.ids.get(text);
         if (known !== undefined) return known;
         const parsed = parseStored(text);
-        return this.add(text, 'reason' in parsed ? null : parsed);
+        if ('reason' in parsed) return this.add(text, null);
+        const key = storedKey(parsed);
+        return typeof key === 'string' ? this.keyed(key, parsed) : this.add(text, parsed);
     }
 
-    // The id of a tree already parsed, such as a formula typed at a cell: its stored text is the key.
+    // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key.
     public internTree(tree: FormulaNode): number {
-        const text = printStored(tree);
-        return this.ids.get(text) ?? this.add(text, tree);
+        return this.keyed(printStored(tree), tree);
     }
 
     // Forgets every shape whose id is not set in `held`, which says for each id up to `size` whether a cell holds
@@ -63,6 +67,10 @@ export class ShapeTable {
             this.shapes[id - 1] = FORGOTTEN;
             this.free.push(id);
         }
+    }
+
+    private keyed(key: string, tree: FormulaNode): number {
+        return this.ids.get(key) ?? this.add(key, tree);
     }
 
     private add(text: string, tree: FormulaNode | null): number {

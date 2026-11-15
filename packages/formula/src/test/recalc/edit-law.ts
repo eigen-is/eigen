@@ -444,12 +444,16 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         const sheetEdit = (): Op => {
             const drawn = pick(5);
             if (drawn === 0 && model.length > 1) return { kind: 'remove', id: present() };
+            // The engine refuses a name another sheet has, so no sheet comes under one.
+            const later = model.every((sheet) => sheet.name !== 'Later');
+            const back = removed.filter((sheet) => later || sheet.name !== 'Later');
             // A sheet comes back as it went: what it holds typed with a name is the engine's to bind.
-            if (drawn === 1 && removed.length > 0) {
-                return { kind: 'add', sheet: one(removed), place: pick(model.length + 1) };
+            if (drawn === 1 && back.length > 0) {
+                return { kind: 'add', sheet: one(back), place: pick(model.length + 1) };
             }
             if (
                 drawn === 2 &&
+                later &&
                 model.every((sheet) => sheet.id !== 's4') &&
                 removed.every((sheet) => sheet.id !== 's4')
             ) {
@@ -461,8 +465,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             }
             if (drawn === 3) {
                 renames += 1;
-                const free = model.every((sheet) => sheet.name !== 'Later');
-                return { kind: 'rename', id: present(), name: free && pick(2) === 0 ? 'Later' : `Named${renames}` };
+                return { kind: 'rename', id: present(), name: later && pick(2) === 0 ? 'Later' : `Named${renames}` };
             }
             return { kind: 'reorder', id: present(), place: pick(model.length) };
         };

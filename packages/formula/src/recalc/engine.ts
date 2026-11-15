@@ -10,14 +10,14 @@ import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { Literal, SheetSource } from '../store/workbook';
-import { ChangeKind, Workbook } from '../store/workbook';
+import { admit, ChangeKind, Workbook, within } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
 import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<Workbook, 'sheet' | 'known' | 'value' | 'sheets' | 'shapes'>;
+    private readonly workbook: Pick<Workbook, 'known' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName'>;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -27,7 +27,7 @@ export class Engine {
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
-        this.calc.setValue(this.cell(sheet, row, column), row, column, value);
+        this.calc.setValue(this.cell(sheet, row, column, value), row, column, value);
     }
 
     // The formula in its stored text. It holds no value until a recalc computes it.
@@ -68,8 +68,11 @@ export class Engine {
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
     // values they came with, and the result lists the formulas that now read a sheet by the name they were typed with.
     public addSheet(source: SheetSource, place: number): EditResult {
-        if (this.workbook.sheet(source.id) !== undefined) throw new Error(`Sheet ${source.id} exists`);
-        return this.calc.addSheet(source, place);
+        // The source is the host's code, so what is refused is checked once it has run.
+        const draft = this.workbook.read(source);
+        this.workbook.checkId(source.id);
+        this.workbook.checkName(source.name, null);
+        return this.calc.addSheet(draft, place);
     }
 
     // A formula that names the sheet keeps naming it, reads #REF!, and reads it again when the id comes back.
@@ -79,7 +82,7 @@ export class Engine {
     }
 
     public renameSheet(sheet: string, name: string): EditResult {
-        this.workbook.known(sheet);
+        this.workbook.checkName(name, this.workbook.known(sheet));
         return this.calc.edit({ kind: ChangeKind.RenameSheet, sheet, name });
     }
 
@@ -88,8 +91,8 @@ export class Engine {
         this.calc.edit({ kind: ChangeKind.MoveSheet, sheet, place });
     }
 
-    // Computes the formulas that the writes and edits since the last recalc reach: one that came with a value and
-    // reads nothing written keeps it. After `cap` formulas the pass stops, and the next recalc goes on from there.
+    // Computes the formulas the writes and edits since the last recalc reach: one that came with a value other than
+    // #REF! and reads nothing written keeps it. After `cap` formulas the pass stops, and the next one goes on.
     public recalc(cap: number, now = 0, seed = 0): RecalcResult {
         return this.calc.pass(cap, now, seed);
     }
@@ -104,7 +107,8 @@ export class Engine {
     public formulaOf(sheet: string, row: number, column: number): string | null {
         const cells = this.workbook.known(sheet).columns[column];
         const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
-        return shape === 0 ? null : this.workbook.shapes.shape(shape).text;
+        // A row that is no row, such as -1, reads nothing off the column, as its value does.
+        return shape > 0 ? this.workbook.shapes.shape(shape).text : null;
     }
 
     // Whether a cell holds a formula that is still to be computed.
@@ -115,19 +119,15 @@ export class Engine {
 
     // The id of the sheet at a place among the tabs, which is how a recalc names the sheet of a changed cell.
     public sheetAt(place: number): string {
-        return this.workbook.sheets[place].id;
+        return this.workbook.known(place).id;
     }
 
-    // The sheet of a cell a host names, which must exist, as the cell must on the grid.
-    private cell(sheet: string, row: number, column: number): Sheet {
+    // The sheet of a cell a host names: it must exist, as the cell must on the grid, and its value be one to hold.
+    private cell(sheet: string, row: number, column: number, value: Literal | null = null): Sheet {
         const found = this.workbook.known(sheet);
-        if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+        admit(row, column, value);
         return found;
     }
-}
-
-function within(line: number, lines: number): boolean {
-    return Number.isInteger(line) && line >= 0 && line < lines;
 }
 
 // Throws unless it counts lines: a whole number of them, and at least one.
