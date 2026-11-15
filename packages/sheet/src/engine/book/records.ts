@@ -51,8 +51,8 @@ const KINDS: readonly Kind[] = [
     'chart',
 ];
 
-// A merge is listed under every band of this many rows it covers, so a read looks at the merges near its rows only.
-const BAND_SHIFT = 6;
+// A band of rows in the merge index holds two to this power of rows at least.
+const MIN_BAND_SHIFT = 6;
 
 // The op type is a union over the record types, so an op of a type known only as a type parameter is made here: made
 // whole or deleted, or with some of its fields set, which a rule never is.
@@ -91,8 +91,13 @@ export class SheetRecords {
         image: new Map(),
         chart: new Map(),
     };
-    // The merges by band of rows, each with its rectangle, and the comments by cell, ids in order.
-    private readonly mergeBands = new Map<number, Map<string, Rect>>();
+    // The merge index: by band size, then by band of rows, the merges with a row in the band, each with its rectangle.
+    // A merge is listed in bands of its own size, the smallest power of two rows that holds its height, so it lies in
+    // two bands at most however tall it is, and its width costs nothing. A read looks, for each band size in use, at
+    // the bands on its rows only: one for a cell, and for a rectangle as many as it is tall in bands of that size.
+    // Merges are listed by id, so the index also holds while a line edit or a move rewrites them one by one.
+    private readonly mergeBands = new Map<number, Map<number, Map<string, Rect>>>();
+    // The comments by cell, ids in order.
     private readonly commentCells = new Map<number, string[]>();
     private sheetFields: SheetFields;
 
@@ -135,8 +140,10 @@ export class SheetRecords {
     }
 
     public merge(row: number, column: number): Rect | undefined {
-        for (const rect of this.mergeBands.get(row >> BAND_SHIFT)?.values() ?? []) {
-            if (row >= rect[0] && row <= rect[2] && column >= rect[1] && column <= rect[3]) return rect;
+        for (const [shift, bands] of this.mergeBands) {
+            for (const rect of bands.get(row >> shift)?.values() ?? []) {
+                if (row >= rect[0] && row <= rect[2] && column >= rect[1] && column <= rect[3]) return rect;
+            }
         }
         return undefined;
     }
@@ -490,8 +497,10 @@ export class SheetRecords {
     // The merges with a cell in the rectangle, by id.
     private mergesMeeting(rect: Rect): Map<string, Rect> {
         const found = new Map<string, Rect>();
-        for (let band = rect[0] >> BAND_SHIFT; band <= rect[2] >> BAND_SHIFT; band += 1) {
-            for (const [id, merge] of this.mergeBands.get(band) ?? []) if (meets(merge, rect)) found.set(id, merge);
+        for (const [shift, bands] of this.mergeBands) {
+            for (let band = rect[0] >> shift; band <= rect[2] >> shift; band += 1) {
+                for (const [id, merge] of bands.get(band) ?? []) if (meets(merge, rect)) found.set(id, merge);
+            }
         }
         return found;
     }
@@ -536,7 +545,7 @@ export class SheetRecords {
         return gone ? this.wholeOp(type, id, old) : CHANGE_OP[type]({ sheet: this.sheet, id, set: old });
     }
 
-    // Every write lands here, which keeps the merge bands and the comment cells in step.
+    // Every write lands here, which keeps the merge index and the comment cells in step.
     private replace<T extends Kind>(type: T, id: string, record: Records[T] | undefined): void {
         if (type === 'merge') this.indexMerge(id, false);
         if (type === 'comment') this.indexComment(id, false);
@@ -552,11 +561,16 @@ export class SheetRecords {
     private indexMerge(id: string, add: boolean): void {
         const merge = this.stored.merge.get(id);
         if (!merge) return;
-        for (let band = merge.rect[0] >> BAND_SHIFT; band <= merge.rect[2] >> BAND_SHIFT; band += 1) {
-            const merges = this.mergeBands.get(band) ?? new Map<string, Rect>();
-            if (add) this.mergeBands.set(band, merges.set(id, merge.rect));
-            else if (merges.delete(id) && merges.size === 0) this.mergeBands.delete(band);
+        const [top, , bottom] = merge.rect;
+        const shift = Math.max(MIN_BAND_SHIFT, 32 - Math.clz32(bottom - top));
+        const bands = this.mergeBands.get(shift) ?? new Map<number, Map<string, Rect>>();
+        for (let band = top >> shift; band <= bottom >> shift; band += 1) {
+            const merges = bands.get(band) ?? new Map<string, Rect>();
+            if (add) bands.set(band, merges.set(id, merge.rect));
+            else if (merges.delete(id) && merges.size === 0) bands.delete(band);
         }
+        if (bands.size > 0) this.mergeBands.set(shift, bands);
+        else this.mergeBands.delete(shift);
     }
 
     private indexComment(id: string, add: boolean): void {

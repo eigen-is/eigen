@@ -905,6 +905,23 @@ describe('the sheet content', () => {
         expect(accepts(added({ records: { comment: comments(MAX_RECORDS_PER_TYPE + 1), merge: merges } }))).toBe(false);
     });
 
+    test('has merges that share no cell', () => {
+        const merges = (...rects: number[][]) =>
+            isSheetContent({
+                ...SHEET,
+                records: { merge: Object.fromEntries(rects.map((rect, index) => [`m${index}`, { rect }])) },
+            });
+        expect(merges([0, 0, 3, 3], [1, 1, 5, 5])).toBe(false);
+        expect(merges([0, 0, 3, 3], [3, 3, 5, 5])).toBe(false);
+        expect(merges([0, 0, 3, 3], [0, 0, 3, 3])).toBe(false);
+        expect(merges([0, 2, LAST_ROW, 2], [7, 0, 7, LAST_COLUMN])).toBe(false);
+        expect(merges([0, 0, 3, 3], [4, 0, 5, 3], [0, 4, 3, 5], [4, 4, 4, 4])).toBe(true);
+        expect(merges([0, 2, LAST_ROW, 2], [0, 3, LAST_ROW, 3], [0, 0, LAST_ROW, 1])).toBe(true);
+        expect(accepts(added({ records: { merge: { m1: { rect: [0, 0, 3, 3] }, m2: { rect: [1, 1, 5, 5] } } } }))).toBe(
+            false,
+        );
+    });
+
     test('has records by type, each whole', () => {
         const records = (list: unknown) => isSheetContent({ ...SHEET, records: list });
         expect(records({ sheet: { s2: { name: 'a', order: 'a0' } } })).toBe(false);
