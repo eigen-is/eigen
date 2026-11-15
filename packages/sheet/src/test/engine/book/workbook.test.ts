@@ -221,6 +221,31 @@ describe('engine/book/workbook — the limits at the door', () => {
         }
     });
 
+    test('the slots count per sheet: sheets that each end column A on the last row count a column each', () => {
+        const columns = Math.floor(MAX_VALUE_SLOTS / GRID_ROWS);
+        const far = (count: number) =>
+            bookOf(
+                ...Array.from({ length: count }, (_, at) => sheetOf(`s${at}`, { cells: [[LAST_ROW, 0, { v: 1 }]] })),
+            );
+        expect(new Workbook(far(columns)).weight().slots).toBe(columns * GRID_ROWS);
+        expect(refusalOf(() => new Workbook(far(columns + 1)))).toBe('too-many-cells');
+    });
+
+    test('the weight sums every sheet', () => {
+        const book = new Workbook(
+            bookOf(
+                sheetOf('a', { cells: [[0, 0, { v: 1 }]] }),
+                sheetOf('b', {
+                    fields: { name: 'b', order: 'a1' },
+                    cells: [[4, 2, { v: 1 }]],
+                    looks: [{ bl: 1 }],
+                    bands: [0, 1, 0, 1, 3, 2, 0, 1, 5, 0],
+                }),
+            ),
+        );
+        expect(book.weight()).toEqual({ slots: 1 + 5, runs: 3, bands: 3 });
+    });
+
     test('a book over the format limit does not open', () => {
         expect(refusalOf(() => new Workbook(bookOf(sheetOf('a', striped))))).toBe('too-many-formats');
     });
