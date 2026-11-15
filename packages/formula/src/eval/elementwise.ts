@@ -197,7 +197,6 @@ class Operand {
                 if (i < 0 || j < 0) this.lay(at, NA);
                 if (i < 0 || column === undefined) continue;
                 const row = cells.row(i);
-                if (row >= column.length) continue;
                 const held = column.kind[row] & KIND_MASK;
                 kind[at] = held;
                 if (held === CellKind.Number) num[at] = column.num[row];
