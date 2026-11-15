@@ -22,7 +22,6 @@ export const driveStillActivity = {
     },
 } satisfies Scene;
 
-// The grid view is saved in Saar's settings, so this scene films after every other scene that shows her drive.
 export const driveStillTiles = {
     name: 'drive-still-tiles',
     kind: 'still',
@@ -46,5 +45,13 @@ export const driveStillTiles = {
             ),
         );
         await Bun.sleep(2000);
+    },
+    // The view is saved in Saar's settings, so the scene waits until the list view is saved back.
+    teardown: async ({ pages: [page] }) => {
+        const saved = page.waitForResponse(
+            (response) => response.request().method() === 'PUT' && response.url().endsWith('/settings'),
+        );
+        await page.getByLabel('List view').dispatchEvent('click');
+        await saved;
     },
 } satisfies Scene;

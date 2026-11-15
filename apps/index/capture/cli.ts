@@ -59,5 +59,6 @@ async function film(
         await scene.run(ctx);
         await takeStill(pages[0], scene);
     }
+    await scene.teardown?.(ctx);
     await Promise.all(contexts.map((context) => context.close()));
 }

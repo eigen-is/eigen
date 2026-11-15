@@ -36,4 +36,6 @@ export type Scene = {
     // Runs before the camera rolls, such as opening the app and waiting for it to load.
     setup?: (ctx: SceneContext) => Promise<void>;
     run: (ctx: SceneContext) => Promise<void>;
+    // Runs after the camera stops, such as putting back a setting the scene saved, so later scenes find it as seeded.
+    teardown?: (ctx: SceneContext) => Promise<void>;
 };
