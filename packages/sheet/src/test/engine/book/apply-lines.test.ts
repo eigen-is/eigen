@@ -464,6 +464,23 @@ describe('engine/book/apply-lines — a delete', () => {
         ]);
     });
 
+    test('(6) the lossy formulas come back one op per sheet in the order of the workbook’s sheets, not the engine’s', () => {
+        // Sheet c moves before a, so the engine lists its rewrites first; sheet b has none.
+        const book = new Workbook(
+            bookOf(
+                sheetOf('a', { cells: [[0, 0, { f: '=R3C2' }]] }),
+                sheetOf('b', { cells: [[0, 0, { v: 1 }]] }),
+                sheetOf('c', { cells: [[0, 1, { f: '=[a]!R3C2' }]] }),
+            ),
+        );
+        applyOps(book, [{ kind: 'record', sheet: 'c', type: 'sheet', id: 'c', set: { order: '0' } }]);
+        const inverse = applyOps(book, [lines(true, false, 2, 1)]);
+        expect(inverse.slice(-2)).toEqual([
+            { kind: 'input', sheet: 'a', cells: [[0, 0, { f: '=R3C2' }]] },
+            { kind: 'input', sheet: 'c', cells: [[0, 1, { f: '=[a]!R3C2' }]] },
+        ]);
+    });
+
     test('(6) a run of one lossy formula that the deleted lines stood inside is written back in two parts', () => {
         // A filled column reads row 3; the rows above and below the deleted one hold one text, side by side after it.
         const book = bookOf(

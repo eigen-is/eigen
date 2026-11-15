@@ -69,12 +69,16 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
 // deleted under what it read, one per sheet, each cell with the link, the mark and the given value it holds. They
 // apply after the edit's own inverse: where that is a line edit, `after`, each cell is said where it stands then.
 export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
+    const bySheet = Map.groupBy(rewrites, ({ sheet }) => sheet);
     const ops: InputOp[] = [];
+    // In the order of the workbook's sheets, not of the engine's rewrites.
     for (const [sheet, { extras }] of book.sheets) {
+        const blocks = bySheet.get(sheet);
+        if (!blocks) continue;
         const moves = after?.sheet === sheet ? after : undefined;
         const gathered: Gathered = { runs: [], cells: [] };
-        for (const { sheet: on, top, left, bottom, right, lost } of rewrites) {
-            if (on !== sheet || lost === null) continue;
+        for (const { top, left, bottom, right, lost } of blocks) {
+            if (lost === null) continue;
             readBlock(book, sheet, extras, [top, left, bottom, right], (group) => {
                 const content = { ...contentOfGroup(group), f: lost };
                 for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
