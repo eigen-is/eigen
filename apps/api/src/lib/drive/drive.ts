@@ -5,7 +5,13 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import type { DrivePath, DrivePathDetails, DrivePathType, EigenDocType } from '@workspace/lib/types/drive';
+import type {
+    DrivePath,
+    DrivePathDetails,
+    DrivePathRef,
+    DrivePathType,
+    EigenDocType,
+} from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -1017,7 +1023,7 @@ export class Drive {
     public async getVisiblePaths(
         user: User,
         memberships: Memberships,
-        rows: readonly { mountId: string; pathId: string }[],
+        rows: readonly DrivePathRef[],
         mimeTypePrefix: string,
     ): Promise<DrivePath[]> {
         const found: DrivePath[] = [];

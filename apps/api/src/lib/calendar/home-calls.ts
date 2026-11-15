@@ -4,7 +4,7 @@
 // imports types only: a module that led back to the relay would make the relay run first and read the table before
 // it exists.
 
-import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import type { CalendarItem, SharedWithMeCalendar } from '@workspace/lib/types/calendar';
 import type { Answerers } from '../home/home-relay';
 import type { InvitationRequest } from './types';
 
@@ -13,7 +13,7 @@ export type CalendarQueries = {
     'calendar:calendars': { ask: null; answer: CalendarItem[] | null };
     'calendar:shares': {
         ask: { email: string; teamIds: string[] };
-        answer: { calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[];
+        answer: SharedWithMeCalendar[];
     };
     'calendar:pending-invitations': { ask: { attendeeEmail: string }; answer: InvitationRequest[] };
 };

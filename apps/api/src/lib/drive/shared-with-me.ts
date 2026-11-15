@@ -5,7 +5,7 @@
 // with its shared database.
 
 import { shareTag } from '@workspace/lib/notification/tags';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { DriveACL } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -93,7 +93,7 @@ export async function listSharedWithMe(sharedDb: SharedDb, user: User, mimeTypeP
 }
 
 // Asks each owner once for all of its rows, and keeps the rows' order, each visible path beside its row.
-export async function readVisiblePaths<Row extends { ownerId: string; mountId: string; pathId: string }>(
+export async function readVisiblePaths<Row extends DrivePathRef>(
     user: User,
     memberships: Memberships,
     rows: readonly Row[],

@@ -11,6 +11,7 @@ import type {
     CalendarItem,
     CalendarShare,
     SharedCalendar,
+    SharedWithMeCalendar,
 } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
@@ -505,10 +506,7 @@ export class Calendar {
         shares.removeSharedEntriesForOwner(this, ownerUserId);
     }
 
-    public async getSharedWith(
-        userEmail: string,
-        teamIds: string[],
-    ): Promise<{ calendarId: string; name: string; color: string; permission: CalendarShare['permission'] }[]> {
+    public async getSharedWith(userEmail: string, teamIds: string[]): Promise<SharedWithMeCalendar[]> {
         return shares.getSharedWith(this, userEmail, teamIds);
     }
 
