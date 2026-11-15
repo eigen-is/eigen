@@ -145,8 +145,9 @@ export class Workbook {
             } else if (value !== null) this.put(held, row, value);
             // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
             // which only computing it finds. A host's error is told by its code, as the cell stores it.
-            const waits = value === null || (typeof value === 'object' && value.code === REF.code);
-            if (formula !== null && waits) held.markDirty(row);
+            if (formula !== null && (value === null || (typeof value === 'object' && value.code === REF.code))) {
+                held.markDirty(row);
+            }
         });
         return { sheet, texts, formulas, errors };
     }
