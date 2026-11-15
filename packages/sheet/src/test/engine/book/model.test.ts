@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { exceedsChartSpecBytes, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Op, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
 import { isSheetContent, readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -10,6 +11,7 @@ import type { Book } from './book-fixtures';
 import { canonical, randomOf } from './book-fixtures';
 import type { Model } from './model';
 import { contentOfModel, expectReads, modelAfter, modelOf } from './model';
+import { chartOf, ref } from './records-fixtures';
 
 const SEEDS = Array.from({ length: 300 }, (_, at) => at + 1);
 
@@ -212,5 +214,49 @@ describe('engine/book — the model, rule by rule', () => {
         const [moved] = sheetsAfter([sheetOf('a')], bold([0, 0, 1, 0]), move);
         const [expected] = sheetsAfter([sheetOf('a')], bold([5, 3, 6, 3]));
         expect({ looks: moved.looks, bands: moved.bands }).toEqual({ looks: expected.looks, bands: expected.bands });
+    });
+
+    test('a chart change is refused when the chart it makes is past its size bound', () => {
+        const parts = newChartSpecParts(sampleChartSpec('column'));
+        const padded = (part: string) => `${part.slice(0, -1)}${' '.repeat(40_000)}${part.slice(-1)}`;
+        const chart = { index: 'a0', x: 0, y: 0, width: 1, height: 1, ...parts };
+        const sheets = [sheetOf('a', {}, { records: { chart: { g: chart } } })];
+        const change = (set: Partial<typeof parts>): Op => ({
+            kind: 'record',
+            sheet: 'a',
+            type: 'chart',
+            id: 'g',
+            set,
+        });
+        const title = change({ specTitle: padded(parts.specTitle) });
+        const [landed] = sheetsAfter(sheets, title);
+        expect(landed.records.chart?.g.specTitle).toBe(padded(parts.specTitle));
+        expect(after(sheets, title, change({ specLegend: padded(parts.specLegend) }))).toBe('key-too-long');
+    });
+
+    test('a line edit is refused when the refs it rewrites take a chart past its size bound', () => {
+        const chart = (length: number) =>
+            chartOf({
+                categories: null,
+                series: [{ id: 's', name: 'n'.repeat(length), values: ref('a', [0, 0], [0, 0]) }],
+            });
+        // The longest name that keeps the chart inside its bound.
+        let [low, high] = [1, 70_000];
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (exceedsChartSpecBytes(chart(middle))) high = middle - 1;
+            else low = middle;
+        }
+        const sheets = [sheetOf('a', {}, { records: { chart: { g: chart(low) } } }), sheetOf('b', { order: 'a1' })];
+        const insert = (sheet: string): Op => ({
+            kind: 'lines',
+            sheet,
+            rows: true,
+            insert: true,
+            index: 0,
+            count: 1_000_000,
+        });
+        expect(after(sheets, insert('a'))).toBe('key-too-long');
+        expect(sheetsAfter(sheets, insert('b'))[0].records.chart?.g).toEqual(chart(low));
     });
 });

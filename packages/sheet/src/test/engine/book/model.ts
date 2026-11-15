@@ -16,6 +16,7 @@ import {
     transformLines,
     transformMove,
 } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
@@ -78,8 +79,8 @@ export function modelOf(content: Book): Model {
     return model;
 }
 
-// The model after a batch, or the key of the refusal that leaves the model as it is. A too long stored key is
-// foreseen; the weigh of the limits is not.
+// The model after a batch, or the key of the refusal that leaves the model as it is. A too long stored key and a
+// chart past its size bound are foreseen; the weigh of the limits, such as too many records or sheets, is not.
 export function modelAfter(model: Model, batch: Pick<Batch, 'now' | 'seed' | 'ops'>): Model | RefusalKey {
     const next: Model = { ...model, looks: [...model.looks], sheets: new Map() };
     for (const [id, sheet] of model.sheets) {
@@ -413,7 +414,8 @@ function put<T extends Kind>(sheet: ModelSheet, type: T, id: string, record: Rec
     return null;
 }
 
-// A change of a record that is gone is skipped alone, as is a filter column moved to a filter that is not there.
+// A change of a record that is gone is skipped alone, as is a filter column moved to a filter that is not there. A
+// chart change is refused when the chart it makes is past its size bound.
 function change<T extends ChangedKind>(
     sheet: ModelSheet,
     type: T,
@@ -426,6 +428,7 @@ function change<T extends ChangedKind>(
     const next = withFields(old, set);
     if ('rect' in next && type === 'merge' && overlaps(next.rect)) return 'merge-overlap';
     if ('filter' in next && !sheet.records.filter.has(next.filter)) return null;
+    if (type === 'chart' && exceedsChartSpecBytes(next)) return 'key-too-long';
     return put(sheet, type, id, next);
 }
 
@@ -599,7 +602,8 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
         const next = ranges(rule.ranges);
         put(sheet, 'conditionalFormat', id, next.length > 0 ? { ...rule, ranges: next } : undefined);
     }
-    // A chart on any sheet follows the lines it names on this one.
+    // A chart on any sheet follows the lines it names on this one, and the edit is refused when that takes it past
+    // its size bound.
     for (const other of model.sheets.values()) {
         for (const [id, chart] of other.records.chart) {
             const next = mapChartRefs(chart, (ref) => {
@@ -608,6 +612,7 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
                 if (!after) return null;
                 return rows ? { ...ref, row: after } : { ...ref, column: after };
             });
+            if (exceedsChartSpecBytes(next)) return 'key-too-long';
             other.records.chart.set(id, next);
         }
     }

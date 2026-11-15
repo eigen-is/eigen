@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_ROWS } from '@workspace/formula/text';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type { Batch, RecordOp, SheetContent } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
@@ -19,6 +20,16 @@ type RecordBatch = Omit<Batch, 'ops'> & { ops: RecordOp[] };
 const LAST_ROW = GRID_ROWS - 1;
 // A sheet id as long as an id may be, so a formula bound to it grows.
 const B = 'b'.repeat(60);
+const PARTS = newChartSpecParts(sampleChartSpec('column'));
+
+// A part of a chart's spec 40,000 bytes longer and the same JSON: two such parts take a chart past its size bound.
+function padded(part: string): string {
+    return `${part.slice(0, -1)}${' '.repeat(40_000)}${part.slice(-1)}`;
+}
+
+function chartChange(set: Partial<typeof PARTS>): RecordOp {
+    return { kind: 'record', sheet: 'a', type: 'chart', id: 'g', set };
+}
 
 // A batch as a host lands it: the ops, then the clock of the batch, which a refused batch never reaches.
 function land(book: Workbook, batch: RecordBatch): RecordOp[] {
@@ -46,8 +57,9 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
     return { id, fields, cells: [], looks: [], bands: [], rows: [], columns: [], records: {}, ...part };
 }
 
-// Two sheets, the second hidden, with a merge, a filter with a column, a comment, formulas that read the clock, draw,
-// read the other sheet and wait for a sheet named N, the last so long that the id of the second sheet does not fit it.
+// Two sheets, the second hidden, with a merge, a filter with a column, a comment, a chart one padded part short of its
+// size bound, and formulas that read the clock, draw, read the other sheet and wait for a sheet named N, the last so
+// long that the id of the second sheet does not fit it.
 function twoSheets(): Book {
     const long = `="${'a'.repeat(131_010)}"&'N'!R1C1`;
     const a = sheetOf('a', {
@@ -66,6 +78,9 @@ function twoSheets(): Book {
             filter: { f: { rect: [8, 0, 20, 4] } },
             filterColumn: { k: { filter: 'f', column: 1, rows: [[9, 10]] } },
             comment: { c: { row: 3, column: 1 } },
+            chart: {
+                g: { index: 'a0', x: 0, y: 0, width: 1, height: 1, ...PARTS, specChart: padded(PARTS.specChart) },
+            },
         },
     });
     const b = sheetOf(B, { fields: { name: 'Second', order: 'a1', hide: 1 }, cells: [[0, 0, { v: 21 }]] });
@@ -92,12 +107,13 @@ const REFUSED: readonly [RefusalKey, RecordOp][] = [
     ['merge-overlap', { kind: 'record', sheet: 'a', type: 'merge', id: 'm2', set: { rect: [6, 6, 7, 7] }, whole: 1 }],
     ['last-sheet', { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { hide: 1 } }],
     ['key-too-long', { kind: 'record', sheet: B, type: 'sheet', id: B, set: { name: 'N' } }],
+    ['key-too-long', chartChange({ specTitle: padded(PARTS.specTitle) })],
 ];
 
 describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as they were', () => {
     for (const [key, refused] of REFUSED) {
         for (let k = 0; k <= LANDING.length; k += 1) {
-            test(`${key} at op ${k}, after ${k} ops landed`, () => {
+            test(`${key} by a ${refused.type} op at op ${k}, after ${k} ops landed`, () => {
                 const content = twoSheets();
                 const book = new Workbook(content);
                 const before = bytes(book);
@@ -111,6 +127,28 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
             });
         }
     }
+
+    // The store refuses the chart for what an earlier op of the batch wrote to it, so the frame takes that op back.
+    test('key-too-long by a chart change that an earlier op of the batch took near the bound', () => {
+        const [a, b] = twoSheets().sheets;
+        const chart = { index: 'a0', x: 0, y: 0, width: 1, height: 1, ...PARTS };
+        const content: Book = { g: 3, now: 45_000.5, seed: 7, sheets: [{ ...a, records: { chart: { g: chart } } }, b] };
+        const ops = [
+            chartChange({ specLegend: padded(PARTS.specLegend) }),
+            chartChange({ specTitle: padded(PARTS.specTitle) }),
+        ];
+        const book = new Workbook(content);
+        const before = bytes(book);
+        expect(refusalOf(() => land(book, batch(...ops)))).toBe('key-too-long');
+        expect(bytes(book)).toBe(before);
+        expectReads(book, modelOf(content));
+        // Each op lands alone.
+        for (const op of ops) {
+            const other = new Workbook(content);
+            land(other, batch(op));
+            expect(bytes(other)).not.toBe(before);
+        }
+    });
 
     for (let k = 0; k <= LANDING.length; k += 1) {
         test(`too-many-cells at the weigh, after ${k} ops landed`, () => {
