@@ -17,6 +17,7 @@ import {
 import type { Batch, CellAttrKey, Op, SheetContent } from '../../sheets/ops';
 import { LOOK_KEYS } from '../../sheets/ops';
 import { isSheetContent, readBatch } from '../../sheets/ops-validate';
+import { MAX_RULE_RANGES } from '../../sheets/range-rules';
 
 const CLOCK = { now: 46000.5, seed: -7 };
 const batchOf = (...ops: unknown[]) => ({ g: 0, ...CLOCK, ops });
@@ -757,6 +758,24 @@ describe('8. record', () => {
         expect(
             isSheetContent({ ...SHEET, records: { chart: { c1: { ...BOX, ...SPEC, specData: `${half}${half}` } } } }),
         ).toBe(false);
+    });
+
+    test('a rule holds at most MAX_RULE_RANGES ranges, in each list', () => {
+        const ranges = (count: number) => Array.from({ length: count }, () => RANGE);
+        const validation = (count: number) =>
+            record('validation', { whole: 1, set: { ranges: ranges(count), order: 'a0', rule: RULE } });
+        expect(accepts(validation(MAX_RULE_RANGES))).toBe(true);
+        expect(accepts(validation(MAX_RULE_RANGES + 1))).toBe(false);
+        const rule = (key: string) =>
+            record('conditionalFormat', {
+                whole: 1,
+                set: {
+                    ...{ ranges: [RANGE], order: 'a0', type: 'default', format: {}, conditionName: 'equal' },
+                    ...{ conditionValue: [1], [key]: ranges(MAX_RULE_RANGES + 1) },
+                },
+            });
+        expect(accepts(rule('ranges'))).toBe(false);
+        expect(accepts(rule('conditionRange'))).toBe(false);
     });
 
     test('a rule value is text of at most MAX_TEXT_LENGTH', () => {

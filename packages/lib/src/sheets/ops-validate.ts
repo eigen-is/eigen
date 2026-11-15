@@ -46,6 +46,7 @@ import type {
     SheetFields,
     SheetOp,
 } from './ops';
+import { MAX_RULE_RANGES } from './range-rules';
 import { disjoint } from './rect';
 import { isSheetName } from './sheet-name';
 import type {
@@ -351,7 +352,12 @@ function isSpan(value: unknown, count: number): value is readonly number[] {
 }
 
 function isRanges(value: unknown): boolean {
-    return Array.isArray(value) && value.length > 0 && value.every((range) => isOf(range, RANGE));
+    return (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.length <= MAX_RULE_RANGES &&
+        value.every((range) => isOf(range, RANGE))
+    );
 }
 
 function isFiniteNumber(value: unknown): value is number {
