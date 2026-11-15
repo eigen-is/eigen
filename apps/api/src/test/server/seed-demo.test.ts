@@ -51,7 +51,6 @@ import { formatList } from '../fixtures/validations';
 const runSlow = Boolean(process.env['CI'] || process.env['EIGEN_SLOW_TESTS']);
 const MAIL_DOMAIN = 'tuimel.test';
 const API_DIR = join(import.meta.dir, '../../..');
-const AVATARS_DIR = join(API_DIR, 'src', 'scripts', 'demo', 'fixtures', 'avatars');
 
 // Read-write open (not readonly): the WAL-mode managed DBs need to (re)create their -shm on open,
 // which readonly forbids. The seeder process has exited, so there is no lock contention, and the
@@ -308,8 +307,7 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(cardRows.length).toBe(1);
                 const cardBlob = join(mountsDir, mountId, 'data', cardRows[0].file);
                 expect(statSync(cardBlob).size).toBeGreaterThan(0);
-                // The portrait only rides along once its fixture is committed; the seeder skips a missing one.
-                if (card.card.photo && existsSync(join(AVATARS_DIR, card.card.photo))) {
+                if (card.card.photo) {
                     expect(readFileSync(cardBlob, 'utf8')).toContain('PHOTO;ENCODING=b');
                 }
             }

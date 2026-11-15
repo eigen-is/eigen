@@ -276,38 +276,24 @@ async function main(): Promise<void> {
     const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key, MAIL_DOMAIN);
 
     // --- Avatars: each persona's portrait goes through the upload a user makes, so it sets user.image the same
-    // way. A missing or broken fixture is logged and skipped, never fatal. ---
+    // way. ---
     const seedAvatar = async (user: User, fixtureFile: string): Promise<void> => {
-        const filePath = join(AVATARS_DIR, fixtureFile);
-        if (!existsSync(filePath)) {
-            console.warn(`avatar fixture missing, skipping: ${fixtureFile}`);
-            return;
-        }
         const contacts = await resolveContacts(user, user.id);
         const me = await contacts.getMe();
-        if (!me) return;
+        if (!me) throw new Error(`No own card for ${user.email}`);
         const uploadedPath = await contacts.uploadAvatar(
-            new File([readFileSync(filePath)], fixtureFile, { type: 'image/jpeg' }),
+            new File([readFileSync(join(AVATARS_DIR, fixtureFile))], fixtureFile, { type: 'image/jpeg' }),
         );
         const { id, ...fields } = me;
         // An update of your own card goes through pushUserProfile, which stores the avatar and sets user.image.
         await contacts.updateContact(id, { ...fields, avatar: uploadedPath });
     };
     for (const persona of PERSONAS) {
-        try {
-            await seedAvatar(lookup(userByKey, persona.key), persona.avatar);
-        } catch (err) {
-            console.warn(`avatar seed failed for ${persona.key}:`, err instanceof Error ? err.message : err);
-        }
+        await seedAvatar(lookup(userByKey, persona.key), persona.avatar);
     }
     const adminUser = await getUserByEmail(ADMIN_EMAIL);
-    if (adminUser) {
-        try {
-            await seedAvatar(adminUser, ADMIN_AVATAR);
-        } catch (err) {
-            console.warn('avatar seed failed for admin:', err instanceof Error ? err.message : err);
-        }
-    }
+    if (!adminUser) throw new Error('The admin is missing after setup');
+    await seedAvatar(adminUser, ADMIN_AVATAR);
 
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');
@@ -423,19 +409,17 @@ async function main(): Promise<void> {
         avatar: '',
         labels: [],
     });
-    // The optional portrait is embedded as an inline PHOTO, read from the same avatars/ fixtures the
-    // personas use. A missing fixture is logged and skipped, never fatal, like a persona avatar.
-    const cardPhoto = (spec: VCardSpec): { bytes: Uint8Array; mediaType: string } | undefined => {
-        if (!spec.photo) return undefined;
-        const filePath = join(AVATARS_DIR, spec.photo);
-        if (!existsSync(filePath)) {
-            console.warn(`vcard photo fixture missing, skipping: ${spec.photo}`);
-            return undefined;
-        }
-        return { bytes: readFileSync(filePath), mediaType: 'image/jpeg' };
-    };
+    // The optional portrait is embedded as an inline PHOTO, read from the same avatars/ fixtures the personas use.
     const seedVCard = (spec: VCardSpec): string =>
-        createVCard({ ...contactInput(spec), photo: cardPhoto(spec) }, `demo-${spec.email}`);
+        createVCard(
+            {
+                ...contactInput(spec),
+                photo: spec.photo
+                    ? { bytes: readFileSync(join(AVATARS_DIR, spec.photo)), mediaType: 'image/jpeg' }
+                    : undefined,
+            },
+            `demo-${spec.email}`,
+        );
     for (const vcf of VCARD_FILES) {
         await teamDrive.createFileFromData(
             teamMountId,
