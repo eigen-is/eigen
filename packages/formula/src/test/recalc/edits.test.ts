@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Fact, shapeFacts } from '../../eval/facts';
 import { FUNCTIONS } from '../../functions/library';
 import type { LineEdit, Move, SheetSource } from '../../index';
-import { Engine, ERROR, REF } from '../../index';
+import { DIV0, Engine, ERROR, REF } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS, parseA1, sheetFinder } from '../../text';
 import type { Cells } from './support';
 import { at, engineOf, stored, valueAt } from './support';
@@ -598,7 +598,7 @@ describe('what a host reads back', () => {
         ]);
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 50, 99, 0, 2, 0, 99]);
     });
-    test('a loop that came with its values is listed once a cell of it is computed again, and not before', () => {
+    test('a loop that came with #REF! is listed by the first pass, one that came with other values once computed', () => {
         const engine = new Engine([
             {
                 id: 's1',
@@ -608,17 +608,29 @@ describe('what a host reads back', () => {
                     cell(1, 0, REF, '=R[-1]C');
                     cell(0, 2, 5, null);
                     cell(0, 3, 6, '=RC[-1]+1');
+                    // As a file of Excel's brings a loop: with the 0 it shows there.
+                    cell(0, 5, 0, '=R[1]C');
+                    cell(1, 5, 0, '=R[-1]C');
+                    cell(0, 7, DIV0, '=1/0');
                 },
             },
         ]);
-        // A load brings values and no word on loops, and nothing here is to be computed.
-        expect(engine.recalc(NO_CAP).loops).toEqual([]);
-        engine.setValue('s1', 0, 2, 7);
-        expect(engine.recalc(NO_CAP).loops).toEqual([]);
-        engine.setFormula('s1', 0, 0, '=R[1]C');
-        expect(engine.recalc(NO_CAP).loops).toEqual([
+        const first = [
             { sheet: 's1', row: 0, column: 0 },
             { sheet: 's1', row: 1, column: 0 },
+        ];
+        expect(engine.isPending('s1', 0, 0)).toBe(true);
+        // Only #REF! can stand for a loop: a formula that came with any other value is taken as computed.
+        const settled = [3, 5, 7].map((column) => engine.isPending('s1', 0, column));
+        expect(settled).toEqual([false, false, false]);
+        expect(engine.recalc(NO_CAP)).toEqual({ loops: first, stopped: false, changed: [] });
+        engine.setValue('s1', 0, 2, 7);
+        expect(engine.recalc(NO_CAP).loops).toEqual(first);
+        engine.setFormula('s1', 0, 5, '=R[1]C');
+        expect(engine.recalc(NO_CAP).loops).toEqual([
+            ...first,
+            { sheet: 's1', row: 0, column: 5 },
+            { sheet: 's1', row: 1, column: 5 },
         ]);
     });
     test('the stored text of a cell, and a block filled with one', () => {

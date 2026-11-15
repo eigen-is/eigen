@@ -3,7 +3,7 @@ import type { CellSink, Literal } from '../../index';
 import { Engine, NA, REF } from '../../index';
 import { random } from '../store/support';
 import type { Cells } from './support';
-import { engineOf, stored, valueAt } from './support';
+import { at, engineOf, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 
@@ -75,32 +75,67 @@ describe('recalc', () => {
     });
 });
 
+// The workbook loaded again with every value a full recalc gave it, as a host loads what it stored.
+function reloaded(cells: Cells): Engine {
+    const fresh = engineOf({ s1: cells });
+    fresh.recalc(NO_CAP);
+    return sheetOf((cell) => {
+        for (const [label, input] of Object.entries(cells)) {
+            const [row, column] = at(label);
+            const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
+            cell(row, column, formula === null ? input : fresh.valueOf('s1', row, column), formula);
+        }
+    });
+}
+
+const LOOPS: [string, Cells, string[], Readonly<Record<string, Literal>>][] = [
+    ['a cell that reads itself', { A1: '=A1' }, ['A1'], { A1: REF }],
+    ['two cells', { A1: '=B1', B1: '=A1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
+    ['a reader off the loop', { A1: '=B1', B1: '=A1', C1: '=A1+1' }, ['A1', 'B1'], { C1: REF }],
+    ['a range that holds the formula', { A1: '=SUM(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
+    ['a branch that is not taken', { A1: '=IF(TRUE,1,A1)' }, [], { A1: 1 }],
+    ['a branch that is taken', { A1: '=IF(B1,A1,2)', B1: true }, ['A1'], { A1: REF }],
+    ['a loop a formula would catch', { A1: '=IFERROR(B1,1)', B1: '=A1+1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
+    [
+        'two loops through one cell',
+        { A1: '=B1+C1', B1: '=A1', C1: '=A1', D1: '=IFERROR(A1,"off")' },
+        ['A1', 'B1', 'C1'],
+        { A1: REF, B1: REF, C1: REF, D1: 'off' },
+    ],
+    [
+        'a loop met through a cell that is not on it',
+        { A1: '=B1', B1: '=C1+1', C1: '=D1', D1: '=C1', E1: 5 },
+        ['C1', 'D1'],
+        { A1: REF, B1: REF, C1: REF, D1: REF },
+    ],
+    ['an array formula over itself', { A1: '=SUM(A1:A2*2)', A2: 1 }, ['A1'], { A1: REF }],
+    ['a range of three that holds the formula', { A1: '=SUMPRODUCT(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
+];
+
 describe('circular references', () => {
-    test.each<[string, Cells, string[], Readonly<Record<string, Literal>>]>([
-        ['a cell that reads itself', { A1: '=A1' }, ['A1'], { A1: REF }],
-        ['two cells', { A1: '=B1', B1: '=A1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
-        ['a reader off the loop', { A1: '=B1', B1: '=A1', C1: '=A1+1' }, ['A1', 'B1'], { C1: REF }],
-        ['a range that holds the formula', { A1: '=SUM(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
-        ['a branch that is not taken', { A1: '=IF(TRUE,1,A1)' }, [], { A1: 1 }],
-        ['a branch that is taken', { A1: '=IF(B1,A1,2)', B1: true }, ['A1'], { A1: REF }],
-        ['a loop a formula would catch', { A1: '=IFERROR(B1,1)', B1: '=A1+1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
-        [
-            'two loops through one cell',
-            { A1: '=B1+C1', B1: '=A1', C1: '=A1', D1: '=IFERROR(A1,"off")' },
-            ['A1', 'B1', 'C1'],
-            { A1: REF, B1: REF, C1: REF, D1: 'off' },
-        ],
-        [
-            'a loop met through a cell that is not on it',
-            { A1: '=B1', B1: '=C1+1', C1: '=D1', D1: '=C1', E1: 5 },
-            ['C1', 'D1'],
-            { A1: REF, B1: REF, C1: REF, D1: REF },
-        ],
-        ['an array formula over itself', { A1: '=SUM(A1:A2*2)', A2: 1 }, ['A1'], { A1: REF }],
-    ])('%s', (_name, cells, loops, values) => {
+    test.each(LOOPS)('%s', (_name, cells, loops, values) => {
         const engine = engineOf({ s1: cells });
         expect(loopsOf(engine)).toEqual(loops);
         for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test.each(LOOPS)('%s, loaded with the values it had', (_name, cells, loops, values) => {
+        const engine = reloaded(cells);
+        const { changed, loops: listed } = engine.recalc(NO_CAP);
+        expect(listed.map(({ row, column }) => `${String.fromCharCode(65 + column)}${row + 1}`).sort()).toEqual(loops);
+        expect(changed).toEqual([]);
+        for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test('a workbook loaded with its values lists the loops a load without them lists', () => {
+        let loops = 0;
+        for (let seed = 1; seed <= 40; seed += 1) {
+            const cells = randomCells(seed, false, false);
+            const fresh = engineOf({ s1: cells }).recalc(NO_CAP);
+            expect(reloaded(cells).recalc(NO_CAP)).toEqual({ ...fresh, changed: [] });
+            loops += fresh.loops.length;
+        }
+        expect(loops).toBeGreaterThan(40);
     });
 
     test('a loop that is broken computes again', () => {

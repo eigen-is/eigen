@@ -22,7 +22,7 @@ type CellAddress = { readonly sheet: string; readonly row: number; readonly colu
 
 export type RecalcResult = {
     // Every cell of the workbook that is on a circular reference, in sheet, column, row order. Final only when
-    // `stopped` is false, and a loop is listed once one of its cells was computed: only computing finds it.
+    // `stopped` is false. Only computing finds a loop, so one loaded with other values than #REF! shows once computed.
     readonly loops: readonly CellAddress[];
     // True when the pass met its cap with formulas still to compute. What it computed stays, and the next goes on.
     readonly stopped: boolean;

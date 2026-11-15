@@ -10,7 +10,7 @@ import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
 import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
-import { ERRORS } from '../values/errors';
+import { ERRORS, REF } from '../values/errors';
 import type { Scalar } from '../values/value';
 import type { Column } from './column';
 import { CellKind, KIND_MASK } from './column';
@@ -128,7 +128,9 @@ export class Workbook {
             if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
             if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
             else if (value !== null) this.put(held, row, value);
-            else if (formula !== null) held.markDirty(row);
+            // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
+            // which only computing it finds.
+            if (formula !== null && (value === null || value === REF)) held.markDirty(row);
         });
         return { sheet, texts, formulas };
     }
