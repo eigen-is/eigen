@@ -59,7 +59,8 @@ describe('AboutPage', () => {
             expect(part.match(/Use your favorite apps/g)?.length).toBe(1);
             expect(part.match(/Built for data sovereignty/g)?.length).toBe(1);
             expect(part).not.toContain('Office compatible');
-            expect(part).toContain('>IMAP</span>');
+            expect(part).not.toContain('>IMAP</span>');
+            expect(part).toContain('Every message is a plain .eml file.');
             expect(part).toContain('href="/support/mail/download-an-email"');
         }
     });

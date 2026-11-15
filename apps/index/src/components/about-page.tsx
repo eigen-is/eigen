@@ -4,7 +4,6 @@
 // each of Eigen's principles the app holds to, such as CalDAV for Calendar. Narrow screens have no gutter, so there
 // the boxes sit at the body's end, above the technical panel.
 
-import { Badge } from '@workspace/ui/components/badge';
 import type { AboutApp } from '../content/about-apps';
 import type { ArticleBody, ArticleMeta } from '../content/manifest';
 import { AppWordmark } from './app-wordmark';
@@ -92,17 +91,10 @@ function PrincipleBoxes({ app, className }: { app: AboutApp; className: string }
                 <a
                     key={entry.principle}
                     href={`/support/${entry.article}`}
-                    className="group site-panel block text-sm leading-snug"
+                    className="site-panel block text-sm leading-snug text-muted-foreground transition-colors hover:text-foreground"
                 >
-                    <p className="font-medium underline-offset-4 group-hover:underline">{entry.principle}</p>
-                    <p className="mt-1 text-pretty text-muted-foreground">{entry.line}</p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                        {entry.tags.map((tag) => (
-                            <Badge key={tag} variant="outline">
-                                {tag}
-                            </Badge>
-                        ))}
-                    </div>
+                    <p className="eigen-section-label mb-2 leading-5">{entry.principle}</p>
+                    <p className="text-pretty">{entry.line}</p>
                 </a>
             ))}
         </div>
