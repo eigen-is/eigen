@@ -295,6 +295,18 @@ describe('engine/book/apply-move — the inverse, part by part', () => {
         ]);
     });
 
+    test('(5) a lossy run of formulas the block carries comes back where it came from', () => {
+        const sheet = sheetOf('a', {
+            cells: [
+                [0, 0, { f: '=RC[1]' }],
+                [1, 0, { f: '=RC[1]' }],
+                [2, 0, { f: '=RC[1]' }],
+            ],
+        });
+        const ops = expectLaw2(bookOf(sheet), [moveOf([0, 0, 2, 0], 0, 1)]);
+        expect(ops.at(-1)).toEqual({ kind: 'input', sheet: 'a', runs: [[[0, 0, 2, 0], { f: '=RC[1]' }]] });
+    });
+
     test('a move onto an empty area has the move back alone', () => {
         expect(inverse(moveOf([0, 0, 3, 1], 30, 30))).toEqual([moveOf([30, 30, 33, 31], 0, 0)]);
     });
@@ -336,6 +348,19 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
             expectReads(book, modelOf(content));
         });
     }
+
+    test('the sheet the block leaves is asked first, so a cut there refuses before a clash where it lands', () => {
+        const source = sheetOf('a', {
+            fields: { name: 'a', order: 'a1' },
+            records: { merge: { m: { rect: [0, 0, 1, 1] }, n: { rect: [1, 2, 2, 2] } } },
+        });
+        const first = sheetOf('b', {
+            fields: { name: 'b', order: 'a0' },
+            records: { merge: { m: { rect: [9, 9, 9, 10] } } },
+        });
+        const book = new Workbook(bookOf(source, first));
+        expect(refusalOf(book, [moveOf([0, 0, 1, 2], 4, 4, 'b')])).toBe('merge-cut');
+    });
 
     test('a merge the block lands on whole is removed and comes back', () => {
         const book = new Workbook(bookOf(A, B));

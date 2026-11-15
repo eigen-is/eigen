@@ -1,13 +1,13 @@
 // The applier of a `move` op, which the frame calls for each op of a batch: a block of cells moved, as a cut and
 // paste or a drag does it, on one sheet or to another. Its content, looks and extras go along, with its comments, the
 // merges wholly in it and, on one sheet, the rule ranges wholly in it; formulas anywhere that read it follow. What it
-// lands on is replaced, but for the comments there. Its inverse moves the block back, then writes back what the cells
-// it landed on outside it held, the records the move took or changed, and the formulas it made lossy.
+// lands on is replaced, comments included. Its inverse moves the block back, then writes back what the cells it landed
+// on outside it held, the records the move removed or changed, and the formulas it made lossy.
 
 import type { Move } from '@workspace/formula';
 import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { within } from '@workspace/lib/sheets/rect';
+import { covers, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Areas } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
@@ -124,16 +124,13 @@ function movedBack(ops: readonly InputOp[], op: MoveOp, target: Rect): InputOp[]
     };
     for (const { sheet, runs = [], cells = [] } of ops) {
         for (const [rect, content] of runs) {
-            const moved = sheet === op.toSheet && within(rect, target);
             const [t, l, b, r] = rect;
-            if (moved)
-                of(op.sheet).runs.push([[t - rowShift, l - columnShift, b - rowShift, r - columnShift], content]);
-            else of(sheet).runs.push([rect, content]);
+            if (sheet !== op.toSheet || !within(rect, target)) of(sheet).runs.push([rect, content]);
+            else of(op.sheet).runs.push([[t - rowShift, l - columnShift, b - rowShift, r - columnShift], content]);
         }
         for (const [row, column, content] of cells) {
-            const moved = sheet === op.toSheet && within([row, column, row, column], target);
-            if (moved) of(op.sheet).cells.push([row - rowShift, column - columnShift, content]);
-            else of(sheet).cells.push([row, column, content]);
+            if (sheet !== op.toSheet || !covers(target, row, column)) of(sheet).cells.push([row, column, content]);
+            else of(op.sheet).cells.push([row - rowShift, column - columnShift, content]);
         }
     }
     return [...bySheet].map(([sheet, { runs, cells }]) => {
