@@ -143,6 +143,98 @@ describe('load', () => {
         expect(before[2]).toBeUndefined();
     });
 
+    test('a sheet whose cells lie far apart takes its ids by reading those cells, and no row between them', () => {
+        const far = GRID_ROWS - 1;
+        const cells: TestCell[] = [
+            [0, 0, 'top'],
+            [far, 0, 'far', '=R1C1&"!"'],
+            [far, 1, 7],
+            [far, 2, errorOf('#BUSY!')],
+            [far, 3, null, '=R1C1&"!"'],
+            [far, 4, 'far'],
+        ];
+        const workbook = new Workbook([source('s0', [[0, 0, 'other', '=1+1']])]);
+        const draft = workbook.read(source('s1', cells));
+        let reads = 0;
+        const counted = <Plane extends object>(plane: Plane): Plane =>
+            new Proxy(plane, {
+                get: (target, key) => {
+                    reads += 1;
+                    return Reflect.get(target, key);
+                },
+                set: (target, key, value) => Reflect.set(target, key, value),
+            });
+        for (const column of draft.sheet.columns) {
+            column.kind = counted(column.kind);
+            column.ref = counted(column.ref);
+            column.shape = counted(column.shape);
+        }
+        const sheet = workbook.adopt(draft);
+        // Three planes of six cells at most, where the columns hold over five million rows.
+        expect(reads).toBeLessThanOrEqual(3 * cells.length);
+        expect(reads).toBeGreaterThan(0);
+        const held = sheet.columns.map((column) => workbook.value(column, far));
+        expect(held.map((value) => (typeof value === 'object' ? (value?.text ?? 'blank') : value))).toEqual([
+            'far',
+            7,
+            '#BUSY!',
+            'blank',
+            'far',
+        ]);
+        expect(workbook.value(sheet.columns[0], 0)).toBe('top');
+        expect([0, 3].map((c) => workbook.shapes.shape(sheet.columns[c].shape[far]).text)).toEqual([
+            '=R1C1&"!"',
+            '=R1C1&"!"',
+        ]);
+        expect(sheet.columns.map((column) => `${column.pending} ${column.errors}`)).toEqual([
+            '0 0',
+            '0 0',
+            '0 1',
+            '1 0',
+            '0 0',
+        ]);
+    });
+
+    test('a cell its source reports twice holds what was reported last, and a formula once reported stays', () => {
+        const twice: TestCell[] = [
+            [0, 0, 'first'],
+            [0, 0, 'second'],
+            [1, 0, 'first'],
+            [1, 0, 5],
+            [2, 0, errorOf('#BUSY!')],
+            [2, 0, errorOf('#FIELD!')],
+            [3, 0, 1, '=1+1'],
+            [3, 0, 'third', '=2+2'],
+            [4, 0, 'same'],
+            [4, 0, 'same'],
+            [5, 0, null, '=3+3'],
+            [5, 0, errorOf('#BUSY!')],
+            [6, 0, errorOf('#FIELD!')],
+            [6, 0, NA],
+        ];
+        // The tables hold texts, shapes and errors of another sheet already, so no id is its number in the sheet.
+        const others: TestCell[] = [
+            [0, 0, 'p', '=7+7'],
+            [1, 0, 'q', '=8+8'],
+            [2, 0, errorOf('#BLOCKED!'), '=9+9'],
+        ];
+        const engine = new Engine([source('s0', others), source('s1', twice)]);
+        engine.addSheet(source('s2', twice), 2);
+        for (const sheet of ['s1', 's2']) {
+            const read = [0, 1, 2, 3, 4, 5, 6].map((row) => engine.valueOf(sheet, row, 0));
+            expect(read.map((value) => (typeof value === 'object' ? value?.text : value))).toEqual([
+                'second',
+                5,
+                '#FIELD!',
+                'third',
+                'same',
+                '#BUSY!',
+                '#N/A',
+            ]);
+            expect([3, 5, 6].map((row) => engine.formulaOf(sheet, row, 0))).toEqual(['=2+2', '=3+3', null]);
+        }
+    });
+
     test('a formula that came without a value is empty until a recalc computes it', () => {
         const engine = new Engine([
             source('s1', [

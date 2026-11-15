@@ -32,12 +32,15 @@ export type SheetSource = {
 };
 
 // A sheet as `read` leaves it: a text cell, a formula and an error only a file knows hold their number in the
-// order of these lists, which `adopt` turns into ids and codes of the workbook's tables.
+// order of these lists, which `adopt` turns into ids and codes of the workbook's tables. In a cell the number is
+// written as its complement, below 0, where no id or code is.
 export type Draft = {
     readonly sheet: Sheet;
     readonly texts: ReadonlyMap<string, number>;
     readonly formulas: ReadonlyMap<string, number>;
     readonly errors: ReadonlyMap<string, number>;
+    // Per column, the rows of the cells that may hold such a number, as the source reported them.
+    readonly numbered: readonly (readonly number[])[];
 };
 
 // A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
@@ -133,37 +136,46 @@ export class Workbook {
         const texts = new Map<string, number>();
         const formulas = new Map<string, number>();
         const errors = new Map<string, number>();
+        const numbered = lengths.map((): number[] => []);
         walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
             if (held === undefined || row >= held.length) {
                 throw new Error(`Sheet ${source.id} reported cell ${row},${column} only when it was read again`);
             }
-            if (formula !== null) held.shape[row] = listed(formulas, formula) + 1;
-            if (typeof value === 'string') held.put(row, CellKind.Text, 0, listed(texts, value));
+            if (formula !== null) held.shape[row] = ~listed(formulas, formula);
+            if (typeof value === 'string') held.put(row, CellKind.Text, 0, ~listed(texts, value));
             else if (typeof value === 'object' && value !== null) {
-                held.put(row, CellKind.Error, 0, value.code || CARRIED + listed(errors, value.text));
+                held.put(row, CellKind.Error, 0, value.code || ~listed(errors, value.text));
             } else if (value !== null) this.put(held, row, value);
+            // A number or a boolean with no formula is stored as it stays.
+            if (formula !== null || (typeof value !== 'number' && typeof value !== 'boolean')) {
+                numbered[column].push(row);
+            }
             // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
             // which only computing it finds. A host's error is told by its code, as the cell stores it.
             if (formula !== null && (value === null || (typeof value === 'object' && value.code === REF.code))) {
                 held.markDirty(row);
             }
         });
-        return { sheet, texts, formulas, errors };
+        return { sheet, texts, formulas, errors, numbered };
     }
 
     // Makes a sheet that was read one whose cells hold ids and codes of the tables, in no place yet: `apply` adds
     // it. Nothing may forget a text or a shape between this and the add, as no cell of the workbook holds them yet.
-    public adopt({ sheet, texts, formulas, errors }: Draft): Sheet {
+    public adopt({ sheet, texts, formulas, errors, numbered }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text));
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
-        for (const { kind, ref, shape, length } of sheet.columns) {
-            for (let row = 0; row < length; row += 1) {
-                const holds = kind[row] & KIND_MASK;
-                if (holds === CellKind.Text) ref[row] = textIds[ref[row]];
-                else if (holds === CellKind.Error && ref[row] >= CARRIED) ref[row] = errorCodes[ref[row] - CARRIED];
-                if (shape[row] !== 0) shape[row] = shapeIds[shape[row] - 1];
+        // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
+        // reported twice is listed twice, and holds an id once it was met.
+        for (let c = 0; c < numbered.length; c += 1) {
+            const { kind, ref, shape } = sheet.columns[c];
+            for (const row of numbered[c]) {
+                const number = ~ref[row];
+                if (number >= 0) {
+                    ref[row] = (kind[row] & KIND_MASK) === CellKind.Text ? textIds[number] : errorCodes[number];
+                }
+                if (shape[row] < 0) shape[row] = shapeIds[~shape[row]];
             }
         }
         return sheet;
