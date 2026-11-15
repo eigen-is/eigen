@@ -4,15 +4,16 @@
 
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 import { typeLikeAPerson } from '../lib/type';
 
-const REST = { x: 1400, y: 760 };
+const REST = { x: 980, y: 532 };
 
 export const mailSearch = {
     name: 'mail-search',
     kind: 'video',
     theme: 'dark',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['mail'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {

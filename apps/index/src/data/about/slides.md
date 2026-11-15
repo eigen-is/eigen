@@ -10,9 +10,9 @@ eigen|slides⟩ is the [presentation app](/support/slides/get-started) in Eigen.
 
 ## Building a deck
 
-A slide holds text, images, [shapes and arrows](/support/slides/draw-shapes-and-arrows). [Double-click a text box](/support/slides/insert-content) to type in it. [Drag a thumbnail](/support/slides/add-slides) to reorder the slides. A [background](/support/slides/slide-backgrounds) can be a color, a gradient or an image, for one slide or all of them.
+A slide holds text, images, charts, [shapes and arrows](/support/slides/draw-shapes-and-arrows). [Double-click a text box](/support/slides/insert-content) to type in it. [Drag a thumbnail](/support/slides/add-slides) to reorder the slides. A [background](/support/slides/slide-backgrounds) can be a color, a gradient or an image, for one slide or all of them.
 
-The festival's sponsor deck is five slides, from who comes to what a sponsor gets. Mees writes one line on each.
+The festival's sponsor deck is seven slides, from who comes to what a sponsor gets. Mees writes one line on each. The place has a photo of the dunes beside its line, and This year's sponsors a column chart of Bram's numbers from the budget.
 
 Slides runs on the same canvas as eigen|vector⟩, so shapes have the same hand-drawn look, which you can [turn down to clean lines](/support/slides/style-objects).
 

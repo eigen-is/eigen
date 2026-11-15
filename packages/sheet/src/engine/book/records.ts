@@ -1,8 +1,8 @@
 // The records of one sheet in the workbook model, such as its merges, its filter, its comments and the rules over its
 // ranges, kept by type and id as frozen objects a change replaces, so an unchanged record keeps its reference. It
-// answers the read handle's questions, merges through an index, and works out where every record goes when rows or
-// columns are inserted or deleted or a block of cells moves, with the record ops that undo puts after the inverse
-// edit. The workbook's applier calls it: it checks and plans first and writes only once nothing can refuse.
+// works out where every record goes when rows or columns are inserted or deleted or a block of cells moves, with the
+// record ops that undo puts after the inverse edit. The workbook's applier calls it: it checks and plans first and
+// writes only once nothing can refuse.
 
 import type { Edit, FormulaNode, LineEdit, Move } from '@workspace/formula/text';
 import {
@@ -16,11 +16,13 @@ import {
     transformLines,
     transformMove,
 } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { SingleRange } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
     ConditionalFormatRecord,
     FieldsOf,
+    LinesOp,
     MoveOp,
     RecordOp,
     Records,
@@ -28,31 +30,33 @@ import type {
     Rect,
     SheetContent,
     SheetFields,
+    Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
+import { covers, sameRect, within } from '@workspace/lib/sheets/rect';
 import { mapChartRefs } from '../chart-data';
+import { placeOf } from './extras';
+import { MergeIndex } from './merge-index';
 
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
-type Span = [first: number, last: number];
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
 export type Planned = { readonly restore: readonly RecordOp[]; readonly commit: () => void };
 
-const KINDS: readonly Kind[] = [
-    'merge',
-    'filter',
-    'filterColumn',
-    'comment',
-    'conditionalFormat',
-    'validation',
-    'image',
-    'chart',
-];
-
-// A band of rows in the merge index holds two to this power of rows at least.
-const MIN_BAND_SHIFT = 6;
+// Every record type of a sheet once: the mapped type fails the build on a type left out.
+const KIND: { readonly [T in Kind]: T } = {
+    merge: 'merge',
+    filter: 'filter',
+    filterColumn: 'filterColumn',
+    comment: 'comment',
+    conditionalFormat: 'conditionalFormat',
+    validation: 'validation',
+    image: 'image',
+    chart: 'chart',
+};
+const KINDS = Object.values(KIND);
 
 // The op type is a union over the record types, so an op of a type known only as a type parameter is made here: made
 // whole or deleted, or with some of its fields set, which a rule never is.
@@ -91,12 +95,7 @@ export class SheetRecords {
         image: new Map(),
         chart: new Map(),
     };
-    // The merge index: by band size, then by band of rows, the merges with a row in the band, each with its rectangle.
-    // A merge is listed in bands of its own size, the smallest power of two rows that holds its height, so it lies in
-    // two bands at most however tall it is, and its width costs nothing. A read looks, for each band size in use, at
-    // the bands on its rows only: one for a cell, and for a rectangle as many as it is tall in bands of that size.
-    // Merges are listed by id, so the index also holds while a line edit or a move rewrites them one by one.
-    private readonly mergeBands = new Map<number, Map<number, Map<string, Rect>>>();
+    private readonly merges = new MergeIndex();
     // The comments by cell, ids in order.
     private readonly commentCells = new Map<number, string[]>();
     private sheetFields: SheetFields;
@@ -139,21 +138,21 @@ export class SheetRecords {
         return content;
     }
 
+    // What the limit on records counts: the most records of one type.
+    public weight(): { records: number } {
+        return { records: Math.max(...KINDS.map((type) => this.stored[type].size)) };
+    }
+
     public merge(row: number, column: number): Rect | undefined {
-        for (const [shift, bands] of this.mergeBands) {
-            for (const rect of bands.get(row >> shift)?.values() ?? []) {
-                if (row >= rect[0] && row <= rect[2] && column >= rect[1] && column <= rect[3]) return rect;
-            }
-        }
-        return undefined;
+        return this.merges.at(row, column);
     }
 
     public touchesMerge(rect: Rect): boolean {
-        return this.mergesMeeting(rect).size > 0;
+        return this.merges.meeting(rect).size > 0;
     }
 
     public mergesIn(rect: Rect): readonly Rect[] {
-        return [...this.mergesMeeting(rect).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        return [...this.merges.meeting(rect).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     }
 
     // Where two rules cover a cell, the last in order has it.
@@ -167,12 +166,12 @@ export class SheetRecords {
     }
 
     public comments(row: number, column: number): readonly string[] {
-        return this.commentCells.get(cellKey(row, column)) ?? [];
+        return this.commentCells.get(placeOf(row, column)) ?? [];
     }
 
     // Whole makes or replaces a record, a `set` alone changes the fields it names, null clearing one, and no `set`
     // deletes. A write that is skipped, such as a change of a record that is gone, returns no inverse.
-    public write(op: RecordOp): RecordOp[] | 'merge-overlap' {
+    public write(op: RecordOp): RecordOp[] | 'merge-overlap' | 'key-too-long' {
         if (op.whole) {
             switch (op.type) {
                 case 'merge':
@@ -207,12 +206,16 @@ export class SheetRecords {
             const old = this.stored.filterColumn.get(op.id);
             if (old && !this.stored.filter.has(op.set.filter ?? old.filter)) return [];
         }
+        if (op.type === 'chart') {
+            const old = this.stored.chart.get(op.id);
+            if (old && exceedsChartSpecBytes(withFields(old, op.set))) return 'key-too-long';
+        }
         return this.change(op.type, op.id, op.set);
     }
 
-    // Whether an insert of `count` lines would push a record off the grid's end: a comment or a merge on a pushed
-    // line, or a record range that starts or ends on one. A range that reaches the last line is open and passes.
-    public blocksPush(rows: boolean, count: number): boolean {
+    // Whether the insert would push a record off the grid's end: a comment or a merge on a pushed line, or a record
+    // range that starts or ends on one. A range that reaches the last line is open and passes.
+    public wouldPush({ rows, count }: LinesOp): boolean {
         const last = (rows ? GRID_ROWS : GRID_COLUMNS) - 1;
         const pushed = last + 1 - count;
         const spanPushed = (start: number, end: number) => start >= pushed || (end >= pushed && end !== last);
@@ -231,7 +234,7 @@ export class SheetRecords {
 
     // Lines inserted or deleted on this sheet or another: on this one every range, place and the frozen panes move;
     // on any, a rule's formula and a chart's refs follow the lines they name.
-    public planLines(edit: LineEdit): Planned | 'key-too-long' {
+    public planLines(edit: LinesOp): Planned | 'key-too-long' {
         const here = edit.sheet === this.sheet;
         const { rows } = edit;
         const axis: Edit = {
@@ -264,7 +267,7 @@ export class SheetRecords {
                 const after = span(start, end, true);
                 if (!after) return [];
                 if (after[0] === start && after[1] === end) return [range];
-                return [rows ? { ...range, row: after } : { ...range, column: after }];
+                return [rows ? { ...range, row: [...after] } : { ...range, column: [...after] }];
             });
             return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
         };
@@ -352,7 +355,7 @@ export class SheetRecords {
                 continue;
             }
             const ruled = next === rule.ranges ? rule : { ...rule, ranges: next };
-            // The formula is read at the top-left of the first range the edit leaves, at the first line it leaves of it.
+            // The formula is read at the top-left of the first range the edit leaves, on its first line that stays.
             const first = here ? rule.ranges.findIndex((range) => spanAfter(axis, ...lineSpan(range, rows), true)) : 0;
             const [start] = lineSpan(rule.ranges[first], rows);
             const host = here && mapIndex(axis, start) === GONE ? edit.index + edit.count : start;
@@ -370,8 +373,9 @@ export class SheetRecords {
                 const after = span(start, end, true);
                 if (!after) return null;
                 if (after[0] === start && after[1] === end) return ref;
-                return rows ? { ...ref, row: after } : { ...ref, column: after };
+                return rows ? { ...ref, row: [...after] } : { ...ref, column: [...after] };
             });
+            if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
             settle('chart', id, chart, next);
         }
         return {
@@ -382,9 +386,8 @@ export class SheetRecords {
         };
     }
 
-    // A block of cells moved on this sheet or to another. `source` holds the sheet the block leaves, which is this one
-    // for a move on one sheet. Its comments and the merges wholly in it go along, and on one sheet so do the rule
-    // ranges wholly in it; a merge it lands on whole goes, and one it cuts, where it leaves or lands, refuses.
+    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments and the merges wholly
+    // in it go along, on one sheet its rule ranges too; a merge it lands on whole goes, one it cuts anywhere refuses.
     public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'key-too-long' {
         const block = op.from;
         const [top, left, bottom, right] = block;
@@ -418,10 +421,10 @@ export class SheetRecords {
         const restore: RecordOp[] = [];
 
         const near = toHere || fromHere;
-        const carried = near ? source.mergesMeeting(block) : new Map<string, Rect>();
+        const carried = near ? source.merges.meeting(block) : new Map<string, Rect>();
         if (fromHere && [...carried.values()].some((rect) => !within(rect, block))) return 'merge-cut';
         if (toHere) {
-            for (const [id, rect] of this.mergesMeeting(target)) {
+            for (const [id, rect] of this.merges.meeting(target)) {
                 if (oneSheet && carried.has(id)) continue;
                 if (!within(rect, target)) return 'merge-cut';
                 const merge = this.stored.merge.get(id);
@@ -494,19 +497,8 @@ export class SheetRecords {
         };
     }
 
-    // The merges with a cell in the rectangle, by id.
-    private mergesMeeting(rect: Rect): Map<string, Rect> {
-        const found = new Map<string, Rect>();
-        for (const [shift, bands] of this.mergeBands) {
-            for (let band = rect[0] >> shift; band <= rect[2] >> shift; band += 1) {
-                for (const [id, merge] of bands.get(band) ?? []) if (meets(merge, rect)) found.set(id, merge);
-            }
-        }
-        return found;
-    }
-
     private overlaps(id: string, rect: Rect): boolean {
-        return [...this.mergesMeeting(rect).keys()].some((other) => other !== id);
+        return [...this.merges.meeting(rect).keys()].some((other) => other !== id);
     }
 
     // The filter of this id and its columns go, and come back in that order.
@@ -547,36 +539,21 @@ export class SheetRecords {
 
     // Every write lands here, which keeps the merge index and the comment cells in step.
     private replace<T extends Kind>(type: T, id: string, record: Records[T] | undefined): void {
-        if (type === 'merge') this.indexMerge(id, false);
+        const merge = type === 'merge' ? this.stored.merge.get(id)?.rect : undefined;
         if (type === 'comment') this.indexComment(id, false);
         if (record === undefined) this.stored[type].delete(id);
         else {
             Object.freeze(record);
             this.stored[type].set(id, record);
         }
-        if (type === 'merge') this.indexMerge(id, true);
+        if (type === 'merge') this.merges.set(id, merge, this.stored.merge.get(id)?.rect);
         if (type === 'comment') this.indexComment(id, true);
-    }
-
-    private indexMerge(id: string, add: boolean): void {
-        const merge = this.stored.merge.get(id);
-        if (!merge) return;
-        const [top, , bottom] = merge.rect;
-        const shift = Math.max(MIN_BAND_SHIFT, 32 - Math.clz32(bottom - top));
-        const bands = this.mergeBands.get(shift) ?? new Map<number, Map<string, Rect>>();
-        for (let band = top >> shift; band <= bottom >> shift; band += 1) {
-            const merges = bands.get(band) ?? new Map<string, Rect>();
-            if (add) bands.set(band, merges.set(id, merge.rect));
-            else if (merges.delete(id) && merges.size === 0) bands.delete(band);
-        }
-        if (bands.size > 0) this.mergeBands.set(shift, bands);
-        else this.mergeBands.delete(shift);
     }
 
     private indexComment(id: string, add: boolean): void {
         const comment = this.stored.comment.get(id);
         if (!comment) return;
-        const key = cellKey(comment.row, comment.column);
+        const key = placeOf(comment.row, comment.column);
         const ids = (this.commentCells.get(key) ?? []).filter((other) => other !== id);
         const at = ids.findIndex((other) => other > id);
         if (add) ids.splice(at < 0 ? ids.length : at, 0, id);
@@ -585,9 +562,8 @@ export class SheetRecords {
     }
 }
 
-// The lines `start` to `end` after the edit, or null when none is left. With `open`, an end on the axis's last line
-// stays there, so a range that reaches the end of the grid keeps reaching it, and the whole axis, Excel's `A:A`,
-// stays whole.
+// The lines `start` to `end` after the edit, or null when none is left. With `open` an end on the axis's last line
+// stays there, so a range to the grid's end, Excel's `A:A` included, keeps reaching it.
 function spanAfter(edit: Edit, start: number, end: number, open: boolean): Span | null {
     if (open && start === 0 && end === edit.lines - 1) return [start, end];
     const into = { start: 0, end: 0 };
@@ -595,10 +571,11 @@ function spanAfter(edit: Edit, start: number, end: number, open: boolean): Span 
     return [into.start, open && end === edit.lines - 1 ? end : into.end];
 }
 
-// An insert before the last frozen line freezes the new lines too; a delete takes the frozen lines it deletes.
-function frozenAfter({ insert, index, count }: Edit, frozen: number): number {
+// An insert before the last frozen line freezes the new lines too, up to the grid's end; a delete takes the frozen
+// lines it deletes.
+function frozenAfter({ insert, index, count, lines }: Edit, frozen: number): number {
     if (index >= frozen) return frozen;
-    return insert ? frozen + count : frozen - Math.min(count, frozen - index);
+    return insert ? Math.min(frozen + count, lines) : frozen - Math.min(count, frozen - index);
 }
 
 // A formula rule with its stored key transformed: the rule as it came when its key stays, or when its text does not
@@ -622,9 +599,8 @@ function formulaOf(rule: ConditionalFormatRecord): string | undefined {
     return typeof text === 'string' ? text : undefined;
 }
 
-// Where a rule is read during a move: at the top-left of its first range, unless the block leaves from its sheet and
-// takes cells of the rule but not its first range, which is then read at the first of its cells the block leaves where
-// they are, so the formula does not follow the block. None when the block holds every range.
+// Where a rule is read during a move: the top-left of its first range, or, when the block leaves its sheet with cells
+// of the rule but not that range, the first cell it leaves behind. None when the block holds every range.
 function moveHost(
     ranges: readonly SingleRange[],
     block: Rect,
@@ -652,26 +628,6 @@ function rectRange([top, left, bottom, right]: Rect): SingleRange {
 
 function rangeRect({ row, column }: SingleRange): Rect {
     return [row[0], column[0], row[1], column[1]];
-}
-
-function sameRect(a: Rect, b: Rect): boolean {
-    return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
-}
-
-function covers({ row, column }: SingleRange, r: number, c: number): boolean {
-    return r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
-}
-
-function meets(a: Rect, b: Rect): boolean {
-    return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
-}
-
-function within(inner: Rect, outer: Rect): boolean {
-    return inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
-}
-
-function cellKey(row: number, column: number): number {
-    return row * GRID_COLUMNS + column;
 }
 
 function withFields<R extends object>(record: R, set: FieldsOf<R>): R {

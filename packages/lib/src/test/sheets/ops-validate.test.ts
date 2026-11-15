@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { MAX_CHART_SPEC_BYTES } from '../../charts/limits';
 import { isRecord } from '../../core/guards';
 import {
-    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
     MAX_RECORDS_PER_TYPE,
     MAX_RUNS_PER_CELL,
+    MAX_SHEETS,
     MAX_SHORT_TEXT,
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
@@ -15,6 +16,7 @@ import {
 import type { Batch, CellAttrKey, Op, SheetContent } from '../../sheets/ops';
 import { LOOK_KEYS } from '../../sheets/ops';
 import { isSheetContent, readBatch } from '../../sheets/ops-validate';
+import { MAX_RULE_RANGES } from '../../sheets/range-rules';
 
 const CLOCK = { now: 46000.5, seed: -7 };
 const batchOf = (...ops: unknown[]) => ({ g: 0, ...CLOCK, ops });
@@ -235,8 +237,8 @@ describe('readBatch', () => {
     test('takes the clock as a serial of the days the engine dates, and the seed as a 32-bit integer', () => {
         const clock = (now: unknown, seed: unknown) => read({ g: 0, now, seed, ops: [] }) !== null;
         expect(clock(0, 0)).toBe(true);
-        expect(clock(LAST_DATE_SERIAL + 0.999, 2 ** 31 - 1)).toBe(true);
-        expect(clock(LAST_DATE_SERIAL + 1, 0)).toBe(false);
+        expect(clock(LAST_SERIAL + 0.999, 2 ** 31 - 1)).toBe(true);
+        expect(clock(LAST_SERIAL + 1, 0)).toBe(false);
         expect(clock(1e300, 0)).toBe(false);
         expect(clock(1, -(2 ** 31))).toBe(true);
         for (const now of [-1, Number.NaN, Number.POSITIVE_INFINITY, '1']) expect(clock(now, 0)).toBe(false);
@@ -745,10 +747,38 @@ describe('8. record', () => {
         expect(accepts(record('chart', { set: { index: '' } }))).toBe(false);
     });
 
-    test('a chart part and a rule value are each text of at most MAX_TEXT_LENGTH', () => {
+    test('a chart spec holds at most MAX_CHART_SPEC_BYTES over all its parts, made or changed', () => {
+        const half = 'x'.repeat(MAX_CHART_SPEC_BYTES / 2);
+        const whole = (set: object) => record('chart', { whole: 1, set: { ...BOX, ...SPEC, ...set } });
+        expect(accepts(whole({ specData: half, specPlots: half.slice(4 * 8) }))).toBe(true);
+        expect(accepts(whole({ specData: half, specPlots: half }))).toBe(false);
+        expect(accepts(record('chart', { set: { specData: half, specPlots: half } }))).toBe(true);
+        expect(accepts(record('chart', { set: { specData: half, specPlots: `${half}x` } }))).toBe(false);
+        expect(
+            isSheetContent({ ...SHEET, records: { chart: { c1: { ...BOX, ...SPEC, specData: `${half}${half}` } } } }),
+        ).toBe(false);
+    });
+
+    test('a rule holds at most MAX_RULE_RANGES ranges, in each list', () => {
+        const ranges = (count: number) => Array.from({ length: count }, () => RANGE);
+        const validation = (count: number) =>
+            record('validation', { whole: 1, set: { ranges: ranges(count), order: 'a0', rule: RULE } });
+        expect(accepts(validation(MAX_RULE_RANGES))).toBe(true);
+        expect(accepts(validation(MAX_RULE_RANGES + 1))).toBe(false);
+        const rule = (key: string) =>
+            record('conditionalFormat', {
+                whole: 1,
+                set: {
+                    ...{ ranges: [RANGE], order: 'a0', type: 'default', format: {}, conditionName: 'equal' },
+                    ...{ conditionValue: [1], [key]: ranges(MAX_RULE_RANGES + 1) },
+                },
+            });
+        expect(accepts(rule('ranges'))).toBe(false);
+        expect(accepts(rule('conditionRange'))).toBe(false);
+    });
+
+    test('a rule value is text of at most MAX_TEXT_LENGTH', () => {
         const long = 'x'.repeat(MAX_TEXT_LENGTH);
-        expect(accepts(record('chart', { set: { specData: long } }))).toBe(true);
-        expect(accepts(record('chart', { set: { specData: `${long}x` } }))).toBe(false);
         const rule = (conditionValue: unknown[]) =>
             record('conditionalFormat', {
                 whole: 1,
@@ -804,28 +834,54 @@ describe('10. lines', () => {
 describe('11. the batch budget', () => {
     const text = 'x'.repeat(100_000);
     const cells = Array.from({ length: Math.ceil(MAX_BATCH_JSON / text.length) }, (_, row) => [row, 0, { v: text }]);
+    const deletes = Array.from({ length: MAX_BATCH_JSON / 20 }, (_, index) => ({ kind: 'sheet', delete: `d${index}` }));
 
-    test('refuses a batch whose text is past MAX_BATCH_JSON, to the code unit', () => {
+    test('refuses a batch past MAX_BATCH_JSON as JSON writes it, to the code unit', () => {
         expect(read(batchOf(input({ cells })))).toBeNull();
-        const small = JSON.stringify(EXAMPLES[0]);
-        const padded = (length: number) => `${small}${' '.repeat(length - small.length)}`;
-        expect(readBatch(padded(MAX_BATCH_JSON))).not.toBeNull();
-        expect(readBatch(padded(MAX_BATCH_JSON + 1))).toBeNull();
+        const sized = (length: number) => {
+            const last = (v: string) => batchOf(input({ cells: [...cells.slice(0, -1), [cells.length, 0, { v }]] }));
+            return read(last('x'.repeat(length - JSON.stringify(last('')).length)));
+        };
+        expect(sized(MAX_BATCH_JSON)).not.toBeNull();
+        expect(sized(MAX_BATCH_JSON + 1)).toBeNull();
     });
 
-    test('leaves a batch of sheet ops alone out of the count, and counts an add beside any other op', () => {
+    test('leaves the content of a sheet add out of the count, and counts every other op beside it', () => {
         expect(read(batchOf(added({ cells })))).not.toBeNull();
         expect(read(batchOf(added({ cells }), { kind: 'sheet', delete: 's1' }))).not.toBeNull();
-        expect(read(batchOf(added({ cells }), cell({ v: 1 })))).toBeNull();
-        expect(read(batchOf(added({ cells }), record('comment', { set: { row: 0, column: 0 } })))).toBeNull();
+        expect(read(batchOf(added({ cells }), cell({ v: 1 })))).not.toBeNull();
+        expect(read(batchOf(added({ cells }), input({ cells })))).toBeNull();
+        expect(read(batchOf(added({}), ...deletes))).toBeNull();
+        expect(read(batchOf(added({}), ...deletes.slice(0, 1000)))).not.toBeNull();
     });
 
-    test('counts a batch of sheet ops with no add, however its text is padded', () => {
-        const pad = (batch: unknown) => `${JSON.stringify(batch)}${' '.repeat(MAX_BATCH_JSON)}`;
-        expect(readBatch(pad(batchOf({ kind: 'sheet', delete: 's1' })))).toBeNull();
-        expect(readBatch(pad(batchOf()))).toBeNull();
-        const deletes = ',"delete":"s1"'.repeat(400_000);
-        expect(readBatch(`{"g":0,"now":1,"seed":0,"ops":[{"kind":"sheet"${deletes}}]}`)).toBeNull();
+    test('weighs the ops beside a sheet add as they parse, however the text spells the add', () => {
+        const big = Array.from({ length: 300_000 }, (_, row) => [row, 0, { v: 1e20 }]);
+        const exponents = JSON.stringify(batchOf(added({ cells: big }), ...deletes));
+        expect(readBatch(exponents.replaceAll('100000000000000000000', '1e20'))).toBeNull();
+        const lone = String.fromCharCode(0xd800);
+        const texts = Array.from({ length: 40 }, (_, row) => [row, 0, { v: lone.repeat(100_000) }]);
+        const surrogates = JSON.stringify(batchOf(added({ cells: texts }), ...deletes));
+        expect(readBatch(surrogates.replaceAll('\\ud800', lone))).toBeNull();
+    });
+
+    test('spends nothing on what the parse drops, such as padding or a repeated key', () => {
+        const batch = JSON.stringify(batchOf(added({ cells })));
+        expect(readBatch(batch.replace('"ops":', `"ops":${' '.repeat(MAX_BATCH_JSON)}`))).not.toBeNull();
+        const pad = (value: unknown) => `${JSON.stringify(value)}${' '.repeat(MAX_BATCH_JSON)}`;
+        expect(readBatch(pad(batchOf({ kind: 'sheet', delete: 's1' })))).not.toBeNull();
+        expect(readBatch(pad(batchOf()))).not.toBeNull();
+        const repeated = ',"delete":"s1"'.repeat(400_000);
+        expect(readBatch(`{"g":0,"now":1,"seed":0,"ops":[{"kind":"sheet"${repeated}}]}`)).not.toBeNull();
+    });
+
+    test('refuses a batch that adds more sheets than a workbook holds', () => {
+        const adds = (count: number) =>
+            Array.from({ length: count }, (_, index) =>
+                added({ id: `s${index}`, fields: { name: `n${index}`, order: 'a0' } }),
+            );
+        expect(read(batchOf(...adds(MAX_SHEETS)))).not.toBeNull();
+        expect(read(batchOf(...adds(MAX_SHEETS + 1)))).toBeNull();
     });
 });
 

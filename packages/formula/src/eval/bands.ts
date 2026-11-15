@@ -4,6 +4,9 @@
 
 import type { ArrayValue } from '../values/value';
 
+// What lining up reads of an array: its written size and its runs. A range that is read where it lies has them too.
+export type Bands = Pick<ArrayValue, 'rows' | 'columns' | 'height' | 'width' | 'rowEnds' | 'columnEnds'>;
+
 export type Axis = {
     // The runs of the result, and one past the last written row or column of each: null when each run is one.
     readonly count: number;
@@ -15,7 +18,7 @@ export type Axis = {
 
 // The rows of an operation over these arrays that is `size` rows long, or its columns. An array of one row is
 // read by every run, and a shorter one of more rows ends where it ends.
-export function align(arrays: readonly ArrayValue[], size: number, rows: boolean): Axis {
+export function align(arrays: readonly Bands[], size: number, rows: boolean): Axis {
     const first = rows ? arrays[0].rowEnds : arrays[0].columnEnds;
     let alike = true;
     for (const array of arrays) {

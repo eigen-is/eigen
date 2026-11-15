@@ -4,10 +4,9 @@
 // stores hand back on the way reads back through the batch validator.
 
 import { expect, test } from 'bun:test';
-import type { LineEdit } from '@workspace/formula/text';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { SingleRange } from '@workspace/lib/sheets';
-import type { MoveOp, RecordOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
+import type { LinesOp, MoveOp, RecordOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { SheetRecords } from '../../../engine/book/records';
 import {
@@ -154,15 +153,23 @@ function* lineCases(): Generator<Case> {
         const lines = rows ? GRID_ROWS : GRID_COLUMNS;
         const count = 1 + below(random, 4);
         const index = Math.min(lineOn(random, lines), lines - count);
-        const edit: LineEdit = { insert: random() < 0.5, index, count, sheet: random() < 0.8 ? 'S' : 'T', rows };
+        const edit: LinesOp = {
+            kind: 'lines',
+            insert: random() < 0.5,
+            index,
+            count,
+            sheet: random() < 0.8 ? 'S' : 'T',
+            rows,
+        };
         const sheets = build();
-        if (edit.insert && sheetNamed(sheets, edit.sheet).blocksPush(rows, count)) continue;
+        if (edit.insert && sheetNamed(sheets, edit.sheet).wouldPush(edit)) continue;
         if ([...sheets.values()].some((sheet) => sheet.planLines(edit) === 'key-too-long')) continue;
         yield {
             build,
             run: (sheets) => {
                 const restore = editLines(sheets.values(), edit);
-                if (!edit.insert) expect(sheetNamed(sheets, edit.sheet).blocksPush(rows, count)).toBe(false);
+                if (!edit.insert)
+                    expect(sheetNamed(sheets, edit.sheet).wouldPush({ ...edit, insert: true })).toBe(false);
                 editLines(sheets.values(), inverseOf(edit));
                 return restore;
             },

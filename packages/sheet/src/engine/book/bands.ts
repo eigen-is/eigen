@@ -5,7 +5,7 @@
 // neighbouring bands never hold equal lists, so equal sheets are equal arrays.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { Rect } from '@workspace/lib/sheets/ops';
+import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
 import { RunList } from './run-list';
 
 // The columns from `first` up to the next band's first, or to the grid's last column.
@@ -23,10 +23,9 @@ export type LookSpan = {
 export class Bands {
     private readonly bands: Band[] = [{ first: 0, list: new RunList() }];
 
-    // A sheet from the flat form of a snapshot: per band its first column, n, then n pairs of start row and look
-    // index, where index 0 is plain and index i names `looks[i - 1]`. The form may say in two runs or two bands what
-    // one holds; columns before its first band are plain.
-    public constructor(flat: readonly number[] = [], looks: readonly number[] = []) {
+    // A sheet from a snapshot's flat form: per band its first column, n, then n pairs of start row and look index,
+    // where index i names `looks[i - 1]` and 0 is plain. Equal neighbours join; columns before the first are plain.
+    public constructor(flat: readonly number[], looks: readonly number[]) {
         const ids = [0, ...looks];
         for (let at = 0; at < flat.length; at += 2 + 2 * flat[at + 1]) {
             const runs: number[] = [];
@@ -108,35 +107,40 @@ export class Bands {
         return { looks, bands };
     }
 
-    // What `restore` puts back, here or shifted onto any sheet of the workbook.
-    public capture(rect: Rect): LookSpan[] {
-        return [...this.spans(rect)];
+    // Every cell of the rectangle wears `to` of the look it wore. Returns the spans it replaced.
+    public write(rect: Rect, to: (look: number) => number): LookSpan[] {
+        const replaced = [...this.spans(rect)];
+        this.each(rect[1], rect[3], (list) => list.format(rect[0], rect[2], to));
+        return replaced;
     }
 
-    // Every cell of the rectangle wears `to` of the look it wore.
-    public format([top, left, bottom, right]: Rect, to: (look: number) => number): void {
-        this.each(left, right, (list) => list.format(top, bottom, to));
-    }
-
-    public restore(spans: readonly LookSpan[], rowShift = 0, columnShift = 0): void {
-        let from = 0;
-        while (from < spans.length) {
+    // The block leaves `source`, plain where it was, and lands here over what it returns: the spans it covered, as
+    // they were before the move. Look ids are the workbook's, so a block crosses sheets as it is.
+    public move({ from, toRow, toColumn }: MoveOp, source: Bands): LookSpan[] {
+        const [top, left, bottom, right] = from;
+        const rowShift = toRow - top;
+        const columnShift = toColumn - left;
+        const covered = [...this.spans([toRow, toColumn, bottom + rowShift, right + columnShift])];
+        const spans = source.write(from, () => 0);
+        let at = 0;
+        while (at < spans.length) {
             // The spans of one band stand together: one cut of the columns writes them all.
-            const { c0, c1 } = spans[from];
-            let to = from;
-            while (to < spans.length && spans[to].c0 === c0) to += 1;
+            const { c0, c1 } = spans[at];
+            let end = at;
+            while (end < spans.length && spans[end].c0 === c0) end += 1;
             this.each(c0 + columnShift, c1 + columnShift, (list) => {
-                for (let i = from; i < to; i += 1) {
+                for (let i = at; i < end; i += 1) {
                     list.format(spans[i].r0 + rowShift, spans[i].r1 + rowShift, () => spans[i].look);
                 }
             });
-            from = to;
+            at = end;
         }
+        return covered;
     }
 
-    // Whether an insert of `count` lines would push off the grid's end a line that does not wear the look of the last
-    // line that stays, or of plain when none stays. Such an insert has no delete that undoes it.
-    public wouldPush(rows: boolean, count: number): boolean {
+    // Whether the insert would push off the grid's end a line that does not wear the look of the last line that
+    // stays, or of plain when none stays. Such an insert has no delete that undoes it.
+    public wouldPush({ rows, count }: LinesOp): boolean {
         if (rows) {
             return this.bands.some(({ list }) => list.count > 0 && list.startOf(list.count - 1) >= GRID_ROWS - count);
         }
@@ -144,34 +148,34 @@ export class Bands {
         return last.first >= GRID_COLUMNS - count && (last.first > 0 || last.list.count > 0);
     }
 
-    // The new rows wear the look of the row `like`: the row above them, the row they push down, or plain for -1. The
-    // caller refused the insert when `wouldPush`, so no run or band leaves the grid, here and in `insertColumns`.
-    public insertRows(index: number, count: number, like: number): void {
-        for (const { list } of this.bands) list.insertRows(index, count, like);
-    }
-
-    // The lines that enter at the grid's end wear the look of the last line that stays, here and in `deleteColumns`.
-    public deleteRows(index: number, count: number): void {
-        for (const { list } of this.bands) list.deleteRows(index, count);
-        this.join(1, this.bands.length - 1);
-    }
-
-    // Beside the column `like` the new columns only widen its band.
-    public insertColumns(index: number, count: number, like: number): void {
+    // New lines wear the look of the line `like`: the one before them, the one they push on, or plain when there is
+    // none. Lines that enter at the grid's end on a delete wear the look of the last line that stays.
+    public lines({ rows, insert, index, count, like = -1 }: LinesOp): LookSpan[] {
         const { bands } = this;
-        const from = like === index ? index + 1 : index;
-        for (let i = bands.length - 1; i > 0 && bands[i].first >= from; i -= 1) bands[i].first += count;
-        if (like < 0) this.format([0, index, GRID_ROWS - 1, index + count - 1], () => 0);
-    }
-
-    public deleteColumns(index: number, count: number): void {
-        const { bands } = this;
-        const low = this.split(index);
-        const high = this.split(index + count);
-        bands.splice(low, high - low);
-        for (let i = low; i < bands.length; i += 1) bands[i].first -= count;
-        if (bands.length === 0) bands.push({ first: 0, list: new RunList() });
-        this.join(low, low);
+        const last = index + count - 1;
+        if (insert) {
+            if (rows) for (const { list } of bands) list.insertRows(index, count, like);
+            else {
+                // Beside the column `like` the new columns only widen its band.
+                const from = like === index ? index + 1 : index;
+                for (let i = bands.length - 1; i > 0 && bands[i].first >= from; i -= 1) bands[i].first += count;
+                if (like < 0) this.each(index, last, (list) => list.format(0, GRID_ROWS - 1, () => 0));
+            }
+            return [];
+        }
+        const removed = [...this.spans(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last])];
+        if (rows) {
+            for (const { list } of bands) list.deleteRows(index, count);
+            this.join(1, bands.length - 1);
+        } else {
+            const low = this.split(index);
+            const high = this.split(index + count);
+            bands.splice(low, high - low);
+            for (let i = low; i < bands.length; i += 1) bands[i].first -= count;
+            if (bands.length === 0) bands.push({ first: 0, list: new RunList() });
+            this.join(low, low);
+        }
+        return removed;
     }
 
     private bandAt(column: number): number {

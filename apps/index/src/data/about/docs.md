@@ -27,7 +27,7 @@ A thread keeps a question beside the words it is about. In the plan, Joris asks 
 
 ## More than text
 
-There are [tables, images and charts](/support/docs/images-and-tables), [headers with page numbers](/support/docs/headers-and-footers) and [footnotes that number themselves](/support/docs/footnotes). The production plan has its timeline in a table, a photo of the camping field and a footnote on the last bus home.
+There are [tables, images and charts](/support/docs/images-and-tables), [headers with page numbers](/support/docs/headers-and-footers) and [footnotes that number themselves](/support/docs/footnotes). The production plan has its timeline in a table, a photo of the camping field, Timo's power sum for Saturday night as an equation and a footnote on the last bus home.
 
 [Equations](/support/docs/equations) you type in LaTeX, with a preview as you go.
 

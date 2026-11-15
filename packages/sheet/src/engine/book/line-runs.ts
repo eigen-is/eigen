@@ -4,20 +4,24 @@
 // keys of a line format and shift the runs when lines are inserted or deleted. Two runs side by side never hold equal
 // keys, so equal sheets are equal lists.
 
-import type { LineAttrs, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import type { LineAttrs, LinesOp, SheetContent, Span } from '@workspace/lib/sheets/ops';
 
 type Run = { readonly first: number; last: number; readonly attrs: Readonly<LineAttrs> };
 
 // The lines of a span with the keys they share, as a sheet's content lists them.
-type LineRun = [Span, Readonly<LineAttrs>];
+type LineRun = SheetContent['rows'][number];
 
 const NO_KEYS: Readonly<LineAttrs> = Object.freeze({});
+// Every line key once, in the order a run holds them: the mapped type fails the build on a key left out.
+const LINE_KEY: { readonly [K in keyof LineAttrs]-?: K } = { size: 'size', custom: 'custom', hidden: 'hidden' };
+const LINE_KEYS = Object.values(LINE_KEY);
 
 export class LineRuns {
     private runs: Run[] = [];
 
     // The runs of a snapshot, ascending, which may say in two runs what one holds or list lines with no key.
-    public constructor(content: SheetContent['rows'] = []) {
+    public constructor(content: SheetContent['rows']) {
         for (const [[first, last], attrs] of content) append(this.runs, first, last, keysOf(attrs));
     }
 
@@ -53,26 +57,25 @@ export class LineRuns {
         return before;
     }
 
-    // The new lines hold no key. The caller refused an insert that pushes a line with a key off the grid's end.
-    public insert(index: number, count: number): void {
-        const held = this.runs;
-        this.runs = [];
-        for (const { first, last, attrs } of held) {
-            if (first < index) append(this.runs, first, Math.min(last, index - 1), attrs);
-            if (last >= index) append(this.runs, Math.max(first, index) + count, last + count, attrs);
-        }
+    // Whether the insert would push a line with a key off the grid's end.
+    public wouldPush({ rows, count }: LinesOp): boolean {
+        return (this.runs.at(-1)?.last ?? -1) >= (rows ? GRID_ROWS : GRID_COLUMNS) - count;
     }
 
-    // Returns the keys of the deleted lines, where they were. The lines that enter at the grid's end hold none.
-    public remove(index: number, count: number): LineRun[] {
-        const end = index + count;
+    // The new lines hold no key, nor do the lines that enter at the grid's end on a delete. Returns the keys of the
+    // deleted lines, where they were.
+    public lines({ insert, index, count }: LinesOp): LineRun[] {
+        const end = insert ? index : index + count;
+        const shift = insert ? count : -count;
         const held = this.runs;
         const removed: LineRun[] = [];
         this.runs = [];
         for (const { first, last, attrs } of held) {
             if (first < index) append(this.runs, first, Math.min(last, index - 1), attrs);
-            if (last >= index && first < end) removed.push([[Math.max(first, index), Math.min(last, end - 1)], attrs]);
-            if (last >= end) append(this.runs, Math.max(first, end) - count, last - count, attrs);
+            if (!insert && last >= index && first < end) {
+                removed.push([[Math.max(first, index), Math.min(last, end - 1)], attrs]);
+            }
+            if (last >= end) append(this.runs, Math.max(first, end) + shift, last + shift, attrs);
         }
         return removed;
     }
@@ -106,22 +109,13 @@ export class LineRuns {
 function append(runs: Run[], first: number, last: number, attrs: Readonly<LineAttrs>): void {
     if (attrs === NO_KEYS) return;
     const end = runs.at(-1);
-    const joins =
-        end !== undefined &&
-        end.last + 1 === first &&
-        end.attrs.size === attrs.size &&
-        end.attrs.custom === attrs.custom &&
-        end.attrs.hidden === attrs.hidden;
-    if (joins) end.last = last;
+    if (end && end.last + 1 === first && LINE_KEYS.every((key) => end.attrs[key] === attrs[key])) end.last = last;
     else runs.push({ first, last, attrs });
 }
 
 // The keys in one order and frozen, so a run's keys never change under whoever reads them.
-function keysOf({ size, custom, hidden }: LineAttrs): Readonly<LineAttrs> {
-    if (size === undefined && custom === undefined && hidden === undefined) return NO_KEYS;
-    const attrs: LineAttrs = {};
-    if (size !== undefined) attrs.size = size;
-    if (custom !== undefined) attrs.custom = custom;
-    if (hidden !== undefined) attrs.hidden = hidden;
-    return Object.freeze(attrs);
+function keysOf(attrs: LineAttrs): Readonly<LineAttrs> {
+    const kept: LineAttrs = {};
+    for (const key of LINE_KEYS) if (attrs[key] !== undefined) Object.assign(kept, { [key]: attrs[key] });
+    return Object.keys(kept).length > 0 ? Object.freeze(kept) : NO_KEYS;
 }

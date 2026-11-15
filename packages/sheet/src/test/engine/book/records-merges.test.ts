@@ -4,8 +4,7 @@
 // grow with the size of a merge.
 
 import { expect, spyOn, test } from 'bun:test';
-import type { LineEdit } from '@workspace/formula/text';
-import type { MoveOp, Rect } from '@workspace/lib/sheets/ops';
+import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
 import type { SheetRecords } from '../../../engine/book/records';
 import { LAST_COLUMN, LAST_ROW, sheetOf } from './records-fixtures';
 
@@ -152,8 +151,8 @@ function editLines(sheet: SheetRecords, random: Random): void {
     const last = rows ? LAST_ROW : LAST_COLUMN;
     const count = pick(random, [1, 2, 3, 64, 100, 5000]);
     const index = clamp((rows ? rowOn(random) : columnOn(random)) - below(random, 3), last + 1 - count);
-    const edit: LineEdit = { insert: random() < 0.5, index, count, sheet: 'S', rows };
-    if (edit.insert && sheet.blocksPush(rows, count)) return;
+    const edit: LinesOp = { kind: 'lines', insert: random() < 0.5, index, count, sheet: 'S', rows };
+    if (edit.insert && sheet.wouldPush(edit)) return;
     const plan = sheet.planLines(edit);
     if (typeof plan === 'string') throw new Error(plan);
     plan.commit();

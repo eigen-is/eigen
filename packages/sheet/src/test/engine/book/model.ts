@@ -46,7 +46,7 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { MAX_SHEET_NAME_LENGTH } from '@workspace/lib/sheets/sheet-name';
 import type { Workbook } from '../../../engine/book/workbook';
 import { mapChartRefs } from '../../../engine/chart-data';
-import type { BookContent } from './book-fixtures';
+import type { Book } from './book-fixtures';
 import { LooksGrid } from './looks-grid';
 
 type Kind = Exclude<RecordType, 'sheet'>;
@@ -72,7 +72,7 @@ const RUN_KEYS = ['bl', 'it', 'ff', 'fs', 'fc', 'cl', 'un'] as const;
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
 
-export function modelOf(content: BookContent): Model {
+export function modelOf(content: Book): Model {
     const model: Model = { g: content.g, now: content.now, seed: content.seed, looks: [{}], sheets: new Map() };
     for (const sheet of content.sheets) model.sheets.set(sheet.id, sheetOf(model, sheet));
     return model;
@@ -102,7 +102,7 @@ export function modelAfter(model: Model, batch: Pick<Batch, 'now' | 'seed' | 'op
 }
 
 // The model as a snapshot holds it, in the one form a workbook walks back to.
-export function contentOfModel(model: Model): BookContent {
+export function contentOfModel(model: Model): Book {
     const sheets = [...model.sheets.values()].sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
     return {
         g: model.g,

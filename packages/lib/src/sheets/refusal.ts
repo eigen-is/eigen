@@ -5,6 +5,8 @@
 export type RefusalKey =
     | 'too-many-cells'
     | 'too-many-formats'
+    | 'too-many-records'
+    | 'too-many-sheets'
     | 'grid-end'
     | 'key-too-long'
     | 'merge-overlap'

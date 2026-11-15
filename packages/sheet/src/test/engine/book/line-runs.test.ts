@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { GRID_ROWS } from '@workspace/formula/text';
+import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { LineAttrs, Span } from '@workspace/lib/sheets/ops';
 import { LineRuns } from '../../../engine/book/line-runs';
-import { below, randomOf } from './book-fixtures';
+import { below, linesOp, randomOf } from './book-fixtures';
 
 const TALL: LineAttrs = { size: 30, custom: 1 };
 const HIDDEN: LineAttrs = { hidden: 1 };
@@ -40,8 +40,8 @@ describe('engine/book/line-runs — LineRuns', () => {
             {},
             HIDDEN,
         ]);
-        expect(new LineRuns().at(0)).toEqual({});
-        expect(new LineRuns().content()).toEqual([]);
+        expect(new LineRuns([]).at(0)).toEqual({});
+        expect(new LineRuns([]).content()).toEqual([]);
     });
 
     test('a write sets and clears keys over its spans and returns what every line held', () => {
@@ -101,19 +101,19 @@ describe('engine/book/line-runs — LineRuns', () => {
             [[2, 4], TALL],
             [[8, 8], HIDDEN],
         ]);
-        runs.insert(3, 2);
+        runs.lines(linesOp(true, true, 3, 2));
         expect(runs.content()).toEqual([
             [[2, 2], TALL],
             [[5, 6], TALL],
             [[10, 10], HIDDEN],
         ]);
-        runs.insert(2, 1);
+        runs.lines(linesOp(true, true, 2, 1));
         expect(runs.content()).toEqual([
             [[3, 3], TALL],
             [[6, 7], TALL],
             [[11, 11], HIDDEN],
         ]);
-        runs.insert(12, 5);
+        runs.lines(linesOp(true, true, 12, 5));
         expect(runs.content()[2]).toEqual([[11, 11], HIDDEN]);
     });
 
@@ -123,15 +123,24 @@ describe('engine/book/line-runs — LineRuns', () => {
             [[3, 5], HIDDEN],
             [[6, 9], TALL],
         ]);
-        expect(runs.remove(2, 5)).toEqual([
+        expect(runs.lines(linesOp(true, false, 2, 5))).toEqual([
             [[2, 2], TALL],
             [[3, 5], HIDDEN],
             [[6, 6], TALL],
         ]);
         expect(runs.content()).toEqual([[[0, 4], TALL]]);
-        expect(runs.remove(5, 3)).toEqual([]);
-        expect(runs.remove(0, 5)).toEqual([[[0, 4], TALL]]);
+        expect(runs.lines(linesOp(true, false, 5, 3))).toEqual([]);
+        expect(runs.lines(linesOp(true, false, 0, 5))).toEqual([[[0, 4], TALL]]);
         expect(runs.content()).toEqual([]);
+    });
+
+    test('an insert would push a line off the grid only when that line holds a key', () => {
+        const runs = new LineRuns([[[GRID_COLUMNS - 3, GRID_COLUMNS - 3], TALL]]);
+        expect(runs.wouldPush(linesOp(false, true, 0, 2))).toBe(false);
+        expect(runs.wouldPush(linesOp(false, true, 0, 3))).toBe(true);
+        expect(runs.wouldPush(linesOp(true, true, 0, GRID_ROWS - GRID_COLUMNS + 2))).toBe(false);
+        expect(runs.wouldPush(linesOp(true, true, 0, GRID_ROWS - GRID_COLUMNS + 3))).toBe(true);
+        expect(new LineRuns([]).wouldPush(linesOp(true, true, 0, GRID_ROWS))).toBe(false);
     });
 });
 
@@ -178,7 +187,7 @@ describe('engine/book/line-runs — the runs are the per-line model’s runs', (
     for (const seed of [3, 17, 2026]) {
         test(`random writes, inserts and deletes with their inverses, seed ${seed}`, () => {
             const random = randomOf(seed);
-            const runs = new LineRuns();
+            const runs = new LineRuns([]);
             const model = new LinesModel();
             const counts = { write: 0, insert: 0, remove: 0, joined: 0 };
             for (let step = 0; step < 4000; step += 1) {
@@ -217,15 +226,15 @@ describe('engine/book/line-runs — the runs are the per-line model’s runs', (
                     };
                 } else if (kind === 3) {
                     counts.insert += 1;
-                    runs.insert(index, count);
+                    expect(runs.lines(linesOp(true, true, index, count))).toEqual([]);
                     model.shift(index, count);
-                    undo = () => expect(runs.remove(index, count)).toEqual([]);
+                    undo = () => expect(runs.lines(linesOp(true, false, index, count))).toEqual([]);
                 } else {
                     counts.remove += 1;
-                    const removed = runs.remove(index, count);
+                    const removed = runs.lines(linesOp(true, false, index, count));
                     model.shift(index, -count);
                     undo = () => {
-                        runs.insert(index, count);
+                        runs.lines(linesOp(true, true, index, count));
                         for (const [span, attrs] of removed) runs.write([span], attrs, []);
                     };
                 }
@@ -247,7 +256,7 @@ describe('engine/book/line-runs — the runs are the per-line model’s runs', (
                 // The lines stay near the start: what an insert pushed far away is deleted again.
                 const far = runs.content().at(-1)?.[0][1] ?? 0;
                 if (far > LAST + 20) {
-                    runs.remove(LAST, far);
+                    runs.lines(linesOp(true, false, LAST, far));
                     model.shift(LAST, -far);
                 }
             }

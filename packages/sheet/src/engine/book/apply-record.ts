@@ -33,6 +33,7 @@ export function applyRecord(book: Workbook, op: RecordOp): RecordOp[] {
         }
     }
     const inverse = sheet.records.write(op);
-    if (inverse === 'merge-overlap') throw new Refusal(inverse);
+    // The store writes nothing when it refuses: a merge onto another, or a chart past its size bound.
+    if (typeof inverse === 'string') throw new Refusal(inverse);
     return inverse;
 }

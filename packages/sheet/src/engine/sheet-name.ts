@@ -4,16 +4,15 @@
 // the API does, and a live tab renames and deletes as the op replay does.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { stripNonXmlChars } from '@workspace/lib/xml';
 import {
     isSheetName,
     MAX_SHEET_NAME_LENGTH,
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
     SHEET_NAME_RULE,
-    sheetFinder,
-    sheetNameKey,
-} from './a1-notation';
+} from '@workspace/lib/sheets';
+import { stripNonXmlChars } from '@workspace/lib/xml';
+import { sheetFinder, sheetNameKey } from './a1-notation';
 import { breakSheetRefs, mapSheetCells, renameSheetRefs, rewriteSheetFormulas } from './formula-shift';
 import { iscelldata } from './formula-utils';
 import { error } from './validation';
@@ -74,9 +73,8 @@ export function renameSheetTexts<S extends Sheet>(
     );
 }
 
-// The sheet with `rewrite` run over every text holding references, such as its formulas, formula rules, list sources
-// and links, and `rewriteName` over a link's bare sheet name. A chart ref names its sheet by id and needs nothing. Text
-// that stays keeps its object.
+// The sheet with `rewrite` over every text holding references, such as formulas, rules, list sources and links, and
+// `rewriteName` over a link's bare sheet name; a chart names its sheet by id. Text that stays keeps its object.
 function rewriteSheetTexts<S extends Sheet>(
     sheet: S,
     rewrite: (txt: string) => string,
@@ -130,9 +128,8 @@ export function copySheetName(name: string, taken: readonly string[]): string {
     return copy;
 }
 
-// What a file's sheets are called, each unique in any case. The first holding a name keeps it, and any other is
-// repaired, then numbered as Excel numbers a copy. `reserved` lists names it may not use at all, such as the
-// workbook's own for a sheet an add brings.
+// What a file's sheets are called, each unique in any case: the first holding a name keeps it, any other is repaired
+// and numbered as Excel numbers a copy. `reserved` holds names none may take, such as the workbook's own on an add.
 export function legalSheetNames(names: readonly string[], reserved: readonly string[] = []): string[] {
     const taken = new Set(reserved.map(sheetNameKey));
     const kept = names.map((name) => {

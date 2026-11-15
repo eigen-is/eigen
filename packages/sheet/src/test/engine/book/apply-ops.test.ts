@@ -8,7 +8,7 @@ import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
 import { batchOf, LATER, randomBookContent, randomRecordOp } from './batches';
-import type { BookContent } from './book-fixtures';
+import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
@@ -48,7 +48,7 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
 
 // Two sheets, the second hidden, with a merge, a filter with a column, a comment, formulas that read the clock, draw,
 // read the other sheet and wait for a sheet named N, the last so long that the id of the second sheet does not fit it.
-function twoSheets(): BookContent {
+function twoSheets(): Book {
     const long = `="${'a'.repeat(131_010)}"&'N'!R1C1`;
     const a = sheetOf('a', {
         cells: [
@@ -137,7 +137,7 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
         const state = () => JSON.stringify(book.content().sheets.map(({ fields, records }) => [fields, records]));
         // A book at the limit takes a batch, and one band more takes none.
         expect(refusalOf(() => land(book, batch(LANDING[0])))).toBeUndefined();
-        book.sheets.get('a')?.bands.format([0, 9, 0, 9], () => 0);
+        book.sheets.get('a')?.bands.write([0, 9, 0, 9], () => 0);
         const before = state();
         expect(refusalOf(() => land(book, batch(...LANDING.slice(1))))).toBe('too-many-formats');
         expect(state()).toBe(before);
@@ -240,7 +240,7 @@ function binds(ops: readonly RecordOp[]): boolean {
 
 describe('engine/book/apply-ops — the laws over random books and random batches of records', () => {
     test.todo('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
-        const content: BookContent = {
+        const content: Book = {
             g: 1,
             now: 1,
             seed: 1,

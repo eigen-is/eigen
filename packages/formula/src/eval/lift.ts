@@ -1,9 +1,9 @@
 // A call whose arguments hold an array where one value is read: the body runs once per element of the arrays lined
 // up, and the answers are an array of that shape. An array stores one element for a run of equal ones, so the body
-// runs once per stored element and its answer stands for the whole run. An operator on an array is lifted here too.
-// A lazy argument is evaluated after the elements, once, and only when an element picked it. A row whose arguments
-// come in groups that are tried in turn, such as IFS, is stepped through here too, array or not. A blank answer is
-// a 0 in the array, as a formula's is in its cell, so every reader of a computed array meets the same value.
+// runs once per stored element and its answer stands for the whole run. A lazy argument is evaluated after the
+// elements, once, and only when an element picked it. A row whose arguments come in groups that are tried in turn,
+// such as IFS, is stepped through here too, array or not. A blank answer is a 0 in the array, as a formula's is in
+// its cell, so every reader of a computed array meets the same value.
 
 import type { Sheet } from '../store/sheet';
 import type { FormulaNode } from '../text/tree';
@@ -12,7 +12,7 @@ import type { FormulaError } from '../values/errors';
 import { CALC, NA, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isCell, isError, isReference } from '../values/value';
-import type { Axis } from './bands';
+import type { Axis, Bands } from './bands';
 import { align, apart } from './bands';
 import { ends, isLazy, picked, read, run } from './call';
 import type { Evaluator } from './evaluator';
@@ -176,13 +176,13 @@ export function lifts(param: Param<unknown>, array: ArrayValue): boolean {
     return param.prepare === Prepare.Scalar || param.prepare >= Prepare.Corner;
 }
 
-type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
+export type Lined = { readonly rows: number; readonly columns: number; readonly down: Axis; readonly across: Axis };
 
 const ONE: Axis = { count: 1, ends: null, from: [] };
 
 // The shape of an operation over these arrays and how each of them runs along it, or null when the formula has
 // no room to store the result. `apiece` cuts every run into single elements.
-function lineUp(ctx: Evaluator, arrays: readonly ArrayValue[], apiece: boolean): Lined | null {
+export function lineUp(ctx: Evaluator, arrays: readonly Bands[], apiece: boolean): Lined | null {
     let rows = 1;
     let columns = 1;
     for (const array of arrays) {

@@ -6,7 +6,7 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { SheetRecords } from '../../../engine/book/records';
 import { Workbook } from '../../../engine/book/workbook';
 import { batchOf, randomBookContent, randomLinesOp, randomMoveOp, randomOp, randomRecordOp } from './batches';
-import type { BookContent } from './book-fixtures';
+import type { Book } from './book-fixtures';
 import { canonical, randomOf } from './book-fixtures';
 import type { Model } from './model';
 import { contentOfModel, expectReads, modelAfter, modelOf } from './model';
@@ -19,7 +19,7 @@ function sheetOf(id: string, fields: Partial<SheetFields> = {}, part: Partial<Sh
 }
 
 // The book after the ops as the model applies them, or the key of the refusal.
-function after(sheets: SheetContent[], ...ops: Op[]): BookContent | RefusalKey {
+function after(sheets: SheetContent[], ...ops: Op[]): Book | RefusalKey {
     const model = modelAfter(modelOf({ g: 1, now: 1, seed: 1, sheets }), { now: 1, seed: 1, ops });
     return typeof model === 'string' ? model : contentOfModel(model);
 }
@@ -114,7 +114,7 @@ describe('engine/book — the model and the batches the appliers are held to', (
                 expect(expected).toBe('grid-end');
                 continue;
             }
-            expect(op.kind === 'lines' && op.insert && source.blocksPush(op.rows, op.count)).toBe(false);
+            expect(op.kind === 'lines' && op.insert && source.wouldPush(op)).toBe(false);
             for (const plan of plans) if (typeof plan !== 'string') plan.commit();
             for (const sheet of contentOfModel(expected).sheets) {
                 const store = stores.get(sheet.id);

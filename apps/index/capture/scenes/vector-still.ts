@@ -3,17 +3,19 @@
 
 import { elementPoint } from '../lib/canvas';
 import type { Scene } from '../lib/scene';
-import { openSitePlan } from './site-plan';
+import { VIEWPORT } from '../lib/scene';
+import { openSitePlan, showGround } from './site-plan';
 
 export const vectorStillSketch = {
     name: 'vector-still-sketch',
     kind: 'still',
     theme: 'light',
-    viewport: { width: 1600, height: 900 },
+    viewport: VIEWPORT,
     apps: ['vector'],
     personas: ['saar'],
-    run: async ({ pages: [page], stack }) => {
+    run: async ({ pages: [page], cursors: [cursor], stack }) => {
         await openSitePlan(page, stack);
+        await showGround(page, cursor);
         const barn = await elementPoint(page, 'el-barn-stage', 0.5, 0.3);
         await page.mouse.click(barn.x, barn.y);
         await Bun.sleep(1500);

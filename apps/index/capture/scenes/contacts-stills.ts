@@ -3,8 +3,9 @@
 // Import to Contacts button, in light.
 
 import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
 
-const still: Pick<Scene, 'kind' | 'viewport'> = { kind: 'still', viewport: { width: 1600, height: 900 } };
+const still: Pick<Scene, 'kind' | 'viewport'> = { kind: 'still', viewport: VIEWPORT };
 
 export const contactsStillCard = {
     ...still,

@@ -25,7 +25,7 @@ import type {
     Span,
 } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
-import type { BookContent, Random } from './book-fixtures';
+import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook } from './book-fixtures';
 import type { Model, ModelSheet } from './model';
 import { chartOf, formulaRule, ref } from './records-fixtures';
@@ -57,7 +57,7 @@ function pick<T>(random: Random, list: readonly T[]): T {
 }
 
 // A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there.
-export function randomBookContent(random: Random): BookContent {
+export function randomBookContent(random: Random): Book {
     const book = randomBook(random);
     return {
         ...book,

@@ -4,6 +4,7 @@
 // own writer, writeElementInDoc, so the doc reads back unchanged, and fixed ids and indices make a reseed identical.
 
 import { basename } from 'node:path';
+import { DEFAULT_CHART_SERIES_STYLE, defaultChartSpec, newChartSpecParts } from '@workspace/lib/charts';
 import type { NewVectorElement, StyleDefaults } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
@@ -15,7 +16,7 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import type { DeckImage, DeckSlide, DeckText } from './content';
+import type { DeckChart, DeckImage, DeckSlide, DeckText } from './content';
 import { DECK_INK } from './content';
 
 // The Slides app's own style table in the deck's ink, as an element drawn in the editor gets it.
@@ -36,9 +37,10 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
     for (const [slideIndex, slide] of slides.entries()) {
         const frameId = frames[slideIndex].id;
         const images = (slide.images ?? []).map((image, i) => buildImage(image, slide.key, frameId, i));
+        const charts = (slide.charts ?? []).map((chart, i) => buildChart(chart, slide.key, frameId, i));
         const texts = slide.texts.map((text, i) => buildText(text, slide.key, frameId, i));
-        // Bottom-up within the slide: images, then every text on top.
-        ordered.push(...images, ...texts);
+        // Bottom-up within the slide: images, then charts, then every text on top.
+        ordered.push(...images, ...charts, ...texts);
     }
 
     // One z-order runs across the whole deck. A frame draws only its own elements, so each slide's run of keys
@@ -52,6 +54,48 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
 
 // One shared seed and not a draw per element, as the drawing takes. The deck's style table has roughness 0, so
 // every element draws crisp and a seed would change nothing but the bytes of a reseed.
+function buildImage(im: DeckImage, slideKey: string, frameId: string, i: number): DeckElement {
+    const element: NewVectorElement = {
+        type: 'image',
+        frameId,
+        seed: DEFAULT_ELEMENT_PROPS.seed,
+        x: im.x,
+        y: im.y,
+        width: im.width,
+        height: im.height,
+        mediaName: basename(im.file),
+    };
+    return { id: `el-${slideKey}-image-${i}`, element };
+}
+
+// The parts Insert → Chart writes, with this chart's data and font in place of the sample's. Its fill and color come
+// from the deck's style table, as a chart drawn in the editor gets them.
+function buildChart(c: DeckChart, slideKey: string, frameId: string, i: number): DeckElement {
+    const defaults = defaultChartSpec(c.type, {
+        source: 'inline',
+        categories: c.categories,
+        series: c.series.map(({ name, values }, n) => ({ id: `s-${n + 1}`, name, values })),
+    });
+    const element: NewVectorElement = {
+        type: 'chart',
+        frameId,
+        seed: DEFAULT_ELEMENT_PROPS.seed,
+        x: c.x,
+        y: c.y,
+        width: c.width,
+        height: c.height,
+        ...newChartSpecParts({
+            ...defaults,
+            chart: { ...defaults.chart, fontFamily: c.font ?? DECK_STYLE.fontFamily },
+            legend: { position: 'none' },
+            series: Object.fromEntries(
+                c.series.map(({ color }, n) => [`s-${n + 1}`, { ...DEFAULT_CHART_SERIES_STYLE, color: color ?? null }]),
+            ),
+        }),
+    };
+    return { id: `el-${slideKey}-chart-${i}`, element };
+}
+
 function buildText(t: DeckText, slideKey: string, frameId: string, i: number): DeckElement {
     const element: NewVectorElement = {
         type: 'rectangle',
@@ -71,18 +115,4 @@ function buildText(t: DeckText, slideKey: string, frameId: string, i: number): D
         verticalAlign: t.valign ?? DEFAULT_TEXT_BOX_PROPS.verticalAlign,
     };
     return { id: `el-${slideKey}-text-${i}`, element };
-}
-
-function buildImage(im: DeckImage, slideKey: string, frameId: string, i: number): DeckElement {
-    const element: NewVectorElement = {
-        type: 'image',
-        frameId,
-        seed: DEFAULT_ELEMENT_PROPS.seed,
-        x: im.x,
-        y: im.y,
-        width: im.width,
-        height: im.height,
-        mediaName: basename(im.file),
-    };
-    return { id: `el-${slideKey}-image-${i}`, element };
 }
