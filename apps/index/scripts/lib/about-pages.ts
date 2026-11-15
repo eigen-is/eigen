@@ -1,6 +1,7 @@
 // Checks the About files against the apps the About pages describe: a page's file is named after an app, the
 // overview's rows hold one line for each app, and each principle an app lists links a help article that exists. The
-// content build calls these, so a page named after no app, a missing row or a mistyped article fails the build.
+// content build calls these, so a page named after no app, a missing row or a mistyped article fails the build. It
+// also names the blocks a page draws itself, such as the overview's app rows.
 
 import { aboutApps } from '../../src/content/about-apps';
 
@@ -11,6 +12,11 @@ export function aboutPageSlug(file: string): string {
     const slug = file.replace(/\.md$/, '');
     if (slug !== 'index' && !slugs.has(slug)) throw new Error(`About page ${file} is named after no app`);
     return slug;
+}
+
+// The blocks an About page draws itself where its Markdown puts them: the overview its app rows, an app page none.
+export function aboutPageBlocks(slug: string): ReadonlySet<string> {
+    return new Set(slug === 'index' ? ['apps'] : []);
 }
 
 export function checkAboutRows(rows: Record<string, string> | undefined): Record<string, string> {

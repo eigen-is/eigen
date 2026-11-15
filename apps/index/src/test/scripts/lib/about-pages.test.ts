@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { aboutPageSlug, checkAboutRows, checkPrincipleArticles } from '../../../../scripts/lib/about-pages';
+import {
+    aboutPageBlocks,
+    aboutPageSlug,
+    checkAboutRows,
+    checkPrincipleArticles,
+} from '../../../../scripts/lib/about-pages';
+import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
 import { aboutApps } from '../../../content/about-apps';
 
 const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${app.name}`]));
@@ -17,6 +23,16 @@ describe('aboutPageSlug', () => {
     test('a file named after no app fails the build', () => {
         expect(() => aboutPageSlug('space.md')).toThrow();
         expect(() => aboutPageSlug('Sheets.md')).toThrow();
+    });
+});
+
+describe('aboutPageBlocks', () => {
+    test('the overview draws its app rows at ::: apps', () => {
+        expect(renderMarkdown('::: apps\n:::', aboutPageBlocks('index')).html).toContain('[BLOCK:apps]');
+    });
+
+    test('an app page draws none, so ::: apps there fails the build', () => {
+        expect(() => renderMarkdown('::: apps\n:::', aboutPageBlocks('sheets'))).toThrow('Unknown Markdown block');
     });
 });
 
