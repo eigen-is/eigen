@@ -8,10 +8,13 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dialog';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
+import type { MediaItem } from '../../scripts/lib/content-types';
 import { splitKetNames } from './ket-names';
-import type { MediaItem } from './parse-media-grids';
 
 export type LightboxItem = MediaItem & { loop?: boolean };
+
+// Opens the page's lightbox on one item of a group, such as a grid's.
+export type OpenLightbox = (items: readonly LightboxItem[], index: number) => void;
 
 type MediaLightboxProps = {
     items: readonly LightboxItem[];

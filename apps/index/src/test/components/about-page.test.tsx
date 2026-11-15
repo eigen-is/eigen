@@ -32,7 +32,7 @@ async function renderPage(previous?: ArticleMeta, next?: ArticleMeta, slug = 'ma
                         page={aboutMeta(app.slug)}
                         body={{
                             html: '<p>Body</p><aside class="site-panel"><p>Technical note</p></aside>',
-                            mediaGrids: [],
+                            media: [],
                         }}
                         previous={previous}
                         next={next}

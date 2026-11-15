@@ -1,13 +1,13 @@
 // Renders the site's Markdown, such as help articles, blog posts and the changelog, to HTML at build time. Each h2
 // and h3 gets a slug id and a link icon, and is collected for the page's table of contents. Raw HTML passes through,
 // since every source is written in this repo, each app name in the text is marked to be set in the mono font, and
-// media blocks such as a looping video or a carousel become figures.
+// a media block such as a looping video or a carousel leaves a marker, with what it shows in `media`.
 
 import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
 import { splitKetNames } from '../../src/components/ket-names';
-import type { TocEntry } from './content-types';
+import type { MediaBlock, TocEntry } from './content-types';
 import { markdownBlocks } from './markdown-blocks';
 
 const PUBLIC_DIR = join(import.meta.dir, '..', '..', 'public');
@@ -29,10 +29,11 @@ function slugify(text: string): string {
 export function renderMarkdown(
     markdown: string,
     pageBlocks: ReadonlySet<string> = new Set(),
-): { html: string; toc: TocEntry[] } {
+): { html: string; toc: TocEntry[]; media: MediaBlock[] } {
     const toc: TocEntry[] = [];
+    const media: MediaBlock[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
-    md.use(markdownBlocks, { publicDir: PUBLIC_DIR, pageBlocks });
+    md.use(markdownBlocks, { publicDir: PUBLIC_DIR, pageBlocks, media });
     md.use(anchor, {
         slugify,
         level: [2, 3],
@@ -57,5 +58,5 @@ export function renderMarkdown(
             .join('');
     };
 
-    return { html: md.render(markdown), toc };
+    return { html: md.render(markdown), toc, media };
 }

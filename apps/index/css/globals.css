@@ -162,26 +162,18 @@
         cursor: zoom-in;
     }
 
-    /* A media block from the Markdown, such as a looping video or a carousel, rounded like the media grid. */
+    /* A media block from the Markdown, such as a looping video or a carousel. */
     .media-video,
-    .media-carousel,
-    .media-side-by-side {
+    .media-carousel {
         margin: 2rem 0;
     }
 
     .media-video video,
-    .media-carousel :is(img, video),
-    .media-side-by-side img {
+    .media-carousel :is(img, video) {
         display: block;
         width: 100%;
         height: auto;
-        border-radius: 0.5rem;
         background-color: var(--muted);
-    }
-
-    /* The images sit in one paragraph inside the block, which steps aside so each image is a column. */
-    .media-side-by-side > p {
-        display: contents;
     }
 
     /* A carousel's strip starts at the column's left edge and runs to the right edge of the page, the scroll area and
@@ -316,20 +308,6 @@
 
         > :last-child {
             margin-bottom: 0;
-        }
-    }
-
-    .media-side-by-side {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1rem;
-
-        figcaption {
-            grid-column: 1 / -1;
-        }
-
-        @media (max-width: 40rem) {
-            grid-template-columns: 1fr;
         }
     }
 }

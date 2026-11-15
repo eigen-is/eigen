@@ -22,53 +22,17 @@ Five new apps joined the workspace:
 - **eigen|admin⟩**: server administration with a setup wizard, team management, waitlist and
   invite-based signup.
 
-<media-grid columns="3">
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/mail.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_mail.webp"
-    type="image" 
-    caption="eigen|mail⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/calendar.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_calendar.webp"
-    type="image" 
-    caption="eigen|calendar⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/drive.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_drive.webp"
-    type="image" 
-    caption="eigen|drive⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/contacts.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_contacts.webp"
-    type="image" 
-    caption="eigen|contacts⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/docs.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_docs.webp"
-    type="image" 
-    caption="eigen|docs⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/stickies.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_stickies.webp"
-    type="image" 
-    caption="eigen|stickies⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/sheets.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_sheets.webp"
-    type="image" 
-    caption="eigen|sheets⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/slides.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_slides.webp"
-    type="image" 
-    caption="eigen|slides⟩" />
-  <media 
-    src="/data/blog/media/2026-04-11-eigen-six-months-later/chat.webp" 
-    thumb="/data/blog/media/2026-04-11-eigen-six-months-later/thumb_chat.webp"
-    type="image" 
-    caption="eigen|chat⟩" />
-</media-grid>
+::: grid columns="3"
+![eigen|mail⟩](/data/blog/media/2026-04-11-eigen-six-months-later/mail.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_mail.webp")
+![eigen|calendar⟩](/data/blog/media/2026-04-11-eigen-six-months-later/calendar.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_calendar.webp")
+![eigen|drive⟩](/data/blog/media/2026-04-11-eigen-six-months-later/drive.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_drive.webp")
+![eigen|contacts⟩](/data/blog/media/2026-04-11-eigen-six-months-later/contacts.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_contacts.webp")
+![eigen|docs⟩](/data/blog/media/2026-04-11-eigen-six-months-later/docs.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_docs.webp")
+![eigen|stickies⟩](/data/blog/media/2026-04-11-eigen-six-months-later/stickies.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_stickies.webp")
+![eigen|sheets⟩](/data/blog/media/2026-04-11-eigen-six-months-later/sheets.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_sheets.webp")
+![eigen|slides⟩](/data/blog/media/2026-04-11-eigen-six-months-later/slides.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_slides.webp")
+![eigen|chat⟩](/data/blog/media/2026-04-11-eigen-six-months-later/chat.webp "/data/blog/media/2026-04-11-eigen-six-months-later/thumb_chat.webp")
+:::
 
 Beyond new apps, a lot happened under the hood:
 

@@ -3,7 +3,6 @@
 // share them, so a field added here reaches both.
 
 import { z } from 'zod';
-import type { MediaGridData } from '../../src/components/parse-media-grids';
 
 // A heading in an article, used to build the on-this-page table of contents.
 export type TocEntry = { id: string; text: string; level: number };
@@ -68,8 +67,36 @@ export type ArticleMeta = {
 
 export type ContentManifest = { articles: ArticleMeta[] };
 
-// The per-article generated body file.
-export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
+// A picture or a film of a media grid. The grid shows `thumbnail`, or a film's `poster`, and the lightbox the `src`.
+export type MediaItem = {
+    src: string;
+    type: 'image' | 'video';
+    caption?: string;
+    thumbnail?: string;
+    poster?: string;
+};
+
+export type MediaGridData = { columns: string; items: MediaItem[] };
+
+// A caption as the Markdown renders it, and as the plain text an alt text, a label and the lightbox take.
+export type MediaCaption = { html: string; text: string };
+
+// A looping video's `src` names its files without their endings, and so does a video slide's.
+export type MediaVideoData = { src: string; caption?: MediaCaption };
+
+export type MediaCarouselData = {
+    slides: { type: 'image' | 'video'; src: string; caption?: MediaCaption }[];
+    autoplay: boolean;
+    caption?: MediaCaption;
+};
+
+export type MediaBlock =
+    | ({ kind: 'grid' } & MediaGridData)
+    | ({ kind: 'video' } & MediaVideoData)
+    | ({ kind: 'carousel' } & MediaCarouselData);
+
+// The per-article generated body file. A `[BLOCK:n]` marker in the HTML stands where the page draws `media[n]`.
+export type ArticleBody = { html: string; media: MediaBlock[] };
 
 // The changelog body, plus one entry per release for the page's table of contents. The date is a short
 // day and month such as "3 Nov", and Unreleased has none.

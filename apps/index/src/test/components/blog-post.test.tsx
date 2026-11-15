@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { BlogPost } from '../../components/blog-post';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { ArticleMeta } from '../../content/manifest';
+
+installHappyDom();
+
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { renderToStaticMarkup } = await import('react-dom/server');
+const { BlogPost } = await import('../../components/blog-post');
 
 const post: ArticleMeta = {
     slug: 'first',
@@ -23,7 +27,7 @@ describe('BlogPost', () => {
             routeTree: createRootRoute({
                 component: () => (
                     <QueryClientProvider client={new QueryClient()}>
-                        <BlogPost post={post} body={{ html: '<p>Body</p>', mediaGrids: [] }} />
+                        <BlogPost post={post} body={{ html: '<p>Body</p>', media: [] }} />
                     </QueryClientProvider>
                 ),
             }),

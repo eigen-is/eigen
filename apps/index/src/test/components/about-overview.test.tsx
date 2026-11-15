@@ -30,7 +30,7 @@ async function renderOverview(): Promise<string> {
                         overview={overview}
                         body={{
                             html: '<p>Intro</p><p>[BLOCK:apps]</p><p>Outro</p><p>[BLOCK:principles]</p>',
-                            mediaGrids: [],
+                            media: [],
                         }}
                     />
                 </QueryClientProvider>

@@ -10,14 +10,13 @@ import { ReadingLayout } from '../components/reading-layout';
 import { SitePage } from '../components/site-page';
 import type { ChangelogBody } from '../content/manifest';
 
-// Eager glob (not a static import) so a not-yet-generated file degrades to an empty body
-// in dev instead of breaking the module load. Regenerated on every prod build by
-// scripts/build-changelog.ts (prebuild).
+// An eager glob, not a static import, so a file the build has not written yet is an empty body in dev instead of a
+// module that fails to load.
 const generated = import.meta.glob<ChangelogBody>('../content/.generated/changelog.json', {
     eager: true,
     import: 'default',
 });
-const body: ChangelogBody = Object.values(generated)[0] ?? { html: '', mediaGrids: [], versions: [] };
+const body: ChangelogBody = Object.values(generated)[0] ?? { html: '', media: [], versions: [] };
 const versions = body.versions.map(({ id, version, date }) => ({ id, text: version, detail: date }));
 
 export const Route = createFileRoute('/changelog')({
