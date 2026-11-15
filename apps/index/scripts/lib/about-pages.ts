@@ -1,5 +1,5 @@
 // Checks the About files against the apps the About pages describe: a page's file is named after an app, the
-// overview's rows hold one line for each app, and each app's formats panel links a help article that exists. The
+// overview's rows hold one line for each app, and each principle an app lists links a help article that exists. The
 // content build calls these, so a page named after no app, a missing row or a mistyped article fails the build.
 
 import { aboutApps } from '../../src/content/about-apps';
@@ -21,10 +21,8 @@ export function checkAboutRows(rows: Record<string, string> | undefined): Record
     return rows;
 }
 
-export function checkFormatArticles(supportSlugs: ReadonlySet<string>): void {
-    for (const { formats } of aboutApps) {
-        if (formats && !supportSlugs.has(formats.article)) {
-            throw new Error(`About formats link ${formats.article}, which is no help article`);
-        }
+export function checkPrincipleArticles(supportSlugs: ReadonlySet<string>): void {
+    for (const { article } of aboutApps.flatMap((app) => app.principles)) {
+        if (!supportSlugs.has(article)) throw new Error(`About principles link ${article}, which is no help article`);
     }
 }

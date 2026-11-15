@@ -1,76 +1,117 @@
 // The apps the About pages describe: every app in the shared registry except Space, the workspace home, in the
 // registry's order, then Admin for the person who runs the server. An app's slug is its name in lower case and names
-// both its page's file and its URL, such as sheets.md and /about/sheets. Each also says what it opens and saves and
-// which protocols other apps reach it by, for the panel on its page and the tags under the landing page's blocks. The
-// content build checks the About files against this list, and the pages list the apps in its order.
+// both its page's file and its URL, such as sheets.md and /about/sheets. Each app also says which of Eigen's three
+// principles hold for it and how, such as CalDAV for Calendar, for the boxes beside its page and the tags under the
+// landing page's blocks. The content build checks the About files against this list.
 
 import { adminApp, apps } from '@workspace/lib/apps';
 
-// File types as their endings, such as `.xlsx`, and `article` as a help article's slug, such as `sheets/import-excel`.
-export type AppFormats = { files: readonly string[]; protocols: readonly string[]; text: string; article: string };
+export const principles = ['Use your favorite apps', 'Office compatible', 'Built for data sovereignty'] as const;
 
-export const appFormats = {
-    mail: {
-        files: ['.eml'],
-        protocols: ['IMAP', 'SMTP'],
-        text: 'Read and send from the mail app you already use. Any message downloads as an .eml file, and an .eml file from another mail program imports.',
-        article: 'connect/mail-client',
-    },
-    drive: {
-        files: [],
-        protocols: ['WebDAV'],
-        text: 'Mount Drive as a folder on your computer, and your files open and copy like any other.',
-        article: 'connect/mount-drive-on-your-computer',
-    },
-    calendar: {
-        files: ['.ics'],
-        protocols: ['CalDAV'],
-        text: 'Your calendars sync with the calendar app on your phone or computer, and import and export as .ics files.',
-        article: 'connect/calendar-client',
-    },
-    docs: {
-        files: ['.docx'],
-        protocols: [],
-        text: 'Bring your Word files in, and download any document as Word again, or as PDF.',
-        article: 'docs/import-word',
-    },
-    sheets: {
-        files: ['.xlsx'],
-        protocols: [],
-        text: 'Bring your Excel files in, and download any spreadsheet as Excel again, or as PDF.',
-        article: 'sheets/import-excel',
-    },
-    slides: {
-        files: ['.pptx'],
-        protocols: [],
-        text: 'Bring your PowerPoint files in, and download any deck as PowerPoint again, or as PDF.',
-        article: 'slides/import-powerpoint',
-    },
-    vector: {
-        files: ['.svg'],
-        protocols: [],
-        text: 'Download any drawing as an SVG image or a PDF.',
-        article: 'vector/export-drawing',
-    },
-    contacts: {
-        files: ['.vcf'],
-        protocols: ['CardDAV'],
-        text: 'Your address book syncs with the contacts app on your phone or computer, and imports and exports as .vcf files.',
-        article: 'connect/contacts-client',
-    },
-    admin: {
-        files: ['.tar', '.tar.zst'],
-        protocols: [],
-        text: 'A backup of the whole server is a plain .tar, with a .tar.zst inside for each user and team, so tar opens it on any computer, without Eigen.',
-        article: 'self-hosting/back-up-and-restore',
-    },
-} satisfies Record<string, AppFormats>;
+export type Principle = (typeof principles)[number];
 
-const formatsBySlug = new Map<string, AppFormats>(Object.entries(appFormats));
+// Tags are file endings or protocols, such as `.xlsx` or `CalDAV`, and `article` a help article's slug, such as
+// `sheets/import-excel`.
+export type AppPrinciple = { principle: Principle; line: string; tags: readonly string[]; article: string };
+
+export const appPrinciples = {
+    mail: [
+        {
+            principle: 'Use your favorite apps',
+            line: 'Works with the mail app on your phone and computer.',
+            tags: ['IMAP', 'SMTP'],
+            article: 'connect/mail-client',
+        },
+        {
+            principle: 'Built for data sovereignty',
+            line: 'Every message is a plain .eml file.',
+            tags: ['.eml'],
+            article: 'mail/download-an-email',
+        },
+    ],
+    drive: [
+        {
+            principle: 'Use your favorite apps',
+            line: 'Open your files from Finder or Explorer.',
+            tags: ['WebDAV'],
+            article: 'connect/mount-drive-on-your-computer',
+        },
+    ],
+    calendar: [
+        {
+            principle: 'Use your favorite apps',
+            line: 'Syncs with the calendar on your phone.',
+            tags: ['CalDAV'],
+            article: 'connect/calendar-client',
+        },
+        {
+            principle: 'Built for data sovereignty',
+            line: 'Imports and exports .ics.',
+            tags: ['.ics'],
+            article: 'calendar/export-events',
+        },
+    ],
+    docs: [
+        {
+            principle: 'Office compatible',
+            line: 'Reads and writes .docx files.',
+            tags: ['.docx'],
+            article: 'docs/import-word',
+        },
+    ],
+    sheets: [
+        {
+            principle: 'Office compatible',
+            line: 'Reads and writes .xlsx files.',
+            tags: ['.xlsx'],
+            article: 'sheets/import-excel',
+        },
+    ],
+    slides: [
+        {
+            principle: 'Office compatible',
+            line: 'Reads and writes .pptx files.',
+            tags: ['.pptx'],
+            article: 'slides/import-powerpoint',
+        },
+    ],
+    vector: [
+        {
+            principle: 'Built for data sovereignty',
+            line: 'Exports .svg.',
+            tags: ['.svg'],
+            article: 'vector/export-drawing',
+        },
+    ],
+    contacts: [
+        {
+            principle: 'Use your favorite apps',
+            line: 'Syncs with the contacts on your phone.',
+            tags: ['CardDAV'],
+            article: 'connect/contacts-client',
+        },
+        {
+            principle: 'Built for data sovereignty',
+            line: 'Imports and exports .vcf.',
+            tags: ['.vcf'],
+            article: 'contacts/export-contacts',
+        },
+    ],
+    admin: [
+        {
+            principle: 'Built for data sovereignty',
+            line: 'Backups are plain .tar archives.',
+            tags: ['.tar', '.tar.zst'],
+            article: 'self-hosting/back-up-and-restore',
+        },
+    ],
+} satisfies Record<string, readonly AppPrinciple[]>;
+
+const principlesBySlug = new Map<string, readonly AppPrinciple[]>(Object.entries(appPrinciples));
 
 export const aboutApps = [...apps.filter((app) => app.name !== 'Space'), adminApp].map((app) => {
     const slug = app.name.toLowerCase();
-    return { ...app, slug, formats: formatsBySlug.get(slug) };
+    return { ...app, slug, principles: principlesBySlug.get(slug) ?? [] };
 });
 
 export type AboutApp = (typeof aboutApps)[number];

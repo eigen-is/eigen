@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { aboutApps } from '../../content/about-apps';
+import { aboutApps, principles } from '../../content/about-apps';
 import { getSupportArticles } from '../../content/manifest';
 
 describe('aboutApps', () => {
@@ -19,10 +19,21 @@ describe('aboutApps', () => {
         ]);
     });
 
-    test('every app with open formats names a help article that exists', () => {
+    test('an app holds up to three of the landing principles, each once, and each names a help article', () => {
         const slugs = new Set(getSupportArticles().map((article) => article.slug));
-        const articles = aboutApps.flatMap((app) => (app.formats ? [app.formats.article] : []));
-        expect(articles.length).toBe(9);
+        for (const app of aboutApps) {
+            const named = app.principles.map((entry) => entry.principle);
+            expect(named.length).toBeLessThanOrEqual(3);
+            expect(new Set(named).size).toBe(named.length);
+            expect(named.filter((principle) => !principles.includes(principle))).toEqual([]);
+        }
+        const articles = aboutApps.flatMap((app) => app.principles.map((entry) => entry.article));
+        expect(articles.length).toBe(12);
         expect(articles.filter((article) => !slugs.has(article))).toEqual([]);
+    });
+
+    test('chat and stickies hold none', () => {
+        const none = aboutApps.filter((app) => app.principles.length === 0).map((app) => app.slug);
+        expect(none).toEqual(['stickies', 'chat']);
     });
 });

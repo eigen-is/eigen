@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { aboutPageSlug, checkAboutRows, checkFormatArticles } from '../../../../scripts/lib/about-pages';
+import { aboutPageSlug, checkAboutRows, checkPrincipleArticles } from '../../../../scripts/lib/about-pages';
 import { aboutApps } from '../../../content/about-apps';
 
 const allRows = Object.fromEntries(aboutApps.map((app) => [app.slug, `About ${app.name}`]));
@@ -33,16 +33,16 @@ describe('checkAboutRows', () => {
     });
 });
 
-describe('checkFormatArticles', () => {
-    const articles = new Set(aboutApps.flatMap((app) => (app.formats ? [app.formats.article] : [])));
+describe('checkPrincipleArticles', () => {
+    const articles = new Set(aboutApps.flatMap((app) => app.principles.map((entry) => entry.article)));
 
-    test('passes when every formats panel links a help article', () => {
-        expect(() => checkFormatArticles(articles)).not.toThrow();
+    test('passes when every principle of an app links a help article', () => {
+        expect(() => checkPrincipleArticles(articles)).not.toThrow();
     });
 
     test('fails naming a link to no help article', () => {
         const fewer = new Set(articles);
-        fewer.delete('sheets/import-excel');
-        expect(() => checkFormatArticles(fewer)).toThrow('sheets/import-excel');
+        fewer.delete('mail/download-an-email');
+        expect(() => checkPrincipleArticles(fewer)).toThrow('mail/download-an-email');
     });
 });

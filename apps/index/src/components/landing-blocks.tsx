@@ -1,5 +1,5 @@
 // What Eigen stands for, as three short blocks along the bottom of the landing page and on the About overview, each a
-// plain sentence over tags that name the protocols or formats behind it, taken from what the apps say they speak.
+// plain sentence over tags that name the protocols or formats behind it, taken from the apps the block names.
 // Under them on the landing page, when the server's admin turned it on, a small line installs Eigen, with a button to
 // copy it.
 
@@ -9,30 +9,26 @@ import { CodeBlock, CodeBlockContent } from '@workspace/ui/components/code-block
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { cn } from '@workspace/ui/lib/utils';
 import { Copy } from 'lucide-react';
-import { appFormats } from '../content/about-apps';
+import type { Principle } from '../content/about-apps';
+import { appPrinciples } from '../content/about-apps';
 
 const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
 
-const BLOCKS = [
+const BLOCKS: { principle: Principle; text: string; apps: readonly (keyof typeof appPrinciples)[] }[] = [
     {
-        title: 'Use your favorite apps',
+        principle: 'Use your favorite apps',
         text: 'Works with the mail, calendar, contacts and file apps on your phone, Mac or PC.',
-        tags: [
-            ...appFormats.mail.protocols,
-            ...appFormats.calendar.protocols,
-            ...appFormats.contacts.protocols,
-            ...appFormats.drive.protocols,
-        ],
+        apps: ['mail', 'calendar', 'contacts', 'drive'],
     },
     {
-        title: 'Office compatible',
+        principle: 'Office compatible',
         text: 'Create and edit documents, spreadsheets and slides in your browser. Bring the files you have, and take them with you when you leave.',
-        tags: [...appFormats.docs.files, ...appFormats.sheets.files, ...appFormats.slides.files],
+        apps: ['docs', 'sheets', 'slides'],
     },
     {
-        title: 'Built for data sovereignty',
+        principle: 'Built for data sovereignty',
         text: 'MIT-licensed code running on your own server. Your mail, contacts and calendars stay in open formats, so there is no lock-in.',
-        tags: [...appFormats.mail.files, ...appFormats.contacts.files, ...appFormats.calendar.files],
+        apps: ['mail', 'contacts', 'calendar'],
     },
 ];
 
@@ -67,11 +63,11 @@ export function PrincipleBlocks({ className }: { className?: string }) {
     return (
         <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
             {BLOCKS.map((block) => (
-                <div key={block.title} className="site-panel flex flex-col">
-                    <h2 className="text-lg font-medium">{block.title}</h2>
+                <div key={block.principle} className="site-panel flex flex-col">
+                    <h2 className="text-lg font-medium">{block.principle}</h2>
                     <p className="mt-2 text-sm text-pretty text-muted-foreground">{block.text}</p>
                     <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
-                        {block.tags.map((tag) => (
+                        {principleTags(block.principle, block.apps).map((tag) => (
                             <Badge key={tag} variant="outline">
                                 {tag}
                             </Badge>
@@ -80,5 +76,12 @@ export function PrincipleBlocks({ className }: { className?: string }) {
                 </div>
             ))}
         </div>
+    );
+}
+
+// The tags of one principle across the block's apps, in the block's order, such as Mail's IMAP and SMTP first.
+function principleTags(principle: Principle, apps: readonly (keyof typeof appPrinciples)[]) {
+    return apps.flatMap((app) =>
+        appPrinciples[app].flatMap((entry) => (entry.principle === principle ? entry.tags : [])),
     );
 }
