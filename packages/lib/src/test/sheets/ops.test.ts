@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { CellAttrKey, LOOK_KEYS, Op, OpKind, Records, RecordType, SheetContent } from '../../sheets/ops';
-import { isStructural, opReferences } from '../../sheets/ops';
+import type { Op, OpKind, Records, RecordType, SheetContent } from '../../sheets/ops';
+import { isStructural, LOOK_KEYS, opReferences } from '../../sheets/ops';
 import { Refusal } from '../../sheets/refusal';
 
 const NONE = { media: [], comments: [] };
@@ -186,8 +186,8 @@ describe('the shapes an op may take', () => {
         expect(rows.length).toBe(2);
     });
 
-    test('every look key is in LOOK_KEYS', () => {
-        const everyKeyListed: Exclude<CellAttrKey, (typeof LOOK_KEYS)[number]> extends never ? true : never = true;
-        expect(everyKeyListed).toBe(true);
+    test('LOOK_KEYS lists every look key in the order of a canonical look, which every reader keeps', () => {
+        const order = 'bl it ff fs fc cl un fa ht vt tb bg rt bdt bdb bdl bdr bdd';
+        expect(LOOK_KEYS.join(' ')).toBe(order);
     });
 });

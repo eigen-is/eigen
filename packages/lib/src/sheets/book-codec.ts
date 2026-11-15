@@ -5,6 +5,7 @@
 // written per cell. The decoder rebuilds each sheet and holds it to the guard a `sheet` op's content meets.
 
 import { isRecord } from '../core/guards';
+import { MAX_SHEETS } from './limits';
 import type { CellRecord, SheetContent } from './ops';
 import { isGeneration, isNow, isSeed, isSheetContent } from './ops-validate';
 
@@ -14,9 +15,8 @@ const FORMAT = 'eigensheets/3';
 // value was computed by the writer, as a fold's finished pass does; an importer writes false.
 export type BookContent = { g: number; now: number; seed: number; computed: boolean; sheets: SheetContent[] };
 
-// A column's cells on consecutive rows from `row`. A cell that is a value alone stands bare, the most common cell; a
-// formula is `[index]`, `[index, value]` or, with an error value, `[index, value, 1]`; any other cell keeps its record's
-// keys, with `f` an index.
+// A column's cells on consecutive rows from `row`: a value alone stands bare, a formula is `[index]`, `[index, value]`
+// or, with an error value, `[index, value, 1]`, and any other cell is its record with `f` an index.
 type StoredRun = [column: number, row: number, ...cells: unknown[]];
 
 export function encodeBook(book: BookContent): string {
@@ -55,8 +55,8 @@ export function encodeBook(book: BookContent): string {
     return JSON.stringify({ f: FORMAT, g, now, seed, computed, formulas, sheets });
 }
 
-// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet, a
-// formula index past the list, or a sheet the guard refuses. It never throws.
+// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet or too
+// many, two sheets with one id, a formula index past the list, or a sheet the guard refuses. It never throws.
 export function decodeBook(text: string): BookContent | null {
     let value: unknown;
     try {
@@ -67,8 +67,10 @@ export function decodeBook(text: string): BookContent | null {
     if (!isRecord(value) || Object.keys(value).length !== 7) return null;
     const { f, g, now, seed, computed, formulas, sheets } = value;
     if (f !== FORMAT || !isGeneration(g) || !isNow(now) || !isSeed(seed) || typeof computed !== 'boolean') return null;
-    if (!Array.isArray(formulas) || !Array.isArray(sheets) || sheets.length === 0) return null;
+    if (!Array.isArray(formulas) || !Array.isArray(sheets) || sheets.length === 0 || sheets.length > MAX_SHEETS)
+        return null;
     const decoded: SheetContent[] = [];
+    const ids = new Set<string>();
     for (const sheet of sheets) {
         if (!isRecord(sheet) || !Array.isArray(sheet['cells'])) return null;
         const cells: unknown[] = [];
@@ -78,7 +80,8 @@ export function decodeBook(text: string): BookContent | null {
                 cells.push([run[1] + at - 2, run[0], decodedCell(run[at], formulas)]);
         }
         const content = { ...sheet, cells };
-        if (!isSheetContent(content)) return null;
+        if (!isSheetContent(content) || ids.has(content.id)) return null;
+        ids.add(content.id);
         decoded.push(content);
     }
     return { g, now, seed, computed, sheets: decoded };

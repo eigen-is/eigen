@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { MAX_GRID_SLOTS } from '@workspace/lib/sheets';
+import { isSheetName, MAX_GRID_SLOTS } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { isSheetName } from '@workspace/sheet/engine/a1-notation';
 import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';

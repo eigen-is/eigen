@@ -5,9 +5,14 @@
 // text of a rich cell is also the engine's value of that cell, which the workbook keeps in step.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { CellContent, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
+import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
+
+// A cell's place: its column times the grid's rows plus its row, so the places ascend in column order.
+export function placeOf(row: number, column: number): number {
+    return column * GRID_ROWS + row;
+}
 
 // The text a rich cell shows, which is the value the engine holds for it.
 export function textOf(runs: readonly Run[]): string {
@@ -15,27 +20,24 @@ export function textOf(runs: readonly Run[]): string {
 }
 
 export class Extras {
-    // A place is its column times the grid's rows plus its row, so the places ascend in column order.
     private places: number[] = [];
     private held: Extra[] = [];
 
     public at(row: number, column: number): Extra | undefined {
-        const place = column * GRID_ROWS + row;
+        const place = placeOf(row, column);
         const at = this.search(place);
         return this.places[at] === place ? this.held[at] : undefined;
     }
 
     // The entries of a block in column order. It reads the lists as it goes, so nothing is written during a walk.
-    public *cells(
-        [top, left, bottom, right]: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1],
-    ): Generator<Placed<Extra>> {
-        let at = this.search(left * GRID_ROWS + top);
+    public *cells([top, left, bottom, right]: Rect): Generator<Placed<Extra>> {
+        let at = this.search(placeOf(top, left));
         while (at < this.places.length) {
             const row = this.places[at] % GRID_ROWS;
             const column = (this.places[at] - row) / GRID_ROWS;
             if (column > right) return;
-            if (row < top) at = this.search(column * GRID_ROWS + top);
-            else if (row > bottom) at = this.search((column + 1) * GRID_ROWS + top);
+            if (row < top) at = this.search(placeOf(top, column));
+            else if (row > bottom) at = this.search(placeOf(top, column + 1));
             else {
                 yield [row, column, this.held[at]];
                 at += 1;
@@ -43,10 +45,14 @@ export class Extras {
         }
     }
 
+    public content(): Placed<Extra>[] {
+        return [...this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1])];
+    }
+
     // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
     // entry, so writing none deletes.
-    public put(row: number, column: number, { s, link, qp }: Extra): Extra | undefined {
-        const place = column * GRID_ROWS + row;
+    public write(row: number, column: number, { s, link, qp }: Extra): Extra | undefined {
+        const place = placeOf(row, column);
         const at = this.search(place);
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
@@ -64,53 +70,59 @@ export class Extras {
         return old;
     }
 
-    // The new lines hold nothing. The caller refused an insert that pushes an entry off the grid's end.
-    public insert(rows: boolean, index: number, count: number): void {
-        const { places } = this;
-        for (let at = 0; at < places.length; at += 1) {
-            const row = places[at] % GRID_ROWS;
-            if (rows ? row >= index : (places[at] - row) / GRID_ROWS >= index) {
-                places[at] += rows ? count : count * GRID_ROWS;
-            }
-        }
-    }
-
-    // Returns the entries of the deleted lines, where they were.
-    public remove(rows: boolean, index: number, count: number): Placed<Extra>[] {
-        const last = index + count - 1;
-        const removed = this.take(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last]);
-        // The lines after the deleted ones move up, which is an insert of that many lines fewer.
-        this.insert(rows, index, -count);
-        return removed;
-    }
-
-    // Moves the entries of a block to another place, on this sheet or on the sheet of `to`, over whatever the block
-    // lands on. Returns the entries it landed on that were not its own, where they were.
-    public move(from: Rect, to: Extras, toRow: number, toColumn: number): Placed<Extra>[] {
+    // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
+    // they were before the move.
+    public move({ from, toRow, toColumn }: MoveOp, source: Extras): Placed<Extra>[] {
         const [top, left, bottom, right] = from;
-        const block = this.take(from);
-        const covered = to.take([toRow, toColumn, toRow + bottom - top, toColumn + right - left]);
-        const shift = (toColumn - left) * GRID_ROWS + toRow - top;
+        const target: Rect = [toRow, toColumn, toRow + bottom - top, toColumn + right - left];
+        const covered = [...this.cells(target)];
+        const block = source.take(from);
+        this.take(target);
+        const shift = placeOf(toRow, toColumn) - placeOf(top, left);
         const places: number[] = [];
         const held: Extra[] = [];
         let at = 0;
         // Both lists ascend, and a block shifted whole still does, so one pass merges them.
         for (const [row, column, extra] of block) {
-            const place = column * GRID_ROWS + row + shift;
-            for (; at < to.places.length && to.places[at] < place; at += 1) {
-                places.push(to.places[at]);
-                held.push(to.held[at]);
+            const place = placeOf(row, column) + shift;
+            for (; at < this.places.length && this.places[at] < place; at += 1) {
+                places.push(this.places[at]);
+                held.push(this.held[at]);
             }
             places.push(place);
             held.push(extra);
         }
-        for (; at < to.places.length; at += 1) {
-            places.push(to.places[at]);
-            held.push(to.held[at]);
+        for (; at < this.places.length; at += 1) {
+            places.push(this.places[at]);
+            held.push(this.held[at]);
         }
-        to.places = places;
-        to.held = held;
+        this.places = places;
+        this.held = held;
         return covered;
+    }
+
+    // Whether the insert would push an entry off the grid's end.
+    public wouldPush({ rows, count }: LinesOp): boolean {
+        const last = this.places.at(-1) ?? -1;
+        if (!rows) return last >= placeOf(0, GRID_COLUMNS - count);
+        return this.places.some((place) => place % GRID_ROWS >= GRID_ROWS - count);
+    }
+
+    // The new lines hold nothing. Returns the entries of the deleted lines, where they were.
+    public lines({ rows, insert, index, count }: LinesOp): Placed<Extra>[] {
+        const last = index + count - 1;
+        const removed = insert
+            ? []
+            : this.take(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last]);
+        const shift = insert ? count : -count;
+        const { places } = this;
+        for (let at = 0; at < places.length; at += 1) {
+            const row = places[at] % GRID_ROWS;
+            if (rows ? row >= index : (places[at] - row) / GRID_ROWS >= index) {
+                places[at] += rows ? shift : shift * GRID_ROWS;
+            }
+        }
+        return removed;
     }
 
     // Takes the entries of a block out and returns them, in column order.

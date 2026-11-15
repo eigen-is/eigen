@@ -4,7 +4,8 @@
 // one op that fails is not read at all, so every reader skips the same batches. State, such as whether a sheet or a
 // filter exists, is the applier's to check.
 
-import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '../charts/limits';
 import { isHexColor, parseRgb } from '../constants/colors';
 import { isRecord } from '../core/guards';
 import { isValidFractionalIndex } from '../vector/fractional-index';
@@ -12,12 +13,12 @@ import { isSafeMediaName } from '../vector/media-refs';
 import { STROKE_STYLES } from '../vector/types';
 import { BORDER_STYLES } from './borders';
 import {
-    LAST_DATE_SERIAL,
     MAX_BATCH_JSON,
     MAX_ID_LENGTH,
     MAX_ORDER_KEY,
     MAX_RECORDS_PER_TYPE,
     MAX_RUNS_PER_CELL,
+    MAX_SHEETS,
     MAX_SHORT_TEXT,
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
@@ -37,12 +38,15 @@ import type {
     Op,
     RecordOp,
     Records,
+    Rect,
     Run,
     RunStyle,
     SheetContent,
     SheetFields,
     SheetOp,
 } from './ops';
+import { MAX_RULE_RANGES } from './range-rules';
+import { disjoint } from './rect';
 import { isSheetName } from './sheet-name';
 import type {
     BorderSide,
@@ -67,8 +71,8 @@ type Table<T> = {
     readonly of?: T;
 };
 
-// A batch of ops from its JSON text, when the text parses, fits the batch budget and every op in it is valid, else null.
-// The budget is read before any op, so a text past it costs no more than its parse.
+// A batch of ops from its JSON text when the text parses, fits the batch budget and every op in it is valid, else null.
+// The budget is read before any op, so a text past it costs no more than its parse and one write of its other ops.
 export function readBatch(text: string): Batch | null {
     let value: unknown;
     try {
@@ -76,19 +80,17 @@ export function readBatch(text: string): Batch | null {
     } catch {
         return null;
     }
-    if (text.length > MAX_BATCH_JSON && !addsSheets(value)) return null;
-    return isOf(value, BATCH) ? value : null;
-}
-
-// A batch of sheet ops alone, one of them an add, is left out of the budget, since a sheet's add has bounds of its own.
-// It reads the parsed value raw: the ops are checked after.
-function addsSheets(value: unknown): boolean {
-    const ops = isRecord(value) ? value['ops'] : undefined;
-    return (
-        Array.isArray(ops) &&
-        ops.every((op) => isRecord(op) && op['kind'] === 'sheet') &&
-        ops.some((op) => isRecord(op) && 'add' in op)
-    );
+    if (!isRecord(value) || !Array.isArray(value['ops'])) return null;
+    // A sheet's add is left out of the budget, since `fits` bounds it. The ops are read raw here and checked after.
+    const isAdd = (op: unknown): op is Record<string, unknown> => isRecord(op) && op['kind'] === 'sheet' && 'add' in op;
+    const ops: unknown[] = value['ops'];
+    if (ops.filter(isAdd).length > MAX_SHEETS) return null;
+    // Past the budget the parsed batch is weighed as JSON writes it, since a text can spell a value shorter.
+    const weighed =
+        text.length <= MAX_BATCH_JSON ||
+        JSON.stringify({ ...value, ops: ops.map((op) => (isAdd(op) ? { ...op, add: null } : op)) }).length <=
+            MAX_BATCH_JSON;
+    return weighed && isOf(value, BATCH) ? value : null;
 }
 
 // A sheet whole, as a `sheet` op adds it and a snapshot holds it. Its caller hands it a value built from `JSON.parse`,
@@ -103,7 +105,7 @@ export function isGeneration(value: unknown): value is number {
 }
 
 export function isNow(value: unknown): value is number {
-    return isFiniteNumber(value) && value >= 0 && value < LAST_DATE_SERIAL + 1;
+    return isFiniteNumber(value) && value >= 0 && value < LAST_SERIAL + 1;
 }
 
 // A draw's seed is read as a signed 32-bit integer.
@@ -209,79 +211,12 @@ function isCellList(value: unknown, isCellAt: Check): boolean {
 
 function isRuns(value: unknown): boolean {
     if (!Array.isArray(value)) return false;
-    const rects: (readonly number[])[] = [];
+    const rects: Rect[] = [];
     for (const run of value) {
         if (!Array.isArray(run) || run.length !== 2 || !isRect(run[0]) || !isContentOrNull(run[1])) return false;
         rects.push(run[0]);
     }
     return disjoint(rects);
-}
-
-// Two rectangles meet where a column holds both over a shared row. A sweep across the columns counts how many
-// rectangles cover each row, in a tree over the rows where rectangles start and end, so the check is n log n.
-function disjoint(rects: readonly (readonly number[])[]): boolean {
-    if (rects.length < 2) return true;
-    const edges = [...new Set(rects.flatMap(([top, , bottom]) => [top, bottom + 1]))].sort((a, b) => a - b);
-    const slot = (row: number) => {
-        let low = 0;
-        let high = edges.length - 1;
-        while (low < high) {
-            const middle = (low + high) >> 1;
-            if (edges[middle] < row) low = middle + 1;
-            else high = middle;
-        }
-        return low;
-    };
-    // An event is a rectangle entering at its left column or leaving after its right one; leaving sorts first.
-    const at = (event: number) =>
-        event < rects.length ? rects[event][1] * 2 + 1 : (rects[event - rects.length][3] + 1) * 2;
-    const events = Array.from({ length: rects.length * 2 }, (_, event) => event).sort((a, b) => at(a) - at(b));
-    const covers = new Coverage(edges.length - 1);
-    for (const event of events) {
-        const entering = event < rects.length;
-        const [top, , bottom] = rects[entering ? event : event - rects.length];
-        const from = slot(top);
-        const to = slot(bottom + 1);
-        if (entering && covers.most(from, to) > 0) return false;
-        covers.add(from, to, entering ? 1 : -1);
-    }
-    return true;
-}
-
-// How many rectangles cover each slot, in a segment tree: a node holds the count added over its whole span and the most
-// any slot under it is covered.
-class Coverage {
-    private readonly added: Int32Array;
-    private readonly peak: Int32Array;
-
-    public constructor(private readonly size: number) {
-        this.added = new Int32Array(4 * size);
-        this.peak = new Int32Array(4 * size);
-    }
-
-    public add(from: number, to: number, delta: number, node = 1, low = 0, high = this.size): void {
-        if (to <= low || high <= from) return;
-        if (from <= low && high <= to) {
-            this.added[node] += delta;
-            this.peak[node] += delta;
-            return;
-        }
-        const middle = (low + high) >> 1;
-        this.add(from, to, delta, 2 * node, low, middle);
-        this.add(from, to, delta, 2 * node + 1, middle, high);
-        this.peak[node] = this.added[node] + Math.max(this.peak[2 * node], this.peak[2 * node + 1]);
-    }
-
-    public most(from: number, to: number, node = 1, low = 0, high = this.size): number {
-        if (to <= low || high <= from) return 0;
-        if (from <= low && high <= to) return this.peak[node];
-        const middle = (low + high) >> 1;
-        const below = Math.max(
-            this.most(from, to, 2 * node, low, middle),
-            this.most(from, to, 2 * node + 1, middle, high),
-        );
-        return this.added[node] + below;
-    }
 }
 
 // Bands are flat: first column, n, then n pairs of start row and look index, columns and rows ascending.
@@ -324,7 +259,7 @@ function lineSpan(run: unknown): unknown {
 // Merges share no cell: the applier refuses a merge over another, so no edit makes a sheet where two do.
 function isSheetRecords(value: unknown): boolean {
     if (!isRecord(value)) return false;
-    const merges: (readonly number[])[] = [];
+    const merges: Rect[] = [];
     for (const type in value) {
         const records = value[type];
         if (type === 'sheet' || !Object.hasOwn(RECORD_KINDS, type) || !isRecord(records)) return false;
@@ -404,7 +339,7 @@ function isColumn(value: unknown): value is number {
     return isCount(value, GRID_COLUMNS - 1);
 }
 
-function isRect(value: unknown): value is readonly number[] {
+function isRect(value: unknown): value is Rect {
     if (!Array.isArray(value) || value.length !== 4) return false;
     const [top, left, bottom, right] = value;
     return isRow(top) && isColumn(left) && isRow(bottom) && isColumn(right) && top <= bottom && left <= right;
@@ -417,7 +352,12 @@ function isSpan(value: unknown, count: number): value is readonly number[] {
 }
 
 function isRanges(value: unknown): boolean {
-    return Array.isArray(value) && value.length > 0 && value.every((range) => isOf(range, RANGE));
+    return (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.length <= MAX_RULE_RANGES &&
+        value.every((range) => isOf(range, RANGE))
+    );
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -426,6 +366,10 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isShort(value: unknown): value is string {
     return typeof value === 'string' && value.length <= MAX_SHORT_TEXT;
+}
+
+function isText(value: unknown): value is string {
+    return typeof value === 'string';
 }
 
 function isLongText(value: unknown): value is string {
@@ -676,7 +620,7 @@ const FLOATING: Fields<Omit<ImageRecord, 'mediaName'>> = {
     height: [isFiniteNumber, true],
     angle: [isFiniteNumber, false],
 };
-const CHART: Fields<ChartRecord> = {
+const CHART = table<ChartRecord>({
     ...FLOATING,
     fill: [isLongText, false],
     color: [isShort, false],
@@ -686,17 +630,17 @@ const CHART: Fields<ChartRecord> = {
     strokeStyle: [(value) => STROKE_STYLES.some((style) => style === value), false],
     roughness: [isFiniteNumber, false],
     seed: [isFiniteNumber, false],
-    specChart: [isLongText, true],
-    specTitle: [isLongText, true],
-    specLegend: [isLongText, true],
-    specAxes: [isLongText, true],
-    specPlots: [isLongText, true],
-    specSeries: [isLongText, true],
-    specPoints: [isLongText, true],
-    specData: [isLongText, true],
-};
+    specChart: [isText, true],
+    specTitle: [isText, true],
+    specLegend: [isText, true],
+    specAxes: [isText, true],
+    specPlots: [isText, true],
+    specSeries: [isText, true],
+    specPoints: [isText, true],
+    specData: [isText, true],
+});
 
-const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat'>]: Fields<Records[T]> } = {
+const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat' | 'chart'>]: Fields<Records[T]> } = {
     sheet: SHEET_FIELDS,
     merge: { rect: [isRect, true] },
     filter: { rect: [isRect, true] },
@@ -713,7 +657,6 @@ const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat'>]: Fie
         rule: [(value) => isOf(value, RULE), true],
     },
     image: { ...FLOATING, mediaName: [(value) => isShort(value) && isSafeMediaName(value), true] },
-    chart: CHART,
 };
 
 // How a record op's `set` is read for each type: as a whole record, or as a change of some of its fields.
@@ -730,4 +673,9 @@ const RECORD_KINDS: { readonly [type: string]: RecordKind } = {
     ),
     // A rule changes only whole: a field of one kind of rule merged into a rule of another would leave one of neither.
     conditionalFormat: { whole: isConditionalFormat, change: () => false },
+    // A reader draws nothing of a chart past the byte bound over all its parts, so a part alone holds no other bound.
+    chart: {
+        whole: (value) => isOf(value, CHART) && !exceedsChartSpecBytes(value),
+        change: (value) => isRecord(value) && isChange(value, CHART) && !exceedsChartSpecBytes(value),
+    },
 };

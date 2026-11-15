@@ -3,13 +3,25 @@
 // form of a snapshot worked out here from plain data, without the workbook's own parts.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { CellAttrs, CellRecord, LineAttrs, Placed, Run, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import type { BookContent } from '@workspace/lib/sheets/book-codec';
+import type {
+    CellAttrs,
+    CellRecord,
+    LineAttrs,
+    LinesOp,
+    MoveOp,
+    Placed,
+    Rect,
+    Run,
+    SheetContent,
+    Span,
+} from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
 export type Random = () => number;
-export type BookContent = { g: number; now: number; seed: number; sheets: SheetContent[] };
+export type Book = Omit<BookContent, 'computed'>;
 
 export function randomOf(seed: number): Random {
     let state = seed;
@@ -19,6 +31,16 @@ export function randomOf(seed: number): Random {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+}
+
+// The op of a line insert or delete on sheet S, its new lines plain when `like` is below 0.
+export function linesOp(rows: boolean, insert: boolean, index: number, count: number, like = -1): LinesOp {
+    return { kind: 'lines', sheet: 'S', rows, insert, index, count, ...(like >= 0 && { like }) };
+}
+
+// The op of a block of sheet S moved to (toRow, toColumn), on S or on `toSheet`.
+export function moveOp(from: Rect, toRow: number, toColumn: number, toSheet = 'S'): MoveOp {
+    return { kind: 'move', sheet: 'S', from, toSheet, toRow, toColumn };
 }
 
 export function below(random: Random, n: number): number {
@@ -159,7 +181,7 @@ function randomSheet(random: Random, at: number): SheetContent {
     return { id, fields, cells, looks, bands, rows: randomLines(random), columns: randomLines(random), records };
 }
 
-export function randomBook(random: Random): BookContent {
+export function randomBook(random: Random): Book {
     const sheets = Array.from({ length: 1 + below(random, 4) }, (_, at) => randomSheet(random, at));
     // The sheets come in any order: their fields say where their tabs stand.
     sheets.sort(() => random() - 0.5);
@@ -218,7 +240,7 @@ function canonicalLines(runs: SheetContent['rows']): [Span, LineAttrs][] {
 }
 
 // What a workbook loaded from the snapshot walks back to, when every formula text is the engine's own spelling.
-export function canonical(book: BookContent): BookContent {
+export function canonical(book: Book): Book {
     const sheets = book.sheets.toSorted((a, b) =>
         a.fields.order !== b.fields.order ? (a.fields.order < b.fields.order ? -1 : 1) : a.id < b.id ? -1 : 1,
     );
@@ -235,7 +257,7 @@ export function canonical(book: BookContent): BookContent {
 }
 
 // The same document said another way: the sheets, the records and the listed looks in reverse.
-export function reversed(book: BookContent): BookContent {
+export function reversed(book: Book): Book {
     return {
         ...book,
         sheets: book.sheets.toReversed().map((sheet) => {

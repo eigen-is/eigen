@@ -184,7 +184,13 @@
                 // The root sets no `paths`, so this override's are the only ones.
                 "paths": {
                   "@workspace/formula/text": {
-                    "allowImportNames": ["MAX_STORED_LENGTH", "GRID_ROWS", "GRID_COLUMNS", "ERROR_LITERALS"],
+                    "allowImportNames": [
+                      "MAX_STORED_LENGTH",
+                      "GRID_ROWS",
+                      "GRID_COLUMNS",
+                      "ERROR_LITERALS",
+                      "LAST_SERIAL"
+                    ],
                     "message": "lib imports only the stored-format constants from the engine's text entry."
                   }
                 },

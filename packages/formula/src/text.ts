@@ -25,3 +25,4 @@ export type { FormulaNode } from './text/tree';
 export { NodeKind, RefFlag, RefKind, SheetKind } from './text/tree';
 export { storedText, typedText } from './text/typed';
 export { intersect, isLegacy, parseXlsx, xlsxTree } from './text/xlsx';
+export { LAST_SERIAL } from './values/dates';

@@ -4,10 +4,10 @@
 // charts) are ported from it.
 
 import { describe, expect, test } from 'bun:test';
-import type { LineEdit } from '@workspace/formula/text';
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { DataValidationRule, SingleRange } from '@workspace/lib/sheets';
-import type { Rect, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
+import type { LinesOp, Rect, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
 import {
     applyRecordOps,
     chartData,
@@ -30,14 +30,14 @@ import {
 
 type Records = SheetContent['records'];
 
-function edited(records: Records, edit: LineEdit, fields: Partial<SheetFields> = {}) {
+function edited(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}) {
     const sheet = sheetOf(records, fields);
     const restore = editLines([sheet], edit);
     return { sheet, content: contentOf(sheet), restore };
 }
 
 // The edit, the inverse edit, then the record ops, on sheets S and T: every record as it was.
-function roundTrips(records: Records, edit: LineEdit, fields: Partial<SheetFields> = {}, onT: Records = {}) {
+function roundTrips(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}, onT: Records = {}) {
     const build = () =>
         new Map([
             ['S', sheetOf(records, fields)],
@@ -103,7 +103,7 @@ describe('a filter and its columns', () => {
             },
         },
     });
-    const cases: [string, LineEdit, Rect | null, NonNullable<Records['filterColumn']>][] = [
+    const cases: [string, LinesOp, Rect | null, NonNullable<Records['filterColumn']>][] = [
         [
             'a row insert above the filter moves it and the rows its columns hide',
             rowsAt(true, 0),
@@ -201,7 +201,7 @@ describe('a filter and its columns', () => {
 });
 
 describe('a comment', () => {
-    const cases: [string, LineEdit, { row: number; column: number } | undefined][] = [
+    const cases: [string, LinesOp, { row: number; column: number } | undefined][] = [
         ['a row insert above moves it down', rowsAt(true, 0, 2), { row: 5, column: 4 }],
         ['a row insert at its row moves it down', rowsAt(true, 3), { row: 4, column: 4 }],
         ['a row insert below leaves it', rowsAt(true, 4), { row: 3, column: 4 }],
@@ -223,7 +223,7 @@ describe('a comment', () => {
 });
 
 describe('the frozen panes', () => {
-    const cases: [string, LineEdit, number | undefined][] = [
+    const cases: [string, LinesOp, number | undefined][] = [
         ['an insert inside the freeze adds its lines', rowsAt(true, 2, 2), 7],
         ['an insert at the first frozen line does too', rowsAt(true, 0), 6],
         ['an insert right after the freeze leaves it', rowsAt(true, 5), 5],
@@ -247,6 +247,17 @@ describe('the frozen panes', () => {
         expect(content.fields.frozenColumns).toBe(1);
         expect(restore).toEqual([{ kind: 'record', type: 'sheet', sheet: 'S', id: 'S', set: { frozenColumns: 3 } }]);
     });
+
+    test('an insert inside a freeze that ends near the grid’s end freezes no line past it', () => {
+        for (const [frozenRows, count] of [
+            [LAST_ROW + 1, 1],
+            [LAST_ROW - 575, 1000],
+        ]) {
+            const { content } = edited({}, rowsAt(true, 0, count), { frozenRows });
+            expect(content.fields.frozenRows).toBe(LAST_ROW + 1);
+            roundTrips({}, rowsAt(true, 0, count), { frozenRows });
+        }
+    });
 });
 
 describe('the ranges of a rule', () => {
@@ -265,7 +276,7 @@ describe('the ranges of a rule', () => {
         },
     });
     const rowsOf = (row: [number, number]): SingleRange => ({ row, column: [0, 1] });
-    const cases: [string, SingleRange[], LineEdit, SingleRange[]][] = [
+    const cases: [string, SingleRange[], LinesOp, SingleRange[]][] = [
         ['an insert inside grows a range', [rowsOf([2, 5])], rowsAt(true, 3, 2), [rowsOf([2, 7])]],
         ['an insert at its first line moves it', [rowsOf([2, 5])], rowsAt(true, 2, 2), [rowsOf([4, 7])]],
         ['an insert right after leaves it', [rowsOf([2, 5])], rowsAt(true, 6, 2), [rowsOf([2, 5])]],
@@ -341,7 +352,7 @@ describe('the formula of a conditional format', () => {
     const rule = (ranges: SingleRange[], typed: string) => ({
         conditionalFormat: { r: formulaRule(ranges, keyOf(typed, ranges[0].row[0], ranges[0].column[0])) },
     });
-    const at = (records: Records, edit: LineEdit) => edited(records, edit).content.records.conditionalFormat?.r;
+    const at = (records: Records, edit: LinesOp) => edited(records, edit).content.records.conditionalFormat?.r;
     const column = (row: [number, number]): SingleRange => ({ row, column: [0, 0] });
 
     test('rows inserted between two ranges move the second range, and the formula reads as it did', () => {
@@ -458,6 +469,25 @@ describe('charts and images', () => {
         expect(sheet.records('chart').get('c')).toBe(before);
         expect(sheet.records('image').get('i')).toBe(image);
     });
+
+    test('an edit that would take a chart past its size bound refuses and writes nothing', () => {
+        const padded = (length: number) =>
+            chartOf({
+                categories: null,
+                series: Array.from({ length: 32 }, (_, i) => ({
+                    id: `s-${i}`,
+                    name: 'n'.repeat(length),
+                    values: ref('S', [0, 0], [i, i]),
+                })),
+            });
+        let length = 1;
+        while (!exceedsChartSpecBytes(padded(length + 1))) length += 1;
+        const big = padded(length);
+        const sheet = sheetOf({ chart: { c: big } });
+        expect(sheet.planLines(rowsAt(true, 0, 1_000_000))).toBe('key-too-long');
+        expect(sheet.records('chart').get('c')).toBe(big);
+        expect(typeof sheet.planLines(rowsAt(true, 0, 1))).toBe('object');
+    });
 });
 
 describe('what an insert would push off the grid', () => {
@@ -539,7 +569,7 @@ describe('what an insert would push off the grid', () => {
     ];
     for (const [name, records, rows, count, blocks] of cases) {
         test(`${name}: ${blocks ? 'blocks' : 'passes'}`, () => {
-            expect(sheetOf(records).blocksPush(rows, count)).toBe(blocks);
+            expect(sheetOf(records).wouldPush(rows ? rowsAt(true, 0, count) : columnsAt(true, 0, count))).toBe(blocks);
         });
     }
 });

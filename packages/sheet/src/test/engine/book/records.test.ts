@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { DataValidationRule } from '@workspace/lib/sheets';
-import type { Rect } from '@workspace/lib/sheets/ops';
+import type { ChartRecord, FieldsOf, RecordOp, Rect } from '@workspace/lib/sheets/ops';
 import { contentOf, sheetOf } from './records-fixtures';
 
 const RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
@@ -26,12 +27,24 @@ describe('the store', () => {
         });
         const above = sheet.records('comment').get('above');
         const rule = sheet.records('validation').get('v');
-        const plan = sheet.planLines({ insert: true, index: 5, count: 1, sheet: 'S', rows: true });
+        const plan = sheet.planLines({ kind: 'lines', insert: true, index: 5, count: 1, sheet: 'S', rows: true });
         if (typeof plan === 'string') throw new Error(plan);
         plan.commit();
         expect(sheet.records('comment').get('above')).toBe(above);
         expect(sheet.records('validation').get('v')).toBe(rule);
         expect(sheet.records('comment').get('below')).toEqual({ row: 10, column: 1 });
+    });
+
+    test('the weight is the most records of one type, as they are now', () => {
+        const sheet = sheetOf({ comment: { a: { row: 1, column: 1 }, b: { row: 2, column: 1 } } });
+        expect(sheet.weight()).toEqual({ records: 2 });
+        sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'm', set: { rect: [0, 0, 1, 1] }, whole: 1 });
+        sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'c', set: { row: 3, column: 1 }, whole: 1 });
+        expect(sheet.weight()).toEqual({ records: 3 });
+        sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'a' });
+        sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'b' });
+        expect(sheet.weight()).toEqual({ records: 1 });
+        expect(sheetOf().weight()).toEqual({ records: 0 });
     });
 });
 
@@ -71,7 +84,7 @@ describe('merges are read through an index', () => {
         expect(merges.merge(11, 9)).toEqual([10, 9, 11, 9]);
         merges.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'a' });
         expect(merges.merge(0, 0)).toBeUndefined();
-        const plan = merges.planLines({ insert: true, index: 0, count: 100, sheet: 'S', rows: true });
+        const plan = merges.planLines({ kind: 'lines', insert: true, index: 0, count: 100, sheet: 'S', rows: true });
         if (typeof plan === 'string') throw new Error(plan);
         plan.commit();
         expect(merges.merge(5, 2)).toBeUndefined();
@@ -157,6 +170,25 @@ describe('record writes and what their inverse needs', () => {
         expect(
             sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'a', set: { rect: [0, 0, 2, 2] }, whole: 1 }),
         ).toEqual([{ kind: 'record', type: 'merge', sheet: 'S', id: 'a', set: { rect: [0, 0, 1, 1] }, whole: 1 }]);
+    });
+
+    test('a chart change whose merged chart passes the byte bound is refused and writes nothing', () => {
+        const parts = newChartSpecParts(sampleChartSpec('column'));
+        const sheet = sheetOf({ chart: { c: { index: 'a0', x: 0, y: 0, width: 1, height: 1, ...parts } } });
+        const padded = (part: string) => `${part.slice(0, -1)}${' '.repeat(40_000)}${part.slice(-1)}`;
+        const change = (set: FieldsOf<ChartRecord>): RecordOp => ({
+            kind: 'record',
+            sheet: 'S',
+            type: 'chart',
+            id: 'c',
+            set,
+        });
+        expect(sheet.write(change({ specChart: padded(parts.specChart) }))).toEqual([
+            change({ specChart: parts.specChart }),
+        ]);
+        const once = sheet.records('chart').get('c');
+        expect(sheet.write(change({ specTitle: padded(parts.specTitle) }))).toBe('key-too-long');
+        expect(sheet.records('chart').get('c')).toBe(once);
     });
 
     test('a new filter takes the place of the live one and its columns, which its inverse brings back first', () => {

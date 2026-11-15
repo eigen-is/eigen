@@ -26,28 +26,29 @@ export type CellAttrs = RunStyle & {
     bdd?: BorderSide;
 };
 export type CellAttrKey = keyof CellAttrs;
-// A writer that clears a whole look names every key, since a word for "the rest" would mean another set of keys on a
-// build that knows one key more.
-export const LOOK_KEYS = [
-    'bl',
-    'it',
-    'ff',
-    'fs',
-    'fc',
-    'cl',
-    'un',
-    'fa',
-    'ht',
-    'vt',
-    'tb',
-    'bg',
-    'rt',
-    'bdt',
-    'bdb',
-    'bdl',
-    'bdr',
-    'bdd',
-] as const satisfies readonly CellAttrKey[];
+// Every key of a look once, held whole by the mapped type, in the order a canonical look lists them. A writer that
+// clears a whole look names every key, since a word for "the rest" would mean more keys on a build that knows one more.
+const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
+    bl: 'bl',
+    it: 'it',
+    ff: 'ff',
+    fs: 'fs',
+    fc: 'fc',
+    cl: 'cl',
+    un: 'un',
+    fa: 'fa',
+    ht: 'ht',
+    vt: 'vt',
+    tb: 'tb',
+    bg: 'bg',
+    rt: 'rt',
+    bdt: 'bdt',
+    bdb: 'bdb',
+    bdl: 'bdl',
+    bdr: 'bdr',
+    bdd: 'bdd',
+};
+export const LOOK_KEYS: readonly CellAttrKey[] = Object.values(LOOK_KEY);
 // The snapshot's cell and the cell of a `sheet` op: every formula carries its value here. `spill` stands only on a
 // value with no `f`.
 export type CellRecord = CellContent & { spill?: 1 };
@@ -94,9 +95,8 @@ export type Records = {
 export type RecordType = keyof Records;
 export type LineAttrs = { size?: number; custom?: 1; hidden?: 1 };
 
-// A sheet whole, as a `sheet` op adds it and the snapshot holds it. `looks` are in order of first use, walking bands
-// then runs, with the plain look as index 0 and unlisted. `bands` is flat and ascending: first column, n, then n pairs
-// of start row and look index.
+// A sheet whole, as a `sheet` op adds it. `looks` stand in order of first use, bands then runs, the plain look 0 and
+// unlisted; `bands` is flat and ascending: first column, n, then n pairs of start row and look index.
 export type SheetContent = {
     id: string;
     fields: SheetFields;

@@ -1,6 +1,8 @@
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { Rect } from '@workspace/lib/sheets/ops';
+import type { LookSpan } from '../../../engine/book/bands';
 import { Bands } from '../../../engine/book/bands';
+import { linesOp, moveOp } from './book-fixtures';
 import { LooksGrid } from './looks-grid';
 
 const LAST_ROW = GRID_ROWS - 1;
@@ -41,14 +43,19 @@ export function rawBands(bands: Bands): number[] {
     return flat;
 }
 
+// The spans a write, a delete or a move handed back, written back as the inverse ops of an applier would.
+export function writeBack(bands: Bands, spans: readonly LookSpan[]): void {
+    for (const { r0, c0, r1, c1, look } of spans) bands.write([r0, c0, r1, c1], () => look);
+}
+
 function same(a: readonly number[], b: readonly number[]): boolean {
     return a.length === b.length && a.every((n, i) => n === b[i]);
 }
 
 // Random ops on two sheets, each against its plain grid. After every op the bands are the grid's bands entry for
 // entry and read the same in every cell; `wouldPush` answers as the grid does; and every third op is undone by its
-// inverse (capture before, restore after; a delete for an insert; an insert and a restore for a delete), which must
-// give the arrays back. Throws on the first difference.
+// inverse (what a write or a move covered written back; a delete for an insert; an insert and a write back for a
+// delete), which must give the arrays back. Throws on the first difference.
 export function fuzzBands(seed: number, steps: number): FuzzCounts {
     let state = seed;
     const rnd = (n: number): number => {
@@ -57,7 +64,7 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
     };
-    const sheets = [0, 1].map(() => ({ bands: new Bands(), grid: new LooksGrid() }));
+    const sheets = [0, 1].map(() => ({ bands: new Bands([], []), grid: new LooksGrid() }));
     const counts: FuzzCounts = { ops: {}, undone: 0, refused: 0, mostBands: 0, mostRuns: 0 };
 
     // A real line, or the grid's end: near a line where the looks change, and now and then anywhere.
@@ -91,32 +98,29 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
             const index = Math.min(point(a.grid, rows), total - 1);
             const count = Math.min(total - index, rnd(4) === 0 ? 1 + rnd(total) : 1 + rnd(3));
             const like = [index - 1, index, -1][rnd(3)];
-            const pushes = a.bands.wouldPush(rows, count);
+            const op = linesOp(rows, true, index, count, like);
+            const pushes = a.bands.wouldPush(op);
             if (pushes !== a.grid.wouldPush(rows, count)) throw new Error(`${where}: wouldPush(${count}) is ${pushes}`);
             if (pushes) {
                 counts.refused += 1;
                 a.grid.tidy();
                 continue;
             }
-            if (rows) a.bands.insertRows(index, count, like);
-            else a.bands.insertColumns(index, count, like);
+            if (a.bands.lines(op).length > 0) throw new Error(`${where}: an insert removed spans`);
             a.grid.insert(rows, index, count, like);
-            undo = () => (rows ? a.bands.deleteRows(index, count) : a.bands.deleteColumns(index, count));
+            undo = () => a.bands.lines(linesOp(rows, false, index, count));
         } else if (kind === 'deleteRows' || kind === 'deleteColumns') {
             const rows = kind === 'deleteRows';
             const [index, far] = span(a.grid, rows);
             const count = rnd(3) === 0 ? far - index + 1 : Math.min(far - index + 1, 1 + rnd(3));
-            const lost = a.bands.capture(
-                rows ? [index, 0, index + count - 1, LAST_COLUMN] : [0, index, LAST_ROW, index + count - 1],
-            );
-            if (rows) a.bands.deleteRows(index, count);
-            else a.bands.deleteColumns(index, count);
+            const lost = a.bands.lines(linesOp(rows, false, index, count));
             a.grid.delete(rows, index, count);
-            if (a.bands.wouldPush(rows, count)) throw new Error(`${where}: the inverse of a delete would be refused`);
+            if (a.bands.wouldPush(linesOp(rows, true, index, count))) {
+                throw new Error(`${where}: the inverse of a delete would be refused`);
+            }
             undo = () => {
-                if (rows) a.bands.insertRows(index, count, -1);
-                else a.bands.insertColumns(index, count, -1);
-                a.bands.restore(lost);
+                a.bands.lines(linesOp(rows, true, index, count));
+                writeBack(a.bands, lost);
             };
         } else if (kind === 'move' || kind === 'moveAcross') {
             const b = kind === 'move' ? a : sheets[a === sheets[0] ? 1 : 0];
@@ -125,16 +129,16 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
             const rect: Rect = [top, left, bottom, right];
             const toRow = Math.min(point(b.grid, true), LAST_ROW - (bottom - top));
             const toColumn = Math.min(point(b.grid, false), LAST_COLUMN - (right - left));
-            const kept = a.bands.capture(rect);
-            const covered = b.bands.capture([toRow, toColumn, toRow + bottom - top, toColumn + right - left]);
+            const target: Rect = [toRow, toColumn, toRow + bottom - top, toColumn + right - left];
+            const wanted = [...b.bands.spans(target)];
+            const covered = b.bands.move(moveOp(rect, toRow, toColumn), a.bands);
+            if (JSON.stringify(covered) !== JSON.stringify(wanted)) throw new Error(`${where}: covered`);
             const source = a.grid.clone();
-            a.bands.format(rect, () => 0);
-            b.bands.restore(kept, toRow - top, toColumn - left);
             a.grid.format(rect, () => 0);
             b.grid.paste(source, rect, toRow, toColumn);
             undo = () => {
-                b.bands.restore(covered);
-                a.bands.restore(kept);
+                a.bands.move(moveOp(target, top, left), b.bands);
+                writeBack(b.bands, covered);
             };
         } else {
             const [top, bottom] = kind === 'column' || kind === 'columns' ? [0, LAST_ROW] : span(a.grid, true);
@@ -153,17 +157,16 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
                     : kind === 'clear'
                       ? () => 0
                       : (look: number) => (look + add) % 5;
-            const spans = a.bands.capture(rect);
+            const spans = a.bands.write(rect, to);
             let cells = 0;
             for (const { r0, r1, c0, c1, look } of spans) {
                 cells += (r1 - r0 + 1) * (c1 - c0 + 1);
-                if (look !== a.grid.look(r0, c0) || look !== a.grid.look(r1, c1)) throw new Error(`${where}: capture`);
+                if (look !== a.grid.look(r0, c0) || look !== a.grid.look(r1, c1)) throw new Error(`${where}: replaced`);
             }
             if (cells !== (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1))
-                throw new Error(`${where}: capture's cells`);
-            a.bands.format(rect, to);
+                throw new Error(`${where}: replaced cells`);
             a.grid.format(rect, to);
-            undo = () => a.bands.restore(spans);
+            undo = () => writeBack(a.bands, spans);
         }
 
         for (const { bands, grid } of sheets) {
