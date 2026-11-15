@@ -115,6 +115,25 @@ export class SheetRecords {
         return this.stored[type];
     }
 
+    // The records as a snapshot holds them: by type and by id in order, a type with no record left out.
+    public content(): SheetContent['records'] {
+        const listed = <R>(records: ReadonlyMap<string, R>) =>
+            Object.fromEntries([...records].sort(([a], [b]) => (a < b ? -1 : 1)));
+        const { merge, filter, filterColumn, comment, conditionalFormat, validation, image, chart } = this.stored;
+        const content: SheetContent['records'] = {
+            merge: listed(merge),
+            filter: listed(filter),
+            filterColumn: listed(filterColumn),
+            comment: listed(comment),
+            conditionalFormat: listed(conditionalFormat),
+            validation: listed(validation),
+            image: listed(image),
+            chart: listed(chart),
+        } satisfies Required<SheetContent['records']>;
+        for (const type of KINDS) if (this.stored[type].size === 0) delete content[type];
+        return content;
+    }
+
     public merge(row: number, column: number): Rect | undefined {
         for (const rect of this.mergeBands.get(row >> BAND_SHIFT)?.values() ?? []) {
             if (row >= rect[0] && row <= rect[2] && column >= rect[1] && column <= rect[3]) return rect;
