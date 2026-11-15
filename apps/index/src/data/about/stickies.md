@@ -3,8 +3,6 @@ title: Stickies
 description: Kanban boards you share with your team, with a comment thread on every card, on your own server.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
 eigen|stickies⟩ is the [kanban board](/support/stickies/get-started) in Eigen. Columns run left to right, each holds cards, and every card has a title, a description, a color and its own comment thread.
 
 ::: video src="/data/about/media/stickies-hero" caption="Saar drags the wristband print job into doing, and undo puts it back."

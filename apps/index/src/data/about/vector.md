@@ -3,8 +3,6 @@ title: Vector
 description: A whiteboard for drawings and diagrams, with arrows that stay attached and a hand-drawn look, on your own server.
 ---
 
-<!-- DRAFT: the owner rewrites this -->
-
 eigen|vector⟩ is the [drawing app](/support/vector/get-started) in Eigen. It is a whiteboard on an infinite canvas: boxes, arrows, freehand lines, text and images, with no page edge to bump into. It is heavily inspired by [Excalidraw](https://excalidraw.com/), but not a fork.
 
 ::: video src="/data/about/media/vector-hero" caption="The main stage moved, and the power line and the crowd flow follow it."
