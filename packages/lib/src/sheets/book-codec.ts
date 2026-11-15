@@ -15,9 +15,8 @@ const FORMAT = 'eigensheets/3';
 // value was computed by the writer, as a fold's finished pass does; an importer writes false.
 export type BookContent = { g: number; now: number; seed: number; computed: boolean; sheets: SheetContent[] };
 
-// A column's cells on consecutive rows from `row`. A cell that is a value alone stands bare, the most common cell; a
-// formula is `[index]`, `[index, value]` or, with an error value, `[index, value, 1]`; any other cell keeps its record's
-// keys, with `f` an index.
+// A column's cells on consecutive rows from `row`: a value alone stands bare, a formula is `[index]`, `[index, value]`
+// or, with an error value, `[index, value, 1]`, and any other cell is its record with `f` an index.
 type StoredRun = [column: number, row: number, ...cells: unknown[]];
 
 export function encodeBook(book: BookContent): string {

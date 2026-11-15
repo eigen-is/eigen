@@ -71,7 +71,7 @@ type Table<T> = {
     readonly of?: T;
 };
 
-// A batch of ops from its JSON text, when the text parses, fits the batch budget and every op in it is valid, else null.
+// A batch of ops from its JSON text when the text parses, fits the batch budget and every op in it is valid, else null.
 // The budget is read before any op, so a text past it costs no more than its parse and a pass over its sheet adds.
 export function readBatch(text: string): Batch | null {
     let value: unknown;

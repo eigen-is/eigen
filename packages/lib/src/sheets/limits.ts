@@ -1,31 +1,29 @@
 // The limits of a workbook and of what enters one: how many sheets, value slots and style runs a workbook may hold, how
 // many records and rich-text runs a sheet's parts may hold, and how long an id, an order key, a text and a batch of ops
 // may be. The op validators check the bounds on what a peer or a file wrote, and every door that changes a workbook,
-// such as the importer, the loader and the applier, weighs the result with `fits`, so every reader refuses the same edit.
+// such as the importer, the loader and the applier, weighs the result with `fits`, so every reader refuses one edit.
 
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import type { RefusalKey } from './refusal';
 
-// RULED by the owner. Slots count each column's length, never its capacity.
+// Slots count each column's length, never its capacity.
 export const MAX_VALUE_SLOTS = 4_000_000;
-// RULED by the owner. A band weighs BAND_WEIGHT runs: its object and its entry.
+// A band weighs BAND_WEIGHT runs: its object and its entry.
 export const MAX_STYLE_RUNS = 4_000_000;
 export const BAND_WEIGHT = 32;
 
-// Settled.
 export const MAX_ID_LENGTH = 64;
 export const MAX_ORDER_KEY = 64;
 
-// RULED by the owner: a batch's JSON text in UTF-16 code units, a batch that adds a sheet left out since a sheet's add has
-// bounds of its own (`readBatch` holds the rule); a text a cell or a field holds; a short text such as a color, a number
-// format or a font name.
+// A batch's JSON text in UTF-16 code units, less its sheet adds, which `fits` bounds; a text a cell or a field holds; a
+// short text such as a color, a number format or a font name.
 export const MAX_BATCH_JSON = 4 * 1024 * 1024;
 export const MAX_TEXT_LENGTH = MAX_STORED_LENGTH;
 export const MAX_SHORT_TEXT = 256;
 
-// PROVISIONAL, the owner hears the number: records of one type on one sheet.
+// Records of one type on one sheet.
 export const MAX_RECORDS_PER_TYPE = 100_000;
-// PROVISIONAL, the owner hears the number: rich-text runs in one cell, which `fits` does not weigh.
+// Rich-text runs in one cell, which `fits` does not weigh.
 export const MAX_RUNS_PER_CELL = 1_000;
 export const MAX_SHEETS = 1_000;
 
