@@ -35,8 +35,6 @@ export class Evaluator {
     public calls = 0;
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
-    // The clock of the last batch of edits: its author's date and time as a serial.
-    public now = 0;
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
@@ -141,10 +139,6 @@ export class Evaluator {
             default:
                 return value;
         }
-    }
-
-    public draw(): number {
-        return this.recalc.draw();
     }
 
     // The cell a formula is in, as a reference.

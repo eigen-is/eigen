@@ -40,7 +40,8 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         const value = held[at];
         if (param.prepare === Prepare.Ambient) {
             if (param.read === Read.Engine) args[p] = Book.aim(frame.book(), entry, held, count);
-            else args[p] = param.read === Read.Room ? ctx.room : param.read === Read.Now ? ctx.now : ctx.draw();
+            else if (param.read === Read.Room) args[p] = ctx.room;
+            else args[p] = param.read === Read.Now ? ctx.recalc.now : ctx.recalc.draw();
         } else if (param.prepare !== Prepare.Walked) args[p] = param.rest ? held.slice(at, count) : value;
         else if (family !== null) {
             // Most often the one argument is one range: its cells are computed and looked at in one go.

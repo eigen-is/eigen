@@ -88,7 +88,9 @@ export class Recalc {
     private readonly drew: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
-    // What the draws of the last batch of edits are made of, beside the cell that draws.
+    // The clock of the last batch of edits: its author's date and time as a serial, and what its draws are made
+    // of beside the cell that draws.
+    public now: number;
     private seed: number;
     // Whether the clock formulas were flagged since the clock was last set.
     private stamped = true;
@@ -98,7 +100,7 @@ export class Recalc {
         this.functions = functions;
         this.facts = workbook.shapes.facts;
         this.evaluator = new Evaluator(workbook, functions, this);
-        this.evaluator.now = now;
+        this.now = now;
         this.seed = seed;
         // A formula that came without a value was never computed, which the ones that came with a value have to hear.
         for (let s = 0; s < workbook.sheets.length; s += 1) {
@@ -114,7 +116,7 @@ export class Recalc {
 
     // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
     public setClock(now: number, seed: number): void {
-        this.evaluator.now = now;
+        this.now = now;
         this.seed = seed;
         this.stamped = false;
     }
