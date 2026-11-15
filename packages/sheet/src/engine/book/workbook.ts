@@ -48,7 +48,8 @@ export class Workbook {
     private swept = 0;
 
     // Loads a snapshot. The limits are weighed on the bands as rebuilt and on the cells as listed, before the engine
-    // allocates a column: a document over one throws its refusal and holds nothing.
+    // allocates a column: a document over one throws its refusal and holds nothing. A cell's `spill` mark is dropped,
+    // as a band said twice is, so the snapshot this walks back to loads to itself.
     public constructor({ g, now, seed, sheets }: Readonly<Content>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const bands = ordered.map(

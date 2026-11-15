@@ -62,6 +62,12 @@ describe('engine/book/workbook — a load and the walk back', () => {
         expect(book.engine.slots()).toBe(12);
     });
 
+    test('a cell’s spill mark loads and walks back dropped', () => {
+        const cells: Placed<CellRecord>[] = [[0, 0, { v: 1, spill: 1 }]];
+        expect(isSheetContent(sheetOf('a', { cells }))).toBe(true);
+        expect(new Workbook(bookOf(sheetOf('a', { cells }))).content().sheets[0].cells).toEqual([[0, 0, { v: 1 }]]);
+    });
+
     test('a formula walks back in the spelling the engine keeps', () => {
         const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { v: 3, f: '=sum(RC[1],1.0)' }]] })));
         expect(book.content().sheets[0].cells).toEqual([[0, 0, { v: 3, f: '=SUM(RC[1],1)' }]]);
