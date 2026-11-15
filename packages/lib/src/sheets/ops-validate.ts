@@ -321,18 +321,22 @@ function lineSpan(run: unknown): unknown {
     return Array.isArray(run) && run.length === 2 && isOf(run[1], LINE) ? run[0] : undefined;
 }
 
+// Merges share no cell: the applier refuses a merge over another, so no edit makes a sheet where two do.
 function isSheetRecords(value: unknown): boolean {
     if (!isRecord(value)) return false;
+    const merges: (readonly number[])[] = [];
     for (const type in value) {
         const records = value[type];
         if (type === 'sheet' || !Object.hasOwn(RECORD_KINDS, type) || !isRecord(records)) return false;
         let count = 0;
         for (const id in records) {
             count += 1;
-            if (count > MAX_RECORDS_PER_TYPE || !isId(id) || !RECORD_KINDS[type].whole(records[id])) return false;
+            const record = records[id];
+            if (count > MAX_RECORDS_PER_TYPE || !isId(id) || !RECORD_KINDS[type].whole(record)) return false;
+            if (type === 'merge' && isRecord(record) && isRect(record.rect)) merges.push(record.rect);
         }
     }
-    return true;
+    return disjoint(merges);
 }
 
 function table<T>(fields: Fields<T>): Table<T> {
