@@ -12,6 +12,24 @@ describe('LandingBlocks', () => {
         expect(html).toContain('Built for data sovereignty');
     });
 
+    test('tags each block with the protocols and formats behind it', () => {
+        const html = renderToStaticMarkup(<LandingBlocks showInstall={false} />);
+        const tags = Array.from(html.matchAll(/data-slot="badge"[^>]*>([^<]+)</g), ([, tag]) => tag);
+        expect(tags).toEqual([
+            'IMAP',
+            'SMTP',
+            'CalDAV',
+            'CardDAV',
+            'WebDAV',
+            '.docx',
+            '.xlsx',
+            '.pptx',
+            '.eml',
+            '.vcf',
+            '.ics',
+        ]);
+    });
+
     test('shows the install line only when the setting is on', () => {
         expect(renderToStaticMarkup(<LandingBlocks showInstall={false} />)).not.toContain('curl');
         const on = renderToStaticMarkup(<LandingBlocks showInstall />);

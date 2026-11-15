@@ -1,6 +1,6 @@
 // The table of contents in the left gutter of a reading page, such as "On this page" beside an article or "Versions"
-// beside the changelog. It sticks at the top of the page's padding, so it does not move while the page scrolls, and
-// marks the entry whose heading last passed the top third of the screen. It draws nothing for fewer than two entries.
+// beside the changelog. It marks the entry whose heading last passed the top third of the screen, scrolls within
+// itself when the gutter is too short for it, and draws nothing for fewer than two entries.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
@@ -39,7 +39,7 @@ export function ArticleToc({ toc, label = 'On this page' }: ArticleTocProps) {
     if (entries.length < 2) return null;
 
     return (
-        <nav className="site-panel sticky top-12 max-h-[calc(100dvh-8rem)] overflow-y-auto text-sm leading-snug [scrollbar-width:none]">
+        <nav className="site-panel overflow-y-auto text-sm leading-snug [scrollbar-width:none]">
             <p className="eigen-section-label mb-3 h-5 leading-5">{label}</p>
             <ul>
                 {entries.map((entry) => (

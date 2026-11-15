@@ -30,7 +30,7 @@ async function renderPage(previous?: ArticleMeta, next?: ArticleMeta, slug = 'ma
                     <AboutPage
                         app={app}
                         page={aboutMeta(app.slug)}
-                        body={{ html: '<p>Body</p><p>[BLOCK:formats]</p>', mediaGrids: [] }}
+                        body={{ html: '<p>Body</p><p>[BLOCK:app-principles]</p>', mediaGrids: [] }}
                         previous={previous}
                         next={next}
                     />
@@ -52,14 +52,26 @@ describe('AboutPage', () => {
         expect(await renderPage(undefined, aboutMeta('docs'))).toContain('href="/about/docs"');
     });
 
-    test('an app that opens and saves open formats shows them in a panel, with the article that explains it', async () => {
-        const html = await renderPage(undefined, undefined, 'sheets');
-        expect(html).toContain('Open, and yours to take');
-        expect(html).toContain('>.xlsx</span>');
-        expect(html).toContain('href="/support/sheets/import-excel"');
+    test('an app page shows its principles in the gutter, and again at the end of the body for narrow screens', async () => {
+        const html = await renderPage();
+        const [gutter, column] = html.split('site-reading-column');
+        for (const part of [gutter, column]) {
+            expect(part.match(/Use your favorite apps/g)?.length).toBe(1);
+            expect(part.match(/Built for data sovereignty/g)?.length).toBe(1);
+            expect(part).not.toContain('Office compatible');
+            expect(part).toContain('>IMAP</span>');
+            expect(part).toContain('href="/support/mail/download-an-email"');
+        }
     });
 
-    test('an app with nothing to take out shows no such panel', async () => {
-        expect(await renderPage(undefined, undefined, 'chat')).not.toContain('Open, and yours to take');
+    test('an app with no principles shows no boxes', async () => {
+        const html = await renderPage(undefined, undefined, 'chat');
+        expect(html).not.toContain('Use your favorite apps');
+        expect(html).not.toContain('Built for data sovereignty');
+        expect(html).not.toContain('data-slot="badge"');
+    });
+
+    test('the body has no formats panel', async () => {
+        expect(await renderPage(undefined, undefined, 'sheets')).not.toContain('Open, and yours to take');
     });
 });
