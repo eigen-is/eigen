@@ -15,8 +15,8 @@ export const BAND_WEIGHT = 32;
 export const MAX_ID_LENGTH = 64;
 export const MAX_ORDER_KEY = 64;
 
-// A batch's JSON text in UTF-16 code units, less its sheet adds, which `fits` bounds; a text a cell or a field holds; a
-// short text such as a color, a number format or a font name.
+// A batch as JSON writes it, in UTF-16 code units, less the content of its sheet adds, which `fits` bounds; a text a
+// cell or a field holds; a short text such as a color, a number format or a font name.
 export const MAX_BATCH_JSON = 4 * 1024 * 1024;
 export const MAX_TEXT_LENGTH = MAX_STORED_LENGTH;
 export const MAX_SHORT_TEXT = 256;
