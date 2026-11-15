@@ -43,6 +43,7 @@ import type {
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
+import { MAX_SHEET_NAME_LENGTH } from '@workspace/lib/sheets/sheet-name';
 import type { Workbook } from '../../../engine/book/workbook';
 import { mapChartRefs } from '../../../engine/chart-data';
 import type { BookContent } from './book-fixtures';
@@ -147,7 +148,10 @@ export function expectReads(book: Workbook, model: Model): void {
             cells: sheet.cells.map(([row, column, cell]): Placed<CellRecord> => [row, column, held(cell)]),
         })),
     };
-    expect(read).toEqual(contentOfModel(model));
+    const expected = contentOfModel(model);
+    expect(read).toEqual(expected);
+    // The engine reads a sheet by its place among the tabs, which the content does not show.
+    expect(expected.sheets.map((_, place) => book.engine.sheetAt(place))).toEqual(expected.sheets.map(({ id }) => id));
 }
 
 function sheetOf(model: Model, content: SheetContent): ModelSheet {
@@ -536,11 +540,12 @@ function applyLines(model: Model, op: LinesOp): RefusalKey | null {
     lines.clear();
     for (const [line, attrs] of keys) if (lineAfter(op, line) >= 0) lines.set(lineAfter(op, line), attrs);
 
-    // An insert before the last frozen line freezes the new lines too; a delete takes the frozen lines it deletes.
+    // An insert before the last frozen line freezes the new lines too, up to the grid's end; a delete takes the frozen
+    // lines it deletes.
     const field = rows ? 'frozenRows' : 'frozenColumns';
     const frozen = sheet.fields[field] ?? 0;
     if (index < frozen) {
-        const after = insert ? frozen + count : frozen - Math.min(count, frozen - index);
+        const after = insert ? Math.min(frozen + count, last + 1) : frozen - Math.min(count, frozen - index);
         sheet.fields = withFields(sheet.fields, { [field]: after || null });
     }
 
@@ -747,16 +752,20 @@ function moveOfRules(model: Model, op: MoveOp, move: Move): RefusalKey | null {
 function applySheet(model: Model, op: SheetOp): RefusalKey | null {
     if ('delete' in op) {
         if (!model.sheets.has(op.delete)) return null;
-        if (model.sheets.size === 1) return 'last-sheet';
+        const others = [...model.sheets.values()].filter((sheet) => sheet.id !== op.delete);
+        if (others.every((sheet) => sheet.fields.hide)) return 'last-sheet';
         model.sheets.delete(op.delete);
         return null;
     }
     // A sheet whose id the workbook holds is skipped alone.
     if (model.sheets.has(op.add.id)) return null;
-    // A name in use takes the first free suffix, from ` (2)`.
+    // A name in use takes the first free suffix, from ` (2)`, with the name cut to make room for it.
     const taken = new Set([...model.sheets.values()].map((sheet) => sheetNameKey(sheet.fields.name)));
     let name = op.add.fields.name;
-    for (let n = 2; taken.has(sheetNameKey(name)); n += 1) name = `${op.add.fields.name} (${n})`;
+    for (let n = 2; taken.has(sheetNameKey(name)); n += 1) {
+        const suffix = ` (${n})`;
+        name = `${op.add.fields.name.slice(0, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
+    }
     const sheet = sheetOf(model, { ...op.add, fields: { ...op.add.fields, name } });
     // A formula typed with the name of a sheet that was not there reads the sheet that now has it: the formulas of
     // the workbook the new sheet, and the new sheet's formulas itself first and then the sheets in tab order.
