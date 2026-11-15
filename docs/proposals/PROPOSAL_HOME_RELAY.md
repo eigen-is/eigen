@@ -135,7 +135,7 @@ Six exported functions become three: `sendToHome` and `sendToUserHomes` become `
 5. Calendar routes open the routed owner's Home directly, as Drive routes do. This one is built.
 6. Copy to another owner's drive, import from it, mail attach from it, save a mail attachment to it and share-on-send stay outside on a named list the lint guards, in `lib/` and in `routes/`.
 7. Every push answers before delivery. No awaited path remains. Check a guest's first page and a team calendar share in the browser when built.
-8. Team quota overrides stay in the team's Home. Measure what an upload costs for a member of many teams before deciding more. The measurement is done.
+8. Team quota overrides stay in the team's Home. Measure what an upload costs for a member of many teams before deciding more. The measurement is done: for a member of 50 teams, a warm metered write cost 1.1 ms instead of 0.11 ms and a 500-write sync 563 ms instead of 60 ms; the difference was one auth-database query per team asking whether the team exists. So `getFromHomes` asks the auth database nothing and takes a 404 on opening a Home as a gone owner ([SCALABILITY.md § Reads across many homes go through getFromHomes](../SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)).
 9. Share reconciliation stays. Only code whose sole job is to cover a lost or late delivery goes.
 10. A team whose calendar is switched off has no calendar: messages to it are dropped and members' entries for it are removed. Switching it on later shows what was stored before; nothing sent while it was off arrives. This one is built.
 11. A queued message whose subject is gone (the handler answers 404) is dropped at once with one log line, never retried, so it cannot hold back the target's other messages.
