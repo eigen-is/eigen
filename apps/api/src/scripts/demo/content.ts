@@ -632,7 +632,7 @@ export const SPONSOR_DECK = {
     ] satisfies CanvasComment[],
 };
 
-// --- Stickies board fixture (authored once, byte-copied in; creator = persona email) ---
+// --- Stickies board fixture (authored once, byte-copied in) ---
 
 export type CardSpec = {
     title: string;
@@ -643,6 +643,7 @@ export type CardSpec = {
     // when the card was made.
     chat: string; // slug, lowercase, no extension
     chatText: string;
+    start?: SeededTime; // left out, a day after the board per place in the list
     chatReplies?: ChatLine[];
     attach?: string[]; // seeded team documents pinned to the card
     cover?: string; // fixture path, uploaded into the board's media/ and named first on the card
@@ -669,8 +670,8 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
         },
         {
             title: 'Order fencing',
-            // TipTap task-list HTML (rendered by NoteCard + the card editor) so this card shows a
-            // checklist with a progress badge. Keep the <li data-checked> shape — NoteCard counts it.
+            // Task-list HTML, so this card shows a checklist with a progress badge, which counts the
+            // <li data-checked> items.
             description:
                 '<ul data-type="taskList">' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Get quotes from two suppliers</p></div></li>' +
@@ -705,6 +706,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'nour',
             chat: 'volunteer-recruit',
             chatText: 'Still about 10 short for the build weekend. Call-out goes out today.',
+            start: { daysAgo: 5, hour: 10, minute: 15 },
             chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.', gap: 30 }],
             assignTo: 'volunteers',
         },
@@ -1438,7 +1440,7 @@ export const SITE_PLAN = {
             title: 'Wind cover footprint',
             author: 'timo',
             text: 'If we tent it, the red line is the room it needs. Ruud wants 3 m clear on every side for the guy lines.',
-            start: { daysAgo: 3, hour: 16, minute: 10 },
+            start: { daysAgo: 2, hour: 15, minute: 20 },
             replies: [
                 {
                     author: 'saar',

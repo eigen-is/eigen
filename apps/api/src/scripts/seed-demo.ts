@@ -758,16 +758,15 @@ async function main(): Promise<void> {
     const boardCards: { chatName: string; createdAt: number; attachments: ChatAttachment[] }[] = [];
     for (const [i, card] of KANBAN.cards.entries()) {
         const cardAuthor = lookup(userByKey, card.creator);
-        const createdAt = boardCreatedAt + (i + 1) * 86_400_000; // a card a day after the board
         const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
-        await postThread(chat, new Date(createdAt), [
+        const startedAt = await postThread(chat, card.start ?? new Date(boardCreatedAt + (i + 1) * 86_400_000), [
             { author: card.creator, text: card.chatText },
             ...(card.chatReplies ?? []),
         ]);
         const covers = card.cover ? await uploadMedia(teamDrive, teamMountId, boardPath, [card.cover], cardAuthor) : [];
         boardCards.push({
             chatName: chat.name,
-            createdAt,
+            createdAt: startedAt.getTime(),
             attachments: [...covers.map((cover) => cover.name), ...(card.attach?.map(teamDocRef) ?? [])],
         });
         if (card.assignTo) {
