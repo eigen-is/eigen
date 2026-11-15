@@ -7,9 +7,11 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { readChartSpec } from '@workspace/lib/charts';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import type { EventData } from '@workspace/lib/types/calendar';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import {
@@ -34,6 +36,7 @@ import {
     BUDGET,
     CHATS,
     DOCS,
+    HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
     PERSONAS,
@@ -43,6 +46,8 @@ import {
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_NAME,
+    TECH_TEAM_MEMBERS,
+    TECH_TEAM_NAME,
     TRYING_EIGEN,
     threadTimes,
     VCARD_FILES,
@@ -197,13 +202,19 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const avatarFiles = readdirSync(join(root, 'server', 'avatars')).filter((f) => f.endsWith('.webp'));
             expect(avatarFiles.length).toBeGreaterThanOrEqual(20);
 
-            // One team: the default team setup made with the org, renamed to the crew, with every member in it.
+            // Two teams: the default team setup made with the org, renamed to the crew, with every member in it, and
+            // the stage and tech crew.
             const teams = query<{ id: string; name: string }>(usersDb, 'SELECT id, name FROM team');
-            expect(teams).toHaveLength(1);
-            const teamId = teams[0].id;
-            expect(teams[0].name).toBe(TEAM_NAME);
+            expect(teams.map((team) => team.name).toSorted()).toEqual([TEAM_NAME, TECH_TEAM_NAME].toSorted());
             const serverConfig = JSON.parse(readFileSync(join(root, 'server', 'config.json'), 'utf8'));
-            expect(serverConfig.defaultTeamId).toBe(teamId);
+            const teamId: string = serverConfig.defaultTeamId;
+            expect(teams.find((team) => team.id === teamId)?.name).toBe(TEAM_NAME);
+            const techTeamId = teams.find((team) => team.name === TECH_TEAM_NAME)?.id;
+            const techMembers = query<{ email: string }>(
+                usersDb,
+                `SELECT u.email AS email FROM team_member t JOIN user u ON u.id = t.user_id WHERE t.team_id = '${techTeamId}'`,
+            ).map((row) => row.email);
+            expect(techMembers.toSorted()).toEqual(TECH_TEAM_MEMBERS.map((key) => `${key}@${MAIL_DOMAIN}`).toSorted());
             const outsideTeam = query<{ n: number }>(
                 usersDb,
                 'SELECT count(*) AS n FROM member m WHERE m.user_id NOT IN (SELECT user_id FROM team_member)',
@@ -849,8 +860,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             }
             expect(imageCount).toBeGreaterThanOrEqual(1);
 
-            // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, while their calendar is
-            // left alone: seeded mail carries no DKIM verdict, the path an unverified sender takes.
+            // An outside sender's iMIP invitation reaches the finance lead's inbox as a card, and, carrying the verdict
+            // our MTA would write, their calendar as a pending invitation linked to its organizer.
             const inviteMail = MAILS.find((mail) => mail.messages.some((message) => message.invite));
             const invite = inviteMail?.messages.find((message) => message.invite)?.invite;
             if (!inviteMail || !invite) throw new Error('no seeded mail carries an invitation');
@@ -861,7 +872,16 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const card = summarizeCalendarInvite(inviteParts[0]);
             expect(card?.method).toBe('REQUEST');
             expect(card?.summary).toBe(invite.title);
-            expect(financeEvents).not.toContain(invite.title);
+            const invitations = query<{ data: string; organizerUserId: string | null }>(
+                financeCalendarDb,
+                `SELECT data, organizerUserId FROM events WHERE title = '${invite.title}'`,
+            );
+            expect(invitations.length).toBe(1);
+            expect(invitations[0].organizerUserId).not.toBeNull();
+            const invitationData: EventData = JSON.parse(invitations[0].data);
+            expect(invitationData.attendees?.find((a) => a.email === `${financeKey}@${MAIL_DOMAIN}`)?.status).toBe(
+                'pending',
+            );
 
             // The generator quote arrives as a real xlsx attachment.
             const quoteMail = MAILS.find((mail) =>
@@ -879,6 +899,60 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // ...and Bram's reply to the culture fund carries the budget it says is attached.
             const budgetParts = parseMail(readMessage(financeHome, 'Re: Grant paperwork')).attachments;
             expect(budgetParts.map((part) => part.filename)).toContain('tuimel budget.xlsx');
+
+            // Saar mailed Hein the site plan: her message sits in her Sent box with the plan's pill, its link carrying
+            // his address, and the plan's ACL lets him read it.
+            const linkMail = MAILS.find((mail) => mail.messages.some((message) => message.attachDocs));
+            if (!linkMail) throw new Error('no seeded mail links a document');
+            const productionHome = join(root, 'home', production[0].id);
+            const linkRow = query<{ mailbox: string }>(
+                join(productionHome, 'eigen.mail', 'mail.db'),
+                `SELECT mailbox FROM emails WHERE subject = '${linkMail.subject}'`,
+            );
+            expect(linkRow.map((row) => row.mailbox)).toEqual([MAILBOX_SENT]);
+            const linkHtml = parseMail(readMessage(productionHome, linkMail.subject)).html ?? '';
+            expect(linkHtml).toContain(`Open ${SITE_PLAN.name} →`);
+            expect(linkHtml).toContain(sitePlanId);
+            expect(linkHtml).toContain(`email=${encodeURIComponent(HEIN_KLARENBEEK.email)}`);
+            const sitePlanAcl = query<{ acl: string | null }>(
+                metadataDb,
+                `SELECT acl FROM paths WHERE id = '${sitePlanId}'`,
+            );
+            const sitePlanEntries: DriveACL[] = JSON.parse(sitePlanAcl[0].acl ?? '[]');
+            expect(sitePlanEntries).toContainEqual({ id: HEIN_KLARENBEEK.email, read: true, write: false });
+
+            // Hein is the one guest: an account with the guest role, in no org, whose home lists the site plan.
+            const guests = query<{ id: string; email: string }>(
+                usersDb,
+                "SELECT id, email FROM user WHERE role = 'guest'",
+            );
+            expect(guests.map((guest) => guest.email)).toEqual([HEIN_KLARENBEEK.email]);
+            const guestMembership = query<{ n: number }>(
+                usersDb,
+                `SELECT count(*) AS n FROM member WHERE user_id = '${guests[0].id}'`,
+            );
+            expect(guestMembership[0].n).toBe(0);
+            const guestShares = query<{ pathId: string }>(
+                join(root, 'guest', guests[0].id, 'mounts', 'shared.db'),
+                'SELECT pathId FROM shared_paths',
+            );
+            expect(guestShares.map((row) => row.pathId)).toEqual([sitePlanId]);
+
+            // Saar's site access notes are shared with the tech team, so a member who is not the tech lead has them.
+            const notesRow = query<{ id: string; acl: string | null }>(
+                join(productionHome, 'mounts', 'default', 'metadata.db'),
+                "SELECT id, acl FROM paths WHERE name = 'site access notes.txt' AND trashedAt IS NULL",
+            );
+            expect(notesRow.length).toBe(1);
+            expect(JSON.parse(notesRow[0].acl ?? '[]')).toEqual([
+                { id: `team_${techTeamId}`, read: true, write: false },
+            ]);
+            const sanne = query<{ id: string }>(usersDb, `SELECT id FROM user WHERE email = 'sanne@${MAIL_DOMAIN}'`);
+            const sanneShares = query<{ pathId: string }>(
+                join(root, 'home', sanne[0].id, 'mounts', 'shared.db'),
+                'SELECT pathId FROM shared_paths',
+            );
+            expect(sanneShares.map((row) => row.pathId)).toContain(notesRow[0].id);
 
             // Not every guest accepted: the replies a team event names are the attendees' statuses.
             const repliedEvents = query<{ title: string; data: string }>(

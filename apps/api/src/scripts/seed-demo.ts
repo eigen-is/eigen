@@ -1,9 +1,8 @@
-// Builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance: a crew of personas in one org and its team, a
-// lived-in team drive with such files as docs, a budget sheet and a stickies board, and their mail, calendars, chats
-// and contacts. It boots the API in this process and acts as the personas through the product's own code, so
-// activity, file history and notifications fill in. The demo reset wipes the data root and runs it again, and a
-// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN, EIGEN_DEMO_ADMIN_PASSWORD and
-// EIGEN_DEMO_PERSONA_PASSWORD may be set.
+// Builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance: a crew of personas in one org and its teams, a
+// lived-in team drive with such files as docs, a budget and a stickies board, their mail, calendars, chats and
+// contacts, and an outside guest. It boots the API in-process and acts as the personas through the product's own
+// code, so activity, history and notifications fill in. The demo reset wipes the data root and reruns it; a completed
+// setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN and the EIGEN_DEMO_*_PASSWORD vars may be set.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -30,6 +29,7 @@ import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { parseIdList, serializeIdList } from '@workspace/lib/vector';
 import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
@@ -63,6 +63,7 @@ import {
     DOCS,
     EVENTS,
     emailFor,
+    HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
     NOTES,
@@ -78,6 +79,8 @@ import {
     TEAM_FOLDERS,
     TEAM_MOUNT_NAME,
     TEAM_NAME,
+    TECH_TEAM_MEMBERS,
+    TECH_TEAM_NAME,
     TRYING_EIGEN,
     threadTimes,
     VCARD_FILES,
@@ -140,7 +143,8 @@ function lookup<V>(map: ReadonlyMap<string, V>, key: string): V {
 }
 
 // A raw message from the MIME composer the app's outbound mail uses, called directly so the seed sets the threading
-// headers (Message-ID, In-Reply-To, References) itself. With html it is multipart/alternative.
+// headers (Message-ID, In-Reply-To, References) itself, and any a receiving MTA would add. With html it is
+// multipart/alternative.
 async function buildRfc822(mail: {
     from: string;
     to: string;
@@ -153,6 +157,7 @@ async function buildRfc822(mail: {
     references?: string[];
     attachments?: { filename: string; contentType: string; content: string | Buffer }[];
     icalEvent?: { method: string; content: string };
+    headers?: Record<string, string>;
 }): Promise<Buffer> {
     return new MailComposer({
         from: mail.from,
@@ -166,6 +171,7 @@ async function buildRfc822(mail: {
         references: mail.references?.length ? mail.references.map((id) => `<${id}>`) : undefined,
         attachments: mail.attachments,
         icalEvent: mail.icalEvent,
+        headers: mail.headers,
     })
         .compile()
         .build();
@@ -257,6 +263,9 @@ async function main(): Promise<void> {
     const { writeXlsx } = await import('../lib/export/sheets/xlsx/to-xlsx');
     const { CHAT_ROOM_DB_CONFIG } = await import('../lib/chat/db-config');
     const { messages } = await import('../lib/chat/schema');
+    const { grantAccessForReferences } = await import('../lib/mail/access-grants');
+    const { createGuestUser } = await import('../lib/auth/guest-auth');
+    const { reconcileShares } = await import('../lib/share');
 
     // The one moment every seeded date counts back from.
     const now = new Date();
@@ -322,7 +331,7 @@ async function main(): Promise<void> {
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');
 
-    // updateTeam needs the headers of a signed-in admin.
+    // The team calls need the headers of a signed-in admin.
     const signIn = await auth.api.signInEmail({
         returnHeaders: true,
         body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
@@ -349,6 +358,17 @@ async function main(): Promise<void> {
         body: { teamId, data: { name: TEAM_NAME, organizationId: orgId } },
         headers: adminHeaders,
     });
+    // A second team, made and filled as the Admin app does. Each add reconciles the member's shares in its hook.
+    const techTeam = await auth.api.createTeam({
+        body: { name: TECH_TEAM_NAME, organizationId: orgId },
+        headers: adminHeaders,
+    });
+    for (const key of TECH_TEAM_MEMBERS) {
+        await auth.api.addTeamMember({
+            body: { teamId: techTeam.id, userId: lookup(userByKey, key).id, organizationId: orgId },
+            headers: adminHeaders,
+        });
+    }
 
     // --- Team avatar: the festival logo, through the same pipeline as the avatar route. ---
     const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
@@ -362,7 +382,7 @@ async function main(): Promise<void> {
 
     // --- Team home: enable the calendar (starts disabled) and add the shared mount, raised above the default quota
     // for the crew's photos. ---
-    const teamHome = await getTeamHome(`team_${teamId}`);
+    const teamHome = await getTeamHome(teamOwnerId(teamId));
     await teamHome.settings.set({ calendar: { enabled: true } });
     const mount = await teamHome.addMount({ name: TEAM_MOUNT_NAME, maxSizeMB: 100 });
     const teamMountId = mount.id;
@@ -864,7 +884,7 @@ async function main(): Promise<void> {
     // A drive-reference to the shared team drive root, for all-hands mails that link the workspace.
     const teamDriveRef: AttachmentReference = {
         type: 'reference',
-        ownerId: `team_${teamId}`,
+        ownerId: teamOwnerId(teamId),
         mountId: teamMountId,
         id: teamRoot.id,
         name: TEAM_MOUNT_NAME,
@@ -890,7 +910,6 @@ async function main(): Promise<void> {
         };
     };
     // An invitation as an outside calendar sends one: the shipped iMIP writer over the event its organizer holds.
-    // Seeded mail carries no DKIM verdict, so delivery leaves the persona's calendar alone and the mail shows the card.
     const inviteIcs = (invite: SeededInvite, organizer: { name: string; email: string }, attendee: User): string => {
         const { start, end } = timedSlot(invite);
         const event: CalendarEvent = {
@@ -935,7 +954,12 @@ async function main(): Promise<void> {
         let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
         return async (
             message: SeededMail['messages'][number],
-            parts: { to: string; html?: string; icalEvent?: { method: string; content: string } },
+            parts: {
+                to: string;
+                html?: string;
+                icalEvent?: { method: string; content: string };
+                headers?: Record<string, string>;
+            },
         ): Promise<Buffer> => {
             const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
             date.setHours(message.hour, 0, 0, 0);
@@ -955,6 +979,7 @@ async function main(): Promise<void> {
                 references: references.length ? references : undefined,
                 attachments: message.attachments?.map(mailAttachment),
                 icalEvent: parts.icalEvent,
+                headers: parts.headers,
             });
             references.push(messageId);
             previous = { id: messageId, from, date, html: reply ?? ownHtml };
@@ -977,11 +1002,29 @@ async function main(): Promise<void> {
                     : externalParty
                       ? `${externalParty.name} <${externalParty.email}>`
                       : recipient.email;
-                const icalEvent =
-                    external && message.invite
-                        ? { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) }
-                        : undefined;
-                const buffer = await nextInThread(message, { to, html: message.html, icalEvent });
+                // An invitation arrives as our MTA hands over a signed one, with its DKIM verdict, so delivery files it
+                // in the persona's calendar as a pending invitation.
+                const invite = external &&
+                    message.invite && {
+                        icalEvent: { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) },
+                        headers: {
+                            'Authentication-Results': `${MAIL_DOMAIN}; dkim=pass header.d=${external.email.split('@')[1]}`,
+                        },
+                    };
+                // The persona's own message links documents as a send does that grants the outside party read access.
+                let html = message.html;
+                if (!external && message.attachDocs) {
+                    if (!externalParty) throw new Error(`'${flow.subject}' links documents to nobody outside`);
+                    const refs = message.attachDocs.map(teamDocRef);
+                    await grantAccessForReferences(
+                        recipient,
+                        refs,
+                        refs.map((ref) => ref.id),
+                        [externalParty.email],
+                    );
+                    html = (html ?? textToHtml(message.text)) + renderAttachmentPills(refs, externalParty.email);
+                }
+                const buffer = await nextInThread(message, { to, html, ...invite });
                 const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
                 // The persona's own replies belong in their Sent box, not their inbox. They move there and are
                 // marked read, as mail you sent is.
@@ -1026,6 +1069,9 @@ async function main(): Promise<void> {
         }
     }
 
+    // --- The one guest: Hein opened Saar's link and signed in, which made his account and read his share into it. ---
+    await reconcileShares(await createGuestUser(HEIN_KLARENBEEK.email));
+
     // --- Contacts: the external ecosystem in a few leads' address books, with their labels and portraits. ---
     for (const contact of CONTACTS) {
         const owner = userForRole(contact.owner);
@@ -1046,7 +1092,7 @@ async function main(): Promise<void> {
         });
     }
 
-    // --- Personal-drive files shared person-to-person (shared-with-me variety). ---
+    // --- Personal-drive files shared with a lead or a team (shared-with-me variety). ---
     for (const share of PERSONAL_SHARES) {
         const owner = userForRole(share.owner);
         const ownerHome = await getHome(owner.id);
@@ -1063,7 +1109,18 @@ async function main(): Promise<void> {
         await ownerHome.drive.updateACLDelta(
             'default',
             file.id,
-            { add: [{ id: emailForRole(share.shareWith), read: true, write: false }] },
+            {
+                add: [
+                    {
+                        id:
+                            share.shareWith === TECH_TEAM_NAME
+                                ? teamOwnerId(techTeam.id)
+                                : emailForRole(share.shareWith),
+                        read: true,
+                        write: false,
+                    },
+                ],
+            },
             undefined,
             undefined,
             owner,

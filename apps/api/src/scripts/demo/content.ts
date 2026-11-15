@@ -127,6 +127,9 @@ export const DEMO_MAIL_DOMAIN = 'tuimel.example';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
+// A second team, for the stage and tech crew. Saar shares her site access notes with it.
+export const TECH_TEAM_NAME = 'stage & tech';
+export const TECH_TEAM_MEMBERS = ['timo', 'sanne', 'tessa'];
 export const TEAM_MOUNT_NAME = 'festival';
 
 // All seeded directory and file names are lowercase. Chat channels live under `chats/`.
@@ -847,6 +850,10 @@ const RUUD_DEKKER: VCardSpec = {
     notes: 'Tarps and tents. Quoted the rain cover for the second stage.',
     photo: 'ruud.jpg',
 };
+
+// The fencing supplier, who writes to Ravi and Saar and sits in Saar's book. Saar shares the site plan with him, so
+// he is the demo's one guest.
+export const HEIN_KLARENBEEK = { name: 'Hein Klarenbeek', email: 'hein@hekwerkverhuur.example' };
 
 export const VCARD_FILES: SeededVCardFile[] = [
     { folder: 'production', name: 'dekzeil & zo.vcf', uploader: 'saar', card: RUUD_DEKKER },
@@ -1582,6 +1589,9 @@ export type SeededMail = {
         // `text` stays as the plain-text fallback (multipart/alternative) when this is set.
         html?: string;
         attachments?: MailAttachment[];
+        // Seeded team documents, linked as pills and shared read-only with the outside party, as a send does when
+        // the sender grants access. Only on a persona's message to an external party.
+        attachDocs?: string[];
         invite?: SeededInvite; // only on a message from an external sender
     }[];
 };
@@ -1818,7 +1828,7 @@ export const MAILS: SeededMail[] = [
         subject: 'Fencing delivery',
         messages: [
             {
-                fromExternal: { name: 'Hein Klarenbeek', email: 'hein@hekwerkverhuur.example' },
+                fromExternal: HEIN_KLARENBEEK,
                 daysAgo: 6,
                 hour: 8,
                 text: 'Hi Ravi,\n\nFencing is loaded and coming Thursday, same as last year. Where do you want the pallets dropped this time?\n\nHein\nHekwerkverhuur Vlierzand',
@@ -1828,6 +1838,26 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 6,
                 hour: 13,
                 text: 'Hi Hein,\n\nDrop them by the north track this year, closer to where we are building. Saar can meet you there.\n\nRavi',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'production',
+        subject: 'Site plan for the fencing drop',
+        messages: [
+            {
+                from: 'saar',
+                daysAgo: 5,
+                hour: 9,
+                text: 'Hi Hein,\n\nRavi tells me the pallets go by the north track this year. I have shared our site plan with you so you can see where the fence line runs. The link is below, it opens in your browser.\n\nI will be at the track from eight on Thursday.\n\nSaar',
+                attachDocs: [SITE_PLAN.name],
+            },
+            {
+                fromExternal: HEIN_KLARENBEEK,
+                daysAgo: 5,
+                hour: 12,
+                text: 'Hi Saar,\n\nThanks, that helps. I see the gate sits on the south side, so we will stack the gate panels apart from the rest. See you Thursday.\n\nHein\nHekwerkverhuur Vlierzand',
             },
         ],
     },
@@ -2210,7 +2240,7 @@ export const CONTACTS: SeededContact[] = [
         owner: 'production',
         firstName: 'Hein',
         lastName: 'Klarenbeek',
-        email: 'hein@hekwerkverhuur.example',
+        email: HEIN_KLARENBEEK.email,
         phone: '+31 6 2010 4432',
         company: 'Hekwerkverhuur Vlierzand',
         jobTitle: 'Deliveries',
@@ -2247,13 +2277,13 @@ export const CONTACTS: SeededContact[] = [
     },
 ];
 
-// --- Personal-drive files shared person-to-person (shared-with-me variety) ---
+// --- Personal-drive files shared with a lead or a team (shared-with-me variety) ---
 
 export type SeededShare = {
     owner: LeadRole;
     name: string; // lowercase filename
     body: string;
-    shareWith: LeadRole;
+    shareWith: LeadRole | typeof TECH_TEAM_NAME; // a lead, or the tech team
 };
 
 export const PERSONAL_SHARES: SeededShare[] = [
@@ -2261,7 +2291,7 @@ export const PERSONAL_SHARES: SeededShare[] = [
         owner: 'production',
         name: 'site access notes.txt',
         body: 'Gate code by text from Griet. Deliveries via the north track. Water point is behind the barn.',
-        shareWith: 'tech',
+        shareWith: TECH_TEAM_NAME,
     },
     {
         owner: 'liaison',
