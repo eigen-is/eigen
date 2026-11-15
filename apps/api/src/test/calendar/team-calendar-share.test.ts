@@ -373,7 +373,10 @@ describe('Regression: Team calendar permission enforcement', () => {
         let sharedRes: Response;
         try {
             sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
-            expect(errors).toHaveBeenCalledWith(`home-relay: calendar:shares from ${owner} failed:`, expect.anything());
+            expect(errors).toHaveBeenCalledWith(
+                `home-relay: calendar:shared-with from ${owner} failed:`,
+                expect.anything(),
+            );
         } finally {
             shares.mockRestore();
             errors.mockRestore();

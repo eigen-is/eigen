@@ -11,7 +11,7 @@ import type { InvitationRequest } from './types';
 export type CalendarQueries = {
     // Null when the home has no calendar, such as a guest's, or a team's while it is off.
     'calendar:calendars': { ask: null; answer: CalendarItem[] | null };
-    'calendar:shares': {
+    'calendar:shared-with': {
         ask: { email: string; teamIds: string[] };
         answer: SharedWithMeCalendar[];
     };
@@ -22,7 +22,7 @@ export type CalendarQueries = {
 // of the home, and its callers ask only the user's own teams.
 export const answerCalendar: Answerers<CalendarQueries> = {
     'calendar:calendars': async (home) => (home.hasCalendar ? home.calendar.getCalendars() : null),
-    'calendar:shares': async (home, ask) =>
+    'calendar:shared-with': async (home, ask) =>
         home.hasCalendar ? home.calendar.getSharedWith(ask.email, ask.teamIds) : [],
     'calendar:pending-invitations': async (home, ask) =>
         home.hasCalendar ? home.calendar.pendingInvitations(ask.attendeeEmail) : [],

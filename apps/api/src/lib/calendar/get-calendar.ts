@@ -109,7 +109,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     );
     const [calendarsOf, sharesOf] = await Promise.all([
         getFromHomes(teamOwners, 'calendar:calendars', null),
-        getFromHomes([...teamOwners, ...otherOwners.filter(homeFolderExists)], 'calendar:shares', {
+        getFromHomes([...teamOwners, ...otherOwners.filter(homeFolderExists)], 'calendar:shared-with', {
             email: user.email,
             teamIds,
         }),

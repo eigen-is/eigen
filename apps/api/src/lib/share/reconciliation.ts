@@ -48,7 +48,7 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             // A guest's home has no calendar, so a pull would scan the owner's calendar for nothing.
             if (isGuest(user)) continue;
             const source = [fromUserId].filter(homeFolderExists);
-            const shares = await getFromHomes(source, 'calendar:shares', { email: user.email, teamIds });
+            const shares = await getFromHomes(source, 'calendar:shared-with', { email: user.email, teamIds });
             for (const result of shares.get(fromUserId) ?? []) {
                 await sendToHome(user.id, {
                     type: 'calendar:share',
