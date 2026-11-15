@@ -148,6 +148,12 @@ class Reader {
         return new Reader(new Engine(sheets, now, seed), this.held);
     }
 
+    public formulas(): number {
+        let count = 0;
+        for (const id of this.sheets()) for (const cell of this.cells(id)) if (cell[3] !== null) count += 1;
+        return count;
+    }
+
     private sheets(): string[] {
         return this.held === null ? [this.engine.sheetAt(0), this.engine.sheetAt(1)] : ['s1'];
     }
@@ -165,7 +171,7 @@ export type ClockLawCounts = {
     // Passes that stopped with the next batch arriving on top.
     stopped: number;
     sheetOps: number;
-    // Each log with a reader that differs, as its number and the reader's name.
+    // Each log with a reader that differs, as its number and the reader's name, or what else went wrong with it.
     differing: string[];
 };
 
@@ -210,7 +216,12 @@ export function runClockLaw(seed: number, count: number, across: boolean): Clock
 
         const capped = new Reader();
         for (const batch of log) if (capped.take(batch, 1 + pick(3))) counts.stopped += 1;
-        while (capped.engine.recalc(2).stopped);
+        // A pass that stops has stored a formula, so one pass per formula and one more end it.
+        let unsettled = true;
+        for (let left = capped.formulas(); unsettled && left >= 0; left -= 1) {
+            unsettled = capped.engine.recalc(2).stopped;
+        }
+        if (unsettled) counts.differing.push(`${trial} capped never settles`);
 
         // Passes in between that ran with a clock no batch has.
         const wrong = new Reader();

@@ -275,8 +275,11 @@ describe('the draws of a cell', () => {
         const stopping = loaded(cells);
         stopping.setClock(46000, 7);
         let passes = 1;
-        while (stopping.recalc(2).stopped) passes += 1;
+        // A pass that stops has stored a formula, so more passes than formulas is a pass that never ends.
+        const most = Object.keys(cells).length;
+        while (passes <= most && stopping.recalc(2).stopped) passes += 1;
         expect(passes).toBeGreaterThan(3);
+        expect(passes).toBeLessThanOrEqual(most);
         expect(values(stopping, ...Object.keys(cells))).toEqual(values(whole, ...Object.keys(cells)));
         expect(valueAt(whole, 'A3')).toBe(nth(1, 7, 'A3'));
     });
