@@ -69,9 +69,11 @@ describe('recalc', () => {
             cell(1, 0, 43, stored('=SUM(Sheet1:Sheet2!A1)', 'A2'));
             cell(2, 0, null, stored('=[1]Sheet1!A1+1', 'A3'));
             cell(3, 0, 0, stored('=A1+A2+A3', 'A4'));
+            cell(4, 0, null, stored('=IFERROR(A3,"caught")', 'A5'));
         });
         engine.recalc(NO_CAP);
-        expect(['A1', 'A2', 'A3', 'A4'].map((label) => valueAt(engine, label))).toEqual([42, 43, REF, REF]);
+        const values = ['A1', 'A2', 'A3', 'A4', 'A5'].map((label) => valueAt(engine, label));
+        expect(values).toEqual([42, 43, REF, REF, 'caught']);
     });
 
     test.each([
