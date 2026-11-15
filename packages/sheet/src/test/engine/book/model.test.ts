@@ -172,4 +172,45 @@ describe('engine/book — the model, rule by rule', () => {
         expect(columns.fields.frozenColumns).toBe(GRID_COLUMNS);
         for (const sheet of [rows, columns]) expect(isSheetContent(JSON.parse(JSON.stringify(sheet)))).toBe(true);
     });
+
+    test('a format restyles the runs of a rich cell in its ranges, key by key', () => {
+        const rich = { s: [{ v: 'red ', fc: '#ff0000' }, { v: 'plain' }] };
+        const cells: SheetContent['cells'] = [
+            [0, 0, rich],
+            [1, 0, rich],
+        ];
+        const [sheet] = sheetsAfter([sheetOf('a', {}, { cells })], {
+            kind: 'format',
+            sheet: 'a',
+            ranges: [[0, 0, 0, 0]],
+            set: { bl: 1 },
+            clear: ['fc'],
+        });
+        expect(sheet.cells).toEqual([
+            [
+                0,
+                0,
+                {
+                    s: [
+                        { v: 'red ', bl: 1 },
+                        { v: 'plain', bl: 1 },
+                    ],
+                },
+            ],
+            [1, 0, rich],
+        ]);
+    });
+
+    test('a move takes the looks of its block along and leaves the block plain', () => {
+        const bold = (rect: [number, number, number, number]): Op => ({
+            kind: 'format',
+            sheet: 'a',
+            ranges: [rect],
+            set: { bl: 1 },
+        });
+        const move: Op = { kind: 'move', sheet: 'a', from: [0, 0, 1, 0], toSheet: 'a', toRow: 5, toColumn: 3 };
+        const [moved] = sheetsAfter([sheetOf('a')], bold([0, 0, 1, 0]), move);
+        const [expected] = sheetsAfter([sheetOf('a')], bold([5, 3, 6, 3]));
+        expect({ looks: moved.looks, bands: moved.bands }).toEqual({ looks: expected.looks, bands: expected.bands });
+    });
 });
