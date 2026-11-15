@@ -6,10 +6,10 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/get-started]
 order: 20
-updated: 2026-06-08
+updated: 2026-11-15
 ---
 
-Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with anyone who has the link, and decide whether they can view it or also make changes.
+Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with everyone on your Eigen server who has the link, and decide whether they can view it or also make changes.
 
 ## Share with specific people
 
