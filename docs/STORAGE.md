@@ -19,7 +19,7 @@ Drive's **Recent files** page lists the paths a user lately opened or was notifi
 | `OrgHome` | `data/org/{orgId}/` | Only its filesystem |
 | `GuestHome` | `data/guest/{userId}/` | Drive, Notifications ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 
-A getter for a part the Home lacks, such as `mail` on a guest's or `notifications` on a team's, throws `ApiError(404)`, so a route that reaches for it answers 404 instead of crashing. Code that may meet any kind of home checks first, through `hasCalendar` or `instanceof TeamHome`. A notice goes through `Home.notify`, which drops it on a home without a notification center. The home relay hands a team's notices to its members instead.
+A getter for a part the Home lacks, such as `mail` on a guest's or `notifications` on a team's, throws `ApiError(404)`, so a route that reaches for it answers 404 instead of crashing. Code that may meet any kind of home checks first, through `hasCalendar` or `instanceof TeamHome`. A team whose calendar is switched off has no calendar: its `hasCalendar` is false, as a guest's is ([CALENDAR.md](CALENDAR.md#sharing-is-pushed-and-team-calendars-are-off-by-default)). A notice goes through `Home.notify`, which drops it on a home without a notification center. The home relay hands a team's notices to its members instead.
 
 A Home serves its own owner. Another owner's data goes through `home-relay.ts` ([SCALABILITY.md](SCALABILITY.md)).
 
@@ -227,7 +227,7 @@ What else reaches the list follows from these two writers, and is accepted:
 
 ## A load asks each owner whether the user may still see the path
 
-`GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, groups them by owner, reads the user's team memberships once, and asks every owner at once through `pullVisiblePaths`, which runs on `pullFromEach` ([SCALABILITY.md § Reads across many homes go through pullFromEach](SCALABILITY.md#reads-across-many-homes-go-through-pullfromeach)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the next 100. It merges, sorts by `lastActivityAt` and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
+`GET /drive/:ownerId/recent` (`requireSelf`, `requireNonGuest`) runs `aggregateRecents` (`apps/api/src/lib/drive/aggregate.ts`). It takes the newest 100 rows, reads the user's team memberships once, and asks every owner of those rows through `readVisiblePaths` (`apps/api/src/lib/drive/shared-with-me.ts`), which asks each owner once for all of its rows through the home relay's `getFromHomes` ([SCALABILITY.md § Reads across many homes go through getFromHomes](SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)). The user's own home is asked the same way. When fewer than 100 rows come back visible, it asks again for the rest. It keeps the rows' order, newest first, and returns at most 100, each a current `DrivePath` with its `lastActivityAt`.
 
 `Drive.getVisiblePaths` answers on the owner's side, with one batched `getBreadcrumbs` per mount. It does its own access check and only the relay calls it, so it has no `SharedDrive` wrapper ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)). **Shared with me** asks through the same two functions ([ACL.md](ACL.md#shared-with-me-reads-each-path-from-its-owner)). `getVisiblePaths` leaves a row out when:
 

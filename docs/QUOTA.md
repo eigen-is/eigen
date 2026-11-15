@@ -24,7 +24,9 @@ mountMax    = max(mount's maxSizeMB ?? server default, server default if a user 
 
 A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`), and an unset field means inherit, so it adds no candidate. A user in no team gets the server default. `resolveUserQuotas` returns both limits in bytes. Its data half, `resolveHomeDataMax`, also stands alone, because a team Home has no `default` mount yet meters its calendar. A team is in no teams, so its calendar meters against the server default.
 
-Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)).
+Nothing is cached, so every metered write resolves again. The overrides come through the home relay's `getFromHomes` as `'team:quota-overrides'`, all teams at once, which opens a team Home that is not in memory under the relay's cap on opens ([SCALABILITY.md § Reads across many homes go through getFromHomes](SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)). That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and a loaded team answers without waiting for a slot. The relay first asks the auth database whether each team exists, so a metered write costs one such query per team.
+
+**A team that does not answer adds no override.** A team Home that fails or does not open within the relay's deadline is logged and left out, so that one check resolves without its override. That fails safe: a write may get a false 413 or 507, which a retry heals once the team answers, and a size report may show the lower limit meanwhile, but no write gets past a limit it should not have.
 
 ## A mount's cap takes its owner's overrides
 

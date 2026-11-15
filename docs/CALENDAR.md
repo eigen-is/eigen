@@ -170,15 +170,27 @@ The web dialogs hold a timed event as a date and an `hh:mm` per end, so a defaul
 
 A share grants `free-busy` (time blocks only), `read` or `write`. When shares change, `share-propagation.ts` writes the calendar into each named recipient's `shared_calendars` ([ACL.md § Share Propagation](ACL.md#share-propagation)). A `free-busy` reader gets blocks with cancelled occurrences left out, so their existence doesn't leak.
 
-A `TeamHome` starts with `{ calendar: { enabled: false } }`, and its `calendar` getter throws 404 until an admin enables it from the Admin app. Members get the team calendar in their `shared_calendars` at `read` on each `GET /calendar/:ownerId/shared`. A share on the team calendar upgrades them. While it is disabled, that sync removes the stale entries.
+A `TeamHome` starts with `{ calendar: { enabled: false } }`, and a team whose calendar is off has no calendar until an admin enables it from the Admin app: `TeamHome.hasCalendar` is false and its `calendar` getter throws 404. So a member's event write answers 404, a calendar message to the team is dropped, and asking for its calendars answers null. Switching it on again shows what was stored before, and nothing sent while it was off arrives. Members get the team calendars in their `shared_calendars` at `read` on each `GET /calendar/:ownerId/shared`, and a share on a team calendar upgrades them ([§ The team sync removes an entry only on an answer](#the-team-sync-removes-an-entry-only-on-an-answer)).
 
 Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating, changing and deleting one takes an org admin or the owner (`requireTeamAdmin`, since teams have no roles), because the admin sets a team calendar's shares. Any member may list them. Every event route takes the calendar share instead (`checkCalendarAccess`), so a member's `write` share is event-level. The calendar list routes and the range read over all of an owner's calendars (`resolveCalendar`) answer 403 to a non-team `ownerId` that is not the caller's own.
 
 REST bounds are never tighter than what a PUT may store. The ids Eigen mints cap at 512 characters, and every field a client spells caps at `EVENT_MAX_BYTES`, or an event a CalDAV client stored would be uneditable in the web app.
 
+## The team sync removes an entry only on an answer
+
+`syncTeamCalendars` (`get-calendar.ts`) asks each of the user's teams for its calendars and for its shares with the user, two gets at once through the home relay ([SCALABILITY.md § Reads across many homes go through getFromHomes](SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)). A get leaves out a team that fails or is slow, so the sync tells three answers apart:
+
+| A team's answer | Its entries |
+|---|---|
+| Null: it has no calendar | Removed |
+| None: it failed or did not open in time | Kept, so a slow or restoring team never empties the list |
+| Its calendars, but no answer for its shares | Kept as they are, since a default of `read` would lower a `write` share |
+
+Joining or leaving a team runs no share propagation, so the same sync resolves every entry of an owner outside the user's teams again, from the shares that owner still has for the user. A team the user left, or a deleted team, loses its entries at the next sync, unless that team still shares the calendar with the user by address or through another of their teams. Such an entry lists but cannot be opened ([ROADMAP.md](ROADMAP.md)). An entry whose team gave no answer stays until one does.
+
 ## Asking about another owner's calendar never opens a home it would create
 
-Some reads take another owner's id before any permission exists: the share check behind every event route (`checkCalendarAccess`), `shared-with-me` and the signup reconciliation. The two routed reads reach the owner through `routedCalendar` in `get-calendar.ts` and the reconciliation through `calendarOf` in `home-relay.ts`, and both check that the owner's home folder exists before they open the home. A user who never signed in has no folder yet. A guest's and an org's folders sit elsewhere, and their homes have no calendar. An id without a user has neither. All four answer as a calendar the caller may not see: 403 for an event or the access list, and `[]` for `shared-with-me`. So a caller can't tell which ids exist, and asking never creates a home folder that the backup would then pick up. A disabled team calendar still answers 404, because the team sync reads that 404 to remove stale entries.
+Some reads take another owner's id before any permission exists: the share check behind every event route (`checkCalendarAccess`), `shared-with-me`, the team sync, the teams list and the signup reconciliation. Each checks that the owner's home folder exists before it opens the home (`homeFolderExists` in `apps/api/src/lib/config/paths.ts`): the two routed reads through `routedCalendar` in `get-calendar.ts`, and the others by dropping those owners before they ask the home relay. A user who never signed in has no folder yet. A guest's and an org's folders sit elsewhere, and their homes have no calendar. An id without a user has neither. All four answer as a calendar the caller may not see: 403 for an event or the access list, and `[]` for `shared-with-me`. So a caller can't tell which ids exist, and asking never creates a home folder that the backup would then pick up. A team whose calendar is off answers `[]` to `shared-with-me` too, while its members still get 404 from an event route.
 
 ## Calendar shares the home data budget
 
