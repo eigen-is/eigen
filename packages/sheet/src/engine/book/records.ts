@@ -34,11 +34,11 @@ import type {
 } from '@workspace/lib/sheets/ops';
 import { covers, sameRect, within } from '@workspace/lib/sheets/rect';
 import { mapChartRefs } from '../chart-data';
-import { placeOf } from './extras';
-import { MergeIndex } from './merge-index';
+import { RectIndex } from './rect-index';
 
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
+type RuleKind = 'conditionalFormat' | 'validation';
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
@@ -56,6 +56,14 @@ const KIND: { readonly [T in Kind]: T } = {
     chart: 'chart',
 };
 const KINDS = Object.values(KIND);
+
+// The cells a record lies on, for the types a read finds by cell.
+const RECTS: { readonly [T in Kind]?: (record: Records[T]) => readonly Rect[] } = {
+    merge: ({ rect }) => [rect],
+    comment: ({ row, column }) => [[row, column, row, column]],
+    conditionalFormat: ({ ranges }) => ranges,
+    validation: ({ ranges }) => ranges,
+};
 
 // The op type is a union over the record types, so an op of a type known only as a type parameter is made here: made
 // whole or deleted, or with some of its fields set, which a rule never is.
@@ -94,9 +102,12 @@ export class SheetRecords {
         image: new Map(),
         chart: new Map(),
     };
-    private readonly merges = new MergeIndex();
-    // The comments by cell, ids in order.
-    private readonly commentCells = new Map<number, string[]>();
+    private readonly places = {
+        merge: new RectIndex(),
+        comment: new RectIndex(),
+        conditionalFormat: new RectIndex(),
+        validation: new RectIndex(),
+    };
     private sheetFields: SheetFields;
 
     public constructor(
@@ -143,29 +154,40 @@ export class SheetRecords {
     }
 
     public merge(row: number, column: number): Rect | undefined {
-        return this.merges.at(row, column);
+        return this.places.merge.meeting([row, column, row, column])[0]?.[1];
     }
 
     public touchesMerge(rect: Rect): boolean {
-        return this.merges.meeting(rect).size > 0;
+        return this.places.merge.meeting(rect).length > 0;
     }
 
     public mergesIn(rect: Rect): readonly Rect[] {
-        return [...this.merges.meeting(rect).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+        const merges = this.places.merge.meeting(rect).map(([, merge]) => merge);
+        return merges.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
     }
 
     // Where two rules cover a cell, the last in order has it.
     public validation(row: number, column: number): ValidationRecord | undefined {
-        let found: [string, ValidationRecord] | undefined;
-        for (const [id, record] of this.stored.validation) {
-            if (!record.ranges.some((range) => covers(range, row, column))) continue;
-            if (!found || compareRules(record.order, id, found[1].order, found[0]) > 0) found = [id, record];
+        let last: [string, ValidationRecord] | undefined;
+        for (const [id] of this.places.validation.meeting([row, column, row, column])) {
+            const rule = this.stored.validation.get(id);
+            if (rule && (!last || compareRules(rule.order, id, last[1].order, last[0]) > 0)) last = [id, rule];
         }
-        return found?.[1];
+        return last?.[1];
+    }
+
+    // The rules with a range in the rectangle, in rule order, each with those ranges: what a paint of a screen reads.
+    public rulesIn<T extends RuleKind>(type: T, rect: Rect): { id: string; rule: Records[T]; ranges: Rect[] }[] {
+        const found = [...Map.groupBy(this.places[type].meeting(rect), ([id]) => id)].flatMap(([id, pairs]) => {
+            const rule = this.stored[type].get(id);
+            return rule ? [{ id, rule, ranges: pairs.map(([, range]) => range) }] : [];
+        });
+        return found.sort((a, b) => compareRules(a.rule.order, a.id, b.rule.order, b.id));
     }
 
     public comments(row: number, column: number): readonly string[] {
-        return this.commentCells.get(placeOf(row, column)) ?? [];
+        const found = this.places.comment.meeting([row, column, row, column]);
+        return found.map(([id]) => id).sort();
     }
 
     // Whole makes or replaces a record, a `set` alone changes the fields it names, null clearing one, and no `set`
@@ -419,20 +441,17 @@ export class SheetRecords {
         const restore: RecordOp[] = [];
 
         const near = toHere || fromHere;
-        const carried = near ? source.merges.meeting(block) : new Map<string, Rect>();
+        const carried = new Map(near ? source.places.merge.meeting(block) : []);
         if (fromHere && [...carried.values()].some((rect) => !within(rect, block))) return 'merge-cut';
         if (toHere) {
-            for (const [id, rect] of this.merges.meeting(target)) {
+            for (const [id, rect] of this.places.merge.meeting(target)) {
                 if (oneSheet && carried.has(id)) continue;
                 if (!within(rect, target)) return 'merge-cut';
-                const merge = this.stored.merge.get(id);
-                if (merge) restore.push(this.restoreOp('merge', id, merge, true));
+                restore.push(this.wholeOp('merge', id, { rect }));
                 writes.push(() => this.replace('merge', id, undefined));
             }
         }
-        const comments = near
-            ? [...source.stored.comment].filter(([, { row, column }]) => covers(block, row, column))
-            : [];
+        const comments = near ? source.places.comment.meeting(block) : [];
         if (toHere) {
             const moving = new Set(comments.map(([id]) => id));
             // The move back takes along what lies where the block landed, so undo puts it back after.
@@ -442,10 +461,8 @@ export class SheetRecords {
                 restore.push(this.restoreOp('comment', id, comment, !oneSheet));
             }
             for (const [id, rect] of carried) writes.push(() => this.replace('merge', id, { rect: shifted(rect) }));
-            for (const [id, comment] of comments) {
-                writes.push(() =>
-                    this.replace('comment', id, { row: comment.row + rowShift, column: comment.column + columnShift }),
-                );
+            for (const [id, [row, column]] of comments) {
+                writes.push(() => this.replace('comment', id, { row: row + rowShift, column: column + columnShift }));
             }
         }
         if (fromHere && !oneSheet) {
@@ -491,7 +508,7 @@ export class SheetRecords {
     }
 
     private overlaps(id: string, rect: Rect): boolean {
-        return [...this.merges.meeting(rect).keys()].some((other) => other !== id);
+        return this.places.merge.meeting(rect).some(([other]) => other !== id);
     }
 
     // The filter of this id and its columns go, and come back in that order.
@@ -530,28 +547,16 @@ export class SheetRecords {
         return gone ? this.wholeOp(type, id, old) : CHANGE_OP[type]({ sheet: this.sheet, id, set: old });
     }
 
-    // Every write lands here, which keeps the merge index and the comment cells in step.
+    // Every write lands here, which keeps the indexes of where the records lie in step.
     private replace<T extends Kind>(type: T, id: string, record: Records[T] | undefined): void {
-        const merge = type === 'merge' ? this.stored.merge.get(id)?.rect : undefined;
-        if (type === 'comment') this.indexComment(id, false);
+        const old = this.stored[type].get(id);
         if (record === undefined) this.stored[type].delete(id);
         else {
             Object.freeze(record);
             this.stored[type].set(id, record);
         }
-        if (type === 'merge') this.merges.set(id, merge, this.stored.merge.get(id)?.rect);
-        if (type === 'comment') this.indexComment(id, true);
-    }
-
-    private indexComment(id: string, add: boolean): void {
-        const comment = this.stored.comment.get(id);
-        if (!comment) return;
-        const key = placeOf(comment.row, comment.column);
-        const ids = (this.commentCells.get(key) ?? []).filter((other) => other !== id);
-        const at = ids.findIndex((other) => other > id);
-        if (add) ids.splice(at < 0 ? ids.length : at, 0, id);
-        if (ids.length > 0) this.commentCells.set(key, ids);
-        else this.commentCells.delete(key);
+        const places: { readonly [K in Kind]?: RectIndex } = this.places;
+        places[type]?.set(id, old && RECTS[type]?.(old), record && RECTS[type]?.(record));
     }
 }
 
