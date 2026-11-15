@@ -89,14 +89,14 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
     return ops;
 }
 
-// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it, and without
-// the lines a delete takes.
+// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
+// A delete here undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
 function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Group[] {
     const [first, last] = rows ? [group.top, group.bottom] : [group.left, group.right];
     const shift = insert ? count : -count;
     const parts = [
         [first, Math.min(last, index - 1)],
-        [Math.max(first, insert ? index : index + count) + shift, last + shift],
+        [Math.max(first, index) + shift, last + shift],
     ];
     return parts
         .filter(([start, end]) => start <= end)
