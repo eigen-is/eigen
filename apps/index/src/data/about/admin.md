@@ -10,13 +10,21 @@ eigen|admin⟩ is where you [run the server](/support/admin/get-started). Only a
 
 ## People and teams
 
-You [make an account](/support/admin/manage-members) with a name, a username and a first password. The username becomes the address on your mail domain. Make someone an Admin to share the work, reset a password when someone is locked out, which also signs them out everywhere, or delete an account with everything in it.
+You [make an account](/support/admin/manage-members) with a name, a username and a first password. The username becomes the address on your mail domain.
 
-A [team](/support/admin/teams) is a group you share with at once. Everyone joins the team named after your organization. Make more, add people one by one or a whole selection at a time, and turn on a team calendar. A team gets its own drive, on the server's disk or in an [S3 bucket](/support/admin/s3-bucket-safety). [People from outside](/support/admin/guests) sign in with a code by mail and see only what was shared with them.
+Make someone an Admin to share the work. Reset a password when someone is locked out, which also signs them out everywhere. Or delete an account with everything in it.
+
+A [team](/support/admin/teams) is a group you share with at once. Everyone joins the team named after your organization. Make more, add people one by one or a whole selection at a time, and turn on a team calendar.
+
+A team gets its own drive, on the server's disk or in an [S3 bucket](/support/admin/s3-bucket-safety). At the festival the whole crew is one team. A new volunteer gets an account and joins it, and the plan, the budget and the crew's calendar are there at the first login.
+
+[People from outside](/support/admin/guests) sign in with a code by mail and see only what was shared with them.
 
 ## Server settings
 
-The owner's [Settings page](/support/admin/server-settings) shows the version, the free disk and the HTTPS certificate. It sets who Eigen's own mail comes from, with a button that sends you a test mail, [how much each person may store](/support/admin/storage-quotas) and upload, how long the Trash keeps files, and which events also send an email. You can put [your own buttons](/support/admin/landing-page-buttons) on the landing page, beside Log in.
+The owner's [Settings page](/support/admin/server-settings) shows the version, the free disk and the HTTPS certificate. It sets who Eigen's own mail comes from, with a button that sends you a test mail.
+
+It also sets [how much each person may store](/support/admin/storage-quotas) and upload, how long the Trash keeps files, and which events also send an email. You can put [your own buttons](/support/admin/landing-page-buttons) on the landing page, beside Log in.
 
 ![The top of Settings: the organization's name, how the server is doing and who Eigen's mail comes from](/data/about/media/admin-still-settings.webp)
 
