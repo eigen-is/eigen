@@ -46,7 +46,9 @@ export async function showGround(page: Page, cursor: Cursor): Promise<void> {
         );
     };
     await page.keyboard.down('Control');
-    while (!(await fits())) {
+    // A bound well past the steps to the canvas's smallest zoom, so a plan that never fits fails instead of hanging.
+    for (let step = 0; !(await fits()); step++) {
+        if (step === 60) throw new Error('The site plan still overflows the canvas at its smallest zoom');
         await page.mouse.wheel(0, 5);
         await Bun.sleep(200);
     }
