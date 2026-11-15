@@ -46,6 +46,3 @@ Ten apps on one server, behind one login. Each does the everyday part of the Goo
 Eigen is unpaid work. If you want it to exist, you can sponsor it through [GitHub Sponsors](https://github.com/sponsors/eigen-is) or [Open Collective](https://opencollective.com/eigen). Open Collective is the better choice if you need an invoice.
 
 Installing it and telling me what breaks helps too: open an issue on [GitHub](https://github.com/eigen-is/eigen/issues) or mail me at [reinder@eigen.is](mailto:reinder@eigen.is).
-
-::: principles
-:::

@@ -92,7 +92,7 @@ function buildBlog(): ArticleMeta[] {
 }
 
 // The blocks the About pages draw themselves, such as the overview's app rows. No other collection has any.
-const ABOUT_BLOCKS = new Set(['apps', 'principles', 'app-principles']);
+const ABOUT_BLOCKS = new Set(['apps', 'app-principles']);
 
 // The overview first, then one page per app in the registry's order. An app page ends with the block where narrow
 // screens show the app's principles, and every page with the shared note for the technical reader in a panel,
