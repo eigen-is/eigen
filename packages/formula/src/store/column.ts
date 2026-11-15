@@ -4,7 +4,6 @@
 // it can skip the per-cell checks. The high bits of `kind` are the recalc's own flags, which move with the cell
 // when rows do.
 
-import { firstPushed } from '../edit/map';
 import { GRID_ROWS } from '../text/a1';
 import type { ColumnIndex } from './column-index';
 
@@ -106,32 +105,18 @@ export class Column {
         this.pending -= 1;
     }
 
-    // How many cells of the rows from `from` up to `to` hold a value or a formula.
-    public cells(from: number, to: number): number {
-        let cells = 0;
-        for (let row = from; row < Math.min(to, this.length); row += 1) {
-            if (this.kind[row] !== 0 || this.shape[row] !== 0) cells += 1;
-        }
-        return cells;
-    }
-
-    // Returns how many cells the new rows pushed past the last row of the grid, which are gone.
-    public insertRows(index: number, count: number): number {
-        if (index >= this.length) return 0;
-        const kept = Math.min(this.length, firstPushed(index, count, GRID_ROWS));
-        const dropped = this.cells(kept, this.length);
-        this.tally(kept, this.length, -1);
-        const length = kept > index ? kept + count : index;
+    // The rows from `index` on go `count` rows down, and stay on the grid: an insert that would push a cell off
+    // it never reaches the store.
+    public insertRows(index: number, count: number): void {
+        if (index >= this.length) return;
+        const length = this.length + count;
         if (length > this.kind.length) this.resize(capacityFor(length));
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
-            plane.copyWithin(index + count, index, kept);
-            plane.fill(0, index, Math.min(index + count, this.length));
-            plane.fill(0, length, this.length);
+            plane.copyWithin(index + count, index, this.length);
+            plane.fill(0, index, index + count);
         }
         this.length = length;
-        this.trim();
         this.version += 1;
-        return dropped;
     }
 
     public deleteRows(index: number, count: number): void {

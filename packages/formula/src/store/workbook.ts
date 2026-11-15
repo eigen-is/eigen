@@ -170,8 +170,8 @@ export class Workbook {
     }
 
     // Writes the new shape of each block of formulas an edit rewrites, in the places before the edit, then performs
-    // the edit, so the shapes travel with their cells. Returns how many cells the edit pushed off the grid.
-    public apply(change: Change, fills: readonly number[]): number {
+    // the edit, so the shapes travel with their cells.
+    public apply(change: Change, fills: readonly number[]): void {
         for (let f = 0; f < fills.length; f += 6) {
             const { columns } = this.held[fills[f]];
             for (let c = fills[f + 1]; c <= fills[f + 2]; c += 1) {
@@ -182,13 +182,15 @@ export class Workbook {
             case ChangeKind.Lines: {
                 const { insert, index, count, rows } = change.edit;
                 const sheet = this.known(change.edit.sheet);
-                if (insert) return rows ? sheet.insertRows(index, count) : sheet.insertColumns(index, count);
-                if (rows) sheet.deleteRows(index, count);
+                if (insert && rows) sheet.insertRows(index, count);
+                else if (insert) sheet.insertColumns(index, count);
+                else if (rows) sheet.deleteRows(index, count);
                 else sheet.deleteColumns(index, count);
-                return 0;
+                return;
             }
             case ChangeKind.Move:
-                return this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+                this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+                return;
             case ChangeKind.AddSheet:
                 // Whatever values its formulas came with were computed against another workbook than this one.
                 for (const column of change.sheet.columns) {
@@ -197,23 +199,22 @@ export class Workbook {
                     }
                 }
                 this.insert(change.sheet, change.place);
-                return 0;
+                return;
             case ChangeKind.RemoveSheet: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.byId.delete(sheet.id);
                 this.limit = 0;
                 for (let s = sheet.place; s < this.held.length; s += 1) this.held[s].place = s;
-                return 0;
+                return;
             }
             case ChangeKind.RenameSheet:
                 this.known(change.sheet).name = change.name;
-                return 0;
+                return;
             default: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.insert(sheet, change.place);
-                return 0;
             }
         }
     }

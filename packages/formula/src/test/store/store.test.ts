@@ -154,7 +154,6 @@ describe('writes', () => {
         expect(first.length).toBe(21);
         sheet.deleteRows(3, 100);
         expect([first.length, second.length]).toEqual([3, 0]);
-        workbook.setValue(sheet, GRID_ROWS - 1, 0, 9);
         sheet.insertRows(1, 1);
         expect(first.length).toBe(4);
         expect(read(workbook, 3, 0)).toBe(1);
@@ -338,20 +337,5 @@ describe('rows and columns', () => {
         }
         expect(column.length).toBe(20_001);
         expect(resizes).toBe(39);
-    });
-
-    test('rows pushed past the last row of the grid are gone, with their errors', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [GRID_ROWS - 1, 0, NA],
-                [GRID_ROWS - 2, 0, 4],
-            ]),
-        ]);
-        const sheet = sheetOf(workbook);
-        sheet.insertRows(0, 1);
-        const column = sheet.columns[0];
-        expect(column.length).toBe(GRID_ROWS);
-        expect(column.errors).toBe(0);
-        expect(read(workbook, GRID_ROWS - 1, 0)).toBe(4);
     });
 });

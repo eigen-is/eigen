@@ -2,6 +2,7 @@ export type { Move } from './edit/move';
 export type { LineEdit } from './edit/transform';
 export { FUNCTIONS } from './functions/library';
 export type { Rewrite } from './recalc/edit-plan';
+export { EditRefusal } from './recalc/edit-plan';
 export { Engine } from './recalc/engine';
 export type { EditResult, RecalcResult } from './recalc/recalc';
 export type { CellSink, Literal, SheetSource } from './store/workbook';

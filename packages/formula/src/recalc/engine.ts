@@ -1,8 +1,9 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
 // structural edits, a recalc of what they reach, and the reads: the value and the formula of a cell, a walk of the
-// cells of a sheet and how far they reach. A sheet is named by its id and a cell by its row and column from 0. It reads the store and changes it only through the recalc. What makes
-// it refuse a write or an edit, such as a sheet that is not there or a cell off the grid, is checked here, once,
-// before anything is noted or changed: so a call that throws left the workbook as it was.
+// cells of a sheet and how far they reach. A sheet is named by its id and a cell by its row and column from 0. It
+// reads the store and changes it only through the recalc. What a host can get wrong, such as a sheet that is not
+// there or a cell off the grid, is checked here, once, before anything is noted or changed: so a call that throws
+// left the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -13,6 +14,7 @@ import type { CellSink, Literal, SheetSource } from '../store/workbook';
 import { admit, ChangeKind, Workbook, within } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
+import { EditRefusal } from './edit-plan';
 import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
@@ -49,22 +51,26 @@ export class Engine {
         this.calc.clear(this.cell(sheet, row, column), row, column);
     }
 
-    // Inserts or deletes rows or columns: every formula keeps naming the cells it named. Cells an insert pushes
-    // past the last line are gone and counted, so refusing such an insert is the host's.
+    // Inserts or deletes rows or columns: every formula keeps naming the cells it named. An insert that would
+    // push a cell that holds a value or a formula past the last line of the grid is refused.
     public editLines(edit: LineEdit): EditResult {
-        this.workbook.known(edit.sheet);
+        const sheet = this.workbook.known(edit.sheet);
         if (!within(edit.index, edit.rows ? GRID_ROWS : GRID_COLUMNS)) throw new RangeError(`No line ${edit.index}`);
         counted(edit.count);
+        if (edit.insert && sheet.pushesOff(edit)) throw new EditRefusal('grid-end');
         return this.calc.edit({ kind: ChangeKind.Lines, edit });
     }
 
-    // Moves a block of cells, as a cut and paste does, over whatever it lands on. The block is what lies on the
-    // grid before and after: what would land past the last line is cleared and counted.
+    // Moves a block of cells, as a cut and paste does, over whatever it lands on. The whole block lies on the
+    // grid, where it is and where it goes.
     public moveCells(move: Move): EditResult {
-        this.cell(move.fromSheet, move.row, move.column);
-        this.cell(move.toSheet, move.toRow, move.toColumn);
-        counted(move.rows);
-        counted(move.columns);
+        const { row, column, rows, columns, toRow, toColumn } = move;
+        counted(rows);
+        counted(columns);
+        this.cell(move.fromSheet, row, column);
+        this.cell(move.fromSheet, row + rows - 1, column + columns - 1);
+        this.cell(move.toSheet, toRow, toColumn);
+        this.cell(move.toSheet, toRow + rows - 1, toColumn + columns - 1);
         return this.calc.edit({ kind: ChangeKind.Move, move });
     }
 

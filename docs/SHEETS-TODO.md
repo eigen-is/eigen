@@ -368,7 +368,6 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 
 ### Code
 
-- [ ] **A structural edit can grow a stored key past the bound**: an edit cannot refuse a formula, so a key within a digit per reference of 131,072 characters, such as `=R[9]C+R[9]C+…` at A1, becomes `R[10]C` terms of 152,915 characters after a row inserted between, and the cell is `#ERROR!` after a reload. Accepted for now: no crash, one cell. **S**
 - [ ] **`ParseFailure` is exported by no entry**: `parseA1`, `parseXlsx`, `intersect` and `storedKey` answer it, and step 1b's importer needs the type to handle `intersect`'s failure. **S**
 - [ ] **`Book` keeps its fields private with `#`** where the package writes `private`, because `functions/gates.test.ts` pins at compile time that a body cannot reach a book's fields by a key in brackets either. The owner's call. **S**
 - [ ] **`spell` in `eval/look.ts`** fills one of two lists by a nullable flag; split it. **S**

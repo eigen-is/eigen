@@ -31,11 +31,7 @@ export type RecalcResult = {
     readonly changed: readonly number[];
 };
 
-export type EditResult = {
-    readonly rewrites: readonly Rewrite[];
-    // How many cells that held a value or a formula the edit pushed off the grid, which are gone.
-    readonly dropped: number;
-};
+export type EditResult = { readonly rewrites: readonly Rewrite[] };
 
 // How much of the stack the cells in progress may take together before their calls are dropped, in the units of a
 // shape's depth: half of the smallest stack the engine runs on. Reading a cell takes CELL on top of its shape.
@@ -134,9 +130,12 @@ export class Recalc {
 
     // Performs a structural edit. What it can change is flagged, with the cells written since the last pass, while
     // the index still describes the cells as they are: so only the flags, which move with their cells, cross the edit.
+    // The plan refuses an edit by a throw, before anything is flagged or moved.
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
+        // The plan makes shapes that no cell holds, for good when the edit is refused: the next rebuild forgets them.
+        this.stale = true;
         const plan = planEdit(workbook, this.index.rectangles, change);
         const { seeds } = plan;
         for (let at = 0; at < seeds.length; at += 4) {
@@ -145,9 +144,8 @@ export class Recalc {
         }
         this.index.mark(workbook, merged(this.seeds.concat(seeds)));
         this.seeds.length = 0;
-        const dropped = workbook.apply(change, plan.fills);
-        this.stale = true;
-        return { rewrites: plan.rewrites, dropped };
+        workbook.apply(change, plan.fills);
+        return { rewrites: plan.rewrites };
     }
 
     // Computes the formulas that the cells written since the last pass reach, those that read cells they do not

@@ -26,10 +26,12 @@ describe('after any edits, writes and recalcs the engine equals a fresh load of 
         const counts = runLaw(SEED + 2, COUNT || 60, 12, Edge.Columns, 12);
         console.log('last columns', JSON.stringify(counts));
         expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 300);
+        expect(counts.pushing).toBeGreaterThan(COUNT ? 0 : 5);
     }, 120_000);
     test('hosts, bands and blocks on the last rows of the grid', () => {
         const counts = runLaw(SEED + 3, Math.ceil((COUNT || 40) / 4), 8, Edge.Rows, 12);
         console.log('last rows', JSON.stringify(counts));
-        expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 30);
+        expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 25);
+        expect(counts.pushing).toBeGreaterThan(0);
     }, 120_000);
 });

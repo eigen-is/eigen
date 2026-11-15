@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import type { Engine, Literal } from '../../index';
-import { Engine as Loaded } from '../../index';
+import { EditRefusal, Engine as Loaded } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { ChangeKind, Workbook } from '../../store/workbook';
+import { MAX_STORED_LENGTH } from '../../text';
 import { engineOf, stored } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
@@ -112,6 +113,34 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
         expect(workbook.value(sheet.columns[1], count + 100)).toBe(1 + count);
         expect(sheet.columns[1].pending).toBe(0);
     }, 60_000);
+
+    test('thirty edits refused for a formula too long to store leave the shapes of one edit behind', () => {
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
+        const recalc = new Recalc(workbook, FUNCTIONS);
+        const [sheet] = workbook.sheets;
+        for (let column = 1; column <= 50; column += 1) {
+            recalc.fillFormula(sheet, 0, column, 0, column, `=R[20]C+${column}`);
+        }
+        // A row inserted between this formula and the cell it reads adds a digit to it, which is one too many.
+        recalc.fillFormula(sheet, 0, 60, 0, 60, `=R[9]C${'+1'.repeat((MAX_STORED_LENGTH - 6) / 2)}`);
+        recalc.pass(NO_CAP);
+        expect(workbook.shapes.size).toBe(51);
+        for (let count = 1; count <= 30; count += 1) {
+            const edit = { insert: true, index: 5, count, sheet: 'a', rows: true };
+            expect(() => recalc.edit({ kind: ChangeKind.Lines, edit })).toThrow(EditRefusal);
+        }
+        // Each refused edit made fifty shapes before it met the long one, and the next edit forgot them.
+        expect(workbook.shapes.size).toBe(101);
+        const { rewrites } = recalc.edit({
+            kind: ChangeKind.Lines,
+            edit: { insert: false, index: 5, count: 1, sheet: 'a', rows: true },
+        });
+        expect(rewrites).toHaveLength(51);
+        recalc.pass(NO_CAP);
+        // The edit that went through rewrote the long formula too.
+        expect(workbook.shapes.size).toBe(102);
+        expect(sheet.columns[60].pending).toBe(0);
+    });
 
     test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }]);
