@@ -79,8 +79,8 @@
       "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
     },
     {
-      // The formula engine's root entry holds the whole engine: sheet imports it only under src/engine/book/, where the workbook holds it. The three overrides on sheet's source each restate the rule, since a later one replaces an earlier one whole.
-      "includes": ["packages/sheet/src/**", "!packages/sheet/src/engine/**"],
+      // The formula engine's root entry holds the whole engine: sheet imports it only under src/engine/book/ and its tests, where the workbook holds it. The three overrides on sheet's source each restate the rule, since a later one replaces an earlier one whole.
+      "includes": ["packages/sheet/src/**", "!packages/sheet/src/engine/**", "!packages/sheet/src/test/engine/book/**"],
       "linter": {
         "rules": {
           "style": {
@@ -89,7 +89,7 @@
               "options": {
                 "paths": {
                   "@workspace/formula": {
-                    "message": "sheet imports the formula engine's root entry only under src/engine/book/, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
+                    "message": "sheet imports the formula engine's root entry only under src/engine/book/ and its tests, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
                   }
                 },
                 // Overrides replace the root rule options wholesale — restate the suffix ban.
@@ -122,7 +122,7 @@
                   "react": { "message": "engine/ is imported by the backend and must stay React-free." },
                   "react-dom": { "message": "engine/ is imported by the backend and must stay React-free." },
                   "@workspace/formula": {
-                    "message": "sheet imports the formula engine's root entry only under src/engine/book/, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
+                    "message": "sheet imports the formula engine's root entry only under src/engine/book/ and its tests, so the page's bundle does not carry the engine (see ARCHITECTURE.md § Dependency direction)."
                   }
                 },
                 // Overrides replace the root rule options wholesale — restate the suffix ban.
