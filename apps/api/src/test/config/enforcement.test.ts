@@ -4,8 +4,9 @@ import { getMountQuotaState } from '../../lib/config/enforcement';
 import { resolveHomeDataMax, resolveUserQuotas } from '../../lib/config/quota';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
+import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
 import { getFromHomes } from '../../lib/home/home-relay';
+import * as teamModule from '../../lib/team/team';
 import { getMemberships } from '../../lib/user';
 import { addMember, authedRequest, createTeam, getTestContext } from '../setup';
 
@@ -209,6 +210,20 @@ describe('a user in two teams that both raise a limit gets the higher', () => {
 
         expect(await resolveHomeDataMax([higher, lower])).toBe(expected);
         expect(await resolveHomeDataMax([lower, higher])).toBe(expected);
+    });
+
+    test('asks a loaded team for its overrides without looking the team up', async () => {
+        for (const teamId of [higher, lower]) await getHome(teamOwnerId(teamId));
+        const lookups = spyOn(teamModule, 'getTeam');
+        let looked: string[];
+        try {
+            await resolveHomeDataMax([higher, lower]);
+        } finally {
+            looked = lookups.mock.calls.map(([teamId]) => teamId);
+            lookups.mockRestore();
+        }
+
+        expect(looked).toEqual([]);
     });
 
     test("for a drive's cap, whichever team comes first", async () => {
