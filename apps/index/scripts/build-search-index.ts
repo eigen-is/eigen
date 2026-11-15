@@ -1,23 +1,21 @@
+// Builds the help center's Pagefind search index from the generated article bodies, one record per help article,
+// rather than by crawling the built HTML. It runs after the prerender and writes the bundle into the built site,
+// where the Support page's search loads it in the browser.
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as pagefind from 'pagefind';
 import type { ArticleBody, ContentManifest } from './lib/content-types';
 
-// Experiment: build a Pagefind search index for the help center from the generated
-// content JSON (not by crawling the built HTML). Each support article becomes one
-// custom record; the bundle is written to dist/index/pagefind/ and served statically.
-// The /support landing loads it client-side — see components/support/support-search.tsx.
 const ROOT = process.cwd(); // apps/index
 const DIST = join(ROOT, '..', '..', 'dist', 'index');
 const GEN = join(ROOT, 'src', 'content', '.generated');
 
-// Rendered article HTML -> plain text for indexing. The bodies are trusted,
-// build-time HTML, so a tag strip is enough; also drop the [MEDIAGRID:N] markers
-// the renderer leaves in place of media grids and decode the few entities we emit.
+// The bodies are trusted build-time HTML, so a tag strip is enough. A media block's marker goes too.
 function htmlToText(html: string): string {
     return html
         .replace(/<[^>]+>/g, ' ')
-        .replace(/\[MEDIAGRID:\d+\]/g, ' ')
+        .replace(/\[BLOCK:[\w-]+\]/g, ' ')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
@@ -38,7 +36,7 @@ async function main() {
         const text = htmlToText(body.html);
         await index.addCustomRecord({
             url: `/support/${article.slug}`,
-            // Lead with the title + description so they rank and surface in the excerpt.
+            // The title and description lead, so they rank and show in the excerpt.
             content: `${article.title}. ${article.description} ${text}`,
             language: 'en',
             meta: { title: article.title, section: article.section, description: article.description },
