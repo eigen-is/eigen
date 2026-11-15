@@ -48,6 +48,7 @@ describe('the clock of a batch', () => {
             [200, Number.NEGATIVE_INFINITY],
         ]) {
             expect(() => engine.setClock(now, seed)).toThrow(RangeError);
+            expect(() => loaded({}, now, seed)).toThrow(RangeError);
         }
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 0, 0, 0]);
         expect(valueAt(engine, 'A1')).toBe(100);
