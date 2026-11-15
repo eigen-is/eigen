@@ -1,14 +1,17 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
-// lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers read
-// and write a cell's entry and shift the entries when lines are inserted or deleted or a block of cells moves, and its
-// weight is kept as they write. The text of a rich cell is also the engine's value of that cell, which the workbook
-// keeps in step.
+// lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
+// fill and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text is the
+// engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
+import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
+
+// The most items one spread hands a call.
+const SPREAD = 65_536;
 
 // A cell's place: its column times the grid's rows plus its row, so the places ascend in column order.
 export function placeOf(row: number, column: number): number {
@@ -18,6 +21,29 @@ export function placeOf(row: number, column: number): number {
 // The text a rich cell shows, which is the value the engine holds for it.
 export function textOf(runs: readonly Run[]): string {
     return runs.map((run) => run.v).join('');
+}
+
+// What an op would say a cell holds, null for an empty cell: its rich runs in place of its value, which stands beside
+// no formula or beside one whose value is given, an error as its text.
+export function contentOf(
+    value: Literal | null,
+    formula: string | null,
+    given: boolean,
+    extra: Extra | undefined,
+): CellContent | null {
+    if (value === null && formula === null && extra === undefined) return null;
+    const content: CellContent = {};
+    if (extra?.s) content.s = extra.s;
+    else if (formula === null || given) {
+        if (typeof value === 'object' && value !== null) {
+            content.v = value.text;
+            content.e = 1;
+        } else if (value !== null) content.v = value;
+    }
+    if (formula !== null) content.f = formula;
+    if (extra?.link) content.link = extra.link;
+    if (extra?.qp) content.qp = extra.qp;
+    return content;
 }
 
 export class Extras {
@@ -58,24 +84,59 @@ export class Extras {
 
     // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
     // entry, so writing none deletes.
-    public write(row: number, column: number, { s, link, qp }: Extra): Extra | undefined {
+    public write(row: number, column: number, extra: Extra): Extra | undefined {
         const place = placeOf(row, column);
         const at = this.search(place);
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
-        this.units += unitsOf({ s, link, qp }) - (old ? unitsOf(old) : 0);
-        if (s || link || qp) {
+        const entry = entryOf(extra);
+        this.units += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
+        if (entry) {
             this.places.splice(at, replaced, place);
-            this.held.splice(
-                at,
-                replaced,
-                Object.freeze({ ...(s && { s }), ...(link && { link }), ...(qp && { qp }) }),
-            );
+            this.held.splice(at, replaced, entry);
         } else {
             this.places.splice(at, replaced);
             this.held.splice(at, replaced);
         }
         return old;
+    }
+
+    // Puts one entry in every cell of a block, or with none of the three empties it, in one pass over the entries
+    // between the block's first place and its last.
+    public fill([top, left, bottom, right]: Rect, extra: Extra): void {
+        const entry = entryOf(extra);
+        const start = this.search(placeOf(top, left));
+        const end = this.search(placeOf(bottom, right) + 1);
+        const places: number[] = [];
+        const held: Extra[] = [];
+        let column = left;
+        // Lays the block's columns that start before a place, as the merge reaches it.
+        const lay = (before: number) => {
+            for (; entry && column <= right && placeOf(top, column) < before; column += 1) {
+                for (let row = top; row <= bottom; row += 1) {
+                    places.push(placeOf(row, column));
+                    held.push(entry);
+                }
+            }
+        };
+        for (let at = start; at < end; at += 1) {
+            const row = this.places[at] % GRID_ROWS;
+            if (row >= top && row <= bottom) {
+                this.units -= unitsOf(this.held[at]);
+                continue;
+            }
+            lay(this.places[at]);
+            places.push(this.places[at]);
+            held.push(this.held[at]);
+        }
+        lay(Number.POSITIVE_INFINITY);
+        if (entry) this.units += unitsOf(entry) * (bottom - top + 1) * (right - left + 1);
+        // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
+        for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
+            const removed = at === 0 ? end - start : 0;
+            this.places.splice(start + at, removed, ...places.slice(at, at + SPREAD));
+            this.held.splice(start + at, removed, ...held.slice(at, at + SPREAD));
+        }
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -169,9 +230,14 @@ export class Extras {
     }
 }
 
+// The entry of a cell that holds what is given, with only the keys it holds; none when it holds none of the three.
+function entryOf({ s, link, qp }: Extra): Extra | undefined {
+    if (!s && !link && !qp) return undefined;
+    return Object.freeze({ ...(s && { s }), ...(link && { link }), ...(qp && { qp }) });
+}
+
 // An entry weighs two units, its place and its object, its link three more and each run of its text one: a unit is
 // about the bytes one run of a rich text costs.
-function unitsOf({ s, link, qp }: Extra): number {
-    if (!s && !link && !qp) return 0;
+function unitsOf({ s, link }: Extra): number {
     return 2 + (link ? 3 : 0) + (s?.length ?? 0);
 }

@@ -7,9 +7,8 @@
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
 import type { CellContent, InputOp, Placed, Rect } from '@workspace/lib/sheets/ops';
-import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
-import { textOf } from './extras';
+import { contentOf, textOf } from './extras';
 import type { Workbook } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
@@ -27,20 +26,18 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     const { engine } = book;
     const { sheet } = op;
     const { extras } = part;
-    const runs = op.runs ?? [];
     const gathered: Gathered = { runs: [], cells: [] };
-    for (const [rect] of runs) {
+    for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
     }
     for (const [row, column] of op.cells ?? []) {
-        if (runs.some(([rect]) => covers(rect, row, column))) continue;
         const formula = engine.formulaOf(sheet, row, column);
         const given = formula !== null && engine.isGiven(sheet, row, column);
         const content = contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
         gathered.cells.push([row, column, content]);
     }
 
-    for (const [rect, content] of runs) {
+    for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.fillFormula(sheet, top, left, bottom, right, content.f, value);
@@ -56,13 +53,7 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
                 for (let row = top; row <= bottom; row += 1) engine.setValue(sheet, row, column, value);
             }
         }
-        if (content?.s || content?.link || content?.qp) {
-            for (let column = left; column <= right; column += 1) {
-                for (let row = top; row <= bottom; row += 1) extras.write(row, column, content);
-            }
-        } else {
-            for (const [row, column] of [...extras.cells(rect)]) extras.write(row, column, {});
-        }
+        extras.fill(rect, content ?? {});
     }
     for (const [row, column, content] of op.cells ?? []) {
         const value = content === null ? null : literalOf(content);
@@ -201,28 +192,6 @@ function gather({ runs, cells }: Gathered, { top, left, bottom, right }: Group, 
 function inputOf(sheet: string, { runs, cells }: Gathered): InputOp {
     cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-}
-
-// The content an op says for what a cell held, null for an empty cell.
-function contentOf(
-    value: Literal | null,
-    formula: string | null,
-    given: boolean,
-    extra: Extra | undefined,
-): CellContent | null {
-    if (value === null && formula === null && extra === undefined) return null;
-    const content: CellContent = {};
-    if (extra?.s) content.s = extra.s;
-    else if (formula === null || given) {
-        if (typeof value === 'object' && value !== null) {
-            content.v = value.text;
-            content.e = 1;
-        } else if (value !== null) content.v = value;
-    }
-    if (formula !== null) content.f = formula;
-    if (extra?.link) content.link = extra.link;
-    if (extra?.qp) content.qp = extra.qp;
-    return content;
 }
 
 // The value a cell of this content holds, or null for none: the joined text of rich runs, an error literal, or the
