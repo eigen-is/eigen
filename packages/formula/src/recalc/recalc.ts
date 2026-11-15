@@ -368,7 +368,7 @@ export class Recalc {
         this.made[at] = 0;
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
-            ? null
+            ? (this.workbook.value(column, row) ?? REF)
             : tree === null
               ? ERROR
               : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
@@ -379,7 +379,7 @@ export class Recalc {
         // stops before its first store: a formula that costs more than the cap alone would hold every pass up.
         if (this.cost >= this.cap && this.stored) throw STOP;
         this.stored = true;
-        if ((column.kind[row] & LOOP) === 0 && !kept && this.workbook.put(column, row, value)) {
+        if ((column.kind[row] & LOOP) === 0 && this.workbook.put(column, row, value)) {
             extend(this.changed, this.sheets[at].place, this.places[at], row);
         }
         for (let i = at; i < this.size; i += 1) {

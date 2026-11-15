@@ -301,7 +301,7 @@ Open rows of `packages/formula` ([FORMULA.md](FORMULA.md)), which step 1a of [PR
 - [ ] **A sheet named like a cell, first in a 3-D prefix**: the A1 text `='B2:Sheet2'!A1:B2:Sheet2!C3` reads back as another formula, so re-editing it in the formula bar changes it (stored text is safe). One condition in `text/printer.ts` quotes it. **S**
 - [ ] **A space before a comma is dropped**: `=SUM(A1 ,B1)` comes back as `=SUM(A1,B1)`. **S**
 - [ ] **A call's name folds by Unicode**: `=ß(1)` reads back as `=SS(1)`, where `sheetNameKey` folds a name another way. One fold for every name, before `LET` binds names. **S**
-- [ ] **A typed 3-D formula shows blank with no error**: `=SUM(Sales:Data!A1)` is stored as a reference to a sheet named `Sales:Data` that no tab has, and its value is blank, with no error to say why. **S**
+- [ ] **3-D references are not built**: `=SUM(Sales:Data!A1)` is read and kept but not computed, so a typed one is `#REF!` and a loaded one keeps the value it came with, however its sheets change. It needs the evaluator and the reverse index reading every sheet of the span, and a sheet added, removed or moved changing which those are. **M**
 - [ ] **A typed number keeps a 16th digit**: Excel cuts a typed `1234567890123456` to 1234567890123450 at entry, so `=A1&""` is `1234567890123450` there and `1234567890123460` here, fed the typed digits. The cut belongs in step 1b's editor parse, as the engine reads no typing. **S**
 
 ### Lookups

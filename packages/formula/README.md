@@ -131,5 +131,6 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - A one-cell array is a single value.
 - No 255-character limit on texts that Excel refuses past 255.
 - Approximate searches assume sorted data, as Excel's documentation requires.
+- A 3-D reference is not computed: a loaded formula keeps its value and a typed one is `#REF!`.
 - Volatile functions are computed when the document is, not after every unrelated edit.
 - Number display is numfmt's, with a few known gaps in `TEXT`.
