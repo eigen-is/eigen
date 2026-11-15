@@ -1,8 +1,8 @@
-// The cell store of one workbook: its sheets in tab order and by id, the string table and the shape table. It is
-// built by one load from a description of the sheets and holds nothing a second load would not rebuild; a sheet is
-// read from its source to the end before a table holds any of it. A host writes a literal, a formula in its stored
-// text, or a clear; the recalc writes each result into the same planes, so a reader never sees where a value came
-// from. `apply` is the one way cells move and sheets come and go.
+// The cell store of one workbook: its sheets in tab order, by id and by name, the string table and the shape table.
+// It is built by one load from a description of the sheets and holds nothing a second load would not rebuild; a
+// sheet is read from its source to the end before a table holds any of it. A host writes a literal, a formula in its
+// stored text, or a clear; the recalc writes each result into the same planes, so a reader never sees where a value
+// came from. `apply` is the one way cells move and sheets come and go.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -76,6 +76,8 @@ export class Workbook {
     public readonly strings = new StringTable();
     public readonly shapes = new ShapeTable();
     private readonly byId = new Map<string, Sheet>();
+    // The sheets by the key of their name, which no two share.
+    private readonly byName = new Map<string, Sheet>();
     // The errors only a file knows, by their text.
     private readonly carried: FormulaError[] = [];
     private readonly carriedCodes = new Map<string, number>();
@@ -120,10 +122,8 @@ export class Workbook {
     // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is
     // typed with would read either of them.
     public checkName(name: string, holder: Sheet | null): void {
-        const key = sheetNameKey(name);
-        for (const sheet of this.held) {
-            if (sheet !== holder && sheetNameKey(sheet.name) === key) throw new Error(`Sheet name ${name} is in use`);
-        }
+        const named = this.byName.get(sheetNameKey(name));
+        if (named !== undefined && named !== holder) throw new Error(`Sheet name ${name} is in use`);
     }
 
     // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
@@ -169,7 +169,11 @@ export class Workbook {
     public adopt({ sheet, texts, formulas, errors, numbered }: Draft): Sheet {
         const textIds = Array.from(texts.keys(), (text) => this.strings.intern(text));
         // A formula may name its own sheet, which the workbook does not hold yet when it is added.
-        const named = [sheet, ...this.held];
+        const own = sheetNameKey(sheet.name);
+        const named = (name: string): string | undefined => {
+            const key = sheetNameKey(name);
+            return key === own ? sheet.id : this.byName.get(key)?.id;
+        };
         const shapeIds = Array.from(formulas.keys(), (text) => this.shapes.intern(text, named));
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
         // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
@@ -222,13 +226,18 @@ export class Workbook {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
                 this.byId.delete(sheet.id);
+                this.byName.delete(sheetNameKey(sheet.name));
                 this.limit = 0;
                 for (let s = sheet.place; s < this.held.length; s += 1) this.held[s].place = s;
                 return;
             }
-            case ChangeKind.RenameSheet:
-                this.known(change.sheet).name = change.name;
+            case ChangeKind.RenameSheet: {
+                const sheet = this.known(change.sheet);
+                this.byName.delete(sheetNameKey(sheet.name));
+                sheet.name = change.name;
+                this.byName.set(sheetNameKey(sheet.name), sheet);
                 return;
+            }
             default: {
                 const sheet = this.known(change.sheet);
                 this.held.splice(sheet.place, 1);
@@ -299,7 +308,7 @@ export class Workbook {
 
     // One formula in its stored text in every cell of a block. It is to be computed: it holds no value until then.
     public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
-        const shape = this.shapes.intern(text, this.held);
+        const shape = this.shapes.intern(text, (name) => this.byName.get(sheetNameKey(name))?.id);
         for (let c = left; c <= right; c += 1) {
             const held = sheet.column(c);
             held.reach(bottom);
@@ -324,6 +333,7 @@ export class Workbook {
     private insert(sheet: Sheet, place: number): void {
         this.held.splice(Math.max(0, Math.min(place, this.held.length)), 0, sheet);
         this.byId.set(sheet.id, sheet);
+        this.byName.set(sheetNameKey(sheet.name), sheet);
         for (let s = 0; s < this.held.length; s += 1) this.held[s].place = s;
     }
 

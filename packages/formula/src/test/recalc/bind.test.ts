@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Literal, SheetSource } from '../../index';
-import { Engine, REF } from '../../index';
+import { Engine, ERROR, REF } from '../../index';
 import { MAX_STORED_LENGTH } from '../../text';
 import { runBindLaw } from './bind-law';
 
@@ -219,6 +219,45 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
         expect(engine.formulaOf('a', 0, 0)).toBe(text);
         expect(() => engine.renameSheet('a-long-id-of-a-sheet', 'N')).toThrow('too-long');
         expect(engine.formulaOf('a', 0, 0)).toBe(text);
+    });
+});
+
+describe('a formula typed with a sheet name whose key would be too long to store is text that does not parse', () => {
+    // A bare name is quoted in the key, two characters longer per reference, and #REF! saves only one of them.
+    const tail = '&a!RC'.repeat(3);
+    const text = `="${'x'.repeat(MAX_STORED_LENGTH - 2 - `=""${tail}`.length)}"${tail}`;
+    const target = sheet('s1', 'a', [0, 0, 1, null]);
+    const orders: [string, () => Engine][] = [
+        [
+            'written beside the sheet it names',
+            () => {
+                const engine = new Engine([sheet('host', 'Host'), target]);
+                engine.setFormula('host', 0, 0, text);
+                return engine;
+            },
+        ],
+        ['a load, its own sheet first', () => new Engine([sheet('host', 'Host', [0, 0, null, text]), target])],
+        ['a load, the sheet it names first', () => new Engine([target, sheet('host', 'Host', [0, 0, null, text])])],
+        [
+            'the sheet it names added after it',
+            () => {
+                const engine = new Engine([sheet('host', 'Host', [0, 0, null, text])]);
+                expect(engine.addSheet(target, 1).rewrites).toEqual([]);
+                return engine;
+            },
+        ],
+    ];
+    test.each(orders)('%s', (_, enter) => {
+        const engine = enter();
+        expect(text).toHaveLength(MAX_STORED_LENGTH - 2);
+        engine.recalc(NO_CAP);
+        expect([engine.formulaOf('host', 0, 0) === text, engine.valueOf('host', 0, 0)]).toEqual([true, ERROR]);
+        expect(engine.renameSheet('s1', 'b').rewrites).toEqual([]);
+        expect(engine.renameSheet('s1', 'a').rewrites).toEqual([]);
+        engine.removeSheet('s1');
+        expect(engine.addSheet(target, 1).rewrites).toEqual([]);
+        engine.recalc(NO_CAP);
+        expect([engine.formulaOf('host', 0, 0) === text, engine.valueOf('host', 0, 0)]).toEqual([true, ERROR]);
     });
 });
 

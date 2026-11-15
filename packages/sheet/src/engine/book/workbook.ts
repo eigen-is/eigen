@@ -24,7 +24,7 @@ import { SheetRecords } from './records';
 // takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an insert pushes
 // something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines` and `move`
 // return what they replaced, removed or covered, as the part's reads list it. Records plan an edit before it writes.
-type BookSheet = {
+export type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;
     readonly columns: LineRuns;
@@ -48,8 +48,9 @@ export class Workbook {
     // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
     private swept = 0;
 
-    // Loads a snapshot, weighing the limits on the bands as rebuilt and the cells as listed before the engine
-    // allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
+    // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
+    // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
+    // band said twice is.
     public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map(({ id, fields, cells, looks, bands, rows, columns, records }): BookSheet => {
@@ -178,7 +179,7 @@ export class Workbook {
         this.seed = seed;
     }
 
-    // What the limits count: the engine's slots, the runs and bands of every sheet, its records and the sheets.
+    // What the limits count: the engine's slots, the runs, bands and extras of every sheet, its records, the sheets.
     public weight(): WorkbookWeight {
         return weightOf(this.engine.slots(), [...this.sheets.values()]);
     }
@@ -205,14 +206,16 @@ export class Workbook {
 function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
     let runs = 0;
     let bands = 0;
+    let extras = 0;
     let records = 0;
     for (const sheet of sheets) {
         const looks = sheet.bands.weight();
         runs += looks.runs;
         bands += looks.bands;
+        extras += sheet.extras.weight();
         records = Math.max(records, sheet.records.weight().records);
     }
-    return { slots, runs, bands, records, sheets: sheets.length };
+    return { slots, runs, bands, extras, records, sheets: sheets.length };
 }
 
 // A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.

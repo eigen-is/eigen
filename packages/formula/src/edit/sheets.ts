@@ -4,12 +4,13 @@
 // or when a sheet appears under the name later, which the plan of that edit asks for.
 
 import { REF_ERROR } from '../text/lexer';
-import { findSheetByName } from '../text/sheet-name';
+import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaNode } from '../text/tree';
 import { leaf, NodeKind, referenceNode, SheetKind } from '../text/tree';
 import { mapLeaves } from './leaves';
 
-export type NamedSheet = { readonly id: string; readonly name: string };
+// The id of the sheet a name typed in a formula reads, or undefined where no sheet has the name.
+export type SheetNamed = (name: string) => string | undefined;
 
 // Every sheet id that is a key of `ids` becomes its value.
 export function remapSheets(tree: FormulaNode, ids: ReadonlyMap<string, string>): FormulaNode {
@@ -22,22 +23,24 @@ export function remapSheets(tree: FormulaNode, ids: ReadonlyMap<string, string>)
 
 // Binds what was typed with the name of a sheet that did not exist to the sheet that now has that name.
 export function bindSheet(tree: FormulaNode, name: string, id: string): FormulaNode {
-    return bindSheets(tree, [{ id, name }]);
+    const key = sheetNameKey(name);
+    return bindSheets(tree, (typed) => (sheetNameKey(typed) === key ? id : undefined));
 }
 
-// Binds what was typed with the name of one of `sheets` to that sheet.
-export function bindSheets(tree: FormulaNode, sheets: readonly NamedSheet[]): FormulaNode {
+// Binds what was typed with the name of a sheet `named` finds to that sheet.
+export function bindSheets(tree: FormulaNode, named: SheetNamed): FormulaNode {
     return mapLeaves(tree, (node) => {
-        const named = node.sheetKind === SheetKind.Name ? findSheetByName(sheets, node.sheet) : undefined;
-        return named === undefined ? node : onSheet(node, named.id);
+        const id = node.sheetKind === SheetKind.Name ? named(node.sheet) : undefined;
+        return id === undefined ? node : onSheet(node, id);
     });
 }
 
-// Puts #REF! where a formula was typed with the name of one of `sheets`: for a formula too long to store bound.
-export function breakSheets(tree: FormulaNode, sheets: readonly NamedSheet[]): FormulaNode {
+// Puts #REF! where a formula was typed with the name of a sheet `named` finds: for a formula too long to store
+// bound.
+export function breakSheets(tree: FormulaNode, named: SheetNamed): FormulaNode {
     return mapLeaves(tree, (node) => {
-        const named = node.sheetKind === SheetKind.Name && findSheetByName(sheets, node.sheet) !== undefined;
-        return named ? leaf(NodeKind.Error, REF_ERROR, '', node.space, SheetKind.Host, '') : node;
+        const held = node.sheetKind === SheetKind.Name && named(node.sheet) !== undefined;
+        return held ? leaf(NodeKind.Error, REF_ERROR, '', node.space, SheetKind.Host, '') : node;
     });
 }
 
