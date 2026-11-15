@@ -10,15 +10,19 @@ function blankLike(other: Plain): Plain {
     return typeof other === 'number' ? 0 : typeof other === 'string' ? '' : false;
 }
 
-// Below zero when `a` sorts first, zero when the two are equal. Errors are the caller's to take out first.
-export function compareValues(a: Plain | null, b: Plain | null): number {
+// Below zero when `a` sorts first, zero when the two are equal. Errors are the caller's to take out first. With
+// `keyed` every text is its key already, as the string table holds it for a text of a cell.
+export function compareValues(a: Plain | null, b: Plain | null, keyed = false): number {
     if (a === null) {
         if (b === null) return 0;
-        return compareValues(blankLike(b), b);
+        return compareValues(blankLike(b), b, keyed);
     }
-    if (b === null) return compareValues(a, blankLike(a));
+    if (b === null) return compareValues(a, blankLike(a), keyed);
     if (typeof a === 'number' && typeof b === 'number') return compare15(a, b);
-    if (typeof a === 'string' && typeof b === 'string') return a === b ? 0 : compareText(textKey(a), textKey(b));
+    if (typeof a === 'string' && typeof b === 'string') {
+        if (a === b) return 0;
+        return keyed ? compareText(a, b) : compareText(textKey(a), textKey(b));
+    }
     if (typeof a === 'boolean' && typeof b === 'boolean') return Number(a) - Number(b);
     // Of two kinds, a number comes first and a boolean last.
     const rank = typeof a === 'number' ? 0 : typeof a === 'string' ? 1 : 2;

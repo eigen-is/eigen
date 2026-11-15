@@ -1,8 +1,7 @@
 // The operators on values that are already read: arithmetic, comparison and joining text, with their coercions and
-// their error order, the left operand first. They are total: a value that is no scalar is #VALUE!. Each operator is
-// also an entry of the kind a function is, so that an operator on an array is lifted by the code that lifts a call.
+// their error order, the left operand first. They are total: a value that is no scalar is #VALUE!. The evaluator
+// calls them for two values, and the loop over the elements of an array calls them once per element.
 
-import { ANY, fn } from '../functions/registry';
 import { Token } from '../text/lexer';
 import { toNumber, toText } from '../values/coerce';
 import { compareValues } from '../values/compare';
@@ -13,7 +12,6 @@ import { power } from '../values/powers';
 import { snapSum } from '../values/precision';
 import type { Scalar, Value } from '../values/value';
 import { isError, LONGEST_TEXT } from '../values/value';
-import type { Entry } from './signature';
 
 // A number as a cell can hold it: an overflow is #NUM!, and what is too small to be a normal double is 0.
 export function real(result: number): number | FormulaError {
@@ -21,7 +19,7 @@ export function real(result: number): number | FormulaError {
     return result > -SMALLEST_NORMAL && result < SMALLEST_NORMAL ? 0 : result;
 }
 
-function arithmetic(op: number, x: number, y: number): number | FormulaError {
+export function arithmetic(op: number, x: number, y: number): number | FormulaError {
     switch (op) {
         case Token.Plus:
             return real(x + y);
@@ -38,11 +36,12 @@ function arithmetic(op: number, x: number, y: number): number | FormulaError {
     }
 }
 
-function compare(op: number, a: Value, b: Value): Scalar {
+// One comparison. With `keyed` each text is the key it is compared on, and no longer the text itself.
+export function compare(op: number, a: Value, b: Value, keyed: boolean): Scalar {
     if (isError(a)) return a;
     if (isError(b)) return b;
     if ((typeof a === 'object' && a !== null) || (typeof b === 'object' && b !== null)) return VALUE;
-    const order = compareValues(a, b);
+    const order = compareValues(a, b, keyed);
     switch (op) {
         case Token.Equal:
             return order === 0;
@@ -62,7 +61,7 @@ function compare(op: number, a: Value, b: Value): Scalar {
 // One operator on two values. With `snap`, a sum or a difference that is tiny against its left operand is 0, which
 // is for the last operation of a formula only.
 export function operate(op: number, a: Value, b: Value, snap: boolean): Scalar {
-    if (op >= Token.Equal) return compare(op, a, b);
+    if (op >= Token.Equal) return compare(op, a, b, false);
     if (op === Token.Concat) {
         const left = toText(a);
         if (typeof left !== 'string') return left;
@@ -87,27 +86,3 @@ export function percent(a: Value): Scalar {
     const x = toNumber(a);
     return typeof x === 'number' ? real(x / 100) : x;
 }
-
-const BINARY = [
-    Token.Plus,
-    Token.Minus,
-    Token.Multiply,
-    Token.Divide,
-    Token.Power,
-    Token.Concat,
-    Token.Equal,
-    Token.NotEqual,
-    Token.Less,
-    Token.LessEqual,
-    Token.Greater,
-    Token.GreaterEqual,
-];
-
-// By operator token, for an operand that is an array.
-export const LIFTED_BINARY: readonly Entry[] = BINARY.reduce((entries: Entry[], op) => {
-    entries[op] = fn('', [ANY, ANY], (a, b) => operate(op, a, b, false));
-    return entries;
-}, []);
-export const LIFTED_PLUS = fn('', [ANY], (a) => a);
-export const LIFTED_NEGATE = fn('', [ANY], negate);
-export const LIFTED_PERCENT = fn('', [ANY], percent);

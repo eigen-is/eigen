@@ -1,7 +1,10 @@
-// Reading the cells a reference names: where its first error sits, and the array it becomes when an operator needs
-// its elements. The array stores one row for every row of the area that holds a cell and one for every stretch of
-// rows that hold none, and its columns the same way, so a reference costs the cells that exist, wherever they lie.
+// Reading the cells a reference names: where its first error sits, and the array it becomes when its elements are
+// needed. The array stores one row for every row of the area that holds a cell and one for every stretch of rows
+// that hold none, and its columns the same way, so a reference costs the cells that exist, wherever they lie. A
+// function gets that array filled with the values; an operator gets its rows and columns, and reads the cells
+// where they lie.
 
+import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import { GRID_ROWS } from '../text/a1';
 import type { FormulaError } from '../values/errors';
@@ -32,8 +35,51 @@ export function firstError(ctx: Evaluator, area: Reference, skips: number): Form
     return found;
 }
 
-// The cells of one area as an array, or the cell itself when there is one.
-export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
+// A range as the array it is read as, with its cells left on the sheet: the size that was written and the rows
+// and columns the array stores, each for a run of written ones.
+export class Banded {
+    public readonly rows: number;
+    public readonly columns: number;
+    public readonly height: number;
+    public readonly width: number;
+    public readonly rowEnds: Int32Array | null;
+    public readonly columnEnds: Int32Array | null;
+    private readonly held: readonly Column[];
+    private readonly top: number;
+    private readonly left: number;
+
+    public constructor(
+        held: readonly Column[],
+        area: Reference,
+        rowEnds: Int32Array | null,
+        columnEnds: Int32Array | null,
+    ) {
+        this.held = held;
+        this.top = area.top;
+        this.left = area.left;
+        this.rows = heightOf(area);
+        this.columns = widthOf(area);
+        this.height = rowEnds?.length ?? this.rows;
+        this.width = columnEnds?.length ?? this.columns;
+        this.rowEnds = rowEnds;
+        this.columnEnds = columnEnds;
+    }
+
+    // The row of the sheet that a stored row reads: the first of the rows it stands for.
+    public row(stored: number): number {
+        const { rowEnds } = this;
+        return this.top + (rowEnds === null || stored === 0 ? stored : rowEnds[stored - 1]);
+    }
+
+    // The column of the sheet that a stored column reads, which the sheet may not have.
+    public column(stored: number): Column | undefined {
+        const { columnEnds } = this;
+        return this.held[this.left + (columnEnds === null || stored === 0 ? stored : columnEnds[stored - 1])];
+    }
+}
+
+// One area with its formulas computed, banded as the array of its cells, or the cell itself when there is one.
+export function band(ctx: Evaluator, area: Reference): Scalar | Banded {
     ctx.recalc.settleArea(area);
     const { top, left } = area;
     const sheet = ctx.workbook.sheets[area.sheet].columns;
@@ -54,24 +100,25 @@ export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
             filledColumns[c] = 1;
         }
     }
-    const rowEnds = runs(filledRows, down, rows);
-    const columnEnds = runs(filledColumns, across, columns);
-    const height = rowEnds?.length ?? rows;
-    const width = columnEnds?.length ?? columns;
-    if (!ctx.recalc.room(height * width)) return CALC;
+    const banded = new Banded(sheet, area, runs(filledRows, down, rows), runs(filledColumns, across, columns));
+    if (!ctx.recalc.room(banded.height * banded.width)) return CALC;
+    if (rows * columns > 1) return banded;
+    return across === 0 ? null : ctx.workbook.value(sheet[left], top);
+}
+
+// The cells of one area as an array of their values, or the cell itself when there is one.
+export function toArray(ctx: Evaluator, area: Reference): Scalar | ArrayValue {
+    const banded = band(ctx, area);
+    if (!(banded instanceof Banded)) return banded;
+    const { rows, columns, height, width, rowEnds, columnEnds } = banded;
     // Filled with blanks one by one and never made at its size, which would slow every reference read after it.
     const items: Scalar[] = [];
     for (let at = height * width; at > 0; at -= 1) items.push(null);
     for (let j = 0; j < width; j += 1) {
-        const c = columnEnds === null || j === 0 ? j : columnEnds[j - 1];
-        const column = c < across && filledColumns[c] === 1 ? sheet[left + c] : null;
-        for (let i = 0; i < height; i += 1) {
-            const r = rowEnds === null || i === 0 ? i : rowEnds[i - 1];
-            const held = column !== null && r < down && filledRows[r] === 1;
-            items[i * width + j] = held ? ctx.workbook.value(column, top + r) : null;
-        }
+        const column = banded.column(j);
+        if (column === undefined) continue;
+        for (let i = 0; i < height; i += 1) items[i * width + j] = ctx.workbook.value(column, banded.row(i));
     }
-    if (rows * columns === 1) return items[0];
     // Not looked through for an array of numbers: what reads a range as an array reads it element by element.
     return {
         type: ValueType.Array,
