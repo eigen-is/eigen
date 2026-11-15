@@ -23,6 +23,7 @@ import { driveStillActivity } from './drive-still';
 import { mailHero } from './mail-hero';
 import { mailSearch } from './mail-search';
 import { mailStillInvite } from './mail-still';
+import { slidesPie, vectorPie } from './pie-picture';
 import { ROWS } from './rows';
 import { sheetsChart } from './sheets-chart';
 import { sheetsCollabPair } from './sheets-collab';
@@ -51,9 +52,11 @@ export const SCENES: Scene[] = [
     slidesHero,
     slidesPresent,
     slidesStillHeading,
+    slidesPie,
     vectorHero,
     vectorZoom,
     vectorStillSketch,
+    vectorPie,
     mailHero,
     mailSearch,
     mailStillInvite,
