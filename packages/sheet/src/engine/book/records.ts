@@ -344,7 +344,7 @@ export class SheetRecords {
                 continue;
             }
             const ruled = next === rule.ranges ? rule : { ...rule, ranges: next };
-            // The formula is read at the top-left of the first range the edit leaves, at the first line it leaves of it.
+            // The formula is read at the top-left of the first range the edit leaves, on its first line that stays.
             const first = here ? rule.ranges.findIndex((range) => spanAfter(axis, ...lineSpan(range, rows), true)) : 0;
             const [start] = lineSpan(rule.ranges[first], rows);
             const host = here && mapIndex(axis, start) === GONE ? edit.index + edit.count : start;
@@ -375,9 +375,8 @@ export class SheetRecords {
         };
     }
 
-    // A block of cells moved on this sheet or to another. `source` holds the sheet the block leaves, which is this one
-    // for a move on one sheet. Its comments and the merges wholly in it go along, and on one sheet so do the rule
-    // ranges wholly in it; a merge it lands on whole goes, and one it cuts, where it leaves or lands, refuses.
+    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments and the merges wholly
+    // in it go along, on one sheet its rule ranges too; a merge it lands on whole goes, one it cuts anywhere refuses.
     public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'key-too-long' {
         const block = op.from;
         const [top, left, bottom, right] = block;
@@ -552,9 +551,8 @@ export class SheetRecords {
     }
 }
 
-// The lines `start` to `end` after the edit, or null when none is left. With `open`, an end on the axis's last line
-// stays there, so a range that reaches the end of the grid keeps reaching it, and the whole axis, Excel's `A:A`,
-// stays whole.
+// The lines `start` to `end` after the edit, or null when none is left. With `open` an end on the axis's last line
+// stays there, so a range to the grid's end, Excel's `A:A` included, keeps reaching it.
 function spanAfter(edit: Edit, start: number, end: number, open: boolean): Span | null {
     if (open && start === 0 && end === edit.lines - 1) return [start, end];
     const into = { start: 0, end: 0 };
@@ -590,9 +588,8 @@ function formulaOf(rule: ConditionalFormatRecord): string | undefined {
     return typeof text === 'string' ? text : undefined;
 }
 
-// Where a rule is read during a move: at the top-left of its first range, unless the block leaves from its sheet and
-// takes cells of the rule but not its first range, which is then read at the first of its cells the block leaves where
-// they are, so the formula does not follow the block. None when the block holds every range.
+// Where a rule is read during a move: the top-left of its first range, or, when the block leaves its sheet with cells
+// of the rule but not that range, the first cell it leaves behind. None when the block holds every range.
 function moveHost(
     ranges: readonly SingleRange[],
     block: Rect,

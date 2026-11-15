@@ -23,9 +23,8 @@ export type LookSpan = {
 export class Bands {
     private readonly bands: Band[] = [{ first: 0, list: new RunList() }];
 
-    // A sheet from the flat form of a snapshot: per band its first column, n, then n pairs of start row and look
-    // index, where index 0 is plain and index i names `looks[i - 1]`. The form may say in two runs or two bands what
-    // one holds; columns before its first band are plain.
+    // A sheet from a snapshot's flat form: per band its first column, n, then n pairs of start row and look index,
+    // where index i names `looks[i - 1]` and 0 is plain. Equal neighbours join; columns before the first are plain.
     public constructor(flat: readonly number[], looks: readonly number[]) {
         const ids = [0, ...looks];
         for (let at = 0; at < flat.length; at += 2 + 2 * flat[at + 1]) {

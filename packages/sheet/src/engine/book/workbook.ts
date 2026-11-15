@@ -50,9 +50,8 @@ export class Workbook {
     // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
     private swept = 0;
 
-    // Loads a snapshot. The limits are weighed on the bands as rebuilt and on the cells as listed, before the engine
-    // allocates a column: a document over one throws its refusal and holds nothing. A cell's `spill` mark is dropped,
-    // as a band said twice is, so the snapshot this walks back to loads to itself.
+    // Loads a snapshot, weighing the limits on the bands as rebuilt and the cells as listed before the engine
+    // allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
     public constructor({ g, now, seed, sheets }: Readonly<Content>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const bands = ordered.map(
@@ -186,9 +185,8 @@ export class Workbook {
         );
     }
 
-    // Forgets the looks no cell wears, once the table holds more than twice the looks it held after its last sweep.
-    // It renumbers the rest in every sheet's bands, so a look id held from before it names another look: an applier
-    // calls it once a batch is done, with no id in hand.
+    // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
+    // every sheet's bands: an applier calls it once a batch is done, with no look id in hand.
     public sweepLooks(): void {
         if (this.looks.size > Math.max(SWEEP_FLOOR, 2 * this.swept)) this.sweep();
     }
