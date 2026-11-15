@@ -122,7 +122,10 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): Char
 
 // Rewrites a range chart's refs through `map`, under any key, so a ref this build doesn't know moves too. A null
 // empties a ref, and a name ref leaves the series unnamed. The chart itself when no ref changed.
-export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
+export function mapChartRefs<C extends Readonly<Record<string, unknown>>>(
+    chart: C,
+    map: (ref: CellRangeRef) => CellRangeRef | null,
+): C {
     const { stored } = readChartSpec(chart);
     const before = stored['data'];
     if (!isRecord(before) || before['source'] !== 'range') return chart;
