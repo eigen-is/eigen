@@ -30,7 +30,10 @@ async function renderPage(previous?: ArticleMeta, next?: ArticleMeta, slug = 'ma
                     <AboutPage
                         app={app}
                         page={aboutMeta(app.slug)}
-                        body={{ html: '<p>Body</p><p>[BLOCK:app-principles]</p>', mediaGrids: [] }}
+                        body={{
+                            html: '<p>Body</p><aside class="site-panel"><p>Technical note</p></aside>',
+                            mediaGrids: [],
+                        }}
                         previous={previous}
                         next={next}
                     />
@@ -63,6 +66,14 @@ describe('AboutPage', () => {
             expect(part).toContain('Every message is a plain .eml file.');
             expect(part).toContain('href="/support/mail/download-an-email"');
         }
+    });
+
+    test('the narrow-screen boxes and help link follow the body and its technical note, before the pager', async () => {
+        const column = (await renderPage(undefined, aboutMeta('docs'))).split('site-reading-column')[1] ?? '';
+        const order = ['Technical note', 'Every message is a plain .eml file.', 'All Mail help articles', 'Next'];
+        const at = order.map((text) => column.indexOf(text));
+        expect(at.every((index) => index >= 0)).toBe(true);
+        expect(at).toEqual([...at].sort((a, b) => a - b));
     });
 
     test('an app with no principles shows no boxes', async () => {

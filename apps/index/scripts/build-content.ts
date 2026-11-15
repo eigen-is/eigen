@@ -17,7 +17,6 @@ const ROOT = process.cwd(); // apps/index
 const DATA = join(ROOT, 'src', 'data');
 const OUT = join(ROOT, 'src', 'content', '.generated');
 
-// Recursively list every .md file under `dir`, returning paths relative to `dir`.
 function listMarkdown(dir: string, base = ''): string[] {
     if (!existsSync(dir)) return [];
     const out: string[] = [];
@@ -92,11 +91,10 @@ function buildBlog(): ArticleMeta[] {
 }
 
 // The blocks the About pages draw themselves, such as the overview's app rows. No other collection has any.
-const ABOUT_BLOCKS = new Set(['apps', 'app-principles']);
+const ABOUT_BLOCKS = new Set(['apps']);
 
-// The overview first, then one page per app in the registry's order. An app page ends with the block where narrow
-// screens show the app's principles, and every page with the shared note for the technical reader in a panel,
-// appended after the render so nothing in it reaches the table of contents.
+// The overview first, then one page per app in the registry's order. Every page ends with the shared note for the
+// technical reader in a panel, appended after the render so nothing in it reaches the table of contents.
 function buildAbout(): ArticleMeta[] {
     const dir = join(DATA, 'about');
     const technical = renderMarkdown(readFileSync(join(dir, '_technical.md'), 'utf-8')).html;
@@ -106,9 +104,7 @@ function buildAbout(): ArticleMeta[] {
         const slug = aboutPageSlug(file);
         const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
         if (slug !== 'index' && data.rows) throw new Error(`About page ${file} has rows, which only index.md takes`);
-        const { content, mediaGrids } = parseMediaGrids(
-            slug === 'index' ? body : `${body.trimEnd()}\n\n::: app-principles\n:::\n`,
-        );
+        const { content, mediaGrids } = parseMediaGrids(body);
         const { html, toc } = renderMarkdown(content, ABOUT_BLOCKS);
         writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, mediaGrids });
         const article: ArticleMeta = {
