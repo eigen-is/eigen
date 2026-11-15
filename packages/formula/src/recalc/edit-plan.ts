@@ -4,7 +4,7 @@
 // of the recompute. Everything is in the places before the edit, but the blocks reported to the host. A rewrite
 // too long for a cell to store refuses the whole edit, by a throw from here, before a cell moved.
 
-import { mapLeaves, sheetOf } from '../edit/leaves';
+import { sheetOf } from '../edit/leaves';
 import { moveClasses } from '../edit/move';
 import { bindSheet } from '../edit/sheets';
 import { hostClasses } from '../edit/transform';
@@ -13,7 +13,6 @@ import type { Sheet } from '../store/sheet';
 import type { Change, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
 import type { ShapeTable } from '../text/shapes';
-import { findSheetByName } from '../text/sheet-name';
 import type { Ends, FormulaNode } from '../text/tree';
 import { endsAt, RefKind, SheetKind } from '../text/tree';
 
@@ -150,35 +149,6 @@ export function planEdit(workbook: Workbook, rectangles: readonly number[], chan
                         ref.sheetKind === SheetKind.Span || (ref.sheetKind === SheetKind.Id && ref.sheet === named),
                 );
                 outcome(bound, bound !== tree, reads || bound !== tree, [top, left, bottom, right], host.id, 0, 0);
-            }
-        }
-    }
-    // The formulas of the sheet that comes read a sheet by the name they were typed with, the new sheet first.
-    // The sheet is in no place yet and nothing reads it, so they get their new shape where they stand.
-    if (change.kind === ChangeKind.AddSheet) {
-        const { sheet } = change;
-        const candidates = [sheet, ...sheets];
-        for (let c = 0; c < sheet.columns.length; c += 1) {
-            const column = sheet.columns[c];
-            for (let row = 0; row < column.length; ) {
-                const id = column.shape[row];
-                const top = row;
-                do row += 1;
-                while (row < column.length && column.shape[row] === id);
-                if (id === 0) continue;
-                const shape = shapes.shape(id);
-                if (shape.tree === null || !shape.namesSheet) continue;
-                const bound = mapLeaves(shape.tree, (node) => {
-                    const named =
-                        node.sheetKind === SheetKind.Name ? findSheetByName(candidates, node.sheet) : undefined;
-                    return named === undefined ? node : bindSheet(node, node.sheet, named.id);
-                });
-                if (bound === shape.tree) continue;
-                const shaped = rewritten(shapes, bound);
-                const bottom = row - 1;
-                column.fillShape(top, bottom, shaped);
-                const formula = shapes.shape(shaped).text;
-                plan.rewrites.push({ sheet: sheet.id, top, left: c, bottom, right: c, formula, lost: shape.text });
             }
         }
     }

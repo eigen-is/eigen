@@ -138,7 +138,7 @@ describe('text/tables: a table reference is one leaf that keeps what was written
         const table = new ShapeTable();
         const id = table.internTree(treeA1('=SUM(Sales[Amount])', 'B2'));
         expect(table.internTree(treeA1('=SUM(Sales[Amount])', 'Z99'))).toBe(id);
-        expect(table.intern('=SUM(Sales[Amount])')).toBe(id);
+        expect(table.intern('=SUM(Sales[Amount])', [])).toBe(id);
         expect(table.internTree(treeA1('=SUM(sales[Amount])'))).not.toBe(id);
         expect(table.shape(id).refs).toEqual([]);
     });
