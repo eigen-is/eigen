@@ -17,7 +17,7 @@ export type ResolvedQuotas = {
 };
 
 // Its own function because it needs no mount: a team Home has none, yet its calendar meters against this budget.
-export async function resolveHomeDataMax(teamIds: string[]): Promise<number> {
+export async function resolveHomeDataMax(teamIds: readonly string[]): Promise<number> {
     return homeDataMaxOf(await overridesOf(teamIds));
 }
 
@@ -26,7 +26,7 @@ export async function resolveHomeDataMax(teamIds: string[]): Promise<number> {
 // drive keeps the cap an admin set on it, below the default too.
 export async function resolveUserQuotas(
     mountConfig: MountConfig,
-    teamIds: string[],
+    teamIds: readonly string[],
     owner: 'user' | 'team',
 ): Promise<ResolvedQuotas> {
     const overrides = await overridesOf(teamIds);
@@ -43,7 +43,7 @@ async function overridesOf(teamIds: readonly string[]): Promise<TeamQuotaOverrid
     return [...(await getFromHomes(teamIds.map(teamOwnerId), 'team:quota-overrides', null)).values()];
 }
 
-function homeDataMaxOf(overrides: TeamQuotaOverrides[]): number {
+function homeDataMaxOf(overrides: readonly TeamQuotaOverrides[]): number {
     const candidates = [
         getServerSettings().quotas.homeDataMaxMB,
         ...overrides.flatMap((override) => override.homeDataMaxMB ?? []),

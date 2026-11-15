@@ -195,7 +195,7 @@ export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
 // the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
 export async function broadcastToOwnerAndMembers(
     ownerId: string,
-    members: EffectiveMember[] | Promise<EffectiveMember[]>,
+    members: readonly EffectiveMember[] | Promise<readonly EffectiveMember[]>,
     event: SSEvent,
 ): Promise<void> {
     await sendToHome(ownerId, { type: 'broadcast', event });
