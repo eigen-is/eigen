@@ -129,6 +129,19 @@ describe('the open', () => {
         expect(count.ran).toBe(0);
     });
 
+    test('of a computed snapshot computes a formula that came with #REF! again, and none of its readers', () => {
+        const { count, recalc } = counted(
+            [
+                [0, 0, REF, '=RC'],
+                [0, 1, REF, '=RC[-1]+RAN(1)'],
+                [0, 2, 'kept1', '=IFERROR(RC[-1],"kept")&RAN(1)'],
+            ],
+            true,
+        );
+        expect(recalc.pass(NO_CAP).loops).toHaveLength(1);
+        expect(count.ran).toBe(1);
+    });
+
     test('of one that is not computed computes every formula once', () => {
         const { count, recalc } = counted(cells, false);
         expect(recalc.pass(NO_CAP).stopped).toBe(false);

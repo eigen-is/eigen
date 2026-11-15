@@ -124,7 +124,7 @@ type Counts = {
     compared: number;
     stops: number;
     // Reloads of a settled walk, and the formulas with no value they held; reloads after a stopped pass and after
-    // writes no pass followed.
+    // writes or a clock no pass followed.
     computed: number;
     blanks: number;
     stopped: number;
@@ -181,6 +181,14 @@ function run(seed: number, steps: number): Counts {
         expect([seed, ...values(engine)]).toEqual([seed, ...values(expected.engine)]);
     };
     for (let step = 0; step < steps; step += 1) {
+        if (pick(15) === 0) {
+            // A batch that writes nothing still sets its clock.
+            now = pick(1000);
+            clock = pick(1000);
+            engine.setClock(now, clock);
+            reopen('written');
+            continue;
+        }
         const id = SHEETS[pick(2)];
         const row = pick(ROWS);
         const column = pick(COLUMNS);
