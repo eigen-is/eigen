@@ -11,7 +11,7 @@ import {
     typedText,
 } from '../../text';
 import { ShapeTable } from '../../text/shapes';
-import { at, dice, findSheet, sheetName } from './support';
+import { at, dice, findSheet, NO_SHEET, sheetName } from './support';
 
 // A sheet whose id is as long as the ids a workbook gives, so a!A1 is twelve times as long stored as typed.
 const wide = sheetFinder([
@@ -23,7 +23,7 @@ const LAST = [1048575, 16383] as const;
 function crossed(typed: string, host = 'B2'): { stored: string; shown: string; parsed: boolean } {
     const stored = storedText(typed, ...at(host), findSheet);
     const table = new ShapeTable();
-    const shape = table.shape(table.intern(stored, []));
+    const shape = table.shape(table.intern(stored, NO_SHEET));
     return { stored, shown: typedText(shape, ...at(host), sheetName), parsed: shape.tree !== null };
 }
 
@@ -62,7 +62,7 @@ describe('typed text and stored text', () => {
 
     test('stored text that fails without a mark shows as it is', () => {
         const table = new ShapeTable();
-        const shape = table.shape(table.intern('=SUM(1,', []));
+        const shape = table.shape(table.intern('=SUM(1,', NO_SHEET));
         expect(typedText(shape, 0, 0, sheetName)).toBe('=SUM(1,');
     });
 
@@ -75,7 +75,7 @@ describe('typed text and stored text', () => {
         const far = storedText(typed, ...LAST, wide);
         expect(far).toBe(`=${typed}`);
         const table = new ShapeTable();
-        expect(typedText(table.shape(table.intern(far, [])), ...LAST, sheetName)).toBe(typed);
+        expect(typedText(table.shape(table.intern(far, NO_SHEET)), ...LAST, sheetName)).toBe(typed);
     });
 
     test('a formula of a file whose stored text would pass the bound is refused as too long', () => {

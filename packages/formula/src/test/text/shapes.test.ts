@@ -1,16 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_STORED_LENGTH, NodeKind, parseA1, printA1, RefKind } from '../../text';
+import { findSheetByName, MAX_STORED_LENGTH, NodeKind, parseA1, printA1, RefKind } from '../../text';
 import { ShapeTable } from '../../text/shapes';
-import { at, findSheet, sheetName, stored, treeA1 } from './support';
+import { at, findSheet, NO_SHEET, sheetName, stored, treeA1 } from './support';
+
+// What a workbook that holds `sheets` hands the table.
+const holding =
+    (sheets: readonly { id: string; name: string }[]) =>
+    (name: string): string | undefined =>
+        findSheetByName(sheets, name)?.id;
 
 describe('ShapeTable', () => {
     test('equal stored text is one shape, different text another', () => {
         const table = new ShapeTable();
-        const first = table.intern('=RC[-2]+R1C2', []);
+        const first = table.intern('=RC[-2]+R1C2', NO_SHEET);
         expect(first).toBe(1);
-        expect(table.intern('=RC[-2]+R1C2', [])).toBe(first);
-        expect(table.intern('=RC[-2] + R1C2', [])).toBe(2);
-        expect(table.intern('=RC[-2]+R1C2', [])).toBe(first);
+        expect(table.intern('=RC[-2]+R1C2', NO_SHEET)).toBe(first);
+        expect(table.intern('=RC[-2] + R1C2', NO_SHEET)).toBe(2);
+        expect(table.intern('=RC[-2]+R1C2', NO_SHEET)).toBe(first);
         expect(table.size).toBe(2);
         expect(table.shape(first).text).toBe('=RC[-2]+R1C2');
         expect(table.shape(2).text).toBe('=RC[-2] + R1C2');
@@ -47,20 +53,20 @@ describe('ShapeTable', () => {
         const table = new ShapeTable();
         const tree = treeA1('=SUM(A1:A3)*2', 'A4');
         const id = table.internTree(tree);
-        expect(table.intern('=SUM(R[-3]C:R[-1]C)*2', [])).toBe(id);
+        expect(table.intern('=SUM(R[-3]C:R[-1]C)*2', NO_SHEET)).toBe(id);
         expect(table.shape(id).tree).toBe(tree);
         const other = new ShapeTable();
-        expect(other.shape(other.intern('=SUM(R[-3]C:R[-1]C)*2', [])).tree).toEqual(tree);
+        expect(other.shape(other.intern('=SUM(R[-3]C:R[-1]C)*2', NO_SHEET)).tree).toEqual(tree);
     });
 
     test('a shape lists its reference leaves in the order written', () => {
         const table = new ShapeTable();
-        const shape = table.shape(table.intern('=IF(RC[-1]>0,SUM(C1:C2,(R1C1)),-[s2]!R[1]C%)+Rate', []));
+        const shape = table.shape(table.intern('=IF(RC[-1]>0,SUM(C1:C2,(R1C1)),-[s2]!R[1]C%)+Rate', NO_SHEET));
         expect(shape.refs.map((ref) => ref.op)).toEqual([RefKind.Cell, RefKind.Columns, RefKind.Cell, RefKind.Cell]);
         expect(shape.refs.every((ref) => ref.kind === NodeKind.Ref)).toBe(true);
         expect(shape.refs[3].sheet).toBe('s2');
-        expect(table.shape(table.intern('=1+2', [])).refs).toEqual([]);
-        const chain = table.shape(table.intern(`=${'RC[1]+R1C1*RC[2]-'.repeat(450)}(RC[3],RC[4])`, []));
+        expect(table.shape(table.intern('=1+2', NO_SHEET)).refs).toEqual([]);
+        const chain = table.shape(table.intern(`=${'RC[1]+R1C1*RC[2]-'.repeat(450)}(RC[3],RC[4])`, NO_SHEET));
         expect(chain.refs).toHaveLength(1352);
         expect(chain.refs.slice(0, 4).map((ref) => ref.column)).toEqual([1, 0, 2, 1]);
         expect(chain.refs.slice(-3).map((ref) => ref.column)).toEqual([2, 3, 4]);
@@ -68,7 +74,7 @@ describe('ShapeTable', () => {
 
     test('a shape that is not kept is forgotten, and its id goes to a new shape that starts with nothing', () => {
         const table = new ShapeTable();
-        const [a, b, c] = ['=R1C1', '=R1C2', '=R1C3'].map((text) => table.intern(text, []));
+        const [a, b, c] = ['=R1C1', '=R1C2', '=R1C3'].map((text) => table.intern(text, NO_SHEET));
         table.facts[a] = 7;
         table.facts[c] = 9;
         const held = new Uint8Array(table.size + 1);
@@ -76,39 +82,39 @@ describe('ShapeTable', () => {
         table.keep(held);
         // Kept twice, a forgotten id is still given out once.
         table.keep(held);
-        expect(table.intern('=R1C2', [])).toBe(b);
-        const next = table.intern('=ROW()', []);
-        const again = table.intern('=R1C1', []);
+        expect(table.intern('=R1C2', NO_SHEET)).toBe(b);
+        const next = table.intern('=ROW()', NO_SHEET);
+        const again = table.intern('=R1C1', NO_SHEET);
         expect([next, again].sort()).toEqual([a, c].sort());
         expect([table.shape(next).text, table.shape(again).text]).toEqual(['=ROW()', '=R1C1']);
         expect([table.facts[next], table.facts[again], table.facts[b]]).toEqual([-1, -1, -1]);
-        expect(table.intern('=ROW()', [])).toBe(next);
+        expect(table.intern('=ROW()', NO_SHEET)).toBe(next);
         expect(table.size).toBe(3);
-        expect(table.intern('=R1C3', [])).toBe(4);
+        expect(table.intern('=R1C3', NO_SHEET)).toBe(4);
     });
 
     test('a shape that names a sheet that does not exist says so', () => {
         const table = new ShapeTable();
-        expect(table.shape(table.intern("=SUM('Later'!RC)", [])).namesSheet).toBe(true);
-        expect(table.shape(table.intern("='Later'!Rate", [])).namesSheet).toBe(true);
-        expect(table.shape(table.intern('=SUM([s2]!RC)', [])).namesSheet).toBe(false);
-        expect(table.shape(table.intern("='[1]Book'!RC", [])).namesSheet).toBe(false);
+        expect(table.shape(table.intern("=SUM('Later'!RC)", NO_SHEET)).namesSheet).toBe(true);
+        expect(table.shape(table.intern("='Later'!Rate", NO_SHEET)).namesSheet).toBe(true);
+        expect(table.shape(table.intern('=SUM([s2]!RC)', NO_SHEET)).namesSheet).toBe(false);
+        expect(table.shape(table.intern("='[1]Book'!RC", NO_SHEET)).namesSheet).toBe(false);
         expect(table.shape(table.internTree(treeA1('=Nowhere!A1'))).namesSheet).toBe(true);
     });
 
     test('what is typed with the name of a sheet the workbook holds is the shape bound to it', () => {
         const table = new ShapeTable();
-        const sheets = [
+        const sheets = holding([
             { id: 's2', name: 'Later' },
             { id: 's3', name: 'Other' },
-        ];
-        const typed = table.intern("=SUM('Later'!RC)+'Nowhere'!RC", []);
+        ]);
+        const typed = table.intern("=SUM('Later'!RC)+'Nowhere'!RC", NO_SHEET);
         const bound = table.intern("=SUM('LATER'!RC)+'Nowhere'!RC", sheets);
         expect(table.shape(bound).text).toBe("=SUM([s2]!RC)+'Nowhere'!RC");
         // The typed text is a shape of the table, and still not the shape of a cell that enters now.
         expect(table.intern("=SUM('Later'!RC)+'Nowhere'!RC", sheets)).toBe(bound);
-        expect(table.intern("=SUM('Later'!RC)+'Nowhere'!RC", [])).toBe(typed);
-        expect(table.intern("=SUM('Later'!RC)+'Nowhere'!RC", [sheets[1]])).toBe(typed);
+        expect(table.intern("=SUM('Later'!RC)+'Nowhere'!RC", NO_SHEET)).toBe(typed);
+        expect(table.intern("=SUM('Later'!RC)+'Nowhere'!RC", holding([{ id: 's3', name: 'Other' }]))).toBe(typed);
         expect(table.shape(table.intern("='other'!Rate", sheets))).toMatchObject({
             text: '=[s3]!Rate',
             namesSheet: false,
@@ -119,30 +125,30 @@ describe('ShapeTable', () => {
         const table = new ShapeTable();
         // A number in a spelling shorter than the one a key prints.
         const sum = `RC+${'1e9+'.repeat(MAX_STORED_LENGTH / 4 - 8)}1`;
-        const id = table.intern(`=${sum}`, []);
+        const id = table.intern(`=${sum}`, NO_SHEET);
         expect(table.shape(id)).toMatchObject({ text: `=${sum}`, namesSheet: false });
         expect(table.shape(id).tree).not.toBeNull();
-        expect(table.intern(`=${sum}`, [])).toBe(id);
+        expect(table.intern(`=${sum}`, NO_SHEET)).toBe(id);
         // With a sheet's name, whether or not a sheet has it, it does not parse: no form that binds it would fit.
         const text = `='Nowhere'!${sum}`;
-        const named = table.intern(text, []);
+        const named = table.intern(text, NO_SHEET);
         expect(table.shape(named)).toEqual({ text, tree: null, refs: [], namesSheet: false });
-        expect(table.intern(text, [{ id: 's9', name: 'Nowhere' }])).toBe(named);
+        expect(table.intern(text, holding([{ id: 's9', name: 'Nowhere' }]))).toBe(named);
         expect(table.size).toBe(2);
     });
 
     test('text that does not parse is kept as a shape without a tree', () => {
         const table = new ShapeTable();
-        const id = table.intern('=SUM(1,', []);
+        const id = table.intern('=SUM(1,', NO_SHEET);
         expect(table.shape(id)).toEqual({ text: '=SUM(1,', tree: null, refs: [], namesSheet: false });
-        expect(table.intern('=SUM(1,', [])).toBe(id);
+        expect(table.intern('=SUM(1,', NO_SHEET)).toBe(id);
     });
 
     test('two tables share nothing', () => {
         const one = new ShapeTable();
         const two = new ShapeTable();
-        one.intern('=1', []);
-        expect(two.intern('=2', [])).toBe(1);
+        one.intern('=1', NO_SHEET);
+        expect(two.intern('=2', NO_SHEET)).toBe(1);
         expect(two.size).toBe(1);
     });
 
