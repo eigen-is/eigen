@@ -714,6 +714,8 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     const [top, left, bottom, right] = block;
     const down = op.toRow - top;
     const across = op.toColumn - left;
+    // A block moved onto itself changes nothing, whatever it cuts.
+    if (from === to && down === 0 && across === 0) return null;
     const shifted = ([t, l, b, r]: Rect): Rect => [t + down, l + across, b + down, r + across];
     const target = shifted(block);
     const carried = [...from.records.merge].filter(([, { rect }]) => meets(rect, block));
@@ -722,7 +724,21 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         ([id, { rect }]) => meets(rect, target) && !(from === to && carried.some(([other]) => other === id)),
     );
     if (covered.some(([, { rect }]) => !within(rect, target))) return 'merge-cut';
-
+    // The comments the block lands on go too, but for those it brings. A record it brings from another sheet whose id
+    // that sheet keeps for another record refuses.
+    const brought = [...from.records.comment].filter(([, { row, column }]) => inside(row, column, block));
+    const landed = [...to.records.comment].filter(
+        ([id, { row, column }]) =>
+            inside(row, column, target) && !(from === to && brought.some(([other]) => other === id)),
+    );
+    if (from !== to) {
+        const keeps = (held: ReadonlyMap<string, unknown>, gone: readonly [string, unknown][], id: string) =>
+            held.has(id) && !gone.some(([other]) => other === id);
+        const clash =
+            carried.some(([id]) => keeps(to.records.merge, covered, id)) ||
+            brought.some(([id]) => keeps(to.records.comment, landed, id));
+        if (clash) return 'id-in-use';
+    }
     const move: Move = {
         fromSheet: op.sheet,
         row: top,
@@ -755,8 +771,9 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     from.looks.format(block, () => 0);
     to.looks.paste(looks, block, op.toRow, op.toColumn);
 
-    // The merges wholly in the block and the comments in it go along; a merge the block lands on whole goes.
+    // The merges wholly in the block and the comments in it go along; a merge or a comment the block lands on goes.
     for (const [id] of covered) to.records.merge.delete(id);
+    for (const [id] of landed) to.records.comment.delete(id);
     for (const [id, { rect }] of carried) {
         from.records.merge.delete(id);
         to.records.merge.set(id, { rect: shifted(rect) });
