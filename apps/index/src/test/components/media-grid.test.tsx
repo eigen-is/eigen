@@ -1,7 +1,13 @@
 // A caption that names an app sets the name in the class the site's prose gives app names, the same as the Markdown.
 import { describe, expect, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { MediaGrid } from '../../components/media-grid';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+
+// The grid's module loads the lightbox's dialog, which reads the DOM globals as it loads and keeps what it found for
+// every later test file in the process.
+installHappyDom();
+
+const { renderToStaticMarkup } = await import('react-dom/server');
+const { MediaGrid } = await import('../../components/media-grid');
 
 describe('MediaGrid', () => {
     test('sets an app name in a caption apart and keeps the alt text plain', () => {
