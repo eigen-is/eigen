@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2367 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2373 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1162,7 +1162,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1241)
+## Utilities & constants (1247)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1193,6 +1193,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hostClasses` | `@workspace/formula/text` | packages/formula/src/edit/transform.ts |
 | `intersect` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
 | `isLegacy` | `@workspace/formula/text` | packages/formula/src/text/xlsx.ts |
+| `LAST_SERIAL` | `@workspace/formula/text` | packages/formula/src/values/dates.ts |
 | `mapIndex` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `mapSpan` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `MAX_ARGUMENTS` | `@workspace/formula/text` | packages/formula/src/text/parser.ts |
@@ -1839,10 +1840,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isOpBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isPatchOp` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `isSheetName` | `@workspace/lib/sheets` | packages/lib/src/sheets/sheet-name.ts |
 | `isStructuralBatch` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MAX_CONDITIONAL_FORMATS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `MAX_GRID_SLOTS` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `MAX_RULE_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
+| `MAX_SHEET_NAME_LENGTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/sheet-name.ts |
 | `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1862,6 +1865,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_KEYED_MAPS` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SHEET_NAME_END_QUOTES` | `@workspace/lib/sheets` | packages/lib/src/sheets/sheet-name.ts |
+| `SHEET_NAME_FORBIDDEN` | `@workspace/lib/sheets` | packages/lib/src/sheets/sheet-name.ts |
+| `SHEET_NAME_RULE` | `@workspace/lib/sheets` | packages/lib/src/sheets/sheet-name.ts |
 | `SHEET_ROW_HEADER_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetColumnsWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultColWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
