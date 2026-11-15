@@ -5,6 +5,7 @@
 // written per cell. The decoder rebuilds each sheet and holds it to the guard a `sheet` op's content meets.
 
 import { isRecord } from '../core/guards';
+import { MAX_SHEETS } from './limits';
 import type { CellRecord, SheetContent } from './ops';
 import { isGeneration, isNow, isSeed, isSheetContent } from './ops-validate';
 
@@ -55,8 +56,8 @@ export function encodeBook(book: BookContent): string {
     return JSON.stringify({ f: FORMAT, g, now, seed, computed, formulas, sheets });
 }
 
-// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet, a
-// formula index past the list, or a sheet the guard refuses. It never throws.
+// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet or too
+// many, two sheets with one id, a formula index past the list, or a sheet the guard refuses. It never throws.
 export function decodeBook(text: string): BookContent | null {
     let value: unknown;
     try {
@@ -67,8 +68,10 @@ export function decodeBook(text: string): BookContent | null {
     if (!isRecord(value) || Object.keys(value).length !== 7) return null;
     const { f, g, now, seed, computed, formulas, sheets } = value;
     if (f !== FORMAT || !isGeneration(g) || !isNow(now) || !isSeed(seed) || typeof computed !== 'boolean') return null;
-    if (!Array.isArray(formulas) || !Array.isArray(sheets) || sheets.length === 0) return null;
+    if (!Array.isArray(formulas) || !Array.isArray(sheets) || sheets.length === 0 || sheets.length > MAX_SHEETS)
+        return null;
     const decoded: SheetContent[] = [];
+    const ids = new Set<string>();
     for (const sheet of sheets) {
         if (!isRecord(sheet) || !Array.isArray(sheet['cells'])) return null;
         const cells: unknown[] = [];
@@ -78,7 +81,8 @@ export function decodeBook(text: string): BookContent | null {
                 cells.push([run[1] + at - 2, run[0], decodedCell(run[at], formulas)]);
         }
         const content = { ...sheet, cells };
-        if (!isSheetContent(content)) return null;
+        if (!isSheetContent(content) || ids.has(content.id)) return null;
+        ids.add(content.id);
         decoded.push(content);
     }
     return { g, now, seed, computed, sheets: decoded };

@@ -3,7 +3,7 @@ import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text
 import { isRecord } from '../../core/guards';
 import type { BookContent } from '../../sheets/book-codec';
 import { decodeBook, encodeBook } from '../../sheets/book-codec';
-import { LAST_DATE_SERIAL, MAX_RECORDS_PER_TYPE } from '../../sheets/limits';
+import { LAST_DATE_SERIAL, MAX_RECORDS_PER_TYPE, MAX_SHEETS } from '../../sheets/limits';
 import type { CellAttrs, CellRecord, LineAttrs, Placed, SheetContent, Span } from '../../sheets/ops';
 import { isSheetContent } from '../../sheets/ops-validate';
 import { encodeSheetsSnapshot } from '../../sheets/snapshot-codec';
@@ -443,6 +443,23 @@ describe('refusal', () => {
     test('of a book with no sheet', () => {
         expect(decodeBook(encodeBook({ ...BOOK, sheets: [] }))).toBeNull();
         expect(decodeBook(encodeBook({ ...BOOK, sheets: [BOOK.sheets[1]] }))).not.toBeNull();
+    });
+
+    test('of a book with more sheets than a workbook holds', () => {
+        const sheets = (count: number) =>
+            Array.from({ length: count }, (_, index) => ({
+                ...BOOK.sheets[1],
+                id: `s${index}`,
+                fields: { name: `n${index}`, order: 'a0' },
+            }));
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: sheets(MAX_SHEETS) }))).not.toBeNull();
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: sheets(MAX_SHEETS + 1) }))).toBeNull();
+    });
+
+    test('of two sheets with one id', () => {
+        const twin = { ...BOOK.sheets[1], fields: { name: 'Twin', order: 'a2' } };
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's1' }] }))).toBeNull();
+        expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's3' }] }))).not.toBeNull();
     });
 
     test('of a clock, a generation or a head out of range', () => {
