@@ -13,6 +13,9 @@ beforeAll(() => {
     publicDir = mkdtempSync(join(tmpdir(), 'markdown-blocks-'));
     mkdirSync(join(publicDir, 'data/about/media'), { recursive: true });
     for (const ext of ['av1.mp4', 'h264.mp4', 'webp']) writeFileSync(join(publicDir, `data/about/media/a.${ext}`), '');
+    for (const file of ['mail.webp', 'mail-small.webp', 'plain.webp', 'film.mp4', 'film.webp', 'a.webp']) {
+        writeFileSync(join(publicDir, file), '');
+    }
 });
 
 afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
@@ -58,6 +61,19 @@ describe('grid', () => {
         expect(() => render('::: grid columns="7"\n![a](/a.webp)\n:::')).toThrow('columns from 1 to 6');
         expect(() => render('::: grid columns="2"\n:::')).toThrow('needs an image');
         expect(() => render('::: grid columns="2"\ntext\n:::')).toThrow('one image per line');
+    });
+
+    test('a grid item whose file, thumbnail or poster is missing fails the build', () => {
+        expect(() => render('::: grid columns="2"\n![a](/missing.webp)\n:::')).toThrow(
+            `::: grid on line 1 has no file ${join(publicDir, '/missing.webp')}`,
+        );
+        expect(() => render('::: grid columns="2"\n![a](/a.webp "/missing-small.webp")\n:::')).toThrow(
+            '/missing-small.webp',
+        );
+        expect(() => render('::: grid columns="2"\n![a](/film.mp4 "/missing-poster.webp")\n:::')).toThrow(
+            '/missing-poster.webp',
+        );
+        expect(() => render('::: grid columns="2"\n![a](a.webp)\n:::')).toThrow('needs a src that starts with /');
     });
 });
 

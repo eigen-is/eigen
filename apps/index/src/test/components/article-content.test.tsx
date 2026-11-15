@@ -285,6 +285,11 @@ async function clickOn(container: HTMLElement, selector: string) {
     await act(async () => target.click());
 }
 
+// A grid's files must exist under the public folder, so its tests show real ones.
+const MEDIA = '/data/about/media/';
+const STILL = `${MEDIA}sheets-still-budget.webp`;
+const THUMBNAIL = `${MEDIA}row-sheets.webp`;
+
 describe('lightbox', () => {
     test('a lone image opens bigger, alone, with its alt text as the caption', async () => {
         const html = '<p><img src="/a.webp" alt="A budget"></p>';
@@ -383,13 +388,13 @@ describe('lightbox', () => {
     });
 
     test('a media grid opens one lightbox with the grid as its group', async () => {
-        const body = renderMarkdown('::: grid columns="2"\n![One](/g1.png "/g1-small.png")\n![Two](/g2.png)\n:::');
+        const body = renderMarkdown(`::: grid columns="2"\n![One](${STILL} "${THUMBNAIL}")\n![Two](${THUMBNAIL})\n:::`);
         const { container } = await renderInDocument(<ArticleContent body={body} />);
-        expect(container.querySelector('button img')?.getAttribute('src')).toBe('/g1-small.png');
+        expect(container.querySelector('button img')?.getAttribute('src')).toBe(THUMBNAIL);
         await clickOn(container, 'button:nth-child(2) img');
-        expect(lightbox()).toMatchObject({ count: 1, src: '/g2.png', caption: 'Two' });
+        expect(lightbox()).toMatchObject({ count: 1, src: THUMBNAIL, caption: 'Two' });
         await act(async () => lightbox()?.prev?.click());
-        expect(lightbox()).toMatchObject({ count: 1, src: '/g1.png', caption: 'One' });
+        expect(lightbox()).toMatchObject({ count: 1, src: STILL, caption: 'One' });
     });
 });
 
@@ -398,10 +403,10 @@ describe('media blocks', () => {
         const body = renderMarkdown(
             [
                 'Before',
-                '::: grid columns="3"\n![One](/g1.png)\n:::',
+                `::: grid columns="3"\n![One](${STILL})\n:::`,
                 'Between',
                 '::: apps\n:::',
-                '::: grid columns="1"\n![Film](/f.mp4 "/f.webp")\n:::',
+                `::: grid columns="1"\n![Film](${MEDIA}sheets-chart.h264.mp4 "${MEDIA}sheets-chart.webp")\n:::`,
                 'After',
             ].join('\n\n'),
             new Set(['apps']),
@@ -418,8 +423,8 @@ describe('media blocks', () => {
             ['Film', 'After'],
         ]);
         expect(container.textContent).toContain('Rows');
-        expect(container.querySelector('.lg\\:grid-cols-3 img[src="/g1.png"]')).not.toBeNull();
-        expect(container.querySelector('.grid-cols-1 img[src="/f.webp"]')).not.toBeNull();
+        expect(container.querySelector(`.lg\\:grid-cols-3 img[src="${STILL}"]`)).not.toBeNull();
+        expect(container.querySelector(`.grid-cols-1 img[src="${MEDIA}sheets-chart.webp"]`)).not.toBeNull();
     });
 });
 

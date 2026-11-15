@@ -1,6 +1,6 @@
 // A markdown-it plugin for the blocks the site's Markdown writes as fences, such as a looping video, a carousel or a
 // media grid: an opener line `::: <name> key="value"`, a body, and a closing `:::`. It runs at build time, so a block
-// with a mistake in it, or a video whose files are not under the public folder, fails the build instead of shipping
+// with a mistake in it, or a file it names that is not under the public folder, fails the build instead of shipping
 // a broken page. A block leaves a marker in the HTML, which the page swaps for a component: a media block's marker
 // holds its place in the list of what each shows, and a block the page draws itself, such as the About overview's
 // app rows, holds its name.
@@ -60,12 +60,13 @@ export function markdownBlocks(
                     text: md.renderer.renderInlineAsText(tokens, md.options, state.env),
                 };
             };
-            const checkVideo = (src: string) => {
+            const checkFile = (src: string) => {
                 if (!src.startsWith('/')) throw new Error(`${where} needs a src that starts with /`);
-                for (const ext of VIDEO_FILES) {
-                    const file = join(publicDir, `${src}${ext}`);
-                    if (!existsSync(file)) throw new Error(`${where} has no file ${file}`);
-                }
+                const file = join(publicDir, src);
+                if (!existsSync(file)) throw new Error(`${where} has no file ${file}`);
+            };
+            const checkVideo = (src: string) => {
+                for (const ext of VIDEO_FILES) checkFile(`${src}${ext}`);
             };
             const images = () => {
                 const lines: { src: string; title?: string; caption?: MediaCaption }[] = [];
@@ -113,11 +114,13 @@ export function markdownBlocks(
                 const columns = attrs.get('columns');
                 if (!columns || !/^[1-6]$/.test(columns)) throw new Error(`${where} needs columns from 1 to 6`);
                 // An image's title is the small picture the grid shows for it: a thumbnail, or a film's poster.
-                const items = images().map(({ src, title, caption }) =>
-                    src.endsWith('.mp4')
+                const items = images().map(({ src, title, caption }) => {
+                    checkFile(src);
+                    if (title) checkFile(title);
+                    return src.endsWith('.mp4')
                         ? { src, type: 'video' as const, caption: caption?.text, poster: title }
-                        : { src, type: 'image' as const, caption: caption?.text, thumbnail: title },
-                );
+                        : { src, type: 'image' as const, caption: caption?.text, thumbnail: title };
+                });
                 mark({ kind: 'grid', columns, items });
             }
             state.line = closeLine + 1;
