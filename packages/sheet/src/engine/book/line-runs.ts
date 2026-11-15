@@ -12,6 +12,9 @@ type Run = { readonly first: number; last: number; readonly attrs: Readonly<Line
 type LineRun = [Span, Readonly<LineAttrs>];
 
 const NO_KEYS: Readonly<LineAttrs> = Object.freeze({});
+// Every line key once, in the order a run holds them: the mapped type fails the build on a key left out.
+const LINE_KEY: { readonly [K in keyof LineAttrs]-?: K } = { size: 'size', custom: 'custom', hidden: 'hidden' };
+const LINE_KEYS = Object.values(LINE_KEY);
 
 export class LineRuns {
     private runs: Run[] = [];
@@ -106,22 +109,13 @@ export class LineRuns {
 function append(runs: Run[], first: number, last: number, attrs: Readonly<LineAttrs>): void {
     if (attrs === NO_KEYS) return;
     const end = runs.at(-1);
-    const joins =
-        end !== undefined &&
-        end.last + 1 === first &&
-        end.attrs.size === attrs.size &&
-        end.attrs.custom === attrs.custom &&
-        end.attrs.hidden === attrs.hidden;
-    if (joins) end.last = last;
+    if (end && end.last + 1 === first && LINE_KEYS.every((key) => end.attrs[key] === attrs[key])) end.last = last;
     else runs.push({ first, last, attrs });
 }
 
 // The keys in one order and frozen, so a run's keys never change under whoever reads them.
-function keysOf({ size, custom, hidden }: LineAttrs): Readonly<LineAttrs> {
-    if (size === undefined && custom === undefined && hidden === undefined) return NO_KEYS;
-    const attrs: LineAttrs = {};
-    if (size !== undefined) attrs.size = size;
-    if (custom !== undefined) attrs.custom = custom;
-    if (hidden !== undefined) attrs.hidden = hidden;
-    return Object.freeze(attrs);
+function keysOf(attrs: LineAttrs): Readonly<LineAttrs> {
+    const kept: LineAttrs = {};
+    for (const key of LINE_KEYS) if (attrs[key] !== undefined) Object.assign(kept, { [key]: attrs[key] });
+    return Object.keys(kept).length > 0 ? Object.freeze(kept) : NO_KEYS;
 }

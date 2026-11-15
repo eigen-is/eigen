@@ -41,16 +41,18 @@ type Span = [first: number, last: number];
 // that applies, and the writes, which cannot fail.
 export type Planned = { readonly restore: readonly RecordOp[]; readonly commit: () => void };
 
-const KINDS: readonly Kind[] = [
-    'merge',
-    'filter',
-    'filterColumn',
-    'comment',
-    'conditionalFormat',
-    'validation',
-    'image',
-    'chart',
-];
+// Every record type of a sheet once: the mapped type fails the build on a type left out.
+const KIND: { readonly [T in Kind]: T } = {
+    merge: 'merge',
+    filter: 'filter',
+    filterColumn: 'filterColumn',
+    comment: 'comment',
+    conditionalFormat: 'conditionalFormat',
+    validation: 'validation',
+    image: 'image',
+    chart: 'chart',
+};
+const KINDS = Object.values(KIND);
 
 // A band of rows in the merge index holds two to this power of rows at least.
 const MIN_BAND_SHIFT = 6;
