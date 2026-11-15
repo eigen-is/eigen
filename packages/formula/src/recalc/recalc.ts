@@ -433,6 +433,9 @@ export class Recalc {
         const row = this.rows[at];
         const shape = column.shape[row];
         const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
+        // The cap is met before a formula runs, so a pass that stops throws no finished formula away, and never
+        // before the first store of the pass: a formula that costs more than the cap alone would hold every pass up.
+        if (this.cost >= this.cap && this.stored) throw STOP;
         // A formula that runs again after a throw for depth makes its arrays again, and its draws.
         this.made[at] = 0;
         this.drew[at] = 0;
@@ -445,9 +448,6 @@ export class Recalc {
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;
-        // The cap is met before a formula is stored, never inside a loop that is being stored, and a pass never
-        // stops before its first store: a formula that costs more than the cap alone would hold every pass up.
-        if (this.cost >= this.cap && this.stored) throw STOP;
         this.stored = true;
         if ((column.kind[row] & LOOP) === 0 && this.workbook.put(column, row, value)) {
             extend(this.changed, this.sheets[at].place, this.places[at], row);

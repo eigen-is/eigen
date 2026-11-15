@@ -371,19 +371,19 @@ describe('the cap', () => {
         expect(done()).toEqual([101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
     });
 
-    test('a cap smaller than a chain is deep computes the far end first, pass by pass', () => {
+    test('a cap smaller than a chain is deep stores the chain that is running, and starts no formula after it', () => {
         const engine = sheetOf((cell) => {
             for (let row = 0; row < 9; row += 1) cell(row, 0, null, '=R[1]C+1');
             cell(9, 0, 1, null);
+            for (let row = 0; row < 4; row += 1) cell(row, 1, null, '=RC[-1]*2');
         });
         expect(engine.recalc(3).stopped).toBe(true);
-        expect([5, 6, 7, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([null, 4, 3, 2]);
-        expect([engine.recalc(3).stopped, engine.recalc(3).stopped, engine.recalc(3).stopped]).toEqual([
-            true,
-            false,
-            false,
-        ]);
-        expect(engine.valueOf('s1', 0, 0)).toBe(10);
+        expect([0, 5, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([10, 5, 2]);
+        expect(engine.valueOf('s1', 0, 1)).toBe(null);
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([0, 1, 2, 3].map((row) => engine.valueOf('s1', row, 1))).toEqual([20, 18, 16, null]);
+        expect(engine.recalc(3).stopped).toBe(false);
+        expect(engine.valueOf('s1', 3, 1)).toBe(14);
     });
 
     test('a cap that is exactly the formulas to compute does not stop', () => {
@@ -423,8 +423,12 @@ describe('the cap', () => {
     });
 
     test('a pass that stops inside a loop leaves no cell in progress and no loop half found', () => {
-        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1', D1: '=1+1', E1: '=IFERROR(A1,"loop")' } });
+        const engine = engineOf({
+            s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1+F1', D1: '=1+1', E1: '=IFERROR(A1,"loop")', F1: '=2+2' },
+        });
+        // D1 is the first store, so the pass stops when C1, on the loop by then, asks for F1.
         expect(engine.recalc(0)).toMatchObject({ loops: [], stopped: true });
+        expect(valueAt(engine, 'F1')).toBe(null);
         expect(loopsOf(engine)).toEqual(['A1', 'B1', 'C1']);
         expect(valueAt(engine, 'E1')).toBe('loop');
         engine.setValue('s1', 0, 1, 5);

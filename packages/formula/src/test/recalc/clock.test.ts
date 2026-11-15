@@ -265,9 +265,12 @@ describe('the draws of a cell', () => {
     });
 
     test('a pass that stops draws what a whole pass draws', () => {
-        // Each cell reads the one below it, so the first is computed last.
+        // Every other cell reads the one below it, so that one is computed first, and both before the cap is asked.
         const cells = Object.fromEntries(
-            Array.from({ length: 12 }, (_, row) => [`A${row + 1}`, [`=RAND()+A${row + 2}*0`, null]] as const),
+            Array.from(
+                { length: 12 },
+                (_, row) => [`A${row + 1}`, [row % 2 === 0 ? `=RAND()+A${row + 2}*0` : '=RAND()', null]] as const,
+            ),
         );
         const whole = loaded(cells);
         whole.setClock(46000, 7);
