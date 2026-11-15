@@ -1,12 +1,13 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
 // lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
-// fill and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text is the
-// engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
+// fill, link and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text
+// is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
 import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
+import type { CellLink } from '@workspace/lib/sheets/types';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
@@ -101,42 +102,15 @@ export class Extras {
         return old;
     }
 
-    // Puts one entry in every cell of a block, or with none of the three empties it, in one pass over the entries
-    // between the block's first place and its last.
-    public fill([top, left, bottom, right]: Rect, extra: Extra): void {
+    // Puts one entry in every cell of a block, or with none of the three empties it.
+    public fill(rect: Rect, extra: Extra): void {
         const entry = entryOf(extra);
-        const start = this.search(placeOf(top, left));
-        const end = this.search(placeOf(bottom, right) + 1);
-        const places: number[] = [];
-        const held: Extra[] = [];
-        let column = left;
-        // Lays the block's columns that start before a place, as the merge reaches it.
-        const lay = (before: number) => {
-            for (; entry && column <= right && placeOf(top, column) < before; column += 1) {
-                for (let row = top; row <= bottom; row += 1) {
-                    places.push(placeOf(row, column));
-                    held.push(entry);
-                }
-            }
-        };
-        for (let at = start; at < end; at += 1) {
-            const row = this.places[at] % GRID_ROWS;
-            if (row >= top && row <= bottom) {
-                this.units -= unitsOf(this.held[at]);
-                continue;
-            }
-            lay(this.places[at]);
-            places.push(this.places[at]);
-            held.push(this.held[at]);
-        }
-        lay(Number.POSITIVE_INFINITY);
-        if (entry) this.units += unitsOf(entry) * (bottom - top + 1) * (right - left + 1);
-        // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
-        for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
-            const removed = at === 0 ? end - start : 0;
-            this.places.splice(start + at, removed, ...places.slice(at, at + SPREAD));
-            this.held.splice(start + at, removed, ...held.slice(at, at + SPREAD));
-        }
+        this.merge(rect, () => entry);
+    }
+
+    // Sets the link of every cell of a block, or with none clears it, each cell keeping its runs and its mark.
+    public link(rect: Rect, link: CellLink | undefined): void {
+        this.merge(rect, (old) => entryOf({ ...old, link }));
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -193,6 +167,59 @@ export class Extras {
             }
         }
         return removed;
+    }
+
+    // Puts in every cell of a block the entry `to` makes of the one it holds, in one pass over the entries between the
+    // block's first place and its last: the cells with none all take `to` of none.
+    private merge([top, left, bottom, right]: Rect, to: (old: Extra | undefined) => Extra | undefined): void {
+        const blank = to(undefined);
+        const start = this.search(placeOf(top, left));
+        const end = this.search(placeOf(bottom, right) + 1);
+        const places: number[] = [];
+        const held: Extra[] = [];
+        // The next cell of the block to lay, in column order, when there is an entry to lay.
+        let row = top;
+        let column = left;
+        let laid = 0;
+        const step = () => {
+            if (row < bottom) row += 1;
+            else {
+                row = top;
+                column += 1;
+            }
+        };
+        const lay = (before: number) => {
+            for (; blank && column <= right && placeOf(row, column) < before; step()) {
+                places.push(placeOf(row, column));
+                held.push(blank);
+                laid += 1;
+            }
+        };
+        for (let at = start; at < end; at += 1) {
+            const place = this.places[at];
+            const old = this.held[at];
+            lay(place);
+            if (place % GRID_ROWS < top || place % GRID_ROWS > bottom) {
+                places.push(place);
+                held.push(old);
+                continue;
+            }
+            if (blank) step();
+            const entry = to(old);
+            this.units += (entry ? unitsOf(entry) : 0) - unitsOf(old);
+            if (entry) {
+                places.push(place);
+                held.push(entry);
+            }
+        }
+        lay(Number.POSITIVE_INFINITY);
+        if (blank) this.units += unitsOf(blank) * laid;
+        // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
+        for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
+            const removed = at === 0 ? end - start : 0;
+            this.places.splice(start + at, removed, ...places.slice(at, at + SPREAD));
+            this.held.splice(start + at, removed, ...held.slice(at, at + SPREAD));
+        }
     }
 
     // Takes the entries of a block out and returns them, in column order.
