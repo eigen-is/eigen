@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { MAX_CHART_SPEC_BYTES } from '../../charts/limits';
 import { isRecord } from '../../core/guards';
 import {
     LAST_DATE_SERIAL,
@@ -746,10 +747,20 @@ describe('8. record', () => {
         expect(accepts(record('chart', { set: { index: '' } }))).toBe(false);
     });
 
-    test('a chart part and a rule value are each text of at most MAX_TEXT_LENGTH', () => {
+    test('a chart spec holds at most MAX_CHART_SPEC_BYTES over all its parts, made or changed', () => {
+        const half = 'x'.repeat(MAX_CHART_SPEC_BYTES / 2);
+        const whole = (set: object) => record('chart', { whole: 1, set: { ...BOX, ...SPEC, ...set } });
+        expect(accepts(whole({ specData: half, specPlots: half.slice(4 * 8) }))).toBe(true);
+        expect(accepts(whole({ specData: half, specPlots: half }))).toBe(false);
+        expect(accepts(record('chart', { set: { specData: half, specPlots: half } }))).toBe(true);
+        expect(accepts(record('chart', { set: { specData: half, specPlots: `${half}x` } }))).toBe(false);
+        expect(
+            isSheetContent({ ...SHEET, records: { chart: { c1: { ...BOX, ...SPEC, specData: `${half}${half}` } } } }),
+        ).toBe(false);
+    });
+
+    test('a rule value is text of at most MAX_TEXT_LENGTH', () => {
         const long = 'x'.repeat(MAX_TEXT_LENGTH);
-        expect(accepts(record('chart', { set: { specData: long } }))).toBe(true);
-        expect(accepts(record('chart', { set: { specData: `${long}x` } }))).toBe(false);
         const rule = (conditionValue: unknown[]) =>
             record('conditionalFormat', {
                 whole: 1,

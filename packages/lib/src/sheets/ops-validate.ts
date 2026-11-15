@@ -5,6 +5,7 @@
 // filter exists, is the applier's to check.
 
 import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, MAX_STORED_LENGTH } from '@workspace/formula/text';
+import { exceedsChartSpecBytes } from '../charts/limits';
 import { isHexColor, parseRgb } from '../constants/colors';
 import { isRecord } from '../core/guards';
 import { isValidFractionalIndex } from '../vector/fractional-index';
@@ -361,6 +362,10 @@ function isShort(value: unknown): value is string {
     return typeof value === 'string' && value.length <= MAX_SHORT_TEXT;
 }
 
+function isText(value: unknown): value is string {
+    return typeof value === 'string';
+}
+
 function isLongText(value: unknown): value is string {
     return typeof value === 'string' && value.length <= MAX_TEXT_LENGTH;
 }
@@ -609,7 +614,7 @@ const FLOATING: Fields<Omit<ImageRecord, 'mediaName'>> = {
     height: [isFiniteNumber, true],
     angle: [isFiniteNumber, false],
 };
-const CHART: Fields<ChartRecord> = {
+const CHART = table<ChartRecord>({
     ...FLOATING,
     fill: [isLongText, false],
     color: [isShort, false],
@@ -619,17 +624,17 @@ const CHART: Fields<ChartRecord> = {
     strokeStyle: [(value) => STROKE_STYLES.some((style) => style === value), false],
     roughness: [isFiniteNumber, false],
     seed: [isFiniteNumber, false],
-    specChart: [isLongText, true],
-    specTitle: [isLongText, true],
-    specLegend: [isLongText, true],
-    specAxes: [isLongText, true],
-    specPlots: [isLongText, true],
-    specSeries: [isLongText, true],
-    specPoints: [isLongText, true],
-    specData: [isLongText, true],
-};
+    specChart: [isText, true],
+    specTitle: [isText, true],
+    specLegend: [isText, true],
+    specAxes: [isText, true],
+    specPlots: [isText, true],
+    specSeries: [isText, true],
+    specPoints: [isText, true],
+    specData: [isText, true],
+});
 
-const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat'>]: Fields<Records[T]> } = {
+const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat' | 'chart'>]: Fields<Records[T]> } = {
     sheet: SHEET_FIELDS,
     merge: { rect: [isRect, true] },
     filter: { rect: [isRect, true] },
@@ -646,7 +651,6 @@ const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat'>]: Fie
         rule: [(value) => isOf(value, RULE), true],
     },
     image: { ...FLOATING, mediaName: [(value) => isShort(value) && isSafeMediaName(value), true] },
-    chart: CHART,
 };
 
 // How a record op's `set` is read for each type: as a whole record, or as a change of some of its fields.
@@ -663,4 +667,9 @@ const RECORD_KINDS: { readonly [type: string]: RecordKind } = {
     ),
     // A rule changes only whole: a field of one kind of rule merged into a rule of another would leave one of neither.
     conditionalFormat: { whole: isConditionalFormat, change: () => false },
+    // A reader draws nothing of a chart past the byte bound over all its parts, so a part alone holds no other bound.
+    chart: {
+        whole: (value) => isOf(value, CHART) && !exceedsChartSpecBytes(value),
+        change: (value) => isRecord(value) && isChange(value, CHART) && !exceedsChartSpecBytes(value),
+    },
 };
