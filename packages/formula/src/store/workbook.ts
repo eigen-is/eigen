@@ -57,11 +57,11 @@ export type Change =
 // The store's door for a cell a host hands it, in a write or in a load: throws unless the cell is on the grid and
 // its value, when a number, is one a cell can hold.
 export function admit(row: number, column: number, value: Literal | null): void {
-    if (!within(row, GRID_ROWS) || !within(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
+    if (!isLine(row, GRID_ROWS) || !isLine(column, GRID_COLUMNS)) throw new RangeError(`No cell ${row},${column}`);
     if (typeof value === 'number' && !Number.isFinite(value)) throw new RangeError(`No number ${value}`);
 }
 
-export function within(line: number, lines: number): boolean {
+export function isLine(line: number, lines: number): boolean {
     return Number.isInteger(line) && line >= 0 && line < lines;
 }
 

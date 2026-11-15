@@ -11,7 +11,7 @@ import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { CellSink, Literal, SheetSource } from '../store/workbook';
-import { admit, ChangeKind, Workbook, within } from '../store/workbook';
+import { admit, ChangeKind, isLine, Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
 import { EditRefusal } from './edit-plan';
@@ -55,7 +55,7 @@ export class Engine {
     // push a cell that holds a value or a formula past the last line of the grid is refused.
     public editLines(edit: LineEdit): EditResult {
         const sheet = this.workbook.known(edit.sheet);
-        if (!within(edit.index, edit.rows ? GRID_ROWS : GRID_COLUMNS)) throw new RangeError(`No line ${edit.index}`);
+        if (!isLine(edit.index, edit.rows ? GRID_ROWS : GRID_COLUMNS)) throw new RangeError(`No line ${edit.index}`);
         counted(edit.count);
         if (edit.insert && sheet.pushesOff(edit)) throw new EditRefusal('grid-end');
         return this.calc.edit({ kind: ChangeKind.Lines, edit });
