@@ -19,6 +19,7 @@ rows:
 
 Eigen is a self-hosted alternative to Google Workspace. Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat, on a server you run yourself.
 
+<!-- Hidden for now (owner, 15 Nov 2026):
 ::: carousel autoplay
 ![A formula typed, and the totals update.](/data/about/media/sheets-hero)
 ![Two people in one budget, each sees the other's edit arrive.](/data/about/media/sheets-collab-pair)
@@ -29,11 +30,9 @@ Eigen is a self-hosted alternative to Google Workspace. Mail, drive, docs, sheet
 ![A volunteer's reply in eigen|mail⟩.](/data/about/media/row-mail.webp)
 ![The build week in eigen|calendar⟩.](/data/about/media/row-calendar.webp)
 :::
+-->
 
 You can try it without installing anything at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
-
-::: principles
-:::
 
 ## The apps
 
@@ -47,3 +46,6 @@ Ten apps on one server, behind one login. Each does the everyday part of the Goo
 Eigen is unpaid work. If you want it to exist, you can sponsor it through [GitHub Sponsors](https://github.com/sponsors/eigen-is) or [Open Collective](https://opencollective.com/eigen). Open Collective is the better choice if you need an invoice.
 
 Installing it and telling me what breaks helps too: open an issue on [GitHub](https://github.com/eigen-is/eigen/issues) or mail me at [reinder@eigen.is](mailto:reinder@eigen.is).
+
+::: principles
+:::
