@@ -269,7 +269,9 @@ export class SheetRecords {
             }
             const removed = new Set<string>();
             for (const [id, filter] of this.stored.filter) {
-                const [range] = ranges([rectRange(filter.rect)]);
+                // The header row holds the filter's buttons, so a delete of it removes the filter.
+                const header = rows && !edit.insert && mapIndex(axis, filter.rect[0]) === GONE;
+                const [range] = header ? [] : ranges([rectRange(filter.rect)]);
                 if (!range) removed.add(id);
                 const rect = range && rangeRect(range);
                 settle('filter', id, filter, !rect ? undefined : sameRect(rect, filter.rect) ? filter : { rect });

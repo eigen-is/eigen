@@ -142,22 +142,8 @@ describe('a filter and its columns', () => {
             [2, 1, 5, 3],
             { b: { filter: 'f', column: 1, rows: [] }, c: { filter: 'f', column: 2, rows: [[4, 4]] } },
         ],
-        [
-            'a row delete of the header row moves the filter down a row',
-            rowsAt(false, 2),
-            [2, 1, 7, 3],
-            {
-                b: { filter: 'f', column: 1, rows: [[3, 3]] },
-                c: {
-                    filter: 'f',
-                    column: 2,
-                    rows: [
-                        [3, 3],
-                        [5, 6],
-                    ],
-                },
-            },
-        ],
+        ['a row delete of the header row removes the filter and its columns', rowsAt(false, 2), null, {}],
+        ['a row delete of the header row and the rows above it does the same', rowsAt(false, 0, 3), null, {}],
         ['a row delete of every row of the filter removes it and its columns', rowsAt(false, 2, 7), null, {}],
         [
             "a column delete of one criterion's column removes that column only",
