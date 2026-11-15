@@ -79,6 +79,7 @@ export class Workbook {
 
     public constructor(sources: readonly SheetSource[]) {
         for (const source of sources) {
+            this.checkId(source.id);
             this.checkName(source.name, null);
             this.insert(this.adopt(this.read(source)), this.held.length);
         }
@@ -99,6 +100,11 @@ export class Workbook {
         const sheet = this.byId.get(id);
         if (sheet === undefined) throw new Error(`No sheet ${id}`);
         return sheet;
+    }
+
+    // Throws when a sheet has the id: a host names a sheet by it.
+    public checkId(id: string): void {
+        if (this.byId.has(id)) throw new Error(`Sheet ${id} exists`);
     }
 
     // Throws when a sheet other than `holder` has the name, as two sheet names are compared: a name a formula is

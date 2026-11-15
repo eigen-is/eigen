@@ -178,6 +178,10 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         const sheets = [first, second].map((name, at) => ({ id: `s${at}`, name, cells: () => {} }));
         expect(() => new Engine(sheets)).toThrow(`Sheet name ${second} is in use`);
     });
+    test('a workbook is not loaded from two sheets with one id', () => {
+        const sheets = ['Data', 'Other'].map((name) => ({ id: 's1', name, cells: () => {} }));
+        expect(() => new Engine(sheets)).toThrow('Sheet s1 exists');
+    });
     test('two names a formula tells apart are two sheets, and a sheet takes its own name in another case', () => {
         // Sheet names fold each character on its own, so ß is no ss.
         const engine = new Engine(['Straße', 'STRASSE'].map((name) => ({ id: name, name, cells: () => {} })));
