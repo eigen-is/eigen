@@ -25,7 +25,7 @@ The package is a workspace package and is not published. A workspace that needs 
 
 ## Using it
 
-A host gives the engine its sheets, writes cells, runs a recalc and reads values back. A sheet is named by its id, and a cell by its row and column from 0. A cell off the grid, or a number that is NaN or infinite, is refused by a throw, in a write and in a load alike. So is a sheet whose name another sheet has, in any letter case. A formula is handed over in its stored text, which `@workspace/formula/text` makes from what a person types. `formulaOf` gives it back in the one spelling the engine keeps, so `=sum(RC,1.0)` reads back as `=SUM(RC,1)`. This example ran with Bun, and the output under it is that run's:
+A host gives the engine its sheets, writes cells, runs a recalc and reads values back. A sheet is named by its id, and a cell by its row and column from 0. A cell off the grid, or a number that is NaN or infinite, is refused by a throw, in a write and in a load alike. So is a sheet whose name another sheet has, in any letter case. A read of a cell that is not there answers null, and only a sheet that is not there makes a read throw. A formula is handed over in its stored text, which `@workspace/formula/text` makes from what a person types. `formulaOf` gives it back in the one spelling the engine keeps, so `=sum(RC,1.0)` reads back as `=SUM(RC,1)`. This example ran with Bun, and the output under it is that run's:
 
 ```ts
 import { Engine } from '@workspace/formula';

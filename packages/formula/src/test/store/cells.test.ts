@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Engine, errorOf, NA } from '../../index';
 import type { SheetSource } from '../../store/workbook';
 import { Workbook } from '../../store/workbook';
+import { GRID_ROWS } from '../../text';
 import { ERRORS } from '../../values/errors';
 import { stored } from '../recalc/support';
 import type { TestCell } from './support';
@@ -39,6 +40,44 @@ describe('load', () => {
         expect(engine.valueOf('s1', 3, 0)).toBeNull();
         expect(engine.valueOf('s1', 1000000, 0)).toBeNull();
         expect(engine.valueOf('s1', 0, 5)).toBeNull();
+    });
+
+    test.each([
+        ['a row above the first', -1, 0],
+        ['a row that is a fraction', 0.5, 0],
+        ['a row that is not a number', Number.NaN, 0],
+        ['a row past the grid', GRID_ROWS, 0],
+        ['a column left of the first', 0, -1],
+        ['a column that is a fraction', 0, 0.5],
+        ['a column that is not a number', 0, Number.NaN],
+        ['a column that is infinite', 0, Number.POSITIVE_INFINITY],
+    ])('a read of %s is empty', (_, row, column) => {
+        const engine = new Engine([
+            source('s1', [
+                [0, 0, 1, '=1+1'],
+                [1, 0, null, '=2+2'],
+            ]),
+        ]);
+        const read = () => [
+            engine.valueOf('s1', row, column),
+            engine.formulaOf('s1', row, column),
+            engine.isPending('s1', row, column),
+        ];
+        expect(read()).toEqual([null, null, false]);
+        engine.recalc(ALL);
+        expect(read()).toEqual([null, null, false]);
+    });
+
+    test.each([
+        ['past the last sheet', 2],
+        ['before the first', -1],
+        ['a fraction', 0.5],
+        ['not a number', Number.NaN],
+    ])('a place among the tabs that is %s holds no sheet, as an id no sheet has', (_, place) => {
+        const engine = new Engine([source('s1', []), source('s2', [])]);
+        expect(() => engine.sheetAt(place)).toThrow(`No sheet ${place}`);
+        expect(() => engine.valueOf('s3', 0, 0)).toThrow('No sheet s3');
+        expect([engine.sheetAt(0), engine.sheetAt(1)]).toEqual(['s1', 's2']);
     });
 
     test('an error only a file knows is one object, from whichever sheet it came', () => {

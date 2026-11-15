@@ -17,10 +17,7 @@ import type { EditResult, RecalcResult } from './recalc';
 import { Recalc } from './recalc';
 
 export class Engine {
-    private readonly workbook: Pick<
-        Workbook,
-        'known' | 'value' | 'sheets' | 'shapes' | 'read' | 'checkId' | 'checkName'
-    >;
+    private readonly workbook: Pick<Workbook, 'known' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName'>;
     private readonly calc: Recalc;
 
     public constructor(sheets: readonly SheetSource[]) {
@@ -110,7 +107,8 @@ export class Engine {
     public formulaOf(sheet: string, row: number, column: number): string | null {
         const cells = this.workbook.known(sheet).columns[column];
         const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
-        return shape === 0 ? null : this.workbook.shapes.shape(shape).text;
+        // A row that is no row, such as -1, reads nothing off the column, as its value does.
+        return shape > 0 ? this.workbook.shapes.shape(shape).text : null;
     }
 
     // Whether a cell holds a formula that is still to be computed.
@@ -121,7 +119,7 @@ export class Engine {
 
     // The id of the sheet at a place among the tabs, which is how a recalc names the sheet of a changed cell.
     public sheetAt(place: number): string {
-        return this.workbook.sheets[place].id;
+        return this.workbook.known(place).id;
     }
 
     // The sheet of a cell a host names: it must exist, as the cell must on the grid, and its value be one to hold.
