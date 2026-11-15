@@ -360,6 +360,21 @@ describe('lightbox', () => {
         expect(document.querySelector<HTMLVideoElement>('[role="dialog"] video')?.loop).toBe(true);
     });
 
+    test('a looping video with controls keeps its clicks for them', async () => {
+        stubReducedMotion(true);
+        const video = await renderVideo();
+        await act(async () => video.click());
+        expect(lightbox()).toBeNull();
+    });
+
+    test('a video slide with controls keeps its clicks for them', async () => {
+        stubReducedMotion(true);
+        const body = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        await clickOn(container, '.media-carousel-slide video');
+        expect(lightbox()).toBeNull();
+    });
+
     test('an image inside a link follows the link instead', async () => {
         const html = '<p><a href="#elsewhere"><img src="/a.webp" alt="a"></a></p>';
         const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);

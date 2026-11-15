@@ -1,7 +1,8 @@
 // A looping video from the site's Markdown, a short muted film that shows something happening. MediaVideo is the
 // `::: video` block, the film over its caption, and LoopingVideo the film alone, which a carousel shows on a slide.
 // The markup has no autoplay, so the server render holds still: the film starts from an effect while its caller says
-// it is in view, and holds still with controls for a reader who asked for less motion. A click opens it bigger.
+// it is in view, and holds still with controls for a reader who asked for less motion. A click on a film without
+// controls opens it bigger.
 
 import { useMediaQuery } from '@workspace/lib/media';
 import { useEffect, useRef, useState } from 'react';
@@ -26,6 +27,7 @@ export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
     const ref = useRef<HTMLVideoElement>(null);
     const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const [refused, setRefused] = useState(false);
+    const controls = reduceMotion || refused;
 
     useEffect(() => {
         const video = ref.current;
@@ -49,8 +51,8 @@ export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
             playsInline
             preload="metadata"
             poster={`${src}.webp`}
-            controls={reduceMotion || refused}
-            onClick={onClick}
+            controls={controls}
+            onClick={controls ? undefined : onClick}
         >
             <source src={`${src}.av1.mp4`} type={AV1} />
             <source src={`${src}.h264.mp4`} type="video/mp4" />
