@@ -1,24 +1,25 @@
 import { describe, expect, test } from 'bun:test';
-import { GRID_ROWS } from '@workspace/formula/text';
+import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import { MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
-import type { Batch, InputOp, RecordOp, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
+import { BAND_WEIGHT, EXTRA_WEIGHT, MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
+import type { Batch, FormatOp, InputOp, RecordOp, SheetContent, SheetOp } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, randomBookContent, randomInputOp, randomRecordOp, randomSheetOp } from './batches';
+import { batchOf, randomBookContent, randomFormatOp, randomInputOp, randomRecordOp, randomSheetOp } from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 
-type Applied = InputOp | RecordOp | SheetOp;
+type Applied = Parameters<typeof applyOps>[1][number];
 type AppliedBatch = Omit<Batch, 'ops'> & { ops: Applied[] };
 
 const LAST_ROW = GRID_ROWS - 1;
+const LINK = { type: 'webpage', address: 'https://eigen.is' } as const;
 // A sheet id as long as an id may be, so a formula bound to it grows.
 const B = 'b'.repeat(60);
 const PARTS = newChartSpecParts(sampleChartSpec('column'));
@@ -112,6 +113,9 @@ const LANDING: readonly Applied[] = [
         ],
     },
     { kind: 'input', sheet: 'a', runs: [[[2, 2, 3, 3], null]], cells: [[1, 0, { s: [{ v: 'rich', bl: 1 }] }]] },
+    // It restyles the rich cell the op before wrote, and links cells that hold a link, a formula and nothing.
+    { kind: 'format', sheet: 'a', ranges: [[0, 0, 3, 1]], set: { it: 1, link: LINK }, clear: ['bl'] },
+    { kind: 'format', sheet: 'a', lines: 'columns', spans: [[0, 1]], set: { size: 80 } },
 ];
 const TRAILING: RecordOp = { kind: 'record', sheet: 'a', type: 'sheet', id: 'a', set: { color: '#ff0000' } };
 // Four cells on the grid's last row hold more slots than the limit, as each column then holds every row.
@@ -266,6 +270,64 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
     });
 });
 
+describe('engine/book/apply-ops — LAW 1: a format past the format limit is refused at the weigh', () => {
+    // Filler sheets of one band per column, no two neighbours alike, weigh the book to MARGIN short of the limit, or up
+    // to a band's weight less: well past what the landing ops add.
+    const MARGIN = 2_000;
+    const filler = (id: string, columns: number) =>
+        sheetOf(id, {
+            fields: { name: id, order: 'b' },
+            looks: [{ bl: 1 }, { it: 1 }],
+            bands: Array.from({ length: columns }, (_, column) => [column, 1, 0, 1 + (column % 2)]).flat(),
+        });
+    const formatsOf = (book: Workbook) => {
+        const { runs, bands, extras } = book.weight();
+        return runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
+    };
+    const near = (() => {
+        const content = twoSheets();
+        const full = Array.from({ length: 7 }, (_, at) => filler(`f${at}`, GRID_COLUMNS));
+        const left = MAX_STYLE_RUNS - formatsOf(new Workbook({ ...content, sheets: [...content.sheets, ...full] }));
+        // A filler band weighs its run and itself.
+        const columns = Math.floor((left - MARGIN) / (1 + BAND_WEIGHT));
+        return { ...content, sheets: [...content.sheets, ...full, filler('f7', columns)] };
+    })();
+    // Forty whole columns apart, each two bands more; a link on a hundred cells, each an entry with a link.
+    const PAST: readonly [string, FormatOp][] = [
+        [
+            'runs and bands',
+            {
+                kind: 'format',
+                sheet: 'a',
+                ranges: Array.from({ length: 40 }, (_, at) => [0, 20 + 2 * at, LAST_ROW, 20 + 2 * at] as const),
+                set: { bg: '#00ff00' },
+            },
+        ],
+        ['a ranged link', { kind: 'format', sheet: 'a', ranges: [[0, 20, 99, 20]], set: { link: LINK } }],
+    ];
+
+    test('the book is a margin short of the limit, and the landing ops fit in it', () => {
+        const book = new Workbook(near);
+        const short = MAX_STYLE_RUNS - formatsOf(book);
+        expect(short).toBeGreaterThanOrEqual(MARGIN);
+        expect(short).toBeLessThan(MARGIN + 1 + BAND_WEIGHT);
+        land(book, batch(...LANDING, TRAILING));
+        expect(MAX_STYLE_RUNS - formatsOf(book)).toBeGreaterThan(MARGIN / 2);
+    });
+
+    for (const [reached, past] of PAST) {
+        for (let k = 0; k <= LANDING.length; k += 1) {
+            test(`by ${reached} at op ${k}, after ${k} ops landed and before the rest`, () => {
+                const book = new Workbook(near);
+                const before = bytes(book);
+                const ops = [...LANDING.slice(0, k), past, ...LANDING.slice(k), TRAILING];
+                expect(refusalOf(() => land(book, batch(...ops)))).toBe('too-many-formats');
+                expect(bytes(book)).toBe(before);
+            });
+        }
+    }
+});
+
 describe('engine/book/apply-ops — the inverse batch', () => {
     test('it holds the inverse of every op, the newest first, in one list', () => {
         const book = new Workbook(twoSheets());
@@ -330,7 +392,7 @@ describe('engine/book/apply-ops — the look sweep', () => {
     });
 });
 
-describe('engine/book/apply-ops — the laws over random books and random batches of inputs, records and sheets', () => {
+describe('engine/book/apply-ops — the laws over random books and random batches of every kind built', () => {
     test('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
         const content: Book = {
             g: 1,
@@ -368,6 +430,8 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         let undone = 0;
         // The sheet ops that landed, by what their inverse is: an add lands as its delete, a delete as its add.
         const sheets = { add: 0, delete: 0 };
+        // The format ops in the inverses: over cells, over lines, and of a link.
+        const formats = { cells: 0, lines: 0, links: 0 };
         for (let seed = 1; seed <= 600; seed += 1) {
             const random = randomOf(seed);
             const content = randomBookContent(random);
@@ -379,7 +443,8 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                     model,
                     (r, m) => {
                         const draw = r();
-                        if (draw < 0.4) return randomInputOp(r, m);
+                        if (draw < 0.25) return randomInputOp(r, m);
+                        if (draw < 0.45) return randomFormatOp(r, m);
                         return draw < 0.85 ? randomRecordOp(r, m) : randomSheetOp(r, m);
                     },
                     6,
@@ -413,6 +478,9 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 undone += 1;
                 for (const op of inverse) {
                     if (op.kind === 'sheet') sheets['add' in op ? 'delete' : 'add'] += 1;
+                    if (op.kind !== 'format') continue;
+                    formats['lines' in op ? 'lines' : 'cells'] += 1;
+                    if ('ranges' in op && (op.set?.link || op.clear?.includes('link'))) formats.links += 1;
                 }
             }
         }
@@ -420,6 +488,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         expect(undone).toBe(landed);
         expect(sheets.add).toBeGreaterThan(1000);
         expect(sheets.delete).toBeGreaterThan(500);
+        for (const count of Object.values(formats)) expect(count).toBeGreaterThan(300);
         for (const key of ['merge-overlap', 'last-sheet']) {
             for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`${key} ${k}`) ?? 0).toBeGreaterThan(0);
         }

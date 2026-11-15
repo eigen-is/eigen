@@ -24,6 +24,7 @@ import type {
     SheetOp,
     Span,
 } from '@workspace/lib/sheets/ops';
+import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook } from './book-fixtures';
@@ -40,9 +41,16 @@ const ORDERS = ['a0', 'a1', 'a2', 'a3', 'a1V'];
 // A name as long as a name may be: a sheet added with it in use takes a suffix within the same 31 characters.
 const LONG_NAME = 'Quarterly results by region (b)';
 const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
+const OTHER_LINK: CellLink = { type: 'cellrange', address: 'A1:B2' };
+// Runs that disagree on bold, color and size; runs that agree with a plain look; runs that agree with each other only.
 const RICH: Run[] = [
     { v: 'bold ', bl: 1 },
     { v: 'and red', fc: '#ff0000', fs: 14 },
+];
+const PLAIN_RICH: Run[] = [{ v: 'one ' }, { v: 'two' }];
+const ITALIC_RICH: Run[] = [
+    { v: 'one ', it: 1 },
+    { v: 'two', it: 1 },
 ];
 const SIDE = { style: 1, color: '#000000' };
 const LOOK_PARTS: readonly CellAttrs[] = [
@@ -53,6 +61,8 @@ const LOOK_PARTS: readonly CellAttrs[] = [
     { fs: 12, ff: 'Inter', un: 1 },
     { cl: 1, vt: 2, tb: '2' },
     { rt: 'vertical', bdb: SIDE, bdl: SIDE },
+    { bdr: SIDE, bdd: { style: 2, color: '#ff0000' } },
+    { fs: 9, cl: 1 },
 ];
 const LINE_PARTS: readonly LineAttrs[] = [{ size: 30 }, { size: 44.5, custom: 1 }, { hidden: 1 }, { custom: 1 }];
 
@@ -129,6 +139,8 @@ function content(random: Random, model: Model): CellContent | null {
         () => ({ f: '=R[1]C+1', v: 5 }),
         () => ({ s: RICH }),
         () => ({ s: RICH, link: LINK, qp: 1 }),
+        () => ({ s: PLAIN_RICH }),
+        () => ({ s: ITALIC_RICH, qp: 1 }),
         () => ({ v: 'x', link: LINK }),
         () => ({ v: 'typed', qp: 1 }),
         () => ({ link: LINK }),
@@ -166,6 +178,7 @@ export function randomInputOp(random: Random, model: Model): InputOp {
                 () => ({ f: typedWithName(random, model) }),
                 () => ({ f: pick(random, KEPT), v: 3 }),
                 () => ({ s: RICH }),
+                () => ({ s: PLAIN_RICH, link: OTHER_LINK }),
                 () => ({ v: 'x', link: LINK, qp: 1 }),
             ])();
             return [[top, 10 + at * 6 + left, bottom, 10 + at * 6 + right], filled] as const;
@@ -175,36 +188,48 @@ export function randomInputOp(random: Random, model: Model): InputOp {
     return op;
 }
 
+// A line format over spans that may overlap, or a cell format over one to five rectangles that may overlap: single
+// cells, small blocks, whole columns, whole rows or the whole sheet. Now and then it sets or clears a link, over
+// blocks that hold rich, marked and plain cells, or clears every look key it does not set, as a paste does.
 export function randomFormatOp(random: Random, model: Model): FormatOp {
     const sheet = sheetId(random, model);
     if (random() < 0.3) {
         const set = pick(random, [...LINE_PARTS, undefined]);
         const free = (['size', 'custom', 'hidden'] as const).filter((name) => set?.[name] === undefined);
         const clear = set === undefined ? [pick(random, free)] : free.filter(() => random() < 0.3);
-        const spans = Array.from({ length: 1 + below(random, 2) }, (): Span => {
+        const spans = Array.from({ length: 1 + below(random, 3) }, (): Span => {
             const first = below(random, 16);
             return [first, first + below(random, 4)];
         });
         return { kind: 'format', sheet, lines: random() < 0.5 ? 'rows' : 'columns', spans, set, clear };
     }
-    const column = below(random, 8);
-    const row = below(random, 14);
-    const whole: Rect = random() < 0.5 ? [0, column, GRID_ROWS - 1, column] : [row, 0, row, GRID_COLUMNS - 1];
-    // A link is written cell by cell, so it goes over small rectangles only.
-    const linked = random() < 0.15;
-    const ranges = Array.from({ length: 1 + below(random, 2) }, () =>
-        !linked && random() < 0.2 ? whole : smallRect(random),
-    );
-    const set: CellAttrs & { link?: CellLink } = { ...pick(random, LOOK_PARTS) };
+    // The model writes a link cell by cell, so a link goes over blocks of a few hundred cells at most.
+    const linked = random() < 0.2;
+    const shape = (): Rect => {
+        const row = below(random, 14);
+        const column = below(random, 8);
+        if (linked)
+            return random() < 0.5 ? smallRect(random) : [0, column, 4 + below(random, 60), column + below(random, 8)];
+        return pick<() => Rect>(random, [
+            () => smallRect(random),
+            () => smallRect(random),
+            () => [row, column, row, column],
+            () => [0, column, GRID_ROWS - 1, column],
+            () => [row, 0, row, GRID_COLUMNS - 1],
+            () => [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1],
+        ])();
+    };
+    const ranges = Array.from({ length: 1 + below(random, random() < 0.2 ? 5 : 2) }, shape);
+    const set: CellAttrs & { link?: CellLink } = random() < 0.15 ? {} : { ...pick(random, LOOK_PARTS) };
     const clear: NonNullable<Extract<FormatOp, { ranges: unknown }>['clear']> = [];
-    for (const name of Object.keys(pick(random, LOOK_PARTS))) {
-        if (!(name in set) && (name === 'bl' || name === 'it' || name === 'fc' || name === 'bg' || name === 'fa')) {
-            clear.push(name);
-        }
+    const rest = random() < 0.1;
+    for (const name of LOOK_KEYS) {
+        if (!(name in set) && (rest || random() < 0.08)) clear.push(name);
     }
-    if (linked && random() < 0.5) set.link = LINK;
+    if (linked && random() < 0.5) set.link = pick(random, [LINK, OTHER_LINK]);
     else if (linked) clear.push('link');
-    return { kind: 'format', sheet, ranges, set, clear };
+    if (Object.keys(set).length === 0 && clear.length === 0) clear.push(pick(random, LOOK_KEYS));
+    return { kind: 'format', sheet, ranges, ...(Object.keys(set).length > 0 && { set }), clear };
 }
 
 export function randomRecordOp(random: Random, model: Model): RecordOp {
