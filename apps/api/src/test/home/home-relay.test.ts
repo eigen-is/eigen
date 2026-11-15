@@ -16,8 +16,7 @@ import {
     getFromHomes,
     HOME_OPEN_DEADLINE_MS,
     HOME_OPENS_AT_ONCE,
-    sendToHome,
-    sendToUserHomes,
+    pushToHomes,
 } from '../../lib/home/home-relay';
 import * as teamModule from '../../lib/team/team';
 import type { User } from '../../lib/user';
@@ -113,7 +112,7 @@ async function answersFirst(request: Promise<unknown>): Promise<boolean> {
 describe('A notification to a team', () => {
     test('reaches every member of the team', async () => {
         const tag = 'relay:team-notification';
-        await sendToHome(teamOwner, {
+        await pushToHomes([teamOwner], {
             type: 'notification',
             notification: { type: 'admin-alert', title: 'To the whole team', tag },
         });
@@ -238,7 +237,7 @@ describe('A fan-out to many homes', () => {
             if (ownerId === members[0].id) throw new Error('This home does not open');
             return openHome(ownerId);
         });
-        await sendToUserHomes(
+        await pushToHomes(
             members.slice(0, 3).map((member) => member.id),
             { type: 'notification', notification: { type: 'admin-alert', title: 'One fails', tag } },
         );
@@ -257,12 +256,12 @@ describe('A fan-out to many homes', () => {
         const recipient = [members[0].id];
         const held = holdMemberHomes();
         try {
-            const add = sendToUserHomes(recipient, change(root, [{ id: members[0].email, read: true, write: false }]));
-            const revoke = sendToUserHomes(recipient, change(root, null));
+            const add = pushToHomes(recipient, change(root, [{ id: members[0].email, read: true, write: false }]));
+            const revoke = pushToHomes(recipient, change(root, null));
             await Bun.sleep(50);
             expect(held.peak()).toBe(1);
 
-            const other = sendToUserHomes(recipient, change({ ...root, id: crypto.randomUUID() }, null));
+            const other = pushToHomes(recipient, change({ ...root, id: crypto.randomUUID() }, null));
             await Bun.sleep(50);
             expect(held.peak()).toBe(2);
             held.release();
@@ -671,15 +670,15 @@ describe('A graceful shutdown', () => {
         mock.restore();
     });
 
-    test('waits for a direct send still delivering', async () => {
+    test('waits for a push to one home still delivering', async () => {
         const tag = 'relay-drain:direct';
         const held = holdMemberHomes();
         let drainedFirst: boolean;
         try {
-            sendToHome(members[0].id, {
+            pushToHomes([members[0].id], {
                 type: 'notification',
                 notification: { type: 'admin-alert', title: 'Direct', tag },
-            }).catch(() => {});
+            });
             drainedFirst = await answersFirst(drainHomeDeliveries());
         } finally {
             held.release();
@@ -696,10 +695,10 @@ describe('A graceful shutdown', () => {
         const held = holdMemberHomes();
         let drainedFirst: boolean;
         try {
-            sendToUserHomes(
+            pushToHomes(
                 members.map((member) => member.id),
                 { type: 'notification', notification: { type: 'admin-alert', title: 'Detached', tag } },
-            ).catch(() => {});
+            );
             drainedFirst = await answersFirst(drainHomeDeliveries());
         } finally {
             held.release();
@@ -721,10 +720,10 @@ describe('A graceful shutdown', () => {
         let drainedFirst: boolean;
         let logged: unknown[][];
         try {
-            sendToUserHomes([members[0].id], {
+            pushToHomes([members[0].id], {
                 type: 'notification',
                 notification: { type: 'admin-alert', title: 'Stalled', tag },
-            }).catch(() => {});
+            });
             drainedFirst = await answersFirst(drainDeliveriesWithin(100));
         } finally {
             logged = warnings.mock.calls;

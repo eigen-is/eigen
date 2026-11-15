@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
@@ -9,7 +9,7 @@ import { getTeamHomePath, getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { atHome, getHome } from '../../lib/home';
 import { evictHome } from '../../lib/home/get-home';
-import { sendToHome } from '../../lib/home/home-relay';
+import { pushToHomes } from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
 
@@ -277,14 +277,14 @@ describe('The list of calendars shared with a user', () => {
     test('asks no user who has no home folder, and creates none', async () => {
         const ownerId = await createUserWithoutSignIn('user');
         const share = { type: 'calendar:share', ownerId, calendarId: 'some-calendar', name: 'Never opened' } as const;
-        await sendToHome(ctx.bob.user.id, { ...share, permission: 'read' });
+        await pushToHomes([ctx.bob.user.id], { ...share, permission: 'read' });
         try {
             const shared = await assertJson<SharedCalendar[]>(await sharedWithBob());
             expect(shared.some((entry) => entry.ownerUserId === ownerId)).toBe(true);
             expect(fs.existsSync(getUserHomePath(ownerId))).toBe(false);
             expect(atHome(ownerId)).toBe(false);
         } finally {
-            await sendToHome(ctx.bob.user.id, { ...share, permission: null });
+            await pushToHomes([ctx.bob.user.id], { ...share, permission: null });
         }
     });
 });
@@ -292,13 +292,22 @@ describe('The list of calendars shared with a user', () => {
 describe('A calendar message to a home without a calendar', () => {
     const rsvp = { type: 'calendar:rsvp', eventId: 'some-event', status: 'accepted' } as const;
 
+    // A delivery that fails is logged and never thrown, so the log shows whether the home ignored the message.
+    async function errorsLoggedFor(targetId: string): Promise<string[]> {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await pushToHomes([targetId], { ...rsvp, attendeeEmail: ctx.bob.user.email });
+            return errors.mock.calls.map((call) => String(call[0]));
+        } finally {
+            errors.mockRestore();
+        }
+    }
+
     test('is ignored by a guest home', async () => {
-        const guestId = await createUserWithoutSignIn('guest');
-        await sendToHome(guestId, { ...rsvp, attendeeEmail: ctx.bob.user.email });
+        expect(await errorsLoggedFor(await createUserWithoutSignIn('guest'))).toEqual([]);
     });
 
     test('is ignored by a team home whose calendar is off', async () => {
-        const owner = teamOwnerId(await createTeamFor('nobody'));
-        await sendToHome(owner, { ...rsvp, attendeeEmail: ctx.bob.user.email });
+        expect(await errorsLoggedFor(teamOwnerId(await createTeamFor('nobody')))).toEqual([]);
     });
 });

@@ -6,7 +6,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getServerSettings } from '../config/server-settings';
-import { sendToUserHomes } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { composeShareEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
@@ -100,7 +100,7 @@ export async function propagateSharedPathChange(
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL ?? []), ...(newACL ?? [])]);
 
     // Delivery is derived state, since the owner's side enforces access, so the request doesn't wait for it.
-    sendToUserHomes(ids, {
+    pushToHomes(ids, {
         type: 'drive:acl-change',
         path,
         acl: newACL,

@@ -113,9 +113,11 @@ describe('The nightly server backup tick', () => {
 
     test('a start that fails before its record alerts the owner once a day, and a refusal not at all', async () => {
         const { alice } = await getTestContext();
-        const send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const send = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
         const alerts = () =>
-            send.mock.calls.filter(([, message]) => message.type === 'notification').map(([userId]) => userId);
+            send.mock.calls
+                .filter(([, message]) => message.type === 'notification')
+                .flatMap(([userIds]) => [...userIds]);
         try {
             start.mockRejectedValueOnce(new ApiError(409, 'A server-backup of this home is already running'));
             await expect(tickAt('2026-10-01T02:00:00Z')).rejects.toThrow('already running');

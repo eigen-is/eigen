@@ -1,7 +1,8 @@
-// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
-// another home. getFromHomes asks many homes one question, such as which paths a user watches there, and the domain
-// that owns the question keeps its handler. It opens at most a few homes at once and leaves out a home that is too
-// slow. Today every call runs in this process. When homes live in several processes, only this file has to change.
+// Every time one owner's Home reaches into another, it goes through this file. pushToHomes hands a message, such as an
+// access change or a notification, to other homes, and a failed delivery never fails its caller. getFromHomes asks many
+// homes one question, such as which paths a user watches there: the domain that owns the question keeps its handler, few
+// homes open at once and one that is too slow is left out. broadcastToHomes tells the open tabs of the homes that are
+// loaded. Today every call runs in this process. When homes live in several processes, only this file has to change.
 
 import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
@@ -64,8 +65,28 @@ const deliveries = new Set<Promise<void>>();
 // would bring a removed share back.
 const lastInOrder = new Map<string, Promise<void>>();
 
-export async function sendToHome(targetId: string, message: HomeMessage): Promise<void> {
-    await tracked(deliver(targetId, message));
+// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
+// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
+export async function pushToHomes(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
+    const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
+    const fanOut = tracked(deliverToEach(targetIds, message, previous));
+    if (orderKey) lastInOrder.set(orderKey, fanOut);
+    await fanOut;
+    if (orderKey && lastInOrder.get(orderKey) === fanOut) lastInOrder.delete(orderKey);
+}
+
+async function deliverToEach(
+    targetIds: Iterable<string>,
+    message: HomeMessage,
+    previous: Promise<void> | undefined,
+): Promise<void> {
+    await previous;
+    for (const id of targetIds) {
+        await deliver(id, message).catch((err) =>
+            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
+        );
+    }
 }
 
 async function deliver(targetId: string, message: HomeMessage): Promise<void> {
@@ -125,7 +146,7 @@ async function deliver(targetId: string, message: HomeMessage): Promise<void> {
         case 'notification':
             if (home instanceof TeamHome) {
                 const members = await home.membersToNotify(message.notification.actorEmail);
-                await sendToUserHomes(
+                await pushToHomes(
                     members.map((member) => member.id),
                     message,
                 );
@@ -136,36 +157,12 @@ async function deliver(targetId: string, message: HomeMessage): Promise<void> {
     }
 }
 
-// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
-// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
-export async function sendToUserHomes(userIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
-    const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
-    const fanOut = tracked(deliverToEach(userIds, message, previous));
-    if (orderKey) lastInOrder.set(orderKey, fanOut);
-    await fanOut;
-    if (orderKey && lastInOrder.get(orderKey) === fanOut) lastInOrder.delete(orderKey);
-}
-
-async function deliverToEach(
-    userIds: Iterable<string>,
-    message: HomeMessage,
-    previous: Promise<void> | undefined,
-): Promise<void> {
-    await previous;
-    for (const id of userIds) {
-        await deliver(id, message).catch((err) =>
-            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
-        );
-    }
-}
-
 function tracked(delivery: Promise<void>): Promise<void> {
     deliveries.add(delivery);
     return delivery.finally(() => deliveries.delete(delivery));
 }
 
-// Waits for every delivery still running and for those that start meanwhile. The sends of a caller's own loop that
+// Waits for every delivery still running and for those that start meanwhile. The pushes of a caller's own loop that
 // hasn't reached them yet are not among them.
 export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {

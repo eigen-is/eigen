@@ -984,7 +984,7 @@ describe('Calendar Invites', () => {
     // fields, so no `X-EIGEN-` line ever crosses a home boundary.
     test('a relay invitation carries no X-EIGEN- line', async () => {
         const relay = await import('../../lib/home/home-relay');
-        const spy = spyOn(relay, 'sendToHome');
+        const spy = spyOn(relay, 'pushToHomes');
         spy.mockClear();
 
         await createEventWithAttendees('Projected Payload', [{ email: ctx.bob.user.email }]);

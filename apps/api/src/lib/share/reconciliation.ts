@@ -5,7 +5,7 @@
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import { homeFolderExists } from '../config/paths';
-import { getFromHomes, sendToHome } from '../home/home-relay';
+import { getFromHomes, pushToHomes } from '../home/home-relay';
 import { getTeam } from '../team';
 import type { User } from '../user';
 import { getMemberships, getUserById, isGuest } from '../user';
@@ -27,7 +27,12 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
                 const team = await getTeam(parsed.id);
                 if (!team) continue;
                 for (const path of paths) {
-                    await sendToHome(user.id, { type: 'drive:acl-change', path, acl: path.acl, actorName: team.name });
+                    await pushToHomes([user.id], {
+                        type: 'drive:acl-change',
+                        path,
+                        acl: path.acl,
+                        actorName: team.name,
+                    });
                 }
                 continue;
             }
@@ -36,7 +41,7 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             if (!owner) continue;
 
             for (const path of paths) {
-                await sendToHome(user.id, {
+                await pushToHomes([user.id], {
                     type: 'drive:acl-change',
                     path,
                     acl: path.acl,
@@ -50,7 +55,7 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             const source = [fromUserId].filter(homeFolderExists);
             const shares = await getFromHomes(source, 'calendar:shared-with', { email: user.email, teamIds });
             for (const result of shares.get(fromUserId) ?? []) {
-                await sendToHome(user.id, {
+                await pushToHomes([user.id], {
                     type: 'calendar:share',
                     ownerId: fromUserId,
                     calendarId: result.calendarId,
@@ -64,7 +69,7 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
             if (teamId) continue;
             const requests = await getFromHomes(source, 'calendar:pending-invitations', { attendeeEmail: user.email });
             for (const request of requests.get(fromUserId) ?? []) {
-                await sendToHome(user.id, { type: 'calendar:request', ...request });
+                await pushToHomes([user.id], { type: 'calendar:request', ...request });
             }
         } catch (error) {
             console.error(`Failed to reconcile shares from ${fromUserId} to ${target} for user ${user.id}:`, error);

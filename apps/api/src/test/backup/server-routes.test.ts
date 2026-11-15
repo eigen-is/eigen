@@ -24,7 +24,7 @@ describe('Server backup routes', () => {
     let ctx: TestContext;
     let admin: TestUser;
     let adminApi: ReturnType<typeof treaty<App>>;
-    let send: ReturnType<typeof spyOn<typeof homeRelay, 'sendToHome'>>;
+    let send: ReturnType<typeof spyOn<typeof homeRelay, 'pushToHomes'>>;
 
     function membership(userId: string) {
         const orgId = getServerConfig()?.orgId ?? '';
@@ -38,7 +38,7 @@ describe('Server backup routes', () => {
         admin = await createTestUser('ada-server-backup@test.eigen.is', 'testpassword123', 'Ada Admin');
         await getAuthDrizzleDb().update(memberSchema).set({ role: 'admin' }).where(membership(admin.id));
         adminApi = treaty<App>(ctx.app, { headers: { cookie: `better-auth.session_token=${admin.sessionToken}` } });
-        send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        send = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
     });
 
     afterEach(() => {

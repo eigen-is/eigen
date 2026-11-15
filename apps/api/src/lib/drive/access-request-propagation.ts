@@ -8,7 +8,7 @@ import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
 import type { Home } from '../home';
 import { TeamHome } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { composeAccessRequestEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -32,7 +32,7 @@ export async function propagateAccessRequest(
     // Detached, so the answer doesn't wait on the team's size or tell whether the path exists. It needs no hold on
     // the Home: past this point it reads only memory and the auth database.
     (async () => {
-        await sendToHome(ownerId, {
+        await pushToHomes([ownerId], {
             type: 'notification',
             notification: {
                 type: 'access-request',

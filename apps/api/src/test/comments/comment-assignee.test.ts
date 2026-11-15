@@ -507,7 +507,7 @@ describe('Assignment email', () => {
     test('an address with no account on the ACL gets a mail and no notification, and the assignment stands', async () => {
         const ghost = `ghost-${crypto.randomUUID()}@external.com`;
         const { docId, chatName } = await freshDoc('mail-ghost', [ghost]);
-        const relay = spyOn(homeRelay, 'sendToHome');
+        const relay = spyOn(homeRelay, 'pushToHomes');
         relay.mockClear();
 
         try {
@@ -689,19 +689,18 @@ describe('Assignment email', () => {
 
     test('a home that cannot take the notification does not stop the mail or the assignment', async () => {
         const { docId, chatName } = await freshDoc('mail-relay-throws', [guest.email]);
-        const original = homeRelay.sendToHome;
-        const relay = spyOn(homeRelay, 'sendToHome').mockImplementation(async (target, message) => {
-            if (message.type === 'notification' && message.notification.type === 'assigned') {
-                throw new Error('home held');
-            }
-            await original(target, message);
+        const refusal = spyOn(await getHome(guest.id), 'notify').mockImplementation(() => {
+            throw new Error('home held');
         });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
 
         try {
             expect((await assign(docId, chatName, guest.email)).status).toBe(200);
             expect(assignMailsTo(guest.email)).toHaveLength(1);
+            expect(refusal).toHaveBeenCalled();
         } finally {
-            relay.mockRestore();
+            errors.mockRestore();
+            refusal.mockRestore();
         }
     });
 

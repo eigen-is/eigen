@@ -89,8 +89,8 @@ describe('Server backup job', () => {
         for (const spy of spies.splice(0)) spy.mockRestore();
     });
 
-    function quietRelay(): ReturnType<typeof spyOn<typeof homeRelay, 'sendToHome'>> {
-        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+    function quietRelay(): ReturnType<typeof spyOn<typeof homeRelay, 'pushToHomes'>> {
+        const spy = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
         spies.push(spy);
         return spy;
     }

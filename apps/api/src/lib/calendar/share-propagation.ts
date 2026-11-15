@@ -7,7 +7,7 @@ import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Home } from '../home';
-import { broadcastToHomes, sendToHome } from '../home/home-relay';
+import { broadcastToHomes, pushToHomes } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getMemberships, getUserByEmail } from '../user';
@@ -66,7 +66,7 @@ export async function propagateCalendarShare(
             const memberships = await getMemberships(userId);
             const permission = await ownerHome.calendar.checkPermission(calendar.id, email, memberships.teamIds);
 
-            await sendToHome(userId, {
+            await pushToHomes([userId], {
                 type: 'calendar:share',
                 ownerId: ownerHome.user.id,
                 calendarId: calendar.id,

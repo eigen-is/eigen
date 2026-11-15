@@ -177,12 +177,10 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
         const artifactPath = path.join(getBackupsDir(), name);
         await packFolder(folder, artifactPath, onProgress);
         await writeSidecar(artifactPath, manifest, verify);
-        // Fire-and-forget like the poke: a relay that fails must not replace the failure the admin needs to read.
+        // Not awaited, like the poke: the job doesn't wait for the alert to be delivered.
         if (verify.status !== 'verified' && job.startedBy) {
             const title = `Backup of ${manifest.name} did not verify`;
-            alertUser(job.startedBy, title, describeFailures(verify), homeBackupUnverifiedTag(manifest.ownerId)).catch(
-                () => {},
-            );
+            alertUser(job.startedBy, title, describeFailures(verify), homeBackupUnverifiedTag(manifest.ownerId));
         }
         requireVerified(verify, name);
         return name;
