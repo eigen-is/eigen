@@ -14,7 +14,7 @@ eigen|mail⟩ is the email app in Eigen. Your mailboxes on the left, the list in
 
 A reply quotes the message it answers, so the last mail in a thread carries the whole conversation. Pictures a message loads from the internet stay hidden until you click Load images, so a sender can't tell when you read it. Reply, Reply all and Forward only open a draft: nothing goes out until you click Send ([Read and reply to email](/support/mail/read-and-reply)).
 
-The list shows every message on its own row; it doesn't fold a thread into one. There are no labels: six fixed mailboxes, with any folders you made in another mail app below them ([Get started with Mail](/support/mail/get-started)).
+The sidebar holds six mailboxes, with any folders you made in another mail app below them ([Get started with Mail](/support/mail/get-started)).
 
 ## Attachments land in Drive
 

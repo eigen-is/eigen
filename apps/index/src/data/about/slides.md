@@ -38,4 +38,4 @@ You share a deck with people, a team or a link, and anyone with edit access can 
 
 ## PowerPoint files
 
-You can bring a `.pptx` in, as a new deck or as extra slides in the one you have open. Text, shapes, pictures, charts and backgrounds come across. Tables do not yet: each becomes a box that says what was there ([Import a PowerPoint presentation](/support/slides/import-powerpoint)). You download any deck as PowerPoint, PDF or a web page ([Export a presentation](/support/slides/export-slides)).
+You can bring a `.pptx` in, as a new deck or as extra slides in the one you have open. Text, shapes, pictures, charts and backgrounds come across. ([Import a PowerPoint presentation](/support/slides/import-powerpoint)). You download any deck as PowerPoint, PDF or a web page ([Export a presentation](/support/slides/export-slides)).

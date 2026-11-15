@@ -26,7 +26,7 @@ The owner's Settings page shows the version, the free disk and the HTTPS certifi
 
 Eigen backs up the whole server while it runs, every night once you turn that on, and nobody is signed out. Each backup is checked after it is made, and it can go to an S3 bucket of its own, off the server. Putting one back is `./eigen restore` on the server, also on a new machine ([Back up and restore the whole server](/support/self-hosting/back-up-and-restore)).
 
-You can also back up one person or one team from their panel, and restore just that account. The account as it was stays beside it as a safety copy, so a restore can be undone ([Back up a user or team](/support/admin/back-up-home), [Restore a user or team from a backup](/support/admin/restore-home)). A backup is not encrypted: it holds everything, so treat it like a password ([What a backup contains and how it is checked](/support/admin/backup-contents)).
+You can also back up one person or one team from their panel, and restore just that account. The account as it was stays beside it as a safety copy, so a restore can be undone ([Back up a user or team](/support/admin/back-up-home), [Restore a user or team from a backup](/support/admin/restore-home)). A backup holds everything, so treat it like a password ([What a backup contains and how it is checked](/support/admin/backup-contents)).
 
 ::: carousel
 ![The admin backs up Saar's account, sees it verified, and deletes it again](/data/about/media/admin-backup)

@@ -29,4 +29,4 @@ You can invite any email address. Someone on Google Calendar, Apple Calendar or 
 
 ## On your phone
 
-Your calendars sync over CalDAV with Apple Calendar on a Mac or an iPhone, with Thunderbird, and with other CalDAV apps. Only the calendars you own sync; a team calendar or one shared with you stays in the browser ([Set up Eigen Calendar in a calendar client](/support/connect/calendar-client)). You can also move a calendar in or out as an `.ics` file ([Import events from a calendar file](/support/calendar/import-events), [Export a calendar or an event as a calendar file](/support/calendar/export-events)).
+Your calendars sync over CalDAV with Apple Calendar on a Mac or an iPhone, with Thunderbird, and with other CalDAV apps. ([Set up Eigen Calendar in a calendar client](/support/connect/calendar-client)). You can also move a calendar in or out as an `.ics` file ([Import events from a calendar file](/support/calendar/import-events), [Export a calendar or an event as a calendar file](/support/calendar/export-events)).

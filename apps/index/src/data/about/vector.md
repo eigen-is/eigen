@@ -32,8 +32,8 @@ Copy a chart in eigen|sheets⟩ and paste it on a drawing, and it stays a chart 
 
 ## Moving around
 
-You pan by scrolling and zoom from 10% to 3000%. ⌘F finds text anywhere on the canvas, also in the parts you scrolled away from ([Zoom, pan, find, and keyboard shortcuts](/support/vector/zoom-pan-and-shortcuts)). On a phone a drawing opens read-only; you edit on a computer or a tablet ([Get started](/support/vector/get-started)).
+You pan by scrolling and zoom from 10% to 3000%. ⌘F finds text anywhere on the canvas, also in the parts you scrolled away from ([Zoom, pan, find, and keyboard shortcuts](/support/vector/zoom-pan-and-shortcuts)).
 
 ## Sharing and export
 
-You share a drawing with people, a team or a link, and leave comments on a single shape or on the drawing as a whole ([Share a drawing and comment](/support/vector/share-and-comment)). A drawing downloads as an SVG image or a PDF, cropped to what you drew. There is no PNG export yet ([Download a drawing as SVG or PDF](/support/vector/export-drawing)).
+You share a drawing with people, a team or a link, and leave comments on a single shape or on the drawing as a whole ([Share a drawing and comment](/support/vector/share-and-comment)). A drawing downloads as an SVG image or a PDF, cropped to what you drew. ([Download a drawing as SVG or PDF](/support/vector/export-drawing)).

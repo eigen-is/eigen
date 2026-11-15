@@ -16,7 +16,7 @@ Show a folder as a list or as tiles with thumbnails, sorted by name, size or dat
 
 ## Sharing
 
-Share a file or a folder with people, a team or a link, as an Editor or a Viewer. A link still asks for a sign-in; there is no anonymous sharing. An owner can turn off Editors can share, so nobody else hands it on, and Email collaborators writes to everyone on the list with a link to the file ([Share a file or folder](/support/drive/share-a-file)).
+Share a file or a folder with people, a team or a link, as an Editor or a Viewer. An owner can turn off Editors can share, so nobody else hands it on, and Email collaborators writes to everyone on the list with a link to the file ([Share a file or folder](/support/drive/share-a-file)).
 
 ::: carousel
 ![The festival's photos as tiles](/data/about/media/drive-still-tiles.webp)
@@ -26,8 +26,8 @@ Share a file or a folder with people, a team or a link, as an Editor or a Viewer
 
 ## What happened to it
 
-Select a file or folder and the panel beside the list shows its last five events: who uploaded, edited, moved, shared or commented. For a folder that covers everything inside it ([See what happened to a file](/support/drive/file-activity)). Watch a file or folder and you hear when someone else changes it ([Watch a file or folder for changes](/support/drive/watch-for-changes)). Documents, sheets, decks, boards and drawings keep versions you can restore, hourly at first and thinning out to monthly for a year. A plain uploaded file has no versions ([See and restore previous versions of a file](/support/drive/file-versions)). Deleted files wait in the Trash ([Get started with Drive](/support/drive/get-started)).
+Select a file or folder and the panel beside the list shows its last five events: who uploaded, edited, moved, shared or commented. For a folder that covers everything inside it ([See what happened to a file](/support/drive/file-activity)). Watch a file or folder and you hear when someone else changes it ([Watch a file or folder for changes](/support/drive/watch-for-changes)). Documents, sheets, decks, boards and drawings keep versions you can restore, hourly at first and thinning out to monthly for a year. ([See and restore previous versions of a file](/support/drive/file-versions)). Deleted files wait in the Trash ([Get started with Drive](/support/drive/get-started)).
 
 ## A folder on your computer
 
-Drive speaks WebDAV, so Finder or File Explorer mounts it like a network drive, signed in with an app password. An Eigen document shows there as a folder you can copy but hardly change, and moving between drives doesn't work over WebDAV ([Mount Drive on your computer](/support/connect/mount-drive-on-your-computer)). Finder is slow on big folders; rclone and Mountain Duck do better, and rclone makes backups ([Advanced WebDAV with rclone and Mountain Duck](/support/connect/advanced-webdav)).
+Drive speaks WebDAV, so Finder or File Explorer mounts it like a network drive, signed in with an app password. ([Mount Drive on your computer](/support/connect/mount-drive-on-your-computer)). rclone and Mountain Duck work too, and rclone makes backups ([Advanced WebDAV with rclone and Mountain Duck](/support/connect/advanced-webdav)).

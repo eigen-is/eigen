@@ -25,8 +25,8 @@ A card holds a photo, a company and job title, postal addresses, a birthday and 
 
 ## vCard files in and out
 
-A `.vcf` file from another address book imports from your computer or from Drive, and one that came as an attachment imports straight from the mail. Contacts you already have are skipped, never merged, and Apple's contact groups are left out, since Contacts uses labels instead ([Import contacts from a vCard file](/support/contacts/import-contacts)). When you leave, the whole book downloads as one file ([Export contacts as a vCard file](/support/contacts/export-contacts)).
+A `.vcf` file from another address book imports from your computer or from Drive, and one that came as an attachment imports straight from the mail. Contacts you already have are skipped ([Import contacts from a vCard file](/support/contacts/import-contacts)). When you leave, the whole book downloads as one file ([Export contacts as a vCard file](/support/contacts/export-contacts)).
 
 ## On your phone
 
-Your contacts sync over CardDAV with Apple Contacts on a Mac or an iPhone and with DAVx5 on Android, both ways, photos and labels included. Your team's list stays in the browser: it isn't part of your own book, so it doesn't sync ([Set up Eigen Contacts in a contacts app](/support/connect/contacts-client)).
+Your contacts sync over CardDAV with Apple Contacts on a Mac or an iPhone and with DAVx5 on Android, both ways, photos and labels included ([Set up Eigen Contacts in a contacts app](/support/connect/contacts-client)).

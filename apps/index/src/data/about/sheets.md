@@ -21,7 +21,7 @@ Several people can edit the same sheet at the same time. Their changes merge as 
 
 Formulas work the way you expect: type `=`, pick a function from the autocomplete, click cells to add them ([Use formulas and functions](/support/sheets/formulas)). There is [conditional formatting](/support/sheets/conditional-formatting) and [data validation](/support/sheets/data-validation) too.
 
-You can bring your `.xlsx` files. An import keeps the values, formulas, formatting, charts and images ([Import an Excel file](/support/sheets/import-excel)). Not everything comes across: comments, icon sets and some chart types are left out, and the article lists them. When you leave, you download the sheet as Excel, PDF or a web page ([Download a spreadsheet](/support/sheets/export-spreadsheet)).
+You can bring your `.xlsx` files. An import keeps the values, formulas, formatting, charts and images ([Import an Excel file](/support/sheets/import-excel)). When you leave, you download the sheet as Excel, PDF or a web page ([Download a spreadsheet](/support/sheets/export-spreadsheet)).
 
 ## Charts
 
@@ -45,7 +45,7 @@ Sheets comes with the fastest\* open-source formula engine for the web, eigen|fo
 
 - **Speed**: it was faster than HyperFormula in 15 of 17 workloads, and faster than IronCalc and Univer in 17 of 17.
 - **Correctness**: of 17,584 answers recorded in Excel, it gave Excel's answer on 92.0%. HyperFormula did on 55.4%, IronCalc on 74.3% and Univer on 82.6%.
-- **Coverage**: this is the weak spot. It has 219 of Excel's 524 functions. HyperFormula has 384, IronCalc 492 and Univer 495.
+- **Coverage**: it has 219 of Excel's 524 functions. HyperFormula has 384, IronCalc 492 and Univer 495.
 
 <img class="eigen-paper" src="/data/about/media/formula-speed.svg" alt="Each engine's time per workload divided by ours, on a log scale. Lower is faster; a bar below the 1× line is faster than eigen|formula⟩.">
 

@@ -33,4 +33,4 @@ There are tables, images and charts ([Insert images, charts, and tables](/suppor
 
 ## Word files
 
-You can bring a `.docx` in. The import keeps the text and formatting, tables, images, charts, footnotes and equations ([Import a Word document](/support/docs/import-word)). You download any document as Word, PDF or a web page. Comment threads stay behind, and a sketched chart comes out plain ([Export to Word, PDF, or HTML](/support/docs/export)).
+You can bring a `.docx` in. The import keeps the text and formatting, tables, images, charts, footnotes and equations ([Import a Word document](/support/docs/import-word)). You download any document as Word, PDF or a web page. ([Export to Word, PDF, or HTML](/support/docs/export)).

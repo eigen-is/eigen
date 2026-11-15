@@ -5,14 +5,14 @@ description: Rooms for the people you work with and for your whole team, with fi
 
 <!-- DRAFT: the owner rewrites this -->
 
-eigen|chat⟩ is the messaging app in Eigen. Your rooms are in the sidebar, your own at the top and your teams' below them, and you type at the bottom of the room ([Get started with Chat](/support/chat/get-started)). It is plain text, files and a few slash commands; nothing more clever than that.
+eigen|chat⟩ is the messaging app in Eigen. Your rooms are in the sidebar, your own at the top and your teams' below them, and you type at the bottom of the room ([Get started with Chat](/support/chat/get-started)). It is plain text, files and a few slash commands.
 
 ::: video src="/data/about/media/chat-hero" caption="Saar cheers in the production channel, then deletes it again."
 :::
 
 ## Rooms for people and for teams
 
-A personal room lives in your own Drive, and you decide who reads it and who writes in it. A team room belongs to the team, so every member sees it and access follows who is in the team. You can't take one person out of a team room; that means changing the team ([Personal chats and team chats](/support/chat/personal-and-team-chats)). If you start a chat with exactly the people you already have a room with, that room opens instead of a second one ([Create a chat room](/support/chat/create-room)).
+A personal room lives in your own Drive, and you decide who reads it and who writes in it. A team room belongs to the team, so every member sees it and access follows who is in the team. ([Personal chats and team chats](/support/chat/personal-and-team-chats)). If you start a chat with exactly the people you already have a room with, that room opens instead of a second one ([Create a chat room](/support/chat/create-room)).
 
 ## As it happens
 
