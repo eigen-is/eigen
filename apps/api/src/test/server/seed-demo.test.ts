@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { readChartSpec } from '@workspace/lib/charts';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { textToParagraphHtml } from '@workspace/lib/html';
@@ -35,10 +35,12 @@ import {
     BRANDING,
     BUDGET,
     CHATS,
+    CONTACTS,
     DOCS,
     HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
+    ORG_NAME,
     PERSONAS,
     PHOTOS,
     personaByRole,
@@ -262,6 +264,60 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             );
             expect(replied[0].n).toBeGreaterThanOrEqual(1);
 
+            // Each persona's own card carries their title, the festival and their phone. The leads signed in once, so
+            // the user list shows when; the rest of the crew never did.
+            for (const persona of PERSONAS) {
+                const user = query<{ id: string; lastLoginAt: number | null }>(
+                    usersDb,
+                    `SELECT id, last_login_at AS lastLoginAt FROM user WHERE email = '${persona.key}@${MAIL_DOMAIN}'`,
+                );
+                expect(user[0].lastLoginAt !== null).toBe(persona.role !== undefined);
+                const ownCard = query<{ data: string }>(
+                    join(root, 'home', user[0].id, 'eigen.contacts', 'contacts.db'),
+                    `SELECT data FROM contacts WHERE eigenId = '${user[0].id}'`,
+                );
+                expect(ownCard.length).toBe(1);
+                expect(JSON.parse(ownCard[0].data)).toMatchObject({
+                    jobTitle: persona.title,
+                    company: ORG_NAME,
+                    phone: [persona.phone],
+                });
+            }
+
+            // Saar's book holds the default labels and one new one in the next accent color, each contact carries
+            // the labels its spec names, and Ruud's card shows his portrait.
+            const saar = query<{ id: string }>(
+                usersDb,
+                `SELECT id FROM user WHERE email = '${personaByRole('production').key}@${MAIL_DOMAIN}'`,
+            );
+            const saarContacts = join(root, 'home', saar[0].id, 'eigen.contacts');
+            const saarLabels = query<{ name: string; color: string }>(
+                join(saarContacts, 'contacts.db'),
+                'SELECT name, color FROM labels ORDER BY rowid',
+            );
+            expect(saarLabels).toEqual(
+                ['Family', 'Friends', 'Work', 'Important', 'Suppliers'].map((name, i) => ({
+                    name,
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[i].value,
+                })),
+            );
+            for (const spec of CONTACTS.filter((contact) => contact.owner === 'production')) {
+                const labelled = query<{ name: string }>(
+                    join(saarContacts, 'contacts.db'),
+                    `SELECT l.name AS name FROM contacts c JOIN contacts_to_labels cl ON cl.contactId = c.id
+                     JOIN labels l ON l.id = cl.labelId WHERE c.firstName = '${spec.firstName}'`,
+                );
+                expect(labelled.map((label) => label.name)).toEqual(spec.labels ?? []);
+            }
+            const ruud = query<{ data: string }>(
+                join(saarContacts, 'contacts.db'),
+                "SELECT data FROM contacts WHERE firstName = 'Ruud'",
+            );
+            const ruudAvatar: string = JSON.parse(ruud[0].data).avatar;
+            const avatarPrefix = `contacts/${saar[0].id}/avatar/`;
+            expect(ruudAvatar).toStartWith(avatarPrefix);
+            expect(readdirSync(join(saarContacts, 'avatars'))).toContain(ruudAvatar.slice(avatarPrefix.length));
+
             // Each persona's inbox holds one unread message, the newest; the seed marked the rest read.
             for (const persona of PERSONAS) {
                 const user = query<{ id: string }>(
@@ -299,6 +355,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             // mounts/ also holds shared.db — pick the mount's own subdirectory.
             const mountId = readdirSync(mountsDir, { withFileTypes: true }).find((d) => d.isDirectory())?.name;
             if (!mountId) throw new Error('team mount directory missing');
+            // The crew's drive is raised above the demo's default quota, for its photos.
+            const teamSettings = JSON.parse(readFileSync(join(root, 'team', teamId, 'settings.json'), 'utf8'));
+            expect(teamSettings.mounts[mountId].maxSizeMB).toBe(100);
             const metadataDb = join(mountsDir, mountId, 'metadata.db');
             expect(existsSync(metadataDb)).toBe(true);
             const events = query<{ n: number }>(metadataDb, 'SELECT count(*) AS n FROM file_events');
