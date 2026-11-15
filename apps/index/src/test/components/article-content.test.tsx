@@ -34,7 +34,7 @@ function stubReducedMotion(reduce: boolean) {
 
 async function renderVideo() {
     const html = '<figure class="media-video"><video muted loop playsinline></video></figure>';
-    const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+    const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
     const video = container.querySelector('video');
     if (!video) throw new Error('No video rendered');
     return video;
@@ -44,7 +44,7 @@ async function renderVideo() {
 // slide gets its place 600px apart.
 async function renderCarousel(markdown = '::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::') {
     const { html } = renderMarkdown(markdown);
-    const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+    const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
     for (const [i, slide] of container.querySelectorAll('.media-carousel-slide').entries()) {
         Object.defineProperty(slide, 'offsetLeft', { value: i * 600 });
     }
@@ -197,7 +197,7 @@ describe('page blocks', () => {
             new Set(['apps', 'principles']),
         );
         const { container } = await renderInDocument(
-            <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
+            <ArticleContent body={{ html, media: [] }} blocks={{ apps: 'Rows', principles: 'Panels' }} />,
         );
         expect(container.textContent?.replace(/\s+/g, ' ').trim()).toBe('Before Rows Between Panels After');
     });
@@ -205,7 +205,7 @@ describe('page blocks', () => {
     test('draw outside the prose, which holds the Markdown around them', async () => {
         const { html } = renderMarkdown('Before\n\n::: apps\n:::\n\nAfter', new Set(['apps']));
         const { container } = await renderInDocument(
-            <ArticleContent body={{ html, mediaGrids: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
+            <ArticleContent body={{ html, media: [] }} blocks={{ apps: <p className="rows">Rows</p> }} />,
         );
         const prose = Array.from(container.querySelectorAll('.eigen-prose.site-prose'), (div) => div.textContent);
         expect(prose).toEqual(['Before\n', '\nAfter\n']);
@@ -276,14 +276,14 @@ async function clickOn(container: HTMLElement, selector: string) {
 describe('lightbox', () => {
     test('a lone image opens bigger, alone, with its alt text as the caption', async () => {
         const html = '<p><img src="/a.webp" alt="A budget"></p>';
-        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, 'img');
         expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget', prev: null, next: null });
     });
 
     test('a carousel image opens with the carousel as its group, at the image clicked', async () => {
         const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, '.media-carousel-slide:nth-child(2) img');
         expect(lightbox()).toMatchObject({ src: '/b.webp', caption: 'b' });
         await act(async () => lightbox()?.next?.click());
@@ -299,7 +299,7 @@ describe('lightbox', () => {
 
     test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
         const { html } = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, '.media-carousel-slide video');
         const press = (target: Element | null | undefined, handled = false) =>
             act(async () => {
@@ -327,7 +327,7 @@ describe('lightbox', () => {
 
     test('a click on the open picture leaves the group as it is', async () => {
         const { html } = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
-        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, '.media-carousel-slide img');
         await act(async () => document.querySelector<HTMLElement>('[role="dialog"] img')?.click());
         expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp' });
@@ -336,22 +336,49 @@ describe('lightbox', () => {
 
     test('an image inside a link follows the link instead', async () => {
         const html = '<p><a href="#elsewhere"><img src="/a.webp" alt="a"></a></p>';
-        const { container } = await renderInDocument(<ArticleContent body={{ html, mediaGrids: [] }} />);
+        const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, 'img');
         expect(lightbox()).toBeNull();
     });
 
     test('a media grid opens one lightbox with the grid as its group', async () => {
-        const items = [
-            { src: '/g1.png', type: 'image' as const, caption: 'One' },
-            { src: '/g2.png', type: 'image' as const, caption: 'Two' },
-        ];
-        const body = { html: '<p>[MEDIAGRID:0]</p>', mediaGrids: [{ columns: '2', items }] };
+        const body = renderMarkdown('::: grid columns="2"\n![One](/g1.png "/g1-small.png")\n![Two](/g2.png)\n:::');
         const { container } = await renderInDocument(<ArticleContent body={body} />);
-        await clickOn(container, 'button img');
-        expect(lightbox()).toMatchObject({ count: 1, src: '/g1.png', caption: 'One' });
-        await act(async () => lightbox()?.next?.click());
+        expect(container.querySelector('button img')?.getAttribute('src')).toBe('/g1-small.png');
+        await clickOn(container, 'button:nth-child(2) img');
         expect(lightbox()).toMatchObject({ count: 1, src: '/g2.png', caption: 'Two' });
+        await act(async () => lightbox()?.prev?.click());
+        expect(lightbox()).toMatchObject({ count: 1, src: '/g1.png', caption: 'One' });
+    });
+});
+
+describe('media blocks', () => {
+    test('each draws in the prose where the Markdown put it, between the text around it', async () => {
+        const body = renderMarkdown(
+            [
+                'Before',
+                '::: grid columns="3"\n![One](/g1.png)\n:::',
+                'Between',
+                '::: apps\n:::',
+                '::: grid columns="1"\n![Film](/f.mp4 "/f.webp")\n:::',
+                'After',
+            ].join('\n\n'),
+            new Set(['apps']),
+        );
+        const { container } = await renderInDocument(<ArticleContent body={body} blocks={{ apps: 'Rows' }} />);
+        expect(container.innerHTML).not.toContain('[BLOCK');
+        const prose = Array.from(container.querySelectorAll('.eigen-prose.site-prose'), (div) =>
+            Array.from(div.children, (child) => child.textContent?.trim() || child.querySelector('img')?.alt).filter(
+                Boolean,
+            ),
+        );
+        expect(prose).toEqual([
+            ['Before', 'One', 'Between'],
+            ['Film', 'After'],
+        ]);
+        expect(container.textContent).toContain('Rows');
+        expect(container.querySelector('.lg\\:grid-cols-3 img[src="/g1.png"]')).not.toBeNull();
+        expect(container.querySelector('.grid-cols-1 img[src="/f.webp"]')).not.toBeNull();
     });
 });
 
@@ -365,7 +392,7 @@ const PAGE = [
 describe('prerender', () => {
     test('the server markup holds every slide with its alt text and captions, and no film that starts itself', () => {
         const page = document.createElement('div');
-        page.innerHTML = renderToString(<ArticleContent body={{ html: renderMarkdown(PAGE).html, mediaGrids: [] }} />);
+        page.innerHTML = renderToString(<ArticleContent body={{ html: renderMarkdown(PAGE).html, media: [] }} />);
         expect(page.querySelector('.media-carousel-slide img[src="/a.webp"][alt="A table"]')).not.toBeNull();
         const captions = Array.from(page.querySelectorAll('figcaption'), (caption) => caption.innerHTML);
         expect(captions).toEqual(['A table', 'A film', 'The <em>budget</em>', 'A bar grows']);
@@ -392,7 +419,7 @@ describe('prerender', () => {
 
     test('the first client render is the server markup, also for a reader who asked for less motion', async () => {
         stubReducedMotion(true);
-        const element = <ArticleContent body={{ html: renderMarkdown(PAGE).html, mediaGrids: [] }} />;
+        const element = <ArticleContent body={{ html: renderMarkdown(PAGE).html, media: [] }} />;
         const page = document.createElement('div');
         page.innerHTML = renderToString(element);
         document.body.append(page);

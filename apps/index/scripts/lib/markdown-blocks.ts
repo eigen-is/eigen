@@ -8,6 +8,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type MarkdownIt from 'markdown-it';
+import type { MediaGridData } from './content-types';
 
 // Lucide "chevron-left" and "chevron-right", inlined like the heading anchor icon.
 const chevron = (path: string) =>
@@ -17,13 +18,14 @@ const NEXT_ICON = chevron('m9 18 6-6-6-6');
 
 const VIDEO_FILES = ['.av1.mp4', '.h264.mp4', '.webp'];
 
-const MEDIA_BLOCKS = new Set(['video', 'carousel', 'side-by-side']);
+const MEDIA_BLOCKS = new Set(['video', 'carousel', 'grid', 'side-by-side']);
 
 // `pageBlocks` names the blocks the page draws itself where the Markdown puts them, such as the About overview's
-// `apps`. A page that draws none passes none, so such a block there fails the build as an unknown one.
+// `apps`. A page that draws none passes none, so such a block there fails the build as an unknown one. `media` takes
+// what each media block the page draws shows, and the block's marker holds its place in it.
 export function markdownBlocks(
     md: MarkdownIt,
-    { publicDir, pageBlocks }: { publicDir: string; pageBlocks: ReadonlySet<string> },
+    { publicDir, pageBlocks, media }: { publicDir: string; pageBlocks: ReadonlySet<string>; media: MediaGridData[] },
 ): void {
     const { escapeHtml } = md.utils;
     // Inline rendering runs the caption through the text rule, so app names in it are set like the prose around it.
@@ -68,6 +70,27 @@ export function markdownBlocks(
                 return `<video muted loop playsinline preload="metadata" poster="${base}.webp"><source src="${base}.av1.mp4" type='video/mp4; codecs="av01.0.08M.08"'><source src="${base}.h264.mp4" type="video/mp4"></video>`;
             };
 
+            const images = () => {
+                const lines: { src: string; title?: string; alt: string; caption: string; markdown: string }[] = [];
+                for (let line = startLine + 1; line < closeLine; line++) {
+                    const text = lineText(line);
+                    if (!text) continue;
+                    const [image, ...others] = md.parseInline(text, state.env)[0].children ?? [];
+                    if (image?.type !== 'image' || others.length) {
+                        throw new Error(`${where} takes one image per line, not ${text}`);
+                    }
+                    lines.push({
+                        src: image.attrGet('src') ?? '',
+                        title: image.attrGet('title') ?? undefined,
+                        alt: md.renderer.renderInlineAsText(image.children ?? [], md.options, state.env),
+                        caption: image.content,
+                        markdown: text,
+                    });
+                }
+                if (!lines.length) throw new Error(`${where} needs an image`);
+                return lines;
+            };
+
             if ((name === 'video' || pageBlock) && closeLine > startLine + 1) {
                 throw new Error(`${where} takes no body`);
             }
@@ -78,19 +101,11 @@ export function markdownBlocks(
                 if (!src) throw new Error(`${where} needs a src`);
                 html(`<figure class="media-video">${video(src)}${figcaption(caption)}</figure>\n`);
             } else if (name === 'carousel') {
-                const slides: string[] = [];
-                for (let line = startLine + 1; line < closeLine; line++) {
-                    const text = lineText(line);
-                    if (!text) continue;
-                    const [image, ...others] = md.parseInline(text, state.env)[0].children ?? [];
-                    if (image?.type !== 'image' || others.length) {
-                        throw new Error(`${where} takes one image per line, not ${text}`);
-                    }
-                    // A src with no file ending names a video's files, as a video block's does.
-                    const src = image.attrGet('src') ?? '';
-                    const media = /\.\w+$/.test(src) ? md.renderInline(text) : video(src);
-                    slides.push(`<figure class="media-carousel-slide">${media}${figcaption(image.content)}</figure>\n`);
-                }
+                // A src with no file ending names a video's files, as a video block's does.
+                const slides = images().map(({ src, caption, markdown }) => {
+                    const slide = /\.\w+$/.test(src) ? md.renderInline(markdown) : video(src);
+                    return `<figure class="media-carousel-slide">${slide}${figcaption(caption)}</figure>\n`;
+                });
                 const dots = slides.map(
                     (_, i) =>
                         `<button type="button" class="media-carousel-dot" aria-label="Slide ${i + 1} of ${slides.length}"${i === 0 ? ' aria-current="true"' : ''}></button>`,
@@ -99,6 +114,17 @@ export function markdownBlocks(
                 html(
                     `<figure class="media-carousel"${attrs.has('autoplay') ? ' data-autoplay' : ''}><div class="media-carousel-strip" tabindex="0" aria-label="${escapeHtml(caption ?? 'Slides')}">\n${slides.join('')}</div><div class="media-carousel-nav"><div class="media-carousel-dots">${dots.join('')}</div><div class="media-carousel-steps"><button type="button" class="media-carousel-prev" aria-label="Previous slide" disabled>${PREV_ICON}</button><button type="button" class="media-carousel-next" aria-label="Next slide"${nextDisabled}>${NEXT_ICON}</button></div></div>${figcaption(caption)}</figure>\n`,
                 );
+            } else if (name === 'grid') {
+                const columns = attrs.get('columns');
+                if (!columns || !/^[1-6]$/.test(columns)) throw new Error(`${where} needs columns from 1 to 6`);
+                // An image's title is the small picture the grid shows for it: a thumbnail, or a film's poster.
+                const items = images().map(({ src, title, alt }) =>
+                    src.endsWith('.mp4')
+                        ? { src, type: 'video' as const, caption: alt, poster: title }
+                        : { src, type: 'image' as const, caption: alt, thumbnail: title },
+                );
+                html(`<p>[BLOCK:${media.length}]</p>\n`);
+                media.push({ columns, items });
             } else {
                 html('<figure class="media-side-by-side">\n');
                 const lineMax = state.lineMax;

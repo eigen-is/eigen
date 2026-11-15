@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
+import type { MediaGridData } from '../../../../scripts/lib/content-types';
 import { markdownBlocks } from '../../../../scripts/lib/markdown-blocks';
 import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
 
@@ -16,8 +17,44 @@ beforeAll(() => {
 
 afterAll(() => rmSync(publicDir, { recursive: true, force: true }));
 
-const render = (markdown: string, pageBlocks: ReadonlySet<string> = new Set()) =>
-    new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir, pageBlocks }).render(markdown);
+// The HTML of the Markdown, and what each media block it left a marker for shows.
+function build(markdown: string, pageBlocks: ReadonlySet<string> = new Set()) {
+    const media: MediaGridData[] = [];
+    const html = new MarkdownIt({ html: true }).use(markdownBlocks, { publicDir, pageBlocks, media }).render(markdown);
+    return { html, media };
+}
+
+const render = (markdown: string, pageBlocks?: ReadonlySet<string>) => build(markdown, pageBlocks).html;
+
+describe('grid', () => {
+    test('a grid leaves a marker for its place among the media, with one item per image line', () => {
+        const { html, media } = build(
+            [
+                '::: grid columns="3"\n![The *inbox*](/mail.webp "/mail-small.webp")\n\n![](/plain.webp)\n:::',
+                'Between',
+                '::: grid columns="1"\n![A film](/film.mp4 "/film.webp")\n:::',
+            ].join('\n\n'),
+        );
+        expect(html).toBe('<p>[BLOCK:0]</p>\n<p>Between</p>\n<p>[BLOCK:1]</p>\n');
+        expect(media).toEqual([
+            {
+                columns: '3',
+                items: [
+                    { src: '/mail.webp', type: 'image', caption: 'The inbox', thumbnail: '/mail-small.webp' },
+                    { src: '/plain.webp', type: 'image', caption: '', thumbnail: undefined },
+                ],
+            },
+            { columns: '1', items: [{ src: '/film.mp4', type: 'video', caption: 'A film', poster: '/film.webp' }] },
+        ]);
+    });
+
+    test('a grid without columns from 1 to 6, or without an image, fails the build', () => {
+        expect(() => render('::: grid\n![a](/a.webp)\n:::')).toThrow('columns from 1 to 6');
+        expect(() => render('::: grid columns="7"\n![a](/a.webp)\n:::')).toThrow('columns from 1 to 6');
+        expect(() => render('::: grid columns="2"\n:::')).toThrow('needs an image');
+        expect(() => render('::: grid columns="2"\ntext\n:::')).toThrow('one image per line');
+    });
+});
 
 describe('video', () => {
     test('a video block is a muted loop with both encodes and a poster, which the page starts', () => {

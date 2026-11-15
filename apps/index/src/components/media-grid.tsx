@@ -1,13 +1,14 @@
-// A grid of images and videos inside a blog post or Support article, which the article's markdown declares as a
-// media block. Each item is a button with a thumbnail, a play mark on a video, and its caption. The page around it
-// opens a clicked item in its lightbox, with the grid as the group, and finds the grid by its `index` on the page.
+// A grid of images and videos inside a blog post or Support article, which the article's Markdown declares as a
+// `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, and its caption. A click hands
+// the page around it the item to open in its lightbox, with the grid as the group.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { Play } from 'lucide-react';
+import type { MediaGridData, MediaItem } from '../../scripts/lib/content-types';
+import type { OpenLightbox } from './media-lightbox';
 import { Caption } from './media-lightbox';
-import type { MediaGridData, MediaItem } from './parse-media-grids';
 
-const GRID_COLUMNS: Record<string, string> = {
+const GRID_COLUMNS: Readonly<Record<string, string>> = {
     '1': 'grid-cols-1',
     '2': 'grid-cols-1 md:grid-cols-2',
     '3': 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
@@ -16,35 +17,31 @@ const GRID_COLUMNS: Record<string, string> = {
     '6': 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6',
 };
 
-export function MediaGrid({ columns, items, index }: MediaGridData & { index: number }) {
-    if (items.length === 0) return null;
+export function MediaGrid({ columns, items, onOpen }: MediaGridData & { onOpen: OpenLightbox }) {
     return (
-        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns] ?? GRID_COLUMNS['2'])} data-grid={index}>
+        <div className={cn('grid gap-6 my-8', GRID_COLUMNS[columns])}>
             {items.map((item, i) => (
-                <MediaThumbnail key={i} {...item} />
+                <MediaThumbnail key={i} {...item} onClick={() => onOpen(items, i)} />
             ))}
         </div>
     );
 }
 
-function MediaThumbnail({ src, type, caption, thumbnail, poster }: MediaItem) {
-    const thumbnailSrc = thumbnail ?? src;
-    const posterSrc = poster ?? thumbnail;
-
+function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: MediaItem & { onClick: () => void }) {
     return (
-        <button type="button" className="group block w-full text-left">
+        <button type="button" className="group block w-full text-left" onClick={onClick}>
             <div className="relative overflow-hidden rounded-lg bg-muted">
                 {type === 'image' && (
                     <img
-                        src={thumbnailSrc}
+                        src={thumbnail ?? src}
                         alt={caption ?? ''}
                         className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                     />
                 )}
                 {type === 'video' && (
                     <div className="relative w-full h-full">
-                        {posterSrc ? (
-                            <img src={posterSrc} alt={caption ?? ''} className="w-full h-full object-cover" />
+                        {poster ? (
+                            <img src={poster} alt={caption ?? ''} className="w-full h-full object-cover" />
                         ) : (
                             <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
                         )}

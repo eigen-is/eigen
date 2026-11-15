@@ -30,7 +30,7 @@ async function renderPage(previous?: ArticleMeta, next?: ArticleMeta, slug = 'ma
                     <AboutPage
                         app={app}
                         page={aboutMeta(app.slug)}
-                        body={{ html: '<p>Body</p><p>[BLOCK:app-principles]</p>', mediaGrids: [] }}
+                        body={{ html: '<p>Body</p><p>[BLOCK:app-principles]</p>', media: [] }}
                         previous={previous}
                         next={next}
                     />

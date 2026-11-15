@@ -4,7 +4,6 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { parseMediaGrids } from '../src/components/parse-media-grids';
 import { aboutApps } from '../src/content/about-apps';
 import { aboutPageSlug, checkAboutRows, checkPrincipleArticles } from './lib/about-pages';
 import type { ArticleBody, ArticleMeta, ContentManifest } from './lib/content-types';
@@ -43,9 +42,8 @@ function buildSupport(): ArticleMeta[] {
         const section = slug.split('/')[0];
         const { data, body } = parseContentFile(readFileSync(join(dir, rel), 'utf-8'), supportFrontmatterSchema);
         if (data.draft) continue;
-        const { content, mediaGrids } = parseMediaGrids(body);
-        const { html, toc } = renderMarkdown(content);
-        writeArticle('support', slug, { html, mediaGrids });
+        const { html, toc, media } = renderMarkdown(body);
+        writeArticle('support', slug, { html, media });
         articles.push({
             slug,
             section,
@@ -71,9 +69,8 @@ function buildBlog(): ArticleMeta[] {
         const dateMatch = rel.match(/^(\d{4}-\d{2}-\d{2})-/);
         const { data, body } = parseContentFile(readFileSync(join(dir, rel), 'utf-8'), blogFrontmatterSchema);
         if (data.draft) continue;
-        const { content, mediaGrids } = parseMediaGrids(body);
-        const { html, toc } = renderMarkdown(content);
-        writeArticle('blog', data.id, { html, mediaGrids });
+        const { html, toc, media } = renderMarkdown(body);
+        writeArticle('blog', data.id, { html, media });
         articles.push({
             slug: data.id,
             section: 'blog',
@@ -106,11 +103,11 @@ function buildAbout(): ArticleMeta[] {
         const slug = aboutPageSlug(file);
         const { data, body } = parseContentFile(readFileSync(join(dir, file), 'utf-8'), aboutFrontmatterSchema);
         if (slug !== 'index' && data.rows) throw new Error(`About page ${file} has rows, which only index.md takes`);
-        const { content, mediaGrids } = parseMediaGrids(
+        const { html, toc, media } = renderMarkdown(
             slug === 'index' ? body : `${body.trimEnd()}\n\n::: app-principles\n:::\n`,
+            ABOUT_BLOCKS,
         );
-        const { html, toc } = renderMarkdown(content, ABOUT_BLOCKS);
-        writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, mediaGrids });
+        writeArticle('about', slug, { html: `${html}<aside class="site-panel">\n${technical}</aside>\n`, media });
         const article: ArticleMeta = {
             slug,
             section: 'about',

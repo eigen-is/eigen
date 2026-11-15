@@ -23,7 +23,7 @@ describe('BlogPost', () => {
             routeTree: createRootRoute({
                 component: () => (
                     <QueryClientProvider client={new QueryClient()}>
-                        <BlogPost post={post} body={{ html: '<p>Body</p>', mediaGrids: [] }} />
+                        <BlogPost post={post} body={{ html: '<p>Body</p>', media: [] }} />
                     </QueryClientProvider>
                 ),
             }),

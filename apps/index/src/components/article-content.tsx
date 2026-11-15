@@ -9,7 +9,7 @@ import type { KeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ArticleBody } from '../content/manifest';
 import { MediaGrid } from './media-grid';
-import type { LightboxItem } from './media-lightbox';
+import type { LightboxItem, OpenLightbox } from './media-lightbox';
 import { MediaLightbox } from './media-lightbox';
 
 // `blocks` holds what each of the page's own blocks shows, by name, such as `apps` for `::: apps`.
@@ -17,11 +17,12 @@ type ArticleContentProps = { body: ArticleBody; blocks?: Readonly<Record<string,
 
 export function ArticleContent({ body, blocks, className }: ArticleContentProps) {
     const ref = useRef<HTMLDivElement>(null);
-    const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number; open: boolean }>({
+    const [lightbox, setLightbox] = useState<{ items: readonly LightboxItem[]; index: number; open: boolean }>({
         items: [],
         index: 0,
         open: false,
     });
+    const openLightbox: OpenLightbox = (items, index) => setLightbox({ items, index, open: true });
 
     // The build writes no autoplay, so a loop never moves before hydration for a reader who asked for less motion.
     // Scroll does not bubble, so the root hears each carousel strip's in the capture phase.
@@ -86,13 +87,6 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
             strip.scrollTo({ left: slide * pitch });
             return;
         }
-        const grid = e.target.closest<HTMLElement>('[data-grid]');
-        const thumbnail = e.target.closest('button');
-        if (grid && thumbnail) {
-            const { items } = body.mediaGrids[Number(grid.dataset.grid)];
-            setLightbox({ items, index: Array.from(grid.querySelectorAll('button')).indexOf(thumbnail), open: true });
-            return;
-        }
         const media = e.target.closest('img, figure video');
         if (media?.closest('.site-prose') && !media.closest('a, button')) {
             const group = Array.from(media.closest('.media-carousel-strip')?.querySelectorAll('img, video') ?? [media]);
@@ -119,27 +113,27 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         setLightbox({ items: group.map(lightboxItem), index: carouselPosition(strip).current, open: true });
     };
 
+    // One section per block the page draws: the block, then the Markdown and the media up to the next one, in prose.
+    const sections: { block?: string; prose: ReactNode[] }[] = [{ prose: [] }];
+    for (const [i, piece] of body.html.split(BLOCK_MARKER).entries()) {
+        const { prose } = sections[sections.length - 1];
+        // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
+        if (i % 2 === 0) piece && prose.push(<div key={i} dangerouslySetInnerHTML={{ __html: piece }} />);
+        else if (/^\d+$/.test(piece))
+            prose.push(<MediaGrid key={i} {...body.media[Number(piece)]} onOpen={openLightbox} />);
+        else sections.push({ block: piece, prose: [] });
+    }
+
     // The lightbox sits outside the root, so React passes no click in its portaled dialog up to onClick.
     return (
         <>
             <div ref={ref} className={className} onClick={onClick} onKeyDown={onKeyDown}>
-                {body.html.split(BLOCK_MARKER).map((section, i) => {
-                    if (i % 2) return <Fragment key={i}>{blocks?.[section]}</Fragment>;
-                    if (!section) return null;
-                    return (
-                        <div key={i} className="eigen-prose site-prose">
-                            {section.split(GRID_MARKER).map((part, j) => {
-                                if (j % 2) {
-                                    const grid = Number(part);
-                                    return <MediaGrid key={j} {...body.mediaGrids[grid]} index={grid} />;
-                                }
-                                if (!part) return null;
-                                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
-                                return <div key={j} dangerouslySetInnerHTML={{ __html: part }} />;
-                            })}
-                        </div>
-                    );
-                })}
+                {sections.map(({ block, prose }, i) => (
+                    <Fragment key={i}>
+                        {block && blocks?.[block]}
+                        {prose.length > 0 && <div className="eigen-prose site-prose">{prose}</div>}
+                    </Fragment>
+                ))}
             </div>
             <MediaLightbox
                 {...lightbox}
@@ -150,10 +144,9 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
     );
 }
 
-// The build's markers for a block the page draws, such as `apps`, and for a media grid, by its number. Split on
-// them, the pieces at odd places are the captured names and numbers.
+// The build's marker for a block: the name of one the page draws, such as `apps`, or the number of a media block.
+// Split on it, the pieces at odd places are the captured names and numbers.
 const BLOCK_MARKER = /<p>\[BLOCK:([\w-]+)\]<\/p>/;
-const GRID_MARKER = /<p>\[MEDIAGRID:(\d+)\]<\/p>/;
 
 const AUTOPLAY_MS = 7000;
 

@@ -28,38 +28,14 @@ The basics work:
 
 It’s all minimal, but functional enough to feel like a small ecosystem.
 
-<media-grid columns="6">
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
-    type="image" 
-    caption="eigen|space⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
-    type="image" 
-    caption="eigen|mail⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
-    type="image" 
-    caption="eigen|contacts⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
-    type="image" 
-    caption="eigen|drive⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
-    type="image" 
-    caption="eigen|docs⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
-    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
-    type="image" 
-    caption="eigen|stickies⟩" />
-</media-grid>
+::: grid columns="6"
+![eigen|space⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/space.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp")
+![eigen|mail⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp")
+![eigen|contacts⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp")
+![eigen|drive⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp")
+![eigen|docs⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp")
+![eigen|stickies⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp "/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp")
+:::
 
 ## Under the hood
 
@@ -98,18 +74,10 @@ they are active. They sync over WebSockets and are periodically written to disk.
 disappears from memory.
 
 
-<media-grid columns="2">
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
-    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
-    type="video" 
-    caption="eigen|docs⟩" />
-  <media 
-    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
-    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
-    type="video" 
-    caption="eigen|drive⟩" />
-</media-grid>
+::: grid columns="2"
+![eigen|docs⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4 "/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp")
+![eigen|drive⟩](/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4 "/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp")
+:::
 
 ## What's Next?
 

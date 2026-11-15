@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
 import { splitKetNames } from '../../src/components/ket-names';
-import type { TocEntry } from './content-types';
+import type { MediaGridData, TocEntry } from './content-types';
 import { markdownBlocks } from './markdown-blocks';
 
 const PUBLIC_DIR = join(import.meta.dir, '..', '..', 'public');
@@ -29,10 +29,11 @@ function slugify(text: string): string {
 export function renderMarkdown(
     markdown: string,
     pageBlocks: ReadonlySet<string> = new Set(),
-): { html: string; toc: TocEntry[] } {
+): { html: string; toc: TocEntry[]; media: MediaGridData[] } {
     const toc: TocEntry[] = [];
+    const media: MediaGridData[] = [];
     const md = new MarkdownIt({ html: true, linkify: true, typographer: false });
-    md.use(markdownBlocks, { publicDir: PUBLIC_DIR, pageBlocks });
+    md.use(markdownBlocks, { publicDir: PUBLIC_DIR, pageBlocks, media });
     md.use(anchor, {
         slugify,
         level: [2, 3],
@@ -57,5 +58,5 @@ export function renderMarkdown(
             .join('');
     };
 
-    return { html: md.render(markdown), toc };
+    return { html: md.render(markdown), toc, media };
 }

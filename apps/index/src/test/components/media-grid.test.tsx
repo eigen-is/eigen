@@ -7,8 +7,8 @@ describe('MediaGrid', () => {
     test('sets an app name in a caption apart and keeps the alt text plain', () => {
         const html = renderToStaticMarkup(
             <MediaGrid
-                index={0}
                 columns="2"
+                onOpen={() => {}}
                 items={[{ src: '/mail.png', type: 'image', caption: 'The inbox of eigen|mail⟩' }]}
             />,
         );
@@ -18,7 +18,7 @@ describe('MediaGrid', () => {
 
     test('leaves a caption without a name as text', () => {
         const html = renderToStaticMarkup(
-            <MediaGrid index={0} columns="2" items={[{ src: '/a.png', type: 'image', caption: 'A chart' }]} />,
+            <MediaGrid columns="2" items={[{ src: '/a.png', type: 'image', caption: 'A chart' }]} onOpen={() => {}} />,
         );
         expect(html).toContain('>A chart</p>');
         expect(html).not.toContain('ket-name');

@@ -17,7 +17,7 @@ const generated = import.meta.glob<ChangelogBody>('../content/.generated/changel
     eager: true,
     import: 'default',
 });
-const body: ChangelogBody = Object.values(generated)[0] ?? { html: '', mediaGrids: [], versions: [] };
+const body: ChangelogBody = Object.values(generated)[0] ?? { html: '', media: [], versions: [] };
 const versions = body.versions.map(({ id, version, date }) => ({ id, text: version, detail: date }));
 
 export const Route = createFileRoute('/changelog')({

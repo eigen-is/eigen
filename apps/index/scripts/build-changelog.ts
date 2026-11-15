@@ -40,7 +40,7 @@ export function renderChangelog(raw: string): ChangelogBody {
             const ends = /[.!?:]$/.test(text.replace(/<[^>]*>/g, '').trimEnd());
             return `<li>${open}<strong class="lead">${title}</strong> ${text}${ends ? '' : '.'}${close}`;
         });
-    return { html: body, mediaGrids: [], versions };
+    return { html: body, media: [], versions };
 }
 
 // Run only when executed directly (bun run scripts/build-changelog.ts), not when the
