@@ -15,7 +15,10 @@ async function renderOverview(): Promise<string> {
         tags: [],
         order: 0,
         rows: Object.fromEntries(aboutApps.map((app) => [app.slug, `The line of ${app.name}`])),
-        toc: [],
+        toc: [
+            { id: 'the-apps', text: 'The apps', level: 2 },
+            { id: 'support-the-project', text: 'Support the project', level: 2 },
+        ],
         related: [],
         crossSections: [],
     };
@@ -25,7 +28,10 @@ async function renderOverview(): Promise<string> {
                 <QueryClientProvider client={new QueryClient()}>
                     <AboutOverview
                         overview={overview}
-                        body={{ html: '<p>Intro</p><p>[BLOCK:apps]</p>', mediaGrids: [] }}
+                        body={{
+                            html: '<p>Intro</p><p>[BLOCK:apps]</p><p>Outro</p><p>[BLOCK:principles]</p>',
+                            mediaGrids: [],
+                        }}
                     />
                 </QueryClientProvider>
             ),
@@ -58,5 +64,23 @@ describe('AboutOverview', () => {
         expect(html).toContain('src="/data/about/media/row-mail.webp"');
         expect(html).toContain('src="/data/about/media/row-admin.webp"');
         expect(html).toContain('The line of Admin');
+    });
+
+    test('reads in the column, with the table of contents of its headings in the gutter', async () => {
+        const [gutter, column] = (await renderOverview()).split('site-reading-column');
+        expect(gutter).toContain('site-reading-aside');
+        expect(gutter).toContain('href="#the-apps"');
+        expect(gutter).toContain('href="#support-the-project"');
+        expect(column).toContain('About eigen');
+    });
+
+    test("ends on the landing page's three panels, widened to the wide container", async () => {
+        const [, column] = (await renderOverview()).split('site-reading-column');
+        const panels = column.slice(column.indexOf('Outro'));
+        expect(panels).toContain('site-reading-wide');
+        expect(panels).toContain('Use your favorite apps');
+        expect(panels).toContain('Office compatible');
+        expect(panels).toContain('Built for data sovereignty');
+        expect(panels).toContain('>IMAP</span>');
     });
 });

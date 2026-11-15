@@ -33,8 +33,6 @@
 }
 
 .site-wide {
-    /* A carousel inside reads its column from here, so its slides line up with this wider container. */
-    --site-column: var(--site-wide);
     width: 100%;
     max-width: calc(var(--site-wide) + 2 * var(--app-gutter-x));
     margin-inline: auto;
@@ -66,6 +64,11 @@
 
     .site-reading-column {
         grid-column: 2;
+    }
+
+    /* A block in the column that reaches over both gutters to the wide container's edges. */
+    .site-reading-wide {
+        margin-inline: calc(-1 * (var(--site-gutter) + var(--site-gap)));
     }
 }
 
@@ -185,7 +188,7 @@
        a size container, so the next slide peeks in. The column's width follows the site grid: --site-col at most,
        less the gutters on a narrow page. */
     .media-carousel {
-        --carousel-column: min(var(--site-column, var(--site-col)), 100cqw - 2 * var(--app-gutter-x));
+        --carousel-column: min(var(--site-col), 100cqw - 2 * var(--app-gutter-x));
         --carousel-bleed: calc((100cqw - var(--carousel-column)) / 2);
     }
 

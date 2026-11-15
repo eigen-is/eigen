@@ -39,7 +39,7 @@ type LandingBlocksProps = {
 export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     return (
         <div className="site-wide mt-auto pb-10">
-            <PrincipleBlocks className="md:gap-10" />
+            <PrincipleBlocks />
             {showInstall && (
                 <div className="mt-4 flex items-center justify-end gap-2 text-xs text-muted-foreground">
                     <span className="shrink-0">Install in one line</span>
@@ -58,10 +58,10 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
     );
 }
 
-// The three blocks alone, three across from a tablet up, spaced and placed by the caller.
+// The three blocks alone, three across from a tablet up, placed by the caller.
 export function PrincipleBlocks({ className }: { className?: string }) {
     return (
-        <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3', className)}>
+        <div className={cn('grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10', className)}>
             {BLOCKS.map((block) => (
                 <div key={block.principle} className="site-panel flex flex-col">
                     <h2 className="text-lg font-medium">{block.principle}</h2>

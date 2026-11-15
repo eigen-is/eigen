@@ -10,6 +10,7 @@ describe('LandingBlocks', () => {
         expect(html).toContain('Use your favorite apps');
         expect(html).toContain('Office compatible');
         expect(html).toContain('Built for data sovereignty');
+        expect(html).toContain('class="grid grid-cols-1 gap-6 md:grid-cols-3 md:gap-10"');
     });
 
     test('tags each block with the protocols and formats behind it', () => {
