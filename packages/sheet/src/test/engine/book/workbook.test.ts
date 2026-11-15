@@ -263,6 +263,17 @@ describe('engine/book/workbook — the look sweep', () => {
         expect(book.looks.size).toBe(3);
     });
 
+    test('the load holds only the looks a band wears, so the next sweep counts from those', () => {
+        const unworn = Array.from({ length: 200 }, (_, at) => ({ fs: 100 + at }));
+        const raw = bookOf(sheetOf('a', { looks: [...unworn, bold], bands: [0, 1, 0, 201] }));
+        const book = new Workbook(raw);
+        expect(book.looks.size).toBe(2);
+        expect(book.content()).toEqual(bookOf(sheetOf('a', { looks: [bold], bands: [0, 1, 0, 1] })));
+        wearUnused(book, 63);
+        book.sweepLooks();
+        expect(book.looks.size).toBe(2);
+    });
+
     test('a sweep renumbers the looks in every sheet’s bands and moves no byte', () => {
         const book = loaded();
         wearUnused(book, 70);

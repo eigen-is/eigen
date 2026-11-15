@@ -44,8 +44,8 @@ export class Workbook {
     public readonly g: number;
     private readonly now: number;
     private readonly seed: number;
-    // How many looks the table held after its last sweep, or after the load.
-    private swept: number;
+    // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
+    private swept = 0;
 
     // Loads a snapshot. The limits are weighed on the bands as rebuilt and on the cells as listed, before the engine
     // allocates a column: a document over one throws its refusal and holds nothing.
@@ -106,7 +106,7 @@ export class Workbook {
         this.g = g;
         this.now = now;
         this.seed = seed;
-        this.swept = this.looks.size;
+        this.sweep();
     }
 
     // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
@@ -184,7 +184,10 @@ export class Workbook {
     // It renumbers the rest in every sheet's bands, so a look id held from before it names another look: an applier
     // calls it once a batch is done, with no id in hand.
     public sweepLooks(): void {
-        if (this.looks.size <= Math.max(SWEEP_FLOOR, 2 * this.swept)) return;
+        if (this.looks.size > Math.max(SWEEP_FLOOR, 2 * this.swept)) this.sweep();
+    }
+
+    private sweep(): void {
         const worn = new Set<number>();
         for (const { bands } of this.sheets.values()) {
             for (const id of bands.content().looks) worn.add(id);
