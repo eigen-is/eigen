@@ -54,27 +54,6 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
 
 // One shared seed and not a draw per element, as the drawing takes. The deck's style table has roughness 0, so
 // every element draws crisp and a seed would change nothing but the bytes of a reseed.
-function buildText(t: DeckText, slideKey: string, frameId: string, i: number): DeckElement {
-    const element: NewVectorElement = {
-        type: 'rectangle',
-        autoFit: true,
-        frameId,
-        seed: DEFAULT_ELEMENT_PROPS.seed,
-        x: t.x,
-        y: t.y,
-        width: t.width,
-        height: t.height,
-        html: t.html,
-        fontFamily: t.font ?? DECK_STYLE.fontFamily,
-        fontSize: t.fontSize,
-        fontWeight: t.bold ? 'bold' : DEFAULT_TEXT_BOX_PROPS.fontWeight,
-        color: t.color ?? DECK_STYLE.color,
-        textAlign: t.align ?? DEFAULT_TEXT_BOX_PROPS.textAlign,
-        verticalAlign: t.valign ?? DEFAULT_TEXT_BOX_PROPS.verticalAlign,
-    };
-    return { id: `el-${slideKey}-text-${i}`, element };
-}
-
 function buildImage(im: DeckImage, slideKey: string, frameId: string, i: number): DeckElement {
     const element: NewVectorElement = {
         type: 'image',
@@ -112,4 +91,25 @@ function buildChart(c: DeckChart, slideKey: string, frameId: string, i: number):
         }),
     };
     return { id: `el-${slideKey}-chart-${i}`, element };
+}
+
+function buildText(t: DeckText, slideKey: string, frameId: string, i: number): DeckElement {
+    const element: NewVectorElement = {
+        type: 'rectangle',
+        autoFit: true,
+        frameId,
+        seed: DEFAULT_ELEMENT_PROPS.seed,
+        x: t.x,
+        y: t.y,
+        width: t.width,
+        height: t.height,
+        html: t.html,
+        fontFamily: t.font ?? DECK_STYLE.fontFamily,
+        fontSize: t.fontSize,
+        fontWeight: t.bold ? 'bold' : DEFAULT_TEXT_BOX_PROPS.fontWeight,
+        color: t.color ?? DECK_STYLE.color,
+        textAlign: t.align ?? DEFAULT_TEXT_BOX_PROPS.textAlign,
+        verticalAlign: t.valign ?? DEFAULT_TEXT_BOX_PROPS.verticalAlign,
+    };
+    return { id: `el-${slideKey}-text-${i}`, element };
 }
