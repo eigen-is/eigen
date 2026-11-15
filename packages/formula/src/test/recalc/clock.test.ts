@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Literal } from '../../index';
-import { Engine } from '../../index';
+import { Engine, REF } from '../../index';
 import { runClockLaw } from './clock-law';
 import { at, stored, valueAt } from './support';
 
@@ -328,4 +328,90 @@ describe('whoever reads one log of batches ends with the same values', () => {
         expect(counts.differing).toEqual([]);
         expect(counts.sheetOps).toBeGreaterThan(COUNT ? 0 : 1500);
     }, 120_000);
+});
+
+describe('a value given with a formula this build cannot evaluate', () => {
+    const KEPT = stored('=[1]Sheet1!A1*2', 'A1');
+    const SPAN = stored('=SUM(Sheet1:Sheet1!A1)', 'A1');
+
+    test('the formula holds the value it was given, waits for no pass, and what reads it is computed', () => {
+        const engine = loaded({ B1: ['=A1+1', 5], B2: ['=A2+1', 5] });
+        engine.setFormula('s1', 0, 0, KEPT, 42);
+        engine.setFormula('s1', 1, 0, SPAN, 'text');
+        expect(values(engine, 'A1', 'A2')).toEqual([42, 'text']);
+        expect([engine.isPending('s1', 0, 0), engine.isPending('s1', 1, 0)]).toEqual([false, false]);
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 0, 1]);
+        expect(values(engine, 'A1', 'A2', 'B1')).toEqual([42, 'text', 43]);
+        expect(engine.formulaOf('s1', 0, 0)).toBe(KEPT);
+    });
+
+    test('given none, it is #REF! once a pass ran', () => {
+        const engine = loaded({});
+        engine.setFormula('s1', 0, 0, KEPT);
+        engine.setFormula('s1', 1, 0, KEPT, null);
+        expect(engine.isPending('s1', 0, 0)).toBe(true);
+        engine.recalc(NO_CAP);
+        expect(values(engine, 'A1', 'A2')).toEqual([REF, REF]);
+    });
+
+    test('a formula this build can evaluate computes its own value, whatever it was given', () => {
+        const engine = loaded({ A1: 1 });
+        engine.setFormula('s1', 0, 1, stored('=A1+1', 'B1'), 99);
+        engine.fillFormula('s1', 1, 1, 2, 2, '=R1C1+2', 99);
+        expect(values(engine, 'B1', 'B2', 'C3')).toEqual([null, null, null]);
+        expect(engine.isPending('s1', 0, 1)).toBe(true);
+        engine.recalc(NO_CAP);
+        expect(values(engine, 'B1', 'B2', 'C3')).toEqual([2, 3, 3]);
+    });
+
+    test('a block filled with such a formula holds the value in every cell', () => {
+        const engine = loaded({ D1: ['=SUM(A1:B3)', 0] });
+        engine.fillFormula('s1', 0, 0, 2, 1, stored('=[1]Sheet1!$A$1', 'A1'), 7);
+        expect(values(engine, 'A1', 'B1', 'A3', 'B3')).toEqual([7, 7, 7, 7]);
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 3, 0, 0]);
+        expect(valueAt(engine, 'D1')).toBe(42);
+    });
+
+    test('the value stays through later writes, edits and clocks, and goes with the formula', () => {
+        const engine = loaded({ B1: 1 });
+        engine.setFormula('s1', 0, 0, KEPT, 42);
+        engine.recalc(NO_CAP);
+        engine.setValue('s1', 0, 1, 2);
+        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 0, count: 1 });
+        engine.setClock(46000, 7);
+        engine.recalc(NO_CAP);
+        expect(valueAt(engine, 'A2')).toBe(42);
+        engine.setFormula('s1', 1, 0, KEPT);
+        engine.recalc(NO_CAP);
+        expect(valueAt(engine, 'A2')).toBe(REF);
+    });
+
+    test('a cell that was on a loop is on none once it holds a given value', () => {
+        const engine = loaded({ A1: ['=B1', null], B1: ['=A1', null] });
+        expect(engine.recalc(NO_CAP).loops).toHaveLength(2);
+        engine.setFormula('s1', 0, 0, KEPT, 42);
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        expect(values(engine, 'A1', 'B1')).toEqual([42, 42]);
+    });
+
+    test('a value that is no value to hold is refused before anything is written', () => {
+        const engine = loaded({ A1: 1 });
+        expect(() => engine.setFormula('s1', 0, 0, KEPT, Number.NaN)).toThrow(RangeError);
+        expect(() => engine.fillFormula('s1', 0, 0, 1, 1, KEPT, Number.POSITIVE_INFINITY)).toThrow(RangeError);
+        expect(engine.formulaOf('s1', 0, 0)).toBeNull();
+        expect(valueAt(engine, 'A1')).toBe(1);
+    });
+
+    test('isGiven tells the formulas whose value a host sends beside them', () => {
+        const engine = loaded({
+            A1: ['=[1]Sheet1!A1*2', 42],
+            A2: ['=A1+NOW()', 1],
+            A3: 5,
+            A4: ['=SUM(Sheet1:Sheet1!A1)', null],
+        });
+        const given = (label: string) => engine.isGiven('s1', ...at(label));
+        expect(['A1', 'A2', 'A3', 'A4', 'A9', 'Z1'].map(given)).toEqual([true, false, false, true, false, false]);
+        expect(engine.isGiven('s1', -1, 0)).toBe(false);
+        expect(() => engine.isGiven('nope', 0, 0)).toThrow();
+    });
 });

@@ -129,11 +129,28 @@ export class Recalc {
         this.workbook.clear(sheet, row, c);
     }
 
-    // One formula in its stored text in every cell of a block. It holds no value until a pass computes it.
-    public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
+    // One formula in its stored text in every cell of a block. It holds no value until a pass computes it, unless
+    // this build cannot evaluate it and it comes with one: then every cell holds that value and waits for no pass.
+    public fillFormula(
+        sheet: Sheet,
+        top: number,
+        left: number,
+        bottom: number,
+        right: number,
+        text: string,
+        given: Literal | null,
+    ): void {
         this.stale = true;
         for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
+        if (given === null || (this.factsOf(sheet.columns[left].shape[top]) & Fact.Kept) === 0) return;
+        for (let c = left; c <= right; c += 1) {
+            const column = sheet.columns[c];
+            for (let row = top; row <= bottom; row += 1) {
+                this.workbook.put(column, row, given);
+                column.settle(row);
+            }
+        }
     }
 
     // Adds a sheet that was read from its description. The index is brought up to date before the tables take the

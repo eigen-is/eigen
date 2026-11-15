@@ -7,6 +7,7 @@
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
+import { Fact } from '../eval/facts';
 import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
@@ -44,16 +45,25 @@ export class Engine {
         this.calc.setValue(this.cell(sheet, row, column, value), row, column, value);
     }
 
-    // The formula in its stored text. It holds no value until a recalc computes it.
-    public setFormula(sheet: string, row: number, column: number, text: string): void {
-        this.calc.fillFormula(this.cell(sheet, row, column), row, column, row, column, text);
+    // The formula in its stored text. It holds no value until a recalc computes it. A formula this build cannot
+    // evaluate holds `given` at once, as an import or a paste brings its value; for any other formula it is ignored.
+    public setFormula(sheet: string, row: number, column: number, text: string, given: Literal | null = null): void {
+        this.calc.fillFormula(this.cell(sheet, row, column, given), row, column, row, column, text, given);
     }
 
     // One stored text in every cell of a block, as a fill writes it and as undo puts a rewritten block back.
-    public fillFormula(sheet: string, top: number, left: number, bottom: number, right: number, text: string): void {
-        this.cell(sheet, bottom, right);
+    public fillFormula(
+        sheet: string,
+        top: number,
+        left: number,
+        bottom: number,
+        right: number,
+        text: string,
+        given: Literal | null = null,
+    ): void {
+        this.cell(sheet, bottom, right, given);
         if (top > bottom || left > right) throw new RangeError(`No block from ${top},${left} to ${bottom},${right}`);
-        this.calc.fillFormula(this.cell(sheet, top, left), top, left, bottom, right, text);
+        this.calc.fillFormula(this.cell(sheet, top, left), top, left, bottom, right, text, given);
     }
 
     public clear(sheet: string, row: number, column: number): void {
@@ -127,6 +137,13 @@ export class Engine {
         const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
         // A row that is no row, such as -1, reads nothing off the column, as its value does.
         return shape > 0 ? this.workbook.shapes.shape(shape).text : null;
+    }
+
+    // Whether a cell holds a formula this build cannot evaluate, whose value is therefore given with it.
+    public isGiven(sheet: string, row: number, column: number): boolean {
+        const cells = this.workbook.known(sheet).columns[column];
+        const shape = cells === undefined || row >= cells.length ? 0 : cells.shape[row];
+        return shape > 0 && (this.calc.factsOf(shape) & Fact.Kept) !== 0;
     }
 
     // Whether a cell holds a formula that is still to be computed.

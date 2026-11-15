@@ -43,7 +43,7 @@ describe('the string table weighs what the cells hold now, within the factor a s
         ]);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
-        recalc.fillFormula(sheet, 1, 2, count, 2, stored('=$B$1&A2', 'C2'));
+        recalc.fillFormula(sheet, 1, 2, count, 2, stored('=$B$1&A2', 'C2'), null);
         recalc.pass(NO_CAP);
         // Every text is held by a cell here, and each write makes as many again of the same lengths.
         const { weight, size } = workbook.strings;
@@ -69,7 +69,7 @@ describe('the string table weighs what the cells hold now, within the factor a s
         const workbook = new Workbook([texts('a', 3000, (row) => `name ${row}`)]);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0);
         const [sheet] = workbook.sheets;
-        recalc.fillFormula(sheet, 0, 2, 0, 2, stored('=TEXTJOIN(", ",TRUE,A1:A3000)', 'C1'));
+        recalc.fillFormula(sheet, 0, 2, 0, 2, stored('=TEXTJOIN(", ",TRUE,A1:A3000)', 'C1'), null);
         recalc.pass(NO_CAP);
         const before = megabytes();
         for (let i = 0; i < 2000; i += 1) {

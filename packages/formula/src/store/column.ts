@@ -92,7 +92,7 @@ export class Column {
         this.loops += loop ? 1 : -1;
     }
 
-    // The cell holds no formula any more.
+    // The cell holds nothing to compute: no formula any more, or one that keeps the value it was given.
     public settle(row: number): void {
         this.setLoop(row, false);
         if (this.kind[row] > SETTLED) this.pending -= 1;
