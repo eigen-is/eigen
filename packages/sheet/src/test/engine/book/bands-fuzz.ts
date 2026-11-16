@@ -207,9 +207,6 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
                 if (extent.lastRow !== wanted.lastRow || extent.lastColumn !== wanted.lastColumn) {
                     throw new Error(`${where}: extent ${JSON.stringify(extent)}, the grid's ${JSON.stringify(wanted)}`);
                 }
-                const [c0, c1] = span(grid, false);
-                const meeting = firsts.filter((first, i) => first <= c1 && (firsts[i + 1] ?? GRID_COLUMNS) > c0).length;
-                if (bands.bandsIn(c0, c1) !== meeting) throw new Error(`${where}: bandsIn(${c0}, ${c1})`);
                 counts.mostBands = Math.max(counts.mostBands, weight.bands);
                 counts.mostRuns = Math.max(counts.mostRuns, weight.runs);
             }

@@ -140,6 +140,27 @@ describe('engine/book/handle — tab order', () => {
                 .map(({ id }) => id),
         ).toEqual(['b', 'z']);
     });
+
+    test('the sheets come as the workbook holds them, after a move, an add and the undo of a delete', () => {
+        const at = (id: string, order: string) => sheetOf(id, { fields: { name: id, order } });
+        const book = new Workbook(bookOf(at('a', 'a0'), at('b', 'a1'), at('c', 'a2')));
+        const holds = (ids: string[]) => {
+            expect([...book.sheets.keys()]).toEqual(ids);
+            expect(
+                cellsOf(book)
+                    .sheets()
+                    .map(({ id }) => id),
+            ).toEqual(ids);
+        };
+        applyOps(book, record({ kind: 'record', sheet: 'c', type: 'sheet', id: 'c', set: { order: 'a0V' } }));
+        holds(['a', 'c', 'b']);
+        applyOps(book, [{ kind: 'sheet', add: at('d', 'a0') }]);
+        holds(['a', 'd', 'c', 'b']);
+        const undo = applyOps(book, [{ kind: 'sheet', delete: 'c' }]);
+        holds(['a', 'd', 'b']);
+        applyOps(book, undo);
+        holds(['a', 'd', 'c', 'b']);
+    });
 });
 
 describe('engine/book/handle — a cell', () => {

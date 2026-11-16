@@ -20,7 +20,6 @@ describe('engine/book/bands — Bands', () => {
             expect(bands.extent()).toEqual({ lastRow: -1, lastColumn: -1 });
             expect(bands.look(0, 0)).toBe(0);
             expect(bands.look(LAST_ROW, LAST_COLUMN)).toBe(0);
-            expect(bands.bandsIn(0, LAST_COLUMN)).toBe(1);
         });
 
         test('one cell is three bands and three runs', () => {
@@ -63,20 +62,6 @@ describe('engine/book/bands — Bands', () => {
             expect(bands.extent()).toEqual({ lastRow: 40, lastColumn: 7 });
             bands.write([50, 0, LAST_ROW, LAST_COLUMN], () => 5);
             expect(bands.extent()).toEqual({ lastRow: 50, lastColumn: 7 });
-        });
-
-        test('bandsIn counts the bands that meet the columns', () => {
-            const bands = new Bands([], []);
-            bands.write(column(3), () => 1);
-            bands.write(column(4), () => 2);
-            bands.write(column(8), () => 1);
-            // 0..2, 3, 4, 5..7, 8, 9..
-            expect(bands.bandsIn(0, LAST_COLUMN)).toBe(6);
-            expect(bands.bandsIn(0, 2)).toBe(1);
-            expect(bands.bandsIn(2, 3)).toBe(2);
-            expect(bands.bandsIn(3, 3)).toBe(1);
-            expect(bands.bandsIn(4, 8)).toBe(3);
-            expect(bands.bandsIn(9, 100)).toBe(1);
         });
     });
 
@@ -427,7 +412,7 @@ describe('engine/book/bands — Bands', () => {
             const bands = new Bands([], []);
             for (let r = 0; r < 2000; r += 2) bands.write(row(r), () => 1);
             expect(bands.weight()).toEqual({ runs: 2000, bands: 1 });
-            expect(bands.bandsIn(7, 7)).toBe(1);
+            expect(bands.growth([[7, 7]])).toEqual({ runs: 2 * 2000 + 3, bands: 2 });
             bands.write([501, 7, 501, 7], () => 2);
             // The bands before and after the cell's column each hold the 2,000 runs; the cell's own row was a run.
             expect(bands.weight()).toEqual({ runs: 3 * 2000, bands: 3 });

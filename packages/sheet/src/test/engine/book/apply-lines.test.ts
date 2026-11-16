@@ -460,8 +460,8 @@ describe('engine/book/apply-lines — a delete', () => {
         ]);
     });
 
-    test('(6) the lossy formulas come back one op per sheet in the order of the workbook’s sheets, not the engine’s', () => {
-        // Sheet c moves before a, so the engine lists its rewrites first; sheet b has none.
+    test('(6) the lossy formulas come back one op per sheet in tab order, whatever order the sheets were loaded in', () => {
+        // Sheet c moves before a, so a reader that loads the book now holds it first; sheet b has none.
         const book = new Workbook(
             bookOf(
                 sheetOf('a', { cells: [[0, 0, { f: '=R3C2' }]] }),
@@ -472,8 +472,8 @@ describe('engine/book/apply-lines — a delete', () => {
         applyOps(book, [{ kind: 'record', sheet: 'c', type: 'sheet', id: 'c', set: { order: '0' } }]);
         const inverse = applyOps(book, [lines(true, false, 2, 1)]);
         expect(inverse.slice(-2)).toEqual([
-            { kind: 'input', sheet: 'a', cells: [[0, 0, { f: '=R3C2' }]] },
             { kind: 'input', sheet: 'c', cells: [[0, 1, { f: '=[a]!R3C2' }]] },
+            { kind: 'input', sheet: 'a', cells: [[0, 0, { f: '=R3C2' }]] },
         ]);
     });
 

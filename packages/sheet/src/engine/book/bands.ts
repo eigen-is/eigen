@@ -5,7 +5,7 @@
 // neighbouring bands never hold equal lists, so equal sheets are equal arrays.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
+import type { LinesOp, MoveOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { RunList } from './run-list';
 
 // The columns from `first` up to the next band's first, or to the grid's last column.
@@ -82,9 +82,36 @@ export class Bands {
         return { runs, bands: this.bands.length };
     }
 
-    // How many bands meet the columns c0 to c1.
-    public bandsIn(c0: number, c1: number): number {
-        return this.bandAt(c1) - this.bandAt(c0) + 1;
+    // The most that writes over these spans of columns can add, in any order and when only some land. A write copies
+    // the runs of the band it cuts at each end, then adds at most three runs to each band the cuts leave in its columns.
+    public growth(writes: readonly Span[]): { runs: number; bands: number } {
+        const { bands } = this;
+        let runs = 0;
+        const cuts = new Set<number>();
+        for (const [c0, c1] of writes) {
+            for (const column of [c0, c1 + 1]) {
+                const band = bands[this.bandAt(column)];
+                if (column >= GRID_COLUMNS || band.first === column || cuts.has(column)) continue;
+                cuts.add(column);
+                runs += band.list.count;
+            }
+        }
+        const sorted = [...cuts].sort((a, b) => a - b);
+        // How many cuts lie at or before a column.
+        const cutsTo = (column: number) => {
+            let low = 0;
+            let high = sorted.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (sorted[middle] <= column) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        };
+        for (const [c0, c1] of writes) {
+            runs += 3 * (this.bandAt(c1) - this.bandAt(c0) + 1 + cutsTo(c1) - cutsTo(c0));
+        }
+        return { runs, bands: cuts.size };
     }
 
     // The flat form of the constructor, with the look ids it names in order of first use, walking bands then runs.

@@ -35,7 +35,7 @@ const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
     cl: 'cl',
     un: 'un',
 };
-const RUN_KEYS = Object.values(RUN_KEY);
+export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
@@ -48,7 +48,7 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         const { set = {}, clear = [] } = op;
         const replaced = (op.lines === 'rows' ? part.rows : part.columns).write(op.spans, set, clear);
         const inverse: FormatOp[] = [];
-        for (const key of LINE_KEYS.filter((name) => set[name] !== undefined || clear.includes(name))) {
+        for (const key of LINE_KEYS.filter((name) => names(op, name))) {
             // The lines of each old value, under that value as text, with the keys of one of them.
             const held = new Map<string, { attrs: Readonly<LineAttrs>; spans: Span[] }>();
             for (const [[first, last], attrs] of replaced) {
@@ -71,12 +71,11 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         return inverse;
     }
 
-    const { set = {}, clear = [] } = op;
-    const { link, ...looks } = set;
+    const { link, ...looks } = op.set ?? {};
     const { bands, extras } = part;
-    const lookKeys = LOOK_KEYS.filter((key) => looks[key] !== undefined || clear.includes(key));
+    const lookKeys = LOOK_KEYS.filter((key) => names(op, key));
     const runKeys = RUN_KEYS.filter((key) => lookKeys.includes(key));
-    const linked = link !== undefined || clear.includes('link');
+    const linked = names(op, 'link');
 
     // Read before any write, each cell once however many rectangles hold it: the rich cells a run-style key restyles,
     // with the look they wore, and the links a link write replaces.
@@ -132,15 +131,7 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     for (const [row, column, extra, runs, look] of rich.values()) {
         // Runs that all wear the look's value of every named key take it back with the look; others are put back whole.
         if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
-        const restyled = runs.map((run) => {
-            const next: Run = { ...run };
-            for (const key of runKeys) {
-                if (looks[key] === undefined) delete next[key];
-                else Object.assign(next, { [key]: looks[key] });
-            }
-            return next;
-        });
-        extras.write(row, column, { ...extra, s: restyled });
+        extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked) for (const rect of op.ranges) extras.link(rect, link);
 
@@ -174,6 +165,26 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     return inverse;
 }
 
+// Whether a format sets or clears a key.
+export function names<K extends string>(
+    op: { set?: { [P in K]?: unknown }; clear?: readonly string[] },
+    key: K,
+): boolean {
+    return op.set?.[key] !== undefined || (op.clear?.includes(key) ?? false);
+}
+
+// The runs of a rich cell as a format leaves them: each run-style key the format names set on every run, or cleared.
+export function restyled(runs: readonly Run[], keys: readonly (keyof RunStyle)[], set: RunStyle): Run[] {
+    return runs.map((run) => {
+        const next: Run = { ...run };
+        for (const key of keys) {
+            if (set[key] === undefined) delete next[key];
+            else Object.assign(next, { [key]: set[key] });
+        }
+        return next;
+    });
+}
+
 // The rectangles of the cells that held one old value. They come band by band, rows down within a band, so a span
 // joins the one above it as it comes, and once all are in, neighbours across bands over the same rows join.
 export class Areas {
@@ -202,7 +213,7 @@ export class Areas {
 }
 
 // A value as a key of the map of old values, a border side by its style and color whatever order its keys came in.
-function keyOf(value: CellAttrs[CellAttrKey] | LineAttrs[keyof LineAttrs] | CellLink): string {
+export function keyOf(value: CellAttrs[CellAttrKey] | LineAttrs[keyof LineAttrs] | CellLink): string {
     if (value === undefined) return '';
     if (typeof value !== 'object') return JSON.stringify(value);
     return 'style' in value ? `${value.style} ${value.color}` : `${value.type} ${value.address}`;

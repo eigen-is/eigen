@@ -31,7 +31,7 @@ export function applyRecord(book: Workbook, op: RecordOp): (RecordOp | InputOp)[
         }
         if (order && order !== fields.order) {
             const before = others.filter((other) => compareRules(other.order, other.id, order, op.sheet) < 0);
-            book.engine.moveSheet(op.sheet, before.length);
+            book.moveSheet(op.sheet, before.length);
         }
     }
     const inverse = sheet.records.write(op);

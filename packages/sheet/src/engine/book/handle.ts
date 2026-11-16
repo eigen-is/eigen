@@ -6,7 +6,6 @@
 import type { Literal } from '@workspace/formula';
 import { numberDisplay } from '@workspace/formula/format';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import { compareRules } from '@workspace/lib/sheets';
 import type {
     CellAttrs,
     CellContent,
@@ -41,9 +40,7 @@ const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 // The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
 // workbook held when it was made.
 export function cellsOf(book: Workbook): Book {
-    const sheets = [...book.sheets]
-        .map(([id, parts]) => new Sheet(id, parts, book))
-        .sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
+    const sheets = [...book.sheets].map(([id, parts]) => new Sheet(id, parts, book));
     const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
     return { sheets: () => sheets, sheet: (id) => byId.get(id) };
 }

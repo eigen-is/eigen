@@ -7,6 +7,7 @@
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
+import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf } from './extras';
 import type { Workbook } from './workbook';
@@ -30,12 +31,8 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
     }
-    for (const [row, column] of op.cells ?? []) {
-        const formula = engine.formulaOf(sheet, row, column);
-        const given = formula !== null && engine.isGiven(sheet, row, column);
-        const content = contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
-        gathered.cells.push([row, column, content]);
-    }
+    for (const [row, column] of op.cells ?? [])
+        gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
 
     for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;
@@ -65,13 +62,37 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     return [inputOf(sheet, gathered)];
 }
 
+// What a cell holds now, as an op would say it, null for an empty cell.
+export function cellAt(book: Workbook, sheet: string, extras: Extras, row: number, column: number): CellContent | null {
+    const { engine } = book;
+    const formula = engine.formulaOf(sheet, row, column);
+    const given = formula !== null && engine.isGiven(sheet, row, column);
+    return contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
+}
+
+// What an input writes into a cell: content, null for a cell it empties, or undefined when it does not write the
+// cell. A listed cell is written after the rectangles, so its entry is the one that stays.
+export function entryAt(op: InputOp, row: number, column: number): CellContent | null | undefined {
+    const cells = op.cells ?? [];
+    let low = 0;
+    let high = cells.length;
+    while (low < high) {
+        const middle = (low + high) >> 1;
+        const [r, c] = cells[middle];
+        if (c < column || (c === column && r < row)) low = middle + 1;
+        else high = middle;
+    }
+    if (low < cells.length && cells[low][0] === row && cells[low][1] === column) return cells[low][2];
+    return op.runs?.find(([rect]) => covers(rect, row, column))?.[1];
+}
+
 // The ops that put back the text of every formula an edit could not keep, such as a rename that bound it or rows
 // deleted under what it read, one per sheet, each cell with the link, the mark and the given value it holds. They
 // apply after the edit's own inverse: where that is a line edit, `after`, each cell is said where it stands then.
 export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
     const bySheet = Map.groupBy(rewrites, ({ sheet }) => sheet);
     const ops: InputOp[] = [];
-    // In the order of the workbook's sheets, not of the engine's rewrites.
+    // In tab order, as the workbook holds its sheets, not in the order of the engine's rewrites.
     for (const [sheet, { extras }] of book.sheets) {
         const blocks = bySheet.get(sheet);
         if (!blocks) continue;

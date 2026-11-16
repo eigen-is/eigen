@@ -84,9 +84,9 @@ export function applyMove(book: Workbook, op: MoveOp): (MoveOp | FormatOp | Inpu
     return inverse;
 }
 
-// The cells of `target` that `block` does not hold, as at most two rectangles: the rows above or below the block,
+// The cells of `target` that `block` does not hold, as at most four rectangles: the rows above and below the block,
 // then beside it on its rows.
-function outsideOf(target: Rect, block: Rect): Rect[] {
+export function outsideOf(target: Rect, block: Rect): Rect[] {
     const [top, left, bottom, right] = target;
     if (top > block[2] || bottom < block[0] || left > block[3] || right < block[1]) return [target];
     const rects: Rect[] = [];
