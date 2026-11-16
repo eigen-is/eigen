@@ -359,6 +359,25 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
         expect(told.size).toBe(GRID_COLUMNS);
         for (const [column, lengths] of told) expect(lengths).toEqual([column === 7 ? 5001 : 1000]);
     }, 60_000);
+
+    test('a link cleared over 1,000 full-width rows moves the 10,000 links between them once, not once a row', () => {
+        const cells = Array.from({ length: 10_000 }, (_, row): Placed<CellRecord> => [row, 50, { v: 1, link: LINK }]);
+        const book = new Workbook(bookOf(sheetOf('S', { cells })));
+        const rows = Array.from({ length: 1000 }, (_, k): Rect => [20_000 + k, 0, 20_000 + k, LAST_COLUMN]);
+        let moved = 0;
+        const { splice } = Array.prototype;
+        Array.prototype.splice = function (this: unknown[], start: number, count: number, ...items: unknown[]) {
+            moved += count + items.length;
+            return splice.call(this, start, count, ...items);
+        };
+        try {
+            expect(applyOps(book, [format(rows, undefined, ['link'])])).toEqual([]);
+        } finally {
+            Array.prototype.splice = splice;
+        }
+        expect(moved).toBeLessThanOrEqual(4 * (cells.length + rows.length));
+        expect(book.weight().extras).toBe(5 * 10_000);
+    }, 60_000);
 });
 
 describe('engine/book/room — a refused batch is taken back within four limits, for at most three times its work', () => {

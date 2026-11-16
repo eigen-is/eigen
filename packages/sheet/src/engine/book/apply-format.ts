@@ -172,7 +172,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
         if (!stopped) extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked && !stopped) {
-        for (const rect of op.ranges) extras.link(rect, link);
+        extras.link(op.ranges, link);
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();
         for (const [row, column, value] of [...links.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0])) {

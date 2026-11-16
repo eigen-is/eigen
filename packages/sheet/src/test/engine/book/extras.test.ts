@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { Placed, Rect } from '@workspace/lib/sheets/ops';
+import { meets } from '@workspace/lib/sheets/rect';
 import type { Extra } from '../../../engine/book/extras';
 import { Extras, textOf } from '../../../engine/book/extras';
 import type { Random } from './book-fixtures';
@@ -163,7 +164,7 @@ describe('engine/book/extras — Extras', () => {
             [5, 1, LINK],
             [0, 2, QUOTED],
         ]);
-        extras.link([0, 1, 2, 1], other);
+        extras.link([[0, 1, 2, 1]], other);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s, link: other }],
@@ -173,7 +174,7 @@ describe('engine/book/extras — Extras', () => {
             [0, 2, QUOTED],
         ]);
         expect(extras.weight()).toBe(2 + 7 + 5 + 5 + 5 + 2);
-        extras.link([0, 0, 5, 2], undefined);
+        extras.link([[0, 0, 5, 2]], undefined);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s }],
@@ -189,7 +190,7 @@ describe('engine/book/extras — Extras', () => {
         for (let row = 0; row < 150_000; row += 150) extras.write(row, 0, { s: RICH.s });
         extras.fill([0, 1, 149_999, 1], QUOTED);
         const started = performance.now();
-        extras.link([0, 0, 149_999, 0], LINK.link);
+        extras.link([[0, 0, 149_999, 0]], LINK.link);
         expect(performance.now() - started).toBeLessThan(500);
         expect(extras.weight()).toBe(1_000 * 7 + 149_000 * 5 + 150_000 * 2);
         expect(extras.at(150, 0)).toEqual({ s: RICH.s, link: LINK.link });
@@ -403,22 +404,31 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                         for (const [row, column, extra] of removed) extras.write(row, column, extra);
                     };
                 } else if (kind >= 12) {
-                    const block = randomBlock(random);
+                    // Up to three blocks that share no cell, in any order, linked in one call.
+                    const blocks: Rect[] = [];
+                    for (let at = 0; at < 3; at += 1) {
+                        const block = randomBlock(random);
+                        if (!blocks.some((other) => meets(other, block))) blocks.push(block);
+                    }
                     const link = random() < 0.5 ? undefined : ENTRIES[below(random, 2) * 4].link;
-                    const covered = model.within(block);
+                    const covered = blocks.map((block) => model.within(block));
                     counts[link ? 'linked' : 'unlinked'] += 1;
-                    extras.link(block, link);
-                    for (let row = block[0]; row <= block[2]; row += 1) {
-                        for (let column = block[1]; column <= block[3]; column += 1) {
-                            const old = model.cells.get(`${row},${column}`)?.[2];
-                            const { s, qp } = old ?? {};
-                            const kept = { ...(s && { s }), ...(link && { link }), ...(qp && { qp }) };
-                            model.put(row, column, Object.keys(kept).length > 0 ? kept : undefined);
+                    extras.link(blocks, link);
+                    for (const block of blocks) {
+                        for (let row = block[0]; row <= block[2]; row += 1) {
+                            for (let column = block[1]; column <= block[3]; column += 1) {
+                                const old = model.cells.get(`${row},${column}`)?.[2];
+                                const { s, qp } = old ?? {};
+                                const kept = { ...(s && { s }), ...(link && { link }), ...(qp && { qp }) };
+                                model.put(row, column, Object.keys(kept).length > 0 ? kept : undefined);
+                            }
                         }
                     }
                     undo = () => {
-                        extras.fill(block, {});
-                        for (const [row, column, old] of covered) extras.write(row, column, old);
+                        for (const [at, block] of blocks.entries()) {
+                            extras.fill(block, {});
+                            for (const [row, column, old] of covered[at]) extras.write(row, column, old);
+                        }
                     };
                 } else if (kind >= 10) {
                     counts.fill += 1;

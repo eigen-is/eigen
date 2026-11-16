@@ -109,12 +109,13 @@ export class Extras {
     // Puts one entry in every cell of a block, or with none of the three empties it.
     public fill(rect: Rect, extra: Extra): void {
         const entry = entryOf(extra);
-        this.merge(rect, () => entry);
+        this.merge([rect], () => entry);
     }
 
-    // Sets the link of every cell of a block, or with none clears it, each cell keeping its runs and its mark.
-    public link(rect: Rect, link: CellLink | undefined): void {
-        this.merge(rect, (old) => entryOf({ ...old, link }));
+    // Sets the link of every cell of the rectangles, which share no cell, or with none clears it, each cell keeping its
+    // runs and its mark.
+    public link(rects: readonly Rect[], link: CellLink | undefined): void {
+        this.merge(rects, (old) => entryOf({ ...old, link }));
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -173,56 +174,61 @@ export class Extras {
         return removed;
     }
 
-    // Puts in every cell of a block the entry `to` makes of the one it holds, in one pass over the entries between the
-    // block's first place and its last: the cells with none all take `to` of none.
-    private merge([top, left, bottom, right]: Rect, to: (old: Extra | undefined) => Extra | undefined): void {
+    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds: the cells with
+    // none all take `to` of none. The cells the rectangles change are found first, then one pass over the entries
+    // between the first and the last puts them all in.
+    private merge(rects: readonly Rect[], to: (old: Extra | undefined) => Extra | undefined): void {
         const blank = to(undefined);
-        const start = this.search(placeOf(top, left));
-        const end = this.search(placeOf(bottom, right) + 1);
-        const places: number[] = [];
-        const held: Extra[] = [];
-        // The next cell of the block to lay, in column order, when there is an entry to lay.
-        let row = top;
-        let column = left;
-        let laid = 0;
-        const step = () => {
-            if (row < bottom) row += 1;
-            else {
-                row = top;
-                column += 1;
-            }
-        };
-        const lay = (before: number) => {
-            for (; blank && column <= right && placeOf(row, column) < before; step()) {
-                places.push(placeOf(row, column));
-                held.push(blank);
-                laid += 1;
-            }
-        };
-        for (let at = start; at < end; at += 1) {
-            const place = this.places[at];
-            const old = this.held[at];
-            lay(place);
-            if (place % GRID_ROWS < top || place % GRID_ROWS > bottom) {
-                places.push(place);
-                held.push(old);
+        const changed: number[] = [];
+        const entries: (Extra | undefined)[] = [];
+        for (const rect of rects) {
+            const cells = this.cells(rect);
+            if (!blank) {
+                for (const [row, column, old] of cells) {
+                    changed.push(placeOf(row, column));
+                    entries.push(to(old));
+                }
                 continue;
             }
-            if (blank) step();
-            const entry = to(old);
-            this.total.extras += (entry ? unitsOf(entry) : 0) - unitsOf(old);
+            const [top, left, bottom, right] = rect;
+            let next = cells.next();
+            for (let column = left; column <= right; column += 1) {
+                for (let row = top; row <= bottom; row += 1) {
+                    const here = !next.done && next.value[0] === row && next.value[1] === column;
+                    changed.push(placeOf(row, column));
+                    entries.push(here ? to(next.value[2]) : blank);
+                    if (here) next = cells.next();
+                }
+            }
+        }
+        if (changed.length === 0) return;
+        // Each rectangle's cells come in place order, so the sort only merges them.
+        const order = changed.map((_, at) => at).sort((a, b) => changed[a] - changed[b]);
+        const start = this.search(changed[order[0]]);
+        const end = this.search(changed[order[order.length - 1]] + 1);
+        const places: number[] = [];
+        const held: Extra[] = [];
+        let at = start;
+        for (const change of order) {
+            const place = changed[change];
+            for (; this.places[at] < place; at += 1) {
+                places.push(this.places[at]);
+                held.push(this.held[at]);
+            }
+            const old = this.places[at] === place ? this.held[at] : undefined;
+            if (old) at += 1;
+            const entry = entries[change];
+            this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
             if (entry) {
                 places.push(place);
                 held.push(entry);
             }
         }
-        lay(Number.POSITIVE_INFINITY);
-        if (blank) this.total.extras += unitsOf(blank) * laid;
         // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
-        for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
-            const removed = at === 0 ? end - start : 0;
-            this.places.splice(start + at, removed, ...places.slice(at, at + SPREAD));
-            this.held.splice(start + at, removed, ...held.slice(at, at + SPREAD));
+        for (let part = 0; part === 0 || part < places.length; part += SPREAD) {
+            const removed = part === 0 ? end - start : 0;
+            this.places.splice(start + part, removed, ...places.slice(part, part + SPREAD));
+            this.held.splice(start + part, removed, ...held.slice(part, part + SPREAD));
         }
     }
 
