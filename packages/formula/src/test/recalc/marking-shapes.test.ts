@@ -324,6 +324,7 @@ describe('the shapes that take the clock', () => {
         index.rebuild(workbook);
         expect(index.clocks).toEqual([0, 2, 3, 2, 4, 1, 1, 1, 9, 9]);
         workbook.setValue(workbook.sheets[1], 9, 1, 3);
+        index.forget(workbook.sheets[1]);
         index.rebuild(workbook);
         expect(index.clocks).toEqual([0, 2, 3, 2, 4]);
     });

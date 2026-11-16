@@ -1,11 +1,11 @@
-// The reverse index of a workbook: which formulas read a cell. `Recalc` rebuilds it whole from the shape planes when
-// a formula came or went, and has it mark: flag every formula that reads a written cell or a formula flagged here.
-// Cells of one shape in a block share their entries, about one per reference, which a `Listing` finds by the rows
-// and the column of a span. A second listing holds the boxes around what formulas worked out as they ran, an entry
-// per box, built again whenever a record changed.
+// The reverse index of a workbook: which formulas read a cell, which a marking follows from the written cells. It
+// holds every block of cells of one shape and, per block, about one entry per reference, which a `Listing` finds by
+// the rows and the column of a span; a second listing holds the boxes of the records. Nothing here is patched: a
+// sheet's blocks are found again from its columns once it is forgotten or reshaped, and both listings are built
+// again whole, from all blocks and all records.
 
 import { Fact } from '../eval/facts';
-import type { Column } from '../store/column';
+import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { RefFlag, RefKind, SheetKind } from '../text/tree';
@@ -29,45 +29,90 @@ export class ReverseIndex {
     // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
     // last row, and shape.
     public rectangles: readonly number[] = [];
+    // Per sheet, its blocks as they were last found in its columns, in the same numbers but the sheet, in the order
+    // of their first column. A sheet whose formulas came, went or moved since is not here.
+    private readonly blocks = new WeakMap<Sheet, readonly number[]>();
+    // The sheets whose blocks here are the blocks their columns hold.
+    private readonly fresh = new WeakSet<Sheet>();
+    // Whether the workbook changed since the last rebuild in a way the index lists: a formula, or a sheet's place.
+    public stale = true;
 
-    // The facts of every shape a cell holds are to be worked out.
+    // Formulas of a sheet came, went or moved, or the sheet did: the next rebuild reads all its columns.
+    public forget(sheet: Sheet): void {
+        this.blocks.delete(sheet);
+        this.reshape(sheet);
+    }
+
+    // Formulas of a sheet got another shape where they are: the next rebuild reads the columns of its blocks.
+    public reshape(sheet: Sheet): void {
+        this.fresh.delete(sheet);
+        this.stale = true;
+    }
+
+    // Finds the blocks of the sheets that changed in their columns, and lists again what every block of the
+    // workbook reads. The facts of every shape a cell holds are to be worked out.
     public rebuild(workbook: Workbook): void {
         const { sheets, shapes } = workbook;
         const rectangles: number[] = [];
         for (let s = 0; s < sheets.length; s += 1) {
-            // The runs of the column before, from the top down: first row, last row, shape, and where in the list
-            // its rectangle starts. The two lists swap from column to column.
-            let open: number[] = [];
-            let runs: number[] = [];
-            let opened = 0;
-            for (let c = 0; c < sheets[s].columns.length; c += 1) {
-                const { shape, length } = sheets[s].columns[c];
-                let ran = 0;
-                let o = 0;
-                let row = 0;
-                while (row < length) {
-                    const id = shape[row];
-                    const first = row;
-                    row += 1;
-                    if (id === 0) continue;
-                    while (row < length && shape[row] === id) row += 1;
-                    while (o < opened && open[o] < first) o += 4;
-                    const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
-                    runs[ran] = first;
-                    runs[ran + 1] = row - 1;
-                    runs[ran + 2] = id;
-                    runs[ran + 3] = joins ? open[o + 3] : rectangles.length;
-                    ran += 4;
-                    if (joins) rectangles[open[o + 3] + 2] = c;
-                    else rectangles.push(s, c, c, first, row - 1, id);
+            let found = this.blocks.get(sheets[s]);
+            if (found === undefined || !this.fresh.has(sheets[s])) {
+                const blocks: number[] = [];
+                const { columns } = sheets[s];
+                // Formulas that only got another shape lie in the columns of the blocks the sheet had: of those,
+                // the first one that reaches the column or lies past it.
+                const had = found;
+                let h = 0;
+                // The runs of the column before, from the top down: first row, last row, shape, and where in the
+                // list its block starts. The two lists swap from column to column.
+                let open: number[] = [];
+                let runs: number[] = [];
+                let opened = 0;
+                for (let c = 0; c < columns.length; c += 1) {
+                    if (had !== undefined) {
+                        while (h < had.length && had[h + 1] < c) h += 5;
+                        if (h === had.length) break;
+                        // The columns up to that block hold no formula, so no run of them goes on.
+                        if (had[h] > c) {
+                            c = had[h];
+                            opened = 0;
+                        }
+                    }
+                    const { shape, length } = columns[c];
+                    let ran = 0;
+                    let o = 0;
+                    let row = 0;
+                    while (row < length) {
+                        const id = shape[row];
+                        const first = row;
+                        row += 1;
+                        if (id === 0) continue;
+                        while (row < length && shape[row] === id) row += 1;
+                        while (o < opened && open[o] < first) o += 4;
+                        const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
+                        runs[ran] = first;
+                        runs[ran + 1] = row - 1;
+                        runs[ran + 2] = id;
+                        runs[ran + 3] = joins ? open[o + 3] : blocks.length;
+                        ran += 4;
+                        if (joins) blocks[open[o + 3] + 1] = c;
+                        else blocks.push(c, c, first, row - 1, id);
+                    }
+                    const before = open;
+                    open = runs;
+                    runs = before;
+                    opened = ran;
                 }
-                const before = open;
-                open = runs;
-                runs = before;
-                opened = ran;
+                this.blocks.set(sheets[s], blocks);
+                this.fresh.add(sheets[s]);
+                found = blocks;
+            }
+            for (let b = 0; b < found.length; b += 5) {
+                rectangles.push(s, found[b], found[b + 1], found[b + 2], found[b + 3], found[b + 4]);
             }
         }
         this.rectangles = rectangles;
+        this.stale = false;
         const entries: number[] = [];
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
@@ -156,24 +201,23 @@ export class ReverseIndex {
         this.named.build(entries, areas);
     }
 
-    // Lists the boxes of the records: per column and row of a formula, five numbers a box, the sheet first.
-    public listRecords(workbook: Workbook, records: ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>>): void {
-        const { sheets } = workbook;
+    // Lists the boxes of the records of a workbook of so many sheets: per column of a formula, as the place of its
+    // sheet times the columns of the grid plus its own, and per row, five numbers a box, the sheet first.
+    public listRecords(sheets: number, records: ReadonlyMap<number, ReadonlyMap<number, readonly number[]>>): void {
         const entries: number[] = [];
-        const areas: number[][] = sheets.map(() => []);
-        for (let s = 0; s < sheets.length; s += 1) {
-            const { columns } = sheets[s];
-            for (let c = 0; c < columns.length; c += 1) {
-                for (const [row, record] of records.get(columns[c]) ?? []) {
-                    for (let a = 0; a < record.length; a += 5) {
-                        const top = record[a + 1];
-                        const left = record[a + 2];
-                        const bottom = record[a + 3];
-                        const right = record[a + 4];
-                        areas[record[a]].push(top, bottom, left, right, entries.length);
-                        // As a range, so that a marking is done with the entry once its cell is flagged.
-                        entries.push(s, row, row, c, c, top, bottom, left, right, RANGE, 0, -1);
-                    }
+        const areas: number[][] = Array.from({ length: sheets }, () => []);
+        for (const [at, rows] of records) {
+            const s = Math.floor(at / GRID_COLUMNS);
+            const c = at % GRID_COLUMNS;
+            for (const [row, record] of rows) {
+                for (let a = 0; a < record.length; a += 5) {
+                    const top = record[a + 1];
+                    const left = record[a + 2];
+                    const bottom = record[a + 3];
+                    const right = record[a + 4];
+                    areas[record[a]].push(top, bottom, left, right, entries.length);
+                    // As a range, so that a marking is done with the entry once its cell is flagged.
+                    entries.push(s, row, row, c, c, top, bottom, left, right, RANGE, 0, -1);
                 }
             }
         }

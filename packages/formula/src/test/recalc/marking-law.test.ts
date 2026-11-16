@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { Recalc } from '../../recalc/recalc';
 import { ReverseIndex } from '../../recalc/reverse-index';
-import type { Column } from '../../store/column';
 import { SETTLED } from '../../store/column';
 import { Workbook } from '../../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text/a1';
@@ -178,7 +177,7 @@ function run(seed: number, books: number): Marked {
             const facts = factsOf(workbook);
             index.rebuild(workbook);
             readers = readersOf(workbook, facts, false);
-            const records = new Map<Column, Map<number, number[]>>();
+            const records = new Map<number, Map<number, number[]>>();
             for (const reader of readers) {
                 if (!reader.resolves || pick(2) === 0) continue;
                 const record: number[] = [];
@@ -191,11 +190,11 @@ function run(seed: number, books: number): Marked {
                     record.push(pick(3), top, left, bottom, right);
                     reader.areas.push(record[record.length - 5], top, bottom, left, right);
                 }
-                const column = workbook.sheets[reader.sheet].columns[reader.column];
+                const column = reader.sheet * GRID_COLUMNS + reader.column;
                 records.set(column, (records.get(column) ?? new Map()).set(reader.row, record));
                 counts.recorded += record.length / 5;
             }
-            index.listRecords(workbook, records);
+            index.listRecords(workbook.sheets.length, records);
         };
         rebuild();
         for (let marking = 0; marking < 14; marking += 1) {
@@ -226,6 +225,7 @@ function run(seed: number, books: number): Marked {
                 if (what < 2) workbook.fillFormula(sheet, row, column, row, column, what === 0 ? formula() : tall());
                 else if (what === 2) workbook.setValue(sheet, row, column, pick(9));
                 else workbook.clear(sheet, row, column);
+                index.forget(sheet);
                 rebuild();
             }
             const seeds: number[] = [];
