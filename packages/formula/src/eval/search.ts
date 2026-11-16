@@ -2,11 +2,12 @@
 // pattern, for the nearest value, or by halving when the values are taken to be sorted. An approximate search, such
 // as VLOOKUP's, only halves where Excel also reads on cell by cell: on values not sorted so it differs, by choice.
 // A key matches only values of its own kind, text in any case, and a blank never matches; XMATCH's bisection alone
-// orders the kinds. A function gets a column's cells or an array's elements as a Vector, and a position from 0.
+// orders the kinds. A function gets a Vector, the cells of a sheet where they lie or an array, and a position from 0.
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
 import { ColumnIndex, firstFrom } from '../store/column-index';
+import type { StringTable } from '../store/strings';
 import type { Workbook } from '../store/workbook';
 import { compareValues } from '../values/compare';
 import type { FormulaError } from '../values/errors';
@@ -18,13 +19,15 @@ import { bandOf, heightOf, isArray, isReference, widthOf } from '../values/value
 import { patternMatches, patternOf } from '../values/wildcard';
 import type { Evaluator } from './evaluator';
 import { Find } from './signature';
-import { toArray } from './views';
 
 // One row or one column of a table, ready to be searched.
 export class Vector {
     private readonly workbook: Workbook;
-    // The values are the cells of this column from row `start` down, or else `items` from `start` in steps of `step`.
+    // The values are the cells of this column from row `start` down, or the cells of row `row` of these columns
+    // from column `start` on, or else `items` from `start` in steps of `step`.
     private readonly column: Column | null;
+    private readonly line: readonly Column[] | null;
+    private readonly row: number;
     private readonly items: ArrayLike<Scalar | Reference>;
     private readonly start: number;
     private readonly step: number;
@@ -39,6 +42,8 @@ export class Vector {
     public constructor(
         workbook: Workbook,
         column: Column | null,
+        line: readonly Column[] | null,
+        row: number,
         items: ArrayLike<Scalar | Reference>,
         start: number,
         step: number,
@@ -48,6 +53,8 @@ export class Vector {
     ) {
         this.workbook = workbook;
         this.column = column;
+        this.line = line;
+        this.row = row;
         this.items = items;
         this.start = start;
         this.step = step;
@@ -76,14 +83,13 @@ export class Vector {
     }
 
     private valueAt(at: number): Scalar | Reference {
-        const { column, start } = this;
-        if (column !== null) return this.workbook.value(column, start + at);
-        return this.items[start + bandOf(this.ends, at) * this.step];
+        return this.heldAt(bandOf(this.ends, at));
     }
 
     // The held value `at`, counted from the first held one.
     private heldAt(at: number): Scalar | Reference {
-        const { column, start } = this;
+        const { column, line, start } = this;
+        if (line !== null) return this.workbook.value(line[start + at], this.row);
         return column !== null ? this.workbook.value(column, start + at) : this.items[start + at * this.step];
     }
 
@@ -97,7 +103,7 @@ export class Vector {
     // The first value that equals the key, or the last one when `reverse`. With `wild` a text key is a pattern, and
     // a blank key finds a blank.
     private exact(key: Plain | null, wild: boolean, reverse: boolean): number {
-        const { column, start, stored } = this;
+        const { column, line, start, stored } = this;
         const step = reverse ? -1 : 1;
         const first = reverse ? stored - 1 : 0;
         const end = reverse ? -1 : stored;
@@ -123,7 +129,7 @@ export class Vector {
             }
             sought = pattern?.literal ?? sought;
         }
-        if (column === null) {
+        if (column === null && line === null) {
             for (let at = first; at !== end; at += step) {
                 if (against(this.heldAt(at), sought) === 0) return this.placeOf(at, reverse);
             }
@@ -138,6 +144,12 @@ export class Vector {
                   : CellKind.Boolean;
         const num = typeof sought === 'number' ? sought : 0;
         const ref = typeof sought === 'string' ? strings.find(sought) : sought === true ? 1 : 0;
+        if (column === null) {
+            for (let at = first; line !== null && at !== end; at += step) {
+                if (holds(strings, line[start + at], this.row, kind, num, ref)) return at;
+            }
+            return -1;
+        }
         const rows = ColumnIndex.rows(column, strings, kind, num, ref);
         if (rows !== null) {
             // The rows of a number also list the text cells that read as it, which no lookup takes.
@@ -150,14 +162,7 @@ export class Vector {
             return -1;
         }
         for (let row = start + first; row !== start + end; row += step) {
-            if ((column.kind[row] & KIND_MASK) !== kind) continue;
-            const same =
-                kind === CellKind.Number
-                    ? equal15(column.num[row], num)
-                    : kind === CellKind.Text
-                      ? strings.upper(column.ref[row]) === ref
-                      : column.ref[row] === ref;
-            if (same) return row - start;
+            if (holds(strings, column, row, kind, num, ref)) return row - start;
         }
         return -1;
     }
@@ -246,7 +251,7 @@ export function edge(ctx: Evaluator, range: Value, down: boolean, index: number)
     const { workbook } = ctx;
     // Outside the range there is nothing to search: a row or a column of it holds no cell that it does not name.
     if (index < 0 || index >= (down ? widthOf(range) : heightOf(range))) {
-        return new Vector(workbook, null, [], 0, 1, 0, 0, null);
+        return new Vector(workbook, null, null, 0, [], 0, 1, 0, 0, null);
     }
     if (isReference(range) && down) {
         const left = range.left + index;
@@ -256,28 +261,43 @@ export function edge(ctx: Evaluator, range: Value, down: boolean, index: number)
         // The blanks at the end of the range take no part, whatever cells the column holds below it.
         let used = column === undefined ? 0 : Math.max(0, Math.min(length, column.length - range.top));
         while (used > 0 && (column.kind[range.top + used - 1] & KIND_MASK) === CellKind.Empty) used -= 1;
-        return new Vector(workbook, column ?? null, [], range.top, 1, length, used, null);
+        return new Vector(workbook, column ?? null, null, 0, [], range.top, 1, length, used, null);
     }
-    const top = isReference(range) ? range.top + index : 0;
-    const values = isReference(range) ? toArray(ctx, { ...range, top, bottom: top, next: null }) : ctx.read(range);
-    if (!isArray(values)) return new Vector(workbook, null, [values], 0, 1, 1, 1, null);
-    const { items, width } = values;
-    const across = isReference(range) ? 0 : index;
-    const start = down ? bandOf(values.columnEnds, across) : bandOf(values.rowEnds, across) * width;
+    if (isReference(range)) {
+        const row = range.top + index;
+        ctx.recalc.settleArea({ ...range, top: row, bottom: row, next: null });
+        const { columns } = workbook.sheets[range.sheet];
+        const length = widthOf(range);
+        let used = Math.max(0, Math.min(length, columns.length - range.left));
+        while (used > 0 && workbook.value(columns[range.left + used - 1], row) === null) used -= 1;
+        return new Vector(workbook, null, columns, row, [], range.left, 1, length, used, null);
+    }
+    if (!isArray(range)) return new Vector(workbook, null, null, 0, [range], 0, 1, 1, 1, null);
+    const { items, width } = range;
+    const start = down ? bandOf(range.columnEnds, index) : bandOf(range.rowEnds, index) * width;
     const step = down ? width : 1;
     // The blanks at the end never take part.
-    let stored = down ? values.height : width;
+    let stored = down ? range.height : width;
     while (stored > 0 && items[start + (stored - 1) * step] === null) stored -= 1;
     return new Vector(
         workbook,
         null,
+        null,
+        0,
         items,
         start,
         step,
-        down ? values.rows : values.columns,
+        down ? range.rows : range.columns,
         stored,
-        down ? values.rowEnds : values.columnEnds,
+        down ? range.rowEnds : range.columnEnds,
     );
+}
+
+// Whether a cell holds the key: a value of its kind that equals it, a text by the id of its upper-cased form.
+function holds(strings: StringTable, column: Column, row: number, kind: number, num: number, ref: number): boolean {
+    if (row >= column.length || (column.kind[row] & KIND_MASK) !== kind) return false;
+    if (kind === CellKind.Number) return equal15(column.num[row], num);
+    return kind === CellKind.Text ? strings.upper(column.ref[row]) === ref : column.ref[row] === ref;
 }
 
 // How a value sorts against the key, and NaN when it is of another kind.
