@@ -115,7 +115,8 @@ function recalcOf(sheets: readonly SheetSource[], reps: number): Measured {
     return { ms: best, check: `${formulas} formulas, sum ${sum.toPrecision(10)}, texts ${texts}, errors ${errors}` };
 }
 
-// The fastest edit plus the recalc after it, each on a fresh engine that `setup` made and computed.
+// The fastest batch as a host applies one, its clock, an edit and the recalc after it, each on a fresh engine that
+// `setup` made and computed.
 function editOf(reps: number, setup: () => Engine, edit: (engine: Engine) => string): Measured {
     let best = INF;
     let check = '';
@@ -123,6 +124,7 @@ function editOf(reps: number, setup: () => Engine, edit: (engine: Engine) => str
         const engine = setup();
         engine.recalc(INF);
         const start = performance.now();
+        engine.setClock(1, 1);
         const note = edit(engine);
         const edited = performance.now();
         engine.recalc(INF);
@@ -307,6 +309,30 @@ function readers(formula: string, insert: boolean) {
         );
 }
 
+// 10,000 formulas that each work out the cell beside them, and one clock formula, under one batch of writes.
+function resolving(write: (engine: Engine) => string) {
+    return (reps: number): Measured =>
+        editOf(
+            reps,
+            () => {
+                const engine = new Engine(
+                    [
+                        sheetOf('a', (sink) => {
+                            for (let r = 0; r < 10_000; r += 1) sink(r, 0, r, null);
+                        }),
+                    ],
+                    0,
+                    0,
+                    false,
+                );
+                engine.fillFormula('a', 0, 1, 9999, 1, '=OFFSET(RC[-1],0,0)');
+                engine.setFormula('a', 0, 4, '=NOW()');
+                return engine;
+            },
+            write,
+        );
+}
+
 function ownShapes(engine: Engine): Engine {
     engine.setValue('a', 0, 0, 1);
     for (let r = 0; r < 10_000; r += 1) engine.setFormula('a', r + 1, 1, `=R1C1+${r}`);
@@ -464,8 +490,10 @@ const ROWS: Row[] = [
             engine.recalc(INF);
             const before = process.memoryUsage();
             const start = performance.now();
-            for (let i = 0; i < 100; i += 1)
+            for (let i = 0; i < 100; i += 1) {
+                engine.setClock(1, i);
                 engine.editLines({ insert: true, index: 0, count: 1, sheet: 'a', rows: true });
+            }
             const ms = performance.now() - start;
             const after = process.memoryUsage();
             const mb = (bytes: number) => (bytes / 1e6).toFixed(0);
@@ -474,6 +502,33 @@ const ROWS: Row[] = [
                 check: `heap ${mb(before.heapUsed)} to ${mb(after.heapUsed)} MB, rss ${mb(before.rss)} to ${mb(after.rss)} MB`,
             };
         },
+    },
+    {
+        group: 'resolved references',
+        name: '10,000 OFFSET and a clock cell, a write none of them reads',
+        reps: 5,
+        run: resolving((engine) => {
+            engine.setValue('a', 20_000, 9, 1);
+            return '1 cell written';
+        }),
+    },
+    {
+        group: 'resolved references',
+        name: '10,000 OFFSET and a clock cell, 2,000 cells pasted into the column they read',
+        reps: 5,
+        run: resolving((engine) => {
+            for (let i = 0; i < 2000; i += 1) engine.setValue('a', i * 5, 0, i + 0.5);
+            return '2000 cells written';
+        }),
+    },
+    {
+        group: 'resolved references',
+        name: '10,000 OFFSET and a clock cell, one row insert',
+        reps: 5,
+        run: resolving(
+            (engine) =>
+                `${engine.editLines({ insert: true, index: 2, count: 1, sheet: 'a', rows: true }).rewrites.length} rewrites`,
+        ),
     },
     ...(
         [
