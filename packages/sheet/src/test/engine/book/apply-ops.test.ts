@@ -200,11 +200,8 @@ const REFUSED: readonly [RefusalKey, Op, Book?][] = [
     ],
     ['merge-cut', moveOf([5, 5, 5, 6], 30, 30)],
     ['merge-cut', moveOf([30, 30, 30, 30], 6, 6)],
-    [
-        'id-in-use',
-        moveOf([5, 5, 6, 6], 0, 3, B),
-        twoSheetsWith(undefined, {}, { merge: { m: { rect: [9, 9, 9, 10] } } }),
-    ],
+    ['id-in-use', { kind: 'record', sheet: B, type: 'comment', id: 'c', set: { row: 1, column: 1 }, whole: 1 }],
+    ['id-in-use', addOf('c', { records: { comment: { c: { row: 1, column: 1 } } } })],
     ['key-too-long', moveOf([0, 0, 0, 0], 5, 5, B), twoSheetsWith([7, 0, { f: NEAR_BOUND }])],
     [
         'key-too-long',

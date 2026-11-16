@@ -215,6 +215,12 @@ describe('engine/book/commutes — commutes', () => {
                 comment('d', 4, 4),
             ],
             [
+                'two record ops on one id on two sheets',
+                comment('e', 4, 4),
+                { kind: 'record', sheet: 'b', type: 'comment', id: 'e', set: { row: 1, column: 1 }, whole: 1 },
+                comment('d', 4, 4),
+            ],
+            [
                 'two merges on one sheet',
                 merge('x', [0, 0, 2, 2]),
                 merge('y', [1, 1, 3, 3]),

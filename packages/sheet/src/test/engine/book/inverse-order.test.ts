@@ -55,7 +55,7 @@ describe('the order of an inverse', () => {
         if (typeof back === 'string') throw new Error(back);
         landed(replayed, batch(...back));
         for (const sheet of ['c', 'a', 'b']) {
-            for (const id of ['z', 'k', 'q']) {
+            for (const id of ['z', 'k', 'q'].map((own) => `${sheet}${own}`)) {
                 landed(
                     replayed,
                     batch(

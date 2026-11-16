@@ -240,7 +240,7 @@ describe('engine/book/apply-lines — an insert', () => {
             sheetOf('b', {
                 records: { conditionalFormat: { r: formulaRule([[0, 0, 2, 0]], '=SUM([a]!R1C1:R1048576C1)>0') } },
             }),
-            sheetOf('c', { records: { conditionalFormat: { r: rule } } }),
+            sheetOf('c', { records: { conditionalFormat: { s: rule } } }),
         );
         const inverse = landed(book, lines(true, true, 3, 5));
         expect(kinds(inverse)).toEqual(['lines', 'record', 'input']);

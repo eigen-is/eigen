@@ -510,7 +510,6 @@ describe('engine/book/apply-move — the laws over random books and batches of m
             expect(at(key)).toBeGreaterThan(40);
         }
         expect(at('refused merge-cut')).toBeGreaterThan(100);
-        expect(at('refused id-in-use')).toBeGreaterThan(10);
         for (const key of ['looks', 'content', 'records', 'lost']) expect(at(`part ${key}`)).toBeGreaterThan(30);
     }, 300_000);
 });

@@ -98,26 +98,10 @@ describe('comments', () => {
     });
 });
 
-describe('ids the sheet a block lands on holds', () => {
+describe('a block that lands on its own records', () => {
     const onS: Records = { merge: { m: { rect: [1, 1, 1, 2] } }, comment: { c: { row: 2, column: 2 } } };
 
-    test('a merge or a comment brought from another sheet under an id the sheet keeps elsewhere refuses the move', () => {
-        expect(refused(onS, move('T'), { merge: { m: { rect: [9, 9, 9, 10] } } })).toEqual([null, 'id-in-use']);
-        expect(refused(onS, move('T'), { comment: { c: { row: 9, column: 9 } } })).toEqual([null, 'id-in-use']);
-    });
-
-    test('the record of that id where the block lands goes, as any landed-on record does, and comes back', () => {
-        for (const onT of [
-            { merge: { m: { rect: [5, 4, 5, 5] } } },
-            { comment: { c: { row: 4, column: 4 } } },
-        ] as const) {
-            const { t } = moved(onS, move('T'), onT);
-            expect(t).toEqual({ merge: { m: { rect: [4, 4, 4, 5] } }, comment: { c: { row: 5, column: 5 } } });
-            roundTrips(onS, move('T'), onT);
-        }
-    });
-
-    test('on one sheet an id is the record itself', () => {
+    test('carries them, as they are not records it lands on', () => {
         expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toEqual([null, null]);
         roundTrips(onS, move('S', [1, 1, 2, 2], 2, 1));
     });

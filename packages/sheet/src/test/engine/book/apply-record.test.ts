@@ -172,6 +172,31 @@ describe('engine/book/apply-record — the records of a sheet', () => {
         expect(book.sheets.get('a')?.records.merge(3, 3)).toEqual([0, 0, 3, 3]);
     });
 
+    test('a make under an id another sheet holds for its type is refused; on its own sheet it replaces', () => {
+        const records: SheetContent['records'] = { comment: { x: { row: 1, column: 1 } } };
+        const book = bookOf(sheetOf('a', {}, { records }), sheetOf('b', { order: 'a1' }));
+        const before = bytes(book);
+        const comment = (sheet: string): RecordOp => ({
+            kind: 'record',
+            sheet,
+            type: 'comment',
+            id: 'x',
+            set: { row: 4, column: 4 },
+            whole: 1,
+        });
+        expect(refusalOf(() => applyOps(book, [comment('b')]))).toBe('id-in-use');
+        expect(bytes(book)).toBe(before);
+        // A field set makes nothing, so a set on a sheet that has no such record is skipped alone.
+        const set: RecordOp = { kind: 'record', sheet: 'b', type: 'comment', id: 'x', set: { row: 2 } };
+        expect(applyOps(book, [set])).toEqual([]);
+        expect(applyOps(book, [{ ...merge('x', [0, 0, 1, 1]), sheet: 'b' }])).toHaveLength(1);
+        const back: RecordOp = { ...comment('a'), type: 'comment', set: { row: 1, column: 1 }, whole: 1 };
+        expect(applyOps(book, [comment('a')])).toEqual([back]);
+        // Once the record leaves its sheet, its id is free for another.
+        applyOps(book, [{ kind: 'record', sheet: 'a', type: 'comment', id: 'x' }]);
+        expect(applyOps(book, [comment('b')])).toEqual([{ kind: 'record', sheet: 'b', type: 'comment', id: 'x' }]);
+    });
+
     test('a new filter takes the place of the live one, and the inverse brings it back before its columns', () => {
         const records: SheetContent['records'] = {
             filter: { f: { rect: [0, 0, 9, 3] } },

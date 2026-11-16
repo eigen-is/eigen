@@ -728,6 +728,9 @@ describe('engine/book/still-holding — stillHolding', () => {
                     continue;
                 }
                 const undone = facets(book);
+                // A peer who renamed my sheet to my new name in another case keeps it, so my typed text, written back,
+                // binds to that sheet again, as typing it would.
+                const waits = book.content().sheets.every(({ fields }) => fields.name.toLowerCase() !== 'later');
 
                 for (const key of new Set([
                     ...before.cells.keys(),
@@ -737,8 +740,10 @@ describe('engine/book/still-holding — stillHolding', () => {
                 ])) {
                     const [b0, b1, bp, f] = [before, left, peers, undone].map((read) => read.cells.get(key) ?? EMPTY);
                     const [l0, l1, lp, lf] = [b0, b1, bp, f].map((cell): CellAttrs => JSON.parse(cell.look));
-                    if (bp.whole === b1.whole) expect(f.whole, `${where} cell ${key}`).toBe(b0.whole);
-                    else {
+                    if (bp.whole === b1.whole) {
+                        if (waits || !b0.whole.includes(`'${LATER}'!`))
+                            expect(f.whole, `${where} cell ${key}`).toBe(b0.whole);
+                    } else {
                         if (bp.link !== b1.link) expect(f.link, `${where} link ${key}`).toBe(bp.link);
                         if (bp.text !== b1.text) expect(f.text, `${where} text ${key}`).toBe(bp.text);
                         // A run-style key a peer changed stays on the runs as the peer left it, unless every run wears

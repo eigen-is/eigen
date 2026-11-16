@@ -147,7 +147,8 @@ function formatsMeet(book: Workbook, a: FormatOp, b: FormatOp): boolean {
 }
 
 // Beyond one record, the store reads its other records: a merge may not lie on another, a new filter takes the place
-// of the live one and its columns, a name may be in use, and a sheet may be hidden only while another is shown.
+// of the live one and its columns, a name may be in use, a sheet may be hidden only while another is shown, and an id
+// names one record of its type in the whole book.
 function recordsMeet(a: RecordOp, b: RecordOp): boolean {
     if (a.type === 'sheet' && b.type === 'sheet') {
         if (renames(a) && renames(b)) return true;
@@ -155,8 +156,9 @@ function recordsMeet(a: RecordOp, b: RecordOp): boolean {
             return true;
         }
     }
+    if (a.type === b.type && a.id === b.id) return true;
     if (a.sheet !== b.sheet) return false;
-    if (a.type === b.type && (a.id === b.id || a.type === 'merge')) return true;
+    if (a.type === 'merge' && b.type === 'merge') return true;
     const filters = (op: RecordOp) => op.type === 'filter' || op.type === 'filterColumn';
     return filters(a) && filters(b) && (a.type === 'filter' || b.type === 'filter');
 }

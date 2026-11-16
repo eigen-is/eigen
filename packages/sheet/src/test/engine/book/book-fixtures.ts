@@ -131,8 +131,8 @@ function randomLines(random: Random): [Span, LineAttrs][] {
     return runs;
 }
 
-function randomSheet(random: Random, at: number): SheetContent {
-    const id = `s${at}`;
+// A sheet whose records' ids start with its id, so they are unique in a book of such sheets.
+export function randomSheet(random: Random, at: number, id = `s${at}`): SheetContent {
     const cells: Placed<CellRecord>[] = [];
     for (const column of someOf(random, [0, 1, 2, 3, 7, 40, GRID_COLUMNS - 1], 5)) {
         const far = random() < 0.05 ? [100_000] : [];
@@ -149,11 +149,11 @@ function randomSheet(random: Random, at: number): SheetContent {
     const records: SheetContent['records'] = random() < 0.3 ? { merge: {}, chart: {} } : {};
     if (random() < 0.5) records.merge = { [`${id}m2`]: { rect: [0, 0, 1, 1] }, [`${id}m1`]: { rect: [5, 5, 5, 9] } };
     if (random() < 0.5) {
-        records.filter = { f: { rect: [2, 0, 20, 4] } };
-        records.filterColumn = { k1: { filter: 'f', column: 1, rows: [[3, 4]] } };
+        records.filter = { [`${id}f`]: { rect: [2, 0, 20, 4] } };
+        records.filterColumn = { [`${id}k1`]: { filter: `${id}f`, column: 1, rows: [[3, 4]] } };
         if (random() < 0.5) {
-            records.filterColumn.k0 = {
-                filter: 'f',
+            records.filterColumn[`${id}k0`] = {
+                filter: `${id}f`,
                 column: 0,
                 condition: { name: 'values', values: ['a'] },
                 rows: [],
@@ -162,18 +162,18 @@ function randomSheet(random: Random, at: number): SheetContent {
     }
     if (random() < 0.5) records.comment = { [`${id}c9`]: { row: 3, column: 1 }, [`${id}c10`]: { row: 3, column: 1 } };
     if (random() < 0.5) {
-        records.conditionalFormat = { r1: formulaRule([[0, 0, 9, 0]], '=RC>1') };
+        records.conditionalFormat = { [`${id}r1`]: formulaRule([[0, 0, 9, 0]], '=RC>1') };
     }
     if (random() < 0.5) {
         const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
-        records.validation = { v1: { ranges: [[0, 2, 3, 2]], order: 'a1', rule } };
+        records.validation = { [`${id}v1`]: { ranges: [[0, 2, 3, 2]], order: 'a1', rule } };
     }
     if (random() < 0.5) {
-        records.image = { i1: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: `${id}.png` } };
+        records.image = { [`${id}i1`]: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: `${id}.png` } };
     }
     if (random() < 0.5) {
         const values = ref(id, [0, 4], [0, 0]);
-        records.chart = { c: chartOf({ categories: null, series: [{ id: 's', name: 'n', values }] }) };
+        records.chart = { [`${id}g`]: chartOf({ categories: null, series: [{ id: 's', name: 'n', values }] }) };
     }
     const fields: SheetContent['fields'] = { name: `Sheet ${at}`, order: pick(random, ['a0', 'a1', 'a2']) };
     if (random() < 0.3) fields.frozenRows = 1 + below(random, 3);
