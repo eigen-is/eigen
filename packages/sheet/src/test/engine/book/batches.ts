@@ -224,7 +224,8 @@ export function randomInputOp(random: Random, model: Model): InputOp {
             ],
         );
     const op: InputOp = { kind: 'input', sheet: sheetId(random, model), cells };
-    // The rectangles of the runs stand in columns of their own, right of the cells, so they are disjoint.
+    // The rectangles of the runs stand in columns of their own, right of the cells, so they are disjoint. Now and then
+    // a listed cell lies in a corner of the first run and wins over it; it lists last, its column right of the rest.
     if (random() < 0.4) {
         op.runs = Array.from({ length: 1 + below(random, 2) }, (_, at) => {
             const [top, left, bottom, right] = smallRect(random, 14, 2);
@@ -240,7 +241,10 @@ export function randomInputOp(random: Random, model: Model): InputOp {
             ])();
             return [[top, 10 + at * 6 + left, bottom, 10 + at * 6 + right], filled] as const;
         });
-        if (random() < 0.3) delete op.cells;
+        // The cell inside the run takes no draw of its own, so the other draws stay.
+        const draw = random();
+        if (draw < 0.3) delete op.cells;
+        else if (draw < 0.45) cells.push([op.runs[0][0][2], op.runs[0][0][1], cells[0][2]]);
     }
     return op;
 }

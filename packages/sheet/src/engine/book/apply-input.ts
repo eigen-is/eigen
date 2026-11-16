@@ -10,6 +10,7 @@ import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib
 import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf } from './extras';
+import { RectIndex } from './rect-index';
 import type { Workbook } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
@@ -28,11 +29,16 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     const { sheet } = op;
     const { extras } = part;
     const gathered: Gathered = { runs: [], cells: [] };
+    const read = new RectIndex();
     for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
+        read.set('', undefined, [rect]);
     }
-    for (const [row, column] of op.cells ?? [])
-        gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+    // A listed cell inside a run was read with the run.
+    for (const [row, column] of op.cells ?? []) {
+        if (read.meeting([row, column, row, column]).length === 0)
+            gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+    }
 
     for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;

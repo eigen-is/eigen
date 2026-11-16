@@ -111,6 +111,31 @@ describe('engine/book/apply-input — what an input writes', () => {
         expect([entryAt(op, 1, 1), entryAt(op, 2, 1), entryAt(op, 3, 1)]).toEqual([{ v: 9 }, { v: 1 }, undefined]);
     });
 
+    test('a listed cell inside a run is read once, with the run, for the inverse', () => {
+        const content = bookOf(sheetOf('a', { cells: [[1, 1, { v: 5 }]] }));
+        const op = input({
+            runs: [
+                [[5, 0, 5, 1], { v: 2 }],
+                [[0, 0, 2, 2], { v: 1 }],
+            ],
+            cells: [[1, 1, { v: 9 }]],
+        });
+        expect(expectLaw2(content, [op])).toEqual([
+            input({
+                runs: [
+                    [[5, 0, 5, 1], null],
+                    [[0, 0, 2, 0], null],
+                    [[0, 2, 2, 2], null],
+                ],
+                cells: [
+                    [0, 1, null],
+                    [1, 1, { v: 5 }],
+                    [2, 1, null],
+                ],
+            }),
+        ]);
+    });
+
     test('a run of null empties its rectangle, links and marks included, and leaves the rest', () => {
         const cells: SheetContent['cells'] = [
             [0, 0, { v: 1 }],
