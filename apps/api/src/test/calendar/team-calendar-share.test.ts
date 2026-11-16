@@ -622,6 +622,34 @@ describe('Team calendar administration', () => {
         expect(deleteRes.status).toBe(200);
     });
 
+    test("a calendar the team deleted leaves the member's list at the next sync, and the others stay", async () => {
+        const owner = teamOwnerId(adminTeamId);
+        const asAlice = (path: string, init: RequestInit) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars${path}`, init);
+        const bobsEntries = async () =>
+            (
+                await assertJson<SharedCalendar[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+                )
+            ).filter((entry) => entry.ownerUserId === owner);
+        const doomed = await assertJson<CalendarItem>(
+            await asAlice('', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Calendar To Delete' }),
+            }),
+        );
+        const before = await bobsEntries();
+        expect(before.some((entry) => entry.calendarId === doomed.id)).toBe(true);
+
+        expect((await asAlice(`/${doomed.id}`, { method: 'DELETE' })).status).toBe(200);
+
+        const after = await bobsEntries();
+        const permissions = (entries: SharedCalendar[]) =>
+            entries.map((entry) => [entry.calendarId, entry.permission]).sort();
+        expect(permissions(after)).toEqual(permissions(before.filter((entry) => entry.calendarId !== doomed.id)));
+    });
+
     test('deleting a team calendar shared by name removes it from that user and tells them', async () => {
         const owner = teamOwnerId(adminTeamId);
         const asAlice = (path: string, init: RequestInit) =>

@@ -127,6 +127,11 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
         for (const item of items) {
             await calendar.ensureSharedEntry(teamOwner, item.id, item.name, permissionOf(teamOwner, item.id) ?? 'read');
         }
+        for (const entry of entries) {
+            if (entry.ownerUserId === teamOwner && !items.some((item) => item.id === entry.calendarId)) {
+                await calendar.deleteSharedCalendar(entry.id);
+            }
+        }
     }
 
     for (const entry of entries) {
