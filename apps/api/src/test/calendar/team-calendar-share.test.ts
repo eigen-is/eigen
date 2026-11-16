@@ -6,6 +6,7 @@ import type {
     CalendarItem,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
 import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
@@ -619,6 +620,36 @@ describe('Team calendar administration', () => {
             { method: 'DELETE' },
         );
         expect(deleteRes.status).toBe(200);
+    });
+
+    test('deleting a team calendar shared by name removes it from that user and tells them', async () => {
+        const owner = teamOwnerId(adminTeamId);
+        const asAlice = (path: string, init: RequestInit) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars${path}`, init);
+        const created = await assertJson<CalendarItem>(
+            await asAlice('', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Calendar For Charlie' }),
+            }),
+        );
+        const shareRes = await asAlice(`/${created.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shares: [{ targetId: ctx.charlie.user.email, permission: 'write' }] }),
+        });
+        expect(shareRes.status).toBe(200);
+
+        expect((await asAlice(`/${created.id}`, { method: 'DELETE' })).status).toBe(200);
+
+        const notifs = await assertJson<Notification[]>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/notifications/${ctx.charlie.user.id}`),
+        );
+        expect(notifs.some((n) => n.type === 'calendar-unshare' && n.body === 'Team Calendar For Charlie')).toBe(true);
+        const shared = await assertJson<SharedCalendar[]>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/calendar/${ctx.charlie.user.id}/shared`),
+        );
+        expect(shared.find((s) => s.calendarId === created.id)).toBeUndefined();
     });
 });
 

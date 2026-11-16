@@ -1106,6 +1106,38 @@ describe('Calendar', () => {
             const shared = await assertJson<SharedCalendar[]>(res);
             expect(shared.find((s: SharedCalendar) => s.calendarId === sharedCalendarId)).toBeUndefined();
         });
+
+        test('deleting a shared calendar removes it from Bob and tells him', async () => {
+            const asAlice = (path: string, init: RequestInit) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, init);
+            const bobsShared = async () =>
+                assertJson<SharedCalendar[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+                );
+            const cal = await assertJson<CalendarItem>(
+                await asAlice('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Deleted Shared Cal' }),
+                }),
+            );
+            const shareRes = await asAlice(`/${cal.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission: 'write' }] }),
+            });
+            expect(shareRes.status).toBe(200);
+            expect(findOrFail(await bobsShared(), (s) => s.calendarId === cal.id).permission).toBe('write');
+
+            expect((await asAlice(`/${cal.id}`, { method: 'DELETE' })).status).toBe(200);
+
+            expect((await bobsShared()).find((s) => s.calendarId === cal.id)).toBeUndefined();
+            const notifs = await assertJson<Notification[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+            );
+            const removed = findOrFail(notifs, (n) => n.type === 'calendar-unshare' && n.body === 'Deleted Shared Cal');
+            expect(removed.title).toBe(`${ctx.alice.user.name} removed your access`);
+        });
     });
 
     describe('Cross-calendar write escalation (IDOR)', () => {

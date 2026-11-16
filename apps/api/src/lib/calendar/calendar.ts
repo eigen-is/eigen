@@ -298,11 +298,6 @@ export class Calendar {
         if (!existing) throw new ApiError(404, 'Calendar not found');
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
-        // Outside the lock: two Homes each deleting a calendar shared with the other would be a two-lock cycle.
-        if (existing.shares?.length) {
-            await propagateCalendarShare(this.home, { ...existing, shares: [] }, existing.shares);
-        }
-
         await this.writeLock.run(async () => {
             const removed = this.db.transaction((tx) => {
                 const { total } = tx
@@ -318,6 +313,12 @@ export class Calendar {
             });
             this.eventsBytes -= removed;
         });
+
+        // After the delete, as each reader's permission is read off the stored row, and outside the lock: two Homes
+        // each deleting a calendar shared with the other would be a two-lock cycle.
+        if (existing.shares?.length) {
+            await propagateCalendarShare(this.home, { ...existing, shares: [] }, existing.shares);
+        }
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_DELETED, this.home.user.id));
     }
