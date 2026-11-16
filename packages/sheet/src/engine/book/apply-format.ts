@@ -35,7 +35,7 @@ const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
     cl: 'cl',
     un: 'un',
 };
-const RUN_KEYS = Object.values(RUN_KEY);
+export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
@@ -132,15 +132,7 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     for (const [row, column, extra, runs, look] of rich.values()) {
         // Runs that all wear the look's value of every named key take it back with the look; others are put back whole.
         if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
-        const restyled = runs.map((run) => {
-            const next: Run = { ...run };
-            for (const key of runKeys) {
-                if (looks[key] === undefined) delete next[key];
-                else Object.assign(next, { [key]: looks[key] });
-            }
-            return next;
-        });
-        extras.write(row, column, { ...extra, s: restyled });
+        extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked) for (const rect of op.ranges) extras.link(rect, link);
 
@@ -174,6 +166,18 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     return inverse;
 }
 
+// The runs of a rich cell as a format leaves them: each run-style key the format names set on every run, or cleared.
+export function restyled(runs: readonly Run[], keys: readonly (keyof RunStyle)[], set: RunStyle): Run[] {
+    return runs.map((run) => {
+        const next: Run = { ...run };
+        for (const key of keys) {
+            if (set[key] === undefined) delete next[key];
+            else Object.assign(next, { [key]: set[key] });
+        }
+        return next;
+    });
+}
+
 // The rectangles of the cells that held one old value. They come band by band, rows down within a band, so a span
 // joins the one above it as it comes, and once all are in, neighbours across bands over the same rows join.
 export class Areas {
@@ -202,7 +206,7 @@ export class Areas {
 }
 
 // A value as a key of the map of old values, a border side by its style and color whatever order its keys came in.
-function keyOf(value: CellAttrs[CellAttrKey] | LineAttrs[keyof LineAttrs] | CellLink): string {
+export function keyOf(value: CellAttrs[CellAttrKey] | LineAttrs[keyof LineAttrs] | CellLink): string {
     if (value === undefined) return '';
     if (typeof value !== 'object') return JSON.stringify(value);
     return 'style' in value ? `${value.style} ${value.color}` : `${value.type} ${value.address}`;

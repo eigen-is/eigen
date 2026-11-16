@@ -263,8 +263,9 @@ function entryOf({ s, link, qp }: Extra): Extra | undefined {
     return Object.freeze({ ...(s && { s }), ...(link && { link }), ...(qp && { qp }) });
 }
 
-// An entry weighs two units, its place and its object, its link three more and each run of its text one: a unit is
-// about the bytes one run of a rich text costs.
-function unitsOf({ s, link }: Extra): number {
-    return 2 + (link ? 3 : 0) + (s?.length ?? 0);
+// What the limits count of what a cell holds beyond its value, nothing when it holds none of the three: an entry
+// weighs two units, its place and its object, its link three more and each run of its text one. A unit is about the
+// bytes one run of a rich text costs.
+export function unitsOf({ s, link, qp }: Extra): number {
+    return s || link || qp ? 2 + (link ? 3 : 0) + (s?.length ?? 0) : 0;
 }

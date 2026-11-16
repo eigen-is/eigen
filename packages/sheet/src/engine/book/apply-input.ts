@@ -7,6 +7,7 @@
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
+import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf } from './extras';
 import type { Workbook } from './workbook';
@@ -63,6 +64,22 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
         extras.write(row, column, content ?? {});
     }
     return [inputOf(sheet, gathered)];
+}
+
+// What an input writes into a cell: content, null for a cell it empties, or undefined when it does not write the
+// cell. A listed cell is written after the rectangles, so its entry is the one that stays.
+export function entryAt(op: InputOp, row: number, column: number): CellContent | null | undefined {
+    const cells = op.cells ?? [];
+    let low = 0;
+    let high = cells.length;
+    while (low < high) {
+        const middle = (low + high) >> 1;
+        const [r, c] = cells[middle];
+        if (c < column || (c === column && r < row)) low = middle + 1;
+        else high = middle;
+    }
+    if (low < cells.length && cells[low][0] === row && cells[low][1] === column) return cells[low][2];
+    return op.runs?.find(([rect]) => covers(rect, row, column))?.[1];
 }
 
 // The ops that put back the text of every formula an edit could not keep, such as a rename that bound it or rows

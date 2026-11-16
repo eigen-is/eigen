@@ -382,7 +382,7 @@ describe('engine/book/shift-ops — shiftOps', () => {
                 keyOfRule(formulaRule([[2, 0, 5, 0]], '=[a]!R7C1>0')),
             );
             expect(
-                charted.kind === 'record' && charted.type === 'chart' && charted.set && chartData(charted.set),
+                charted.kind === 'record' && charted.type === 'chart' && charted.whole && chartData(charted.set),
             ).toEqual(
                 chartData(
                     chartOf({ categories: null, series: [{ id: 's', name: 'n', values: ref('a', [6, 10], [0, 0]) }] }),
@@ -455,7 +455,8 @@ describe('engine/book/shift-ops — shiftOps', () => {
                 if (after.length > said.length) kinds.cutRuns += 1;
                 const of = <K extends Op['kind']>(list: readonly Op[], kind: K, here: boolean) =>
                     list.filter(
-                        (op): op is Extract<Op, { kind: K }> => op.kind === kind && (op.sheet === edit.sheet) === here,
+                        (op): op is Extract<Op, { kind: K }> =>
+                            op.kind === kind && 'sheet' in op && (op.sheet === edit.sheet) === here,
                     );
                 // No record op was dropped, and no input of another sheet ever is, so they stand in step.
                 const records = [...of(shifted, 'record', true), ...of(shifted, 'record', false)];
