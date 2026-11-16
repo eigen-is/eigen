@@ -1,10 +1,11 @@
 // Random books and random batches of ops for the laws of the workbook's appliers, seeded so a failing case runs
-// again. A book comes with every formula still to be computed, so its values are the engine's own and stay the same
-// when an edit computes them again. An op is drawn against the model of the book: it mostly names sheets, cells and
-// records that are there, and now and then one that is not, a name in use, a merge over a merge or the last sheet.
-// Every batch passes the validators.
+// again. A book comes with every formula still to be computed, or about half the time as the server's fold of it,
+// computed and trusted whole, so its values are the engine's own and stay the same when an edit computes them again.
+// An op is drawn against the model of the book: it mostly names sheets, cells and records that are there, and now and
+// then one that is not, a name in use, a merge over a merge or the last sheet. Every batch passes the validators.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { encodeBook } from '@workspace/lib/sheets/book-codec';
 import type {
     Batch,
     CellAttrs,
@@ -28,6 +29,7 @@ import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook } from './book-fixtures';
+import { decoded, fold } from './bytes';
 import type { Model, ModelSheet } from './model';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
@@ -70,9 +72,15 @@ function pick<T>(random: Random, list: readonly T[]): T {
     return list[below(random, list.length)];
 }
 
-// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there, and its
-// filter, where it has one, often from the first line or to the last.
+// A book whose formulas hold no value yet, or about half the time its computed fold, with a formula typed with the
+// name of a sheet that is not there, and its filter, where it has one, often from the first line or to the last.
 export function randomBookContent(random: Random): Book {
+    const book = uncomputedBook(random);
+    // Told by the generation, already drawn, so the choice takes no draw of its own.
+    return book.g % 2 === 1 ? decoded(fold(encodeBook(book), [])) : book;
+}
+
+function uncomputedBook(random: Random): Book {
     const book = randomBook(random);
     return {
         ...book,

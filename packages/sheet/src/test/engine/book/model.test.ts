@@ -37,7 +37,8 @@ describe('engine/book — the model and the batches the appliers are held to', (
         for (const seed of SEEDS) {
             const content = randomBookContent(randomOf(seed));
             const model = modelOf(content);
-            expect(contentOfModel(model)).toEqual(canonical(content));
+            // A computed book's formulas hold the values the model does not model.
+            if (!content.computed) expect(contentOfModel(model)).toEqual(canonical(content));
             expectReads(new Workbook(content), model);
         }
     });

@@ -466,7 +466,7 @@ describe('engine/book/apply-move — the laws over random books and batches of m
                     model,
                     (r, m) => {
                         const draw = r();
-                        if (single || draw < 0.4) return randomMoveOp(r, m);
+                        if (single || draw < 0.5) return randomMoveOp(r, m);
                         if (draw < 0.6) return randomLandingReaderOp(r, m);
                         if (draw < 0.65) return randomInputOp(r, m);
                         if (draw < 0.72) return randomFormatOp(r, m);
