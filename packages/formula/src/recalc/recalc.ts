@@ -193,9 +193,9 @@ export class Recalc {
         const { workbook } = this;
         // The cells and the areas move, so no record holds, and the marking below flags every formula that
         // resolves a reference. An edit that is refused leaves that to the next marking.
+        if (this.records.size > 0) this.relisted = true;
         this.records.clear();
         this.unrecorded = true;
-        this.relisted = true;
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;

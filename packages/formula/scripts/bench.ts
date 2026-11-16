@@ -309,7 +309,8 @@ function readers(formula: string, insert: boolean) {
         );
 }
 
-// 10,000 formulas that each work out the cell beside them, and one clock formula, under one batch of writes.
+// 10,000 formulas that each work out the cell beside them, and one clock formula, under one batch of writes. A far
+// write and its recalc come first, as in a workbook in use: the batch after the first full recalc lists every record.
 function resolving(write: (engine: Engine) => string) {
     return (reps: number): Measured =>
         editOf(
@@ -327,6 +328,8 @@ function resolving(write: (engine: Engine) => string) {
                 );
                 engine.fillFormula('a', 0, 1, 9999, 1, '=OFFSET(RC[-1],0,0)');
                 engine.setFormula('a', 0, 4, '=NOW()');
+                engine.recalc(INF);
+                engine.setValue('a', 30_000, 9, 0);
                 return engine;
             },
             write,
