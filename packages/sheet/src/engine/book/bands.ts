@@ -1,8 +1,8 @@
-// Where the looks of one sheet live. No cell stores a look: the sheet's columns are cut into bands, neighbouring
-// columns that share one run list, which says the look each row wears, so a formatted column is one band with one
-// run and a formatted row one write to each band. Bands cover every column and a list every row: there is no second
-// layer of row or column defaults. The workbook holds one per sheet and its appliers read, format and shift it;
-// neighbouring bands never hold equal lists, so equal sheets are equal arrays.
+// Where the looks of one sheet live. No cell stores a look: the columns are cut into bands, neighbouring columns
+// that share one run list saying the look each row wears, so a formatted column is one band with one run and a
+// formatted row one write to each band. Bands cover every column and a list every row, with no second layer of
+// defaults. The workbook holds one per sheet for its appliers, and each write adds what it changed to the workbook's
+// count. Neighbouring bands never hold equal lists, so equal sheets are equal arrays.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { LinesOp, MoveOp, Rect, Span } from '@workspace/lib/sheets/ops';

@@ -24,7 +24,7 @@ import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { pick } from 'es-toolkit';
 import type { Extra } from './extras';
-import { placeOf, unitsOf } from './extras';
+import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
 import type { Workbook } from './workbook';
 
@@ -93,21 +93,17 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
         if (over) throw new Refusal(over);
     }
 
-    // Read before any write, each cell once however many rectangles hold it: the rich cells a run-style key restyles,
-    // with the look they wore, and the links a link write replaces.
-    const rich = new Map<
-        number,
-        readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look]
-    >();
-    const links = new Map<number, Placed<CellLink>>();
+    // Read before any write: the rich cells a run-style key restyles, with the look they wore, and the links a link
+    // write replaces.
+    const rich: (readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look])[] = [];
+    const links: Placed<CellLink>[] = [];
     if (runKeys.length > 0 || linked) {
         for (const rect of op.ranges) {
             for (const [row, column, extra] of extras.cells(rect)) {
-                const place = placeOf(row, column);
-                if (extra.s && runKeys.length > 0 && !rich.has(place)) {
-                    rich.set(place, [row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
+                if (extra.s && runKeys.length > 0) {
+                    rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
                 }
-                if (extra.link && linked) links.set(place, [row, column, extra.link]);
+                if (extra.link && linked) links.push([row, column, extra.link]);
             }
         }
     }
@@ -165,7 +161,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
         }
     }
     const restored: Placed<CellContent>[] = [];
-    for (const [row, column, extra, runs, look] of rich.values()) {
+    for (const [row, column, extra, runs, look] of rich) {
         // Runs that all wear the look's value of every named key take it back with the look; others are put back whole,
         // also by a format that stopped before it restyled them: the looks it takes back restyle the cells they cross.
         if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
@@ -175,7 +171,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
         extras.link(op.ranges, link);
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();
-        for (const [row, column, value] of [...links.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
+        for (const [row, column, value] of links.sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
             const was = keyOf(value);
             let group = held.get(was);
             if (!group) {
