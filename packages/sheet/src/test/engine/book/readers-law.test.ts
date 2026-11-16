@@ -159,18 +159,27 @@ function afterLoadBatch(random: Random, model: Model, tags: Map<Op, string>): Ba
 
 // Cells of a sheet add an inverse carries hold the values of the reader's last pass: a reader that has not run one
 // carries older ones, which the add computes again. FINDING (kept #REF!): a formula this build cannot evaluate, typed
-// with no value, holds none until a pass and #REF! after it, which its inverse then carries as given.
+// with no value, holds none until a pass and #REF! after it, which its inverse then carries as given, and which then
+// joins it into a run with its neighbours or not. So an input is compared cell by cell.
 function withoutValues(inverse: readonly Op[]): Op[] {
-    const plain = (cell: CellContent): CellContent => {
-        if (cell.f === undefined || !(cell.e === 1 && cell.v === '#REF!')) return cell;
+    const plain = (cell: CellContent | null): CellContent | null => {
+        if (cell?.f === undefined || !(cell.e === 1 && cell.v === '#REF!')) return cell;
         const { v: _, e: __, ...rest } = cell;
         return rest;
     };
     return inverse.map((op): Op => {
         if (op.kind === 'input') {
-            const cells = op.cells?.map(([row, column, cell]) => [row, column, cell && plain(cell)] as const);
-            const runs = op.runs?.map(([rect, cell]) => [rect, cell && plain(cell)] as const);
-            return { ...op, ...(cells && { cells }), ...(runs && { runs }) };
+            const cells: Placed<CellContent | null>[] = (op.cells ?? []).map(([row, column, cell]) => [
+                row,
+                column,
+                plain(cell),
+            ]);
+            for (const [[top, left, bottom, right], cell] of op.runs ?? []) {
+                for (let column = left; column <= right; column += 1) {
+                    for (let row = top; row <= bottom; row += 1) cells.push([row, column, plain(cell)]);
+                }
+            }
+            return { kind: 'input', sheet: op.sheet, cells: cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]) };
         }
         if (op.kind !== 'sheet' || !('add' in op)) return op;
         const cells = op.add.cells.map(([row, column, cell]): Placed<CellRecord> => {
@@ -208,6 +217,9 @@ describe('engine/book — LAW 5: a fold then a join equals a replay', () => {
                 let snapshot = encodeBook(start);
                 let since = 0;
                 const replay = new Workbook(start);
+                // It runs its pass once it loads, as a tab does: before one, a kept formula given no value gives
+                // another inverse (FINDING kept #REF!, below).
+                bytes(replay);
                 let loaded: Workbook | undefined;
                 let lazy: Workbook | undefined;
                 const log: Batch[] = [];
