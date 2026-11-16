@@ -2,7 +2,6 @@ import { heapStats } from 'bun:jsc';
 import { describe, expect, test } from 'bun:test';
 import { Engine } from '../../index';
 import { Sheet } from '../../store/sheet';
-import { Workbook } from '../../store/workbook';
 import { GRID_COLUMNS } from '../../text/a1';
 import { source } from './support';
 
@@ -70,21 +69,21 @@ describe('a column that holds nothing costs nothing', () => {
     });
 });
 
-describe('the slot total is a count', () => {
-    test('slots() reads no sheet and no column, however many there are', () => {
+describe('the slot total is a count each sheet keeps', () => {
+    test('slots() reads the count of each sheet once and no column, however wide the sheets are', () => {
         const sheets = Array.from({ length: 60 }, (_, at) => source(`t${at}`, [[0, LAST, 1]]));
         const engine = new Engine(sheets, 0, 0, false);
-        const read = { sheets: 0, columns: 0 };
-        const sheetsOf = Object.getOwnPropertyDescriptor(Workbook.prototype, 'sheets');
+        const read = { slots: 0, columns: 0 };
+        const slotsOf = Object.getOwnPropertyDescriptor(Sheet.prototype, 'slots');
         const columnsOf = Object.getOwnPropertyDescriptor(Sheet.prototype, 'columns');
-        if (sheetsOf?.get === undefined || columnsOf?.get === undefined) throw new Error('no getters');
-        const sheetsGet = sheetsOf.get;
+        if (slotsOf?.get === undefined || columnsOf?.get === undefined) throw new Error('no getters');
+        const slotsGet = slotsOf.get;
         const columnsGet = columnsOf.get;
-        Object.defineProperty(Workbook.prototype, 'sheets', {
-            ...sheetsOf,
+        Object.defineProperty(Sheet.prototype, 'slots', {
+            ...slotsOf,
             get() {
-                read.sheets += 1;
-                return sheetsGet.call(this);
+                read.slots += 1;
+                return slotsGet.call(this);
             },
         });
         Object.defineProperty(Sheet.prototype, 'columns', {
@@ -97,9 +96,9 @@ describe('the slot total is a count', () => {
         try {
             for (let at = 0; at < 100; at += 1) expect(engine.slots()).toBe(60);
         } finally {
-            Object.defineProperty(Workbook.prototype, 'sheets', sheetsOf);
+            Object.defineProperty(Sheet.prototype, 'slots', slotsOf);
             Object.defineProperty(Sheet.prototype, 'columns', columnsOf);
         }
-        expect(read).toEqual({ sheets: 0, columns: 0 });
+        expect(read).toEqual({ slots: 60 * 100, columns: 0 });
     });
 });

@@ -1,9 +1,8 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
 // the id of its shape. A column ends at its last cell, is loaded at exactly its rows and grows to an eighth more
 // than it needs, and counts its errors, its formulas still to compute and its cells on a loop, so that a loop over
-// it can skip the per-cell checks. Each change of its rows returns the rows it gained, below 0 for those it lost,
-// for the slot counts of its sheet and workbook. The high bits of `kind` are the recalc's own flags, which move with
-// the cell when rows do.
+// it can skip the per-cell checks. The high bits of `kind` are the recalc's own flags, which move with the cell
+// when rows do.
 
 import { GRID_ROWS } from '../text/a1';
 import type { ColumnIndex } from './column-index';
@@ -49,12 +48,10 @@ export class Column {
     }
 
     // Makes `row` a row of the column.
-    public reach(row: number): number {
-        if (row < this.length) return 0;
+    public reach(row: number): void {
+        if (row < this.length) return;
         if (row >= this.kind.length) this.resize(capacityFor(row + 1));
-        const gained = row + 1 - this.length;
         this.length = row + 1;
-        return gained;
     }
 
     // Writes a value and keeps the flags. False when the cell already held it.
@@ -111,8 +108,8 @@ export class Column {
 
     // The rows from `index` on go `count` rows down, and stay on the grid: an insert that would push a cell off
     // it never reaches the store.
-    public insertRows(index: number, count: number): number {
-        if (index >= this.length) return 0;
+    public insertRows(index: number, count: number): void {
+        if (index >= this.length) return;
         const length = this.length + count;
         if (length > this.kind.length) this.resize(capacityFor(length));
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
@@ -121,12 +118,10 @@ export class Column {
         }
         this.length = length;
         this.version += 1;
-        return count;
     }
 
-    public deleteRows(index: number, count: number): number {
-        if (index >= this.length) return 0;
-        const was = this.length;
+    public deleteRows(index: number, count: number): void {
+        if (index >= this.length) return;
         const end = Math.min(index + count, this.length);
         this.tally(index, end, -1);
         const length = this.length - (end - index);
@@ -137,15 +132,13 @@ export class Column {
         this.length = length;
         this.trim();
         this.version += 1;
-        return this.length - was;
     }
 
     // Puts the `count` rows of `source` from `from` on at `to`, flags and all, and empties every row there that
     // the source does not reach. The source may be this column, and the rows may overlap.
-    public take(source: Column | undefined, from: number, to: number, count: number): number {
+    public take(source: Column | undefined, from: number, to: number, count: number): void {
         const supplied = source === undefined ? 0 : Math.max(0, Math.min(count, source.length - from));
-        if (supplied === 0 && to >= this.length) return 0;
-        const was = this.length;
+        if (supplied === 0 && to >= this.length) return;
         this.tally(to, Math.min(to + count, this.length), -1);
         if (source !== undefined && supplied > 0) {
             this.reach(to + supplied - 1);
@@ -159,27 +152,24 @@ export class Column {
         this.tally(to, to + supplied, 1);
         this.trim();
         this.version += 1;
-        return this.length - was;
     }
 
     // Empties the rows from `from` up to `to`.
-    public clearRows(from: number, to: number): number {
+    public clearRows(from: number, to: number): void {
         const end = Math.min(to, this.length);
-        if (from >= end) return 0;
+        if (from >= end) return;
         this.tally(from, end, -1);
         for (const plane of [this.kind, this.num, this.ref, this.shape]) plane.fill(0, from, end);
         this.version += 1;
-        return this.trim();
+        this.trim();
     }
 
     // Ends the column at its last cell that holds a value or a formula. Whoever empties a cell calls it, so what a
     // formula reads of a column never depends on what the column held before.
-    public trim(): number {
-        const was = this.length;
+    public trim(): void {
         while (this.length > 0 && this.kind[this.length - 1] === 0 && this.shape[this.length - 1] === 0) {
             this.length -= 1;
         }
-        return this.length - was;
     }
 
     // Takes the rows from `from` up to `to` out of the counts before they leave the column, with -1, or into them
