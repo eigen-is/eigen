@@ -7,7 +7,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { composeAssignedEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -27,8 +27,7 @@ export async function propagateAssignment(
     const { guestOnAssign, userOnAssign } = getServerSettings().notifications.email;
     const toGuest = !assigneeUser || isGuest(assigneeUser);
     const key = `${assignee}:${path.ownerId}:${path.mountId}:${path.id}`;
-    // Sent before the notification, so a home that refuses it can't stop the mail, and not awaited, so a slow mail
-    // relay can't hold the route.
+    // Not awaited, so a slow mail relay can't hold the route.
     if ((toGuest ? guestOnAssign : userOnAssign) && assignMailWindow.take(key)) {
         sendMail(composeAssignedEmail(path, assignee, actor, chatName, card))
             .then((sent) => {
@@ -38,7 +37,7 @@ export async function propagateAssignment(
     }
 
     if (!assigneeUser) return;
-    await sendToHome(assigneeUser.id, {
+    await pushToHomes([assigneeUser.id], {
         type: 'notification',
         notification: {
             type: 'assigned',

@@ -7,7 +7,7 @@ import { contactFullName } from '@workspace/lib/types/contact';
 import { eq, gt } from 'drizzle-orm';
 import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, failsPreconditions, normalizeResourceUri } from '../core';
-import { pushUserProfile } from '../home/home-relay';
+import { writeUserProfile } from '../user/profile';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
@@ -194,7 +194,7 @@ export async function putCard(
             throw e;
         }
 
-        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
+        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the profile photo is the derived webp cache.
         if (eigenId === contacts.home.user.id) {
             let avatarWebP: Buffer | null = null;
             if (avatarUrl) {
@@ -202,7 +202,7 @@ export async function putCard(
                 if (data) avatarWebP = Buffer.from(data);
             }
             try {
-                await pushUserProfile(contacts.home.user.id, contactFullName(parsed), avatarWebP);
+                await writeUserProfile(contacts.home.user.id, contactFullName(parsed), avatarWebP);
             } catch (e) {
                 console.error(`contacts: failed to propagate the profile of ${contacts.home.user.id}:`, e);
             }

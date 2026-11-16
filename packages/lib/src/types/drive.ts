@@ -278,3 +278,10 @@ export type DriveItemRef = {
     type: DrivePathType;
     mimeType: string;
 };
+
+// A path named only by its owner, mount and id, such as a row in one home that points at another owner's path.
+export type DrivePathRef = {
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+};

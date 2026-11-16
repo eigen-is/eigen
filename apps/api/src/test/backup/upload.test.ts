@@ -20,6 +20,7 @@ import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getServerStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
+import * as homeJobs from '../../lib/home/home-jobs';
 import * as homeRelay from '../../lib/home/home-relay';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
@@ -74,7 +75,7 @@ describe('Upload of server archives', () => {
     let fake: FakeS3Server;
     let bucket: S3Config;
     let backing: LocalStorage;
-    let send: ReturnType<typeof spyOn<typeof homeRelay, 'sendToHome'>>;
+    let send: ReturnType<typeof spyOn<typeof homeRelay, 'pushToHomes'>>;
     // This server's own folder under the prefix, as another server sharing the bucket never sees it.
     const own = (name: string) => `nightly/${getDomain()}/${name}`;
 
@@ -82,7 +83,7 @@ describe('Upload of server archives', () => {
         ctx = await getTestContext();
         // A user who never signed in has no home folder, and the job skips a row without one.
         await getHome(ctx.alice.user.id);
-        send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        send = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
     });
 
     beforeEach(async () => {
@@ -452,13 +453,11 @@ describe('Upload of server archives', () => {
             'an archive with a home that failed still goes, since it verified',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const pull = homeRelay.pullHomeSnapshot;
-                const broken = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(
-                    async (ownerId, dir, options) => {
-                        if (ownerId === ctx.alice.user.id) throw new Error('bucket unreachable');
-                        return pull(ownerId, dir, options);
-                    },
-                );
+                const pull = homeJobs.snapshotHomeHeld;
+                const broken = spyOn(homeJobs, 'snapshotHomeHeld').mockImplementation(async (ownerId, dir, options) => {
+                    if (ownerId === ctx.alice.user.id) throw new Error('bucket unreachable');
+                    return pull(ownerId, dir, options);
+                });
                 try {
                     const started = await startServerBackup({ level: 'full', reason: 'manual' });
                     const job = await waitForJob(started.id);

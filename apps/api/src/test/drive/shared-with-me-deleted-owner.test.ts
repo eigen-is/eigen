@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 import { getPublicConfig } from '../../lib/config/server-config';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { sharedPaths } from '../../lib/drive/shared-schema';
-import { getHome } from '../../lib/home/get-home';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import * as userModule from '../../lib/user/user';
 import type { TestUser } from '../setup';
 import {
@@ -180,6 +180,8 @@ describe('Shared with me leaves out the items of a deleted owner', () => {
         const other = await newOwner();
         const path = await share(owner.sessionToken, owner.id, bob.user);
         const ofOther = await share(other.sessionToken, other.id, bob.user);
+        // A loaded home answers with no lookup, so the owner's home opens again inside the listing.
+        await evictHome(owner.id);
 
         const getUserById = userModule.getUserById;
         spyOn(userModule, 'getUserById').mockImplementation(async (id) => {

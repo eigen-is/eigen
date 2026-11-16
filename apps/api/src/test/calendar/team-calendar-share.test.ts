@@ -6,9 +6,10 @@ import type {
     CalendarItem,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home';
-import * as relay from '../../lib/home/home-relay';
+import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
 import * as mailer from '../../lib/mailer/mailer';
 import { makeSyntheticUser } from '../../lib/user';
 import { addMember, assertJson, authedRequest, createTeam, eventually, findOrFail, getTestContext } from '../setup';
@@ -174,17 +175,23 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(teamCal2).toBeDefined();
     });
 
-    // A relay failure says nothing about the share: only an answer — a team with no calendar — removes.
-    test('a relay failure leaves the shared entries alone', async () => {
+    // A team that gives no answer says nothing about the share: only an answer, a team with no calendar, removes.
+    test('a team home that gives no answer leaves the shared entries alone', async () => {
         const before = await assertJson<SharedCalendar[]>(
             await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
         );
         expect(before.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
 
-        const spy = spyOn(relay, 'pullCalendars').mockRejectedValue(new Error('the team home is unreachable'));
-        const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        markHomeRestoring(teamOwnerId(teamId));
+        let sharedRes: Response;
+        try {
+            sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+        } finally {
+            clearHomeRestoring(teamOwnerId(teamId));
+            errors.mockRestore();
+        }
         const shared = await assertJson<SharedCalendar[]>(sharedRes);
-        spy.mockRestore();
 
         expect(shared.find((s) => s.ownerUserId === teamOwnerId(teamId))).toBeDefined();
     });
@@ -356,6 +363,30 @@ describe('Regression: Team calendar permission enforcement', () => {
         );
         const event = await assertJson<CalendarEvent>(createRes);
         expect(event.title).toBe('Permitted Event');
+    });
+
+    // A default of read for a team whose shares gave no answer would lower the write share the member holds.
+    test("a team that answers its calendars but not its shares keeps the member's write permission", async () => {
+        const owner = teamOwnerId(permTeamId);
+        const teamHome = await getHome(owner);
+        const shares = spyOn(teamHome.calendar, 'getSharedWith').mockRejectedValue(new Error('unreadable'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        let sharedRes: Response;
+        try {
+            sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
+            expect(errors).toHaveBeenCalledWith(
+                `home-relay: calendar:shared-with from ${owner} failed:`,
+                expect.anything(),
+            );
+        } finally {
+            shares.mockRestore();
+            errors.mockRestore();
+        }
+        const shared = await assertJson<SharedCalendar[]>(sharedRes);
+
+        expect(findOrFail(shared, (s) => s.ownerUserId === owner && s.calendarId === permTeamCalId).permission).toBe(
+            'write',
+        );
     });
 
     test('downgrading back to read revokes write access', async () => {
@@ -589,5 +620,171 @@ describe('Team calendar administration', () => {
             { method: 'DELETE' },
         );
         expect(deleteRes.status).toBe(200);
+    });
+
+    test("a calendar the team deleted leaves the member's list at the next sync, and the others stay", async () => {
+        const owner = teamOwnerId(adminTeamId);
+        const asAlice = (path: string, init: RequestInit) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars${path}`, init);
+        const bobsEntries = async () =>
+            (
+                await assertJson<SharedCalendar[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+                )
+            ).filter((entry) => entry.ownerUserId === owner);
+        const doomed = await assertJson<CalendarItem>(
+            await asAlice('', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Calendar To Delete' }),
+            }),
+        );
+        const before = await bobsEntries();
+        expect(before.some((entry) => entry.calendarId === doomed.id)).toBe(true);
+
+        expect((await asAlice(`/${doomed.id}`, { method: 'DELETE' })).status).toBe(200);
+
+        const after = await bobsEntries();
+        const permissions = (entries: SharedCalendar[]) =>
+            entries.map((entry) => [entry.calendarId, entry.permission]).sort();
+        expect(permissions(after)).toEqual(permissions(before.filter((entry) => entry.calendarId !== doomed.id)));
+    });
+
+    test('deleting a team calendar shared by name removes it from that user and tells them', async () => {
+        const owner = teamOwnerId(adminTeamId);
+        const asAlice = (path: string, init: RequestInit) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars${path}`, init);
+        const created = await assertJson<CalendarItem>(
+            await asAlice('', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Calendar For Charlie' }),
+            }),
+        );
+        const shareRes = await asAlice(`/${created.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shares: [{ targetId: ctx.charlie.user.email, permission: 'write' }] }),
+        });
+        expect(shareRes.status).toBe(200);
+
+        expect((await asAlice(`/${created.id}`, { method: 'DELETE' })).status).toBe(200);
+
+        const notifs = await assertJson<Notification[]>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/notifications/${ctx.charlie.user.id}`),
+        );
+        expect(notifs.some((n) => n.type === 'calendar-unshare' && n.body === 'Team Calendar For Charlie')).toBe(true);
+        const shared = await assertJson<SharedCalendar[]>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/calendar/${ctx.charlie.user.id}/shared`),
+        );
+        expect(shared.find((s) => s.calendarId === created.id)).toBeUndefined();
+    });
+});
+
+describe("A team that is no longer among the member's teams", () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let orgId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        orgId = getServerConfig()!.orgId;
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+    });
+
+    function asAlice(path: string, method: string, body: object): Promise<Response> {
+        return authedRequest(ctx.alice.user.sessionToken, path, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    }
+
+    // A team with its calendar on, and the id of its default calendar.
+    async function teamWithCalendar(): Promise<{ teamId: string; owner: string; calendarId: string }> {
+        const teamId = await createTeam(ctx, orgId, `Left ${crypto.randomUUID()}`);
+        const owner = teamOwnerId(teamId);
+        expect((await asAlice(`/team/${owner}/settings`, 'PUT', { calendar: { enabled: true } })).status).toBe(200);
+        const calendars = await assertJson<CalendarItem[]>(
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${owner}/calendars`),
+        );
+        return { teamId, owner, calendarId: findOrFail(calendars, (c) => c.isDefault).id };
+    }
+
+    async function bobsEntriesOf(owner: string): Promise<SharedCalendar[]> {
+        const shared = await assertJson<SharedCalendar[]>(
+            await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+        );
+        return shared.filter((entry) => entry.ownerUserId === owner);
+    }
+
+    test("a member removed from a team no longer lists the team's calendars", async () => {
+        const { teamId, owner } = await teamWithCalendar();
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        expect(await bobsEntriesOf(owner)).toHaveLength(1);
+
+        const removed = await asAlice('/auth/organization/remove-team-member', 'POST', {
+            teamId,
+            userId: ctx.bob.user.id,
+        });
+        expect(removed.status).toBe(200);
+
+        expect(await bobsEntriesOf(owner)).toEqual([]);
+    });
+
+    test("a member of a deleted team no longer lists the team's calendars", async () => {
+        const { teamId, owner } = await teamWithCalendar();
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        expect(await bobsEntriesOf(owner)).toHaveLength(1);
+
+        const deleted = await asAlice('/auth/organization/remove-team', 'POST', { teamId, organizationId: orgId });
+        expect(deleted.status).toBe(200);
+
+        expect(await bobsEntriesOf(owner)).toEqual([]);
+    });
+
+    test('a team calendar shared by name with someone who is no member stays listed', async () => {
+        const { owner, calendarId } = await teamWithCalendar();
+        const shared = await asAlice(`/calendar/${owner}/calendars/${calendarId}`, 'PUT', {
+            shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+        });
+        expect(shared.status).toBe(200);
+
+        const entries = await bobsEntriesOf(owner);
+
+        expect(entries.map((entry) => [entry.calendarId, entry.permission])).toEqual([[calendarId, 'write']]);
+
+        // A team that gives no answer says nothing about the share either.
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        markHomeRestoring(owner);
+        try {
+            expect(await bobsEntriesOf(owner)).toEqual(entries);
+        } finally {
+            clearHomeRestoring(owner);
+            errors.mockRestore();
+        }
+    });
+
+    test('a member removed from a team keeps the one team calendar shared with them by name', async () => {
+        const { teamId, owner, calendarId } = await teamWithCalendar();
+        const second = await assertJson<CalendarItem>(
+            await asAlice(`/calendar/${owner}/calendars`, 'POST', { name: 'Not shared by name' }),
+        );
+        await addMember(ctx, teamId, ctx.bob.user.id);
+        const shared = await asAlice(`/calendar/${owner}/calendars/${calendarId}`, 'PUT', {
+            shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+        });
+        expect(shared.status).toBe(200);
+        expect((await bobsEntriesOf(owner)).map((entry) => entry.calendarId).sort()).toEqual(
+            [calendarId, second.id].sort(),
+        );
+
+        await asAlice('/auth/organization/remove-team-member', 'POST', { teamId, userId: ctx.bob.user.id });
+
+        const entries = await bobsEntriesOf(owner);
+        expect(entries.map((entry) => [entry.calendarId, entry.permission])).toEqual([[calendarId, 'write']]);
     });
 });

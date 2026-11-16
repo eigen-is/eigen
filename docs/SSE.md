@@ -6,7 +6,7 @@ Every app mounts the stream once, in `EigenApp`'s provider stack ([LAYOUT.md](LA
 
 ## A stream belongs to one user's own Home
 
-A user subscribes to their own Home's stream, never to another's. An action that touches another home reaches its users through the relay: `sendToHome` with a `broadcast` message, or `broadcastToOwnerAndMembers` for the owner and every member of a path, such as the people a folder is shared with or a team's members (`apps/api/src/lib/home/home-relay.ts`). The target Home then broadcasts to its own listeners. That keeps every stream on the server that owns its home, which is what sharding needs ([SCALABILITY.md](SCALABILITY.md)).
+A user subscribes to their own Home's stream, never to another's. An action that touches another home reaches its users through the relay's `broadcastToHomes` (`apps/api/src/lib/home/home-relay.ts`), which tells the open tabs of the homes that are loaded and opens none, or through `broadcastToOwnerAndMembers` (`apps/api/src/lib/drive/sse-events.ts`) for the owner and every member of a path, such as the people a folder is shared with or a team's members. The target Home then broadcasts to its own listeners. That keeps every stream on the server that owns its home, which is what sharding needs ([SCALABILITY.md](SCALABILITY.md)).
 
 A home's first stream also starts its mail folder watchers, so a change another mail app makes reaches the open tab at once ([IMAP.md § Only the six standard folders have a watcher](IMAP.md#only-the-six-standard-folders-have-a-watcher)).
 

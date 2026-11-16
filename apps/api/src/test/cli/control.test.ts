@@ -17,6 +17,7 @@ import { buildRestartNoticeEvent, clearRestartNotice } from '../../lib/config/re
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
+import * as homeJobs from '../../lib/home/home-jobs';
 import * as homeRelay from '../../lib/home/home-relay';
 import { controlRouter, startControlSocket } from '../../routes/control';
 import {
@@ -599,7 +600,7 @@ describe('the server backup on the control socket', () => {
     beforeAll(async () => {
         const ctx = await getTestContext();
         await getHome(ctx.alice.user.id);
-        spies.push(spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined));
+        spies.push(spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined));
     });
 
     afterEach(() => {
@@ -754,9 +755,9 @@ describe('the server backup on the control socket', () => {
             'prints the steps it sees, then what it saved, and ends with the archive',
             async () => {
                 // Only the first home is slow, long enough that a poll sees the step.
-                const pull = homeRelay.pullHomeSnapshot;
+                const pull = homeJobs.snapshotHomeHeld;
                 let first = true;
-                const slow = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+                const slow = spyOn(homeJobs, 'snapshotHomeHeld').mockImplementation(async (...args) => {
                     if (first) {
                         first = false;
                         await Bun.sleep(1200);
@@ -781,8 +782,8 @@ describe('the server backup on the control socket', () => {
         test(
             'a backup with a home backed up with warnings names them and exits 0, so the update after it goes on',
             async () => {
-                const pull = homeRelay.pullHomeSnapshot;
-                const warned = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => ({
+                const pull = homeJobs.snapshotHomeHeld;
+                const warned = spyOn(homeJobs, 'snapshotHomeHeld').mockImplementation(async (...args) => ({
                     ...(await pull(...args)),
                     warnings: ['mount default: files with no object in storage, archived without their bytes: a.png'],
                 }));
@@ -922,7 +923,7 @@ describe('the server backup on the control socket', () => {
         test(
             'a job that fails exits 1 with its error',
             async () => {
-                const failing = spyOn(homeRelay, 'pullHomeSnapshot').mockRejectedValue(new Error('disk on fire'));
+                const failing = spyOn(homeJobs, 'snapshotHomeHeld').mockRejectedValue(new Error('disk on fire'));
                 try {
                     const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']);
                     expect(code).toBe(1);

@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2366 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2369 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -689,7 +689,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (467)
+## Types (470)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -836,6 +836,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathPermissions` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DrivePathRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DriveSort` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
@@ -922,6 +923,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SetupResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SetupStatus` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `SharedWithMeCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -936,6 +938,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventTypeName` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `TeamQuotaOverrides` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UpdateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |

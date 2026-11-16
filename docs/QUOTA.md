@@ -24,7 +24,9 @@ mountMax    = max(mount's maxSizeMB ?? server default, server default if a user 
 
 A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`), and an unset field means inherit, so it adds no candidate. A user in no team gets the server default. `resolveUserQuotas` returns both limits in bytes. Its data half, `resolveHomeDataMax`, also stands alone, because a team Home has no `default` mount yet meters its calendar. A team is in no teams, so its calendar meters against the server default.
 
-Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)).
+Nothing is cached, so every metered write resolves again. The overrides come through the home relay's `getFromHomes` as `'team:quota-overrides'`, all teams at once, which opens a team Home that is not in memory under the relay's cap on opens ([SCALABILITY.md § Reads across many homes go through getFromHomes](SCALABILITY.md#reads-across-many-homes-go-through-getfromhomes)). That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and a loaded team answers without waiting for a slot. A loaded team also costs no query to the auth database; a closed team Home looks its team up once as it opens, and a team that is gone answers 404 there and is skipped.
+
+**A team that does not answer adds no override.** A team Home that fails or does not open within the relay's deadline is logged and left out, so that one check resolves without its override. That fails safe: a write may get a false 413 or 507, which a retry heals once the team answers, and a size report may show the lower limit meanwhile, but no write gets past a limit it should not have.
 
 ## A mount's cap takes its owner's overrides
 
@@ -78,11 +80,11 @@ A staged attachment is charged from the moment it lands until the draft saves or
 
 ## A cold read reports what a live Home reports
 
-The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-users-page-sizes-homes-without-booting-them)). It reads each part from the home's own files with the query its counter is seeded from, so the page and a live Home report the same number.
+The admin Users page sizes homes nobody has loaded, through `sizeUserHome` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-users-page-sizes-homes-without-booting-them)). It reads each part from the home's own files with the query its counter is seeded from, so the page and a live Home report the same number.
 
 - Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk. On a server with mail turned off, `MaildirStore.init` opens no index and seeds its byte counter from these same two reads instead, so the mail kept from before still counts toward storage.
 - Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
-- Drive: a live Home sizes its drive the cold way too. `Home.size` and `pullHomeSize` both call `userHomeSize`, which sums the default mount's `metadata.db` through `readMountTotalSize` and takes the cap from the default mount in `settings.json`. So a home whose default mount is switched off still answers its size, and still counts the files it kept. A `metadata.db` that SQLite can't read still fails the size.
+- Drive: a live Home sizes its drive the cold way too. `Home.size` and `sizeUserHome` both call `userHomeSize`, which sums the default mount's `metadata.db` through `readMountTotalSize` and takes the cap from the default mount in `settings.json`. So a home whose default mount is switched off still answers its size, and still counts the files it kept. A `metadata.db` that SQLite can't read still fails the size.
 
 `readBlobTableSize` sizes a missing database as 0, and so a database whose table or column does not exist yet, on which the SUM throws. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
 

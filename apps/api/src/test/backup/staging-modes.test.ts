@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getBackupStagingDir, wipeBackupStagingDir } from '../../lib/backup/paths';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { snapshotHomeHeld } from '../../lib/home/home-jobs';
 import type { TestContext } from '../setup';
 import { getTestContext, TEST_DATA_DIR } from '../setup';
 
@@ -58,7 +58,7 @@ describe('Backup staging modes', () => {
         const jobId = 'staging-modes-capture';
         const staging = getBackupStagingDir(jobId);
         try {
-            await pullHomeSnapshot(ctx.alice.user.id, staging, {});
+            await snapshotHomeHeld(ctx.alice.user.id, staging, {});
             expect(modeOf(stagingRoot)).toBe(0o700);
             expect(modeOf(staging)).toBe(0o700);
             const staged = filesUnder(staging);

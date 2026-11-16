@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
 import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { snapshotHomeHeld } from '../../lib/home/home-jobs';
 import { createTestUser, getTestContext } from '../setup';
 
 const snapshotHome = snapshotModule.snapshotHome;
@@ -14,7 +14,7 @@ const USER_IDLE_MS = 5 * 60_000;
 // A backup opens a home without counting as a request and holds it while it captures, like any other
 // holder. So a home nobody requested closes when the capture lets go, and a request keeps a home open
 // until that request is its idle time ago. The backup never closes a home by force.
-describe('pullHomeSnapshot', () => {
+describe('snapshotHomeHeld', () => {
     let ownerId: string;
     const dirs: string[] = [];
     const spies: { mockRestore(): void }[] = [];
@@ -70,7 +70,7 @@ describe('pullHomeSnapshot', () => {
     test('a home nobody requested closes when the capture lets go', async () => {
         await evictHome(ownerId);
         captureThenFakeTimers();
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
         expect(atHome(ownerId)).toBe(true);
 
         jest.advanceTimersByTime(1);
@@ -84,7 +84,7 @@ describe('pullHomeSnapshot', () => {
         captureThenFakeTimers(async () => {
             requested = await request();
         });
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
         if (!requested) throw new Error('the capture made no request');
 
         advanceTo(requested.before + USER_IDLE_MS - 1);
@@ -99,7 +99,7 @@ describe('pullHomeSnapshot', () => {
         await evictHome(ownerId);
         const requested = await request();
         captureThenFakeTimers();
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
 
         advanceTo(requested.before + USER_IDLE_MS - 1);
         expect(requested.home.closing).toBe(false);
@@ -116,7 +116,7 @@ describe('pullHomeSnapshot', () => {
             // What an event stream or a collab socket takes when it opens.
             releaseConnection = opened.hold();
         });
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
         if (!opened || !releaseConnection) throw new Error('the capture made no connection');
 
         jest.advanceTimersByTime(2 * USER_IDLE_MS);
@@ -132,7 +132,7 @@ describe('pullHomeSnapshot', () => {
     test('a home that was tearing down when the capture started counts as unrequested: its successor closes after the capture', async () => {
         const going = (await getHome(ownerId)).close();
         captureThenFakeTimers();
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
         await going;
         expect(atHome(ownerId)).toBe(true);
 
@@ -152,7 +152,7 @@ describe('pullHomeSnapshot', () => {
                 return snapshotHome(home, dir, options);
             }),
         );
-        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await snapshotHomeHeld(ownerId, targetDir(), {});
         expect(closing).toBe(false);
     });
 });

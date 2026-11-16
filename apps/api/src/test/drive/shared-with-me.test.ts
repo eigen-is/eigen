@@ -162,6 +162,58 @@ describe('Shared with me reads each row from its owner', () => {
         expect(await listed(file.id)).toBeDefined();
     });
 
+    test('the listing of one type holds only the shared paths of that type', async () => {
+        const file = await sharedWithBob();
+        const folder = await newFolder();
+        await shareWithBob(folder.id);
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/mime/text-plain`);
+        const ids = (await assertJson<DrivePath[]>(res)).map((path) => path.id);
+        expect(ids).toContain(file.id);
+        expect(ids).not.toContain(folder.id);
+    });
+
+    test('oldest share first, across owners', async () => {
+        const charlie = await getHome(ctx.charlie.user.id);
+        const charlieRoot = await driveGet<DrivePath>(
+            ctx.charlie.user.sessionToken,
+            ctx.charlie.user.id,
+            MOUNT,
+            'root',
+        );
+        const files: DrivePath[] = [];
+        for (const owner of [alice, charlie, alice, charlie]) {
+            const parentId = owner === alice ? rootId : charlieRoot.id;
+            const name = `${crypto.randomUUID()}.txt`;
+            const file = await owner.drive.createFileFromData(
+                MOUNT,
+                parentId,
+                name,
+                'text/plain',
+                Buffer.from('x'),
+                owner.user,
+            );
+            const add = [{ id: ctx.bob.user.email, read: true, write: false }];
+            await owner.drive.updateACLDelta(MOUNT, file.id, { add }, undefined, undefined, owner.user);
+            files.push(file);
+        }
+        await drainHomeDeliveries();
+        // The shares get times a second apart in another order than they were made, owners taking turns.
+        const sharedDb = await getSharedDatabase(bob);
+        const base = Date.now() - 60_000;
+        for (const [i, file] of [files[2], files[1], files[0], files[3]].entries()) {
+            sharedDb
+                .update(sharedPaths)
+                .set({ sharedAt: new Date(base + i * 1000) })
+                .where(eq(sharedPaths.pathId, file.id))
+                .run();
+        }
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
+        const ids = new Set(files.map((file) => file.id));
+        const listed = (await assertJson<DrivePath[]>(res)).map((path) => path.id).filter((id) => ids.has(id));
+        expect(listed).toEqual([files[2].id, files[1].id, files[0].id, files[3].id]);
+    });
+
     test('a home nobody shared with reads no memberships', async () => {
         const loner = await createTestUser('shared-with-me-loner@test.eigen.is', 'testpassword123', 'Loner');
         const home = await getHome(loner.id);

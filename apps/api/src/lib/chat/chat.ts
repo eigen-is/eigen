@@ -16,8 +16,9 @@ import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
+import { broadcastToOwnerAndMembers } from '../drive/sse-events';
 import type { Home } from '../home';
-import { broadcastToOwnerAndMembers, sendToUserHomes } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import type { Mount } from '../mount';
 import { CONTAINER_DATA_DB, CONTAINER_MEDIA_FOLDER } from '../mount/container-dbs';
 import type { User } from '../user';
@@ -168,7 +169,7 @@ export class ChatRoom {
 
             // The deliveries open each recipient's home, so they run after the post answers.
             const notify = (userIds: string[], notification: NotificationPersistInput) => {
-                sendToUserHomes(userIds, { type: 'notification', notification });
+                pushToHomes(userIds, { type: 'notification', notification });
             };
             // The message is stored already, so a failed lookup costs only that person's notification.
             // It is logged, and the post still answers.

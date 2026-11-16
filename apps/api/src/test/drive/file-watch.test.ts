@@ -458,6 +458,19 @@ describe('File watch + fan-out', () => {
         expect(watches.some((w) => w.id === folder.id)).toBe(false);
     });
 
+    test("a path whose share was revoked is no longer among the user's watches, asked of the owner's drive", async () => {
+        const folder = await createFolder('WatchOwnerDriveRevoked');
+        await shareWith(folder.id, ctx.bob.user.email);
+        await watch(bobToken, folder.id);
+        const bob = (await getHome(ctx.bob.user.id)).user;
+        const drive = (await getHome(aliceOwnerId)).drive;
+        expect((await drive.getWatches(bob)).map((path) => path.id)).toContain(folder.id);
+
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${folder.id}/acl`, { remove: [ctx.bob.user.email] });
+
+        expect((await drive.getWatches(bob)).map((path) => path.id)).not.toContain(folder.id);
+    });
+
     test('the watch list keeps exactly the watches some ancestor still grants', async () => {
         const upload = (parentId: string, name: string): Promise<DrivePath> =>
             driveUpload(aliceToken, aliceOwnerId, mountId, parentId, new File(['x'], name));

@@ -6,7 +6,7 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { desc, sql } from 'drizzle-orm';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import { isGuest } from '../user';
@@ -33,12 +33,12 @@ export function recordOpenedUnlessInDocument(user: User, mount: Mount, path: Dri
 // The caller passes a path it has just served, and never one inside a document. A failed write never fails the open.
 export function recordOpened(user: User, path: DrivePath): void {
     if (isGuest(user)) return;
-    sendToHome(user.id, {
+    pushToHomes([user.id], {
         type: 'drive:recent-open',
         ownerId: path.ownerId,
         mountId: path.mountId,
         pathId: path.id,
-    }).catch((err) => console.error(`recent: recording ${path.id} for ${user.id} failed:`, err));
+    });
 }
 
 export function touchRecent(sharedDb: SharedDb, ownerId: string, mountId: string, pathId: string): void {

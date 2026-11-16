@@ -76,12 +76,15 @@ export type TeamSettings = {
         enabled?: boolean;
     };
     mounts?: Record<string, MountSettings>;
-    memberOverrides?: {
-        homeDataMaxMB?: number;
-        defaultMountMaxSizeMB?: number;
-    };
-    // Missing = on: a notification relayed to the team reaches its members.
+    memberOverrides?: TeamQuotaOverrides;
+    // Missing = on: an access request to the team notifies its members.
     notifyMembers?: boolean;
+};
+
+// What a team raises its members' quotas to. An unset field means the team adds nothing.
+export type TeamQuotaOverrides = {
+    homeDataMaxMB?: number;
+    defaultMountMaxSizeMB?: number;
 };
 
 export const SERVER_STORAGE_TYPES = ['local-id', 'local-fullnames', 's3'] as const;

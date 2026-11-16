@@ -36,6 +36,14 @@ export type CalendarShare = {
     permission: CalendarSharePermission;
 };
 
+// A calendar another owner shares with a user, with the strongest permission the user holds on it.
+export type SharedWithMeCalendar = {
+    calendarId: string;
+    name: string;
+    color: string;
+    permission: CalendarSharePermission;
+};
+
 export type CalendarItem = {
     id: string;
     name: string;

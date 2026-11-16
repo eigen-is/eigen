@@ -6,7 +6,8 @@ import * as path from 'node:path';
 import { homeBackupUnverifiedTag } from '@workspace/lib/notification/tags';
 import type { BackupJob, BackupProgress } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
-import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
+import { snapshotHomeHeld } from '../home/home-jobs';
+import { broadcastToHomes } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
 import { packFolder, readUnpackedHome } from './archive';
@@ -169,19 +170,17 @@ export async function drainBackupJobs(): Promise<void> {
 export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: BackupProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
-        const manifest = await pullHomeSnapshot(ownerId, staging, { onProgress });
+        const manifest = await snapshotHomeHeld(ownerId, staging, { onProgress });
         const folder = path.join(staging, buildHomeFolderName(manifest.ownerId));
         const verify = await verifyFolder(folder, onProgress);
         const name = freeArtifactName(manifest.ownerId, new Date(manifest.createdAt));
         const artifactPath = path.join(getBackupsDir(), name);
         await packFolder(folder, artifactPath, onProgress);
         await writeSidecar(artifactPath, manifest, verify);
-        // Fire-and-forget like the poke: a relay that fails must not replace the failure the admin needs to read.
+        // Not awaited, like the poke: the job doesn't wait for the alert to be delivered.
         if (verify.status !== 'verified' && job.startedBy) {
             const title = `Backup of ${manifest.name} did not verify`;
-            alertUser(job.startedBy, title, describeFailures(verify), homeBackupUnverifiedTag(manifest.ownerId)).catch(
-                () => {},
-            );
+            alertUser(job.startedBy, title, describeFailures(verify), homeBackupUnverifiedTag(manifest.ownerId));
         }
         requireVerified(verify, name);
         return name;
@@ -234,7 +233,8 @@ function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
     const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
     recipients
-        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
+        .then((users) => users.map((user) => user.id))
+        .then((userIds) => broadcastToHomes(userIds, event))
         .catch(() => {});
 }
 

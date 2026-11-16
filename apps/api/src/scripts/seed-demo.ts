@@ -263,7 +263,8 @@ async function main(): Promise<void> {
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { commitEigendocImport } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/document/doc-schema');
-    const { drainHomeDeliveries, pushTeamAvatar } = await import('../lib/home/home-relay');
+    const { drainHomeDeliveries } = await import('../lib/home/home-relay');
+    const { writeTeamAvatar } = await import('../lib/user/profile');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/mailer/mail-template');
     const { createVCard } = await import('../lib/vcard');
@@ -314,7 +315,7 @@ async function main(): Promise<void> {
         );
 
     // --- Own cards: every account's portrait, and for a persona the job title, the festival and a phone. An update
-    // of your own card goes through pushUserProfile, which stores the avatar and sets user.image. ---
+    // of your own card goes through writeUserProfile, which stores the avatar and sets user.image. ---
     const seedOwnCard = async (
         user: User,
         avatarFile: string,
@@ -387,7 +388,7 @@ async function main(): Promise<void> {
         fit: 'cover',
     });
     if (!logo) throw new Error('The team avatar thumbnail failed');
-    await pushTeamAvatar(teamId, logo.data);
+    await writeTeamAvatar(teamId, logo.data);
 
     // --- Team home: enable the calendar (starts disabled) and add the shared mount, raised above the default quota
     // for the crew's photos. ---

@@ -225,9 +225,9 @@ describe('self-profile propagation', () => {
         const me = (await contacts.getMe())!;
         const before = rowOf(db, me.id);
 
-        const relay = await import('../../lib/home/home-relay');
+        const profile = await import('../../lib/user/profile');
         let pushed = false;
-        const push = spyOn(relay, 'pushUserProfile').mockImplementation(async () => {
+        const push = spyOn(profile, 'writeUserProfile').mockImplementation(async () => {
             pushed = true;
             throw new Error('push boom');
         });
@@ -261,13 +261,13 @@ describe('self-profile propagation', () => {
         expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
 
-    test('a self card with only a first name pushes that name without a trailing space', async () => {
+    test('a self card with only a first name writes that name without a trailing space', async () => {
         const { instance: contacts, user } = await makeContacts();
         const me = (await contacts.getMe())!;
 
-        const relay = await import('../../lib/home/home-relay');
+        const profile = await import('../../lib/user/profile');
         const names: string[] = [];
-        const push = spyOn(relay, 'pushUserProfile').mockImplementation(async (_userId, name) => {
+        const push = spyOn(profile, 'writeUserProfile').mockImplementation(async (_userId, name) => {
             names.push(name);
         });
         try {

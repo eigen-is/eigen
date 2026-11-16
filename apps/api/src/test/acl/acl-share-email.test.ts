@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../../lib/home';
-import { drainHomeDeliveries, sendToHome } from '../../lib/home/home-relay';
+import { drainHomeDeliveries, pushToHomes } from '../../lib/home/home-relay';
 import { assertJson, authedRequest, driveDelete, driveGet, drivePost, drivePut, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -146,7 +146,7 @@ describe('ACL share email', () => {
         const bobHome = await getHome(ctx.bob.user.id);
         const broadcast = spyOn(bobHome, 'broadcast');
 
-        await sendToHome(ctx.bob.user.id, {
+        await pushToHomes([ctx.bob.user.id], {
             type: 'drive:acl-change',
             path,
             acl: null,

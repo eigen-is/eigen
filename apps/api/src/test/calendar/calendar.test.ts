@@ -11,6 +11,7 @@ import type {
 import type { Notification } from '@workspace/lib/types/notification';
 import * as schema from '../../lib/calendar/schema';
 import { getHome } from '../../lib/home';
+import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
 import {
     CALENDAR_TEST_ROOT,
     defaultCalendarId,
@@ -1105,6 +1106,83 @@ describe('Calendar', () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
             const shared = await assertJson<SharedCalendar[]>(res);
             expect(shared.find((s: SharedCalendar) => s.calendarId === sharedCalendarId)).toBeUndefined();
+        });
+
+        test('deleting a shared calendar removes it from Bob and tells him', async () => {
+            const asAlice = (path: string, init: RequestInit) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, init);
+            const bobsShared = async () =>
+                assertJson<SharedCalendar[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+                );
+            const cal = await assertJson<CalendarItem>(
+                await asAlice('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Deleted Shared Cal' }),
+                }),
+            );
+            const shareRes = await asAlice(`/${cal.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission: 'write' }] }),
+            });
+            expect(shareRes.status).toBe(200);
+            expect(findOrFail(await bobsShared(), (s) => s.calendarId === cal.id).permission).toBe('write');
+
+            expect((await asAlice(`/${cal.id}`, { method: 'DELETE' })).status).toBe(200);
+
+            expect((await bobsShared()).find((s) => s.calendarId === cal.id)).toBeUndefined();
+            const notifs = await assertJson<Notification[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+            );
+            const removed = findOrFail(notifs, (n) => n.type === 'calendar-unshare' && n.body === 'Deleted Shared Cal');
+            expect(removed.title).toBe(`${ctx.alice.user.name} removed your access`);
+        });
+
+        test('an unshare that never reached Bob leaves his list at the next sync Alice answers', async () => {
+            const asAlice = (path: string, init: RequestInit) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, init);
+            const bobsShared = async () =>
+                assertJson<SharedCalendar[]>(
+                    await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+                );
+            const share = (calendarId: string, shares: object[]) =>
+                asAlice(`/${calendarId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ shares }),
+                });
+            const cal = await assertJson<CalendarItem>(
+                await asAlice('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Lost Unshare Cal' }),
+                }),
+            );
+            expect((await share(cal.id, [{ targetId: ctx.bob.user.email, permission: 'read' }])).status).toBe(200);
+            expect((await bobsShared()).some((s) => s.calendarId === cal.id)).toBe(true);
+
+            const bobHome = await getHome(ctx.bob.user.id);
+            const lost = spyOn(bobHome.calendar, 'removeShare').mockRejectedValue(new Error('lost'));
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                expect((await share(cal.id, [])).status).toBe(200);
+                expect(lost).toHaveBeenCalled();
+
+                // A sync that Alice's home gives no answer to keeps the entry.
+                markHomeRestoring(ctx.alice.user.id);
+                try {
+                    expect((await bobsShared()).some((s) => s.calendarId === cal.id)).toBe(true);
+                } finally {
+                    clearHomeRestoring(ctx.alice.user.id);
+                }
+            } finally {
+                lost.mockRestore();
+                errors.mockRestore();
+            }
+
+            expect((await bobsShared()).some((s) => s.calendarId === cal.id)).toBe(false);
         });
     });
 
@@ -2338,6 +2416,59 @@ describe('Event move across calendars', () => {
             body: JSON.stringify({ targetCalendarId: 'no-such-calendar' }),
         });
         expect(res.status).toBe(404);
+    });
+
+    test('refuses a sharee who may write the source but only read the target', async () => {
+        const asAlice = (url: string, init?: RequestInit) => authedRequest(ctx.alice.user.sessionToken, url, init);
+        const sharedWith = async (name: string, permission: 'read' | 'write') => {
+            const created = await assertJson<CalendarItem>(
+                await asAlice(`/calendar/${ctx.alice.user.id}/calendars`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, color: '#4285f4' }),
+                }),
+            );
+            const shared = await asAlice(`/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares: [{ targetId: ctx.bob.user.email, permission }] }),
+            });
+            expect(shared.status).toBe(200);
+            return created.id;
+        };
+        const writable = await sharedWith('Bob Writes', 'write');
+        const readable = await sharedWith('Bob Reads', 'read');
+        const event = await assertJson<CalendarEvent>(
+            await asAlice(eventsUrl(writable), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Stays Put',
+                    startTime: '2026-12-10T09:00:00Z',
+                    endTime: '2026-12-10T10:00:00Z',
+                    allDay: false,
+                }),
+            }),
+        );
+
+        const res = await authedRequest(ctx.bob.user.sessionToken, moveUrl(writable, event.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: readable }),
+        });
+        expect({ status: res.status, message: await res.text() }).toEqual({
+            status: 403,
+            message: 'Write permission required',
+        });
+
+        const idsIn = async (calId: string) =>
+            (
+                await assertJson<CalendarEventOccurrence[]>(
+                    await asAlice(rangeUrl(calId, '2026-12-10T00:00:00Z', '2026-12-11T00:00:00Z')),
+                )
+            ).map((e) => e.id);
+        expect(await idsIn(writable)).toEqual([event.id]);
+        expect(await idsIn(readable)).toEqual([]);
     });
 });
 

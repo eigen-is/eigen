@@ -158,7 +158,7 @@ describe('Public Routes', () => {
                 email: string[];
             };
 
-            // Update contact with avatar (triggers pushUserProfile)
+            // Update contact with avatar (triggers writeUserProfile)
             await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.bob.user.id}/contacts/${meContact.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
