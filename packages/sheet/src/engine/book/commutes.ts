@@ -5,17 +5,14 @@
 // one thing, or the late ops and the inverses might pass a limit.
 
 import { fits } from '@workspace/lib/sheets/limits';
-import type { FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
+import type { Op, Rect, Span } from '@workspace/lib/sheets/ops';
 import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { covers, meets } from '@workspace/lib/sheets/rect';
+import { apart } from '@workspace/lib/sheets/rect';
 import { names, RUN_KEYS } from './apply-format';
-import { entryAt } from './apply-input';
 import type { Extras } from './extras';
 import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
 import type { Workbook } from './workbook';
-
-type CellFormat = Extract<FormatOp, { ranges: unknown }>;
 
 // `book` holds `applied`, every batch of which landed, and `inverses` are the inverses those batches returned. The
 // ops of `late` are in no particular order with them: an op of an inverse counts as an op of its batch.
@@ -26,11 +23,9 @@ export function commutes(
     inverses: readonly Op[],
 ): boolean {
     const held = [...applied, ...inverses];
-    // A late op that renumbers places clashes even with nothing held.
-    if (late.some(isStructural)) return false;
-    for (const op of late) {
-        for (const other of held) if (clash(book, op, other)) return false;
-    }
+    // A structural op renumbers places, so it clashes with any op, and a late one even with nothing held.
+    if (late.some(isStructural) || (late.length > 0 && held.some(isStructural))) return false;
+    if (meet(book, sideOf(late), sideOf(held))) return false;
     // The most the workbook can weigh once the late ops and the inverses land, in any order and when only some do: its
     // weight now, plus per sheet the rows each written column may come to hold and the columns each cell format writes.
     const written = new Map<string, { lengths: Map<number, number>; formats: Span[] }>();
@@ -83,94 +78,124 @@ export function commutes(
     return fits({ slots, runs, bands, extras, records, sheets: now.sheets }) === null;
 }
 
-// Whether two ops write one thing, so that their order shows in the bytes, in a refusal or in an inverse.
-function clash(book: Workbook, a: Op, b: Op): boolean {
-    if (a.kind === 'input') {
-        if (b.kind === 'input') {
-            return (
-                a.sheet === b.sheet &&
-                ((a.cells ?? []).some(([row, column]) => entryAt(b, row, column) !== undefined) ||
-                    (b.cells ?? []).some(([row, column]) => a.runs?.some(([rect]) => covers(rect, row, column))) ||
-                    (a.runs ?? []).some(([rect]) => b.runs?.some(([other]) => meets(rect, other))))
-            );
+// What the ops of one side write per sheet, as rectangles a sweep sets against the other side's, and what their records
+// name. A line format's span is a rectangle one column wide.
+type Writes = {
+    inputs: Rect[];
+    rich: Rect[];
+    restyles: Rect[];
+    keys: Map<string, Rect[]>;
+    lines: Map<string, Rect[]>;
+};
+type Side = {
+    sheets: Map<string, Writes>;
+    inputs: boolean;
+    renames: boolean;
+    hides: boolean;
+    showsOrHides: boolean;
+    ids: Set<string>;
+    merges: Set<string>;
+    filters: Set<string>;
+    filterParts: Set<string>;
+};
+
+function sideOf(ops: readonly Op[]): Side {
+    const side: Side = {
+        sheets: new Map(),
+        inputs: false,
+        renames: false,
+        hides: false,
+        showsOrHides: false,
+        ids: new Set(),
+        merges: new Set(),
+        filters: new Set(),
+        filterParts: new Set(),
+    };
+    const on = (sheet: string) => {
+        let writes = side.sheets.get(sheet);
+        if (!writes) {
+            writes = { inputs: [], rich: [], restyles: [], keys: new Map(), lines: new Map() };
+            side.sheets.set(sheet, writes);
         }
-        if (b.kind === 'format') return inputMeetsFormat(book, a, b);
-        return b.kind !== 'record' || renames(b);
-    }
-    if (a.kind === 'format') {
-        if (b.kind === 'input') return inputMeetsFormat(book, b, a);
-        if (b.kind === 'format') return formatsMeet(book, a, b);
-        return b.kind !== 'record';
-    }
-    if (a.kind === 'record') {
-        if (b.kind === 'input') return renames(a);
-        if (b.kind === 'record') return recordsMeet(a, b);
-        return b.kind !== 'format';
-    }
-    return true;
-}
-
-// An input replaces a cell's link, and a format's run-style key restyles the runs of a rich cell: one the input
-// writes, or one the cell holds now, which is how a cell that was rich when the format landed reads here.
-function inputMeetsFormat(book: Workbook, input: InputOp, format: FormatOp): boolean {
-    const extras = book.sheets.get(input.sheet)?.extras;
-    if (input.sheet !== format.sheet || !('ranges' in format) || !extras) return false;
-    const linked = names(format, 'link');
-    if (!linked && !RUN_KEYS.some((key) => names(format, key))) return false;
-    return format.ranges.some(
-        (range) =>
-            (input.cells ?? []).some(
-                ([row, column, content]) =>
-                    covers(range, row, column) && (linked || content?.s || extras.at(row, column)?.s),
-            ) ||
-            (input.runs ?? []).some(
-                ([rect, content]) => meets(range, rect) && (linked || content?.s || richIn(extras, range, rect)),
-            ),
-    );
-}
-
-function formatsMeet(book: Workbook, a: FormatOp, b: FormatOp): boolean {
-    if (a.sheet !== b.sheet) return false;
-    if ('lines' in a || 'lines' in b) {
-        if (!('lines' in a && 'lines' in b) || a.lines !== b.lines) return false;
-        const shared = LINE_KEYS.some((key) => names(a, key) && names(b, key));
-        return shared && a.spans.some((x) => b.spans.some((y) => x[0] <= y[1] && y[0] <= x[1]));
-    }
-    const extras = book.sheets.get(a.sheet)?.extras;
-    if (!extras) return false;
-    const shared = [...LOOK_KEYS, 'link' as const].some((key) => names(a, key) && names(b, key));
-    // The inverse of a format writes back the runs of a rich cell whole, with what the other format made of them.
-    const restyles = (op: CellFormat) => RUN_KEYS.some((key) => names(op, key));
-    const rich = restyles(a) ? restyles(b) || names(b, 'link') : restyles(b) && names(a, 'link');
-    if (!shared && !rich) return false;
-    return a.ranges.some((x) => b.ranges.some((y) => meets(x, y) && (shared || richIn(extras, x, y))));
-}
-
-// Beyond one record, the store reads its other records: a merge may not lie on another, a new filter takes the place
-// of the live one and its columns, a name may be in use, a sheet may be hidden only while another is shown, and an id
-// names one record of its type in the whole book.
-function recordsMeet(a: RecordOp, b: RecordOp): boolean {
-    if (a.type === 'sheet' && b.type === 'sheet') {
-        if (renames(a) && renames(b)) return true;
-        if ((a.set.hide === 1 && b.set.hide !== undefined) || (b.set.hide === 1 && a.set.hide !== undefined)) {
-            return true;
+        return writes;
+    };
+    const listOf = <K>(lists: Map<K, Rect[]>, key: K) => {
+        const list = lists.get(key) ?? [];
+        lists.set(key, list);
+        return list;
+    };
+    for (const op of ops) {
+        if (op.kind === 'input') {
+            side.inputs = true;
+            const { inputs, rich } = on(op.sheet);
+            for (const [rect, content] of op.runs ?? []) {
+                inputs.push(rect);
+                if (content?.s) rich.push(rect);
+            }
+            for (const [row, column, content] of op.cells ?? []) {
+                inputs.push([row, column, row, column]);
+                if (content?.s) rich.push([row, column, row, column]);
+            }
+        } else if (op.kind === 'format' && 'lines' in op) {
+            const { lines } = on(op.sheet);
+            const spans = op.spans.map(([first, last]): Rect => [first, 0, last, 0]);
+            for (const key of LINE_KEYS) {
+                if (names(op, key)) listOf(lines, `${op.lines} ${key}`).push(...spans);
+            }
+        } else if (op.kind === 'format') {
+            const { keys, restyles } = on(op.sheet);
+            const named = Object.entries(op.set ?? {}).flatMap(([key, value]) => (value === undefined ? [] : [key]));
+            for (const key of new Set([...named, ...(op.clear ?? [])])) listOf(keys, key).push(...op.ranges);
+            if (RUN_KEYS.some((key) => names(op, key))) restyles.push(...op.ranges);
+        } else if (op.kind === 'record') {
+            if (op.type === 'sheet') {
+                side.renames ||= op.set.name !== undefined;
+                side.hides ||= op.set.hide === 1;
+                side.showsOrHides ||= op.set.hide !== undefined;
+            }
+            side.ids.add(`${op.type} ${op.id}`);
+            if (op.type === 'merge') side.merges.add(op.sheet);
+            if (op.type === 'filter') side.filters.add(op.sheet);
+            if (op.type === 'filter' || op.type === 'filterColumn') side.filterParts.add(op.sheet);
         }
     }
-    if (a.type === b.type && a.id === b.id) return true;
-    if (a.sheet !== b.sheet) return false;
-    if (a.type === 'merge' && b.type === 'merge') return true;
-    const filters = (op: RecordOp) => op.type === 'filter' || op.type === 'filterColumn';
-    return filters(a) && filters(b) && (a.type === 'filter' || b.type === 'filter');
+    return side;
 }
 
-// A new name binds the formulas typed with it, which an input may be writing.
-function renames(op: RecordOp): boolean {
-    return op.type === 'sheet' && op.set.name !== undefined;
-}
-
-// Whether a cell that both rectangles hold is rich.
-function richIn(extras: Extras, a: Rect, b: Rect): boolean {
-    const both: Rect = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
-    for (const [, , extra] of extras.cells(both)) if (extra.s) return true;
+// Whether an op of each side writes one thing, so their order shows in the bytes, a refusal or an inverse. A record op
+// also reads others: merges, the live filter and its columns, the names in use, and whether another sheet is shown.
+function meet(book: Workbook, a: Side, b: Side): boolean {
+    if ((a.renames && (b.renames || b.inputs)) || (b.renames && a.inputs)) return true;
+    if ((a.hides && b.showsOrHides) || (b.hides && a.showsOrHides)) return true;
+    if (!a.ids.isDisjointFrom(b.ids) || !a.merges.isDisjointFrom(b.merges)) return true;
+    if (!a.filters.isDisjointFrom(b.filterParts) || !b.filters.isDisjointFrom(a.filterParts)) return true;
+    for (const [sheet, mine] of a.sheets) {
+        const theirs = b.sheets.get(sheet);
+        if (theirs && writesMeet(book.sheets.get(sheet)?.extras, mine, theirs)) return true;
+    }
     return false;
+}
+
+// An input replaces a link, and a run-style key restyles a rich cell, one an input writes or one the sheet holds now,
+// which is how a cell that was rich when a format landed reads here. A sheet that is gone holds no cell to format.
+function writesMeet(extras: Extras | undefined, a: Writes, b: Writes): boolean {
+    if (!apart(a.inputs, b.inputs)) return true;
+    for (const [key, spans] of a.lines) if (!apart(spans, b.lines.get(key) ?? [])) return true;
+    if (!extras) return false;
+    for (const [key, ranges] of a.keys) if (!apart(ranges, b.keys.get(key) ?? [])) return true;
+    const aLinks = a.keys.get('link') ?? [];
+    const bLinks = b.keys.get('link') ?? [];
+    if (!apart(a.inputs, bLinks) || !apart(b.inputs, aLinks)) return true;
+    if (!apart(a.rich, b.restyles) || !apart(b.rich, a.restyles)) return true;
+    // The inverse of a format writes back the runs of a rich cell whole, with what the other format made of them.
+    const richNow = (ranges: readonly Rect[]) =>
+        ranges.flatMap((range) =>
+            [...extras.cells(range)].flatMap(([row, column, { s }]): Rect[] => (s ? [[row, column, row, column]] : [])),
+        );
+    const meetsRich = (restyles: readonly Rect[], others: readonly Rect[]) =>
+        restyles.length > 0 && others.length > 0 && !apart(richNow(restyles), others);
+    return (
+        meetsRich(a.restyles, [...b.inputs, ...b.restyles, ...bLinks]) ||
+        meetsRich(b.restyles, [...a.inputs, ...aLinks])
+    );
 }
