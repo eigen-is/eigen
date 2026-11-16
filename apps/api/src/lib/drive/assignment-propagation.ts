@@ -27,8 +27,7 @@ export async function propagateAssignment(
     const { guestOnAssign, userOnAssign } = getServerSettings().notifications.email;
     const toGuest = !assigneeUser || isGuest(assigneeUser);
     const key = `${assignee}:${path.ownerId}:${path.mountId}:${path.id}`;
-    // Sent before the notification, so a home that refuses it can't stop the mail, and not awaited, so a slow mail
-    // relay can't hold the route.
+    // Not awaited, so a slow mail relay can't hold the route.
     if ((toGuest ? guestOnAssign : userOnAssign) && assignMailWindow.take(key)) {
         sendMail(composeAssignedEmail(path, assignee, actor, chatName, card))
             .then((sent) => {

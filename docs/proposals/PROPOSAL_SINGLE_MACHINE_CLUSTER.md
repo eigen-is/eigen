@@ -146,43 +146,37 @@ single-process path.
 
 ### Modified: `../../apps/api/src/lib/home/home-relay.ts`
 
-With the [outbox](PROPOSAL_HOME_RELAY.md#6-sharding-later) built, the wrapper below is its `deliver` function, `sendToHome()` only writes the row, and the `fetch` must throw on a non-2xx answer so the row retries, unless the answer says the target is gone, which `deliver` reports by returning false.
-
-The switch in the relay's private `deliver`, which every delivery passes, is extracted into
-`dispatchToLocalHome()` (exported, used by internal endpoints) and wrapped with the cluster routing:
+`pushToHomes` stays as it is: it never rejects, a failed delivery is logged with its kind and target, and nothing retries it. The relay's private `deliver(targetId, message)`, which every push passes once per target, keeps its switch as `dispatchToLocalHome()` (exported, used by internal endpoints) and is wrapped with the cluster routing:
 
 ```typescript
-export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
-    // Fast path: Home is loaded on this process
-    if (atHome(targetUserId)) {
-        await dispatchToLocalHome(targetUserId, message);
-        return;
-    }
-
-    // Single-process mode: original behavior
-    if (!isClusterMode()) {
-        if (message.type === 'broadcast') return; // No SSE connection = skip
-        await dispatchToLocalHome(targetUserId, message);
+async function deliver(targetId: string, message: HomeMessage): Promise<void> {
+    // Fast path, and single-process mode: the original behavior
+    if (atHome(targetId) || !isClusterMode()) {
+        await dispatchToLocalHome(targetId, message);
         return;
     }
 
     // Cluster mode: send through Caddy (ring_hash routes to correct peer)
-    await fetch(getRelayUrl(`/internal/relay/${targetUserId}`), {
+    const response = await fetch(getRelayUrl(`/internal/relay/${targetId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
     });
+    // Thrown so pushToHomes logs it, as it logs a local failure.
+    if (!response.ok) throw new Error(`relay to ${targetId} answered ${response.status}`);
 }
 ```
 
 Key behaviors:
 - `atHome()` is a **pure optimization** — if the Home is already loaded on this process, skip the
   network hop. It is NOT a routing decision.
-- In single-process mode, `broadcast` type is skipped when `!atHome()` (user has no SSE connection).
-  All other types call `getHome()` directly (original behavior).
-- In cluster mode, everything goes through Caddy's `:8080` listener. Caddy routes to the correct
+- In cluster mode, every delivery goes through Caddy's `:8080` listener. Caddy routes to the correct
   peer based on the ownerId in the URL path. The receiving peer calls `getHome()` to initialize the
   Home if needed.
+- A delivery is as durable between processes as within one: a push in flight when either process
+  dies is lost ([SCALABILITY.md](../SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash)).
+- `broadcastToHomes` tells only the Homes loaded in this process. A tab connected to another
+  process needs the same hop, sent without waiting and skipped by a peer where the Home is not loaded.
 
 `getFromHomes` follows the same pattern for each owner it asks: the local path if the Home is loaded here or cluster mode is off, else a fetch through the Caddy relay with the query's kind and `ask`:
 
@@ -198,8 +192,9 @@ async function answerOf<K extends keyof HomeQueries>(ownerId: string, kind: K, a
 New endpoints with `:ownerId` in the path (so Caddy can extract it for routing):
 
 - `POST /internal/relay/:ownerId` — receives `{ message: HomeMessage }`, calls
-  `dispatchToLocalHome()`. For `broadcast` messages only: checks `atHome()` first and skips if the
-  Home isn't loaded (user has no active SSE connection, so broadcasting is pointless).
+  `dispatchToLocalHome()`.
+- `POST /internal/broadcast/:ownerId` — receives `{ event }` and runs `broadcastToHomes` on the local
+  process, which skips a Home that isn't loaded (no active SSE connection, so nothing to tell).
 - `POST /internal/get/:ownerId` — receives `{ kind, ask }`, runs that kind's answerer on the local Home and returns the answer. One route serves every query kind.
 
 Avatars need no get route: they are server files under `getAvatarsDir()`, not Home data.
