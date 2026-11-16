@@ -50,9 +50,10 @@ function generator(next: () => number) {
     };
     const count = (): string =>
         of([`${pick(3)}`, `${pick(3)}`, ref(), ref(), 'RANDBETWEEN(0,2)', `-${pick(2)}`, 'ROW()-1']);
+    const spot = () => `${letter(pick(COLUMNS))}${1 + pick(ROWS)}`;
     const spelled = () =>
         of([
-            `${letter(pick(COLUMNS))}${1 + pick(ROWS)}`,
+            spot(),
             `${letter(pick(3))}${1 + pick(4)}:${letter(3 + pick(3))}${5 + pick(4)}`,
             `${quoted(of(NAMES))}!${letter(pick(COLUMNS))}${1 + pick(ROWS)}`,
         ]);
@@ -103,6 +104,8 @@ function generator(next: () => number) {
             () => `SHEETS()+SHEET()+${ref()}`,
             () => `IF(${ref()},${ref()},2)`,
             () => `${resolving()}+${resolving()}`,
+            // Two sheets for sure, and no cell named: only the box of each sheet says what it reads.
+            () => `INDIRECT("${quoted(NAMES[0])}!${spot()}")+INDIRECT("${quoted(NAMES[1 + pick(2)])}!${spot()}")`,
             () => `OFFSET(${fixed()},${1 + pick(3)},0)`,
             () => `OFFSET(${fixed()},${1 + pick(3)},0)`,
         ])()}`;
