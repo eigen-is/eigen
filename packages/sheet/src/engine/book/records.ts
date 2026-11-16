@@ -404,7 +404,7 @@ export class SheetRecords {
             settle('chart', id, chart, next);
         }
         return {
-            restore,
+            restore: inOrder(restore),
             commit: () => {
                 for (const write of writes) write();
             },
@@ -517,7 +517,7 @@ export class SheetRecords {
             }
         }
         return {
-            restore,
+            restore: inOrder(restore),
             commit: () => {
                 for (const write of writes) write();
             },
@@ -535,7 +535,7 @@ export class SheetRecords {
         for (const [columnId, column] of this.stored.filterColumn) {
             if (column.filter === id) restore.push(...this.swap('filterColumn', columnId, undefined));
         }
-        return restore;
+        return inOrder(restore);
     }
 
     // Puts a record in place of the one under its id and returns the op that puts the old one back.
@@ -575,6 +575,13 @@ export class SheetRecords {
         const places: { readonly [K in Kind]?: RectIndex } = this.places;
         places[type]?.set(id, old && RECTS[type]?.(old), record && RECTS[type]?.(record));
     }
+}
+
+// The ops in the one order every reader lists them, whatever order its records were made in: the sheet's own fields
+// first, then by type, a filter before its columns, then by id.
+function inOrder(ops: RecordOp[]): RecordOp[] {
+    const rank = (op: RecordOp) => (op.type === 'sheet' ? -1 : KINDS.indexOf(op.type));
+    return ops.sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 // The lines `start` to `end` after the edit, or null when none is left.

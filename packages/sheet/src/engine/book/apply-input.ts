@@ -71,7 +71,7 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
 export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
     const bySheet = Map.groupBy(rewrites, ({ sheet }) => sheet);
     const ops: InputOp[] = [];
-    // In the order of the workbook's sheets, not of the engine's rewrites.
+    // In tab order, as the workbook holds its sheets, not in the order of the engine's rewrites.
     for (const [sheet, { extras }] of book.sheets) {
         const blocks = bySheet.get(sheet);
         if (!blocks) continue;

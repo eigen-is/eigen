@@ -40,7 +40,8 @@ export class Workbook {
     public readonly engine: Engine;
     // A look id is this table's, so it means the same look on every sheet, until the next sweep.
     public readonly looks = new LookTable();
-    private readonly parts = new Map<string, BookSheet>();
+    // In tab order, as the engine holds them, so every reader walks the sheets in one order whatever its history.
+    private parts = new Map<string, BookSheet>();
     // The generation: it rises only when the document is replaced whole, never with an edit.
     public readonly g: number;
     // The clock of the last batch that landed, or of the snapshot: its author's time and the seed of its draws.
@@ -86,14 +87,11 @@ export class Workbook {
     // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
     // a host walks only after a recalc that did not stop.
     public content(): Omit<BookContent, 'computed'> {
-        const sheets = [...this.parts].sort(([idA, a], [idB, b]) =>
-            compareRules(a.records.fields.order, idA, b.records.fields.order, idB),
-        );
         return {
             g: this.g,
             now: this.now,
             seed: this.seed,
-            sheets: sheets.map(([id, sheet]) => this.sheetContent(id, sheet)),
+            sheets: [...this.parts].map(([id, sheet]) => this.sheetContent(id, sheet)),
         };
     }
 
@@ -150,8 +148,15 @@ export class Workbook {
             if (compareRules(records.fields.order, id, sheet.fields.order, sheet.id) < 0) place += 1;
         }
         const result = this.engine.addSheet(sourceOf(sheet), place);
-        this.parts.set(sheet.id, this.partsOf(sheet));
+        this.place(sheet.id, this.partsOf(sheet), place);
         return result;
+    }
+
+    // A sheet's new place among the tabs, from 0, once its order says so: the engine reads a sheet by its place.
+    public moveSheet(id: string, place: number): void {
+        this.engine.moveSheet(id, place);
+        const part = this.parts.get(id);
+        if (part) this.place(id, part, place);
     }
 
     // Its looks stay in the table until the next sweep.
@@ -195,6 +200,11 @@ export class Workbook {
             extras,
             records: new SheetRecords(id, fields, records),
         };
+    }
+
+    private place(id: string, part: BookSheet, place: number): void {
+        const others = [...this.parts].filter(([other]) => other !== id);
+        this.parts = new Map([...others.slice(0, place), [id, part], ...others.slice(place)]);
     }
 
     private sweep(): void {

@@ -340,8 +340,8 @@ describe('the ranges of a rule', () => {
         const { content, restore } = edited(both([rowsOf([2, 3])]), rowsAt(false, 1, 4));
         expect(content.records).toEqual({});
         expect(restore.map((op) => [op.type, op.whole])).toEqual([
-            ['validation', 1],
             ['conditionalFormat', 1],
+            ['validation', 1],
         ]);
     });
 
