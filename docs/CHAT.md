@@ -54,7 +54,7 @@ A whisper's target must be a registered user, or the post answers 404. On read, 
 - Everyone who posted before, plus the room's owner, gets `chat-message` or `comment-reply`, unless the mention already covered them. A whisper notifies its recipient only.
 - The container (or the standalone room) records a `commented` file event. Its watcher fan-out excludes the author and everyone the two steps before it reached, so nobody hears about one message twice ([FILE-HISTORY.md](FILE-HISTORY.md)).
 
-The post waits for the user lookups only. The message is stored before them, so a lookup that fails is logged and skips only that person's notification. The deliveries go out through the relay's `sendToUserHomes` after the post answers. Each one opens the recipient's home, one home at a time within a fan-out, and no fan-out waits for another ([ACL.md § Share Propagation](ACL.md#share-propagation)).
+The post waits for the user lookups only. The message is stored before them, so a lookup that fails is logged and skips only that person's notification. The deliveries go out through the relay's `pushToHomes` after the post answers. Each one opens the recipient's home, one home at a time within a fan-out, and no fan-out waits for another ([ACL.md § Share Propagation](ACL.md#share-propagation)).
 
 The mention list in the composer opens on `@` only at the start of the text or after whitespace, a comma or a period, so typing an email never triggers it. The tags these notifications carry, and how opening a thread marks them read, are in [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md#chat-and-comment-tags-name-the-thread).
 

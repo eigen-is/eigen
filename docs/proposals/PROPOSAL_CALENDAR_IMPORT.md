@@ -333,7 +333,7 @@ everywhere by construction, verified against current code:
   `checkPermission` on the owner's calendar, so route-level write checks
   (`permission !== 'write'` → 403) reject before any write.
 - `propagateCalendarShare` (`share-propagation.ts`) resolves each recipient's permission through
-  `checkPermission` before `sendToHome`, so recipients' `shared_calendars` rows store `read` and
+  `checkPermission` before `pushToHomes`, so recipients' `shared_calendars` rows store `read` and
   their UI shows no write affordances.
 - `syncTeamCalendars`'s repair loop re-resolves through the same function.
 

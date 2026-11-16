@@ -11,10 +11,10 @@ This proposal keeps Eigen from failing silently when the process runs out of fil
 During the 2026-07-04 slow-share investigation, sharing a path to a 26-member team fanned out
 `drive:acl-change` to 26 recipient Homes. On a dev machine with macOS's default `ulimit -n 256`,
 the fan-out crashed with `SQLITE_IOERR_VNODE` mid-delivery and **silently skipped recipients** —
-the per-recipient `catch` in `sendToUserHomes` (`../../apps/api/src/lib/home/home-relay.ts`) logs
+the relay's `pushToHomes` (`../../apps/api/src/lib/home/home-relay.ts`) logs each failed recipient
 and moves on. Nothing told the operator the process was out of file descriptors.
 
-The fan-outs through `sendToUserHomes` open one home at a time now, though every opened home stays open, and
+The fan-outs through `pushToHomes` open one home at a time, though every opened home stays open, and
 `../../docker-compose.yml` pins the limit for the `eigen-api` service:
 
 ```yaml
@@ -152,8 +152,7 @@ Never evict a home that:
   private/internal today;
 - was touched within the last 30 seconds. Every request path goes through the `home.drive` /
   `home.mail` getters, all of which `touch()`, so a min-idle threshold is the flat, honest
-  stand-in for an in-flight-request counter — no counting framework. The same threshold covers
-  pending outbox deliveries once the durable outbox exists, because its drain touches the home.
+  stand-in for an in-flight-request counter — no counting framework.
 
 If nothing is evictable, don't evict — exceed N and let the idle timers catch up. The cap is a
 pressure valve, not an invariant.
@@ -210,9 +209,9 @@ other half left for sockets, document DBs, and multi-mount variance. Pinned comp
 `SQLITE_IOERR`, and the startup check already screamed). Env override
 `EIGEN_MAX_RESIDENT_HOMES` for tests and as an operator escape hatch.
 
-### Composition with the home-relay outbox
+### Composition with the relay's open cap
 
-The relay's `getFromHomes` opens the homes it reads under one cap, `HOME_OPENS_AT_ONCE` (4): a bound on *in-flight opens* (flow), which [PROPOSAL_HOME_RELAY.md](PROPOSAL_HOME_RELAY.md) extends to deliveries. The LRU cap bounds *resident homes* (stock). They compose without coordination: the relay opens at most that many homes concurrently, each install may evict the least-recently-used resident, so residency overshoots N by at most the open cap plus the opens outside it. Deliveries are outside it today: `sendToUserHomes` opens one home at a time per fan-out, and fan-outs run side by side.
+The relay's `getFromHomes` opens the homes it reads under one cap, `HOME_OPENS_AT_ONCE` (4): a bound on *in-flight opens* (flow). The LRU cap bounds *resident homes* (stock). They compose without coordination: the relay opens at most that many homes concurrently, each install may evict the least-recently-used resident, so residency overshoots N by at most the open cap plus the opens outside it. Deliveries are outside it: `pushToHomes` opens one home at a time per fan-out, and fan-outs run side by side.
 
 ## Failure honesty
 

@@ -108,7 +108,7 @@ What already exists, so the design extends rather than reinvents:
   (100 rows/turn), durable via the `contentDirty` bit on `paths` (metadata.db v6) — resumable across
   restarts by construction. The sweep mirrors this shape.
 - **Alert channel** (`lib/notification-center/`): `home.notifications.persist({...})` with
-  tag-upsert dedup + coalesce; `sendToHome(userId, { type: 'notification', ... })` in
+  tag-upsert dedup + coalesce; `pushToHomes([userId], { type: 'notification', ... })` in
   `home-relay.ts` delivers cross-home; `getOrgOwner()` / `getOrgRole()` (`lib/user/user.ts`)
   identify admins.
 - **Semantic layer** (`../../packages/lib/src/core/collab/yjs-utils.ts`, `lib/collab/yjs-loader.ts`):
@@ -289,7 +289,7 @@ No new subsystem. Every finding produces:
 1. **A structured log line** — `[integrity] <check> <ownerId>/<mountId>/<pathId> <detail>` — always,
    for grep/journald.
 2. **A notification to the org owner** (and org admins) via the existing relay:
-   `sendToHome(adminUserId, { type: 'notification', notification: {...} })` — the `HomeMessage`
+   `alertUser` (`lib/user/alert-owner.ts`), a `pushToHomes([adminUserId], { type: 'notification', ... })` — the `HomeMessage`
    variant that already exists. Affected end-users are *not* notified: they can't act on "your
    database failed quick_check", and alarming them is worse than fixing it.
 
