@@ -290,6 +290,20 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
         expect(work.moved).toBeLessThan(3_000_000);
     }, 60_000);
 
+    test('two far cells of one column of a million stripes cost the runs they reach, not the runs between', () => {
+        const { bands, looks } = striped(1_000_000);
+        const column = bookOf(sheetOf('S', { looks, bands: [...bands, 1, 0] }));
+        // Not the last stripe: it runs to the grid's end, and a cut there grows the list's array once.
+        const far: Rect[] = [
+            [0, 0, 0, 0],
+            [999_998, 0, 999_998, 0],
+        ];
+        const { work, refused, reached, grown } = measured(column, format(far, { it: 1 }));
+        expect(refused).toBeUndefined();
+        expect([reached, grown]).toEqual([2, 0]);
+        expect(work.read + work.moved).toBeLessThanOrEqual(BOUND * (reached + grown) + 16);
+    }, 60_000);
+
     test('rows that take turns over two spans of columns are two passes, wherever they stand in the list', () => {
         const rows = Array.from({ length: 16_000 }, (_, k): Rect => [2 * k, k % 2, 2 * k, 9 + (k % 2)]);
         const { work, refused, groups } = measured(

@@ -73,19 +73,26 @@ export class RunList {
     }
 
     // Every row of the spans, which ascend and share no row, wears `to` of the look it wore: `to` is told which span
-    // the row is in. One pass lays the runs the spans reach anew, and the runs after them move once.
+    // the row is in. One walk lays anew the runs the spans reach, jumping from span to span, and the runs between
+    // them move whole, once.
     public format(rows: readonly Span[], to: (look: number, span: number) => number): void {
-        const first = this.runAt(rows[0][0]);
-        const last = this.runAt(rows[rows.length - 1][1]);
+        const { size } = this;
+        // Per stretch of runs laid anew: its first run, the run after it, where its pairs start and end in `laid`,
+        // and how far the runs after it move.
+        const stretches: number[] = [];
         const laid: number[] = [];
-        // The look of the run before the next one laid: a run that wears it again is no run of its own.
-        let worn = first > 0 ? this.lookOf(first - 1) : -1;
+        let shift = 0;
         let span = 0;
-        for (let run = first; run <= last; run += 1) {
+        let run = this.runAt(rows[0][0]);
+        let first = run;
+        // The look of the run before the next one laid: a run that wears it again is no run of its own.
+        let worn = run > 0 ? this.lookOf(run - 1) : -1;
+        let from = 0;
+        while (span < rows.length) {
             // A list with no run is one plain run here.
-            const look = this.size === 0 ? 0 : this.lookOf(run);
-            const end = run + 1 < this.size ? this.startOf(run + 1) : GRID_ROWS;
-            for (let row = this.size === 0 ? 0 : this.startOf(run); row < end; ) {
+            const look = size === 0 ? 0 : this.lookOf(run);
+            const end = run + 1 < size ? this.startOf(run + 1) : GRID_ROWS;
+            for (let row = size === 0 ? 0 : this.startOf(run); row < end; ) {
                 while (span < rows.length && rows[span][1] < row) span += 1;
                 const inside = span < rows.length && rows[span][0] <= row;
                 const next = inside ? to(look, span) : look;
@@ -93,19 +100,40 @@ export class RunList {
                 worn = next;
                 row = Math.min(end, inside ? rows[span][1] + 1 : (rows[span]?.[0] ?? end));
             }
+            run += 1;
+            while (span < rows.length && rows[span][1] < end) span += 1;
+            const next = span < rows.length ? this.runAt(rows[span][0]) : size;
+            if (span < rows.length && next <= run) continue;
+            let after = Math.min(run, size);
+            if (after < size && this.lookOf(after) === worn) after += 1;
+            shift += (laid.length - from) / 2 - (after - first);
+            stretches.push(first, after, from, laid.length, shift);
+            from = laid.length;
+            run = next;
+            first = next;
+            if (span < rows.length) worn = this.lookOf(next - 1);
         }
-        let after = Math.min(last + 1, this.size);
-        if (after < this.size && this.lookOf(after) === worn) after += 1;
-        const size = this.size - (after - first) + laid.length / 2;
-        if (2 * size > this.pairs.length) {
-            const grown = new Int32Array(Math.max(8, 4 * size));
-            grown.set(this.pairs.subarray(0, 2 * first));
-            grown.set(this.pairs.subarray(2 * after, 2 * this.size), 2 * first + laid.length);
+        if (2 * (size + shift) > this.pairs.length) {
+            const grown = new Int32Array(Math.max(8, 4 * (size + shift)));
+            grown.set(this.pairs.subarray(0, 2 * size));
             this.pairs = grown;
-        } else this.pairs.copyWithin(2 * first + laid.length, 2 * after, 2 * this.size);
-        this.pairs.set(laid, 2 * first);
-        this.size = size;
-        if (size === 1 && this.pairs[1] === 0) {
+        }
+        const { pairs } = this;
+        // The runs after a stretch, up to the next one, move by its shift: those that move back first, in order,
+        // then those that move on, from the last, so none is written over before it moved.
+        const slide = (at: number) => {
+            const by = stretches[at + 4];
+            const start = stretches[at + 1];
+            pairs.copyWithin(2 * (start + by), 2 * start, 2 * (stretches[at + 5] ?? size));
+        };
+        for (let at = 0; at < stretches.length; at += 5) if (stretches[at + 4] < 0) slide(at);
+        for (let at = stretches.length - 5; at >= 0; at -= 5) if (stretches[at + 4] > 0) slide(at);
+        for (let at = 0; at < stretches.length; at += 5) {
+            const into = 2 * (stretches[at] + (stretches[at - 1] ?? 0)) - stretches[at + 2];
+            for (let k = stretches[at + 2]; k < stretches[at + 3]; k += 1) pairs[into + k] = laid[k];
+        }
+        this.size = size + shift;
+        if (this.size === 1 && pairs[1] === 0) {
             this.pairs = NO_PAIRS;
             this.size = 0;
         }
