@@ -1,8 +1,8 @@
 // The state of one spreadsheet document on one host, such as a browser tab or the server: the formula engine, which
 // keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
 // the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
-// snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. A
-// sheet an op adds is built as the load builds one. Only the appliers in this folder reach the parts through it.
+// snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. It
+// tells the engine which rows a sheet hides and filters. Only the appliers in this folder reach the parts through it.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
@@ -11,7 +11,7 @@ import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
-import type { CellRecord, Placed, SheetContent } from '@workspace/lib/sheets/ops';
+import type { CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
 import type { Extra } from './extras';
@@ -71,7 +71,10 @@ export class Workbook {
         const refusal = fits(weightOf(slots, parts));
         if (refusal) throw new Refusal(refusal);
 
-        this.engine = new Engine(ordered.map(sourceOf), now, seed, computed);
+        // The rows a sheet hides and filters come with its cells, as the values of a computed load were computed
+        // with them.
+        const sources = ordered.map((sheet, at) => ({ ...sourceOf(sheet), ...rowsOut(parts[at]) }));
+        this.engine = new Engine(sources, now, seed, computed);
         for (const [at, { id }] of ordered.entries()) this.parts.set(id, parts[at]);
         this.g = g;
         this.now = now;
@@ -173,6 +176,15 @@ export class Workbook {
         this.seed = seed;
     }
 
+    // Says to the engine the rows every sheet hides and filters now. It moves none with an edit and takes an added
+    // sheet with none, so the frame calls this at the end of a batch that can have changed them.
+    public setRowsOut(): void {
+        for (const [id, part] of this.parts) {
+            const { hidden, filtered } = rowsOut(part);
+            this.engine.setRowsOut(id, hidden, filtered);
+        }
+    }
+
     // What the limits count: the engine's slots, the runs, bands and extras of every sheet, its records, the sheets.
     public weight(): WorkbookWeight {
         return weightOf(this.engine.slots(), [...this.parts.values()]);
@@ -233,6 +245,28 @@ function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
         records = Math.max(records, sheet.records.weight().records);
     }
     return { slots, runs, bands, extras, records, sheets: sheets.length };
+}
+
+// The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
+// the sheet's filter left out. A hidden column matters to neither function.
+function rowsOut({ rows, records }: BookSheet): { hidden: number[]; filtered: number[] } {
+    const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
+    const filters = records.records('filter');
+    const filtered = [...records.records('filterColumn').values()].flatMap((column) =>
+        filters.has(column.filter) ? column.rows : [],
+    );
+    return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
+}
+
+// Spans in the order of their first line as pairs of a first and a last line, those that meet or touch as one.
+function pairsOf(spans: readonly Span[]): number[] {
+    const pairs: number[] = [];
+    for (const [first, last] of spans) {
+        const end = pairs.length - 1;
+        if (end > 0 && pairs[end] >= first - 1) pairs[end] = Math.max(pairs[end], last);
+        else pairs.push(first, last);
+    }
+    return pairs;
 }
 
 // A sheet's cells as the engine reads them: a rich text is the text of its runs, and only a value, a formula or a
