@@ -10,7 +10,7 @@ import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
 import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
-import { ERRORS, errorOf, REF } from '../values/errors';
+import { ERRORS, errorOf } from '../values/errors';
 import type { Scalar } from '../values/value';
 import type { Column } from './column';
 import { CellKind, KIND_MASK } from './column';
@@ -161,11 +161,7 @@ export class Workbook {
             if (formula !== null || (typeof value !== 'number' && typeof value !== 'boolean')) {
                 numbered[column].push(row);
             }
-            // A formula that came with #REF! may be on a loop, which only computing it finds. A host's error is told
-            // by its code, as the cell stores it.
-            if (formula !== null && (!computed || (typeof value === 'object' && value?.code === REF.code))) {
-                held.markDirty(row);
-            }
+            if (formula !== null && !computed) held.markDirty(row);
         });
         // The first walk sized the columns, and a source may not report its last cells again.
         for (const column of sheet.columns) column.trim();

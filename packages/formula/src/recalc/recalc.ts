@@ -9,7 +9,7 @@ import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
 import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
-import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
+import { CellKind, DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { Change, Draft, Literal, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
@@ -103,6 +103,19 @@ export class Recalc {
         this.evaluator = new Evaluator(workbook, functions, this);
         this.now = now;
         this.seed = seed;
+        // A load carries no loops and every cell on one holds #REF!, so a formula whose #REF! the load trusted is to
+        // be computed. It is a seed too: a marking takes the readers of a flagged formula for flagged.
+        for (const sheet of workbook.sheets) {
+            for (let c = 0; c < sheet.columns.length; c += 1) {
+                const column = sheet.columns[c];
+                const { kind, ref, shape, length } = column;
+                for (let row = 0; column.errors > 0 && row < length; row += 1) {
+                    if (kind[row] !== CellKind.Error || ref[row] !== REF.code || shape[row] === 0) continue;
+                    column.markDirty(row);
+                    extend(this.seeds, sheet.place, c, row);
+                }
+            }
+        }
     }
 
     // No seed waits, the clock is stamped, and no formula is flagged.
