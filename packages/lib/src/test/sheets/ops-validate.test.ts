@@ -540,6 +540,47 @@ describe('5. input', () => {
 });
 
 describe('6. format', () => {
+    test('the rectangles of one cell format share no cell: its author subtracts', () => {
+        const over = (ranges: number[][]) => accepts({ kind: 'format', sheet: 's1', ranges, set: { bl: 1 } });
+        expect(
+            over([
+                [0, 0, 4, 4],
+                [5, 0, 9, 4],
+                [0, 5, 9, 5],
+            ]),
+        ).toBe(true);
+        expect(
+            over([
+                [0, 0, 4, 4],
+                [4, 4, 9, 9],
+            ]),
+        ).toBe(false);
+        expect(
+            over([
+                [2, 2, 2, 2],
+                [2, 2, 2, 2],
+            ]),
+        ).toBe(false);
+        expect(
+            over([
+                [0, 3, LAST_ROW, 3],
+                [7, 0, 7, LAST_COLUMN],
+            ]),
+        ).toBe(false);
+        // The spans of a line format may still overlap.
+        const lines = {
+            kind: 'format',
+            sheet: 's1',
+            lines: 'rows',
+            spans: [
+                [0, 4],
+                [2, 6],
+            ],
+            set: { hidden: 1 },
+        };
+        expect(accepts(lines)).toBe(true);
+    });
+
     test('has exactly one of ranges or lines with spans', () => {
         const both = {
             kind: 'format',
