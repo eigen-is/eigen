@@ -44,9 +44,8 @@ export class ReverseIndex {
     // The sheets whose formulas changed since the last rebuild, and whether they came, went or moved: else they
     // only got another shape where they are.
     private readonly changed = new Map<Sheet, boolean>();
-    // Per shape, how many blocks hold it, and the highest id the shape table had given out at the last rebuild.
+    // Per shape, how many blocks hold it.
     private readonly holders: number[] = [];
-    private sized = 0;
 
     public get stale(): boolean {
         return this.changed.size > 0;
@@ -68,8 +67,8 @@ export class ReverseIndex {
         const { shapes } = workbook;
         const { holders, readers } = this;
         while (holders.length <= shapes.size) holders.push(0);
-        // The table is asked which shapes no block holds when it grew, or when a sheet that held formulas changed.
-        let unheld = shapes.size > this.sized;
+        // The table is asked which shapes no block holds when it gave out an id, or a sheet that held formulas changed.
+        let unheld = shapes.added;
         const relist = new Set<string>();
         // Per sheet to list again, what its listing is made of, which the changed sheets enter first.
         const lists = new Map<string, Listed>();
@@ -121,7 +120,6 @@ export class ReverseIndex {
             for (let shape = 1; shape <= shapes.size; shape += 1) held[shape] = holders[shape] > 0 ? 1 : 0;
             shapes.keep(held);
         }
-        this.sized = shapes.size;
     }
 
     // The blocks of `sheets` and the blocks of any sheet that read one of `keys`, each once, in the order of the

@@ -31,10 +31,16 @@ export class ShapeTable {
     // Per id, what the recalc worked out of the shape's tree and its functions, or -1 until it has. The list is
     // kept here because it is here that an id goes to another shape, which starts with nothing.
     public readonly facts: number[] = [-1];
+    // Whether an id was given out since the last `keep`: a shape no cell holds yet may wait in it.
+    private gave = false;
 
     // The highest id given out so far.
     public get size(): number {
         return this.shapes.length;
+    }
+
+    public get added(): boolean {
+        return this.gave;
     }
 
     // Ids start at 1: in a cell, 0 means no formula.
@@ -77,6 +83,7 @@ export class ShapeTable {
     // Forgets every shape whose id is not set in `held`, which says for each id up to `size` whether a cell holds
     // it. The id of a shape that stays does not change.
     public keep(held: Uint8Array): void {
+        this.gave = false;
         for (let id = 1; id <= this.shapes.length; id += 1) {
             const shape = this.shapes[id - 1];
             if (held[id] !== 0 || shape === FORGOTTEN) continue;
@@ -97,6 +104,7 @@ export class ShapeTable {
         this.shapes[id - 1] = { text, tree, refs, namesSheet };
         this.facts[id] = -1;
         this.ids.set(text, id);
+        this.gave = true;
         return id;
     }
 }
