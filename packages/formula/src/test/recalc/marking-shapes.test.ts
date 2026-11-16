@@ -31,7 +31,7 @@ function marked(shape: Shape, n: number): number {
     let best = Number.POSITIVE_INFINITY;
     for (let run = 0; run < 7; run += 1) {
         const start = performance.now();
-        index.mark(workbook, seeds);
+        index.mark(workbook, seeds, false);
         best = Math.min(best, performance.now() - start);
         let pending = 0;
         for (const column of workbook.sheets[0].columns) {
@@ -229,7 +229,7 @@ describe('the work of a marking grows with the workbook, not with its square', (
             const row = 100 + Math.floor(next() * (n - 200));
             seeds.push(0, 0, row, row);
         }
-        index.mark(workbook, seeds);
+        index.mark(workbook, seeds, false);
         const rows = new Set<number>();
         for (let i = 2; i < seeds.length; i += 4)
             for (let row = seeds[i]; row <= seeds[i] + 20; row += 1) rows.add(row);
@@ -258,7 +258,7 @@ describe('the work of a marking grows with the workbook, not with its square', (
         const index = new ReverseIndex();
         factsOf(workbook);
         index.rebuild(workbook);
-        index.mark(workbook, [0, 0, 0, 0]);
+        index.mark(workbook, [0, 0, 0, 0], false);
         expect(workbook.sheets[0].columns.map((column) => column.pending)).toEqual([0, 1, 1, 0, 0, 0, 1]);
     });
 });

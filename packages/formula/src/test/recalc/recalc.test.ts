@@ -316,7 +316,7 @@ describe('depth', () => {
                 ],
                 false,
             );
-            const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5);
+            const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5, false);
             expect(recalc.pass(NO_CAP)).toMatchObject({ loops: [], stopped: false });
             const [column] = workbook.sheets[0].columns;
             expect(runs).toBe(2);

@@ -255,7 +255,7 @@ describe('a walk of products that ends early leaves the next one right', () => {
             ],
             false,
         );
-        const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [thrower.name, thrower]]), 0, 0);
+        const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [thrower.name, thrower]]), 0, 0, false);
         expect(() => recalc.pass(Number.POSITIVE_INFINITY)).toThrow('a body that throws');
         fail = false;
         recalc.pass(Number.POSITIVE_INFINITY);

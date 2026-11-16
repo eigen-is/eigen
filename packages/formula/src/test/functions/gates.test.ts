@@ -10,6 +10,7 @@ import { FUNCTIONS } from '../../functions/library';
 import type { Numbers, Pairs, Table } from '../../functions/registry';
 import {
     ANYTHING,
+    ANYWHERE,
     BOOLEAN,
     defaulted,
     ENGINE,
@@ -57,7 +58,7 @@ function passOf(entry: Entry, cells: Readonly<Record<string, string | number>>) 
         ],
         false,
     );
-    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [entry.name, entry]]), 0, 0);
+    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [entry.name, entry]]), 0, 0, false);
     const value = (label: string) => workbook.value(workbook.sheets[0].columns[at(label)[1]], at(label)[0]);
     return { recalc, value };
 }
@@ -165,20 +166,34 @@ describe('a body reaches no cell, column or stored array', () => {
         expect(rows.length).toBe(5);
     });
 
-    // A row on this list can answer anew with no value changed, so each is computed in every pass that has a write.
-    test('the rows that ask the workbook are these six, and a formula that calls one reads cells it does not name', () => {
+    // What a formula reads that its references do not name is one of two facts. A row that asks the workbook
+    // itself can answer anew with no value changed, so every marking flags it. A reference worked out from values
+    // is recorded as the formula runs: INDIRECT asks the workbook only where a text points, so it is of that kind.
+    test('the rows that ask the workbook are these six, and those that answer a reference anywhere these two', () => {
         const asking = [...FUNCTIONS.values()].filter((entry) =>
             entry.params.some((param) => param.read === Read.Engine),
         );
+        const anywhere = [...FUNCTIONS.values()].filter((entry) => entry.returns === ANYWHERE);
         expect(asking.map((entry) => entry.name).sort()).toEqual([
             ...['CELL', 'FORMULATEXT', 'INDIRECT', 'ISFORMULA', 'SHEET', 'SHEETS'],
         ]);
-        for (const entry of asking) {
-            const tree = parseA1(`=1+${entry.name}(A1)`, 0, 0, () => undefined);
-            expect('reason' in tree ? 0 : shapeFacts(tree, FUNCTIONS) & Fact.ReadsUnnamed).toBe(Fact.ReadsUnnamed);
+        expect(anywhere.map((entry) => entry.name).sort()).toEqual(['INDIRECT', 'OFFSET']);
+        const both = Fact.ReadsUnnamed | Fact.Resolves;
+        const factsOf = (formula: string) => {
+            const tree = parseA1(formula, 0, 0, () => undefined);
+            return 'reason' in tree ? -1 : shapeFacts(tree, FUNCTIONS) & both;
+        };
+        for (const entry of new Set([...asking, ...anywhere])) {
+            const expected = entry.returns === ANYWHERE ? Fact.Resolves : Fact.ReadsUnnamed;
+            expect([entry.name, factsOf(`=1+${entry.name}(A1)`)]).toEqual([entry.name, expected]);
         }
-        const plain = parseA1('=1+ISREF(A1)', 0, 0, () => undefined);
-        expect('reason' in plain ? -1 : shapeFacts(plain, FUNCTIONS) & Fact.ReadsUnnamed).toBe(0);
+        expect(factsOf('=1+ISREF(A1)')).toBe(0);
+        expect(factsOf('=ISFORMULA(OFFSET(A1,1,0))')).toBe(both);
+        // The two other places a reference is worked out: a colon between operands, and a range sized by another.
+        expect(factsOf('=SUM(A1:INDEX(B1:B3,2))')).toBe(Fact.Resolves);
+        expect(factsOf('=SUM(A1:B3)')).toBe(0);
+        expect(factsOf('=SUMIF(A1:A3,">0",B1)')).toBe(Fact.Resolves);
+        expect(factsOf('=SUMIF(A1:A3,">0",B1:B3)')).toBe(0);
     });
 
     // Checked when the tests are compiled: each of these bodies would read a cell its row does not name.

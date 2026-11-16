@@ -1,9 +1,11 @@
 // The reverse index of a workbook: which formulas read a cell. `Recalc` rebuilds it whole from the shape planes when
 // a formula came or went, and has it mark: flag every formula that reads a written cell or a formula flagged here.
 // Cells of one shape in a block share their entries, about one per reference, which a `Listing` finds by the rows
-// and the column of a span.
+// and the column of a span. A second listing holds the areas that formulas worked out as they ran, an entry per
+// area, built again whenever `Recalc` recorded another.
 
 import { Fact } from '../eval/facts';
+import type { Column } from '../store/column';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { RefFlag, RefKind, SheetKind } from '../text/tree';
@@ -12,10 +14,13 @@ import { flag, Listing, RANGE } from './listing';
 export class ReverseIndex {
     // The spans a marking has still to follow: sheet, column, first and last row.
     private readonly work: number[] = [];
-    // What the references of the shapes read.
+    // What the references of the shapes read, and what the formulas resolved when they were last computed.
     private readonly named = new Listing(this.work);
-    // The rectangles whose shape reads cells its references do not name: sheet, first and last column and row.
+    private readonly resolved = new Listing(this.work);
+    // The rectangles whose shape asks the workbook itself: sheet, first and last column and row.
     private unnamed: number[] = [];
+    // The rectangles whose shape works a reference out as it runs, in the same five numbers.
+    private resolving: number[] = [];
     // The rectangles whose shape reads the clock or draws, in the same five numbers.
     public clocks: readonly number[] = [];
     // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
@@ -64,6 +69,7 @@ export class ReverseIndex {
         // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
         const areas: number[][] = sheets.map(() => []);
         this.unnamed = [];
+        this.resolving = [];
         const clocks: number[] = [];
         this.clocks = clocks;
         for (let r = 0; r < rectangles.length; r += 6) {
@@ -72,6 +78,7 @@ export class ReverseIndex {
             const facts = shapes.facts[id];
             if (facts & Fact.Kept) continue;
             if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
+            if (facts & Fact.Resolves) this.resolving.push(...rectangles.slice(r, r + 5));
             if (facts & Fact.Clock) clocks.push(...rectangles.slice(r, r + 5));
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
@@ -139,16 +146,43 @@ export class ReverseIndex {
         this.named.build(entries, areas);
     }
 
-    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that reads
-    // cells it does not name. A seed is a span of rows: sheet, column, first and last row.
-    public mark(workbook: Workbook, seeds: readonly number[]): void {
+    // Lists the areas of the records: per column and row of a formula, five numbers an area, the sheet first.
+    public resolve(workbook: Workbook, records: ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>>): void {
         const { sheets } = workbook;
-        const { unnamed, named, work } = this;
+        const entries: number[] = [];
+        const areas: number[][] = sheets.map(() => []);
+        for (let s = 0; s < sheets.length; s += 1) {
+            const { columns } = sheets[s];
+            for (let c = 0; c < columns.length; c += 1) {
+                for (const [row, record] of records.get(columns[c]) ?? []) {
+                    for (let a = 0; a < record.length; a += 5) {
+                        const top = record[a + 1];
+                        const left = record[a + 2];
+                        const bottom = record[a + 3];
+                        const right = record[a + 4];
+                        areas[record[a]].push(top, bottom, left, right, entries.length);
+                        // As a range, so that a marking is done with the entry once its cell is flagged.
+                        entries.push(s, row, row, c, c, top, bottom, left, right, RANGE, 0, -1);
+                    }
+                }
+            }
+        }
+        this.resolved.build(entries, areas);
+    }
+
+    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that asks
+    // the workbook itself; with `resolving`, every formula that works a reference out too, as no record says what
+    // they read. A seed is a span of rows: sheet, column, first and last row.
+    public mark(workbook: Workbook, seeds: readonly number[], resolving: boolean): void {
+        const { sheets } = workbook;
+        const { named, resolved, work } = this;
         for (const seed of seeds) work.push(seed);
-        for (let i = 0; i < unnamed.length; i += 5) {
-            const { columns } = sheets[unnamed[i]];
-            for (let c = unnamed[i + 1]; c <= unnamed[i + 2]; c += 1) {
-                flag(work, unnamed[i], c, columns[c], unnamed[i + 3], unnamed[i + 4]);
+        for (const rectangles of resolving ? [this.unnamed, this.resolving] : [this.unnamed]) {
+            for (let i = 0; i < rectangles.length; i += 5) {
+                const { columns } = sheets[rectangles[i]];
+                for (let c = rectangles[i + 1]; c <= rectangles[i + 2]; c += 1) {
+                    flag(work, rectangles[i], c, columns[c], rectangles[i + 3], rectangles[i + 4]);
+                }
             }
         }
         while (work.length > 0) {
@@ -159,7 +193,9 @@ export class ReverseIndex {
             const to = work[span + 3];
             work.length = span;
             named.follow(sheets, sheet, column, from, to);
+            resolved.follow(sheets, sheet, column, from, to);
         }
         named.restore();
+        resolved.restore();
     }
 }

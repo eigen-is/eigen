@@ -1,8 +1,8 @@
 // The areas some entries read, listed per sheet so that the entries that read a span of rows of one column are found
-// by its rows: `ReverseIndex` keeps one for what the references of the shapes name. An entry is listed under the
-// aligned blocks of columns that tile the columns it reads, sorted by row, so a lookup tests rows only. Following
-// a span flags the hosts of the entries that read it and adds them to the work of the marking. A marking writes
-// scratch here, the rows a range flagged and the listings it is done with, and `restore` puts it back at its end.
+// by its rows. `ReverseIndex` keeps one for what the references of the shapes name and one for what formulas worked
+// out as they ran. An entry is listed under the aligned blocks of columns that tile its columns, sorted by row, so a
+// lookup tests rows only. Following a span flags the hosts of the entries that read it and adds them to the work of
+// the marking, which writes scratch here that `restore` puts back at its end.
 
 import type { Column } from '../store/column';
 import { SETTLED } from '../store/column';
@@ -68,6 +68,8 @@ export class Listing {
     public follow(sheets: readonly Sheet[], sheet: number, column: number, from: number, to: number): void {
         const starts = this.starts[sheet];
         const levels = this.levels[sheet];
+        // A sheet that came after the entries were listed is read by none of them.
+        if (levels === undefined) return;
         for (let l = 0; l < levels.length; l += 4) {
             const block = column >> levels[l];
             if (block < levels[l + 1] || block > levels[l + 2]) continue;
