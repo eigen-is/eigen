@@ -27,7 +27,7 @@ export class Engine {
 
     // A load, with the clock its values were computed with and whether a full pass computed them all, as `settled`
     // says of a walk. Then every value is trusted and a formula with no value is a blank result; else every formula
-    // is to be computed, and one this build cannot evaluate keeps the value it came with.
+    // is to be computed. Either way one this build cannot evaluate keeps the value it came with, #REF! with none.
     public constructor(sheets: readonly SheetSource[], now: number, seed: number, computed: boolean) {
         clocked(now, seed);
         const workbook = new Workbook(sheets, computed);
@@ -46,8 +46,8 @@ export class Engine {
         this.calc.setValue(this.cell(sheet, row, column, value), row, column, value);
     }
 
-    // The formula in its stored text. It holds no value until a recalc computes it. A formula this build cannot
-    // evaluate holds `given` at once, as an import or a paste brings its value; for any other formula it is ignored.
+    // The formula in its stored text, with no value until a recalc computes it. One this build cannot evaluate holds
+    // `given` at once, as an import or a paste brings it, and #REF! with none; any other ignores `given`.
     public setFormula(sheet: string, row: number, column: number, text: string, given: Literal | null = null): void {
         this.calc.fillFormula(this.cell(sheet, row, column, given), row, column, row, column, text, given);
     }
@@ -94,8 +94,8 @@ export class Engine {
         return this.calc.edit({ kind: ChangeKind.Move, move });
     }
 
-    // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
-    // values they came with, and the result lists the formulas of the other sheets that were typed with its name.
+    // Adds a sheet at a place among the tabs, from 0, read as a load that is not computed reads it. The result lists
+    // the formulas of the other sheets that were typed with its name.
     public addSheet(source: SheetSource, place: number): EditResult {
         // The source is the host's code, so what is refused is checked once it has run. Whatever values its formulas
         // came with were computed against another workbook than this one.

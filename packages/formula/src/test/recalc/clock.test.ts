@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Literal } from '../../index';
+import type { Literal, SheetSource } from '../../index';
 import { Engine, REF } from '../../index';
 import { runClockLaw } from './clock-law';
 import { at, stored, valueAt } from './support';
@@ -376,13 +376,54 @@ describe('a value given with a formula this build cannot evaluate', () => {
         expect(engine.formulaOf('s1', 0, 0)).toBe(KEPT);
     });
 
-    test('given none, it is #REF! once a pass ran', () => {
-        const engine = loaded({});
+    // What a host reads of a sheet: the walk, and per cell whether it is given and still to be computed.
+    const seen = (engine: Engine, sheet = 's1') => {
+        const cells: unknown[] = [];
+        engine.cells(sheet, (row, column, value, formula) =>
+            cells.push([
+                row,
+                column,
+                value,
+                formula,
+                engine.isGiven(sheet, row, column),
+                engine.isPending(sheet, row, column),
+            ]),
+        );
+        return cells;
+    };
+
+    test('given none, it holds #REF! at once, so a pass changes nothing a host reads', () => {
+        const engine = loaded({ C1: ['=IFERROR(A1,7)', 7] });
         engine.setFormula('s1', 0, 0, KEPT);
         engine.setFormula('s1', 1, 0, KEPT, null);
-        expect(engine.isPending('s1', 0, 0)).toBe(true);
+        engine.fillFormula('s1', 2, 0, 3, 1, SPAN);
+        const before = seen(engine);
+        expect(values(engine, 'A1', 'A2', 'A3', 'B4')).toEqual([REF, REF, REF, REF]);
         engine.recalc(NO_CAP);
-        expect(values(engine, 'A1', 'A2')).toEqual([REF, REF]);
+        expect(seen(engine)).toEqual(before);
+        expect(before.every((cell) => Array.isArray(cell) && cell[5] === false)).toBe(true);
+    });
+
+    test('loaded or added with no value, it holds #REF! at once, computed or not', () => {
+        const cells: SheetSource['cells'] = (cell) => {
+            cell(0, 0, null, KEPT);
+            cell(1, 0, 3, SPAN);
+        };
+        const opened = [false, true].map(
+            (computed) => new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, computed),
+        );
+        const added = loaded({});
+        added.addSheet({ id: 's2', name: 'Sheet2', cells }, 1);
+        const reads = () => [...opened.map((engine) => seen(engine)), seen(added, 's2')];
+        const held = [
+            [0, 0, REF, KEPT, true, false],
+            [1, 0, 3, SPAN, true, false],
+        ];
+        expect(reads()).toEqual([held, held, held]);
+        // A load that is not computed computes every reader anyway; in a computed one a reader may hold another value.
+        expect(opened.map((engine) => engine.settled())).toEqual([true, false]);
+        for (const engine of [...opened, added]) engine.recalc(NO_CAP);
+        expect(reads()).toEqual([held, held, held]);
     });
 
     test('a formula this build can evaluate computes its own value, whatever it was given', () => {
