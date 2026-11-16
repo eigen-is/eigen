@@ -116,7 +116,21 @@ export function randomOp(random: Random, model: Model): Op {
     );
 }
 
-function someSheet(random: Random, model: Model): ModelSheet {
+// An op in the mix the general laws draw: every kind, with formulas that read the lines and blocks an edit moves and
+// things put at the grid's end, which an insert then pushes.
+export function randomAnyOp(random: Random, model: Model): Op {
+    const draw = random();
+    if (draw < 0.15) return randomInputOp(random, model);
+    if (draw < 0.19) return randomLineReaderOp(random, model);
+    if (draw < 0.23) return randomLandingReaderOp(random, model);
+    if (draw < 0.36) return randomFormatOp(random, model);
+    if (draw < 0.47) return randomLinesOp(random, model);
+    if (draw < 0.52) return randomEndOp(random, model);
+    if (draw < 0.66) return randomMoveOp(random, model);
+    return draw < 0.89 ? randomRecordOp(random, model) : randomSheetOp(random, model);
+}
+
+export function someSheet(random: Random, model: Model): ModelSheet {
     return pick(random, [...model.sheets.values()]);
 }
 
