@@ -480,6 +480,8 @@ function lastRowOut({ rows, records }: ModelSheet): number {
 // What an op that lands does to the rows the sheets of the model hide or filter.
 type RowStep =
     | 'hide'
+    | 'hideInFilter'
+    | 'hideOutFilter'
     | 'show'
     | 'filterOn'
     | 'filterOff'
@@ -497,7 +499,15 @@ function rowStepsOf(model: Model, op: Op): RowStep[] {
     const last = lastRowOut(sheet);
     if (op.kind === 'format' && 'lines' in op && op.lines === 'rows') {
         const shows = op.clear?.includes('hidden') && last >= 0;
-        return op.set?.hidden ? ['hide'] : shows ? ['show'] : [];
+        if (!op.set?.hidden) return shows ? ['show'] : [];
+        // A hide on a sheet whose filter leaves a row out, by whether its rows lie inside the filter's range.
+        const [filter] = sheet.records.filter;
+        const columns = [...sheet.records.filterColumn.values()];
+        if (!filter || !columns.some((column) => column.filter === filter[0] && column.rows.length > 0))
+            return ['hide'];
+        const [top, , bottom] = filter[1].rect;
+        const inside = op.spans.every(([first, end]) => first >= top && end <= bottom);
+        return ['hide', inside ? 'hideInFilter' : 'hideOutFilter'];
     }
     if (op.kind === 'record' && op.type === 'filter') {
         return op.set ? ['filterOn'] : sheet.records.filterColumn.size > 0 ? ['filterOff'] : [];
@@ -528,6 +538,8 @@ function lawRun(seeds: number, make: (random: () => number, model: Model) => Op,
     // by what the op does to the rows its sheet hides or filters.
     const rowSteps = {
         hide: 0,
+        hideInFilter: 0,
+        hideOutFilter: 0,
         show: 0,
         filterOn: 0,
         filterOff: 0,
@@ -677,6 +689,9 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         for (const kind of ['input', 'format', 'record', 'lines', 'move', 'sheet']) {
             expect(kinds.get(kind) ?? 0).toBeGreaterThan(300);
         }
-        for (const count of Object.values(rowSteps)) expect(count).toBeGreaterThan(50);
+        const { hideInFilter, hideOutFilter, ...steps } = rowSteps;
+        for (const count of Object.values(steps)) expect(count).toBeGreaterThan(50);
+        // A row hidden while the filter leaves a row out, inside its range and outside: both are filtered then.
+        expect(Math.min(hideInFilter, hideOutFilter)).toBeGreaterThan(25);
     }, 120_000);
 });

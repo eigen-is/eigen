@@ -248,13 +248,15 @@ function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
 }
 
 // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
-// the sheet's filter left out. A hidden column matters to neither function.
+// the sheet's filter left out. While the filter leaves a row out, Excel counts every hidden row of the sheet as
+// filtered, inside its range or not. A hidden column matters to neither function.
 function rowsOut({ rows, records }: BookSheet): { hidden: number[]; filtered: number[] } {
     const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
     const filters = records.records('filter');
     const filtered = [...records.records('filterColumn').values()].flatMap((column) =>
         filters.has(column.filter) ? column.rows : [],
     );
+    if (filtered.length > 0) filtered.push(...hidden);
     return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
 }
 

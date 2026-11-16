@@ -552,16 +552,20 @@ export function randomRowReaderOp(random: Random, model: Model): InputOp {
 }
 
 // An op that changes which rows a sheet hides or filters, among the rows the row readers read: rows hidden or
-// shown, a filter made where the sheet has none and else the rows one of its columns leaves out, the filter
-// deleted, or rows inserted or deleted there.
+// shown, a filter made where the sheet has none, over all of those rows or some, and else the rows one of its
+// columns leaves out, the filter deleted, or rows inserted or deleted there.
 export function randomRowsOutOp(random: Random, model: Model): FormatOp | RecordOp | LinesOp {
     const held = someSheet(random, model);
     const sheet = held.id;
     const first = below(random, 16);
     const span: Span = [first, first + below(random, 4)];
     const [filter] = held.records.filter.keys();
+    // Now and then the row just outside the filter's range, which a filter that leaves a row out reads as filtered.
+    const rect = filter === undefined ? undefined : held.records.filter.get(filter)?.rect;
+    const beside = rect && (rect[0] > 0 ? rect[0] - 1 : rect[2] + 1);
+    const hidden: Span = beside !== undefined && beside < GRID_ROWS && random() < 0.5 ? [beside, beside] : span;
     return pick<() => FormatOp | RecordOp | LinesOp>(random, [
-        () => ({ kind: 'format', sheet, lines: 'rows', spans: [span], set: { hidden: 1 } }),
+        () => ({ kind: 'format', sheet, lines: 'rows', spans: [hidden], set: { hidden: 1 } }),
         () => ({ kind: 'format', sheet, lines: 'rows', spans: [span, [first + 6, first + 9]], clear: ['hidden'] }),
         () => {
             if (filter === undefined) {
@@ -570,7 +574,13 @@ export function randomRowsOutOp(random: Random, model: Model): FormatOp | Record
                     sheet,
                     type: 'filter',
                     id: `${sheet}fr`,
-                    set: { rect: [0, 0, 20, 4] },
+                    // A range short of the rows read, so a row hidden outside it is read too.
+                    set: {
+                        rect: pick<Rect>(random, [
+                            [0, 0, 20, 4],
+                            [3, 0, 10, 4],
+                        ]),
+                    },
                     whole: 1,
                 };
             }
