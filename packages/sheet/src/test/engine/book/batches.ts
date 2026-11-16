@@ -33,7 +33,7 @@ import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook, randomSheet } from './book-fixtures';
 import { decoded, fold } from './bytes';
 import type { Model, ModelSheet } from './model';
-import { chartOf, formulaRule, ref } from './records-fixtures';
+import { chartData, chartOf, formulaRule, ref } from './records-fixtures';
 
 // A formula typed with the name of a sheet that is not there: a rename or an add of a sheet to that name binds it,
 // and its inverse writes the typed text back. An input typed with the name of a sheet the book holds is bound.
@@ -520,9 +520,9 @@ export function randomLineReaderOp(random: Random, model: Model): InputOp {
     return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 4), left + below(random, 2)], { f }]] };
 }
 
-// A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range
-// or a comment, one a little larger, or a whole column or row. Half the moves land near where they start, so the block
-// overlaps itself in every direction; now and then either sheet is one the book does not hold.
+// A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range,
+// a comment or a chart's series, one a little larger, or a whole column or row. Half the moves land near where they
+// start, so the block overlaps itself in every direction; now and then either sheet is one the book does not hold.
 export function randomMoveOp(random: Random, model: Model): MoveOp {
     const held = someSheet(random, model);
     const sheet = random() < 0.04 ? 'nosheet' : held.id;
@@ -532,6 +532,7 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
         ...[...merge.values()].map(({ rect }) => rect),
         ...[...comment.values()].map(({ row, column }): Rect => [row, column, row, column]),
         ...[...conditionalFormat.values(), ...validation.values()].flatMap(({ ranges }) => ranges),
+        ...chartRefsOn(model, held.id),
     ].filter(([top, left, bottom, right]) => bottom - top < 40 && right - left < 40);
     const row = below(random, 14);
     const column = below(random, 8);
@@ -560,6 +561,18 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
     const near = random() < 0.6;
     const toward = (start: number, size: number, room: number) =>
         Math.min(room, Math.max(0, near ? start + below(random, 2 * size + 1) - size : below(random, 16)));
+    // Now and then the block lands on a chart's series it is large enough to cover, where it fits on the grid.
+    const covered = chartRefsOn(model, toSheet).filter(
+        ([t, l, b, r]) =>
+            b - t <= bottom - top &&
+            r - l <= right - left &&
+            t + bottom - top < GRID_ROWS &&
+            l + right - left < GRID_COLUMNS,
+    );
+    if (covered.length > 0 && random() < 0.2) {
+        const [toRow, toColumn] = pick(random, covered);
+        return { kind: 'move', sheet, from, toSheet, toRow, toColumn };
+    }
     return {
         kind: 'move',
         sheet,
@@ -568,6 +581,16 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
         toRow: toward(top, Math.max(1, bottom - top), GRID_ROWS - 1 - (bottom - top)),
         toColumn: toward(left, Math.max(1, right - left), GRID_COLUMNS - 1 - (right - left)),
     };
+}
+
+// The rectangles the series of every chart of the book read on one sheet.
+export function chartRefsOn(model: Model, sheet: string): Rect[] {
+    const charts = [...model.sheets.values()].flatMap(({ records }) => [...records.chart.values()]);
+    return charts.flatMap((chart) =>
+        (chartData(chart)?.series ?? []).flatMap(({ values }): Rect[] =>
+            values?.sheetId === sheet ? [[values.row[0], values.column[0], values.row[1], values.column[1]]] : [],
+        ),
+    );
 }
 
 // A sheet copied whole under a new id, as a writer copies one: its records take ids of their own, as an id names one
@@ -628,7 +651,8 @@ export function randomLandingReaderOp(random: Random, model: Model): InputOp {
 export function randomSheetOp(random: Random, model: Model): SheetOp {
     if (random() < 0.4) return { kind: 'sheet', delete: sheetId(random, model) };
     const id = random() < 0.05 ? someSheet(random, model).id : `n${below(random, 1_000_000)}`;
-    // A writer that copies a sheet mints new ids for its records; now and then one keeps those of a sheet the book holds.
+    // A writer that copies a sheet mints new ids for its records; now and then one keeps the ids of a sheet the book
+    // holds.
     const sheet = randomSheet(random, 0, random() < 0.1 ? someSheet(random, model).id : id);
     const held = someSheet(random, model).fields.name;
     const name = pick(random, [

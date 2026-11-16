@@ -1,6 +1,6 @@
 // The applier of a `move` op, which the frame calls for each op of a batch: a block of cells moved, as a cut and
 // paste or a drag does it, on one sheet or to another. Its content, looks and extras go along, with its comments, the
-// merges wholly in it and, on one sheet, the rule ranges wholly in it; formulas anywhere that read it follow. What it
+// merges wholly in it and, on one sheet, the rule ranges wholly in it; formulas and charts that read it follow. What it
 // lands on is replaced, comments included. Its inverse moves the block back, then writes back what the cells it landed
 // on outside it held, the records the move removed or changed, and the formulas it made lossy.
 

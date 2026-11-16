@@ -790,6 +790,24 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         from.records.comment.delete(id);
         to.records.comment.set(id, { row: comment.row + down, column: comment.column + across });
     }
+    // A chart on any sheet reads its cells by sheet and place: those wholly in the block it reads where they landed.
+    for (const sheet of model.sheets.values()) {
+        for (const [id, chart] of sheet.records.chart) {
+            const next = mapChartRefs(chart, (ref) => {
+                const { sheetId, row, column } = ref;
+                if (sheetId !== op.sheet || !inside(row[0], column[0], block) || !inside(row[1], column[1], block)) {
+                    return ref;
+                }
+                return {
+                    sheetId: op.toSheet,
+                    row: [row[0] + down, row[1] + down],
+                    column: [column[0] + across, column[1] + across],
+                };
+            });
+            if (exceedsChartSpecBytes(next)) return 'key-too-long';
+            sheet.records.chart.set(id, next);
+        }
+    }
     // On one sheet the rule ranges wholly in the block go along too.
     if (from !== to) return null;
     const moved = (ranges: readonly Rect[]): Rect[] =>

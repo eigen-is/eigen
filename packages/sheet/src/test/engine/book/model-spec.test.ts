@@ -69,6 +69,8 @@ const chartRows = (id: 'S' | 'T') => (sheets: ReadonlyMap<string, Read>) => {
 const chartOn = (sheet: string, row: [number, number]) => ({
     chart: { c: chartOf({ categories: null, series: [{ id: 's', name: 'n', values: ref(sheet, row, [0, 0]) }] }) },
 });
+const chartRef = (id: 'S' | 'T') => (sheets: ReadonlyMap<string, Read>) =>
+    chartData(sheets.get(id)?.records.chart?.c)?.series[0].values ?? null;
 const rows = (insert: boolean, index: number, count = 1) => linesOp(true, insert, index, count);
 const columns = (insert: boolean, index: number, count = 1) => linesOp(false, insert, index, count);
 
@@ -451,6 +453,44 @@ const CASES: Case[] = [
         ops: [moveOp([2, 2, 3, 2], 10, 5)],
         read: validationRanges,
         expected: [[2, 2, 5, 2]],
+    },
+    // Chart refs under a move.
+    // Amendment 1 § 5: a move follows chart refs; the brief: a ref wholly in the block follows it, to the sheet it
+    // lands on too, and a ref partly in it or one the block lands on stays, as a rule range does.
+    {
+        name: 'a chart ref wholly in the block follows it on one sheet',
+        sheets: { S: { records: chartOn('S', [2, 8]) } },
+        ops: [moveOp([2, 0, 8, 0], 20, 3)],
+        read: chartRef('S'),
+        expected: { sheetId: 'S', row: [20, 26], column: [3, 3] },
+    },
+    {
+        name: 'a chart ref wholly in the block follows it to another sheet, the chart staying where it is',
+        sheets: { S: { records: chartOn('S', [2, 8]) } },
+        ops: [moveOp([0, 0, 9, 1], 20, 3, 'T')],
+        read: (sheets) => [chartRef('S')(sheets), sheets.get('T')?.records.chart],
+        expected: [{ sheetId: 'T', row: [22, 28], column: [3, 3] }, undefined],
+    },
+    {
+        name: 'a chart on another sheet follows the block its ref is in',
+        sheets: { T: { records: chartOn('S', [2, 8]) } },
+        ops: [moveOp([2, 0, 8, 0], 4, 1)],
+        read: chartRef('T'),
+        expected: { sheetId: 'S', row: [4, 10], column: [1, 1] },
+    },
+    {
+        name: 'a chart ref partly in the block stays',
+        sheets: { S: { records: chartOn('S', [2, 8]) } },
+        ops: [moveOp([2, 0, 5, 0], 20, 3)],
+        read: chartRef('S'),
+        expected: { sheetId: 'S', row: [2, 8], column: [0, 0] },
+    },
+    {
+        name: 'a chart ref the block lands on stays',
+        sheets: { T: { records: chartOn('T', [20, 22]) } },
+        ops: [moveOp([0, 0, 9, 9], 18, 0, 'T')],
+        read: chartRef('T'),
+        expected: { sheetId: 'T', row: [20, 22], column: [0, 0] },
     },
 ];
 

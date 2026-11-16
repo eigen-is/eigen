@@ -21,6 +21,7 @@ import type {
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
 import { covers, within } from '@workspace/lib/sheets/rect';
+import { mapChartRefs } from '../chart-data';
 import {
     chartAfter,
     commentAfter,
@@ -322,9 +323,9 @@ export class SheetRecords {
         };
     }
 
-    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments and the merges wholly
-    // in it go along, on one sheet its rule ranges too. A merge or a comment it lands on goes, and a merge it cuts
-    // anywhere refuses.
+    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments, the merges and the
+    // chart refs wholly in it go along, on one sheet its rule ranges too. A merge or a comment it lands on goes, and a
+    // merge it cuts anywhere refuses.
     public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'key-too-long' {
         const block = op.from;
         const [top, left, bottom, right] = block;
@@ -385,14 +386,18 @@ export class SheetRecords {
             for (const [id] of comments) writes.push(() => this.replace('comment', id, undefined));
         }
 
+        // A range wholly in the block goes along; one the block lands on stays, and as the move back would take it,
+        // undo puts it back. A rule's ranges keep to its sheet, while a chart's refs follow the block to another.
+        const along = (sheet: string, range: Rect) => sheet === op.sheet && within(range, block);
+        const landedOn = (sheet: string, range: Rect) =>
+            sheet === op.toSheet && !along(sheet, range) && within(range, target);
         const carries = oneSheet && fromHere;
         // The list itself when no range moves.
         const moved = (list: Rect[]): Rect[] =>
-            carries && list.some((range) => within(range, block))
-                ? list.map((range) => (within(range, block) ? shifted(range) : range))
+            carries && list.some((range) => along(this.sheet, range))
+                ? list.map((range) => (along(this.sheet, range) ? shifted(range) : range))
                 : list;
-        const returns = (list: readonly Rect[]) =>
-            carries && list.some((range) => !within(range, block) && within(range, target));
+        const returns = (list: readonly Rect[]) => carries && list.some((range) => landedOn(this.sheet, range));
         for (const [id, validation] of this.stored.validation) {
             const ranges = moved(validation.ranges);
             if (ranges !== validation.ranges)
@@ -415,6 +420,19 @@ export class SheetRecords {
             if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule) || returns(rule.ranges)) {
                 restore.push(this.wholeOp('conditionalFormat', id, rule));
             }
+        }
+        for (const [id, chart] of this.stored.chart) {
+            let landed = false;
+            const next = mapChartRefs(chart, (ref) => {
+                const range: Rect = [ref.row[0], ref.column[0], ref.row[1], ref.column[1]];
+                landed ||= landedOn(ref.sheetId, range);
+                if (!along(ref.sheetId, range)) return ref;
+                const [t, l, b, r] = shifted(range);
+                return { ...ref, sheetId: op.toSheet, row: [t, b], column: [l, r] };
+            });
+            if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
+            if (next !== chart) writes.push(() => this.replace('chart', id, next));
+            if (landed) restore.push(this.restoreOp('chart', id, chart, false));
         }
         return {
             restore: inOrder(restore),
