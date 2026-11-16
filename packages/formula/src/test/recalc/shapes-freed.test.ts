@@ -145,6 +145,19 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
         expect(sheet.columns[60].pending).toBe(0);
     });
 
+    test('a hundred formulas written and written over before a recalc, on a sheet with no other, leave few shapes', () => {
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);
+        const [sheet] = workbook.sheets;
+        for (let i = 1; i <= 100; i += 1) {
+            recalc.fillFormula(sheet, 0, 1, 0, 1, `=R1C1+${i}`, null);
+            recalc.setValue(sheet, 0, 1, i);
+            recalc.pass(NO_CAP);
+        }
+        // No block ever held one, so the table is asked only when it grows: once its free ids are used up.
+        expect(workbook.shapes.size).toBe(13);
+    });
+
     test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);

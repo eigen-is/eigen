@@ -143,6 +143,24 @@ describe('what an edit visits and lists', () => {
         expect(counted['a sheet move']).toEqual([0, 0]);
     });
 
+    test('a formula that names both sheets of a move is rewritten once', () => {
+        const engine = new Engine(
+            [
+                source('a', [[0, 0, 1, null]]),
+                source('b', [[0, 0, 2, null]]),
+                source('c', [[0, 0, null, '=[a]!R1C1+[b]!R1C1']]),
+            ],
+            0,
+            0,
+            false,
+        );
+        engine.recalc(NO_CAP);
+        const move = { fromSheet: 'a', row: 0, column: 0, rows: 1, columns: 1, toSheet: 'b', toRow: 4, toColumn: 4 };
+        expect(engine.moveCells(move).rewrites).toEqual([
+            { sheet: 'c', top: 0, left: 0, bottom: 0, right: 0, formula: '=[b]!R5C5+[b]!R1C1', lost: null },
+        ]);
+    });
+
     // The accepted cost: an entry lives in the listing of the sheet it reads, which is listed whole.
     test('an edit on a sheet whose formulas read a hub lists every reader of the hub again, and no more', () => {
         const hub = (sheets: number) => {

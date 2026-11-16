@@ -190,11 +190,14 @@ export class ReverseIndex {
         const { sheets } = workbook;
         const { work } = this;
         for (const seed of seeds) work.push(seed);
-        const unnamed = this.reading([], resolving ? [Fact.ReadsUnnamed, Fact.Resolves] : [Fact.ReadsUnnamed]);
-        for (let i = 0; i < unnamed.length; i += 6) {
-            const { columns } = sheets[unnamed[i]];
-            for (let c = unnamed[i + 1]; c <= unnamed[i + 2]; c += 1) {
-                flag(work, unnamed[i], c, columns[c], unnamed[i + 3], unnamed[i + 4]);
+        for (const fact of resolving ? [Fact.ReadsUnnamed, Fact.Resolves] : [Fact.ReadsUnnamed]) {
+            for (const host of this.readers.get(fact) ?? []) {
+                const { blocks = [], filed } = this.held.get(host) ?? {};
+                for (const b of filed?.get(fact) ?? []) {
+                    for (let c = blocks[b]; c <= blocks[b + 1]; c += 1) {
+                        flag(work, host.place, c, host.columns[c], blocks[b + 2], blocks[b + 3]);
+                    }
+                }
             }
         }
         // The listings of the sheet the last span lay on, which most spans share with the one before.
