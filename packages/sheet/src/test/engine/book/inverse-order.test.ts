@@ -40,7 +40,7 @@ function threeSheets(): Book {
         [9, 1, { f: '=[a]!R3C2*2' }],
     ];
     const sheets = ['a', 'b', 'c'].map((id, at) => sheetOf(id, `a${at}`, { cells: readers }));
-    return { g: 1, now: 45_000, seed: 3, sheets };
+    return { g: 1, now: 45_000, seed: 3, computed: false, sheets };
 }
 
 const batch = (...ops: Op[]): Batch => ({ g: 1, now: 45_001, seed: 4, ops });

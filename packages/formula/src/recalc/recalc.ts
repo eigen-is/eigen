@@ -1,14 +1,15 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and with a new
-// clock those that read it, and computes them: reading a cell still to be computed computes it first, so no order
-// is worked out ahead. A cell met while it is being computed is on a loop with every cell reading towards it.
-// Nesting has one budget: past it the calls in progress are dropped by a throw and the cells computed again.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and after a new
+// clock or a structural edit the clock formulas and their readers, and computes them: reading a cell still to be
+// computed computes it first, so no order is worked out ahead. A cell met while it is being computed is on a loop
+// with every cell reading towards it. Nesting has one budget: past it the calls in progress are dropped by a throw
+// and the cells computed again.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
 import type { Registry } from '../functions/registry';
 import type { Column } from '../store/column';
-import { DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
+import { CellKind, DIRTY, KIND_MASK, LOOP, RUNNING, SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { Change, Draft, Literal, Workbook } from '../store/workbook';
 import { ChangeKind } from '../store/workbook';
@@ -92,7 +93,7 @@ export class Recalc {
     // of beside the cell that draws.
     public now: number;
     private seed: number;
-    // Whether the clock formulas were flagged since the clock was last set.
+    // Whether the clock formulas were flagged since the clock was last set or a structural edit moved cells.
     private stamped = true;
 
     public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
@@ -102,16 +103,28 @@ export class Recalc {
         this.evaluator = new Evaluator(workbook, functions, this);
         this.now = now;
         this.seed = seed;
-        // A formula that came without a value was never computed, which the ones that came with a value have to hear.
-        for (let s = 0; s < workbook.sheets.length; s += 1) {
-            const { columns } = workbook.sheets[s];
-            for (let c = 0; c < columns.length; c += 1) {
-                const { kind, length } = columns[c];
-                for (let row = 0; columns[c].pending > 0 && row < length; row += 1) {
-                    if (kind[row] > SETTLED) extend(this.seeds, s, c, row);
+        // A load carries no loops and every cell on one holds #REF!, so a formula whose #REF! the load trusted is to
+        // be computed. It is a seed too: a marking takes the readers of a flagged formula for flagged.
+        for (const sheet of workbook.sheets) {
+            for (let c = 0; c < sheet.columns.length; c += 1) {
+                const column = sheet.columns[c];
+                const { kind, ref, shape, length } = column;
+                for (let row = 0; column.errors > 0 && row < length; row += 1) {
+                    if (kind[row] !== CellKind.Error || ref[row] !== REF.code || shape[row] === 0) continue;
+                    column.markDirty(row);
+                    extend(this.seeds, sheet.place, c, row);
                 }
             }
         }
+    }
+
+    // No seed waits, the clock is stamped, and no formula is flagged.
+    public settled(): boolean {
+        if (this.seeds.length > 0 || !this.stamped) return false;
+        for (const { columns } of this.workbook.sheets) {
+            for (const { pending } of columns) if (pending > 0) return false;
+        }
+        return true;
     }
 
     // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
@@ -167,6 +180,8 @@ export class Recalc {
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
+        // A draw it moves is drawn again by its new place.
+        this.stamped = false;
         // The plan makes shapes no cell holds yet, or ever when it refuses the edit by a throw: the next rebuild
         // forgets those.
         this.stale = true;
@@ -433,6 +448,9 @@ export class Recalc {
         const row = this.rows[at];
         const shape = column.shape[row];
         const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
+        // The cap is met before a formula runs, so a pass that stops throws no finished formula away, and never
+        // before the first store of the pass: a formula that costs more than the cap alone would hold every pass up.
+        if (this.cost >= this.cap && this.stored) throw STOP;
         // A formula that runs again after a throw for depth makes its arrays again, and its draws.
         this.made[at] = 0;
         this.drew[at] = 0;
@@ -445,9 +463,6 @@ export class Recalc {
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;
-        // The cap is met before a formula is stored, never inside a loop that is being stored, and a pass never
-        // stops before its first store: a formula that costs more than the cap alone would hold every pass up.
-        if (this.cost >= this.cap && this.stored) throw STOP;
         this.stored = true;
         if ((column.kind[row] & LOOP) === 0 && this.workbook.put(column, row, value)) {
             extend(this.changed, this.sheets[at].place, this.places[at], row);

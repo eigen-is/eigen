@@ -47,7 +47,12 @@ function stepped(engine: Engine, sheet: string, column: number): number[] {
 function edited(seed: number, steps: number): Engine {
     const next = random(seed);
     const pick = (below: number) => Math.floor(next() * below);
-    const engine = new Engine(SHEETS.map((id) => source(id, [])));
+    const engine = new Engine(
+        SHEETS.map((id) => source(id, [])),
+        0,
+        0,
+        false,
+    );
     const values: Literal[] = [1, 2.5, 'x', '', true, false, NA, errorOf('#BUSY!')];
     const formulas = ['=R1C1+1', '=SUM(C1)', '=R[-1]C', '=R20C20', '=SUM(', '=R[1]C[1]&"a"'];
     for (let step = 0; step < steps; step += 1) {
@@ -107,14 +112,19 @@ describe('the walk of a sheet', () => {
         for (let seed = 1; seed <= 60; seed += 1) {
             const engine = edited(seed, 30);
             engine.recalc(ALL);
-            const loaded = new Engine(SHEETS.map((id) => ({ id, name: id, cells: (cell) => engine.cells(id, cell) })));
+            const loaded = new Engine(
+                SHEETS.map((id) => ({ id, name: id, cells: (cell) => engine.cells(id, cell) })),
+                0,
+                0,
+                engine.settled(),
+            );
             for (const sheet of SHEETS) expect(walked(loaded, sheet)).toEqual(walked(engine, sheet));
             expect(loaded.slots()).toBe(engine.slots());
         }
     });
 
     test('reports a formula whose result is blank, and a text that is empty', () => {
-        const engine = new Engine([source('s1', [...BOOK, [5, 0, '']])]);
+        const engine = new Engine([source('s1', [...BOOK, [5, 0, '']])], 0, 0, false);
         engine.recalc(ALL);
         expect(walked(engine, 's1')).toEqual([
             [0, 0, 1, null],
@@ -128,7 +138,7 @@ describe('the walk of a sheet', () => {
     });
 
     test('of a block stops at its last row and its last column', () => {
-        const engine = new Engine([source('s1', BOOK)]);
+        const engine = new Engine([source('s1', BOOK)], 0, 0, false);
         const at = (cells: Walked[]) => cells.map(([row, column]) => `${row},${column}`);
         expect(at(walked(engine, 's1', 1, 0, 4, 1))).toEqual(['4,0', '1,1', '2,1']);
         expect(at(walked(engine, 's1', 0, 0, 3, 3))).toEqual(['0,0', '1,1', '2,1', '3,3']);
@@ -140,19 +150,24 @@ describe('the walk of a sheet', () => {
 
     test('hands out the texts and the errors the engine holds, none made for the walk', () => {
         const busy = errorOf('#BUSY!');
-        const engine = new Engine([
-            source('s1', [
-                [0, 0, NA],
-                [1, 0, busy],
-            ]),
-        ]);
+        const engine = new Engine(
+            [
+                source('s1', [
+                    [0, 0, NA],
+                    [1, 0, busy],
+                ]),
+            ],
+            0,
+            0,
+            false,
+        );
         const [first, second] = walked(engine, 's1');
         expect(first[2]).toBe(NA);
         expect(second[2]).toBe(engine.valueOf('s1', 1, 0));
     });
 
     test('the cursor finds the first cell at or after a row, and none past the last', () => {
-        const engine = new Engine([source('s1', BOOK)]);
+        const engine = new Engine([source('s1', BOOK)], 0, 0, false);
         const last = GRID_ROWS - 1;
         expect(engine.nextCell('s1', 0, 0, last)).toBe(0);
         expect(engine.nextCell('s1', 0, 1, last)).toBe(4);
@@ -163,13 +178,18 @@ describe('the walk of a sheet', () => {
     });
 
     test('the cursor looks no further than the last row it is given', () => {
-        const engine = new Engine([
-            source('s1', [
-                [0, 0, 1],
-                [4, 0, 2],
-                [GRID_ROWS - 1, 1, 3],
-            ]),
-        ]);
+        const engine = new Engine(
+            [
+                source('s1', [
+                    [0, 0, 1],
+                    [4, 0, 2],
+                    [GRID_ROWS - 1, 1, 3],
+                ]),
+            ],
+            0,
+            0,
+            false,
+        );
         expect(engine.nextCell('s1', 0, 1, 4)).toBe(4);
         expect(engine.nextCell('s1', 0, 1, 3)).toBe(-1);
         expect(engine.nextCell('s1', 0, 4, 4)).toBe(4);
@@ -181,7 +201,7 @@ describe('the walk of a sheet', () => {
     });
 
     test('a sheet that is not there is refused by every question', () => {
-        const engine = new Engine([source('s1', BOOK)]);
+        const engine = new Engine([source('s1', BOOK)], 0, 0, false);
         expect(() => engine.cells('nope', () => {})).toThrow('No sheet nope');
         expect(() => engine.nextCell('nope', 0, 0, 0)).toThrow('No sheet nope');
         expect(() => engine.columnLength('nope', 0)).toThrow('No sheet nope');
@@ -198,13 +218,13 @@ function sizeOf(engine: Engine, sheet: string): number {
 
 describe('the extents of a sheet', () => {
     test('an empty sheet has no last row, no last column and no slots', () => {
-        const engine = new Engine([source('s1', [])]);
+        const engine = new Engine([source('s1', [])], 0, 0, false);
         expect([engine.lastRow('s1'), engine.lastColumn('s1'), engine.columnLength('s1', 0)]).toEqual([-1, -1, 0]);
         expect(engine.slots()).toBe(0);
     });
 
     test('a column is one past its last content cell after a clear, a delete and a move', () => {
-        const engine = new Engine([source('s1', BOOK), source('s2', [[9, 2, 1]])]);
+        const engine = new Engine([source('s1', BOOK), source('s2', [[9, 2, 1]])], 0, 0, false);
         const lengths = () => [0, 1, 2, 3, 4].map((column) => engine.columnLength('s1', column));
         expect(lengths()).toEqual([5, 3, 0, 4, 0]);
         expect([engine.lastRow('s1'), engine.lastColumn('s1'), engine.slots()]).toEqual([4, 3, 12 + 10]);
@@ -233,21 +253,26 @@ describe('the extents of a sheet', () => {
 
     test('a column ends at its last cell when a load is told of a cell below it only the first time', () => {
         let walks = 0;
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: 's1',
-                cells: (cell) => {
-                    walks += 1;
-                    cell(0, 0, 1, null);
-                    cell(2, 1, null, '=R1C1+1');
-                    if (walks > 1) return;
-                    cell(GRID_ROWS - 1, 0, 2, null);
-                    cell(5, 1, 'gone', null);
-                    cell(0, 3, 3, null);
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 's1',
+                    cells: (cell) => {
+                        walks += 1;
+                        cell(0, 0, 1, null);
+                        cell(2, 1, null, '=R1C1+1');
+                        if (walks > 1) return;
+                        cell(GRID_ROWS - 1, 0, 2, null);
+                        cell(5, 1, 'gone', null);
+                        cell(0, 3, 3, null);
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            false,
+        );
         expect([0, 1, 2, 3].map((column) => engine.columnLength('s1', column))).toEqual([1, 3, 0, 0]);
         expect([engine.lastRow('s1'), engine.lastColumn('s1'), engine.slots()]).toEqual([2, 1, 4]);
         expect(walked(engine, 's1')).toEqual([
@@ -259,7 +284,7 @@ describe('the extents of a sheet', () => {
     });
 
     test('slots are the lengths of the columns, not the room a column that grew has', () => {
-        const engine = new Engine([source('s1', [])]);
+        const engine = new Engine([source('s1', [])], 0, 0, false);
         for (let row = 0; row < 100; row += 1) engine.setValue('s1', row, 0, row);
         expect(engine.slots()).toBe(100);
     });

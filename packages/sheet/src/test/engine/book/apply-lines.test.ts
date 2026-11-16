@@ -64,7 +64,7 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}, fields: Partial<S
 }
 
 function bookOf(...sheets: SheetContent[]): Book {
-    return { g: 1, now: 45_000.5, seed: 7, sheets };
+    return { g: 1, now: 45_000.5, seed: 7, computed: false, sheets };
 }
 
 function lines(rows: boolean, insert: boolean, index: number, count = 1, like?: number, sheet = 'a'): LinesOp {

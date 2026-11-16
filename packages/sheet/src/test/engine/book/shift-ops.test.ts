@@ -34,7 +34,13 @@ function sheetOf(id: string, order: string, part: Partial<SheetContent> = {}): S
 function twoSheets(): Book {
     const cells: SheetContent['cells'] = [];
     for (let row = 0; row < 12; row += 1) cells.push([row, 0, { v: row }]);
-    return { g: 1, now: 45_000, seed: 3, sheets: [sheetOf('a', 'a0', { cells }), sheetOf('b', 'a1', { cells })] };
+    return {
+        g: 1,
+        now: 45_000,
+        seed: 3,
+        computed: false,
+        sheets: [sheetOf('a', 'a0', { cells }), sheetOf('b', 'a1', { cells })],
+    };
 }
 
 // Whether the ops landed: a refusal leaves the book as it was.

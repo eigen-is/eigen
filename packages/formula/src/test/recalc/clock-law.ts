@@ -86,7 +86,10 @@ class Reader {
     public engine: Engine;
     private held: Cell[] | null;
 
-    public constructor(engine = new Engine([source('s1', []), source('s2', [])]), held: Cell[] | null = null) {
+    public constructor(
+        engine = new Engine([source('s1', []), source('s2', [])], 0, 0, false),
+        held: Cell[] | null = null,
+    ) {
         this.engine = engine;
         this.held = held;
     }
@@ -131,8 +134,8 @@ class Reader {
         return JSON.stringify(sheets);
     }
 
-    // A new reader loaded from a walk of this one, with the clock the walk was computed with. With `bare`, no
-    // formula brings its value.
+    // A new reader loaded from a walk of this one, with the clock the walk was computed with, as computed when this
+    // one is settled. With `bare`, no formula brings its value.
     public loaded(now: number, seed: number, bare = false): Reader {
         const sheets = this.sheets().map((id) =>
             source(
@@ -145,7 +148,7 @@ class Reader {
                 ]),
             ),
         );
-        return new Reader(new Engine(sheets, now, seed), this.held);
+        return new Reader(new Engine(sheets, now, seed, !bare && this.engine.settled()), this.held);
     }
 
     public formulas(): number {
@@ -249,7 +252,7 @@ export function runClockLaw(seed: number, count: number, across: boolean): Clock
         }
         fold.engine.recalc(NO_CAP);
 
-        // A pass over a load of the end state changes nothing: it computes only what holds a blank or #REF!.
+        // A pass over a load of the end state changes nothing: it computes only what holds #REF!.
         const load = live.loaded(last.now, last.seed);
         const changedAtLoad = load.engine.recalc(NO_CAP).changed.length;
 

@@ -11,8 +11,9 @@ import { isGeneration, isNow, isSeed, isSheetContent } from './ops-validate';
 
 const FORMAT = 'eigensheets/3';
 
-// `g`, `now` and `seed` are the book's generation and the clock of its last batch. `computed` says every formula's
-// value was computed by the writer, as a fold's finished pass does; an importer writes false.
+// `g`, `now` and `seed` are the book's generation and the clock of its last batch. `computed` says every value is
+// what a finished pass computed, so a formula with no value is a blank result; false says no formula's value is
+// trusted. A writer writes what the workbook's `content` gives, never the flag by hand.
 export type BookContent = { g: number; now: number; seed: number; computed: boolean; sheets: SheetContent[] };
 
 // A column's cells on consecutive rows from `row`: a value alone stands bare, a formula is `[index]`, `[index, value]`

@@ -124,7 +124,7 @@ export function runBindLaw(seed: number, count: number, steps: number): BindCoun
             first.push(held);
             sheets.push({ id, name: held.name });
         }
-        const engine = new Engine(first.map(source));
+        const engine = new Engine(first.map(source), 0, 0, false);
         engine.recalc(NO_CAP);
         log.push(`load ${JSON.stringify(first)}`);
 
@@ -164,6 +164,9 @@ export function runBindLaw(seed: number, count: number, steps: number): BindCoun
                         })),
                     }),
                 ),
+                0,
+                0,
+                false,
             );
             if (order !== held) for (const [place, sheet] of held.entries()) loaded.moveSheet(sheet.id, place);
             loaded.recalc(NO_CAP);

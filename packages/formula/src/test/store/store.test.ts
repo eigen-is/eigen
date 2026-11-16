@@ -20,14 +20,17 @@ function read(workbook: Workbook, row: number, column: number, id = 's1'): Scala
 
 describe('load', () => {
     test('each column is allocated once, at its own last row', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, 1],
-                [99, 0, 2],
-                [4, 2, 'x'],
-                [0, 3, null, '=R1C1'],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [0, 0, 1],
+                    [99, 0, 2],
+                    [4, 2, 'x'],
+                    [0, 3, null, '=R1C1'],
+                ]),
+            ],
+            false,
+        );
         const { columns } = sheetOf(workbook);
         expect(columns.map((column) => column.length)).toEqual([100, 0, 5, 1]);
         for (const column of columns) {
@@ -51,7 +54,10 @@ describe('load', () => {
             [0, 40, null],
         ];
         const extents = (cells: TestCell[]) =>
-            sheetOf(new Workbook([source('s1', cells)])).columns.map((column) => [column.length, column.kind.length]);
+            sheetOf(new Workbook([source('s1', cells)], false)).columns.map((column) => [
+                column.length,
+                column.kind.length,
+            ]);
         expect(extents([...empties, ...content, ...empties])).toEqual(extents(content));
         expect(extents(content)).toEqual([
             [1, 1],
@@ -64,14 +70,17 @@ describe('load', () => {
 
 describe('the tables', () => {
     test('equal text is one id, and texts that differ by case share their upper id', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, 'Apple'],
-                [1, 0, 'APPLE'],
-                [2, 0, 'Apple'],
-                [3, 0, 'pear'],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [0, 0, 'Apple'],
+                    [1, 0, 'APPLE'],
+                    [2, 0, 'Apple'],
+                    [3, 0, 'pear'],
+                ]),
+            ],
+            false,
+        );
         const { ref } = sheetOf(workbook).columns[0];
         const { strings } = workbook;
         expect(ref[0]).toBe(ref[2]);
@@ -83,12 +92,15 @@ describe('the tables', () => {
     });
 
     test('a formula filled down is one shape', () => {
-        const workbook = new Workbook([
-            source(
-                's1',
-                Array.from({ length: 50 }, (_, row): TestCell => [row, 1, 0, '=RC[-1]*2']),
-            ),
-        ]);
+        const workbook = new Workbook(
+            [
+                source(
+                    's1',
+                    Array.from({ length: 50 }, (_, row): TestCell => [row, 1, 0, '=RC[-1]*2']),
+                ),
+            ],
+            false,
+        );
         expect(workbook.shapes.size).toBe(1);
         expect(new Set(sheetOf(workbook).columns[1].shape)).toEqual(new Set([1]));
     });
@@ -96,10 +108,13 @@ describe('the tables', () => {
 
 describe('sheet names', () => {
     test('a typed name finds the sheet of its key, under the name it has now, while it is there', () => {
-        const workbook = new Workbook([
-            { id: 's1', name: 'Data', cells: () => undefined },
-            { id: 's2', name: 'Σοφία', cells: () => undefined },
-        ]);
+        const workbook = new Workbook(
+            [
+                { id: 's1', name: 'Data', cells: () => undefined },
+                { id: 's2', name: 'Σοφία', cells: () => undefined },
+            ],
+            false,
+        );
         const named = (name: string) => workbook.named(name)?.id;
         expect([named('Data'), named('data'), named('DATA'), named('Dat'), named('')]).toEqual([
             's1',
@@ -118,7 +133,7 @@ describe('sheet names', () => {
 
 describe('writes', () => {
     test('a write past the end grows the column to its rows and an eighth, 64 rows at least', () => {
-        const workbook = new Workbook([source('s1', [[9, 0, 1]])]);
+        const workbook = new Workbook([source('s1', [[9, 0, 1]])], false);
         const sheet = sheetOf(workbook);
         workbook.setValue(sheet, 10, 0, 2);
         const column = sheet.columns[0];
@@ -135,14 +150,19 @@ describe('writes', () => {
     });
 
     test('a formula counts as to be computed until it is replaced or cleared', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, null, '=1+1'],
-                [1, 0, 2, '=1+1'],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [0, 0, null, '=1+1'],
+                    [1, 0, 2, '=1+1'],
+                ]),
+            ],
+            false,
+        );
         const sheet = sheetOf(workbook);
         const column = sheet.columns[0];
+        expect(column.pending).toBe(2);
+        workbook.setValue(sheet, 1, 0, 3);
         expect(column.pending).toBe(1);
         workbook.fillFormula(sheet, 1, 0, 1, 0, '=2+2');
         expect(column.pending).toBe(2);
@@ -153,15 +173,18 @@ describe('writes', () => {
     });
 
     test('a column ends at its last cell, whatever it held before', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [2, 0, 1],
-                [5, 0, 'x'],
-                [9, 0, 3],
-                [7, 1, null, '=R1C1'],
-                [9, 1, 4],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [2, 0, 1],
+                    [5, 0, 'x'],
+                    [9, 0, 3],
+                    [7, 1, null, '=R1C1'],
+                    [9, 1, 4],
+                ]),
+            ],
+            false,
+        );
         const sheet = sheetOf(workbook);
         const [first, second] = sheet.columns;
         workbook.clear(sheet, 5, 0);
@@ -184,14 +207,17 @@ describe('writes', () => {
     });
 
     test('a column counts its errors and bumps its version on every change', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [0, 0, NA],
-                [1, 0, 1],
-                [2, 0, DIV0],
-                [0, 1, 1],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [0, 0, NA],
+                    [1, 0, 1],
+                    [2, 0, DIV0],
+                    [0, 1, 1],
+                ]),
+            ],
+            false,
+        );
         const sheet = sheetOf(workbook);
         const [first, second] = sheet.columns;
         expect(first.errors).toBe(2);
@@ -245,7 +271,7 @@ describe('rows and columns', () => {
             if (cells.some((cell) => cell[0] === row && cell[1] === column)) continue;
             cells.push([row, column, value, kind === 4 ? `=R[${pick(9)}]C+${pick(4)}` : undefined]);
         }
-        const workbook = new Workbook([source('s1', cells)]);
+        const workbook = new Workbook([source('s1', cells)], false);
         const sheet = sheetOf(workbook);
         const ROWS = 140;
         const COLUMNS = 30;
@@ -300,12 +326,15 @@ describe('rows and columns', () => {
     });
 
     test('an insert bumps the version of the columns it moves, and of no other', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [5, 0, 1],
-                [1, 1, 1],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [5, 0, 1],
+                    [1, 1, 1],
+                ]),
+            ],
+            false,
+        );
         const sheet = sheetOf(workbook);
         const [long, short] = sheet.columns;
         const versions = [long.version, short.version];
@@ -318,7 +347,7 @@ describe('rows and columns', () => {
 
     test('one inserted row grows a loaded column by an eighth, not to twice its rows', () => {
         const capacityAfterOneRow = (rows: number) => {
-            const workbook = new Workbook([source('s1', [[rows - 1, 0, 1]])]);
+            const workbook = new Workbook([source('s1', [[rows - 1, 0, 1]])], false);
             const sheet = sheetOf(workbook);
             expect(sheet.columns[0].kind.length).toBe(rows);
             sheet.insertRows(0, 1);
@@ -331,12 +360,15 @@ describe('rows and columns', () => {
     });
 
     test('a column never holds more rows than the grid has', () => {
-        const workbook = new Workbook([
-            source('s1', [
-                [999_999, 0, 1],
-                [999_999, 1, 1],
-            ]),
-        ]);
+        const workbook = new Workbook(
+            [
+                source('s1', [
+                    [999_999, 0, 1],
+                    [999_999, 1, 1],
+                ]),
+            ],
+            false,
+        );
         const sheet = sheetOf(workbook);
         const [inserted, written] = sheet.columns;
         workbook.setValue(sheet, 1_000_000, 1, 2);
@@ -347,7 +379,7 @@ describe('rows and columns', () => {
     });
 
     test('rows inserted one by one resize a column a few dozen times, not once a row', () => {
-        const workbook = new Workbook([source('s1', [[0, 0, 1]])]);
+        const workbook = new Workbook([source('s1', [[0, 0, 1]])], false);
         const sheet = sheetOf(workbook);
         const column = sheet.columns[0];
         let resizes = 0;

@@ -26,7 +26,7 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
 }
 
 function bookOf(...sheets: SheetContent[]): Book {
-    return { g: 1, now: 45_000.5, seed: 7, sheets };
+    return { g: 1, now: 45_000.5, seed: 7, computed: false, sheets };
 }
 
 function only(book: Workbook, id = 'a'): Sheet {

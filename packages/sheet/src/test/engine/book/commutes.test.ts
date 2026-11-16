@@ -52,7 +52,7 @@ function twoSheets(part: Partial<SheetContent> = {}): Book {
         },
         ...part,
     });
-    return { g: 1, now: 45_000, seed: 3, sheets: [a, sheetOf('b', 'a1')] };
+    return { g: 1, now: 45_000, seed: 3, computed: false, sheets: [a, sheetOf('b', 'a1')] };
 }
 
 function landed(book: Workbook, ops: readonly Op[]): Op[] | string {

@@ -114,7 +114,7 @@ function twoSheets(): Book {
         },
     });
     const b = sheetOf(B, { fields: { name: 'Second', order: 'a1', hide: 1 }, cells: [[0, 0, { v: 21 }]] });
-    return { g: 3, now: 45_000.5, seed: 7, sheets: [a, b] };
+    return { g: 3, now: 45_000.5, seed: 7, computed: false, sheets: [a, b] };
 }
 
 // Ops that land on `twoSheets`, each of which changes its bytes, and the later ones what the earlier ones wrote.
@@ -247,7 +247,13 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
     test('key-too-long by a chart change that an earlier op of the batch took near the bound', () => {
         const [a, b] = twoSheets().sheets;
         const chart = { index: 'a0', x: 0, y: 0, width: 1, height: 1, ...PARTS };
-        const content: Book = { g: 3, now: 45_000.5, seed: 7, sheets: [{ ...a, records: { chart: { g: chart } } }, b] };
+        const content: Book = {
+            g: 3,
+            now: 45_000.5,
+            seed: 7,
+            computed: false,
+            sheets: [{ ...a, records: { chart: { g: chart } } }, b],
+        };
         const ops = [
             chartChange({ specLegend: padded(PARTS.specLegend) }),
             chartChange({ specTitle: padded(PARTS.specTitle) }),
@@ -469,6 +475,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
             g: 1,
             now: 1,
             seed: 1,
+            computed: false,
             sheets: [
                 sheetOf('a', {
                     cells: [[0, 0, { f: "='N'!R1C1+1" }]],

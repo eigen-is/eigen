@@ -47,7 +47,7 @@ function twoSheets(): Book {
             image: { i: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: 'i.png' } },
         },
     });
-    return { g: 1, now: 45_000, seed: 3, sheets: [a, sheetOf('b', 'a1')] };
+    return { g: 1, now: 45_000, seed: 3, computed: false, sheets: [a, sheetOf('b', 'a1')] };
 }
 
 // A book after `written`, with its inverse, then after the peers' ops.

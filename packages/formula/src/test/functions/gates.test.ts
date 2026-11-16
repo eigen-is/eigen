@@ -41,19 +41,22 @@ import { at, evaluateWith, stored } from '../recalc/support';
 
 // A recalc over typed cells with one more row in the list of functions: what no function of this build does.
 function passOf(entry: Entry, cells: Readonly<Record<string, string | number>>) {
-    const workbook = new Workbook([
-        {
-            id: 's1',
-            name: 'Sheet1',
-            cells: (cell) => {
-                for (const [label, input] of Object.entries(cells)) {
-                    const [row, column] = at(label);
-                    if (typeof input === 'string') cell(row, column, null, stored(input, label));
-                    else cell(row, column, input, null);
-                }
+    const workbook = new Workbook(
+        [
+            {
+                id: 's1',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    for (const [label, input] of Object.entries(cells)) {
+                        const [row, column] = at(label);
+                        if (typeof input === 'string') cell(row, column, null, stored(input, label));
+                        else cell(row, column, input, null);
+                    }
+                },
             },
-        },
-    ]);
+        ],
+        false,
+    );
     const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [entry.name, entry]]), 0, 0);
     const value = (label: string) => workbook.value(workbook.sheets[0].columns[at(label)[1]], at(label)[0]);
     return { recalc, value };

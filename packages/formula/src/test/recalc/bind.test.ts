@@ -29,7 +29,7 @@ function walk(engine: Engine, ids: readonly string[]): string[] {
     return cells;
 }
 function computed(sources: readonly SheetSource[]): Engine {
-    const engine = new Engine(sources);
+    const engine = new Engine(sources, 0, 0, false);
     engine.recalc(NO_CAP);
     return engine;
 }
@@ -59,14 +59,14 @@ describe('a formula that enters with the name of a sheet the workbook holds is s
         expect([engine.valueOf('a', 0, 0), engine.valueOf('a', 1, 0), engine.valueOf('a', 2, 1)]).toEqual([6, 7, 7]);
     });
     test('every reference of the formula, a name and a deleted cell on the sheet too, and no other workbook', () => {
-        const engine = new Engine([sheet('a', 'Host'), named, sheet('c', 'M')]);
+        const engine = new Engine([sheet('a', 'Host'), named, sheet('c', 'M')], 0, 0, false);
         engine.setFormula('a', 0, 0, "=SUM('N'!R1C1:R2C2,'M'!C1:C2)+'N'!Rate+'M'!#REF!+'Gone'!R1C1+'[1]N'!R1C1");
         expect(engine.formulaOf('a', 0, 0)).toBe(
             "=SUM([b]!R1C1:R2C2,[c]!C1:C2)+[b]!Rate+[c]!#REF!+'Gone'!R1C1+'[1]N'!R1C1",
         );
     });
     test('the name is compared as two sheet names are', () => {
-        const engine = new Engine([sheet('a', 'Host'), sheet('s', 'ΟΔΟΣ'), sheet('t', 'Straße')]);
+        const engine = new Engine([sheet('a', 'Host'), sheet('s', 'ΟΔΟΣ'), sheet('t', 'Straße')], 0, 0, false);
         engine.setFormula('a', 0, 0, "='οδος'!R1C1");
         engine.setFormula('a', 1, 0, "='STRAßE'!R1C1");
         engine.setFormula('a', 2, 0, "='STRASSE'!R1C1");
@@ -87,11 +87,12 @@ describe('a formula that enters with the name of a sheet the workbook holds is s
     });
     test('a span of sheets, another workbook and text that does not parse are kept as they are', () => {
         const kept = ["=SUM('N:M'!R1C1)", "='[1]N'!R1C1+1", "=SUM('N'!R1C1"];
-        const engine = new Engine([
-            sheet('a', 'Host', ...kept.map((text, row): Held => [row, 0, 4, text])),
-            named,
-            sheet('c', 'M'),
-        ]);
+        const engine = new Engine(
+            [sheet('a', 'Host', ...kept.map((text, row): Held => [row, 0, 4, text])), named, sheet('c', 'M')],
+            0,
+            0,
+            false,
+        );
         for (const [row, text] of kept.entries()) engine.setFormula('a', row, 1, text, 4);
         expect([0, 1, 2].flatMap((row) => [engine.formulaOf('a', row, 0), engine.formulaOf('a', row, 1)])).toEqual(
             kept.flatMap((text) => [text, text]),
@@ -169,11 +170,11 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
     const fits = filling(19);
     const broken = text.replace("'N'!R1C1", '#REF!');
     const doors: [string, (formula: string) => Engine][] = [
-        ['a load', (formula) => new Engine([sheet('a', 'Host', [0, 0, null, formula]), long])],
+        ['a load', (formula) => new Engine([sheet('a', 'Host', [0, 0, null, formula]), long], 0, 0, false)],
         [
             'a formula written to a cell',
             (formula) => {
-                const engine = new Engine([sheet('a', 'Host'), long]);
+                const engine = new Engine([sheet('a', 'Host'), long], 0, 0, false);
                 engine.setFormula('a', 0, 0, formula);
                 return engine;
             },
@@ -181,7 +182,7 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
         [
             'a formula filled into a block',
             (formula) => {
-                const engine = new Engine([sheet('a', 'Host'), long]);
+                const engine = new Engine([sheet('a', 'Host'), long], 0, 0, false);
                 engine.fillFormula('a', 0, 0, 1, 1, formula);
                 return engine;
             },
@@ -189,7 +190,7 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
         [
             'a sheet that comes',
             (formula) => {
-                const engine = new Engine([long]);
+                const engine = new Engine([long], 0, 0, false);
                 engine.addSheet(sheet('a', 'Host', [0, 0, 1, formula]), 0);
                 return engine;
             },
@@ -206,7 +207,9 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
         expect(engine.renameSheet('a-long-id-of-a-sheet', 'N').rewrites).toEqual([]);
         engine.recalc(NO_CAP);
         expect(walk(engine, ['a'])).toEqual(before);
-        expect(new Engine([sheet('a', 'Host', [0, 0, 1, broken]), long]).formulaOf('a', 0, 0)).toBe(broken);
+        expect(new Engine([sheet('a', 'Host', [0, 0, 1, broken]), long], 0, 0, false).formulaOf('a', 0, 0)).toBe(
+            broken,
+        );
     });
     test.each(doors)('%s, with a text that just fits bound', (_, enter) => {
         const engine = enter(fits);
@@ -215,7 +218,7 @@ describe('a reference whose sheet is held and whose bound text would not fit a c
         expect(engine.formulaOf('a', 0, 0)).toBe(bound);
     });
     test('the same text with the name of no sheet is kept, and the rename that would bind it is refused', () => {
-        const engine = new Engine([sheet('a', 'Host', [0, 0, 1, text]), { ...long, name: 'Y' }]);
+        const engine = new Engine([sheet('a', 'Host', [0, 0, 1, text]), { ...long, name: 'Y' }], 0, 0, false);
         expect(engine.formulaOf('a', 0, 0)).toBe(text);
         expect(() => engine.renameSheet('a-long-id-of-a-sheet', 'N')).toThrow('too-long');
         expect(engine.formulaOf('a', 0, 0)).toBe(text);
@@ -231,17 +234,23 @@ describe('a formula typed with a sheet name whose key would be too long to store
         [
             'written beside the sheet it names',
             () => {
-                const engine = new Engine([sheet('host', 'Host'), target]);
+                const engine = new Engine([sheet('host', 'Host'), target], 0, 0, false);
                 engine.setFormula('host', 0, 0, text);
                 return engine;
             },
         ],
-        ['a load, its own sheet first', () => new Engine([sheet('host', 'Host', [0, 0, null, text]), target])],
-        ['a load, the sheet it names first', () => new Engine([target, sheet('host', 'Host', [0, 0, null, text])])],
+        [
+            'a load, its own sheet first',
+            () => new Engine([sheet('host', 'Host', [0, 0, null, text]), target], 0, 0, false),
+        ],
+        [
+            'a load, the sheet it names first',
+            () => new Engine([target, sheet('host', 'Host', [0, 0, null, text])], 0, 0, false),
+        ],
         [
             'the sheet it names added after it',
             () => {
-                const engine = new Engine([sheet('host', 'Host', [0, 0, null, text])]);
+                const engine = new Engine([sheet('host', 'Host', [0, 0, null, text])], 0, 0, false);
                 expect(engine.addSheet(target, 1).rewrites).toEqual([]);
                 return engine;
             },

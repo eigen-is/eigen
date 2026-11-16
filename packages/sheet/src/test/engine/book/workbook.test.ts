@@ -23,7 +23,7 @@ function sheetOf(id: string, part: Partial<SheetContent> = {}): SheetContent {
 }
 
 function bookOf(...sheets: SheetContent[]): Book {
-    return { g: 1, now: 45_000.5, seed: 7, sheets };
+    return { g: 1, now: 45_000.5, seed: 7, computed: false, sheets };
 }
 
 function refusalOf(load: () => unknown): unknown {
@@ -38,7 +38,7 @@ function refusalOf(load: () => unknown): unknown {
 describe('engine/book/workbook — a load and the walk back', () => {
     test('a sheet with nothing on it walks back plain', () => {
         const book = new Workbook(bookOf(sheetOf('a')));
-        expect(book.content()).toEqual(bookOf(sheetOf('a', { bands: [0, 0] })));
+        expect(book.content()).toEqual({ ...bookOf(sheetOf('a', { bands: [0, 0] })), computed: true });
         expect(book.weight()).toEqual({ slots: 0, runs: 0, bands: 1, extras: 0, records: 0, sheets: 1 });
     });
 
@@ -124,7 +124,13 @@ describe('engine/book/workbook — a load and the walk back', () => {
     });
 
     test('the generation and the clock walk back', () => {
-        const { g, now, seed } = new Workbook({ g: 12, now: 46_000.25, seed: -5, sheets: [sheetOf('a')] }).content();
+        const { g, now, seed } = new Workbook({
+            g: 12,
+            now: 46_000.25,
+            seed: -5,
+            computed: false,
+            sheets: [sheetOf('a')],
+        }).content();
         expect({ g, now, seed }).toEqual({ g: 12, now: 46_000.25, seed: -5 });
     });
 
@@ -348,7 +354,10 @@ describe('engine/book/workbook — the look sweep', () => {
         const raw = bookOf(sheetOf('a', { looks: [...unworn, bold], bands: [0, 1, 0, 201] }));
         const book = new Workbook(raw);
         expect(book.looks.size).toBe(2);
-        expect(book.content()).toEqual(bookOf(sheetOf('a', { looks: [bold], bands: [0, 1, 0, 1] })));
+        expect(book.content()).toEqual({
+            ...bookOf(sheetOf('a', { looks: [bold], bands: [0, 1, 0, 1] })),
+            computed: true,
+        });
         wearUnused(book, 63);
         book.sweepLooks();
         expect(book.looks.size).toBe(2);
@@ -403,5 +412,45 @@ describe('engine/book/workbook — the clock', () => {
         const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { f: '=NOW()' }]] })));
         book.engine.recalc(100);
         expect(book.engine.valueOf('a', 0, 0)).toBe(45_000.5);
+    });
+});
+
+describe('engine/book/workbook — the snapshot says whether it is computed', () => {
+    const chain: Placed<CellRecord>[] = [
+        [0, 0, { v: 2 }],
+        [1, 0, { v: 99, f: '=R[-1]C*2' }],
+        [2, 0, { f: '=R[-1]C+1' }],
+    ];
+
+    test('a load that is not computed computes every formula, and walks back computed once a pass finished', () => {
+        const book = new Workbook(bookOf(sheetOf('a', { cells: chain })));
+        expect(book.content().computed).toBe(false);
+        expect(book.engine.recalc(1).stopped).toBe(true);
+        expect(book.content().computed).toBe(false);
+        while (book.engine.recalc(1).stopped);
+        const content = book.content();
+        expect([content.computed, ...[1, 2].map((row) => book.engine.valueOf('a', row, 0))]).toEqual([true, 4, 5]);
+        const again = new Workbook(content);
+        expect(again.engine.recalc(Number.POSITIVE_INFINITY).changed).toEqual([]);
+        expect(again.content()).toEqual(content);
+    });
+
+    test('a computed load is trusted whole: its values stand and a formula with no value is a blank result', () => {
+        const book = new Workbook({ ...bookOf(sheetOf('a', { cells: chain })), computed: true });
+        expect(book.engine.recalc(Number.POSITIVE_INFINITY).changed).toEqual([]);
+        expect([1, 2].map((row) => book.engine.valueOf('a', row, 0))).toEqual([99, null]);
+        expect(new Workbook(book.content()).content()).toEqual(book.content());
+    });
+
+    test('a write that no pass followed walks back not computed, and that snapshot heals', () => {
+        const book = new Workbook(bookOf(sheetOf('a', { cells: chain })));
+        book.engine.recalc(Number.POSITIVE_INFINITY);
+        book.engine.setValue('a', 0, 0, 10);
+        const content = book.content();
+        expect(content.computed).toBe(false);
+        const again = new Workbook(content);
+        again.engine.recalc(Number.POSITIVE_INFINITY);
+        expect([1, 2].map((row) => again.engine.valueOf('a', row, 0))).toEqual([20, 21]);
+        expect(again.content().computed).toBe(true);
     });
 });

@@ -33,7 +33,7 @@ function sheetOf(id: string, fields: Partial<SheetFields> = {}, part: Partial<Sh
 }
 
 function bookOf(...sheets: SheetContent[]): Book {
-    return { g: 1, now: 45_000.5, seed: 7, sheets };
+    return { g: 1, now: 45_000.5, seed: 7, computed: false, sheets };
 }
 
 function refusalOf(run: () => unknown): RefusalKey | undefined {

@@ -10,7 +10,7 @@ import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { ShapeTable } from '../text/shapes';
 import { sheetNameKey } from '../text/sheet-name';
 import type { FormulaError } from '../values/errors';
-import { ERRORS, errorOf, REF } from '../values/errors';
+import { ERRORS, errorOf } from '../values/errors';
 import type { Scalar } from '../values/value';
 import type { Column } from './column';
 import { CellKind, KIND_MASK } from './column';
@@ -19,7 +19,7 @@ import { StringTable } from './strings';
 
 export type Literal = number | string | boolean | FormulaError;
 
-// A formula comes as its stored text with the value it last had, or null for one that was never computed.
+// A formula comes as its stored text with its value, or null for a blank result or one that was never computed.
 export type CellSink = (row: number, column: number, value: Literal | null, formula: string | null) => void;
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
@@ -85,12 +85,14 @@ export class Workbook {
     // load and the floor at least, and 0 once a sheet was removed.
     private limit: number;
 
-    public constructor(sources: readonly SheetSource[]) {
+    // A load. With `computed` every value is what a full pass computed, so a formula with no value is a blank
+    // result; else no formula's value is trusted and every formula is to be computed.
+    public constructor(sources: readonly SheetSource[], computed: boolean) {
         // Every sheet has its place before a formula is read, so one may name a sheet that comes after its own.
         const drafts = sources.map((source) => {
             this.checkId(source.id);
             this.checkName(source.name, null);
-            const draft = this.read(source);
+            const draft = this.read(source, computed);
             this.insert(draft.sheet, this.held.length);
             return draft;
         });
@@ -132,8 +134,9 @@ export class Workbook {
     }
 
     // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
-    // does while it is read, such as a call of the engine, meets the workbook as it was.
-    public read(source: SheetSource): Draft {
+    // does while it is read, such as a call of the engine, meets the workbook as it was. Its formulas are to be
+    // computed unless a full pass computed their values.
+    public read(source: SheetSource, computed: boolean): Draft {
         const lengths: number[] = [];
         walk(source, (row, column) => {
             while (lengths.length <= column) lengths.push(0);
@@ -158,11 +161,7 @@ export class Workbook {
             if (formula !== null || (typeof value !== 'number' && typeof value !== 'boolean')) {
                 numbered[column].push(row);
             }
-            // A formula that came with no value was never computed, and one that came with #REF! may be on a loop,
-            // which only computing it finds. A host's error is told by its code, as the cell stores it.
-            if (formula !== null && (value === null || (typeof value === 'object' && value.code === REF.code))) {
-                held.markDirty(row);
-            }
+            if (formula !== null && !computed) held.markDirty(row);
         });
         // The first walk sized the columns, and a source may not report its last cells again.
         for (const column of sheet.columns) column.trim();
@@ -217,12 +216,6 @@ export class Workbook {
                 this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
                 return;
             case ChangeKind.AddSheet:
-                // Whatever values its formulas came with were computed against another workbook than this one.
-                for (const column of change.sheet.columns) {
-                    for (let row = 0; row < column.length; row += 1) {
-                        if (column.shape[row] !== 0) column.markDirty(row);
-                    }
-                }
                 this.insert(change.sheet, change.place);
                 return;
             case ChangeKind.RemoveSheet: {

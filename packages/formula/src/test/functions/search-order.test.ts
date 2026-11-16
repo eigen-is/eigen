@@ -860,7 +860,7 @@ function readsOf(rows: number, fill: (row: number) => Literal, formulas: readonl
             });
         },
     };
-    const engine = new Engine([sheet]);
+    const engine = new Engine([sheet], 0, 0, false);
     const { value } = Workbook.prototype;
     let reads = 0;
     Workbook.prototype.value = function counted(column, row) {

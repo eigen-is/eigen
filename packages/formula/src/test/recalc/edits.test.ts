@@ -398,14 +398,19 @@ describe('rows and columns', () => {
                 `=${near}`,
                 `=SUM(${onRows ? 'C1' : 'R1'})`,
             ];
-            const engine = new Engine([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => formulas.forEach((formula, at) => void cell(20 + at, 20 + at, null, formula)),
-                },
-                { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, `=SUM([s1]!${close})`) },
-            ]);
+            const engine = new Engine(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => formulas.forEach((formula, at) => void cell(20 + at, 20 + at, null, formula)),
+                    },
+                    { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, `=SUM([s1]!${close})`) },
+                ],
+                0,
+                0,
+                false,
+            );
             const read = () => [
                 ...formulas.map((_, at) => engine.formulaOf('s1', 20 + at, 20 + at)),
                 engine.formulaOf('s2', 0, 0),
@@ -523,7 +528,7 @@ describe('sheets', () => {
         expect(engine.valueOf('s3', 0, 0)).toBe(21);
     });
     test('a sheet that comes reads a name typed in any case, its own name too', () => {
-        const engine = new Engine([{ id: 'a', name: 'data', cells: (cell) => cell(0, 0, 1, null) }]);
+        const engine = new Engine([{ id: 'a', name: 'data', cells: (cell) => cell(0, 0, 1, null) }], 0, 0, false);
         const added = engine.addSheet(
             {
                 id: 'c',
@@ -600,22 +605,27 @@ describe('what a host reads back', () => {
         expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 50, 99, 0, 2, 0, 99]);
     });
     test('a loop that came with #REF! is listed by the first pass, one that came with other values once computed', () => {
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    cell(0, 0, REF, '=R[1]C');
-                    cell(1, 0, REF, '=R[-1]C');
-                    cell(0, 2, 5, null);
-                    cell(0, 3, 6, '=RC[-1]+1');
-                    // As a file of Excel's brings a loop: with the 0 it shows there.
-                    cell(0, 5, 0, '=R[1]C');
-                    cell(1, 5, 0, '=R[-1]C');
-                    cell(0, 7, DIV0, '=1/0');
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        cell(0, 0, REF, '=R[1]C');
+                        cell(1, 0, REF, '=R[-1]C');
+                        cell(0, 2, 5, null);
+                        cell(0, 3, 6, '=RC[-1]+1');
+                        // As a file of Excel's brings a loop: with the 0 it shows there.
+                        cell(0, 5, 0, '=R[1]C');
+                        cell(1, 5, 0, '=R[-1]C');
+                        cell(0, 7, DIV0, '=1/0');
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            true,
+        );
         const first = [
             { sheet: 's1', row: 0, column: 0 },
             { sheet: 's1', row: 1, column: 0 },
@@ -715,11 +725,16 @@ describe('a formula handed in a spelling that is not the stored one', () => {
     const sheet = (cells: SheetSource['cells']) => ({ id: 'a', name: 'a', cells });
 
     test('a written, a filled and a loaded formula read back as the one stored text', () => {
-        const engine = new Engine([
-            sheet((cell) => {
-                for (const [row, text] of SPELLINGS.entries()) cell(row, 0, null, text);
-            }),
-        ]);
+        const engine = new Engine(
+            [
+                sheet((cell) => {
+                    for (const [row, text] of SPELLINGS.entries()) cell(row, 0, null, text);
+                }),
+            ],
+            0,
+            0,
+            false,
+        );
         engine.setFormula('a', 0, 1, SPELLINGS[0]);
         engine.setFormula('a', 1, 1, SPELLINGS[1]);
         engine.fillFormula('a', 2, 1, 2, 2, SPELLINGS[2]);
@@ -731,7 +746,7 @@ describe('a formula handed in a spelling that is not the stored one', () => {
     });
 
     test('the spellings are one shape: an edit rewrites them as one block', () => {
-        const engine = new Engine([sheet(() => {})]);
+        const engine = new Engine([sheet(() => {})], 0, 0, false);
         for (const [row, text] of SPELLINGS.entries()) engine.setFormula('a', row, 0, text);
         const { rewrites } = engine.editLines({ insert: true, index: 4, count: 2, sheet: 'a', rows: true });
         expect(rewrites).toEqual([
@@ -740,7 +755,7 @@ describe('a formula handed in a spelling that is not the stored one', () => {
     });
 
     test('text that does not parse is kept as it was handed', () => {
-        const engine = new Engine([sheet(() => {})]);
+        const engine = new Engine([sheet(() => {})], 0, 0, false);
         engine.setFormula('a', 0, 0, '==sum(');
         engine.recalc(NO_CAP);
         expect([engine.formulaOf('a', 0, 0), engine.valueOf('a', 0, 0)]).toEqual(['==sum(', ERROR]);
@@ -749,7 +764,7 @@ describe('a formula handed in a spelling that is not the stored one', () => {
     test('a formula whose stored text would be too long to read back is kept as it was handed', () => {
         // .5 is stored as 0.5, so the text of this sum grows by a third and passes the longest a cell stores.
         const long = `=${Array.from({ length: Math.floor(MAX_STORED_LENGTH / 3) }, () => '.5').join('+')}`;
-        const engine = new Engine([sheet((cell) => cell(0, 0, null, long))]);
+        const engine = new Engine([sheet((cell) => cell(0, 0, null, long))], 0, 0, false);
         engine.setFormula('a', 1, 0, long);
         engine.setFormula('a', 2, 0, '=.5+.5');
         engine.recalc(NO_CAP);
@@ -760,7 +775,7 @@ describe('a formula handed in a spelling that is not the stored one', () => {
             '=0.5+0.5',
         ]);
         expect([engine.valueOf('a', 0, 0), engine.valueOf('a', 1, 0)]).toEqual([21845, 21845]);
-        const again = new Engine([sheet((cell) => cell(0, 0, null, read[0]))]);
+        const again = new Engine([sheet((cell) => cell(0, 0, null, read[0]))], 0, 0, false);
         again.recalc(NO_CAP);
         expect(again.valueOf('a', 0, 0)).toBe(21845);
     });

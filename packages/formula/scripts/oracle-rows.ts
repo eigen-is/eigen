@@ -366,21 +366,26 @@ function evaluateAll(formulas: readonly string[], fixture: Fixture, named: reado
     const [hostRow, hostColumn] = cellAt(HOST);
     return formulas.map((formula) => {
         const text = storedText(formula, hostRow, hostColumn, find);
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: hostName,
-                cells: (sink) => {
-                    fill(sink, fixture.host);
-                    sink(hostRow, hostColumn, null, text);
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: hostName,
+                    cells: (sink) => {
+                        fill(sink, fixture.host);
+                        sink(hostRow, hostColumn, null, text);
+                    },
                 },
-            },
-            ...Object.entries(others).map(([name, cells], i) => ({
-                id: `o${i}`,
-                name,
-                cells: (sink: CellSink) => fill(sink, cells),
-            })),
-        ]);
+                ...Object.entries(others).map(([name, cells], i) => ({
+                    id: `o${i}`,
+                    name,
+                    cells: (sink: CellSink) => fill(sink, cells),
+                })),
+            ],
+            0,
+            0,
+            false,
+        );
         engine.setClock(NOW, 7);
         engine.recalc(Number.POSITIVE_INFINITY);
         return engine.valueOf('s1', hostRow, hostColumn);

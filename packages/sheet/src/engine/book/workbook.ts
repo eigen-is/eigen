@@ -1,9 +1,8 @@
-// The state of one spreadsheet document on one host, such as a browser tab or the server. It holds the formula
-// engine, which keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which
-// look a cell wears, the keys of its rows and columns, what its cells hold beyond a value, and its records. It is
-// built from a decoded snapshot and walks back to one, so equal documents give equal snapshots whatever their
-// history. A sheet an op adds is built as the load builds one. The appliers of the ops reach the parts through it, and
-// nothing outside this folder does.
+// The state of one spreadsheet document on one host, such as a browser tab or the server: the formula engine, which
+// keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
+// the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
+// snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. A
+// sheet an op adds is built as the load builds one. Only the appliers in this folder reach the parts through it.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
@@ -53,7 +52,7 @@ export class Workbook {
     // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
     // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
     // band said twice is.
-    public constructor({ g, now, seed, sheets }: Readonly<Omit<BookContent, 'computed'>>) {
+    public constructor({ g, now, seed, computed, sheets }: Readonly<BookContent>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map((sheet) => this.partsOf(sheet));
         let slots = 0;
@@ -72,7 +71,7 @@ export class Workbook {
         const refusal = fits(weightOf(slots, parts));
         if (refusal) throw new Refusal(refusal);
 
-        this.engine = new Engine(ordered.map(sourceOf), now, seed);
+        this.engine = new Engine(ordered.map(sourceOf), now, seed, computed);
         for (const [at, { id }] of ordered.entries()) this.parts.set(id, parts[at]);
         this.g = g;
         this.now = now;
@@ -84,13 +83,14 @@ export class Workbook {
         return this.parts;
     }
 
-    // The document as a snapshot holds it. A formula still to be computed is listed with the value it last held, so
-    // a host walks only after a recalc that did not stop.
-    public content(): Omit<BookContent, 'computed'> {
+    // The document as a snapshot holds it. It says it is computed exactly when the engine's values are those of a
+    // finished pass, so a host writes what this gives and a snapshot cannot say more than is true.
+    public content(): BookContent {
         return {
             g: this.g,
             now: this.now,
             seed: this.seed,
+            computed: this.engine.settled(),
             sheets: [...this.parts].map(([id, sheet]) => this.sheetContent(id, sheet)),
         };
     }
