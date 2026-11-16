@@ -6,9 +6,9 @@
 
 import { fits } from '@workspace/lib/sheets/limits';
 import type { Op, Rect, Span } from '@workspace/lib/sheets/ops';
-import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { apart } from '@workspace/lib/sheets/rect';
-import { names, RUN_KEYS } from './apply-format';
+import { names } from './apply-format';
 import type { Extras } from './extras';
 import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';

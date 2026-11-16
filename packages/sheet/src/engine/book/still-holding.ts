@@ -5,11 +5,10 @@
 
 import { bindSheet, parseStored, printStored } from '@workspace/formula/text';
 import type { CellContent, FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { covers } from '@workspace/lib/sheets/rect';
-import { Areas, keyOf, names, RUN_KEYS, restyled } from './apply-format';
+import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
+import { covers, intersect, outsideOf } from '@workspace/lib/sheets/rect';
+import { Areas, keyOf, names, restyled } from './apply-format';
 import { cellAt, entryAt } from './apply-input';
-import { outsideOf } from './apply-move';
 import { LINE_KEYS } from './line-runs';
 import type { BookSheet, Workbook } from './workbook';
 
@@ -23,7 +22,7 @@ export function stillHolding(book: Workbook, apply: readonly Op[], written: read
     const held: Op[] = [];
     const tests = new Map<string, Holds>();
     for (const op of apply) {
-        if (op.kind === 'lines' || op.kind === 'move' || op.kind === 'sheet') return [...apply];
+        if (isStructural(op)) return [...apply];
         const part = book.sheets.get(op.sheet);
         // An op on a sheet that is gone would be skipped.
         if (!part) continue;
@@ -146,14 +145,8 @@ function heldOf<V>(
     for (const { ranges: over, value } of writes) {
         for (const rect of over) {
             open = open.flatMap((piece) => {
-                const [top, left, bottom, right] = piece;
-                const both: Rect = [
-                    Math.max(top, rect[0]),
-                    Math.max(left, rect[1]),
-                    Math.min(bottom, rect[2]),
-                    Math.min(right, rect[3]),
-                ];
-                if (both[0] > both[2] || both[1] > both[3]) return [piece];
+                const both = intersect(piece, rect);
+                if (!both) return [piece];
                 const parts = check(both, value);
                 if (parts) cut = true;
                 held.push(...(parts ?? [both]));

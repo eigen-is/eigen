@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, OpKind, Records, RecordType, SheetContent } from '../../sheets/ops';
-import { isStructural, LOOK_KEYS, opReferences } from '../../sheets/ops';
+import { isStructural, LOOK_KEYS, opReferences, RUN_KEYS } from '../../sheets/ops';
 import { Refusal } from '../../sheets/refusal';
 
 const NONE = { media: [], comments: [] };
@@ -193,5 +193,7 @@ describe('the shapes an op may take', () => {
     test('LOOK_KEYS lists every look key in the order of a canonical look, which every reader keeps', () => {
         const order = 'bl it ff fs fc cl un fa ht vt tb bg rt bdt bdb bdl bdr bdd';
         expect(LOOK_KEYS.join(' ')).toBe(order);
+        // The run-style keys lead it, as a rich cell's runs carry them.
+        expect(RUN_KEYS.join(' ')).toBe('bl it ff fs fc cl un');
     });
 });

@@ -5,17 +5,7 @@
 // cut where its formula comes out differently. An entry that renumbers places itself has no shifted form.
 
 import type { Edit, FormulaNode } from '@workspace/formula/text';
-import {
-    GONE,
-    GRID_COLUMNS,
-    GRID_ROWS,
-    hostClasses,
-    mapIndex,
-    NodeKind,
-    parseStored,
-    storedKey,
-    transformLines,
-} from '@workspace/formula/text';
+import { GONE, hostClasses, mapIndex, NodeKind, parseStored, storedKey, transformLines } from '@workspace/formula/text';
 import type {
     CellContent,
     FormatOp,
@@ -27,6 +17,7 @@ import type {
     Rect,
     Span,
 } from '@workspace/lib/sheets/ops';
+import { isStructural } from '@workspace/lib/sheets/ops';
 import type { Reach } from './record-lines';
 import {
     chartAfter,
@@ -47,15 +38,12 @@ import {
 // of it would be too long to store.
 export function shiftOps(ops: readonly Op[], edit: LinesOp): Op[] | null {
     const map = new LineMap(edit);
-    const axis: Edit = { ...edit, lines: edit.rows ? GRID_ROWS : GRID_COLUMNS };
+    const { axis } = map;
     const shifted: Op[] = [];
     for (const op of ops) {
+        if (isStructural(op)) return null;
         let next: Op | undefined | null;
         switch (op.kind) {
-            case 'lines':
-            case 'move':
-            case 'sheet':
-                return null;
             case 'input':
                 next = inputAfter(op, edit, axis);
                 break;

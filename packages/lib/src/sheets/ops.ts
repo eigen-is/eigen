@@ -27,9 +27,8 @@ export type CellAttrs = RunStyle & {
     bdd?: BorderSide;
 };
 export type CellAttrKey = keyof CellAttrs;
-// Every key of a look once, held whole by the mapped type, in the order a canonical look lists them. A writer that
-// clears a whole look names every key, since a word for "the rest" would mean more keys on a build that knows one more.
-const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
+// The keys of a look that style the runs of a rich cell too, held whole by the mapped type.
+const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
     bl: 'bl',
     it: 'it',
     ff: 'ff',
@@ -37,6 +36,12 @@ const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
     fc: 'fc',
     cl: 'cl',
     un: 'un',
+};
+export const RUN_KEYS: readonly (keyof RunStyle)[] = Object.values(RUN_KEY);
+// Every key of a look once, in the order a canonical look lists them. A writer that clears a whole look names every
+// key, since a word for "the rest" would mean more keys on a build that knows one more.
+const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
+    ...RUN_KEY,
     fa: 'fa',
     ht: 'ht',
     vt: 'vt',
@@ -201,7 +206,7 @@ export function opReferences(op: Op): OpReferences {
 }
 
 // Whether an op renumbers places or sheets, so that nothing commutes with it.
-export function isStructural(op: Op): boolean {
+export function isStructural(op: Op): op is LinesOp | MoveOp | SheetOp {
     switch (op.kind) {
         case 'lines':
         case 'move':

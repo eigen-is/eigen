@@ -39,7 +39,8 @@ export class LineMap {
     public readonly rows: boolean;
     // The edit that undoes this one, as a formula's transform takes it.
     private readonly back: LineEdit;
-    private readonly axis: Edit;
+    // The edit as an index on its axis maps through it.
+    public readonly axis: Edit;
     private readonly inverse: Edit;
     // Whether the inverse edit gives back every line, span and formula mapped in the current `through`.
     private kept = true;
@@ -161,8 +162,8 @@ export function filterColumnAfter<R extends FieldsOf<FilterColumnRecord>>(fields
         const after = map.span(start, end, 'open');
         return after ? [after] : [];
     });
-    const same = spans.length === rows.length && spans.every((s, i) => s[0] === rows[i][0] && s[1] === rows[i][1]);
-    return same ? fields : { ...fields, rows: spans };
+    const unmoved = spans.length === rows.length && spans.every((s, i) => s[0] === rows[i][0] && s[1] === rows[i][1]);
+    return unmoved ? fields : { ...fields, rows: spans };
 }
 
 export function commentAfter<R extends FieldsOf<CommentRecord>>(fields: R, map: LineMap): R | undefined {

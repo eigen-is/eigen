@@ -23,6 +23,26 @@ export function sameRect(a: Rect, b: Rect): boolean {
     return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 }
 
+// The cells two rectangles share, or null when they share none.
+export function intersect(a: Rect, b: Rect): Rect | null {
+    const both: Rect = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+    return both[0] <= both[2] && both[1] <= both[3] ? both : null;
+}
+
+// The cells of `target` that `block` does not hold, as at most four rectangles: the rows above and below the block,
+// then beside it on its rows.
+export function outsideOf(target: Rect, block: Rect): Rect[] {
+    const [top, left, bottom, right] = target;
+    if (top > block[2] || bottom < block[0] || left > block[3] || right < block[1]) return [target];
+    const rects: Rect[] = [];
+    if (top < block[0]) rects.push([top, left, block[0] - 1, right]);
+    if (bottom > block[2]) rects.push([block[2] + 1, left, bottom, right]);
+    const rows: [number, number] = [Math.max(top, block[0]), Math.min(bottom, block[2])];
+    if (left < block[1]) rects.push([rows[0], left, rows[1], block[1] - 1]);
+    if (right > block[3]) rects.push([rows[0], block[3] + 1, rows[1], right]);
+    return rects;
+}
+
 // Whether no two rectangles share a cell.
 export function disjoint(rects: readonly Rect[]): boolean {
     return rects.length < 2 || sweep(rects, rects.length);

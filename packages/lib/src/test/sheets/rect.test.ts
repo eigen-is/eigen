@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Rect } from '../../sheets/ops';
-import { apart, covers, disjoint, meets, sameRect, within } from '../../sheets/rect';
+import { apart, covers, disjoint, intersect, meets, outsideOf, sameRect, within } from '../../sheets/rect';
 
 describe('meets', () => {
     test('two rectangles that share a cell meet, either way round', () => {
@@ -141,5 +141,24 @@ describe('apart', () => {
             seen[anyMeet ? 'meet' : 'apart'] += 1;
         }
         expect(Math.min(seen.apart, seen.meet)).toBeGreaterThan(50);
+    });
+});
+
+describe('intersect and outsideOf', () => {
+    test('the cells two rectangles share, or none', () => {
+        expect(intersect([0, 0, 5, 5], [3, 4, 9, 9])).toEqual([3, 4, 5, 5]);
+        expect(intersect([0, 0, 5, 5], [5, 5, 5, 5])).toEqual([5, 5, 5, 5]);
+        expect(intersect([0, 0, 5, 5], [6, 0, 9, 5])).toBeNull();
+    });
+
+    test('the cells of a rectangle a block does not hold, in at most four rectangles', () => {
+        expect(outsideOf([0, 0, 9, 9], [3, 3, 5, 5])).toEqual([
+            [0, 0, 2, 9],
+            [6, 0, 9, 9],
+            [3, 0, 5, 2],
+            [3, 6, 5, 9],
+        ]);
+        expect(outsideOf([0, 0, 2, 2], [5, 5, 6, 6])).toEqual([[0, 0, 2, 2]]);
+        expect(outsideOf([3, 3, 5, 5], [0, 0, 9, 9])).toEqual([]);
     });
 });

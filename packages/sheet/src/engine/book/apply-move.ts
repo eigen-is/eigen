@@ -7,7 +7,7 @@
 import type { Move } from '@workspace/formula';
 import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { covers, within } from '@workspace/lib/sheets/rect';
+import { covers, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Areas } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
@@ -82,20 +82,6 @@ export function applyMove(book: Workbook, op: MoveOp): (MoveOp | FormatOp | Inpu
     for (const plan of plans) inverse.push(...plan.restore);
     inverse.push(...movedBack(lostInputs(book, result), op, target));
     return inverse;
-}
-
-// The cells of `target` that `block` does not hold, as at most four rectangles: the rows above and below the block,
-// then beside it on its rows.
-export function outsideOf(target: Rect, block: Rect): Rect[] {
-    const [top, left, bottom, right] = target;
-    if (top > block[2] || bottom < block[0] || left > block[3] || right < block[1]) return [target];
-    const rects: Rect[] = [];
-    if (top < block[0]) rects.push([top, left, block[0] - 1, right]);
-    if (bottom > block[2]) rects.push([block[2] + 1, left, bottom, right]);
-    const rows: [number, number] = [Math.max(top, block[0]), Math.min(bottom, block[2])];
-    if (left < block[1]) rects.push([rows[0], left, rows[1], block[1] - 1]);
-    if (right > block[3]) rects.push([rows[0], block[3] + 1, rows[1], right]);
-    return rects;
 }
 
 // The lossy formulas are read where the move left them, and written back after the move back: those in the block go
