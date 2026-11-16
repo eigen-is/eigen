@@ -64,8 +64,21 @@ function landed(book: Workbook, ops: readonly Op[]): Op[] | string {
     }
 }
 
+// Whether two answers of one batch apply alike: the same refusal, or inverses that give the same bytes, each applied
+// to a copy of `book`. Their rectangles may differ, as they follow the band layout; equal ones apply alike.
+function alike(book: Workbook, a: Op[] | string, b: Op[] | string): boolean {
+    if (typeof a === 'string' || typeof b === 'string') return a === b;
+    if (JSON.stringify(a) === JSON.stringify(b)) return true;
+    const [x, y] = [a, b].map((ops) => {
+        const copy = new Workbook(book.content());
+        landed(copy, ops);
+        return bytes(copy);
+    });
+    return x === y;
+}
+
 // The verdict for `late` against `applied` on a book that holds `applied`, and whether the two orders differ in
-// their bytes, their refusals or their inverses.
+// their bytes, their refusals or what their inverses do.
 function verdict(content: Book, late: readonly Op[], applied: readonly Op[]): { commutes: boolean; differ: boolean } {
     const tab = new Workbook(structuredClone(content));
     const inverse = landed(tab, applied);
@@ -75,10 +88,7 @@ function verdict(content: Book, late: readonly Op[], applied: readonly Op[]): { 
     const log = new Workbook(structuredClone(content));
     const first = landed(log, late);
     const second = landed(log, applied);
-    const differ =
-        bytes(tab) !== bytes(log) ||
-        JSON.stringify(first) !== JSON.stringify(onTop) ||
-        JSON.stringify(second) !== JSON.stringify(inverse);
+    const differ = bytes(tab) !== bytes(log) || !alike(log, first, onTop) || !alike(log, second, inverse);
     return { commutes: says, differ };
 }
 
@@ -443,7 +453,7 @@ describe('engine/book/commutes — commutes', () => {
             return inverse;
         };
 
-        test('whenever it says yes, both orders give the same bytes, refusals and inverses', () => {
+        test('whenever it says yes, both orders give the same bytes and refusals, and inverses that apply alike', () => {
             const seen = { yes: 0, no: 0, refusedBoth: 0, skipped: 0 };
             const together = new Set<string>();
             for (let seed = 1; seed <= 2500; seed += 1) {
@@ -478,14 +488,16 @@ describe('engine/book/commutes — commutes', () => {
                 seen.yes += 1;
                 const onTop = land(tab, late);
                 const log = new Workbook(structuredClone(content));
-                expect(land(log, late), `seed ${seed}: the late batch`).toEqual(onTop);
+                const lateBack = land(log, late);
                 if (typeof onTop === 'string') seen.refusedBoth += 1;
-                for (const [at, batch] of applied.entries()) {
-                    expect(land(log, batch), `seed ${seed}: applied batch ${at}`).toEqual(inverses[at]);
-                }
+                const backs = applied.map((batch) => land(log, batch));
                 const last = applied[applied.length - 1];
                 tab.setClock(last.now, last.seed);
                 expect(bytes(tab), `seed ${seed}`).toBe(bytes(log));
+                expect(alike(log, lateBack, onTop), `seed ${seed}: the late batch`).toBe(true);
+                for (const [at, back] of backs.entries()) {
+                    expect(alike(log, back, inverses[at]), `seed ${seed}: applied batch ${at}`).toBe(true);
+                }
                 for (const a of late.ops) {
                     for (const b of ops)
                         if ('sheet' in a && 'sheet' in b && a.sheet === b.sheet) together.add(`${a.kind} ${b.kind}`);

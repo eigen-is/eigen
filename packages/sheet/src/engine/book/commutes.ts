@@ -1,8 +1,8 @@
 // Whether batches the log orders before batches this workbook already holds can land on top of them as they are: a
-// tab applies its own edits at once, so a peer's batch the server put first arrives late. On a yes the door relies on
-// three things: the bytes are those of the log's order once the clock is the log's last batch's, every batch is
-// refused in one order exactly when it is in the other and none by the limits, and every batch returns one inverse
-// in either order. It says no when two ops write one thing, or the late ops and the inverses might pass a limit.
+// tab applies its own edits at once, so a peer's batch the server put first arrives late. A yes promises the bytes of
+// the log's order once the clock is its last batch's, each refusal alike in both orders and none by the limits, and
+// inverses that apply alike, though their rectangles may follow another band layout. It says no when two ops write
+// one thing, or the late ops and the inverses might pass a limit.
 
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
