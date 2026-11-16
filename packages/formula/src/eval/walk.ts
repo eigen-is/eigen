@@ -187,7 +187,9 @@ export class Walk {
         const tall = reach.columns;
         const { columns } = this.ctx.workbook.sheets[area.sheet];
         const { kinds } = this.family;
-        if (this.row < end && area.left === right && this.skips === 0) {
+        // No cell is passed over when no row is out and the walk skips neither errors nor nested totals.
+        const whole = this.out.length === 0 && (this.skips & (ERRORS | NESTED)) === 0;
+        if (this.row < end && area.left === right && whole) {
             const held = columns[right];
             const { kind } = held;
             let row = this.row;
@@ -216,7 +218,7 @@ export class Walk {
         const { out } = this;
         let { pair } = this;
         let full = false;
-        while (!full && row < end && (area.left < right || this.skips !== 0)) {
+        while (!full && row < end && (area.left < right || !whole)) {
             const stop = pair < out.length ? Math.min(end, out[pair]) : end;
             for (; row < stop; row += 1) {
                 if (row >= reach.shortest) live = reach.cut(row);
