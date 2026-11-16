@@ -177,6 +177,31 @@ describe('the walk of a sheet', () => {
         expect(engine.nextCell('s1', 9, 0, last)).toBe(-1);
     });
 
+    test('the last cell up to a row is found from that row back, and none before the first', () => {
+        const engine = new Engine(
+            [
+                source('s1', [
+                    [2, 0, 1],
+                    [4, 0, 2],
+                    [GRID_ROWS - 1, 1, 3],
+                ]),
+            ],
+            0,
+            0,
+            false,
+        );
+        expect(engine.lastCell('s1', 0, GRID_ROWS - 1)).toBe(4);
+        expect(engine.lastCell('s1', 0, 4)).toBe(4);
+        expect(engine.lastCell('s1', 0, 3)).toBe(2);
+        expect(engine.lastCell('s1', 0, 2)).toBe(2);
+        expect(engine.lastCell('s1', 0, 1)).toBe(-1);
+        expect(engine.lastCell('s1', 1, GRID_ROWS - 1)).toBe(GRID_ROWS - 1);
+        expect(engine.lastCell('s1', 1, GRID_ROWS - 2)).toBe(-1);
+        expect(engine.lastCell('s1', 2, 9)).toBe(-1);
+        expect(engine.lastCell('s1', 9, 9)).toBe(-1);
+        expect(engine.lastCell('s1', 0, -1)).toBe(-1);
+    });
+
     test('the cursor looks no further than the last row it is given', () => {
         const engine = new Engine(
             [
