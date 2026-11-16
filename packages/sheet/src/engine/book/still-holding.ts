@@ -45,74 +45,60 @@ export function stillHolding(book: Workbook, apply: readonly Op[], written: read
 }
 
 // The one test before the inverse writes a cell's content, restyles its runs or puts back a formula a rename bound:
-// the cell holds what the edit left in it. The inverse's last word on a cell is what it held before the edit, and
-// what no op of the inverse says is read as the cell holds it now. A value beside a formula counts only where the
-// workbook keeps one, and a kept formula with no value reads #REF!.
+// the cell holds what the edit left in it. That is folded from what the cell held before the edit, the inverse's last
+// word on it, or what it holds now where the inverse says nothing: an input replaces the cell, a format sets keys and a
+// new name binds a formula typed with it. A value beside a formula counts only where the workbook keeps one.
 function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly Op[], written: readonly Op[]): Holds {
     const inputs = apply.filter((op): op is InputOp => op.kind === 'input' && op.sheet === sheet).toReversed();
     return (row, column) => {
         const now = cellAt(book, sheet, part.extras, row, column);
-        let before = now;
+        let left = now;
         for (const op of inputs) {
             const entry = entryAt(op, row, column);
             if (entry === undefined) continue;
-            before = entry;
+            left = entry;
             break;
         }
-        const left = leftIn(written, sheet, row, column, before);
-        if (left === undefined) return true;
+        let wrote = false;
+        for (const op of written) {
+            if (op.kind === 'record') {
+                if (op.type !== 'sheet' || !op.set.name || left?.f === undefined) continue;
+                const tree = parseStored(left.f);
+                if ('reason' in tree) continue;
+                const bound = bindSheet(tree, op.set.name, op.sheet);
+                if (bound === tree) continue;
+                left = { ...left, f: printStored(bound) };
+                wrote = true;
+            }
+            if (op.kind === 'input' && op.sheet === sheet) {
+                const entry = entryAt(op, row, column);
+                if (entry === undefined) continue;
+                left = entry;
+                wrote = true;
+            }
+            if (op.kind !== 'format' || op.sheet !== sheet || !('ranges' in op)) continue;
+            if (!op.ranges.some((rect) => covers(rect, row, column))) continue;
+            const keys = RUN_KEYS.filter((key) => names(op, key));
+            if (left?.s && keys.length > 0) {
+                left = { ...left, s: restyled(left.s, keys, op.set ?? {}) };
+                wrote = true;
+            }
+            if (names(op, 'link')) {
+                const { link: _, ...rest } = left ?? {};
+                left = op.set?.link ? { ...rest, link: op.set.link } : rest;
+                wrote = true;
+            }
+        }
+        if (!wrote) return true;
         const a = left ?? {};
         const b = now ?? {};
         if (a.f !== b.f || a.qp !== b.qp || !same(a.link, b.link) || !same(a.s, b.s)) return false;
         if (a.f !== undefined && b.v === undefined) return true;
+        // A kept formula with no value reads #REF!.
         const value = ({ v, e, f }: CellContent) =>
             v === undefined || (f !== undefined && e && v === '#REF!') ? null : [v, e];
         return same(value(a), value(b));
     };
-}
-
-// What the edit left in a cell that held `before`, or undefined when no op of it wrote the cell's content, its link
-// or its formula. Every op is folded in: an input replaces the cell, a format sets keys, and a new name binds a formula
-// typed with it, so an earlier op gives `before` again.
-function leftIn(
-    written: readonly Op[],
-    sheet: string,
-    row: number,
-    column: number,
-    before: CellContent | null,
-): CellContent | null | undefined {
-    let content = before;
-    let wrote = false;
-    for (const op of written) {
-        if (op.kind === 'record') {
-            if (op.type !== 'sheet' || !op.set.name || content?.f === undefined) continue;
-            const tree = parseStored(content.f);
-            if ('reason' in tree) continue;
-            const bound = bindSheet(tree, op.set.name, op.sheet);
-            if (bound === tree) continue;
-            content = { ...content, f: printStored(bound) };
-            wrote = true;
-        }
-        if (op.kind === 'input' && op.sheet === sheet) {
-            const entry = entryAt(op, row, column);
-            if (entry === undefined) continue;
-            content = entry;
-            wrote = true;
-        }
-        if (op.kind !== 'format' || op.sheet !== sheet || !('ranges' in op)) continue;
-        if (!op.ranges.some((rect) => covers(rect, row, column))) continue;
-        const keys = RUN_KEYS.filter((key) => names(op, key));
-        if (content?.s && keys.length > 0) {
-            content = { ...content, s: restyled(content.s, keys, op.set ?? {}) };
-            wrote = true;
-        }
-        if (names(op, 'link')) {
-            const { link: _, ...rest } = content ?? {};
-            content = op.set?.link ? { ...rest, link: op.set.link } : rest;
-            wrote = true;
-        }
-    }
-    return wrote ? content : undefined;
 }
 
 function same(a: unknown, b: unknown): boolean {

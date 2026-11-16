@@ -4,7 +4,6 @@
 // inverses that apply alike, though their rectangles may follow another band layout. It says no when two ops write
 // one thing, or the late ops and the inverses might pass a limit.
 
-import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
 import type { FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
@@ -27,18 +26,13 @@ export function commutes(
     inverses: readonly Op[],
 ): boolean {
     const held = [...applied, ...inverses];
-    // A structural op the workbook holds clashes with every late op.
+    // A late op that renumbers places clashes even with nothing held.
     if (late.some(isStructural)) return false;
     for (const op of late) {
         for (const other of held) if (clash(book, op, other)) return false;
     }
-    return fits(weightBound(book, [...late, ...inverses])) === null;
-}
-
-// The most the workbook can weigh once ops that renumber no place land on it, in whatever order and when only some
-// of them do: each count of its weight now, and the most the ops can add to it.
-function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
-    // Per sheet, the rows each written column may come to hold and the columns each cell format writes.
+    // The most the workbook can weigh once the late ops and the inverses land, in any order and when only some do: its
+    // weight now, plus per sheet the rows each written column may come to hold and the columns each cell format writes.
     const written = new Map<string, { lengths: Map<number, number>; formats: Span[] }>();
     const of = (sheet: string) => {
         let entry = written.get(sheet);
@@ -50,7 +44,7 @@ function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
     };
     const now = book.weight();
     let { slots, runs, bands, extras, records } = now;
-    for (const op of ops) {
+    for (const op of [...late, ...inverses]) {
         if (op.kind === 'record') records += op.whole ? 1 : 0;
         if (op.kind === 'input') {
             const { lengths } = of(op.sheet);
@@ -86,7 +80,7 @@ function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
         runs += growth.runs;
         bands += growth.bands;
     }
-    return { slots, runs, bands, extras, records, sheets: now.sheets };
+    return fits({ slots, runs, bands, extras, records, sheets: now.sheets }) === null;
 }
 
 // Whether two ops write one thing, so that their order shows in the bytes, in a refusal or in an inverse.
