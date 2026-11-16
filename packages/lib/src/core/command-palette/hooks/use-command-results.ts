@@ -35,7 +35,7 @@ export function useCommandResults(
     const mail = useMailSearchResults(ctx, input, effectiveScope);
     const file = useFileSearchResults(ctx, input, effectiveScope);
     const help = useHelpSearchResults(input, effectiveScope);
-    const recent = useRecentFileResults(ctx, input, effectiveScope, open);
+    const recent = useRecentFileResults(ctx, input, open);
 
     // docComment is async but doc (sync IN DOCUMENT) is not — smoothing only the comment section
     // keeps the sync section instant while IN COMMENTS never collapses mid-flight.
@@ -76,9 +76,8 @@ export function useCommandResults(
     );
 }
 
-// Holds an async source's last results while its own query is in flight, so its section never collapses or
-// flickers and a slow source, such as Pagefind's first load, can't freeze the others. Writing a ref in render is
-// the React docs' caching pattern.
+// Holds an async source's last results while its own query is in flight, so its section never flickers and a slow
+// source, such as Pagefind's first load, can't freeze the others (the React docs' ref-in-render caching pattern).
 function useStableWhilePending(results: PaletteResult[], isPending: boolean): PaletteResult[] {
     const ref = useRef(results);
     if (!isPending) ref.current = results;

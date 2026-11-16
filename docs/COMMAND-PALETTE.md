@@ -18,7 +18,7 @@ Three things surprise people: a document match never becomes the Top hit, a slow
 
 With an empty box the palette shows the published selection, then Recent files, the five newest from `useRecentPaths`, the same cached query as Drive's Recent page ([STORAGE.md](STORAGE.md#the-recent-files-page-reads-at-most-once-a-minute)). The short Suggested list (`SUGGESTED_COMMAND_IDS`) follows only when nothing is selected. The dialog's results hook runs on every signed-in page, open or not, so the query is enabled only while the palette is open, and never for a guest, whom the route refuses. The open document publishes itself as the selection, so it is left out of the list.
 
-With text, recent files whose title matches join Files ahead of the search hits, deduped by row id. They answer from the cache, so a file opened lately is the Top hit before the search responds. Search hits and recent rows come from one row builder, `fileToResult`, so both open a file the same way.
+With text, the first three recent files whose title matches join Files ahead of the search hits, deduped by row id. Three, because a short query matches many recent titles and Files shows six rows. They answer from the cache, so a file opened lately is the Top hit before the search responds. Search hits and recent rows come from one row builder, `fileToResult`, so both open a file the same way.
 
 ## A prefix or the Tab chip narrows the palette to one source
 

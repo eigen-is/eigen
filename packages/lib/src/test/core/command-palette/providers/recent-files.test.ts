@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import type { CommandContext, PaletteResult, PaletteScope } from '../../../../types/command-palette';
+import { driveKeys } from '../../../../core/drive/hooks/keys';
+import type { CommandContext, PaletteResult } from '../../../../types/command-palette';
 import type { RecentPath } from '../../../../types/drive';
 import { renderHook } from '../../../render-hook';
 import { installTransferHarness, OWNER } from '../../../transfer-harness';
@@ -49,18 +50,18 @@ const ctx: CommandContext = {
 };
 
 // Renders the source over a cache that already holds the recent list and returns the rows it gave.
-async function recentRows(input: string, scope: PaletteScope | undefined): Promise<PaletteResult[]> {
+async function recentRows(input: string, paths: readonly RecentPath[] = PATHS): Promise<PaletteResult[]> {
     const { useRecentFileResults } = await import('../../../../core/command-palette/providers/recent-files');
     const queryClient = new QueryClient();
-    queryClient.setQueryData(['drive', OWNER, 'recent'], PATHS);
-    const { latest, unmount } = await renderHook(() => useRecentFileResults(ctx, input, scope, true), queryClient);
+    queryClient.setQueryData(driveKeys.recent(OWNER), paths);
+    const { latest, unmount } = await renderHook(() => useRecentFileResults(ctx, input, true), queryClient);
     await unmount();
     return latest;
 }
 
 describe('the recent files source', () => {
     test('an empty box lists the recent files, leaving out the open document', async () => {
-        const rows = await recentRows('', undefined);
+        const rows = await recentRows('');
         expect(rows.map((r) => [r.id, r.group])).toEqual([
             ['file.a', 'recent'],
             ['file.b', 'recent'],
@@ -68,12 +69,13 @@ describe('the recent files source', () => {
     });
 
     test('typed text keeps the recent files whose title matches, as files', async () => {
-        const rows = await recentRows('bud', undefined);
+        const rows = await recentRows('bud');
         expect(rows.map((r) => [r.id, r.group])).toEqual([['file.a', 'file']]);
     });
 
-    test('a scope other than files hides them', async () => {
-        expect(await recentRows('', 'mail')).toEqual([]);
-        expect((await recentRows('', 'file')).length).toBe(2);
+    test('a short query keeps only the first three matches, leaving Files room for search hits', async () => {
+        const many = ['1', '2', '3', '4', '5'].map((id) => recent(id, `Report ${id}.txt`));
+        const rows = await recentRows('rep', many);
+        expect(rows.map((r) => r.id)).toEqual(['file.1', 'file.2', 'file.3']);
     });
 });

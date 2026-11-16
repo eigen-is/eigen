@@ -30,10 +30,8 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
     'all-tokens-in-title': 1,
 };
 
-// Pure merge of what the sources found for one settled query; the caller holds an async source back while it is in
-// flight, so this never sees a partial state. The empty box shows Selection, then Recent files, then Suggested when
-// nothing is selected. Typed text shows the Top hit, Suggestions, Selection, the open document's hits, Files (recent
-// matches first), Mail, Contacts, Help and last the catalog Actions, which the user reaches by typing.
+// Pure merge of what the sources found for one settled query. Catalog Actions come last, since typing finds them,
+// and the caller holds each async source back while it is in flight, so this never sees a partial state.
 export function buildSections(input: BuildInput): Sections {
     const actionList = input.action.filter((r) => r.group === 'actions');
     const scopedSelection = input.action
