@@ -1,43 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { bindSheet, offGrid, printA1, printStored, remapSheets } from '../../text';
+import { bindSheet, offGrid, printA1, printStored } from '../../text';
 import { ShapeTable } from '../../text/shapes';
-import { treeStored } from '../text/support';
 import { sheetName, tree } from './support';
-
-describe('remapSheets', () => {
-    const ids = new Map([
-        ['s1', 'n1'],
-        ['s2', 'n2'],
-    ]);
-    test('rewrites the id of every reference, scoped name and broken reference', () => {
-        const before = treeStored('=RC+[s1]!R[1]C+SUM([s2]!C1:C2, [s3]!R1C1)+[s1]!Rate+[s2]!#REF!');
-        expect(printStored(remapSheets(before, ids))).toBe(
-            '=RC+[n1]!R[1]C+SUM([n2]!C1:C2, [s3]!R1C1)+[n1]!Rate+[n2]!#REF!',
-        );
-    });
-    test('leaves the host sheet, a name that is no sheet and another workbook alone, and returns the same tree', () => {
-        const before = treeStored("=RC+'s1'!RC+'[1]s1'!RC+[s9]!RC+\"[s1]!RC\"");
-        expect(remapSheets(before, ids)).toBe(before);
-    });
-    test('maps every id once, so two sheets can swap ids', () => {
-        const swap = new Map([
-            ['s1', 's2'],
-            ['s2', 's1'],
-        ]);
-        expect(printStored(remapSheets(treeStored('=[s1]!RC+[s2]!R1C1:R2C2+[s2]!Rate+[s1]!#REF!'), swap))).toBe(
-            '=[s2]!RC+[s1]!R1C1:R2C2+[s1]!Rate+[s2]!#REF!',
-        );
-    });
-    test('reaches every term of a sum of thousands, which is a tree that deep', () => {
-        const before = treeStored(`=${'[s1]!RC+'.repeat(16000)}RC`);
-        expect(printStored(remapSheets(before, ids))).toBe(`=${'[n1]!RC+'.repeat(16000)}RC`);
-    });
-    test('a duplicated tab points its references to itself at the copy', () => {
-        const copy = remapSheets(tree('=A1+Sheet1!B1+Sheet2!C1', 'D1'), new Map([['s1', 'copy']]));
-        const names = (id: string) => (id === 'copy' ? 'Sheet1 (2)' : sheetName(id));
-        expect(printA1(copy, 0, 3, names)).toBe("=A1+'Sheet1 (2)'!B1+Sheet2!C1");
-    });
-});
 
 describe('bindSheet', () => {
     test('binds the references that name the sheet, in any case, and no other', () => {

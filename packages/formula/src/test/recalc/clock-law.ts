@@ -81,17 +81,21 @@ function source(id: string, cells: readonly Cell[]): SheetSource {
     };
 }
 
-// One reader of a log. A sheet it removed is held as the cells it had, as a host holds them for the undo.
+// One reader of a log. A sheet it removed is held as the cells it had, as a host holds them for the undo, and the
+// reader knows the tab order it gave the engine.
 class Reader {
     public engine: Engine;
     private held: Cell[] | null;
+    private secondFirst: boolean;
 
     public constructor(
         engine = new Engine([source('s1', []), source('s2', [])], 0, 0, false),
         held: Cell[] | null = null,
+        secondFirst = false,
     ) {
         this.engine = engine;
         this.held = held;
+        this.secondFirst = secondFirst;
     }
 
     public apply(batch: Batch): void {
@@ -105,8 +109,11 @@ class Reader {
                 if (this.held === null) continue;
                 engine.addSheet(source('s2', this.held), op.place);
                 this.held = null;
+                this.secondFirst = op.place === 0;
             } else if (op.kind === 'move') {
-                if (this.held === null) engine.moveSheet('s2', op.place);
+                if (this.held !== null) continue;
+                engine.moveSheet('s2', op.place);
+                this.secondFirst = op.place === 0;
             } else if (op.sheet === 's2' && this.held !== null) {
             } else if (op.kind === 'formula') {
                 engine.setFormula(op.sheet, op.row, op.column, storedText(op.text, op.row, op.column, find));
@@ -148,7 +155,7 @@ class Reader {
                 ]),
             ),
         );
-        return new Reader(new Engine(sheets, now, seed, !bare && this.engine.settled()), this.held);
+        return new Reader(new Engine(sheets, now, seed, !bare && this.engine.settled()), this.held, this.secondFirst);
     }
 
     public formulas(): number {
@@ -158,7 +165,8 @@ class Reader {
     }
 
     private sheets(): string[] {
-        return this.held === null ? [this.engine.sheetAt(0), this.engine.sheetAt(1)] : ['s1'];
+        if (this.held !== null) return ['s1'];
+        return this.secondFirst ? ['s2', 's1'] : ['s1', 's2'];
     }
 
     private cells(sheet: string): Cell[] {

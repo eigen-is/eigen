@@ -12,15 +12,6 @@ import { mapLeaves } from './leaves';
 // The id of the sheet a name typed in a formula reads, or undefined where no sheet has the name.
 export type SheetNamed = (name: string) => string | undefined;
 
-// Every sheet id that is a key of `ids` becomes its value.
-export function remapSheets(tree: FormulaNode, ids: ReadonlyMap<string, string>): FormulaNode {
-    return mapLeaves(tree, (node) => {
-        if (node.sheetKind !== SheetKind.Id) return node;
-        const id = ids.get(node.sheet);
-        return id === undefined ? node : onSheet(node, id);
-    });
-}
-
 // Binds what was typed with the name of a sheet that did not exist to the sheet that now has that name.
 export function bindSheet(tree: FormulaNode, name: string, id: string): FormulaNode {
     const key = sheetNameKey(name);

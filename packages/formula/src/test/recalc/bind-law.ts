@@ -129,8 +129,7 @@ export function runBindLaw(seed: number, count: number, steps: number): BindCoun
         log.push(`load ${JSON.stringify(first)}`);
 
         const read = (from: Engine): Held[] =>
-            sheets.map(({ id, name }, place) => {
-                if (from.sheetAt(place) !== id) fail(`place ${place} is ${from.sheetAt(place)}`);
+            sheets.map(({ id, name }) => {
                 const cells: Cell[] = [];
                 from.cells(id, (row, column, value, text) => cells.push({ row, column, value, formula: text }));
                 return { id, name, cells };

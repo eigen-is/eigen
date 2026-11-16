@@ -90,7 +90,11 @@ describe('a source of cells that calls the engine while it is read', () => {
             cell(0, 0, 'outer', null);
         });
         expect(() => engine.addSheet(outer, 0)).toThrow('Sheet b exists');
-        expect([engine.sheetAt(0), engine.sheetAt(1), engine.valueOf('b', 0, 0)]).toEqual(['b', 'a', 'inner']);
-        expect(() => engine.sheetAt(2)).toThrow();
+        // Two sheets, the inner one first, as SHEET and SHEETS read them.
+        engine.setFormula('a', 1, 0, '=SHEET()');
+        engine.setFormula('a', 2, 0, '=SHEETS()');
+        engine.recalc(NO_CAP);
+        expect([1, 2].map((row) => engine.valueOf('a', row, 0))).toEqual([2, 2]);
+        expect(engine.valueOf('b', 0, 0)).toBe('inner');
     });
 });

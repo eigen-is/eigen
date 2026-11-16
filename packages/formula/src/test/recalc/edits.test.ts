@@ -9,6 +9,15 @@ import { at, engineOf, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 
+// The place of a sheet among the tabs, from 0, as SHEET reads it in a cell far from the test's own.
+function placeOf(engine: Engine, sheet: string): number {
+    engine.setFormula(sheet, 99, 25, '=SHEET()');
+    engine.recalc(NO_CAP);
+    const place = engine.valueOf(sheet, 99, 25);
+    engine.clear(sheet, 99, 25);
+    return Number(place) - 1;
+}
+
 const rows = (insert: boolean, row1: number, count = 1, sheet = 's1'): LineEdit => ({
     insert,
     index: row1 - 1,
@@ -463,13 +472,12 @@ describe('sheets', () => {
     test('a sheet that goes leaves #REF! in its readers and no text changed, and a sheet of its name repairs nothing', () => {
         const engine = book();
         engine.removeSheet('s2');
-        expect(engine.sheetAt(0)).toBe('s1');
         expect(() => engine.valueOf('s2', 0, 0)).toThrow('No sheet s2');
         engine.recalc(NO_CAP);
         expect([text(engine, 'B1'), valueAt(engine, 'B1')]).toEqual(['=[s2]!RC[-1]*2', REF]);
         engine.addSheet({ id: 's9', name: 'Sheet2', cells: (cell) => cell(0, 0, 5, null) }, 0);
         engine.recalc(NO_CAP);
-        expect([valueAt(engine, 'B1'), engine.sheetAt(0), engine.sheetAt(1)]).toEqual([REF, 's9', 's1']);
+        expect([valueAt(engine, 'B1'), placeOf(engine, 's9'), placeOf(engine, 's1')]).toEqual([REF, 0, 1]);
     });
     test('a sheet that comes back under its id is read again, and its own formulas are computed whatever they came with', () => {
         const engine = book();
@@ -495,7 +503,7 @@ describe('sheets', () => {
         const added = other.addSheet({ id: 's7', name: 'LATER', cells: (cell) => cell(0, 0, 8, null) }, 5);
         expect(added.rewrites).toHaveLength(1);
         other.recalc(NO_CAP);
-        expect([valueAt(other, 'C1'), other.sheetAt(2)]).toEqual([8, 's7']);
+        expect([valueAt(other, 'C1'), placeOf(other, 's7')]).toEqual([8, 2]);
     });
     test('a sheet that comes with formulas typed with the name of a sheet that is there reads that sheet', () => {
         const engine = book();
@@ -557,11 +565,12 @@ describe('sheets', () => {
             },
         };
         expect(() => engine.addSheet(broken, 0)).toThrow('no cells');
-        expect([text(engine, 'C1'), engine.sheetAt(0)]).toEqual(["='Later'!RC[-2]", 's1']);
+        expect(text(engine, 'C1')).toBe("='Later'!RC[-2]");
         expect(() => engine.valueOf('s7', 0, 0)).toThrow('No sheet s7');
         engine.setValue('s1', 0, 0, 3);
         expect(engine.recalc(NO_CAP).stopped).toBe(false);
         expect([valueAt(engine, 'C1'), engine.valueOf('s2', 0, 0)]).toEqual([REF, 7]);
+        expect([placeOf(engine, 's1'), placeOf(engine, 's2')]).toEqual([0, 1]);
     });
     test('a loop through a sheet that goes is no loop any more, and is one again when the sheet returns', () => {
         const engine = computed({ s1: { A1: '=Sheet2!A1' }, s2: { A1: '=Sheet1!A1' } });
@@ -583,7 +592,6 @@ describe('sheets', () => {
         expect([engine.valueOf('s2', 3, 0), valueAt(engine, 'B1'), stopped]).toEqual([14, 28, false]);
         // The runs name the sheets by the place they have now.
         expect(changed).toEqual([0, 0, 3, 3, 1, 1, 0, 0]);
-        expect([engine.sheetAt(0), engine.sheetAt(1)]).toEqual(['s2', 's1']);
     });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Op, OpKind, Records, RecordType, SheetContent } from '../../sheets/ops';
+import type { Op, Records, RecordType, SheetContent } from '../../sheets/ops';
 import { isStructural, LOOK_KEYS, opReferences, RUN_KEYS } from '../../sheets/ops';
 import { Refusal } from '../../sheets/refusal';
 
@@ -53,7 +53,7 @@ const ADDED: SheetContent = {
 };
 
 // One op of each kind but `record`, which has its own table below.
-const OF_KIND: { [K in Exclude<OpKind, 'record'>]: Op } = {
+const OF_KIND: { [K in Exclude<Op['kind'], 'record'>]: Op } = {
     input: { kind: 'input', sheet: 's1', cells: [[0, 0, { v: 'photo.png' }]] },
     format: { kind: 'format', sheet: 's1', ranges: [[0, 0, 0, 0]], set: { bl: 1 } },
     lines: { kind: 'lines', sheet: 's1', rows: true, insert: true, index: 5, count: 2, like: 4 },

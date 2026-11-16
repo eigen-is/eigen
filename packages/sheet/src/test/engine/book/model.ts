@@ -163,8 +163,6 @@ export function expectReads(book: Workbook, model: Model): void {
     };
     const expected = contentOfModel(model);
     expect(read).toEqual({ ...expected, computed: true });
-    // The engine reads a sheet by its place among the tabs, which the content does not show.
-    expect(expected.sheets.map((_, place) => book.engine.sheetAt(place))).toEqual(expected.sheets.map(({ id }) => id));
 }
 
 // A sheet as it enters, its formulas bound to `sheets`.

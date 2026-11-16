@@ -226,11 +226,6 @@ export class Engine {
         return slots;
     }
 
-    // The id of the sheet at a place among the tabs, which is how a recalc names the sheet of a changed cell.
-    public sheetAt(place: number): string {
-        return this.workbook.known(place).id;
-    }
-
     // The sheet of a cell a host names: it must exist, as the cell must on the grid, and its value be one to hold.
     private cell(sheet: string, row: number, column: number, value: Literal | null = null): Sheet {
         const found = this.workbook.known(sheet);

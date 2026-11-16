@@ -176,7 +176,6 @@ export type LinesOp = {
 export type MoveOp = { kind: 'move'; sheet: string; from: Rect; toSheet: string; toRow: number; toColumn: number };
 export type SheetOp = { kind: 'sheet'; add: SheetContent } | { kind: 'sheet'; delete: string };
 export type Op = InputOp | FormatOp | RecordOp | LinesOp | MoveOp | SheetOp;
-export type OpKind = Op['kind'];
 // `now` is the author's clock as a serial of the engine's day line, days with the time of day as the fraction, and
 // `seed` a 32-bit integer the author drew: every reader recomputes the clock and random cells with them.
 export type Batch = { g: number; now: number; seed: number; ops: Op[] };
