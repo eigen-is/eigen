@@ -1,8 +1,8 @@
-// The About overview: what eigen is, the admin's links, and the body, in the reading column with the table of
-// contents of its headings in the gutter. Where its `::: apps` block stands it draws a row for every app in the
-// registry's order, with a still of the app, its eigen|app⟩ wordmark and one line; a row links to its app's page once
-// that page is written, and each washes in its own app's color. Last, under the body and its note for the technical
-// reader, come the landing page's blocks on what Eigen stands for, as wide and as last as they are there.
+// The About overview: the title and the body on what eigen is, in the reading column with the table of contents of its
+// headings in the gutter. Where its `::: apps` block stands it draws a row for every app in the registry's order, with
+// a still of the app, its eigen|app⟩ wordmark and one line; a row links to its app's page once that page is written,
+// and each washes in its own app's color. Last, under the body and its note for the technical reader, come the landing
+// page's blocks on what Eigen stands for, as wide and as last as they are there.
 
 import { Link } from '@tanstack/react-router';
 import { cn } from '@workspace/ui/lib/utils';
@@ -15,7 +15,6 @@ import { AppWordmark } from './app-wordmark';
 import { ArticleContent } from './article-content';
 import { ArticleToc } from './article-toc';
 import { PrincipleBlocks } from './landing-blocks';
-import { LandingLinks } from './landing-links';
 import { ReadingLayout } from './reading-layout';
 import { SitePage } from './site-page';
 
@@ -29,9 +28,6 @@ export function AboutOverview({ overview, body }: AboutOverviewProps) {
         <SitePage>
             <ReadingLayout aside={<ArticleToc toc={overview.toc} />}>
                 <h1 className="site-title">{overview.title}</h1>
-                <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
-                    <LandingLinks />
-                </div>
                 <ArticleContent body={body} blocks={{ apps: <AppRows rows={overview.rows} /> }} className="mt-8" />
                 <PrincipleBlocks className="site-reading-wide mt-14 md:grid-cols-1 md:gap-6 min-[76rem]:grid-cols-3 min-[76rem]:gap-10" />
             </ReadingLayout>
