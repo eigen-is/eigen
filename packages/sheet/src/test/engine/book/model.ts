@@ -110,7 +110,8 @@ export function modelAfter(model: Model, batch: Pick<Batch, 'now' | 'seed' | 'op
     return next;
 }
 
-// The model as a snapshot holds it, in the one form a workbook walks back to: its formulas are not computed.
+// The model as a snapshot holds it, in the one form a workbook walks back to: computed when it holds no formula,
+// as the model computes none.
 export function contentOfModel(model: Model): Book {
     const sheets = [...model.sheets.values()].sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
     return {
