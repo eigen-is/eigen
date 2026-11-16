@@ -4,6 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SSEvent, SSEventChat, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getServerConfig } from '../../lib/config/server-config';
+import { broadcastToOwnerAndMembers, buildDriveEvent } from '../../lib/drive/sse-events';
 import { drainHomeDeliveries } from '../../lib/home/home-relay';
 import type { SSECollector, TestContext, TestUser } from '../setup';
 import {
@@ -334,5 +335,27 @@ describe('a chat message in a shared chat', () => {
         expect(postedCount(aliceSSE)).toBe(1);
         expect(postedCount(bobSSE)).toBe(1);
         expect(postedCount(charlieSSE)).toBe(0);
+    });
+});
+
+describe('a drive event whose members cannot be read', () => {
+    test("still reaches the owner's stream, and the failure reaches the caller", async () => {
+        const owner = ctx.alice.user.id;
+        const pathId = crypto.randomUUID();
+        const event = buildDriveEvent(SSEventType.DRIVE_FILE_UPLOADED, {
+            ownerId: owner,
+            mountId: 'default',
+            id: pathId,
+            parentId: null,
+            mimeType: 'text/plain',
+        });
+        const sse = await collectSSE(owner);
+        try {
+            const sent = broadcastToOwnerAndMembers(owner, Promise.reject(new Error('members read failed')), event);
+            await expect(sent).rejects.toThrow('members read failed');
+            await sse.next(driveEvent(SSEventType.DRIVE_FILE_UPLOADED, pathId));
+        } finally {
+            sse.stop();
+        }
     });
 });
