@@ -125,14 +125,14 @@ describe('engine/book/apply-format — what a cell format writes', () => {
         expect(sheet?.bands.weight()).toEqual({ runs: 5, bands: 4 });
     });
 
-    test('overlapping rectangles in one op write each cell once', () => {
+    test('rectangles in one op that share no cell are written as one, and undone in the reverse of that order', () => {
         const content = bookOf(RED_TOP);
         const inverse = expectLaw2(content, [
             format(
                 [
                     [0, 0, 6, 1],
-                    [4, 0, 9, 2],
-                    [0, 0, 6, 1],
+                    [7, 0, 9, 2],
+                    [0, 2, 6, 2],
                 ],
                 { bg: '#0000ff' },
                 ['bl'],
@@ -143,10 +143,9 @@ describe('engine/book/apply-format — what a cell format writes', () => {
             format([[0, 0, 4, 0]], { bg: '#ff0000' }),
             format(
                 [
+                    [7, 0, 9, 2],
+                    [0, 1, 6, 2],
                     [5, 0, 6, 0],
-                    [0, 1, 6, 1],
-                    [7, 0, 9, 1],
-                    [4, 2, 9, 2],
                 ],
                 undefined,
                 ['bg'],
@@ -238,8 +237,8 @@ describe('engine/book/apply-format — the inverse of a cell format', () => {
             format([[0, 0, 4, 0]], { bg: '#ff0000' }),
             format(
                 [
-                    [5, 0, 9, 0],
                     [0, 1, 9, 1],
+                    [5, 0, 9, 0],
                 ],
                 undefined,
                 ['bg'],

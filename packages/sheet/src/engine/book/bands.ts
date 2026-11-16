@@ -53,21 +53,19 @@ export class Bands {
     public *spans([top, left, bottom, right]: Rect): Generator<LookSpan> {
         const { bands } = this;
         for (let b = this.bandAt(left); b < bands.length && bands[b].first <= right; b += 1) {
-            const { first, list } = bands[b];
-            const c0 = Math.max(left, first);
-            const c1 = Math.min(right, (b + 1 < bands.length ? bands[b + 1].first : GRID_COLUMNS) - 1);
-            if (list.count === 0) yield { c0, c1, r0: top, r1: bottom, look: 0 };
-            for (let i = list.runAt(top); i < list.count && list.startOf(i) <= bottom; i += 1) {
-                const end = i + 1 < list.count ? list.startOf(i + 1) : GRID_ROWS;
-                yield {
-                    c0,
-                    c1,
-                    r0: Math.max(top, list.startOf(i)),
-                    r1: Math.min(bottom, end - 1),
-                    look: list.lookOf(i),
-                };
-            }
+            yield* this.under(b, top, left, bottom, right);
         }
+    }
+
+    // How many spans tile a rectangle: what a write over it reads.
+    public tiles([top, left, bottom, right]: Rect): number {
+        const { bands } = this;
+        let tiles = 0;
+        for (let b = this.bandAt(left); b < bands.length && bands[b].first <= right; b += 1) {
+            const { list } = bands[b];
+            tiles += list.runAt(bottom) - list.runAt(top) + 1;
+        }
+        return tiles;
     }
 
     // The styled part of the used range. A run or band that reaches the grid's end counts only up to where it starts,
@@ -142,10 +140,35 @@ export class Bands {
         return { looks, bands };
     }
 
-    // Every cell of the rectangle wears `to` of the look it wore. Returns the spans it replaced.
-    public write(rect: Rect, to: (look: number) => number): LookSpan[] {
-        const replaced = [...this.spans(rect)];
-        this.each(rect[1], rect[3], (list) => list.format(rect[0], rect[2], to));
+    // Every cell of the rectangles wears `to` of the look it wore. They span the same columns, ascend and share no
+    // cell. Returns the spans whose look changed, band by band and rows down. A band is cut and its list written, in
+    // one pass, only where a look changes, so a write that changes nothing costs its reads.
+    public write(rects: readonly Rect[], to: (look: number) => number): LookSpan[] {
+        const { bands } = this;
+        const [, left, , right] = rects[0];
+        const rows = rects.map(([top, , bottom]): Span => [top, bottom]);
+        const replaced: LookSpan[] = [];
+        let wrote = false;
+        let b = this.bandAt(left);
+        for (; b < bands.length && bands[b].first <= right; b += 1) {
+            const before = replaced.length;
+            for (const [top, bottom] of rows) {
+                for (const span of this.under(b, top, left, bottom, right)) {
+                    if (to(span.look) !== span.look) replaced.push(span);
+                }
+            }
+            const writes = replaced.length > before;
+            if (writes) {
+                const { c0, c1 } = replaced[before];
+                this.split(c1 + 1);
+                b = this.split(c0);
+                this.rewrite(bands[b].list, (list) => list.format(rows, to));
+            }
+            // A band joins the one before it when either was written.
+            if (writes || wrote) b -= this.join(b, b);
+            wrote = writes;
+        }
+        if (wrote) this.join(b, b);
         return replaced;
     }
 
@@ -156,19 +179,16 @@ export class Bands {
         const rowShift = toRow - top;
         const columnShift = toColumn - left;
         const covered = [...this.spans([toRow, toColumn, bottom + rowShift, right + columnShift])];
-        const spans = source.write(from, () => 0);
+        const spans = [...source.spans(from)];
+        source.write([from], () => 0);
         let at = 0;
         while (at < spans.length) {
-            // The spans of one band stand together: one cut of the columns writes them all.
+            // The spans of one band stand together: one cut of the columns writes them all, in one pass.
             const { c0, c1 } = spans[at];
-            let end = at;
-            while (end < spans.length && spans[end].c0 === c0) end += 1;
-            this.each(c0 + columnShift, c1 + columnShift, (list) => {
-                for (let i = at; i < end; i += 1) {
-                    list.format(spans[i].r0 + rowShift, spans[i].r1 + rowShift, () => spans[i].look);
-                }
-            });
-            at = end;
+            const first = at;
+            while (at < spans.length && spans[at].c0 === c0) at += 1;
+            const rows = spans.slice(first, at).map(({ r0, r1 }): Span => [r0 + rowShift, r1 + rowShift]);
+            this.each(c0 + columnShift, c1 + columnShift, (list) => list.format(rows, (_, i) => spans[first + i].look));
         }
         return covered;
     }
@@ -194,7 +214,7 @@ export class Bands {
                 // Beside the column `like` the new columns only widen its band.
                 const from = like === index ? index + 1 : index;
                 for (let i = bands.length - 1; i > 0 && bands[i].first >= from; i -= 1) bands[i].first += count;
-                if (like < 0) this.each(index, last, (list) => list.format(0, GRID_ROWS - 1, () => 0));
+                if (like < 0) this.each(index, last, (list) => list.format([[0, GRID_ROWS - 1]], () => 0));
             }
             return [];
         }
@@ -227,6 +247,19 @@ export class Bands {
         return low;
     }
 
+    // The spans of one band that tile the part of a rectangle in its columns, rows down, a list with no run as one.
+    private *under(b: number, top: number, left: number, bottom: number, right: number): Generator<LookSpan> {
+        const { bands } = this;
+        const { first, list } = bands[b];
+        const c0 = Math.max(left, first);
+        const c1 = Math.min(right, (b + 1 < bands.length ? bands[b + 1].first : GRID_COLUMNS) - 1);
+        if (list.count === 0) yield { c0, c1, r0: top, r1: bottom, look: 0 };
+        for (let i = list.runAt(top); i < list.count && list.startOf(i) <= bottom; i += 1) {
+            const end = i + 1 < list.count ? list.startOf(i + 1) : GRID_ROWS;
+            yield { c0, c1, r0: Math.max(top, list.startOf(i)), r1: Math.min(bottom, end - 1), look: list.lookOf(i) };
+        }
+    }
+
     // Writes one list and adds the runs it gained or lost to the workbook's count.
     private rewrite(list: RunList, write: (list: RunList) => void): void {
         const before = list.count;
@@ -255,8 +288,8 @@ export class Bands {
         return at + 1;
     }
 
-    // Drops each of the bands `low` to `high` that holds the list of the band before it.
-    private join(low: number, high: number): void {
+    // Drops each of the bands `low` to `high` that holds the list of the band before it, and says how many.
+    private join(low: number, high: number): number {
         const { bands } = this;
         const end = Math.min(high + 1, bands.length);
         let kept = Math.max(1, low);
@@ -271,5 +304,6 @@ export class Bands {
         const dropped = Math.max(0, end - kept);
         bands.splice(kept, dropped);
         this.held.bands -= dropped;
+        return dropped;
     }
 }

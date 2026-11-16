@@ -30,14 +30,18 @@ export function applyOps(book: Workbook, ops: readonly Op[]): Op[] {
     // JavaScript's limit on arguments.
     const landed: Op[][] = [];
     try {
-        for (const op of ops) landed.push(applyOne(book, op));
+        for (const op of ops) {
+            landed.push(applyOne(book, op, true));
+            const midway = book.over();
+            if (midway) throw new Refusal(midway);
+        }
         const over = fits(book.weight());
         if (over) throw new Refusal(over);
     } catch (error) {
         // The engine refuses an edit before it writes, as an applier does, so the op that threw left nothing.
         const refusal = error instanceof EditRefusal ? new Refusal(REFUSAL_OF[error.reason]) : error;
         if (refusal instanceof Refusal) {
-            for (const op of landed.reverse().flat()) applyOne(book, op);
+            for (const op of landed.reverse().flat()) applyOne(book, op, false);
             close(book, ops);
         }
         throw refusal;
@@ -55,12 +59,12 @@ function close(book: Workbook, ops: readonly Op[]): void {
 
 // An applier checks what its op can be refused for and reads what the inverse needs, throwing before its first
 // write, then writes, the engine first. It returns the ops that undo its op, in the order they apply.
-function applyOne(book: Workbook, op: Op): Op[] {
+function applyOne(book: Workbook, op: Op, checked: boolean): Op[] {
     switch (op.kind) {
         case 'input':
             return applyInput(book, op);
         case 'format':
-            return applyFormat(book, op);
+            return applyFormat(book, op, checked);
         case 'record':
             return applyRecord(book, op);
         case 'lines':

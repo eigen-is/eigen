@@ -250,7 +250,7 @@ export class Workbook {
         }
         const moved = this.looks.sweep(worn);
         for (const { bands } of this.parts.values()) {
-            bands.write([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1], (id) => moved[id]);
+            bands.write([[0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]], (id) => moved[id]);
         }
         this.swept = this.looks.size;
     }

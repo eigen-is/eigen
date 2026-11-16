@@ -4,6 +4,7 @@
 // by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that held
 // it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
+import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     CellAttrKey,
     CellAttrs,
@@ -18,10 +19,11 @@ import type {
     Span,
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { pick } from 'es-toolkit';
 import type { Extra } from './extras';
-import { placeOf } from './extras';
+import { placeOf, unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
 import type { Workbook } from './workbook';
 
@@ -39,7 +41,11 @@ export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
-export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[] {
+// A format of cells that is `checked` is refused before it writes when its rectangles reach more runs of the bands
+// than the limit on formats allows, whatever it would leave, or when its links would pass the limit inside a batch.
+// Its looks are weighed as each group of rectangles is written: past the limit it stops, and returns what undoes the
+// part it wrote, for the frame to refuse the batch and take that part back.
+export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (FormatOp | InputOp)[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
     if (!part) return [];
@@ -76,6 +82,17 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     const lookKeys = LOOK_KEYS.filter((key) => names(op, key));
     const runKeys = RUN_KEYS.filter((key) => lookKeys.includes(key));
     const linked = names(op, 'link');
+    if (checked) {
+        let tiles = 0;
+        let cells = 0;
+        for (const rect of op.ranges) {
+            if (lookKeys.length > 0) tiles += bands.tiles(rect);
+            if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
+            cells += (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1);
+        }
+        const over = book.over(0, link ? unitsOf({ link }) * EXTRA_WEIGHT * cells : 0);
+        if (over) throw new Refusal(over);
+    }
 
     // Read before any write, each cell once however many rectangles hold it: the rich cells a run-style key restyles,
     // with the look they wore, and the links a link write replaces.
@@ -97,8 +114,8 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     }
 
     // Per named key, the cells of each old value it changed, under that value as text, with the look of one of them.
-    // A rectangle reads what the rectangles before it wrote, so the cells it shares with them read as unchanged.
     const changed = new Map(lookKeys.map((key) => [key, new Map<string, { look: Look; areas: Areas }>()]));
+    let stopped = false;
     if (lookKeys.length > 0) {
         const worn = new Map<number, number>();
         const to = (id: number) => {
@@ -111,8 +128,13 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
             }
             return next;
         };
-        for (const rect of op.ranges) {
-            for (const { c0, c1, r0, r1, look } of bands.write(rect, to)) {
+        for (let at = 0; at < op.ranges.length && !stopped; ) {
+            // Neighbours in the list that span the same columns are written as one, rows down.
+            const first = at;
+            const [, left, , right] = op.ranges[at];
+            while (at < op.ranges.length && op.ranges[at][1] === left && op.ranges[at][3] === right) at += 1;
+            const group = op.ranges.slice(first, at).sort((a, b) => a[0] - b[0]);
+            for (const { c0, c1, r0, r1, look } of bands.write(group, to)) {
                 const old = book.looks.look(look);
                 for (const [key, held] of changed) {
                     const was = keyOf(old[key]);
@@ -125,8 +147,20 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
                     group.areas.add(r0, c0, r1, c1);
                 }
             }
+            stopped = checked && book.over() !== null;
         }
     }
+    // The rectangles a key's inverse restores go in the reverse of the order they were written, so it cuts and joins
+    // the bands as the write did, backwards.
+    const inverse: (FormatOp | InputOp)[] = [];
+    for (const [key, held] of changed) {
+        for (const { look, areas } of held.values()) {
+            const named = look[key] === undefined ? { clear: [key] } : { set: pick(look, [key]) };
+            inverse.push({ kind: 'format', sheet, ranges: areas.joined().reverse(), ...named });
+        }
+    }
+    if (stopped) return inverse;
+
     const restored: Placed<CellContent>[] = [];
     for (const [row, column, extra, runs, look] of rich.values()) {
         // Runs that all wear the look's value of every named key take it back with the look; others are put back whole.
@@ -134,14 +168,6 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked) for (const rect of op.ranges) extras.link(rect, link);
-
-    const inverse: (FormatOp | InputOp)[] = [];
-    for (const [key, held] of changed) {
-        for (const { look, areas } of held.values()) {
-            const named = look[key] === undefined ? { clear: [key] } : { set: pick(look, [key]) };
-            inverse.push({ kind: 'format', sheet, ranges: areas.joined(), ...named });
-        }
-    }
     if (linked) {
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();

@@ -4,6 +4,7 @@
 // side never wear one look and a list of plain rows holds no run, so equal rows are always equal lists.
 
 import { GRID_ROWS } from '@workspace/formula/text';
+import type { Span } from '@workspace/lib/sheets/ops';
 
 // The array of every list with no run: a plain band costs no array of its own.
 const NO_PAIRS = new Int32Array(0);
@@ -70,12 +71,43 @@ export class RunList {
         return copy;
     }
 
-    // Every row from r0 to r1 wears `to` of the look it wore.
-    public format(r0: number, r1: number, to: (look: number) => number): void {
-        const low = this.split(r0);
-        const high = this.split(r1 + 1);
-        for (let i = low; i < high; i += 1) this.pairs[2 * i + 1] = to(this.pairs[2 * i + 1]);
-        this.join(low, high);
+    // Every row of the spans, which ascend and share no row, wears `to` of the look it wore: `to` is told which span
+    // the row is in. One pass lays the runs the spans reach anew, and the runs after them move once.
+    public format(rows: readonly Span[], to: (look: number, span: number) => number): void {
+        const first = this.runAt(rows[0][0]);
+        const last = this.runAt(rows[rows.length - 1][1]);
+        const laid: number[] = [];
+        // The look of the run before the next one laid: a run that wears it again is no run of its own.
+        let worn = first > 0 ? this.lookOf(first - 1) : -1;
+        let span = 0;
+        for (let run = first; run <= last; run += 1) {
+            // A list with no run is one plain run here.
+            const look = this.size === 0 ? 0 : this.lookOf(run);
+            const end = run + 1 < this.size ? this.startOf(run + 1) : GRID_ROWS;
+            for (let row = this.size === 0 ? 0 : this.startOf(run); row < end; ) {
+                while (span < rows.length && rows[span][1] < row) span += 1;
+                const inside = span < rows.length && rows[span][0] <= row;
+                const next = inside ? to(look, span) : look;
+                if (next !== worn) laid.push(row, next);
+                worn = next;
+                row = Math.min(end, inside ? rows[span][1] + 1 : (rows[span]?.[0] ?? end));
+            }
+        }
+        let after = Math.min(last + 1, this.size);
+        if (after < this.size && this.lookOf(after) === worn) after += 1;
+        const size = this.size - (after - first) + laid.length / 2;
+        if (2 * size > this.pairs.length) {
+            const grown = new Int32Array(Math.max(8, 4 * size));
+            grown.set(this.pairs.subarray(0, 2 * first));
+            grown.set(this.pairs.subarray(2 * after, 2 * this.size), 2 * first + laid.length);
+            this.pairs = grown;
+        } else this.pairs.copyWithin(2 * first + laid.length, 2 * after, 2 * this.size);
+        this.pairs.set(laid, 2 * first);
+        this.size = size;
+        if (size === 1 && this.pairs[1] === 0) {
+            this.pairs = NO_PAIRS;
+            this.size = 0;
+        }
     }
 
     // The new rows wear the look of the row `like`, which is the row above them or the row they push down, or plain
@@ -83,7 +115,7 @@ export class RunList {
     public insertRows(index: number, count: number, like: number): void {
         const from = like === index ? index + 1 : index;
         for (let i = this.size - 1; i > 0 && this.pairs[2 * i] >= from; i -= 1) this.pairs[2 * i] += count;
-        if (like < 0) this.format(index, index + count - 1, () => 0);
+        if (like < 0) this.format([[index, index + count - 1]], () => 0);
     }
 
     // The rows that enter at the grid's end wear the look of the last row that stays: its run reaches them.
