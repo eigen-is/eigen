@@ -1,8 +1,8 @@
-// One sheet of the store: its id, its name, its place among the sheets, its columns and the count of their rows. No
-// column exists past the last one written, and every one before it that holds nothing is one shared empty column,
-// so a sheet costs its cells and a pointer per column before the last. Inserting and deleting rows and columns and
-// moving a block moves the cells only: what a formula's text becomes is the transform's work, not the store's. The
-// place is the workbook's to write, and the rows hidden and filtered the host's to say: no edit here moves one.
+// One sheet of the store: its id, its name, its place among the sheets, its columns and what it counts over them:
+// their rows, their formulas still to compute and their cells on a loop. No column exists past the last one
+// written, and every one before it that holds nothing is one shared empty column, so a sheet costs its cells and a
+// pointer per column before the last. Line edits and moves move the cells only: what a formula's text becomes is the
+// transform's work. The place is the workbook's to write, and the rows left out the host's to say: no edit moves one.
 
 import { firstPushed } from '../edit/map';
 import type { Move } from '../edit/move';
@@ -11,7 +11,7 @@ import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { Column } from './column';
 
 // Frozen, so a write into it throws: a column is made by `reach` before a write. Its planes hold no row.
-const EMPTY = new Column(0);
+const EMPTY = new Column(0, Object.freeze({ pending: 0, loops: 0 }));
 Object.freeze(EMPTY);
 
 export class Sheet {
@@ -24,6 +24,9 @@ export class Sheet {
     private readonly held: Column[];
     // The rows the columns hold, together, measured around every change of a column.
     private total = 0;
+    // The formulas still to compute and the cells on a loop, which every column counts here as it counts its own.
+    public pending = 0;
+    public loops = 0;
     // The rows hidden by hand, the rows a filter left out, and both together: each list is sorted pairs of a first
     // and a last row that share no row. SUBTOTAL and AGGREGATE pass over them.
     private hidden: readonly number[] = [];
@@ -37,7 +40,7 @@ export class Sheet {
         let salt = 0x811c9dc5;
         for (let i = 0; i < id.length; i += 1) salt = Math.imul(salt ^ id.charCodeAt(i), 0x01000193);
         this.salt = salt;
-        this.held = lengths.map((length) => (length === 0 ? EMPTY : new Column(length)));
+        this.held = lengths.map((length) => (length === 0 ? EMPTY : new Column(length, this)));
         for (const length of lengths) this.total += length;
     }
 
@@ -124,7 +127,11 @@ export class Sheet {
     }
 
     public deleteColumns(index: number, count: number): void {
-        for (const column of this.held.splice(index, count)) this.total -= column.length;
+        for (const column of this.held.splice(index, count)) {
+            this.total -= column.length;
+            this.pending -= column.pending;
+            this.loops -= column.loops;
+        }
     }
 
     // Takes a move's block from `source`, which may be this sheet, over whatever it lands on.
@@ -158,7 +165,7 @@ export class Sheet {
     // The column to write into, made with the empty ones before it when the sheet did not reach that far.
     private column(index: number): Column {
         while (this.held.length <= index) this.held.push(EMPTY);
-        if (this.held[index] === EMPTY) this.held[index] = new Column(0);
+        if (this.held[index] === EMPTY) this.held[index] = new Column(0, this);
         return this.held[index];
     }
 }

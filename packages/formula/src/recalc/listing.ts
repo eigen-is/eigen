@@ -35,6 +35,8 @@ const BOTTOM = 1;
 const REACH = 2;
 const ENTRY = 3;
 
+const NONE = new Int32Array(0);
+
 export class Listing {
     private entries = new Int32Array(0);
     // Per sheet that is read, its listings: block by block, the narrowest blocks first, sorted by first row in each.
@@ -91,6 +93,13 @@ export class Listing {
     // Lists what the entries read of one sheet.
     private list(read: readonly number[]): void {
         const count = read.length / 5;
+        // A sheet no entry reads has no block in use, which is all a lookup asks of it.
+        if (count === 0) {
+            this.lists.push(NONE);
+            this.starts.push(NONE);
+            this.levels.push([]);
+            return;
+        }
         // The first row and the place of each area in one number, so that a plain sort orders them by row.
         const order = new Float64Array(count);
         for (let i = 0; i < count; i += 1) order[i] = read[i * 5] * count + i;

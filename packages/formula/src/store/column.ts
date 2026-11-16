@@ -1,8 +1,8 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
 // the id of its shape. A column ends at its last cell, is loaded at exactly its rows and grows to an eighth more
 // than it needs, and counts its errors, its formulas still to compute and its cells on a loop, so that a loop over
-// it can skip the per-cell checks. The high bits of `kind` are the recalc's own flags, which move with the cell
-// when rows do.
+// it can skip the per-cell checks. The last two it counts for its sheet as well, so that a loop over the sheets
+// can skip a sheet. The high bits of `kind` are the recalc's own flags, which move with the cell when rows do.
 
 import { GRID_ROWS } from '../text/a1';
 import type { ColumnIndex } from './column-index';
@@ -21,6 +21,9 @@ export const DIRTY = 128;
 const SLACK_MIN = 64;
 const SLACK_MAX = 65_536;
 
+// What a sheet counts over all its columns: the formulas still to compute and the cells on a loop.
+type Flagged = { pending: number; loops: number };
+
 export class Column {
     public kind: Uint8Array;
     // The number of a number cell, and 0 for every other kind.
@@ -38,8 +41,10 @@ export class Column {
     public version = 0;
     // What exact lookups keep of the column, true for one version of it.
     public index: ColumnIndex | null = null;
+    private readonly sheet: Flagged;
 
-    public constructor(length: number) {
+    public constructor(length: number, sheet: Flagged) {
+        this.sheet = sheet;
         this.kind = new Uint8Array(length);
         this.num = new Float64Array(length);
         this.ref = new Int32Array(length);
@@ -83,6 +88,7 @@ export class Column {
         if (this.kind[row] > SETTLED) return;
         this.kind[row] |= DIRTY;
         this.pending += 1;
+        this.sheet.pending += 1;
     }
 
     // Says whether the cell is on a circular reference, and keeps the count of those cells.
@@ -91,12 +97,16 @@ export class Column {
         if (((kind & LOOP) !== 0) === loop) return;
         this.kind[row] = kind ^ LOOP;
         this.loops += loop ? 1 : -1;
+        this.sheet.loops += loop ? 1 : -1;
     }
 
     // The cell holds nothing to compute: no formula any more, or one that keeps the value it was given.
     public settle(row: number): void {
         this.setLoop(row, false);
-        if (this.kind[row] > SETTLED) this.pending -= 1;
+        if (this.kind[row] > SETTLED) {
+            this.pending -= 1;
+            this.sheet.pending -= 1;
+        }
         this.kind[row] &= KIND_MASK;
     }
 
@@ -104,6 +114,7 @@ export class Column {
     public computed(row: number): void {
         this.kind[row] &= KIND_MASK | LOOP;
         this.pending -= 1;
+        this.sheet.pending -= 1;
     }
 
     // The rows from `index` on go `count` rows down, and stay on the grid: an insert that would push a cell off
@@ -175,12 +186,18 @@ export class Column {
     // Takes the rows from `from` up to `to` out of the counts before they leave the column, with -1, or into them
     // once they arrived, with 1.
     private tally(from: number, to: number, by: number): void {
+        let pending = 0;
+        let loops = 0;
         for (let row = from; row < to; row += 1) {
             const kind = this.kind[row];
             if ((kind & KIND_MASK) === CellKind.Error) this.errors += by;
-            if (kind > SETTLED) this.pending += by;
-            if (kind & LOOP) this.loops += by;
+            if (kind > SETTLED) pending += by;
+            if (kind & LOOP) loops += by;
         }
+        this.pending += pending;
+        this.loops += loops;
+        this.sheet.pending += pending;
+        this.sheet.loops += loops;
     }
 
     private resize(capacity: number): void {
