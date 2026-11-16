@@ -263,3 +263,40 @@ describe('what a load and a sheet add ask of the shapes', () => {
         expect(load(100)).toBe(10 * load(10));
     });
 });
+
+describe('the readers of a key', () => {
+    test('hold no removed sheet, and no key or listing no block reads, after a thousand adds, removes and retargets', () => {
+        const engine = new Engine(
+            [
+                source('t0', [
+                    [0, 0, 1, null],
+                    [0, 1, null, '=RC[-1]+1'],
+                ]),
+                source('b', [[0, 0, 1, null]]),
+            ],
+            0,
+            0,
+            false,
+        );
+        engine.recalc(NO_CAP);
+        for (let k = 0; k < 1000; k += 1) {
+            engine.addSheet(source(`x${k}`, [[0, 0, null, '=[t0]!R1C1+1']]), 1);
+            engine.recalc(NO_CAP);
+            engine.removeSheet(`x${k}`);
+            engine.recalc(NO_CAP);
+            // A formula on t0 that reads another sheet no sheet is, each time.
+            engine.setFormula('t0', 3, 3, `=[q${k}]!R1C1+1`);
+            engine.recalc(NO_CAP);
+        }
+        // What the index holds is private, and only its size is in question here.
+        const index = Reflect.get(Reflect.get(engine, 'calc'), 'index');
+        const readers: Map<string | number, Set<{ readonly id: string }>> = Reflect.get(index, 'readers');
+        const named: Map<string, unknown> = Reflect.get(index, 'named');
+        const held = Array.from(readers, ([key, hosts]) => [key, Array.from(hosts, (sheet) => sheet.id)]);
+        expect(held.sort()).toEqual([
+            ['q999', ['t0']],
+            ['t0', ['t0']],
+        ]);
+        expect([...named.keys()].sort()).toEqual(['q999', 't0']);
+    });
+});
