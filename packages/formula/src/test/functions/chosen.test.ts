@@ -31,7 +31,7 @@ describe('SUBTOTAL picks a function by its first argument and hands it the refer
         ['=SUBTOTAL(9,C4)', 0],
         ['=SUBTOTAL(3,C1:C4)', 2],
         ['=SUBTOTAL(9,C1:C4,C1:D4)', 6],
-        // No row is hidden in this build, so 101 to 111 answer as 1 to 11 do.
+        // With no row hidden or filtered, 101 to 111 answer as 1 to 11 do.
         ['=SUBTOTAL(109,A1:A5)', 15],
         ['=SUBTOTAL(103,A1:A5)', 5],
         ['=SUBTOTAL(109,C1:C4)', 3],

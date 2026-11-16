@@ -23,6 +23,9 @@ export class ReverseIndex {
     private resolving: number[] = [];
     // The rectangles whose shape reads the clock or draws, in the same five numbers.
     public clocks: readonly number[] = [];
+    // The rectangles whose shape leaves rows out, as SUBTOTAL does, once per sheet they name: that sheet, or -1 for
+    // any sheet when the shape works a reference out, and the same five numbers.
+    public choosers: readonly number[] = [];
     // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
     // last row, and shape.
     public rectangles: readonly number[] = [];
@@ -72,6 +75,8 @@ export class ReverseIndex {
         this.resolving = [];
         const clocks: number[] = [];
         this.clocks = clocks;
+        const choosers: number[] = [];
+        this.choosers = choosers;
         for (let r = 0; r < rectangles.length; r += 6) {
             const s = rectangles[r];
             const id = rectangles[r + 5];
@@ -80,6 +85,10 @@ export class ReverseIndex {
             if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
             if (facts & Fact.Resolves) this.resolving.push(...rectangles.slice(r, r + 5));
             if (facts & Fact.Clock) clocks.push(...rectangles.slice(r, r + 5));
+            // A shape that leaves rows out is listed from here on, under any sheet or under each one it names.
+            const chooses = (facts & Fact.Chosen) !== 0;
+            const listed = choosers.length;
+            if (chooses && (facts & Fact.Resolves) !== 0) choosers.push(-1, ...rectangles.slice(r, r + 5));
             for (const ref of shapes.shape(id).refs) {
                 const { op, sheetKind, flags } = ref;
                 const target =
@@ -89,6 +98,11 @@ export class ReverseIndex {
                           ? workbook.sheet(ref.sheet)?.place
                           : undefined;
                 if (target === undefined) continue;
+                if (chooses) {
+                    let at = listed;
+                    while (at < choosers.length && choosers[at] !== -1 && choosers[at] !== target) at += 6;
+                    if (at === choosers.length) choosers.push(target, ...rectangles.slice(r, r + 5));
+                }
                 // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
                 let { row, row2, column, column2 } = ref;
                 let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
