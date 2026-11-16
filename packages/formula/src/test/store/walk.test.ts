@@ -177,29 +177,35 @@ describe('the walk of a sheet', () => {
         expect(engine.nextCell('s1', 9, 0, last)).toBe(-1);
     });
 
-    test('the last cell up to a row is found from that row back, and none before the first', () => {
+    test('the last cell from a first row up to a row is found from that row back, and none before the first', () => {
+        // Row 6 holds a formula whose blank result a computed load gave: no value, still a cell.
         const engine = new Engine(
             [
                 source('s1', [
                     [2, 0, 1],
                     [4, 0, 2],
+                    [6, 0, null, '=R1C9'],
                     [GRID_ROWS - 1, 1, 3],
                 ]),
             ],
             0,
             0,
-            false,
+            true,
         );
-        expect(engine.lastCell('s1', 0, GRID_ROWS - 1)).toBe(4);
-        expect(engine.lastCell('s1', 0, 4)).toBe(4);
-        expect(engine.lastCell('s1', 0, 3)).toBe(2);
-        expect(engine.lastCell('s1', 0, 2)).toBe(2);
-        expect(engine.lastCell('s1', 0, 1)).toBe(-1);
-        expect(engine.lastCell('s1', 1, GRID_ROWS - 1)).toBe(GRID_ROWS - 1);
-        expect(engine.lastCell('s1', 1, GRID_ROWS - 2)).toBe(-1);
-        expect(engine.lastCell('s1', 2, 9)).toBe(-1);
-        expect(engine.lastCell('s1', 9, 9)).toBe(-1);
-        expect(engine.lastCell('s1', 0, -1)).toBe(-1);
+        expect(engine.lastCell('s1', 0, GRID_ROWS - 1, 0)).toBe(6);
+        expect(engine.lastCell('s1', 0, 5, 0)).toBe(4);
+        expect(engine.lastCell('s1', 0, 4, 0)).toBe(4);
+        expect(engine.lastCell('s1', 0, 3, 0)).toBe(2);
+        expect(engine.lastCell('s1', 0, 2, 0)).toBe(2);
+        expect(engine.lastCell('s1', 0, 1, 0)).toBe(-1);
+        expect(engine.lastCell('s1', 0, 5, 3)).toBe(4);
+        expect(engine.lastCell('s1', 0, 3, 3)).toBe(-1);
+        expect(engine.lastCell('s1', 0, 4, 4)).toBe(4);
+        expect(engine.lastCell('s1', 1, GRID_ROWS - 1, 0)).toBe(GRID_ROWS - 1);
+        expect(engine.lastCell('s1', 1, GRID_ROWS - 2, 0)).toBe(-1);
+        expect(engine.lastCell('s1', 2, 9, 0)).toBe(-1);
+        expect(engine.lastCell('s1', 9, 9, 0)).toBe(-1);
+        expect(engine.lastCell('s1', 0, -1, 0)).toBe(-1);
     });
 
     test('the cursor looks no further than the last row it is given', () => {

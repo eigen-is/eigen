@@ -42,8 +42,8 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         const { engine } = book;
         let slots = 0;
         for (let column = Math.min(right, engine.lastColumn(op.sheet)); column >= left; column -= 1) {
-            const last = engine.lastCell(op.sheet, column, bottom);
-            if (last < top) continue;
+            const last = engine.lastCell(op.sheet, column, bottom, top);
+            if (last < 0) continue;
             slots += Math.max(0, last + rowShift + 1 - engine.columnLength(op.toSheet, column + columnShift));
         }
         // The block lands band by band: the first row's spans are its bands.

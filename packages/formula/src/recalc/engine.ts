@@ -208,14 +208,16 @@ export class Engine {
         return -1;
     }
 
-    // The last row up to `row` where a column holds a value or a formula, or -1.
-    public lastCell(sheet: string, column: number, row: number): number {
+    // The last row from `first` up to `row` where a column holds a value or a formula, or -1.
+    public lastCell(sheet: string, column: number, row: number, first: number): number {
         const cells = this.workbook.known(sheet).columns[column];
         if (cells === undefined) return -1;
         const { kind, shape, length } = cells;
-        let at = Math.min(row, length - 1);
-        while (at >= 0 && kind[at] === 0 && shape[at] === 0) at -= 1;
-        return at;
+        const end = Math.max(first, 0);
+        for (let at = Math.min(row, length - 1); at >= end; at -= 1) {
+            if (kind[at] !== 0 || shape[at] !== 0) return at;
+        }
+        return -1;
     }
 
     // The rows a column holds: one past its last cell that holds a value or a formula.
