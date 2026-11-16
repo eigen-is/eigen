@@ -5,7 +5,7 @@
 // neighbouring bands never hold equal lists, so equal sheets are equal arrays.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
+import type { LinesOp, MoveOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { RunList } from './run-list';
 
 // The columns from `first` up to the next band's first, or to the grid's last column.
@@ -82,9 +82,38 @@ export class Bands {
         return { runs, bands: this.bands.length };
     }
 
-    // How many bands meet the columns c0 to c1.
-    public bandsIn(c0: number, c1: number): number {
-        return this.bandAt(c1) - this.bandAt(c0) + 1;
+    // The most runs and bands that writes over these spans of columns can add to the weight, whatever rows and looks
+    // they write, in whatever order, and when only some of them land. A write cuts a band at each end of its columns,
+    // which copies that band's runs, and adds at most three runs to each band it then writes: the bands it meets now
+    // and those the cuts of every write make inside its columns.
+    public growth(writes: readonly Span[]): { runs: number; bands: number } {
+        const { bands } = this;
+        let runs = 0;
+        const cuts = new Set<number>();
+        for (const [c0, c1] of writes) {
+            for (const column of [c0, c1 + 1]) {
+                const band = bands[this.bandAt(column)];
+                if (column >= GRID_COLUMNS || band.first === column || cuts.has(column)) continue;
+                cuts.add(column);
+                runs += band.list.count;
+            }
+        }
+        const sorted = [...cuts].sort((a, b) => a - b);
+        // How many cuts lie at or before a column.
+        const cutsTo = (column: number) => {
+            let low = 0;
+            let high = sorted.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (sorted[middle] <= column) low = middle + 1;
+                else high = middle;
+            }
+            return low;
+        };
+        for (const [c0, c1] of writes) {
+            runs += 3 * (this.bandAt(c1) - this.bandAt(c0) + 1 + cutsTo(c1) - cutsTo(c0));
+        }
+        return { runs, bands: cuts.size };
     }
 
     // The flat form of the constructor, with the look ids it names in order of first use, walking bands then runs.
