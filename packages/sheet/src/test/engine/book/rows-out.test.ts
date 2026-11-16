@@ -53,8 +53,8 @@ const HIDDEN_AND_FILTERED: Partial<SheetContent> = {
 };
 
 describe('engine/book — a load says the rows a sheet hides and filters with its cells', () => {
-    test('a load that computes leaves out the hidden row for 109 and option 5, the filtered row for 9 too', () => {
-        expect(totals(new Workbook(bookOf(sheetOf('a', HIDDEN_AND_FILTERED))))).toEqual([53, 55, 53, 63]);
+    test('a load that computes leaves out the hidden and the filtered row for 9, 109 and option 5', () => {
+        expect(totals(new Workbook(bookOf(sheetOf('a', HIDDEN_AND_FILTERED))))).toEqual([53, 53, 53, 63]);
     });
 
     test('runs side by side that are hidden with other keys, and filter columns whose rows overlap, are one set', () => {
@@ -76,7 +76,7 @@ describe('engine/book — a load says the rows a sheet hides and filters with it
                 }),
             ),
         );
-        expect(totals(book)).toEqual([4, 7, 4, 63]);
+        expect(totals(book)).toEqual([4, 4, 4, 63]);
         // The two hidden runs become one run: the same rows, so the engine is told nothing new.
         applyOps(book, [{ kind: 'format', sheet: 'a', lines: 'rows', spans: [[1, 1]], set: { size: 30 } }]);
         expect(book.sheets.get('a')?.rows.content()[0]).toEqual([[0, 1], { size: 30, hidden: 1 }]);
@@ -154,7 +154,7 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
         // The totals moved two rows down with the numbers they read.
         expect(book.engine.formulaOf('a', 2, 2)).toBe('=SUBTOTAL(109,R3C1:R8C1)');
         totals(book);
-        expect([2, 3, 4, 5].map((row) => book.engine.valueOf('a', row, 2))).toEqual([53, 55, 53, 63]);
+        expect([2, 3, 4, 5].map((row) => book.engine.valueOf('a', row, 2))).toEqual([53, 53, 53, 63]);
         // The hidden row goes, with the 2 and the second total on it.
         applyOps(book, [{ kind: 'lines', sheet: 'a', rows: true, insert: false, index: 3, count: 1 }]);
         totals(book);
@@ -192,13 +192,13 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
 
     test('a block moved to rows that show, and back', () => {
         const book = new Workbook(bookOf(sheetOf('a', HIDDEN_AND_FILTERED)));
-        expect(totals(book)).toEqual([53, 55, 53, 63]);
+        expect(totals(book)).toEqual([53, 53, 53, 63]);
         const inverse = applyOps(book, [
             { kind: 'move', sheet: 'a', from: [0, 0, 5, 0], toSheet: 'a', toRow: 10, toColumn: 0 },
         ]);
         expect(totals(book)).toEqual([63, 63, 63, 63]);
         applyOps(book, inverse);
-        expect(totals(book)).toEqual([53, 55, 53, 63]);
+        expect(totals(book)).toEqual([53, 53, 53, 63]);
     });
 
     test('a sheet deleted and added back by the inverse, for a total on another sheet', () => {
@@ -207,12 +207,12 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
             cells: TOTALS.map((f, row): Placed<CellRecord> => [row, 2, { f: f.replace('R1C1', '[a]!R1C1') }]),
         });
         const book = new Workbook(bookOf(sheetOf('a', HIDDEN_AND_FILTERED), reader));
-        expect(totals(book, 'b')).toEqual([53, 55, 53, 63]);
+        expect(totals(book, 'b')).toEqual([53, 53, 53, 63]);
         const inverse = applyOps(book, [{ kind: 'sheet', delete: 'a' }]);
         expect(totals(book, 'b')).toEqual([REF, REF, REF, REF]);
         applyOps(book, inverse);
-        expect(totals(book, 'b')).toEqual([53, 55, 53, 63]);
-        expect(totals(book)).toEqual([53, 55, 53, 63]);
+        expect(totals(book, 'b')).toEqual([53, 53, 53, 63]);
+        expect(totals(book)).toEqual([53, 53, 53, 63]);
     });
 
     test('a refused batch that hid a row before it was refused leaves every total', () => {
@@ -221,7 +221,7 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
         const refused = () => applyOps(book, [hide(4, 5), filterColumn('j', [[0, 0]]), { kind: 'sheet', delete: 'a' }]);
         expect(refused).toThrow(Refusal);
         expect(bytes(book)).toBe(before);
-        expect(totals(book)).toEqual([53, 55, 53, 63]);
+        expect(totals(book)).toEqual([53, 53, 53, 63]);
     });
 
     // The sheet comes back as it was when it was deleted, and the rest of the take-back hides its row again.
@@ -236,7 +236,7 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
             applyOps(book, [show(1, 1), { kind: 'sheet', delete: 'a' }, { kind: 'sheet', delete: 'b' }]);
         expect(refused).toThrow(Refusal);
         expect(bytes(book)).toBe(before);
-        expect(totals(book, 'b')).toEqual([53, 55, 53, 63]);
+        expect(totals(book, 'b')).toEqual([53, 53, 53, 63]);
     });
 
     test('a filter column of a snapshot whose filter is not there leaves out no row', () => {
@@ -244,5 +244,77 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
         const book = new Workbook(bookOf(sheetOf('a', { records: { ...orphan } })));
         book.engine.recalc(Number.MAX_SAFE_INTEGER);
         expect(TOTALS.map((_, row) => book.engine.valueOf('a', row, 2))).toEqual([63, 63, 63, 63]);
+    });
+});
+
+// Measured in Excel for the web on 16 Nov 2026: A2:A7 hold 1, 2, 4, 8, 16 and 32, A9 holds 64, and a filter over
+// A1:B7 leaves rows 3 and 6 out. Column D reads SUBTOTAL 9 and 109, AGGREGATE 9 with an even and an odd option.
+describe('engine/book — while a filter leaves a row out, SUBTOTAL 1 to 11 leave out every hidden row, as Excel does', () => {
+    const READS = [
+        '=SUBTOTAL(9,R2C1:R7C1)',
+        '=SUBTOTAL(109,R2C1:R7C1)',
+        '=AGGREGATE(9,6,R2C1:R7C1)',
+        '=AGGREGATE(9,5,R2C1:R7C1)',
+        '=SUBTOTAL(9,R2C1:R9C1)',
+    ];
+    const excel = () =>
+        new Workbook(
+            bookOf(
+                sheetOf('a', {
+                    cells: [
+                        ...[1, 2, 4, 8, 16, 32].map((v, at): Placed<CellRecord> => [at + 1, 0, { v }]),
+                        [8, 0, { v: 64 }],
+                        ...READS.map((f, row): Placed<CellRecord> => [row, 3, { f }]),
+                    ],
+                }),
+            ),
+        );
+    const filterOn: Op[] = [
+        { kind: 'record', sheet: 'a', type: 'filter', id: 'f', set: { rect: [0, 0, 6, 1] }, whole: 1 },
+        filterColumn('k', [
+            [2, 2],
+            [5, 5],
+        ]),
+    ];
+
+    // The five reads, once computed, and the same from a book loaded fresh from the content.
+    function reads(book: Workbook): (Literal | null)[] {
+        const text = bytes(book);
+        expect(bytes(new Workbook({ ...decoded(text), computed: false }))).toBe(text);
+        return READS.map((_, row) => book.engine.valueOf('a', row, 3));
+    }
+
+    test('no filter and a row hidden by hand: only 109 and the odd option leave it out', () => {
+        const book = excel();
+        applyOps(book, [hide(3, 3)]);
+        expect(reads(book)).toEqual([63, 59, 63, 59, 127]);
+    });
+
+    test('the filter on and no row hidden by hand: every code but the even option leaves its rows out', () => {
+        const book = excel();
+        applyOps(book, filterOn);
+        expect(reads(book)).toEqual([45, 45, 63, 45, 109]);
+    });
+
+    test('the filter on and a row hidden by hand inside its range: SUBTOTAL 9 leaves that row out too', () => {
+        const book = excel();
+        applyOps(book, [...filterOn, hide(3, 3)]);
+        expect(reads(book)).toEqual([41, 41, 63, 41, 105]);
+    });
+
+    test('a row hidden by hand outside the filter range is left out by SUBTOTAL 9 too', () => {
+        const book = excel();
+        applyOps(book, [...filterOn, hide(3, 3)]);
+        applyOps(book, [hide(8, 8)]);
+        expect(reads(book)).toEqual([41, 41, 63, 41, 41]);
+        // A load of the same rows says the same.
+        expect(reads(new Workbook(decoded(bytes(book))))).toEqual([41, 41, 63, 41, 41]);
+    });
+
+    test('the criteria cleared: no row is filtered, and SUBTOTAL 9 leaves no hidden row out', () => {
+        const book = excel();
+        applyOps(book, [...filterOn, hide(3, 3), hide(8, 8)]);
+        applyOps(book, [{ kind: 'record', sheet: 'a', type: 'filterColumn', id: 'k', set: { rows: [] } }]);
+        expect(reads(book)).toEqual([63, 59, 63, 59, 127]);
     });
 });
