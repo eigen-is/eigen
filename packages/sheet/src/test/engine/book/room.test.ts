@@ -502,4 +502,15 @@ describe('engine/book/room — a format refused midway leaves the book as it was
         expect(book.weight()).toEqual(weight);
         expect(bytes(book)).toBe(before);
     }, 120_000);
+
+    test('a batch whose later op would bring the book back under the limit is still refused', () => {
+        // The format stops once it passes twice the limit, half written: a clear of every look after it would leave a
+        // book that fits, with a format that landed in part.
+        const book = new Workbook(bookOf(sheetOf('S', striped(300_000))));
+        const looks = JSON.stringify(book.sheets.get('S')?.bands.content());
+        const ranges = Array.from({ length: 100 }, (_, k): Rect => [k, 2 * k, k, 2 * k]);
+        const batch = [format(ranges, { it: 1 }), format([WHOLE], undefined, [...LOOK_KEYS])];
+        expect(refusalOf(() => applyOps(book, batch))).toBe('too-many-formats');
+        expect(JSON.stringify(book.sheets.get('S')?.bands.content())).toBe(looks);
+    }, 120_000);
 });
