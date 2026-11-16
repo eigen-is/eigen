@@ -273,6 +273,24 @@ describe('engine/book/apply-move — the inverse, part by part', () => {
         ]);
     });
 
+    test('(4) a comment where the block overlaps itself goes along and back, and needs no record op', () => {
+        // B4 is in the block and where it lands; C5 is only landed on, so it comes back after the move back.
+        const comment = { bc: { row: 0, column: 1 }, oc: { row: 3, column: 1 }, tc: { row: 4, column: 2 } };
+        const content = bookOf({ ...A, records: { ...A.records, comment } }, B);
+        const ops = expectLaw2(content, [OVERLAP]);
+        expect(ops.filter((op) => op.kind === 'record')).toEqual([
+            { kind: 'record', sheet: 'a', type: 'merge', id: 'landed', set: { rect: [5, 1, 5, 2] }, whole: 1 },
+            { kind: 'record', sheet: 'a', type: 'comment', id: 'tc', set: { row: 4, column: 2 }, whole: 1 },
+            { kind: 'record', sheet: 'a', type: 'validation', id: 'v', set: A.records.validation?.v },
+        ]);
+        const book = new Workbook(content);
+        applyOps(book, [OVERLAP]);
+        expect(Object.fromEntries(book.sheets.get('a')?.records.records('comment') ?? [])).toEqual({
+            bc: { row: 2, column: 2 },
+            oc: { row: 5, column: 2 },
+        });
+    });
+
     test('(5) the formulas the move made lossy come back last, per sheet, where the move back leaves them', () => {
         const ops = inverse();
         expect(ops.slice(-2)).toEqual([
@@ -448,7 +466,7 @@ describe('engine/book/apply-move — the laws over random books and batches of m
                     model,
                     (r, m) => {
                         const draw = r();
-                        if (single || draw < 0.4) return randomMoveOp(r, m);
+                        if (single || draw < 0.5) return randomMoveOp(r, m);
                         if (draw < 0.6) return randomLandingReaderOp(r, m);
                         if (draw < 0.65) return randomInputOp(r, m);
                         if (draw < 0.72) return randomFormatOp(r, m);

@@ -193,8 +193,14 @@ export function randomBook(random: Random): Book {
     return { g: below(random, 9), now, seed: below(random, 2 ** 31), computed: false, sheets };
 }
 
+// A border side is one look whatever the order its keys come in, as a decoded snapshot sorts them.
 function lookKey(look: CellAttrs): string {
-    return JSON.stringify(LOOK_KEYS.map((key) => look[key] ?? null));
+    return JSON.stringify(
+        LOOK_KEYS.map((key) => {
+            const value = look[key];
+            return typeof value === 'object' ? [value.style, value.color] : (value ?? null);
+        }),
+    );
 }
 
 // The bands column by column from the looks the flat form names: each band as its first column and its runs of

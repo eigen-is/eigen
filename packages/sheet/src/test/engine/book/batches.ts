@@ -1,10 +1,11 @@
 // Random books and random batches of ops for the laws of the workbook's appliers, seeded so a failing case runs
-// again. A book comes with every formula still to be computed, so its values are the engine's own and stay the same
-// when an edit computes them again. An op is drawn against the model of the book: it mostly names sheets, cells and
-// records that are there, and now and then one that is not, a name in use, a merge over a merge or the last sheet.
-// Every batch passes the validators.
+// again. A book comes with every formula still to be computed, or about half the time as the server's fold of it,
+// computed and trusted whole, so its values are the engine's own and stay the same when an edit computes them again.
+// An op is drawn against the model of the book: it mostly names sheets, cells and records that are there, and now and
+// then one that is not, a name in use, a merge over a merge or the last sheet. Every batch passes the validators.
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { encodeBook } from '@workspace/lib/sheets/book-codec';
 import type {
     Batch,
     CellAttrs,
@@ -28,6 +29,7 @@ import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook } from './book-fixtures';
+import { decoded, fold } from './bytes';
 import type { Model, ModelSheet } from './model';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
@@ -70,9 +72,15 @@ function pick<T>(random: Random, list: readonly T[]): T {
     return list[below(random, list.length)];
 }
 
-// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there, and its
-// filter, where it has one, often from the first line or to the last.
+// A book whose formulas hold no value yet, or about half the time its computed fold, with a formula typed with the
+// name of a sheet that is not there, and its filter, where it has one, often from the first line or to the last.
 export function randomBookContent(random: Random): Book {
+    const book = uncomputedBook(random);
+    // Told by the generation, already drawn, so the choice takes no draw of its own.
+    return book.g % 2 === 1 ? decoded(fold(encodeBook(book), [])) : book;
+}
+
+function uncomputedBook(random: Random): Book {
     const book = randomBook(random);
     return {
         ...book,
@@ -116,7 +124,37 @@ export function randomOp(random: Random, model: Model): Op {
     );
 }
 
-function someSheet(random: Random, model: Model): ModelSheet {
+// An op in the mix the general laws draw: every kind, with formulas that read the lines and blocks an edit moves and
+// things put at the grid's end, which an insert then pushes.
+export function randomAnyOp(random: Random, model: Model): Op {
+    const draw = random();
+    if (draw < 0.15) return randomInputOp(random, model);
+    if (draw < 0.19) return randomLineReaderOp(random, model);
+    if (draw < 0.23) return randomLandingReaderOp(random, model);
+    if (draw < 0.36) return randomFormatOp(random, model);
+    if (draw < 0.47) return randomLinesOp(random, model);
+    if (draw < 0.52) return randomEndOp(random, model);
+    if (draw < 0.66) return randomMoveOp(random, model);
+    if (draw < 0.7) return randomMergeOp(random, model);
+    return draw < 0.89 ? randomRecordOp(random, model) : randomSheetOp(random, model);
+}
+
+// A merge made over a cell of a merge of its sheet, which the store refuses, or made fresh where a sheet holds none.
+function randomMergeOp(random: Random, model: Model): RecordOp {
+    const merged = [...model.sheets.values()].filter(({ records }) => records.merge.size > 0);
+    const id = `m${below(random, 5)}`;
+    if (merged.length === 0) {
+        const { id: sheet } = someSheet(random, model);
+        return { kind: 'record', sheet, type: 'merge', id, set: { rect: smallRect(random) }, whole: 1 };
+    }
+    const { id: sheet, records } = pick(random, merged);
+    const [top, left, bottom, right] = pick(random, [...records.merge.values()]).rect;
+    const row = top + below(random, bottom - top + 1);
+    const column = left + below(random, right - left + 1);
+    return { kind: 'record', sheet, type: 'merge', id, set: { rect: [row, column, row + 1, column] }, whole: 1 };
+}
+
+export function someSheet(random: Random, model: Model): ModelSheet {
     return pick(random, [...model.sheets.values()]);
 }
 

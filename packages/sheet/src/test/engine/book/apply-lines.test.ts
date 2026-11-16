@@ -979,7 +979,7 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
                         const draw = r();
                         if (draw < 0.45) return randomLinesOp(r, m);
                         if (draw < 0.57) return randomEndOp(r, m);
-                        if (draw < 0.67) return randomLineReaderOp(r, m);
+                        if (draw < 0.74) return randomLineReaderOp(r, m);
                         if (draw < 0.75) return randomInputOp(r, m);
                         if (draw < 0.83) return randomFormatOp(r, m);
                         return draw < 0.97 ? randomRecordOp(r, m) : randomSheetOp(r, m);

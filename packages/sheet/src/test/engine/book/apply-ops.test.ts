@@ -26,19 +26,7 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import {
-    batchOf,
-    randomBookContent,
-    randomEndOp,
-    randomFormatOp,
-    randomInputOp,
-    randomLandingReaderOp,
-    randomLineReaderOp,
-    randomLinesOp,
-    randomMoveOp,
-    randomRecordOp,
-    randomSheetOp,
-} from './batches';
+import { batchOf, randomAnyOp, randomBookContent } from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
 import { bytes } from './bytes';
@@ -511,28 +499,16 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         const sheets = { add: 0, delete: 0 };
         // The format ops in the inverses: over cells, over lines, and of a link.
         const formats = { cells: 0, lines: 0, links: 0 };
+        // The loads trusted whole, and those that compute every formula.
+        const loads = { computed: 0, computing: 0 };
         for (let seed = 1; seed <= 600; seed += 1) {
             const random = randomOf(seed);
             const content = randomBookContent(random);
+            loads[content.computed ? 'computed' : 'computing'] += 1;
             const book = new Workbook(content);
             let model: Model = modelOf(content);
             for (let round = 0; round < 8; round += 1) {
-                const drawn = batchOf(
-                    random,
-                    model,
-                    (r, m) => {
-                        const draw = r();
-                        if (draw < 0.15) return randomInputOp(r, m);
-                        if (draw < 0.19) return randomLineReaderOp(r, m);
-                        if (draw < 0.23) return randomLandingReaderOp(r, m);
-                        if (draw < 0.36) return randomFormatOp(r, m);
-                        if (draw < 0.47) return randomLinesOp(r, m);
-                        if (draw < 0.52) return randomEndOp(r, m);
-                        if (draw < 0.66) return randomMoveOp(r, m);
-                        return draw < 0.89 ? randomRecordOp(r, m) : randomSheetOp(r, m);
-                    },
-                    6,
-                );
+                const drawn = batchOf(random, model, randomAnyOp, 6);
                 const before = bytes(book);
                 const clock = model;
                 const next = modelAfter(model, drawn);
@@ -580,6 +556,8 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 }
             }
         }
+        expect(loads.computed).toBeGreaterThan(250);
+        expect(loads.computing).toBeGreaterThan(250);
         expect(landed).toBeGreaterThan(3500);
         expect(undone).toBe(landed);
         for (const kind of ['input', 'format', 'record', 'lines', 'move', 'sheet']) {
@@ -595,6 +573,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         for (const key of ['grid-end', 'merge-overlap', 'merge-cut', 'id-in-use', 'last-sheet']) {
             for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`${key} ${k}`) ?? 0).toBeGreaterThan(0);
         }
+        for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`merge-overlap ${k}`) ?? 0).toBeGreaterThan(30);
         for (let k = 1; k < 5; k += 1) expect(refusedAt.get(`too-many-cells ${k}`) ?? 0).toBeGreaterThan(5);
     }, 120_000);
 });
