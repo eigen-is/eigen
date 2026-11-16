@@ -708,7 +708,7 @@ describe('A graceful shutdown', () => {
     });
 
     // The second change has not reached the relay yet: it starts when the first has been delivered.
-    test('waits for an access change still waiting behind the one before it on that path', async () => {
+    test('waits until a second access change to a path, queued behind the first, is delivered', async () => {
         const file = await aliceFile('drained.txt');
         const receive = spyOn((await getHomeModule.getHome(members[0].id)).drive, 'receiveSharedPathChange');
         const held = holdMemberHomes();
