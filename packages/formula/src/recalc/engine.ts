@@ -22,7 +22,7 @@ import { Recalc } from './recalc';
 export class Engine {
     private readonly workbook: Pick<
         Workbook,
-        'known' | 'sheets' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName'
+        'known' | 'sheets' | 'value' | 'shapes' | 'read' | 'checkId' | 'checkName' | 'slots'
     >;
     private readonly calc: Recalc;
 
@@ -239,11 +239,7 @@ export class Engine {
 
     // The rows every column of the workbook holds, together: what the cells cost, whatever room a column has.
     public slots(): number {
-        let slots = 0;
-        for (const sheet of this.workbook.sheets) {
-            for (const column of sheet.columns) slots += column.length;
-        }
-        return slots;
+        return this.workbook.slots;
     }
 
     // The sheet of a cell a host names: it must exist, as the cell must on the grid, and its value be one to hold.

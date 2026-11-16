@@ -111,6 +111,8 @@ export type Counts = {
     refused: number;
     // The inserts refused for a cell they would push off the grid.
     pushing: number;
+    // The steps after which the engine's slot total was held against a count of the rows of every column.
+    slots: number;
 };
 
 type Op =
@@ -163,6 +165,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         several: 0,
         refused: 0,
         pushing: 0,
+        slots: 0,
     };
     const rows = edge === Edge.Rows ? [...span(0, 5), ...span(GRID_ROWS - 6, 6)] : span(0, 10);
     const columns =
@@ -257,6 +260,16 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
         const fail = (what: string): never => {
             throw new Error(`${what}\n${where()}`);
         };
+        // The slot total as the store once walked it: the rows of every column of every sheet.
+        const slotted = () => {
+            let slots = 0;
+            for (const { id } of model) {
+                for (let c = engine.lastColumn(id); c >= 0; c -= 1) slots += engine.columnLength(id, c);
+            }
+            if (engine.slots() !== slots) fail(`${engine.slots()} slots, the columns hold ${slots}`);
+            counts.slots += 1;
+        };
+        slotted();
         // The cells of every sheet that hold something in the model or could in the engine.
         const everyCell = (visit: (sheet: ModelSheet, row: number, column: number, cell: Cell | undefined) => void) => {
             for (const sheet of model) {
@@ -267,6 +280,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             }
         };
         const inputs = () => {
+            slotted();
             everyCell((sheet, row, column, cell) => {
                 const text = cell === undefined ? null : textOf(cell, row, column);
                 const held = engine.formulaOf(sheet.id, row, column);
@@ -660,6 +674,7 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 perform(op);
                 recalc(NO_CAP);
             }
+            slotted();
         }
         recalc(NO_CAP);
         counts.workbooks += 1;
