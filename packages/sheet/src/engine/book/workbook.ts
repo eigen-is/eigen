@@ -199,8 +199,9 @@ export class Workbook {
     // and this much weight of formats more, or null. Records are weighed at the end of a batch only.
     public over(slots = 0, formats = 0): RefusalKey | null {
         const { runs, bands, extras } = this.held;
-        const weight = { slots: this.engine.slots() + slots, runs: runs + formats, bands, extras };
-        return fits({ ...weight, records: 0, sheets: this.parts.size }, MIDWAY);
+        const sheets = this.parts.size;
+        const weight = { slots: this.engine.slots() + slots, runs: runs + formats, bands, extras, records: 0, sheets };
+        return fits(weight, MIDWAY);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in

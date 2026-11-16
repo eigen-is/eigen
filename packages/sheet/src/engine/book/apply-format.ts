@@ -82,12 +82,15 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
     const runKeys = RUN_KEYS.filter((key) => lookKeys.includes(key));
     const linked = names(op, 'link');
     if (checked) {
-        let tiles = 0;
         let cells = 0;
-        for (const rect of op.ranges) {
-            if (lookKeys.length > 0) tiles += bands.tiles(rect);
-            if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
-            cells += (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1);
+        for (const [top, left, bottom, right] of op.ranges) cells += (bottom - top + 1) * (right - left + 1);
+        // A span tiles one cell at least, so rectangles of no more cells than the limit reach no more runs.
+        if (lookKeys.length > 0 && cells > MAX_STYLE_RUNS) {
+            let tiles = 0;
+            for (const rect of op.ranges) {
+                tiles += bands.tiles(rect);
+                if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
+            }
         }
         const over = link ? book.over(0, unitsOf({ link }) * EXTRA_WEIGHT * cells) : null;
         if (over) throw new Refusal(over);
