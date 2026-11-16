@@ -14,6 +14,7 @@ import {
     MAX_STYLE_RUNS,
     MAX_TEXT_LENGTH,
     MAX_VALUE_SLOTS,
+    MIDWAY,
 } from '../../sheets/limits';
 
 const EMPTY = { slots: 0, runs: 0, bands: 0, extras: 0, records: 0, sheets: 1 };
@@ -52,6 +53,24 @@ describe('fits', () => {
 
     test('too many cells is told before too many formats', () => {
         expect(fits({ ...EMPTY, slots: MAX_VALUE_SLOTS + 1, runs: MAX_STYLE_RUNS + 1 })).toBe('too-many-cells');
+    });
+
+    test('inside a batch a workbook fits up to twice each limit, and not one past it', () => {
+        expect(MIDWAY).toBe(2);
+        const twice = {
+            slots: 2 * MAX_VALUE_SLOTS,
+            runs: 2 * MAX_STYLE_RUNS - 10 * BAND_WEIGHT - 5 * EXTRA_WEIGHT,
+            bands: 10,
+            extras: 5,
+            records: 2 * MAX_RECORDS_PER_TYPE,
+            sheets: 2 * MAX_SHEETS,
+        };
+        expect(fits(twice, MIDWAY)).toBeNull();
+        expect(fits(twice)).toBe('too-many-cells');
+        expect(fits({ ...twice, slots: twice.slots + 1 }, MIDWAY)).toBe('too-many-cells');
+        expect(fits({ ...twice, runs: twice.runs + 1 }, MIDWAY)).toBe('too-many-formats');
+        expect(fits({ ...twice, records: twice.records + 1 }, MIDWAY)).toBe('too-many-records');
+        expect(fits({ ...twice, sheets: twice.sheets + 1 }, MIDWAY)).toBe('too-many-sheets');
     });
 });
 
