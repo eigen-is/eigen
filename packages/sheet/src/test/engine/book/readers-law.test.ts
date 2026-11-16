@@ -192,165 +192,173 @@ function count(counts: Map<string, number>, key: string): void {
 }
 
 describe('engine/book — LAW 5: a fold then a join equals a replay', () => {
-    test('from one snapshot and one log, a reader that loads a fold and replays the rest reads as one that replays all', () => {
-        const counts = new Map<string, number>();
-        for (let seed = 1; seed <= SEEDS; seed += 1) {
-            const random = randomOf(seed);
-            const start = startOf(random);
-            count(counts, start.computed ? 'start computed' : 'start not computed');
-            const length = 6;
-            // The batches a fold takes in: the first at `folds[0]`, and now and then a second fold later.
-            const folds = [below(random, length)];
-            if (folds[0] < length - 1 && random() < 0.4)
-                folds.push(folds[0] + 1 + below(random, length - 1 - folds[0]));
-            let snapshot = encodeBook(start);
-            let since = 0;
-            const replay = new Workbook(start);
-            let loaded: Workbook | undefined;
-            let lazy: Workbook | undefined;
-            const log: Batch[] = [];
-            for (let at = 0; at < length; at += 1) {
-                const model = modelOf(replay.content());
-                const tags = new Map<Op, string>();
-                if (folds.includes(at)) {
-                    const cap = pick(random, CAPS);
-                    const stops = { n: 0 };
-                    snapshot = fold(snapshot, log.slice(since), cap, stops);
-                    since = at;
-                    const content = decoded(snapshot);
-                    expect(content.computed).toBe(true);
-                    if (stops.n > 0) count(counts, 'capped fold');
-                    const cells = content.sheets.flatMap((sheet) => sheet.cells.map(([, , cell]) => cell));
-                    if (cells.some(({ f, v, e }) => f !== undefined && e === 1 && v === '#REF!'))
-                        count(counts, 'fold holds #REF!');
-                    if (cells.some(({ f }) => f === '=NOW()+R21C5' || f === '=RAND()'))
-                        count(counts, 'fold holds clock');
-                    loaded = new Workbook(content);
-                    lazy ??= new Workbook(content);
-                }
-                const batch = folds.includes(at)
-                    ? afterLoadBatch(random, model, tags)
-                    : batchOf(random, model, randomAnyOp, 6);
-                log.push(batch);
-                const expected = land(replay, batch);
-                // The replaying reader runs its pass after every batch, as a tab does.
-                const replayed = bytes(replay);
-                if (lazy) {
-                    const got = land(lazy, batch);
-                    expect(got.refused).toBe(expected.refused);
-                    if (got.inverse && expected.inverse) {
-                        expect(withoutValues(got.inverse)).toEqual(withoutValues(expected.inverse));
+    test(
+        'from one snapshot and one log, a reader that loads a fold and replays the rest reads as one that replays all',
+        () => {
+            const counts = new Map<string, number>();
+            for (let seed = 1; seed <= SEEDS; seed += 1) {
+                const random = randomOf(seed);
+                const start = startOf(random);
+                count(counts, start.computed ? 'start computed' : 'start not computed');
+                const length = 6;
+                // The batches a fold takes in: the first at `folds[0]`, and now and then a second fold later.
+                const folds = [below(random, length)];
+                if (folds[0] < length - 1 && random() < 0.4)
+                    folds.push(folds[0] + 1 + below(random, length - 1 - folds[0]));
+                let snapshot = encodeBook(start);
+                let since = 0;
+                const replay = new Workbook(start);
+                let loaded: Workbook | undefined;
+                let lazy: Workbook | undefined;
+                const log: Batch[] = [];
+                for (let at = 0; at < length; at += 1) {
+                    const model = modelOf(replay.content());
+                    const tags = new Map<Op, string>();
+                    if (folds.includes(at)) {
+                        const cap = pick(random, CAPS);
+                        const stops = { n: 0 };
+                        snapshot = fold(snapshot, log.slice(since), cap, stops);
+                        since = at;
+                        const content = decoded(snapshot);
+                        expect(content.computed).toBe(true);
+                        if (stops.n > 0) count(counts, 'capped fold');
+                        const cells = content.sheets.flatMap((sheet) => sheet.cells.map(([, , cell]) => cell));
+                        if (cells.some(({ f, v, e }) => f !== undefined && e === 1 && v === '#REF!'))
+                            count(counts, 'fold holds #REF!');
+                        if (cells.some(({ f }) => f === '=NOW()+R21C5' || f === '=RAND()'))
+                            count(counts, 'fold holds clock');
+                        loaded = new Workbook(content);
+                        lazy ??= new Workbook(content);
                     }
+                    const batch = folds.includes(at)
+                        ? afterLoadBatch(random, model, tags)
+                        : batchOf(random, model, randomAnyOp, 6);
+                    log.push(batch);
+                    const expected = land(replay, batch);
+                    // The replaying reader runs its pass after every batch, as a tab does.
+                    const replayed = bytes(replay);
+                    if (lazy) {
+                        const got = land(lazy, batch);
+                        expect(got.refused).toBe(expected.refused);
+                        if (got.inverse && expected.inverse) {
+                            expect(withoutValues(got.inverse)).toEqual(withoutValues(expected.inverse));
+                        }
+                    }
+                    if (!loaded) continue;
+                    const got = land(loaded, batch);
+                    expect(got.refused).toBe(expected.refused);
+                    expect(got.inverse).toEqual(expected.inverse);
+                    expect(bytes(loaded)).toBe(replayed);
+                    if (expected.refused) count(counts, `refused ${expected.refused}`);
+                    if (expected.inverse) for (const op of batch.ops) count(counts, `checked ${op.kind}`);
+                    if (!folds.includes(at)) continue;
+                    // The batch that met the load before its first pass.
+                    count(counts, expected.refused ? 'after load refused' : 'after load landed');
+                    if (expected.refused) continue;
+                    for (const op of batch.ops) count(counts, `after load ${op.kind}`);
+                    for (const tag of new Set(batch.ops.map((op) => tags.get(op))))
+                        if (tag) count(counts, `after load ${tag}`);
                 }
-                if (!loaded) continue;
-                const got = land(loaded, batch);
-                expect(got.refused).toBe(expected.refused);
-                expect(got.inverse).toEqual(expected.inverse);
-                expect(bytes(loaded)).toBe(replayed);
-                if (expected.refused) count(counts, `refused ${expected.refused}`);
-                if (expected.inverse) for (const op of batch.ops) count(counts, `checked ${op.kind}`);
-                if (!folds.includes(at)) continue;
-                // The batch that met the load before its first pass.
-                count(counts, expected.refused ? 'after load refused' : 'after load landed');
-                if (expected.refused) continue;
-                for (const op of batch.ops) count(counts, `after load ${op.kind}`);
-                for (const tag of new Set(batch.ops.map((op) => tags.get(op))))
-                    if (tag) count(counts, `after load ${tag}`);
+                if (lazy) expect(bytes(lazy)).toBe(bytes(replay));
             }
-            if (lazy) expect(bytes(lazy)).toBe(bytes(replay));
-        }
-        const floors: [string, number][] = [
-            ['start computed', SEEDS / 3],
-            ['start not computed', SEEDS / 3],
-            ['capped fold', SEEDS / 4],
-            ['fold holds #REF!', SEEDS * 0.8],
-            ['fold holds clock', SEEDS * 0.8],
-            ['after load landed', SEEDS / 2],
-            ['after load refused', 5],
-            ['after load switch', SEEDS / 2],
-            ['after load loop', SEEDS / 10],
-            ['after load rename', SEEDS / 10],
-            ['after load lines', SEEDS / 10],
-            ['after load move', SEEDS / 10],
-            ['after load input', SEEDS / 2],
-            ['after load record', SEEDS / 10],
-            ...['input', 'format', 'record', 'lines', 'move', 'sheet'].map((kind): [string, number] => [
-                `checked ${kind}`,
-                SEEDS / 2,
-            ]),
-            ...['grid-end', 'merge-overlap', 'merge-cut', 'last-sheet'].map((key): [string, number] => [
-                `refused ${key}`,
-                1,
-            ]),
-        ];
-        const short = floors.filter(([key, floor]) => (counts.get(key) ?? 0) < floor);
-        expect(short.map(([key, floor]) => `${key}: ${counts.get(key) ?? 0} < ${floor}`)).toEqual([]);
-        if (process.env['READERS_LAW_SEEDS']) console.log(Object.fromEntries([...counts].sort()));
-    }, 120_000);
+            const floors: [string, number][] = [
+                ['start computed', SEEDS / 3],
+                ['start not computed', SEEDS / 3],
+                ['capped fold', SEEDS / 4],
+                ['fold holds #REF!', SEEDS * 0.8],
+                ['fold holds clock', SEEDS * 0.8],
+                ['after load landed', SEEDS / 2],
+                ['after load refused', 5],
+                ['after load switch', SEEDS / 2],
+                ['after load loop', SEEDS / 10],
+                ['after load rename', SEEDS / 10],
+                ['after load lines', SEEDS / 10],
+                ['after load move', SEEDS / 10],
+                ['after load input', SEEDS / 2],
+                ['after load record', SEEDS / 10],
+                ...['input', 'format', 'record', 'lines', 'move', 'sheet'].map((kind): [string, number] => [
+                    `checked ${kind}`,
+                    SEEDS / 2,
+                ]),
+                ...['grid-end', 'merge-overlap', 'merge-cut', 'last-sheet'].map((key): [string, number] => [
+                    `refused ${key}`,
+                    1,
+                ]),
+            ];
+            const short = floors.filter(([key, floor]) => (counts.get(key) ?? 0) < floor);
+            expect(short.map(([key, floor]) => `${key}: ${counts.get(key) ?? 0} < ${floor}`)).toEqual([]);
+            if (process.env['READERS_LAW_SEEDS']) console.log(Object.fromEntries([...counts].sort()));
+        },
+        SEEDS * 400,
+    );
 });
 
 describe('engine/book — LAW 7: every reader refuses alike', () => {
-    test('a replaying reader, one that loads a fold, and one that lands and takes back batches of its own refuse alike', () => {
-        const counts = new Map<string, number>();
-        for (let seed = 1; seed <= LAW_7_SEEDS; seed += 1) {
-            const random = randomOf(100_000 + seed);
-            const start = startOf(random);
-            const length = 6;
-            const folded = 1 + below(random, length - 1);
-            const replay = new Workbook(start);
-            const taking = new Workbook(start);
-            let loaded: Workbook | undefined;
-            const log: Batch[] = [];
-            const refusals: Record<'replay' | 'loaded' | 'taking', (RefusalKey | undefined)[]> = {
-                replay: [],
-                loaded: [],
-                taking: [],
-            };
-            for (let at = 0; at < length; at += 1) {
-                if (at === folded) loaded = new Workbook(decoded(fold(encodeBook(start), log, pick(random, CAPS))));
-                // Batches of its own, landed and taken back newest first with the clock they found.
-                const { now, seed: drawn } = taking.content();
-                const own: Op[][] = [];
-                for (let extra = below(random, 3); extra > 0; extra -= 1) {
-                    const landed = land(
-                        taking,
-                        pastNowAndThen(random, batchOf(random, modelOf(taking.content()), randomAnyOp, 4)),
-                    );
-                    count(counts, landed.refused ? 'own refused' : 'own landed');
-                    if (landed.inverse) own.push(landed.inverse);
+    test(
+        'a replaying reader, one that loads a fold, and one that lands and takes back batches of its own refuse alike',
+        () => {
+            const counts = new Map<string, number>();
+            for (let seed = 1; seed <= LAW_7_SEEDS; seed += 1) {
+                const random = randomOf(100_000 + seed);
+                const start = startOf(random);
+                const length = 6;
+                const folded = 1 + below(random, length - 1);
+                const replay = new Workbook(start);
+                const taking = new Workbook(start);
+                let loaded: Workbook | undefined;
+                const log: Batch[] = [];
+                const refusals: Record<'replay' | 'loaded' | 'taking', (RefusalKey | undefined)[]> = {
+                    replay: [],
+                    loaded: [],
+                    taking: [],
+                };
+                for (let at = 0; at < length; at += 1) {
+                    if (at === folded) loaded = new Workbook(decoded(fold(encodeBook(start), log, pick(random, CAPS))));
+                    // Batches of its own, landed and taken back newest first with the clock they found.
+                    const { now, seed: drawn } = taking.content();
+                    const own: Op[][] = [];
+                    for (let extra = below(random, 3); extra > 0; extra -= 1) {
+                        const landed = land(
+                            taking,
+                            pastNowAndThen(random, batchOf(random, modelOf(taking.content()), randomAnyOp, 4)),
+                        );
+                        count(counts, landed.refused ? 'own refused' : 'own landed');
+                        if (landed.inverse) own.push(landed.inverse);
+                    }
+                    for (const inverse of own.reverse()) {
+                        expect(land(taking, { g: start.g, now, seed: drawn, ops: inverse }).refused).toBeUndefined();
+                        count(counts, 'own taken back');
+                    }
+                    const batch = pastNowAndThen(random, batchOf(random, modelOf(replay.content()), randomAnyOp, 6));
+                    log.push(batch);
+                    refusals.replay.push(land(replay, batch).refused);
+                    refusals.taking.push(land(taking, batch).refused);
+                    if (loaded) refusals.loaded.push(land(loaded, batch).refused);
+                    if (random() < 0.5) bytes(replay);
                 }
-                for (const inverse of own.reverse()) {
-                    expect(land(taking, { g: start.g, now, seed: drawn, ops: inverse }).refused).toBeUndefined();
-                    count(counts, 'own taken back');
-                }
-                const batch = pastNowAndThen(random, batchOf(random, modelOf(replay.content()), randomAnyOp, 6));
-                log.push(batch);
-                refusals.replay.push(land(replay, batch).refused);
-                refusals.taking.push(land(taking, batch).refused);
-                if (loaded) refusals.loaded.push(land(loaded, batch).refused);
-                if (random() < 0.5) bytes(replay);
+                expect(refusals.taking).toEqual(refusals.replay);
+                expect(refusals.loaded).toEqual(refusals.replay.slice(folded));
+                const replayed = bytes(replay);
+                expect(bytes(taking)).toBe(replayed);
+                expect(loaded && bytes(loaded)).toBe(replayed);
+                for (const key of refusals.replay) count(counts, key ? `refused ${key}` : 'landed');
             }
-            expect(refusals.taking).toEqual(refusals.replay);
-            expect(refusals.loaded).toEqual(refusals.replay.slice(folded));
-            const replayed = bytes(replay);
-            expect(bytes(taking)).toBe(replayed);
-            expect(loaded && bytes(loaded)).toBe(replayed);
-            for (const key of refusals.replay) count(counts, key ? `refused ${key}` : 'landed');
-        }
-        const floors: [string, number][] = [
-            ['own landed', LAW_7_SEEDS * 2],
-            ['own refused', LAW_7_SEEDS / 10],
-            ['own taken back', LAW_7_SEEDS * 2],
-            ['landed', LAW_7_SEEDS * 4],
-            ...['grid-end', 'merge-cut', 'last-sheet', 'too-many-cells'].map((key): [string, number] => [
-                `refused ${key}`,
-                1,
-            ]),
-        ];
-        const short = floors.filter(([key, floor]) => (counts.get(key) ?? 0) < floor);
-        expect(short.map(([key, floor]) => `${key}: ${counts.get(key) ?? 0} < ${floor}`)).toEqual([]);
-        if (process.env['READERS_LAW_SEEDS']) console.log(Object.fromEntries([...counts].sort()));
-    }, 120_000);
+            const floors: [string, number][] = [
+                ['own landed', LAW_7_SEEDS * 2],
+                ['own refused', LAW_7_SEEDS / 10],
+                ['own taken back', LAW_7_SEEDS * 2],
+                ['landed', LAW_7_SEEDS * 4],
+                ...['grid-end', 'merge-cut', 'last-sheet', 'too-many-cells'].map((key): [string, number] => [
+                    `refused ${key}`,
+                    1,
+                ]),
+            ];
+            const short = floors.filter(([key, floor]) => (counts.get(key) ?? 0) < floor);
+            expect(short.map(([key, floor]) => `${key}: ${counts.get(key) ?? 0} < ${floor}`)).toEqual([]);
+            if (process.env['READERS_LAW_SEEDS']) console.log(Object.fromEntries([...counts].sort()));
+        },
+        LAW_7_SEEDS * 600,
+    );
 });
 
 describe('engine/book — FINDING (kept #REF!): an inverse depends on whether a pass ran', () => {

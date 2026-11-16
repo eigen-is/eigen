@@ -98,51 +98,57 @@ function land(book: Workbook, batch: Batch): Op[] | undefined {
 }
 
 describe('engine/book — LAW 9: every reference is named by the log or the snapshot', () => {
-    test('every media name and comment id in the content comes from an op that landed or from the snapshot loaded', () => {
-        const counts = { landed: 0, undone: 0, redone: 0, copies: 0, media: 0, comments: 0, fromOps: 0 };
-        for (let seed = 1; seed <= SEEDS; seed += 1) {
-            const random = randomOf(seed);
-            const start = randomBookContent(random);
-            const book = new Workbook(start);
-            const named = namedIn(start);
-            const undo: Op[][] = [];
-            const redo: Op[][] = [];
-            for (let step = 0; step < 10; step += 1) {
-                const model = modelOf(book.content());
-                const draw = random();
-                const stack = draw < 0.2 && undo.length > 0 ? undo : draw < 0.3 && redo.length > 0 ? redo : undefined;
-                const ops =
-                    stack?.pop() ??
-                    batchOf(random, model, (r, m) => (r() < 0.6 ? referenceOp(r, m, book) : randomAnyOp(r, m)), 4).ops;
-                const inverse = land(book, { g: model.g, now: model.now + 1, seed: step, ops });
-                if (!inverse) continue;
-                if (stack === undo) counts.undone += 1;
-                else if (stack === redo) counts.redone += 1;
-                else counts.landed += 1;
-                (stack === undo ? redo : undo).push(inverse);
-                for (const op of ops) {
-                    if (op.kind === 'sheet' && 'add' in op && op.add.id.startsWith('copy')) counts.copies += 1;
-                    const { media, comments } = opReferences(op);
-                    for (const name of media) named.media.add(name);
-                    for (const id of comments) named.comments.add(id);
+    test(
+        'every media name and comment id in the content comes from an op that landed or from the snapshot loaded',
+        () => {
+            const counts = { landed: 0, undone: 0, redone: 0, copies: 0, media: 0, comments: 0, fromOps: 0 };
+            for (let seed = 1; seed <= SEEDS; seed += 1) {
+                const random = randomOf(seed);
+                const start = randomBookContent(random);
+                const book = new Workbook(start);
+                const named = namedIn(start);
+                const undo: Op[][] = [];
+                const redo: Op[][] = [];
+                for (let step = 0; step < 10; step += 1) {
+                    const model = modelOf(book.content());
+                    const draw = random();
+                    const stack =
+                        draw < 0.2 && undo.length > 0 ? undo : draw < 0.3 && redo.length > 0 ? redo : undefined;
+                    const ops =
+                        stack?.pop() ??
+                        batchOf(random, model, (r, m) => (r() < 0.6 ? referenceOp(r, m, book) : randomAnyOp(r, m)), 4)
+                            .ops;
+                    const inverse = land(book, { g: model.g, now: model.now + 1, seed: step, ops });
+                    if (!inverse) continue;
+                    if (stack === undo) counts.undone += 1;
+                    else if (stack === redo) counts.redone += 1;
+                    else counts.landed += 1;
+                    (stack === undo ? redo : undo).push(inverse);
+                    for (const op of ops) {
+                        if (op.kind === 'sheet' && 'add' in op && op.add.id.startsWith('copy')) counts.copies += 1;
+                        const { media, comments } = opReferences(op);
+                        for (const name of media) named.media.add(name);
+                        for (const id of comments) named.comments.add(id);
+                    }
+                    const held = namedIn(book.content());
+                    expect([...held.media].filter((name) => !named.media.has(name))).toEqual([]);
+                    expect([...held.comments].filter((id) => !named.comments.has(id))).toEqual([]);
+                    const loaded = namedIn(start);
+                    counts.media += held.media.size;
+                    counts.comments += held.comments.size;
+                    for (const name of held.media) if (!loaded.media.has(name)) counts.fromOps += 1;
+                    for (const id of held.comments) if (!loaded.comments.has(id)) counts.fromOps += 1;
                 }
-                const held = namedIn(book.content());
-                expect([...held.media].filter((name) => !named.media.has(name))).toEqual([]);
-                expect([...held.comments].filter((id) => !named.comments.has(id))).toEqual([]);
-                const loaded = namedIn(start);
-                counts.media += held.media.size;
-                counts.comments += held.comments.size;
-                for (const name of held.media) if (!loaded.media.has(name)) counts.fromOps += 1;
-                for (const id of held.comments) if (!loaded.comments.has(id)) counts.fromOps += 1;
             }
-        }
-        expect(counts.landed).toBeGreaterThan(SEEDS * 5);
-        expect(counts.undone).toBeGreaterThan(SEEDS);
-        expect(counts.redone).toBeGreaterThan(SEEDS / 3);
-        expect(counts.copies).toBeGreaterThan(SEEDS / 3);
-        expect(counts.media).toBeGreaterThan(SEEDS * 5);
-        expect(counts.comments).toBeGreaterThan(SEEDS * 5);
-        expect(counts.fromOps).toBeGreaterThan(SEEDS * 5);
-        if (process.env['REFERENCES_LAW_SEEDS']) console.log(counts);
-    }, 60_000);
+            expect(counts.landed).toBeGreaterThan(SEEDS * 5);
+            expect(counts.undone).toBeGreaterThan(SEEDS);
+            expect(counts.redone).toBeGreaterThan(SEEDS / 3);
+            expect(counts.copies).toBeGreaterThan(SEEDS / 3);
+            expect(counts.media).toBeGreaterThan(SEEDS * 5);
+            expect(counts.comments).toBeGreaterThan(SEEDS * 5);
+            expect(counts.fromOps).toBeGreaterThan(SEEDS * 5);
+            if (process.env['REFERENCES_LAW_SEEDS']) console.log(counts);
+        },
+        SEEDS * 300,
+    );
 });
