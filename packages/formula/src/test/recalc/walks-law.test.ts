@@ -16,6 +16,8 @@ const NO_CAP = Number.POSITIVE_INFINITY;
 const ROWS = 10;
 const NEAR = 6;
 const FAR = 3;
+// A formula that reads its own cell.
+const SELF = '=RC';
 const NAMES = ['Alpha', 'Beta', 'Gam ma', 'Wide', 'Far', 'Delta', 'Eps'];
 
 type Tab = { readonly id: string; readonly name: string };
@@ -132,7 +134,9 @@ function run(seed: number, steps: number, counts: Counts): void {
         for (const c of columns) {
             for (let r = 0; r < ROWS; r += 1) {
                 const what = pick(100);
-                if (what < 22) {
+                // A cell that reads itself is on a loop whatever the rest holds.
+                if (what < 2) cells.push([r, c, null, SELF]);
+                else if (what < 22) {
                     cells.push([r, c, null, stored(formula(), r, c)]);
                     if (c >= NEAR) bump('a formula on the last columns');
                 } else if (what < 55) cells.push([r, c, value(), null]);
@@ -196,11 +200,20 @@ function run(seed: number, steps: number, counts: Counts): void {
             fail(step, what, `loops ${listed(loops).join(' ')}, fresh ${listed(expected.loops).join(' ')}`);
         }
         bump('cells on a loop listed', loops.length);
+        // The fresh load lists its loops the same way, so the cells that read themselves check the listing.
+        const looped = new Set(listed(loops));
+        let sheets = 0;
         for (const { id } of tabs) {
-            engine.cells(id, (r, c) => {
+            let selves = 0;
+            engine.cells(id, (r, c, _held, text) => {
                 if (engine.isPending(id, r, c)) fail(step, what, `${id} ${r},${c} is flagged`);
+                if (text !== SELF) return;
+                if (!looped.has(`${id}!${r},${c}`)) fail(step, what, `${id} ${r},${c} reads itself and is not listed`);
+                selves += 1;
             });
+            if (selves > 0) sheets += 1;
         }
+        if (sheets > 1) bump('loops listed on two sheets or more');
     };
     let loops: readonly { sheet: string; row: number; column: number }[] = [];
     const compare = (step: number, what: string) => {
@@ -436,6 +449,7 @@ describe('what the recalc keeps between edits equals what a fresh load builds', 
             'a formula on the last columns': 1300,
             'values held against a fresh load': 470_000,
             'cells on a loop listed': 13_000,
+            'loops listed on two sheets or more': 2300,
             compares: 2300,
             'a move': 280,
             'settled said false': 5200,
