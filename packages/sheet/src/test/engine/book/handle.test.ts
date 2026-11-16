@@ -163,6 +163,57 @@ describe('engine/book/handle — tab order', () => {
     });
 });
 
+describe('engine/book/handle — a book held across batches', () => {
+    const fresh = () =>
+        new Workbook(
+            bookOf(
+                sheetOf('a', {
+                    looks: [{ bl: 1 }],
+                    bands: [0, 1, 0, 1],
+                    cells: [[0, 0, { v: 5 }]],
+                    records: { comment: { ca: { row: 2, column: 2 } } },
+                }),
+                sheetOf('b', { fields: { name: 'b', order: 'a1' } }),
+            ),
+        );
+    const reads = (sheet: Sheet | undefined) => [
+        sheet?.value(0, 0),
+        sheet?.look(0, 0),
+        sheet?.comments(0, 0),
+        sheet?.comments(2, 2),
+        sheet?.fields.name,
+    ];
+    const merges: RecordOp[] = [
+        { kind: 'record', sheet: 'b', type: 'merge', id: 'm1', set: { rect: [0, 0, 1, 1] }, whole: 1 },
+        { kind: 'record', sheet: 'b', type: 'merge', id: 'm2', set: { rect: [1, 1, 2, 2] }, whole: 1 },
+    ];
+
+    test('a sheet a refused batch deleted and took back reads its new parts, as a new book does', () => {
+        const book = fresh();
+        const held = cellsOf(book);
+        expect(reads(held.sheet('a'))).toEqual([5, { bl: 1 }, [], ['ca'], 'a']);
+        expect(() => applyOps(book, [{ kind: 'sheet', delete: 'a' }, ...merges])).toThrow(Refusal);
+        applyOps(book, [
+            { kind: 'format', sheet: 'a', ranges: [[0, 0, 0, 0]], set: { it: 1 } },
+            { kind: 'record', sheet: 'a', type: 'comment', id: 'cz', set: { row: 0, column: 0 }, whole: 1 },
+            { kind: 'input', sheet: 'a', cells: [[0, 0, { v: 'typed' }]] },
+        ]);
+        expect(reads(held.sheet('a'))).toEqual(reads(cellsOf(book).sheet('a')));
+        expect(reads(held.sheet('a'))).toEqual(['typed', { bl: 1, it: 1 }, ['cz'], ['ca'], 'a']);
+    });
+
+    test('the undo of a delete brings the sheet back to a book held before, and a read of a gone sheet throws', () => {
+        const book = fresh();
+        const held = cellsOf(book);
+        const undo = applyOps(book, [{ kind: 'sheet', delete: 'a' }]);
+        expect(() => held.sheet('a')?.look(0, 0)).toThrow('No sheet a');
+        expect(() => held.sheet('a')?.value(0, 0)).toThrow('No sheet a');
+        applyOps(book, undo);
+        applyOps(book, [{ kind: 'format', sheet: 'a', ranges: [[0, 0, 0, 0]], set: { it: 1 } }]);
+        expect(reads(held.sheet('a'))).toEqual(reads(cellsOf(book).sheet('a')));
+    });
+});
+
 describe('engine/book/handle — a cell', () => {
     const LINK = { type: 'webpage', address: 'https://eigen.is' } as const;
     const cells: Placed<CellContent>[] = [

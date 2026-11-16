@@ -37,9 +37,9 @@ type LookArea = {
 const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 
 // The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
-// workbook held when it was made.
+// workbook held when it was made: one deleted since throws at a read, as the engine does, and reads again once added.
 export function cellsOf(book: Workbook): Book {
-    const sheets = [...book.sheets].map(([id, parts]) => new Sheet(id, parts, book));
+    const sheets = [...book.sheets.keys()].map((id) => new Sheet(id, book));
     const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
     return { sheets: () => sheets, sheet: (id) => byId.get(id) };
 }
@@ -47,12 +47,18 @@ export function cellsOf(book: Workbook): Book {
 export class Sheet {
     public constructor(
         public readonly id: string,
-        private readonly parts: BookSheet,
         private readonly book: Workbook,
     ) {}
 
     public get fields(): Readonly<SheetFields> {
         return this.parts.records.fields;
+    }
+
+    // Read by id at each read, since a batch that deletes a sheet and adds it back gives it new parts.
+    private get parts(): BookSheet {
+        const parts = this.book.sheets.get(this.id);
+        if (!parts) throw new Error(`No sheet ${this.id}`);
+        return parts;
     }
 
     public value(row: number, column: number): Literal | null {
