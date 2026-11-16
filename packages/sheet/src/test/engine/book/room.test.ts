@@ -160,6 +160,9 @@ describe('engine/book/room — a write may leave the book at twice a limit insid
         ];
         const undo = input([[WHOLE, null]]);
         expectUnwritten(full(held, GRID_ROWS), [input(undefined, cells(MAX_VALUE_SLOTS + 1)), undo], 'too-many-cells');
+        // Nor is a cell written inside a full column room for cells elsewhere.
+        const inside: Placed<CellRecord | null>[] = [[0, 0, { v: 2 }], ...reaching(MAX_VALUE_SLOTS + 1, { v: 1 })];
+        expectUnwritten(full(held, GRID_ROWS), [input(undefined, inside), undo], 'too-many-cells');
         const book = full(held, GRID_ROWS);
         expect(refusalOf(() => applyOps(book, [input(undefined, cells(MAX_VALUE_SLOTS)), undo]))).toBeUndefined();
         expect(book.weight().slots).toBe(MAX_VALUE_SLOTS - GRID_ROWS);
@@ -233,6 +236,24 @@ describe('engine/book/room — a write may leave the book at twice a limit insid
         const op: Op = { kind: 'move', sheet: 'S', from: [0, 0, 9, 9], toSheet: 'T', toRow: 0, toColumn: 0 };
         expectUnwritten(new Workbook(bookOf(source, tall)), [op], 'too-many-formats');
     }, 60_000);
+
+    test('a move counts the runs its block brings, on a book a batch has brought near twice the limit', () => {
+        // A column of a million stripes moves onto a plain sheet, after four sheets added bring the book near twice.
+        const plain = sheetOf('P', { fields: { name: 'P', order: 'a1' } });
+        const content = bookOf(sheetOf('S', striped(1_000_000)), plain, ...ballast(0, MAX_STYLE_RUNS - 1_000_064));
+        const added = (id: string, runs: number): Op => {
+            const sheet = sheetOf(id, { fields: { name: id, order: `b${id}` }, ...striped(runs) });
+            return { kind: 'sheet', add: sheet };
+        };
+        const adds = [added('A', 1_000_000), added('B', 1_000_000), added('C', 1_000_000), added('D', 990_000)];
+        const block: Op = { kind: 'move', sheet: 'S', from: [0, 0, LAST_ROW, 0], toSheet: 'P', toRow: 0, toColumn: 0 };
+        const book = new Workbook(content);
+        expect(formatsOf(book.weight())).toBe(MAX_STYLE_RUNS);
+        const moves = spyOn(book.engine, 'moveCells');
+        expect(refusalOf(() => applyOps(book, [...adds, block]))).toBe('too-many-formats');
+        expect(moves).not.toHaveBeenCalled();
+        expect(formatsOf(book.weight())).toBe(MAX_STYLE_RUNS);
+    }, 120_000);
 
     test('a sheet added is weighed with its cells and its parts before the engine takes it', () => {
         const cells = reaching(MAX_VALUE_SLOTS, { v: 1 }).map(
@@ -504,12 +525,12 @@ describe('engine/book/room — a format refused midway leaves the book as it was
     }, 120_000);
 
     test('a batch whose later op would bring the book back under the limit is still refused', () => {
-        // The format stops once it passes twice the limit, half written: a clear of every look after it would leave a
-        // book that fits, with a format that landed in part.
+        // The format stops once it passes twice the limit, half written: a delete of the columns it cut would leave
+        // a book that fits.
         const book = new Workbook(bookOf(sheetOf('S', striped(300_000))));
         const looks = JSON.stringify(book.sheets.get('S')?.bands.content());
         const ranges = Array.from({ length: 100 }, (_, k): Rect => [k, 2 * k, k, 2 * k]);
-        const batch = [format(ranges, { it: 1 }), format([WHOLE], undefined, [...LOOK_KEYS])];
+        const batch = [format(ranges, { it: 1 }), lines(false, false, 0, 300)];
         expect(refusalOf(() => applyOps(book, batch))).toBe('too-many-formats');
         expect(JSON.stringify(book.sheets.get('S')?.bands.content())).toBe(looks);
     }, 120_000);

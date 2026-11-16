@@ -166,11 +166,9 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
     }
     const restored: Placed<CellContent>[] = [];
     for (const [row, column, extra, runs, look] of rich.values()) {
-        // Runs that all wear the look's value of every named key take it back with the look; others are put back
-        // whole, as every rich cell is by a format that stopped: the looks it takes back restyle the cells they cross.
-        if (stopped || runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) {
-            restored.push([row, column, extra]);
-        }
+        // Runs that all wear the look's value of every named key take it back with the look; others are put back whole,
+        // also by a format that stopped before it restyled them: the looks it takes back restyle the cells they cross.
+        if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
         if (!stopped) extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked && !stopped) {
