@@ -53,8 +53,6 @@ export class Recalc {
     private readonly functions: Registry;
     private readonly evaluator: Evaluator;
     private readonly index = new ReverseIndex();
-    // Whether a formula came, went or moved since the index was built.
-    private stale = true;
     // The spans of rows written since the last pass or edit: sheet, column, first and last row.
     private readonly seeds: number[] = [];
     // The runs of cells whose value the pass changed.
@@ -116,10 +114,7 @@ export class Recalc {
     // No seed waits, the clock is stamped, no sheet's rows changed, and no formula is flagged.
     public settled(): boolean {
         if (this.seeds.length > 0 || !this.stamped || this.rowed.size > 0) return false;
-        for (const { columns } of this.workbook.sheets) {
-            for (const { pending } of columns) if (pending > 0) return false;
-        }
-        return true;
+        return this.workbook.sheets.every((sheet) => sheet.pending === 0);
     }
 
     // The clock of a batch of edits, before or after its writes: the next pass computes every clock formula again.
@@ -156,7 +151,7 @@ export class Recalc {
         text: string,
         given: Literal | null,
     ): void {
-        this.stale = true;
+        this.index.forget(sheet);
         for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
         if ((this.factsOf(sheet.columns[left].shape[top]) & Fact.Kept) === 0) return;
@@ -185,27 +180,29 @@ export class Recalc {
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;
-        // And a cell it moves to another row is left out or not by that row: the rows a sheet leaves out are not
-        // moved with its cells, so they count as changed on every sheet the cells left or came to.
-        const moved =
+        const named =
             change.kind === ChangeKind.Move
                 ? [workbook.known(change.move.fromSheet), workbook.known(change.move.toSheet)]
-                : change.kind === ChangeKind.Lines && change.edit.rows
+                : change.kind === ChangeKind.Lines
                   ? [workbook.known(change.edit.sheet)]
-                  : [];
-        if (moved.some((sheet) => sheet.out.length > 0)) for (const sheet of moved) this.rowed.add(sheet);
-        // The plan makes shapes no cell holds yet, or ever when it refuses the edit by a throw: the next rebuild
-        // forgets those.
-        this.stale = true;
+                  : [change.kind === ChangeKind.AddSheet ? change.sheet : workbook.known(change.sheet)];
+        // And a cell it moves to another row is left out or not by that row: the rows a sheet leaves out are not
+        // moved with its cells, so they count as changed on every sheet the cells left or came to.
+        const moves = change.kind === ChangeKind.Move || (change.kind === ChangeKind.Lines && change.edit.rows);
+        if (moves && named.some((sheet) => sheet.out.length > 0)) for (const sheet of named) this.rowed.add(sheet);
+        // A sheet it names comes, goes or has its cells moved, and a formula it rewrites changes on its own sheet.
+        // The plan makes shapes no cell holds, for good when it throws to refuse the edit: the rebuild forgets those.
+        for (const sheet of named) this.index.forget(sheet);
         const plan = planEdit(workbook, this.index.rectangles, change);
-        const { seeds } = plan;
+        const { seeds, fills } = plan;
+        for (let f = 0; f < fills.length; f += 6) this.index.reshape(workbook.sheets[fills[f]]);
         for (let at = 0; at < seeds.length; at += 4) {
             const column = workbook.sheets[seeds[at]].columns[seeds[at + 1]];
             for (let row = seeds[at + 2]; row <= seeds[at + 3]; row += 1) column.markDirty(row);
         }
         this.index.mark(workbook, merged(this.seeds.concat(seeds)), this.records.takeUnrecorded());
         this.seeds.length = 0;
-        workbook.apply(change, plan.fills);
+        workbook.apply(change, fills);
         return { rewrites: plan.rewrites };
     }
 
@@ -243,8 +240,9 @@ export class Recalc {
         let stopped = false;
         try {
             for (const sheet of workbook.sheets) {
-                for (let c = 0; c < sheet.columns.length; c += 1) {
-                    const column = sheet.columns[c];
+                const { columns } = sheet;
+                for (let c = 0; sheet.pending > 0 && c < columns.length; c += 1) {
+                    const column = columns[c];
                     for (let row = 0; column.pending > 0 && row < column.length; row += 1) {
                         if (column.kind[row] <= SETTLED) continue;
                         this.enter(sheet, column, c, row);
@@ -286,9 +284,11 @@ export class Recalc {
         }
         const loops: CellAddress[] = [];
         for (const sheet of workbook.sheets) {
-            for (let c = 0; c < sheet.columns.length; c += 1) {
-                const { kind, length } = sheet.columns[c];
-                for (let row = 0; sheet.columns[c].loops > 0 && row < length; row += 1) {
+            const { columns } = sheet;
+            const listed = loops.length + sheet.loops;
+            for (let c = 0; loops.length < listed && c < columns.length; c += 1) {
+                const { kind, length } = columns[c];
+                for (let row = 0; columns[c].loops > 0 && row < length; row += 1) {
                     if (kind[row] & LOOP) loops.push({ sheet: sheet.id, row, column: c });
                 }
             }
@@ -417,7 +417,7 @@ export class Recalc {
     // A cell is about to be written: it is a seed of the next pass or edit.
     private touch(sheet: Sheet, row: number, c: number): void {
         const column = sheet.columns[c];
-        if (column !== undefined && column.shape[row] > 0) this.stale = true;
+        if (column !== undefined && column.shape[row] > 0) this.index.forget(sheet);
         extend(this.seeds, sheet.place, c, row);
     }
 
@@ -427,17 +427,16 @@ export class Recalc {
     private reach(): void {
         const { index, records, facts } = this;
         const { shapes } = this.workbook;
-        if (this.stale) {
+        if (index.stale) {
             for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
             index.rebuild(this.workbook);
             const held = new Uint8Array(shapes.size + 1);
             for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
             shapes.keep(held);
-            records.prune(facts);
-            this.stale = false;
+            records.prune(this.workbook.sheets, facts);
         }
         if (records.changed) {
-            index.listRecords(this.workbook, records.held);
+            index.listRecords(this.workbook.sheets.length, records.held);
             records.changed = false;
         }
     }
@@ -532,7 +531,7 @@ export class Recalc {
             : tree === null
               ? ERROR
               : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
-        if (resolves) this.records.end(at, column, row);
+        if (resolves) this.records.end(at, this.sheets[at].place, this.places[at], row);
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;

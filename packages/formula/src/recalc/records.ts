@@ -1,19 +1,20 @@
-// What the formulas that work a reference out as they run last resolved: per cell, one box for each sheet it
-// resolved into, around every area of that sheet. The index lists the records, so a marking follows them as it
-// follows the references a formula names. The invariant: at all times such a formula is flagged, or its record
-// covers everything it last resolved. A formula that runs records; a computed load ran none and an edit drops
-// every record, so the marking after either flags them all. Nothing here is stored.
+// What the formulas that work a reference out as they run last resolved, in memory only: per cell, one box for each
+// sheet it resolved into, around every area of that sheet. The index lists them, so a marking follows them as it
+// follows named references. The invariant: such a formula is flagged, or its record covers all it last resolved. No
+// formula ran at a computed load and every edit drops all records, so the marking after either flags them all; and a
+// record names its cell by its sheet's place and its column, as places change only inside an edit, after the drop.
 
 import { Fact } from '../eval/facts';
-import type { Column } from '../store/column';
+import type { Sheet } from '../store/sheet';
+import { GRID_COLUMNS } from '../text/a1';
 import type { Reference } from '../values/value';
 
 export class Records {
     // Whether a record changed since the index listed them.
     public changed = false;
-    // Per cell by its column and row, a box for each sheet its formula resolved into, five numbers each: sheet,
-    // top, left, bottom, right.
-    private readonly boxes = new Map<Column, Map<number, number[]>>();
+    // Per cell, a box for each sheet its formula resolved into, five numbers each: sheet, top, left, bottom, right.
+    // A cell is found by its column, as the place of its sheet times the columns of the grid plus its own, and row.
+    private readonly boxes = new Map<number, Map<number, number[]>>();
     // Whether formulas that resolve a reference may be neither flagged nor recorded.
     private unrecorded: boolean;
     // Per cell in progress, the boxes its formula has resolved since it last started, in the same five numbers.
@@ -24,7 +25,7 @@ export class Records {
         this.unrecorded = computed;
     }
 
-    public get held(): ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>> {
+    public get held(): ReadonlyMap<number, ReadonlyMap<number, readonly number[]>> {
         return this.boxes;
     }
 
@@ -44,8 +45,9 @@ export class Records {
 
     // Forgets the record of every cell that holds no formula that resolves a reference any more, by the facts of
     // each shape, or one this build cannot evaluate.
-    public prune(facts: readonly number[]): void {
-        for (const [column, rows] of this.boxes) {
+    public prune(sheets: readonly Sheet[], facts: readonly number[]): void {
+        for (const [at, rows] of this.boxes) {
+            const column = sheets[Math.floor(at / GRID_COLUMNS)].columns[at % GRID_COLUMNS];
             for (const row of rows.keys()) {
                 const shape = row < column.length ? column.shape[row] : 0;
                 if ((facts[shape] & (Fact.Resolves | Fact.Kept)) === Fact.Resolves) continue;
@@ -78,16 +80,18 @@ export class Records {
         }
     }
 
-    // The formula of a cell in progress ended: its boxes are the record of the cell, unless they are already.
-    public end(at: number, column: Column, row: number): void {
+    // The formula of a cell in progress ended: its boxes are the record of the cell, on the sheet at `sheet`,
+    // unless they are already.
+    public end(at: number, sheet: number, column: number, row: number): void {
         const run = this.runs[at];
-        let rows = this.boxes.get(column);
+        const key = sheet * GRID_COLUMNS + column;
+        let rows = this.boxes.get(key);
         const record = rows?.get(row);
         let same = (record?.length ?? 0) === run.length;
         for (let i = 0; same && record !== undefined && i < run.length; i += 1) same = record[i] === run[i];
         if (same) return;
         this.changed = true;
-        if (rows === undefined) this.boxes.set(column, (rows = new Map()));
+        if (rows === undefined) this.boxes.set(key, (rows = new Map()));
         if (run.length === 0) rows.delete(row);
         else rows.set(row, run.slice());
     }
