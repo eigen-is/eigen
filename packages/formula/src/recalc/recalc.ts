@@ -1,9 +1,8 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach, after a new
-// clock or a structural edit the clock formulas, after a change of a sheet's hidden or filtered rows the formulas
-// that leave rows out, and the readers of each, and computes them: reading a cell still to be computed computes it
-// first, so no order is worked out ahead, and a cell met while it is computed is on a loop. The areas a formula
-// works out as it runs are told to the `Records`, which a marking follows too.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and those that a
+// new clock, a structural edit or other rows left out can change, with the readers of each, and computes them:
+// reading a cell still to be computed computes it first, so no order is worked out ahead, and a cell met while it is
+// computed is on a loop. The areas a formula works out as it runs are told to the `Records`, which a marking follows.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -183,8 +182,7 @@ export class Recalc {
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;
-        // The sheets whose cells come, go or move. One that only moves among the tabs or gets another name keeps
-        // its formulas where they are.
+        // The sheets whose cells come, go or move: one that moves among the tabs or gets another name keeps its own.
         const named =
             change.kind === ChangeKind.Move
                 ? [workbook.known(change.move.fromSheet), workbook.known(change.move.toSheet)]

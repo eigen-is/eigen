@@ -9,9 +9,8 @@ import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 
-// An entry is twelve numbers: its hosts, their sheet as its place in the listing's own list, the two ends of the
-// reference along the rows and along the columns, which of the four move with a host, and for a range the host
-// rows it flagged in the marking that is running.
+// An entry is twelve numbers: its hosts and where their sheet sits in the listing's list, the two ends of the
+// reference along the rows and the columns, which of the four move with a host, and the host rows a range flagged.
 const HOST_SHEET = 0;
 const HOST_TOP = 1;
 const HOST_BOTTOM = 2;
@@ -21,7 +20,7 @@ const ROW_ENDS = 5;
 const COLUMN_ENDS = 7;
 const MOVES = 9;
 const FLAGGED = 10;
-// One past the last of those rows, and -1 while the entry flagged none.
+// One past the last row a range flagged in the marking that is running, and -1 while it flagged none.
 const FLAGGED_END = 11;
 // Beside the four bits of `MOVES`: the reference is a range.
 export const RANGE = 16;

@@ -57,13 +57,13 @@ export class ReverseIndex {
         this.changed.set(sheet, this.changed.get(sheet) === true);
     }
 
-    // Finds the blocks of the sheets that changed in their columns, files them, and lists again who reads each
-    // sheet they read or did read. The shape table then forgets the shapes no block holds, when a sheet that held
-    // formulas changed or the table grew: an edit that rewrites a formula would else leave its old shape for good.
+    // Finds the blocks of the changed sheets in their columns, files them, and lists again who reads each sheet
+    // they read or did read. Then the shape table forgets the shapes no block holds, as a rewritten formula leaves.
     public rebuild(workbook: Workbook, factsOf: (shape: number) => number): void {
         const { shapes } = workbook;
         const { holders, readers } = this;
         while (holders.length <= shapes.size) holders.push(0);
+        // The table is asked which shapes no block holds when it grew, or when a sheet that held formulas changed.
         let unheld = shapes.size > this.sized;
         const relist = new Set<string>();
         for (const [sheet, whole] of this.changed) {
@@ -72,9 +72,7 @@ export class ReverseIndex {
             if (old.length > 0) unheld = true;
             for (let b = 4; b < old.length; b += 5) holders[old[b]] -= 1;
             for (const key of had?.filed.keys() ?? []) {
-                const hosts = readers.get(key);
-                hosts?.delete(sheet);
-                if (hosts?.size === 0) readers.delete(key);
+                readers.get(key)?.delete(sheet);
                 if (typeof key === 'string') relist.add(key);
             }
             // A sheet that is gone, or that an edit refused to add, holds no block.
@@ -82,52 +80,7 @@ export class ReverseIndex {
                 this.held.delete(sheet);
                 continue;
             }
-            const blocks: number[] = [];
-            const { columns } = sheet;
-            // Formulas that only got another shape lie in the columns of the blocks the sheet had: of those, the
-            // first one that reaches the column or lies past it.
-            const kept = whole ? undefined : had?.blocks;
-            let h = 0;
-            // The runs of the column before, from the top down: first row, last row, shape, and where in the
-            // list its block starts. The two lists swap from column to column.
-            let open: number[] = [];
-            let runs: number[] = [];
-            let opened = 0;
-            for (let c = 0; c < columns.length; c += 1) {
-                if (kept !== undefined) {
-                    while (h < kept.length && kept[h + 1] < c) h += 5;
-                    if (h === kept.length) break;
-                    // The columns up to that block hold no formula, so no run of them goes on.
-                    if (kept[h] > c) {
-                        c = kept[h];
-                        opened = 0;
-                    }
-                }
-                const { shape, length } = columns[c];
-                let ran = 0;
-                let o = 0;
-                let row = 0;
-                while (row < length) {
-                    const id = shape[row];
-                    const first = row;
-                    row += 1;
-                    if (id === 0) continue;
-                    while (row < length && shape[row] === id) row += 1;
-                    while (o < opened && open[o] < first) o += 4;
-                    const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
-                    runs[ran] = first;
-                    runs[ran + 1] = row - 1;
-                    runs[ran + 2] = id;
-                    runs[ran + 3] = joins ? open[o + 3] : blocks.length;
-                    ran += 4;
-                    if (joins) blocks[open[o + 3] + 1] = c;
-                    else blocks.push(c, c, first, row - 1, id);
-                }
-                const before = open;
-                open = runs;
-                runs = before;
-                opened = ran;
-            }
+            const blocks = this.found(sheet, whole ? undefined : had?.blocks);
             for (let b = 4; b < blocks.length; b += 5) holders[blocks[b]] += 1;
             const filed = this.filed(sheet, blocks, workbook, factsOf);
             this.held.set(sheet, { blocks, filed });
@@ -189,9 +142,8 @@ export class ReverseIndex {
                         if (top > bottom || left > right) continue;
                         const range = op === RefKind.Cell ? 0 : RANGE;
                         const moves = rowStep | (row2Step << 1) | (columnStep << 2) | (column2Step << 3) | range;
-                        // A range whose columns move is an entry per host column, so that the hosts of every range
-                        // entry read the same rows of the same columns, and one record of flagged rows holds for
-                        // all of them.
+                        // A range whose columns move is an entry per host column: so the hosts of a range entry
+                        // read the same rows of the same columns, and one record of flagged rows holds for them all.
                         const width = range !== 0 && (columnStep | column2Step) !== 0 ? 1 : right - left + 1;
                         for (let first = left; first <= right; first += width) {
                             const last = first + width - 1;
@@ -221,6 +173,7 @@ export class ReverseIndex {
                 }
                 hosts.push(host);
             }
+            if (hosts.length === 0) readers.delete(id);
             if (entries.length === 0) this.named.delete(id);
             else this.named.set(id, new Listing(this.work, hosts, entries, areas));
         }
@@ -321,12 +274,63 @@ export class ReverseIndex {
                 on = sheet;
                 named = this.named.get(sheets[sheet].id);
                 recorded = this.recorded.get(sheets[sheet].id);
-                for (const listing of [named, recorded]) if (listing !== undefined) followed.add(listing);
+                if (named !== undefined) followed.add(named);
+                if (recorded !== undefined) followed.add(recorded);
             }
             named?.follow(column, from, to);
             recorded?.follow(column, from, to);
         }
         for (const listing of followed) listing.restore();
+    }
+
+    // The blocks of a sheet as its columns hold them. Formulas that only got another shape lie in the columns of the
+    // blocks the sheet had: given those as `kept`, no other column is read.
+    private found(sheet: Sheet, kept: readonly number[] | undefined): number[] {
+        const blocks: number[] = [];
+        const { columns } = sheet;
+        // Of the blocks whose columns are read, the first one that reaches the column or lies past it.
+        let h = 0;
+        // The runs of the column before, from the top down: first row, last row, shape, and where in the
+        // list its block starts. The two lists swap from column to column.
+        let open: number[] = [];
+        let runs: number[] = [];
+        let opened = 0;
+        for (let c = 0; c < columns.length; c += 1) {
+            if (kept !== undefined) {
+                while (h < kept.length && kept[h + 1] < c) h += 5;
+                if (h === kept.length) break;
+                // The columns up to that block hold no formula, so no run of them goes on.
+                if (kept[h] > c) {
+                    c = kept[h];
+                    opened = 0;
+                }
+            }
+            const { shape, length } = columns[c];
+            let ran = 0;
+            let o = 0;
+            let row = 0;
+            while (row < length) {
+                const id = shape[row];
+                const first = row;
+                row += 1;
+                if (id === 0) continue;
+                while (row < length && shape[row] === id) row += 1;
+                while (o < opened && open[o] < first) o += 4;
+                const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
+                runs[ran] = first;
+                runs[ran + 1] = row - 1;
+                runs[ran + 2] = id;
+                runs[ran + 3] = joins ? open[o + 3] : blocks.length;
+                ran += 4;
+                if (joins) blocks[open[o + 3] + 1] = c;
+                else blocks.push(c, c, first, row - 1, id);
+            }
+            const before = open;
+            open = runs;
+            runs = before;
+            opened = ran;
+        }
+        return blocks;
     }
 
     // The blocks of a sheet under each thing they read, as where they start in its list.
