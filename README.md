@@ -26,7 +26,7 @@ Why not Nextcloud? Nextcloud is mature and has a large ecosystem. If you need so
 
 ## Status
 
-Reality check: Eigen is pre-1.0 and I build it on my own, in my spare time, unpaid. The core works and improves fast, but I would not yet trust it with data you cannot afford to lose. For hobbyists, self-hosters and small teams comfortable with rough edges, it is ready to try.
+Reality check: Eigen is pre-1.0 and I build it on my own. The core works and improves fast, but I would not yet trust it with data you cannot afford to lose. For hobbyists, self-hosters and small teams comfortable with rough edges, it is ready to try.
 
 Until 1.0 a release can change how data is stored. It then converts the data once or drops it. `./eigen update` makes a Full backup first, so `./eigen rollback` can go back.
 
