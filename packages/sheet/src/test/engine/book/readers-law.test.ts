@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { GRID_ROWS } from '@workspace/formula/text';
 import { encodeBook } from '@workspace/lib/sheets/book-codec';
 import type { Batch, CellContent, CellRecord, Op, Placed, Rect } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -41,6 +42,13 @@ const SWITCH = /^=IF\(R(\d+)C(\d+),5,#REF!\)$/;
 const LOOP = /^=R\[1\]C\+R\d+C\d+$/;
 const CAPS = [1, 2, 5, Number.MAX_SAFE_INTEGER];
 const SEEDS = Number(process.env['READERS_LAW_SEEDS'] ?? 200);
+const LAW_7_SEEDS = Number(process.env['READERS_LAW_SEEDS'] ?? 100);
+// Four cells on the grid's last row hold more slots than the limit, as each column then holds every row.
+const PAST_SLOTS: Op = {
+    kind: 'input',
+    sheet: 's0',
+    cells: [1, 2, 3, 4].map((column) => [GRID_ROWS - 1, column, { v: 1 }] as const),
+};
 
 type Landed = { refused: RefusalKey; inverse?: undefined } | { refused?: undefined; inverse: Op[] };
 
@@ -174,6 +182,11 @@ function withoutValues(inverse: readonly Op[]): Op[] {
     });
 }
 
+// Now and then a batch that ends past the limit on cells, which only the weigh after its last op refuses.
+function pastNowAndThen(random: Random, batch: Batch): Batch {
+    return random() < 0.03 ? { ...batch, ops: [...batch.ops, PAST_SLOTS] } : batch;
+}
+
 function count(counts: Map<string, number>, key: string): void {
     counts.set(key, (counts.get(key) ?? 0) + 1);
 }
@@ -266,6 +279,70 @@ describe('engine/book — LAW 5: a fold then a join equals a replay', () => {
                 SEEDS / 2,
             ]),
             ...['grid-end', 'merge-overlap', 'merge-cut', 'last-sheet'].map((key): [string, number] => [
+                `refused ${key}`,
+                1,
+            ]),
+        ];
+        const short = floors.filter(([key, floor]) => (counts.get(key) ?? 0) < floor);
+        expect(short.map(([key, floor]) => `${key}: ${counts.get(key) ?? 0} < ${floor}`)).toEqual([]);
+        if (process.env['READERS_LAW_SEEDS']) console.log(Object.fromEntries([...counts].sort()));
+    }, 120_000);
+});
+
+describe('engine/book — LAW 7: every reader refuses alike', () => {
+    test('a replaying reader, one that loads a fold, and one that lands and takes back batches of its own refuse alike', () => {
+        const counts = new Map<string, number>();
+        for (let seed = 1; seed <= LAW_7_SEEDS; seed += 1) {
+            const random = randomOf(100_000 + seed);
+            const start = startOf(random);
+            const length = 6;
+            const folded = 1 + below(random, length - 1);
+            const replay = new Workbook(start);
+            const taking = new Workbook(start);
+            let loaded: Workbook | undefined;
+            const log: Batch[] = [];
+            const refusals: Record<'replay' | 'loaded' | 'taking', (RefusalKey | undefined)[]> = {
+                replay: [],
+                loaded: [],
+                taking: [],
+            };
+            for (let at = 0; at < length; at += 1) {
+                if (at === folded) loaded = new Workbook(decoded(fold(encodeBook(start), log, pick(random, CAPS))));
+                // Batches of its own, landed and taken back newest first with the clock they found.
+                const { now, seed: drawn } = taking.content();
+                const own: Op[][] = [];
+                for (let extra = below(random, 3); extra > 0; extra -= 1) {
+                    const landed = land(
+                        taking,
+                        pastNowAndThen(random, batchOf(random, modelOf(taking.content()), randomAnyOp, 4)),
+                    );
+                    count(counts, landed.refused ? 'own refused' : 'own landed');
+                    if (landed.inverse) own.push(landed.inverse);
+                }
+                for (const inverse of own.reverse()) {
+                    expect(land(taking, { g: start.g, now, seed: drawn, ops: inverse }).refused).toBeUndefined();
+                    count(counts, 'own taken back');
+                }
+                const batch = pastNowAndThen(random, batchOf(random, modelOf(replay.content()), randomAnyOp, 6));
+                log.push(batch);
+                refusals.replay.push(land(replay, batch).refused);
+                refusals.taking.push(land(taking, batch).refused);
+                if (loaded) refusals.loaded.push(land(loaded, batch).refused);
+                if (random() < 0.5) bytes(replay);
+            }
+            expect(refusals.taking).toEqual(refusals.replay);
+            expect(refusals.loaded).toEqual(refusals.replay.slice(folded));
+            const replayed = bytes(replay);
+            expect(bytes(taking)).toBe(replayed);
+            expect(loaded && bytes(loaded)).toBe(replayed);
+            for (const key of refusals.replay) count(counts, key ? `refused ${key}` : 'landed');
+        }
+        const floors: [string, number][] = [
+            ['own landed', LAW_7_SEEDS * 2],
+            ['own refused', LAW_7_SEEDS / 10],
+            ['own taken back', LAW_7_SEEDS * 2],
+            ['landed', LAW_7_SEEDS * 4],
+            ...['grid-end', 'merge-cut', 'last-sheet', 'too-many-cells'].map((key): [string, number] => [
                 `refused ${key}`,
                 1,
             ]),
