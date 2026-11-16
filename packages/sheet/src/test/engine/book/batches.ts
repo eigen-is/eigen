@@ -70,7 +70,8 @@ function pick<T>(random: Random, list: readonly T[]): T {
     return list[below(random, list.length)];
 }
 
-// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there.
+// A book whose formulas hold no value yet, with a formula typed with the name of a sheet that is not there, and its
+// filter, where it has one, often from the first line or to the last.
 export function randomBookContent(random: Random): Book {
     const book = randomBook(random);
     return {
@@ -83,7 +84,16 @@ export function randomBookContent(random: Random): Book {
             });
             if (random() < 0.5) cells.push([70, 3, { f: TYPED_WITH_NAME }]);
             cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-            return { ...sheet, cells };
+            const { filter } = sheet.records;
+            if (!filter?.f) return { ...sheet, cells };
+            // A filter often runs from the first line, or to the last, where its header moves and its end stays.
+            const rect = pick<Rect>(random, [
+                [2, 0, 20, 4],
+                [0, 0, GRID_ROWS - 1, 4],
+                [2, 0, GRID_ROWS - 1, 4],
+                [0, 0, 20, GRID_COLUMNS - 1],
+            ]);
+            return { ...sheet, cells, records: { ...sheet.records, filter: { f: { rect } } } };
         }),
     };
 }
@@ -266,14 +276,25 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
         case 2: {
             const id = idOf(records.merge.keys(), fresh('m'));
             const [top, left, bottom, right] = smallRect(random);
-            const rect: Rect = [top, left, bottom, right + 1];
+            // Now and then over another merge of the sheet, which it may not overlap.
+            const others = [...records.merge].filter(([other]) => other !== id);
+            const rect: Rect =
+                others.length > 0 && random() < 0.3 ? pick(random, others)[1].rect : [top, left, bottom, right + 1];
             if (mode === 0) return { kind: 'record', sheet, type: 'merge', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'merge', id, set: { rect } };
             return { kind: 'record', sheet, type: 'merge', id, set: { rect }, whole: 1 };
         }
         case 3: {
             const id = idOf(records.filter.keys(), fresh('f'));
-            const rect = reaching();
+            // Often from the first row or column to the last, where the header moves and the end stays.
+            const [top, left, bottom, right] = smallRect(random);
+            const rect = pick<() => Rect>(random, [
+                reaching,
+                () => [0, left, GRID_ROWS - 1, right],
+                () => [top, 0, bottom, GRID_COLUMNS - 1],
+                () => [0, left, bottom, right],
+                () => [top, left, GRID_ROWS - 1, right],
+            ])();
             if (mode === 0) return { kind: 'record', sheet, type: 'filter', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'filter', id, set: { rect } };
             return { kind: 'record', sheet, type: 'filter', id, set: { rect }, whole: 1 };
@@ -344,20 +365,104 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
     }
 }
 
+// Rows or columns inserted or deleted: mostly among the cells of the book, now and then at the grid's first line or
+// among its last, where an insert pushes lines off the grid and a delete lets lines in.
 export function randomLinesOp(random: Random, model: Model): LinesOp {
     const rows = random() < 0.6;
     const insert = random() < 0.5;
-    const index = below(random, rows ? 20 : 9);
-    const op: LinesOp = {
-        kind: 'lines',
-        sheet: sheetId(random, model),
-        rows,
-        insert,
-        index,
-        count: 1 + below(random, 3),
-    };
+    const count = 1 + below(random, 3);
+    const place = random();
+    const end = (rows ? GRID_ROWS : GRID_COLUMNS) - count;
+    const index = place < 0.1 ? 0 : place < 0.3 ? end - below(random, 4) : below(random, rows ? 20 : 9);
+    const op: LinesOp = { kind: 'lines', sheet: sheetId(random, model), rows, insert, index, count };
     if (insert && random() < 0.7) op.like = index > 0 && random() < 0.6 ? index - 1 : index;
     return op;
+}
+
+// One thing put on one of the last three rows or columns of a sheet, which an insert then pushes off the grid: a link
+// or a mark alone, content, a line key, a look, a comment, a merge, a filter, filtered rows or a rule range. Now and
+// then the comment goes again.
+export function randomEndOp(random: Random, model: Model): InputOp | FormatOp | RecordOp {
+    const { id: sheet, records } = someSheet(random, model);
+    const row = GRID_ROWS - 1 - below(random, 3);
+    const column = GRID_COLUMNS - 1 - below(random, 3);
+    const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const filter = [...records.filter.keys()][0] ?? 'nofilter';
+    return pick<() => InputOp | FormatOp | RecordOp>(random, [
+        () => ({ kind: 'input', sheet, cells: [[row, below(random, 4), random() < 0.5 ? { link: LINK } : { qp: 1 }]] }),
+        () => ({ kind: 'input', sheet, cells: [[below(random, 9), column, content(random, model)]] }),
+        () => ({ kind: 'format', sheet, lines: 'rows', spans: [[row, row]], set: { size: 30 } }),
+        () => ({ kind: 'format', sheet, lines: 'columns', spans: [[column, column]], set: { hidden: 1 } }),
+        () => ({ kind: 'format', sheet, ranges: [[row, 0, row, 2]], set: { bl: 1 } }),
+        () => ({ kind: 'format', sheet, ranges: [[0, column, 5, column]], set: { it: 1 } }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e`, set: { row, column: 1 }, whole: 1 }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e`, set: { row: 1, column }, whole: 1 }),
+        () => ({ kind: 'record', sheet, type: 'comment', id: `${sheet}e` }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'merge',
+            id: `${sheet}e`,
+            set: { rect: [row - 1, 12, row, 13] },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'merge',
+            id: `${sheet}e`,
+            set: { rect: [12, column - 1, 12, column] },
+            whole: 1,
+        }),
+        () => ({ kind: 'record', sheet, type: 'filter', id: 'f', set: { rect: [2, 0, row, 4] }, whole: 1 }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'filterColumn',
+            id: 'ke',
+            set: { filter, column: 1, rows: [[row - 1, row]] },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'validation',
+            id: 've',
+            set: { ranges: [[row, 0, row, 1]], order: 'a2', rule },
+            whole: 1,
+        }),
+        () => ({
+            kind: 'record',
+            sheet,
+            type: 'conditionalFormat',
+            id: 're',
+            set: formulaRule([[0, column, 2, column]], '=RC>1'),
+            whole: 1,
+        }),
+    ])();
+}
+
+// Formulas that read whole lines, lines beside their own and lines of another sheet, typed one cell at a time or
+// filled over a block: a line edit moves, stops or breaks what they read, on their sheet and from another.
+const READERS = [
+    '=SUM(R1C1:R1048576C1)',
+    '=SUM(R1C1:R1C16384)',
+    '=R[-2]C+1',
+    '=SUM(R[-3]C:R[-1]C)',
+    '=RC[-1]*2',
+    '=[s0]!R4C2+1',
+    '=SUM([s0]!R2C1:R1048576C2)',
+    '=SUM([s0]!R1C3:R9C16384)',
+    '=[s1]!R[1]C[1]',
+];
+
+export function randomLineReaderOp(random: Random, model: Model): InputOp {
+    const sheet = someSheet(random, model).id;
+    const top = 3 + below(random, 12);
+    const left = 1 + below(random, 8);
+    const f = pick(random, READERS);
+    if (random() < 0.7) return { kind: 'input', sheet, cells: [[top, left, { f }]] };
+    return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 4), left + below(random, 2)], { f }]] };
 }
 
 // A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range
@@ -397,7 +502,12 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
                       if (placed.length === 0) return smallRect(random);
                       const [top, left, bottom, right] = pick(random, placed);
                       const grow = random() < 0.5 ? 0 : 1;
-                      return [Math.max(0, top - grow), Math.max(0, left - grow), bottom + grow, right + grow];
+                      return [
+                          Math.max(0, top - grow),
+                          Math.max(0, left - grow),
+                          Math.min(GRID_ROWS - 1, bottom + grow),
+                          Math.min(GRID_COLUMNS - 1, right + grow),
+                      ];
                   },
                   () =>
                       random() < 0.5
@@ -421,7 +531,7 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
 
 // Formulas that read cells where blocks move from and land, on their own sheet and on another, so a move makes some
 // follow it and some lossy.
-export function randomReaderOp(random: Random, model: Model): InputOp {
+export function randomLandingReaderOp(random: Random, model: Model): InputOp {
     const cells = Array.from({ length: 1 + below(random, 4) }, (_, at): Placed<CellContent | null> => {
         const row = 1 + below(random, 16);
         const column = 1 + below(random, 9);

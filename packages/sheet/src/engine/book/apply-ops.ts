@@ -11,15 +11,11 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyFormat } from './apply-format';
 import { applyInput } from './apply-input';
+import { applyLines } from './apply-lines';
 import { applyMove } from './apply-move';
 import { applyRecord } from './apply-record';
 import { applySheet } from './apply-sheet';
 import type { Workbook } from './workbook';
-
-// THE KINDS STILL TO BE BUILT. The unit that builds a kind takes it out of this list and adds its case to
-// `applyOne`, which does not compile without it. When the list is empty it goes, and `Applied` is `Op`.
-type Unbuilt = 'lines';
-type Applied = Exclude<Op, { kind: Unbuilt }>;
 
 // The key each reason of the engine's refusal is thrown as: a new reason does not compile until it has one.
 const REFUSAL_OF = { 'grid-end': 'grid-end', 'too-long': 'key-too-long' } satisfies Record<
@@ -29,10 +25,10 @@ const REFUSAL_OF = { 'grid-end': 'grid-end', 'too-long': 'key-too-long' } satisf
 
 // Returns the inverse batch: the inverse ops of every op, the newest op's first, each restoring the state before
 // its op. It throws a `Refusal` with the workbook as it was; any other throw leaves the workbook to be reloaded.
-export function applyOps(book: Workbook, ops: readonly Applied[]): Applied[] {
+export function applyOps(book: Workbook, ops: readonly Op[]): Op[] {
     // Each op's inverse ops, in the order the ops landed. They are flattened once, as a spread of a long list passes
     // JavaScript's limit on arguments.
-    const landed: Applied[][] = [];
+    const landed: Op[][] = [];
     try {
         for (const op of ops) landed.push(applyOne(book, op));
         const over = fits(book.weight());
@@ -53,7 +49,7 @@ export function applyOps(book: Workbook, ops: readonly Applied[]): Applied[] {
 
 // An applier checks what its op can be refused for and reads what the inverse needs, throwing before its first
 // write, then writes, the engine first. It returns the ops that undo its op, in the order they apply.
-function applyOne(book: Workbook, op: Applied): Applied[] {
+function applyOne(book: Workbook, op: Op): Op[] {
     switch (op.kind) {
         case 'input':
             return applyInput(book, op);
@@ -61,6 +57,8 @@ function applyOne(book: Workbook, op: Applied): Applied[] {
             return applyFormat(book, op);
         case 'record':
             return applyRecord(book, op);
+        case 'lines':
+            return applyLines(book, op);
         case 'move':
             return applyMove(book, op);
         case 'sheet':

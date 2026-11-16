@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { Batch, CellAttrs, FormatOp, InputOp, MoveOp, Op, Rect, SheetContent } from '@workspace/lib/sheets/ops';
+import type {
+    Batch,
+    CellAttrs,
+    FormatOp,
+    InputOp,
+    LinesOp,
+    MoveOp,
+    Op,
+    Rect,
+    SheetContent,
+} from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -13,8 +23,8 @@ import {
     randomBookContent,
     randomFormatOp,
     randomInputOp,
+    randomLandingReaderOp,
     randomMoveOp,
-    randomReaderOp,
     randomRecordOp,
     randomSheetOp,
 } from './batches';
@@ -24,8 +34,6 @@ import { bytes } from './bytes';
 import type { Model } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 import { formulaRule } from './records-fixtures';
-
-type Applied = Parameters<typeof applyOps>[1][number];
 
 const LAST_ROW = GRID_ROWS - 1;
 const LAST_COLUMN = GRID_COLUMNS - 1;
@@ -63,7 +71,7 @@ function expectValid(ops: readonly Op[]): void {
 
 // LAW 2 and law 8 on one batch: the book reads as the model after it and after its inverse, which holds the bands
 // canonical; the inverse restores the bytes and passes the validators; its own inverse gives the bytes after.
-function expectLaw2(content: Book, ops: readonly Applied[]): Applied[] {
+function expectLaw2(content: Book, ops: readonly Op[]): Op[] {
     const book = new Workbook(content);
     const before = bytes(book);
     const expected = modelAfter(modelOf(content), { now: content.now, seed: content.seed, ops: [...ops] });
@@ -81,7 +89,7 @@ function expectLaw2(content: Book, ops: readonly Applied[]): Applied[] {
     return inverse;
 }
 
-function refusalOf(book: Workbook, ops: readonly Applied[]): RefusalKey | undefined {
+function refusalOf(book: Workbook, ops: readonly Op[]): RefusalKey | undefined {
     try {
         applyOps(book, ops);
     } catch (error) {
@@ -362,11 +370,64 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
         expect(refusalOf(book, [moveOf([0, 0, 1, 2], 4, 4, 'b')])).toBe('merge-cut');
     });
 
+    test('the sheet the block leaves plans whole first, so its rule past the bound refuses before a cut where it lands', () => {
+        const source = sheetOf('a', { records: { conditionalFormat: { r: formulaRule([[40, 0, 40, 0]], LONG) } } });
+        const content = bookOf(source, sheetOf(ID, { records: { merge: { m: { rect: [5, 5, 5, 6] } } } }));
+        const op = moveOf([0, 0, 0, 0], 5, 5, ID);
+        expect(refusalOf(new Workbook(content), [op])).toBe('key-too-long');
+        expect(modelAfter(modelOf(content), { now: 1, seed: 1, ops: [op] })).toBe('key-too-long');
+    });
+
     test('a merge the block lands on whole is removed and comes back', () => {
         const book = new Workbook(bookOf(A, B));
         applyOps(book, [moveOf([10, 0, 10, 2], 5, 1)]);
         expect(book.sheets.get('a')?.records.records('merge').has('landed')).toBe(false);
         expectLaw2(bookOf(A, B), [moveOf([10, 0, 10, 2], 5, 1)]);
+    });
+});
+
+describe('engine/book/apply-move — beside the line edits of one batch', () => {
+    const linesOf = (rows: boolean, insert: boolean, index: number, count: number, sheet = 'a'): LinesOp => ({
+        kind: 'lines',
+        sheet,
+        rows,
+        insert,
+        index,
+        count,
+    });
+    // A filter from row 3 to the grid's last, with filtered rows, over the cells the moves cross.
+    const FILTERED = sheetOf('a', {
+        ...A,
+        records: {
+            ...A.records,
+            filter: { f: { rect: [2, 0, LAST_ROW, 4] } },
+            filterColumn: { k: { filter: 'f', column: 1, rows: [[3, 4]] } },
+        },
+    });
+
+    test('rows inserted through the block, then the block moved across them', () => {
+        expectLaw2(bookOf(A, B), [linesOf(true, true, 2, 2), moveOf([0, 0, 5, 1], 3, 1)]);
+    });
+
+    test('a column deleted through the block, then the block moved to another sheet', () => {
+        expectLaw2(bookOf(A, B), [linesOf(false, false, 1, 1), moveOf([0, 0, 4, 1], 1, 1, 'b')]);
+    });
+
+    test('a move, then rows deleted through where the block landed', () => {
+        expectLaw2(bookOf(A, B), [OVERLAP, linesOf(true, false, 3, 2)]);
+        expectLaw2(bookOf(A, B), [moveOf([0, 0, 3, 1], 0, 0, 'b'), linesOf(true, false, 1, 2, 'b')]);
+    });
+
+    test('a move, then a column inserted inside the landed block, then a move across it', () => {
+        expectLaw2(bookOf(A, B), [OVERLAP, linesOf(false, true, 2, 1), moveOf([2, 1, 5, 3], 8, 0)]);
+    });
+
+    test('a filter stays where a move leaves it, and its start then moves with a row inserted above', () => {
+        const content = bookOf(FILTERED, B);
+        const book = new Workbook(content);
+        applyOps(book, [moveOf([0, 0, 4, 1], 6, 6)]);
+        expect(book.content().sheets[0]?.records.filter).toEqual({ f: { rect: [2, 0, LAST_ROW, 4] } });
+        expectLaw2(content, [moveOf([0, 0, 4, 1], 6, 6), linesOf(true, true, 0, 1), moveOf([7, 6, 9, 7], 1, 2)]);
     });
 });
 
@@ -388,7 +449,7 @@ describe('engine/book/apply-move — the laws over random books and batches of m
                     (r, m) => {
                         const draw = r();
                         if (single || draw < 0.4) return randomMoveOp(r, m);
-                        if (draw < 0.6) return randomReaderOp(r, m);
+                        if (draw < 0.6) return randomLandingReaderOp(r, m);
                         if (draw < 0.65) return randomInputOp(r, m);
                         if (draw < 0.72) return randomFormatOp(r, m);
                         return draw < 0.93 ? randomRecordOp(r, m) : randomSheetOp(r, m);
@@ -451,7 +512,7 @@ function classOf(model: Model, { sheet, toSheet, from, toRow, toColumn }: MoveOp
 
 // The parts of a move's inverse it holds: after the move back, whole-look formats, the input of the landed-on cells
 // when they held content, records, and the inputs of lossy formulas.
-function partsOf(model: Model, op: MoveOp, inverse: readonly Applied[]): string[] {
+function partsOf(model: Model, op: MoveOp, inverse: readonly Op[]): string[] {
     const parts: string[] = [];
     if (inverse.some((part) => part.kind === 'format')) parts.push('part looks');
     if (inverse.some((part) => part.kind === 'record')) parts.push('part records');

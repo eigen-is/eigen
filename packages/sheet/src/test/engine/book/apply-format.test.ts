@@ -22,7 +22,6 @@ import type { Book } from './book-fixtures';
 import { bytes } from './bytes';
 import { expectReads, modelAfter, modelOf } from './model';
 
-type Applied = Parameters<typeof applyOps>[1][number];
 type CellSet = CellAttrs & { link?: CellLink };
 type CellClear = (CellAttrKey | 'link')[];
 
@@ -78,7 +77,7 @@ function expectValid(ops: readonly Op[]): void {
 // LAW 2 on one batch: the inverse restores the bytes, passes the validators, and its own inverse the bytes after. The
 // model reads every place as the book does after the batch and after its inverse, which holds the bands canonical.
 // Returns the inverse.
-function expectLaw2(content: Book, ops: readonly Applied[]): Applied[] {
+function expectLaw2(content: Book, ops: readonly Op[]): Op[] {
     const book = new Workbook(content);
     const before = bytes(book);
     const expected = modelAfter(modelOf(content), { now: content.now, seed: content.seed, ops: [...ops] });
@@ -595,8 +594,7 @@ describe('engine/book/apply-format — two peers formatting one range (the falsi
         applyOps(whole, inverse);
         expect([lookAt(whole, 0, 0), lookAt(whole, 0, 1)]).toEqual([{ it: 1, bg: '#0000ff' }, { bg: '#ff0000' }]);
         // Every key has its own op, so a guard that drops the ops of the keys a peer changed since keeps the peer's.
-        const named = (op: Applied) =>
-            op.kind === 'format' ? [...Object.keys(op.set ?? {}), ...(op.clear ?? [])] : [];
+        const named = (op: Op) => (op.kind === 'format' ? [...Object.keys(op.set ?? {}), ...(op.clear ?? [])] : []);
         expect(inverse.map(named)).toEqual([['bl'], ['it'], ['bg']]);
         applyOps(
             book,

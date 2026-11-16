@@ -39,6 +39,9 @@ import { RectIndex } from './rect-index';
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
 type RuleKind = 'conditionalFormat' | 'validation';
+// How a span meets the grid's end under a line edit: a merge's end moves as a line does, a filter's end on the last
+// line stays there, and a rule's or a chart's range over the whole axis, Excel's `A:A`, also stays whole.
+type Reach = 'closed' | 'open' | 'whole';
 
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
@@ -270,9 +273,9 @@ export class SheetRecords {
         const restore: RecordOp[] = [];
         // Undo puts back a record the inverse edit does not give back as it was.
         let kept = true;
-        const span = (start: number, end: number, open: boolean): Span | null => {
-            const after = spanAfter(axis, start, end, open);
-            const back = after && spanAfter(inverse, after[0], after[1], open);
+        const span = (start: number, end: number, reach: Reach): Span | null => {
+            const after = spanAfter(axis, start, end, reach);
+            const back = after && spanAfter(inverse, after[0], after[1], reach);
             if (!back || back[0] !== start || back[1] !== end) kept = false;
             return after;
         };
@@ -281,15 +284,15 @@ export class SheetRecords {
             if (after === GONE || mapIndex(inverse, after) !== index) kept = false;
             return after;
         };
-        const rectAfter = (rect: Rect, open: boolean): Rect | null => {
+        const rectAfter = (rect: Rect, reach: Reach): Rect | null => {
             const [top, left, bottom, right] = rect;
-            const after = span(...lineSpan(rect, rows), open);
+            const after = span(...lineSpan(rect, rows), reach);
             return after && (rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]);
         };
         // The list itself when no range moves.
         const ranges = (list: Rect[]): Rect[] => {
             const next = list.flatMap((range) => {
-                const after = rectAfter(range, true);
+                const after = rectAfter(range, 'whole');
                 return after ? [sameRect(after, range) ? range : after] : [];
             });
             return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
@@ -322,7 +325,7 @@ export class SheetRecords {
             }
             for (const [id, merge] of this.stored.merge) {
                 const [top, left, bottom, right] = merge.rect;
-                const rect = rectAfter(merge.rect, false);
+                const rect = rectAfter(merge.rect, 'closed');
                 // A merge the edit cuts to one cell is a merge no more, as in Excel.
                 const single = rect && rect[0] === rect[2] && rect[1] === rect[3] && (top !== bottom || left !== right);
                 settle('merge', id, merge, !rect || single ? undefined : sameRect(rect, merge.rect) ? merge : { rect });
@@ -331,7 +334,7 @@ export class SheetRecords {
             for (const [id, filter] of this.stored.filter) {
                 // The header row holds the filter's buttons, so a delete of it removes the filter.
                 const header = rows && !edit.insert && mapIndex(axis, filter.rect[0]) === GONE;
-                const rect = header ? null : rectAfter(filter.rect, true);
+                const rect = header ? null : rectAfter(filter.rect, 'open');
                 if (!rect) removed.add(id);
                 settle('filter', id, filter, !rect ? undefined : sameRect(rect, filter.rect) ? filter : { rect });
             }
@@ -347,7 +350,7 @@ export class SheetRecords {
                     continue;
                 }
                 const spans = column.rows.flatMap(([start, end]) => {
-                    const after = span(start, end, true);
+                    const after = span(start, end, 'open');
                     return after ? [after] : [];
                 });
                 const same =
@@ -376,7 +379,9 @@ export class SheetRecords {
             }
             const ruled = next === rule.ranges ? rule : { ...rule, ranges: next };
             // The formula is read at the top-left of the first range the edit leaves, on its first line that stays.
-            const first = here ? rule.ranges.findIndex((range) => spanAfter(axis, ...lineSpan(range, rows), true)) : 0;
+            const first = here
+                ? rule.ranges.findIndex((range) => spanAfter(axis, ...lineSpan(range, rows), 'whole'))
+                : 0;
             const [start] = lineSpan(rule.ranges[first], rows);
             const host = here && mapIndex(axis, start) === GONE ? edit.index + edit.count : start;
             const formula = withFormula(ruled, (tree) => transformLines(tree, edit, this.sheet, host));
@@ -390,7 +395,7 @@ export class SheetRecords {
             const next = mapChartRefs(chart, (ref) => {
                 if (ref.sheetId !== edit.sheet) return ref;
                 const [start, end] = rows ? ref.row : ref.column;
-                const after = span(start, end, true);
+                const after = span(start, end, 'whole');
                 if (!after) return null;
                 if (after[0] === start && after[1] === end) return ref;
                 return rows ? { ...ref, row: [...after] } : { ...ref, column: [...after] };
@@ -572,13 +577,13 @@ export class SheetRecords {
     }
 }
 
-// The lines `start` to `end` after the edit, or null when none is left. With `open` an end on the axis's last line
-// stays there, so a range to the grid's end, Excel's `A:A` included, keeps reaching it.
-function spanAfter(edit: Edit, start: number, end: number, open: boolean): Span | null {
-    if (open && start === 0 && end === edit.lines - 1) return [start, end];
+// The lines `start` to `end` after the edit, or null when none is left.
+function spanAfter(edit: Edit, start: number, end: number, reach: Reach): Span | null {
+    const toEnd = reach !== 'closed' && end === edit.lines - 1;
+    if (toEnd && reach === 'whole' && start === 0) return [start, end];
     const into = { start: 0, end: 0 };
     if (!mapSpan(edit, start, end, into)) return null;
-    return [into.start, open && end === edit.lines - 1 ? end : into.end];
+    return [into.start, toEnd ? end : into.end];
 }
 
 // An insert before the last frozen line freezes the new lines too, up to the grid's end; a delete takes the frozen
