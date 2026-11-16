@@ -20,6 +20,7 @@ type Key = string | number;
 // sheet: first and last row, first and last column, and where the entry starts.
 type Listed = { readonly hosts: Sheet[]; readonly entries: number[]; readonly areas: number[] };
 
+// One sheet's blocks, and per thing they read where the blocks that read it start.
 type Held = { readonly blocks: readonly number[]; readonly filed: ReadonlyMap<Key, readonly number[]> };
 
 // What a block reads whose shape names a sheet by a name no sheet has, or a span of sheets: the tabs themselves, as
@@ -223,8 +224,8 @@ export class ReverseIndex {
         for (const listing of followed) listing.restore();
     }
 
-    // The blocks of a sheet as its columns hold them. Formulas that only got another shape lie in the columns of the
-    // blocks the sheet had: given those as `kept`, no other column is read.
+    // The blocks of a sheet as its columns hold them, only in the columns of `kept` when its formulas only got another
+    // shape. A method though called once: inline, the million-row pair insert took 6.7 ms against 4.4.
     private found(sheet: Sheet, kept: readonly number[] | undefined): number[] {
         const blocks: number[] = [];
         const { columns } = sheet;
@@ -273,8 +274,8 @@ export class ReverseIndex {
         return blocks;
     }
 
-    // The blocks of a sheet under each thing they read, as where they start in its list. What their references read
-    // of a sheet is entered in the list of that sheet.
+    // The blocks of a sheet under each thing they read, as where they start in its list, and what each reference reads
+    // entered in the list of the sheet it reads. A method though called once, as `found` is and for the same speed.
     private filed(
         sheet: Sheet,
         blocks: readonly number[],

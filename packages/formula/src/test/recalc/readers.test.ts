@@ -138,7 +138,7 @@ describe('what an edit visits and lists', () => {
         }
     });
 
-    test('a sheet move and a rename that binds no name visit and list nothing', () => {
+    test('a sheet move and a rename visit and list nothing where no formula names a sheet by a name or a span', () => {
         const counted = ring(10);
         expect(counted['a sheet rename']).toEqual([0, 0]);
         expect(counted['a sheet move']).toEqual([0, 0]);
