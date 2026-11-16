@@ -4,6 +4,7 @@
 // by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that held
 // it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
+import { GRID_COLUMNS } from '@workspace/formula/text';
 import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     CellAttrKey,
@@ -128,12 +129,18 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
             }
             return next;
         };
-        for (let at = 0; at < op.ranges.length && !stopped; ) {
-            // Neighbours in the list that span the same columns are written as one, rows down.
-            const first = at;
-            const [, left, , right] = op.ranges[at];
-            while (at < op.ranges.length && op.ranges[at][1] === left && op.ranges[at][3] === right) at += 1;
-            const group = op.ranges.slice(first, at).sort((a, b) => a[0] - b[0]);
+        // The rectangles share no cell, so their order does not show: those over one span of columns are written as
+        // one, rows down, the spans in the order the list first names them.
+        const groups = new Map<number, Rect[]>();
+        for (const rect of op.ranges) {
+            const span = rect[1] * GRID_COLUMNS + rect[3];
+            const group = groups.get(span);
+            if (group) group.push(rect);
+            else groups.set(span, [rect]);
+        }
+        for (const group of groups.values()) {
+            if (stopped) break;
+            group.sort((a, b) => a[0] - b[0]);
             for (const { c0, c1, r0, r1, look } of bands.write(group, to)) {
                 const old = book.looks.look(look);
                 for (const [key, held] of changed) {
@@ -159,16 +166,17 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
             inverse.push({ kind: 'format', sheet, ranges: areas.joined().reverse(), ...named });
         }
     }
-    if (stopped) return inverse;
-
     const restored: Placed<CellContent>[] = [];
     for (const [row, column, extra, runs, look] of rich.values()) {
-        // Runs that all wear the look's value of every named key take it back with the look; others are put back whole.
-        if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
-        extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
+        // Runs that all wear the look's value of every named key take it back with the look; others are put back
+        // whole, as every rich cell is by a format that stopped: the looks it takes back restyle the cells they cross.
+        if (stopped || runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) {
+            restored.push([row, column, extra]);
+        }
+        if (!stopped) extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
-    if (linked) for (const rect of op.ranges) extras.link(rect, link);
-    if (linked) {
+    if (linked && !stopped) {
+        for (const rect of op.ranges) extras.link(rect, link);
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();
         for (const [row, column, value] of [...links.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
