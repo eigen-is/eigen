@@ -4,10 +4,11 @@ import { Engine, REF } from '../../index';
 import { parseStored } from '../../text';
 import { random } from '../store/support';
 
-// The law of incremental recalc: after any sequence of writes, line edits, moves and clocks with recalcs in between, stopped ones
-// included, every cell holds what a fresh engine computes from the same inputs, and the same cells are on a loop.
-// And the reload law: a walk of an engine that is settled, loaded as computed, computes nothing and holds those
-// values, now and after later writes; a walk of one that is not, loaded as not computed, computes them.
+// The law of incremental recalc: after any sequence of writes, line edits, moves, clocks and changes of the rows a
+// sheet hides or filters, with recalcs in between, stopped ones included, every cell holds what a fresh engine
+// computes from the same inputs and the same rows, and the same cells are on a loop. And the reload law: a walk of
+// an engine that is settled, loaded as computed with those rows, computes nothing and holds those values, now and
+// after later writes; a walk of one that is not, loaded as not computed, computes them.
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 const SHEETS = ['s1', 's2'];
@@ -19,8 +20,11 @@ const KEPT = "='[1]Book'!R1C1+";
 // The value of a formula is the one it is written with, which only a formula this build cannot evaluate keeps.
 type Input = { readonly value: Literal | null; readonly formula: string | null };
 type Model = Map<string, Map<number, Input>>;
+// The rows each sheet hides and filters, which the host holds and says: the engine hands none back.
+type RowsOut = { readonly hidden: readonly number[]; readonly filtered: readonly number[] };
+type Rows = Map<string, RowsOut>;
 
-function sources(model: Model): SheetSource[] {
+function sources(model: Model, rows: Rows): SheetSource[] {
     return SHEETS.map((id) => ({
         id,
         name: id,
@@ -28,12 +32,13 @@ function sources(model: Model): SheetSource[] {
             for (const [key, { value, formula }] of model.get(id) ?? [])
                 cell(Math.floor(key / 100), key % 100, value, formula);
         },
+        ...rows.get(id),
     }));
 }
 
-// The engine's own walk, the snapshot a host writes.
-function walked(engine: Engine): SheetSource[] {
-    return SHEETS.map((id) => ({ id, name: id, cells: (cell) => engine.cells(id, cell) }));
+// The engine's own walk, the snapshot a host writes, with the rows the host holds beside it.
+function walked(engine: Engine, rows: Rows): SheetSource[] {
+    return SHEETS.map((id) => ({ id, name: id, cells: (cell) => engine.cells(id, cell), ...rows.get(id) }));
 }
 
 function values(engine: Engine): unknown[] {
@@ -65,7 +70,15 @@ function generator(next: () => number) {
     const columns = () => `${sheet()}${end('C', COLUMNS)}:${end('C', COLUMNS)}`;
     const rows = () => `${sheet()}${end('R', ROWS)}:${end('R', ROWS)}`;
     const formula = (): string => {
-        switch (pick(24)) {
+        switch (pick(28)) {
+            case 24:
+                return `=SUBTOTAL(${[9, 109, 3, 103, 1, 104][pick(6)]},${range()})`;
+            case 25:
+                return `=SUBTOTAL(${pick(2) === 0 ? 9 : 109},${columns()},${range()})`;
+            case 26:
+                return `=AGGREGATE(${[9, 4, 2][pick(3)]},${pick(8)},${range()})`;
+            case 27:
+                return `=SUBTOTAL(109,OFFSET(${cell()},0,0,${1 + pick(5)},${1 + pick(2)}))`;
             case 21:
                 return `=NOW()+${cell()}`;
             case 22:
@@ -117,7 +130,17 @@ function generator(next: () => number) {
         }
     };
     const literal = (): Literal => [pick(10), pick(10), pick(100) / 4, 'a', '7', true][pick(6)];
-    return { pick, formula, literal };
+    // Rows left out, as sorted pairs that share no row and may touch, past the last cell too.
+    const pairs = (): number[] => {
+        const list: number[] = [];
+        for (let row = pick(4); row < ROWS + 3 && pick(4) > 0; row += pick(4)) {
+            const last = row + pick(3);
+            list.push(row, last);
+            row = last + 1;
+        }
+        return list;
+    };
+    return { pick, formula, literal, pairs };
 }
 
 type Counts = {
@@ -131,14 +154,23 @@ type Counts = {
     stopped: number;
     written: number;
     edits: number;
+    // Changes of the rows a sheet leaves out, the same rows said again, the reloads right after a change with no
+    // pass between, the edits that moved cells of a sheet that leaves rows out, and the computed loads with such rows.
+    rows: number;
+    sameRows: number;
+    rowsUnpassed: number;
+    rowEdits: number;
+    rowLoads: number;
 };
 
 function run(seed: number, steps: number): Counts {
-    const { pick, formula, literal } = generator(random(seed));
+    const { pick, formula, literal, pairs } = generator(random(seed));
     const model: Model = new Map(SHEETS.map((id) => [id, new Map()]));
+    const rows: Rows = new Map(SHEETS.map((id) => [id, { hidden: [], filtered: [] }]));
+    const leavesOut = (id: string) => (rows.get(id)?.hidden.length ?? 0) + (rows.get(id)?.filtered.length ?? 0) > 0;
     let now = 0;
     let clock = 0;
-    let engine = new Engine(sources(model), now, clock, false);
+    let engine = new Engine(sources(model, rows), now, clock, false);
     const write = (id: string, row: number, column: number, input: Input | null) => {
         const cells = model.get(id);
         if (input === null) {
@@ -159,6 +191,11 @@ function run(seed: number, steps: number): Counts {
         stopped: 0,
         written: 0,
         edits: 0,
+        rows: 0,
+        sameRows: 0,
+        rowsUnpassed: 0,
+        rowEdits: 0,
+        rowLoads: 0,
     };
     // After a line edit or a move the inputs are the engine's walk, as the edit law holds its rewrites.
     const remodel = () => {
@@ -173,19 +210,20 @@ function run(seed: number, steps: number): Counts {
         }
     };
     const fresh = () => {
-        const engine = new Engine(sources(model), now, clock, false);
+        const engine = new Engine(sources(model, rows), now, clock, false);
         return { engine, result: engine.recalc(NO_CAP) };
     };
     // The workbook opened again from a walk of the engine, as a tab that joins: as computed exactly when it is settled.
     const reopen = (counted: 'stopped' | 'written' | null) => {
         const old = engine;
         const settled = old.settled();
-        engine = new Engine(walked(old), now, clock, settled);
+        engine = new Engine(walked(old, rows), now, clock, settled);
         if (!settled) {
             if (counted !== null) counts[counted] += 1;
             return;
         }
         counts.computed += 1;
+        if (SHEETS.some(leavesOut)) counts.rowLoads += 1;
         // A formula that holds #REF! is computed again, as it may be on a loop, and what reads it.
         let refs = 0;
         for (const id of SHEETS) {
@@ -219,8 +257,26 @@ function run(seed: number, steps: number): Counts {
         const id = SHEETS[pick(2)];
         const row = pick(ROWS);
         const column = pick(COLUMNS);
-        const kind = pick(22);
-        if (kind < 7) write(id, row, column, { value: literal(), formula: null });
+        const kind = pick(25);
+        if (kind >= 22) {
+            // The host hides, shows or filters rows: one list or both, or says the rows it said before.
+            const held = rows.get(id) ?? { hidden: [], filtered: [] };
+            const next =
+                kind === 22
+                    ? held
+                    : { hidden: pick(3) > 0 ? pairs() : held.hidden, filtered: pick(3) > 0 ? pairs() : held.filtered };
+            const same = JSON.stringify(next) === JSON.stringify(held);
+            const settled = engine.settled();
+            engine.setRowsOut(id, next.hidden, next.filtered);
+            expect([seed, step, engine.settled()]).toEqual([seed, step, same && settled]);
+            rows.set(id, next);
+            counts[same ? 'sameRows' : 'rows'] += 1;
+            if (!same && pick(4) === 0) {
+                counts.rowsUnpassed += 1;
+                reopen('written');
+                continue;
+            }
+        } else if (kind < 7) write(id, row, column, { value: literal(), formula: null });
         else if (kind < 11) write(id, row, column, { value: null, formula: formula() });
         else if (kind < 12) write(id, row, column, { value: literal(), formula: `${KEPT}${pick(9)}` });
         else if (kind < 15) write(id, row, column, null);
@@ -239,21 +295,25 @@ function run(seed: number, steps: number): Counts {
             }
         } else {
             // A structural edit, which most often no clock follows: what it moves still computes as it would there.
+            // The rows a sheet leaves out stay the rows they were, whatever cells the edit moves onto them.
             if (kind === 20) {
-                const rows = pick(3) > 0;
-                const index = pick(rows ? ROWS : COLUMNS);
-                engine.editLines({ insert: pick(2) === 0, index, count: 1 + pick(2), sheet: id, rows });
+                const byRows = pick(3) > 0;
+                const index = pick(byRows ? ROWS : COLUMNS);
+                engine.editLines({ insert: pick(2) === 0, index, count: 1 + pick(2), sheet: id, rows: byRows });
+                if (byRows && leavesOut(id)) counts.rowEdits += 1;
             } else {
+                const toSheet = SHEETS[pick(2)];
                 engine.moveCells({
                     fromSheet: id,
                     row,
                     column,
                     rows: 1 + pick(3),
                     columns: 1 + pick(2),
-                    toSheet: SHEETS[pick(2)],
+                    toSheet,
                     toRow: pick(ROWS),
                     toColumn: pick(COLUMNS),
                 });
+                if (leavesOut(id) || leavesOut(toSheet)) counts.rowEdits += 1;
             }
             counts.edits += 1;
             remodel();
@@ -301,7 +361,7 @@ describe('held against a fresh load', () => {
     // A workbook can go a whole run with few formulas that hold no value, so their floor is of the seeds together.
     const blanks: number[] = [];
     test.each(Array.from({ length: Number(process.env['LAW_SEEDS'] ?? 12) }, (_, seed) => [seed + 1]))(
-        'after random writes, line edits, moves, clocks, recalcs and reloads every cell equals a fresh full recalc: seed %i',
+        'after random writes, line edits, moves, clocks, rows left out, recalcs and reloads every cell equals a fresh full recalc: seed %i',
         (seed) => {
             const counts = run(seed, 1500);
             if (process.env['LAW_SEEDS'] !== undefined) console.log(JSON.stringify({ seed, ...counts }));
@@ -312,6 +372,11 @@ describe('held against a fresh load', () => {
             expect(counts.stopped).toBeGreaterThan(2);
             expect(counts.written).toBeGreaterThan(10);
             expect(counts.edits).toBeGreaterThan(50);
+            expect(counts.rows).toBeGreaterThan(60);
+            expect(counts.sameRows).toBeGreaterThan(20);
+            expect(counts.rowsUnpassed).toBeGreaterThan(10);
+            expect(counts.rowEdits).toBeGreaterThan(30);
+            expect(counts.rowLoads).toBeGreaterThan(30);
             blanks.push(counts.blanks);
         },
     );
