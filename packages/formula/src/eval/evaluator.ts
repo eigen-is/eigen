@@ -16,6 +16,7 @@ import { CALC, errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isCell, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
+import { Carries } from './carry';
 import type { Term } from './elementwise';
 import { elementwise, isSpread } from './elementwise';
 import { negate, operate, percent } from './operators';
@@ -36,6 +37,7 @@ export class Evaluator {
     public calls = 0;
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
+    public readonly carries = new Carries();
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.

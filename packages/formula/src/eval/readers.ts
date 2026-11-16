@@ -21,6 +21,8 @@ import {
     widthOf,
 } from '../values/value';
 import { Book } from './book';
+import type { Carry } from './carry';
+import { Answer, NOTHING } from './carry';
 import { Tally } from './criteria';
 import type { Evaluator } from './evaluator';
 import type { Family } from './families';
@@ -98,6 +100,13 @@ export class Numbers {
     private matched = false;
     // Whether the numbers are the products of the arguments, place by place.
     private multiplied = false;
+    // The one range the numbers are of, with what the pass carries of it, and of the answer in hand what was
+    // carried: its value, the cells counted and, of a sum, the sum before its last addition.
+    private range: Reference | null = null;
+    private carry: Carry | null = null;
+    private prior = 0;
+    private priorCount = 0;
+    private priorBefore = 0;
 
     public constructor(ctx: Evaluator, frame: Frame) {
         this.ctx = ctx;
@@ -106,6 +115,8 @@ export class Numbers {
 
     // The arguments `from` up to `to` of the frame, as a family counts them.
     public static bind(numbers: Numbers, from: number, to: number, family: Family, snaps: boolean): Numbers {
+        numbers.range = null;
+        numbers.carry = null;
         numbers.snaps = snaps;
         numbers.from = from;
         numbers.to = to;
@@ -123,6 +134,14 @@ export class Numbers {
         return numbers;
     }
 
+    // Bound numbers that are of one range alone, with what the pass carries of it: true until the body returns, as
+    // no row computes a formula between its collector and its body.
+    public static carrying(numbers: Numbers, range: Reference, carry: Carry): Numbers {
+        numbers.range = range;
+        numbers.carry = carry;
+        return numbers;
+    }
+
     // The numbers beside the cells that the criteria of the call accepted. Their sum is the plain one.
     public static beside(numbers: Numbers): Numbers {
         Numbers.bind(numbers, 0, 0, Families.Numbers, false).matched = true;
@@ -132,33 +151,33 @@ export class Numbers {
     // Added number by number in written order. Of a family's numbers the sum is 0 when the last addition leaves
     // next to nothing.
     public sum(): number {
-        const { walk, recalc } = this.start();
-        const sum = add(walk, recalc);
-        this.done();
+        const { walk, recalc } = this.resume(Answer.Sum);
+        const sum = add(walk, recalc, this.prior, this.priorBefore);
+        this.carried(Answer.Sum, sum);
         return this.snaps ? snapSum(sum, walk.before) : sum;
     }
 
     // How many cells count, a repeated one as often as it is written.
     public count(): number {
         if (this.counted >= 0) return this.counted;
-        const { walk } = this.start();
+        const { walk } = this.resume(Answer.Count);
         while (walk.next());
-        return this.done();
+        return this.carried(Answer.Count, 0);
     }
 
     public min(): number {
-        const { walk } = this.start();
-        let least = Number.POSITIVE_INFINITY;
+        const { walk } = this.resume(Answer.Least);
+        let least = this.prior;
         while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] < least) least = walk.num[i];
-        this.done();
+        this.carried(Answer.Least, least);
         return least;
     }
 
     public max(): number {
-        const { walk } = this.start();
-        let most = Number.NEGATIVE_INFINITY;
+        const { walk } = this.resume(Answer.Most);
+        let most = this.prior;
         while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] > most) most = walk.num[i];
-        this.done();
+        this.carried(Answer.Most, most);
         return most;
     }
 
@@ -199,6 +218,40 @@ export class Numbers {
         if (this.matched) walk.hand(this.frame.tally.numbers, this.frame.tally.found);
         if (this.multiplied) walk.multiply();
         return this.ctx;
+    }
+
+    // The walk of an answer from where the carry of the range knows it to: the whole range when it knows none, the
+    // rows below when it knows some, and nothing when it knows them all.
+    private resume(answer: Answer): Evaluator {
+        const { carry, range, ctx } = this;
+        const end = carry === null ? -1 : carry.ends[answer];
+        if (carry === null || range === null || end <= range.top) {
+            this.prior = NOTHING[answer];
+            this.priorCount = 0;
+            this.priorBefore = 0;
+            return this.start();
+        }
+        this.prior = carry.values[answer];
+        this.priorCount = carry.counts[answer];
+        this.priorBefore = carry.before;
+        const { walk } = ctx;
+        if (end > range.bottom) walk.start(this.frame.held, 0, 0, this.family, this.frame.skips);
+        else walk.below({ ...range, top: end }, this.family, this.frame.skips);
+        return ctx;
+    }
+
+    // The cells counted after an answer's walk, with the answer carried down to the range's last row.
+    private carried(answer: Answer, value: number): number {
+        const { walk } = this.ctx;
+        const counted = this.priorCount + this.done();
+        this.counted = counted;
+        const { carry, range } = this;
+        if (carry === null || range === null) return counted;
+        carry.ends[answer] = range.bottom + 1;
+        carry.values[answer] = value;
+        carry.counts[answer] = counted;
+        if (answer === Answer.Sum) carry.before = walk.before;
+        return counted;
     }
 
     private done(): number {

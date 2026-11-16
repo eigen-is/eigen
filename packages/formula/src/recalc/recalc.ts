@@ -97,6 +97,9 @@ export class Recalc {
     // flagged the formulas that leave rows out.
     private readonly rowed = new Set<Sheet>();
     private readonly records: Records;
+    // Moves with every pass and every loop that closes: what a pass carried from one formula to the next holds
+    // only within one era.
+    public era = 0;
 
     // `computed` says whether the values of the workbook are those a full pass computed, as its load was told.
     public constructor(workbook: Workbook, functions: Registry, now: number, seed: number, computed: boolean) {
@@ -219,6 +222,7 @@ export class Recalc {
     public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
+        this.era += 1;
         if (!this.stamped) {
             // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
             this.reach();
@@ -488,6 +492,7 @@ export class Recalc {
             while (this.columns[found] !== column || this.rows[found] !== row) found = this.parents[this.lows[found]];
         }
         const from = this.lows[found];
+        this.era += 1;
         let at = this.current;
         while (at >= from) {
             const low = this.lows[at];

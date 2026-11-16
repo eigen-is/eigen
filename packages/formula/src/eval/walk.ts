@@ -86,6 +86,13 @@ export class Walk {
         this.multiplied = false;
     }
 
+    // The cells of `area` with no argument, walked as a range even when it is one cell: the rows of a longer range
+    // below those a carry knows.
+    public below(area: Reference, family: Family, skips: number): void {
+        this.start(NO_ARGS, 0, 0, family, skips);
+        this.enter(area);
+    }
+
     // The arguments of the walk, which are of one size, as their products place by place: every place counts.
     public multiply(): void {
         this.multiplied = true;
@@ -384,6 +391,7 @@ export function skipped(ctx: Evaluator, skips: number, held: Column, row: number
 }
 
 const NONE: readonly number[] = [];
+const NO_ARGS: readonly Held[] = [];
 
 // The rows of a sheet that a walk leaves out, as `skips` says: sorted pairs of a first and a last row.
 function rowsOut(sheet: Sheet, skips: number): readonly number[] {
