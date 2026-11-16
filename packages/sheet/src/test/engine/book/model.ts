@@ -293,8 +293,14 @@ function placeOf(place: string): [row: number, column: number] {
     return [row, column];
 }
 
+// A border side is one look whatever the order its keys come in, as a decoded snapshot sorts them.
 function lookKey(look: CellAttrs): string {
-    return JSON.stringify(LOOK_KEYS.map((name) => look[name] ?? null));
+    return JSON.stringify(
+        LOOK_KEYS.map((name) => {
+            const value = look[name];
+            return typeof value === 'object' ? [value.style, value.color] : (value ?? null);
+        }),
+    );
 }
 
 function lookId(model: Model, look: CellAttrs): number {
