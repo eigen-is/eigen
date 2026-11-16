@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import {
     BAND_WEIGHT,
     EXTRA_WEIGHT,
@@ -10,7 +11,7 @@ import {
 import type { Batch, FormatOp, InputOp, Op, RecordOp, Rect, Run, SheetContent } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
-import { commutes, weightBound } from '../../../engine/book/commutes';
+import { commutes } from '../../../engine/book/commutes';
 import { Workbook } from '../../../engine/book/workbook';
 import {
     batchOf,
@@ -519,38 +520,59 @@ describe('engine/book/commutes — commutes', () => {
             ]);
         }, 60_000);
 
-        test('the bound never counts less than the ops add, in any part of them', () => {
-            let grew = 0;
-            let exact = 0;
-            const sums = { added: 0, bound: 0 };
-            for (let seed = 1; seed <= 1500; seed += 1) {
+        test('the bound never counts less than the ops add, in any part of them: one unit less room is a no', () => {
+            const formatsOf = ({ runs, bands, extras }: WorkbookWeight) =>
+                runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
+            // A sheet no op names, of `slots` value slots and `formats` format weight with its own band: full columns,
+            // links of five units a cell from column 100 on, and stripes of one run each for the rest.
+            const pad = (slots: number, formats: number): SheetContent => {
+                const cells: SheetContent['cells'] = [];
+                for (let column = 0, left = slots; left > 0; column += 1, left -= GRID_ROWS) {
+                    cells.push([Math.min(left, GRID_ROWS) - 1, column, { v: 1 }]);
+                }
+                const links = Math.floor((formats - BAND_WEIGHT) / (5 * EXTRA_WEIGHT));
+                for (let at = 0; at < links; at += 1)
+                    cells.push([at % 1000, 100 + Math.floor(at / 1000), { link: LINK }]);
+                const stripes = formats - BAND_WEIGHT - links * 5 * EXTRA_WEIGHT;
+                const bands = stripes > 0 ? [0, stripes] : [];
+                for (let row = 0; row < stripes; row += 1) bands.push(row, row % 2 === 0 ? 1 : 0);
+                return sheetOf('pad', 'z9', { cells, looks: [{ bl: 1 }], bands });
+            };
+            const seen = { slots: 0, formats: 0 };
+            for (let seed = 1; seed <= 300; seed += 1) {
                 const random = randomOf(seed * 49_979_687);
                 const content = randomBookContent(random);
                 const model = modelOf(content);
-                const book = new Workbook(structuredClone(content));
                 const ops = Array.from({ length: 1 + below(random, 6) }, () => draw(random, model));
-                const bound = weightBound(book, ops);
+                const book = new Workbook(structuredClone(content));
                 const before = book.weight();
+                const most = { slots: before.slots, formats: formatsOf(before) };
                 for (const op of ops) {
                     // Each op alone, so a refused one leaves the rest to land: any part of the list.
                     landed(book, [op]);
                     const after = book.weight();
-                    for (const key of ['slots', 'runs', 'bands', 'extras', 'records', 'sheets'] as const) {
-                        expect(after[key], `seed ${seed} ${key}`).toBeLessThanOrEqual(bound[key]);
-                    }
+                    most.slots = Math.max(most.slots, after.slots);
+                    most.formats = Math.max(most.formats, formatsOf(after));
                 }
-                const after = book.weight();
-                const added = (key: 'slots' | 'runs' | 'bands' | 'extras') => Math.max(0, after[key] - before[key]);
-                const most = (key: 'slots' | 'runs' | 'bands' | 'extras') => bound[key] - before[key];
-                if (added('slots') + added('runs') + added('extras') > 0) grew += 1;
-                if (added('slots') === most('slots') && most('slots') > 0) exact += 1;
-                sums.added += added('runs') + added('bands') * BAND_WEIGHT + added('extras') * EXTRA_WEIGHT;
-                sums.bound += most('runs') + most('bands') * BAND_WEIGHT + most('extras') * EXTRA_WEIGHT;
+                const room = { slots: most.slots - before.slots - 1, formats: most.formats - formatsOf(before) - 1 };
+                for (const part of ['slots', 'formats'] as const) {
+                    if (room[part] < 0) continue;
+                    const slots = part === 'slots' ? MAX_VALUE_SLOTS - before.slots - room.slots : 0;
+                    const formats =
+                        part === 'formats' ? MAX_STYLE_RUNS - formatsOf(before) - room.formats : BAND_WEIGHT;
+                    const padded = new Workbook({
+                        ...structuredClone(content),
+                        sheets: [...content.sheets, pad(slots, formats)],
+                    });
+                    const weight = padded.weight();
+                    const left = part === 'slots' ? MAX_VALUE_SLOTS - weight.slots : MAX_STYLE_RUNS - formatsOf(weight);
+                    expect(left, `seed ${seed} ${part}`).toBe(room[part]);
+                    expect(commutes(padded, ops, [], []), `seed ${seed} ${part}`).toBe(false);
+                    seen[part] += 1;
+                }
             }
-            expect(grew).toBeGreaterThan(700);
-            expect(exact).toBeGreaterThan(50);
-            // The format bound counts a few times what random ops add.
-            expect(sums.bound / sums.added).toBeLessThan(12);
+            expect(seen.slots).toBeGreaterThan(200);
+            expect(seen.formats).toBeGreaterThan(180);
         }, 60_000);
     });
 });

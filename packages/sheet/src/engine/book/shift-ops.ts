@@ -104,8 +104,14 @@ function inputAfter(op: InputOp, edit: LinesOp, axis: Edit): InputOp | undefined
             for (const span of spans) runs.push([onLines(rect, rows, span), content]);
             continue;
         }
+        const references: FormulaNode[] = [];
+        const walk = [tree];
+        for (let node = walk.pop(); node; node = walk.pop()) {
+            if (node.kind === NodeKind.Ref) references.push(node);
+            walk.push(...node.children);
+        }
         // One stored text reads differently along the edited lines: each stretch of hosts with one outcome is a run.
-        for (const { start, end, tree: next } of hostClasses(tree, referencesOf(tree), edit, op.sheet, first, last)) {
+        for (const { start, end, tree: next } of hostClasses(tree, references, edit, op.sheet, first, last)) {
             const f = next === tree ? content.f : storedKey(next);
             if (typeof f !== 'string') return null;
             const span: Span = here ? [mapIndex(axis, start), mapIndex(axis, end)] : [start, end];
@@ -127,16 +133,6 @@ function inputAfter(op: InputOp, edit: LinesOp, axis: Edit): InputOp | undefined
     }
     if (runs.length + cells.length === 0) return undefined;
     return { kind: 'input', sheet: op.sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-}
-
-function referencesOf(tree: FormulaNode): FormulaNode[] {
-    const references: FormulaNode[] = [];
-    const walk = [tree];
-    for (let node = walk.pop(); node; node = walk.pop()) {
-        if (node.kind === NodeKind.Ref) references.push(node);
-        walk.push(...node.children);
-    }
-    return references;
 }
 
 // A format on the edited sheet. Undefined when no cell or line of it is left.

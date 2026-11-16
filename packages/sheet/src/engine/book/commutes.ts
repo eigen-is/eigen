@@ -37,7 +37,7 @@ export function commutes(
 
 // The most the workbook can weigh once ops that renumber no place land on it, in whatever order and when only some
 // of them do: each count of its weight now, and the most the ops can add to it.
-export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
+function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
     // Per sheet, the rows each written column may come to hold and the columns each cell format writes.
     const written = new Map<string, { lengths: Map<number, number>; formats: Span[] }>();
     const of = (sheet: string) => {
@@ -92,7 +92,14 @@ export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight 
 // Whether two ops write one thing, so that their order shows in the bytes, in a refusal or in an inverse.
 function clash(book: Workbook, a: Op, b: Op): boolean {
     if (a.kind === 'input') {
-        if (b.kind === 'input') return a.sheet === b.sheet && inputsMeet(a, b);
+        if (b.kind === 'input') {
+            return (
+                a.sheet === b.sheet &&
+                ((a.cells ?? []).some(([row, column]) => entryAt(b, row, column) !== undefined) ||
+                    (b.cells ?? []).some(([row, column]) => a.runs?.some(([rect]) => covers(rect, row, column))) ||
+                    (a.runs ?? []).some(([rect]) => b.runs?.some(([other]) => meets(rect, other))))
+            );
+        }
         if (b.kind === 'format') return inputMeetsFormat(book, a, b);
         return b.kind !== 'record' || renames(b);
     }
@@ -107,14 +114,6 @@ function clash(book: Workbook, a: Op, b: Op): boolean {
         return b.kind !== 'format';
     }
     return true;
-}
-
-function inputsMeet(a: InputOp, b: InputOp): boolean {
-    return (
-        (a.cells ?? []).some(([row, column]) => entryAt(b, row, column) !== undefined) ||
-        (b.cells ?? []).some(([row, column]) => a.runs?.some(([rect]) => covers(rect, row, column))) ||
-        (a.runs ?? []).some(([rect]) => b.runs?.some(([other]) => meets(rect, other)))
-    );
 }
 
 // An input replaces a cell's link, and a format's run-style key restyles the runs of a rich cell: one the input
