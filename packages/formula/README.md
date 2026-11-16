@@ -10,7 +10,7 @@ Excel is the reference: every function it computes is listed in [FUNCTIONS.md](F
 
 The engine is built and proven on its own: its tests, Excel's recorded answers and timing gates against today's engine. The product does not run it yet. Three parts are in use: number display through `@workspace/formula/format` (cells, charts, the xlsx importer and exporter), Excel's function inventory through `@workspace/formula/names`, and the row and column index maps of `@workspace/formula/text` (`mapIndex`, `mapSpan`, `GONE`), which today's sheet engine shifts its ranges with.
 
-It computes 219 of Excel's 524 functions. Not built yet: spilled results and the dynamic-array functions (`FILTER`, `SORT`, `SEQUENCE` and their kin), evaluating `LET` and `LAMBDA`, defined names, tables as a live feature (a file's table references are read as the plain ranges they name), 3-D references such as `Sheet1:Sheet3!A1`, hidden rows, and iterative calculation of circular references.
+It computes 219 of Excel's 524 functions. Not built yet: spilled results and the dynamic-array functions (`FILTER`, `SORT`, `SEQUENCE` and their kin), evaluating `LET` and `LAMBDA`, defined names, tables as a live feature (a file's table references are read as the plain ranges they name), 3-D references such as `Sheet1:Sheet3!A1`, and iterative calculation of circular references.
 
 ## Entries
 
@@ -79,6 +79,8 @@ The stored text holds offsets from the formula's own cell, so inserting a row ab
 
 `setFormula` and `fillFormula` take a value as their last argument, for the one kind of formula this build cannot evaluate, a 3-D reference or one into another workbook: the cell holds that value at once and keeps it, as an import or a paste brings it, and with none it holds `#REF!` at once, at a load and an added sheet too. For any other formula the value is ignored, and `isGiven` says which kind a cell holds.
 
+`setRowsOut(sheet, hidden, filtered)` says the rows a sheet hides by hand and the rows its filter left out, each list whole and as sorted pairs of a first and a last row that share no row: `SUBTOTAL` and `AGGREGATE` leave them out. The lists are row numbers and the engine moves none with an edit, so a host says them again before the next recalc whenever they changed or an edit moved the sheet's lines; the lists a sheet already holds change nothing, so it may say them after every batch. A `SheetSource` carries the same two lists as `hidden` and `filtered`, which a load and `addSheet` take with the cells: a computed load must come with the rows its values were computed with.
+
 A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
 
 `cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host writes `settled()` beside a snapshot and loads it with that flag, never one set by hand: a `true` that is not so is never healed. A build that computes differently makes stored values stale whatever the flag says. The sink must not write to the engine. `nextCell(sheet, column, row, last)` is the same walk as a cursor, the first content row from `row` to `last` or -1, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
@@ -140,5 +142,6 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - No 255-character limit on texts that Excel refuses past 255.
 - Approximate searches assume sorted data, as Excel's documentation requires.
 - A 3-D reference is not computed: a formula loaded or written with a value keeps it and a typed one is `#REF!`.
+- Hidden and filtered rows are what the host last said (`setRowsOut`): `SUBTOTAL` and `AGGREGATE` follow Excel's rule for each code and option, and `AGGREGATE`'s even options keep filtered rows, which Excel documents and no recording settles.
 - An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect `grid-end` from `editLines` only and `too-long` from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
 - Number display is numfmt's, with a few known gaps in `TEXT`.
