@@ -13,9 +13,8 @@ import { Areas } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
-// An insert of rows that is `checked` is refused before it writes when the cells it pushes down would leave the
-// workbook over the limit on cells inside a batch: each column that holds a cell at or below the first new row grows
-// by the rows inserted.
+// `checked`, an insert of rows throws before a write when the cells it pushes down would leave the workbook over the
+// limit inside a batch: each column that holds a cell at or below the first new row grows by the rows inserted.
 export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (LinesOp | FormatOp | InputOp | RecordOp)[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.

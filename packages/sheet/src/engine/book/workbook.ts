@@ -2,7 +2,7 @@
 // keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
 // the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
 // snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. It
-// tells the engine which rows a sheet hides and filters. Only the appliers in this folder reach the parts through it.
+// keeps what the limits weigh as a count, and tells the engine which rows a sheet hides and filters.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
@@ -49,8 +49,7 @@ export class Workbook {
     private seed: number;
     // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
     private swept = 0;
-    // What the limit on formats counts over every sheet: the bands and the extras add to it wherever they write, so
-    // asking the weight walks nothing.
+    // What the limit on formats counts over every sheet: the bands and the extras add to it wherever they write.
     private readonly held = { runs: 0, bands: 0, extras: 0 };
 
     // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
@@ -137,9 +136,8 @@ export class Workbook {
         };
     }
 
-    // Adds a sheet as the load builds one, in its place among the tabs, and hands back the formulas of the other
-    // sheets that the sheet's name bound. Its parts are weighed with the cells it brings before the engine takes
-    // it, unless the add takes a batch back; a refusal, the engine's too, leaves nothing of it.
+    // Adds a sheet as the load builds one, in its place among the tabs, and hands back the formulas its name bound.
+    // `checked`, its parts and cells are weighed before the engine takes it; a refusal, the engine's too, leaves none.
     public addSheet(sheet: SheetContent, checked: boolean): EditResult {
         let place = 0;
         for (const [id, { records }] of this.parts) {

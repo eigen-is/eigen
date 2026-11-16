@@ -1,8 +1,8 @@
 // The applier of a `format` op, which the frame calls for each op of a batch: look keys and links set or cleared over
-// rectangles of cells, such as bold on a selection or a fill on a whole column, or line keys over spans of rows or
-// columns, such as a height or a hidden row. Looks are written in the sheet's bands and links in its extras, never cell
-// by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that held
-// it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
+// rectangles of cells that share no cell, such as bold on a selection or a fill on a whole column, or line keys over
+// spans of rows or columns, such as a height. Looks are written in the sheet's bands and links in its extras, never
+// cell by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that
+// held it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
 import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
@@ -42,10 +42,8 @@ export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
-// A format of cells that is `checked` is refused before it writes when its rectangles reach more runs of the bands
-// than the limit on formats allows, whatever it would leave, or when its links would pass the limit inside a batch.
-// Its looks are weighed as each group of rectangles is written: past the limit it stops, and returns what undoes the
-// part it wrote, for the frame to refuse the batch and take that part back.
+// `checked`, it throws before a write for rectangles that reach more runs than the limit on formats, or links past it,
+// and stops writing looks once they pass it: it then returns what undoes the part it wrote, and the frame refuses.
 export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (FormatOp | InputOp)[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.

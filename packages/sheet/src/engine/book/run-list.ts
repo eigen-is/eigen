@@ -1,7 +1,8 @@
 // The looks down the rows of one band of columns, as runs: from this row on, this look, until the next run or the
 // grid's last row. A sheet's bands hold one list per band and reach every cell's look through it. The runs sit in one
-// array of (start row, look id) pairs that a write splices in place, and a read is a binary search. Two runs side by
-// side never wear one look and a list of plain rows holds no run, so equal rows are always equal lists.
+// array of (start row, look id) pairs: a write lays the runs it reaches anew in one pass, and a read is a binary
+// search. Two runs side by side never wear one look and a list of plain rows holds no run, so equal rows are always
+// equal lists.
 
 import { GRID_ROWS } from '@workspace/formula/text';
 import type { Span } from '@workspace/lib/sheets/ops';

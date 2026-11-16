@@ -15,9 +15,8 @@ import { inputOfBlocks, lostInputs } from './apply-input';
 import type { Planned } from './records';
 import type { Workbook } from './workbook';
 
-// A move that is `checked` is refused before it writes when the block would leave the workbook over a limit inside a
-// batch where it lands, counting nothing it frees: each column grows to the block's last cell in it, and the looks by
-// at most what a write of each of the block's bands can add, with the runs the block brings.
+// `checked`, it throws before a write when the block could leave the workbook over a limit inside a batch where it
+// lands: each column grows to the block's last cell, the looks by what a write of each of its bands can add at most.
 export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp | FormatOp | InputOp | RecordOp)[] {
     const source = book.sheets.get(op.sheet);
     const landing = book.sheets.get(op.toSheet);

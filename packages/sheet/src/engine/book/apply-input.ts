@@ -23,8 +23,8 @@ type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent 
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
 
-// An input that is `checked` is refused before it writes when the cells it fills would leave the workbook over a limit
-// inside a batch, counting nothing it frees.
+// `checked`, it throws before a write when the cells it fills would leave the workbook over a limit inside a batch,
+// counting nothing it frees.
 export function applyInput(book: Workbook, op: InputOp, checked: boolean): InputOp[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
@@ -85,9 +85,8 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     return [inputOf(sheet, gathered)];
 }
 
-// What an input fills, counting nothing it empties: `column` is told how far a column reaches once a rectangle or the
-// listed cells of it are filled with a value, a formula or a rich text, once for each rectangle and once for the
-// list, and the units of what the filled cells hold beyond a value are returned.
+// What an input fills: `column` is told the rows a column holds once a rectangle, or the list's cells of it, hold
+// their value, formula or rich text. Returns the units of what the filled cells hold beyond a value.
 export function filled(op: InputOp, column: (column: number, length: number) => void): number {
     let units = 0;
     for (const [[top, left, bottom, right], content] of op.runs ?? []) {

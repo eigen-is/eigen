@@ -140,9 +140,8 @@ export class Bands {
         return { looks, bands };
     }
 
-    // Every cell of the rectangles wears `to` of the look it wore. They span the same columns, ascend and share no
-    // cell. Returns the spans whose look changed, band by band and rows down. A band is cut and its list written, in
-    // one pass, only where a look changes, so a write that changes nothing costs its reads.
+    // Every cell of the rectangles, which span the same columns, ascend and share no cell, wears `to` of the look it
+    // wore. Returns the spans whose look changed. A band is cut and its list laid only where a look changes.
     public write(rects: readonly Rect[], to: (look: number) => number): LookSpan[] {
         const { bands } = this;
         const [, left, , right] = rects[0];
