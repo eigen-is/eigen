@@ -182,9 +182,8 @@ export class ReverseIndex {
         }
     }
 
-    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that asks
-    // the workbook itself; with `resolving`, every formula that works a reference out too, as no record says what
-    // they read. A seed is a span of rows: sheet, column, first and last row.
+    // Flags each once every formula that reads a seed, a span of rows (sheet, column, first and last row), or one it
+    // flagged, and every one that asks the workbook itself; with `resolving`, every one that works a reference out.
     public mark(workbook: Workbook, seeds: readonly number[], resolving: boolean): void {
         const { sheets } = workbook;
         const { work } = this;

@@ -382,10 +382,8 @@ export class Recalc {
         return facts;
     }
 
-    // The cells of a sheet that came by a load or an add. One this build cannot evaluate is held, a seed when that
-    // changed it in a computed load. A load carries no loops and every cell on one holds #REF!, so any other formula
-    // whose #REF! the load trusted is to be computed, and is a seed too: a marking takes the readers of a flagged
-    // formula for flagged.
+    // Holds the formulas of a loaded or added sheet this build cannot evaluate, a seed where that changed a computed
+    // load. A load carries no loops, so any other formula that came with #REF! is a seed, to be computed again.
     private hold(sheet: Sheet, computed: boolean): void {
         for (let c = 0; c < sheet.columns.length; c += 1) {
             const column = sheet.columns[c];

@@ -48,10 +48,8 @@ export class ShapeTable {
         return this.shapes[id - 1];
     }
 
-    // The id of a formula in stored text as a host hands it, in a workbook whose sheets `named` finds. Its key is
-    // the text its tree prints, so another spelling of one formula, such as a name in lower case, is the same shape.
-    // Text that does not parse is kept as it is, and so is text whose key would not read back: with its tree only
-    // when it names no sheet by its name, as no form of it that binds the name would fit a cell either.
+    // The id of stored text as a host hands it, keyed by what its tree prints, so two spellings are one shape. Text
+    // that does not parse or whose key would not read back stays as handed, its tree too if it names no sheet by name.
     public intern(text: string, named: SheetNamed): number {
         let typed = this.ids.get(text);
         if (typed === undefined) {
