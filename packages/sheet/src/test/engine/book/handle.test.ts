@@ -235,10 +235,10 @@ describe('engine/book/handle — a cell', () => {
         expect(sheet.display(40, 40)).toBe('');
     });
 
-    test('display: a boolean, a text and an error ignore a format’s text section', () => {
-        expect(sheet.display(12, 0)).toBe('TRUE');
-        expect(sheet.display(13, 0)).toBe('ab');
-        expect(sheet.display(14, 0)).toBe('#N/A');
+    test('display: a boolean, a text and an error take a format’s text section', () => {
+        expect(sheet.display(12, 0)).toBe('TRUE pcs');
+        expect(sheet.display(13, 0)).toBe('ab pcs');
+        expect(sheet.display(14, 0)).toBe('#N/A pcs');
     });
 
     test('values walk the cells that hold a value or a formula, in column order', () => {
@@ -283,6 +283,62 @@ describe('engine/book/handle — a cell', () => {
         ]);
         const [first] = sheet.lookSpans([0, 0, 0, 0]);
         expect(first.look).toBe(sheet.look(0, 0));
+    });
+});
+
+describe('engine/book/handle — display follows Excel', () => {
+    // Rows of Excel for the web's table: a value of each kind, typed or a formula's result, in column 0 under a
+    // format with a text section, in column 1 under one section with `@`, in column 2 under `;;;`.
+    const kinds: CellContent[] = [
+        { v: 'abc' },
+        { v: true },
+        { v: false },
+        { v: '#DIV/0!', e: 1 },
+        { f: '="abc"' },
+        { f: '=1=1' },
+        { f: '=NA()' },
+        { v: 5 },
+        { f: '=""' },
+    ];
+    const book = new Workbook(
+        bookOf(
+            sheetOf('a', {
+                cells: kinds.flatMap((cell, r): Placed<CellContent>[] => [0, 1, 2].map((c) => [r, c, cell])),
+                looks: [{ fa: '0;-0;0;"T:"@' }, { fa: '@" kg"' }, { fa: ';;;' }],
+                bands: [0, 1, 0, 1, 1, 1, 0, 2, 2, 1, 0, 3, 3, 1, 0, 0],
+            }),
+        ),
+    );
+    book.engine.recalc(Number.POSITIVE_INFINITY);
+    const sheet = only(book);
+
+    test('every kind of value under three formats', () => {
+        expect(kinds.map((_, r) => [0, 1, 2].map((c) => sheet.display(r, c)))).toEqual([
+            ['T:abc', 'abc kg', ''],
+            ['T:TRUE', 'TRUE kg', ''],
+            ['T:FALSE', 'FALSE kg', ''],
+            ['T:#DIV/0!', '#DIV/0! kg', ''],
+            ['T:abc', 'abc kg', ''],
+            ['T:TRUE', 'TRUE kg', ''],
+            ['T:#N/A', '#N/A kg', ''],
+            ['5', '5', ''],
+            ['T:', ' kg', ''],
+        ]);
+    });
+
+    test('a boolean under General is TRUE or FALSE', () => {
+        const plain = new Workbook(
+            bookOf(
+                sheetOf('a', {
+                    cells: [
+                        [0, 0, { v: true }],
+                        [1, 0, { f: '=1=2' }],
+                    ],
+                }),
+            ),
+        );
+        plain.engine.recalc(Number.POSITIVE_INFINITY);
+        expect([only(plain).display(0, 0), only(plain).display(1, 0)]).toEqual(['TRUE', 'FALSE']);
     });
 });
 
