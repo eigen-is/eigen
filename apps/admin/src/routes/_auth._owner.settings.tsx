@@ -2,7 +2,7 @@
 // sections hold the server-wide choices, such as the storage quotas and the landing page's links.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { ServerSettingsPage } from '../components/admin/server-settings';
 
 export const Route = createFileRoute('/_auth/_owner/settings')({

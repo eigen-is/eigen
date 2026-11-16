@@ -1,3 +1,7 @@
+// The Calendar app's week: seven day columns, each with its all-day events as pills in their calendar's color, then
+// its timed events as a dot, the time, the title and the place. A click on an event opens its detail dialog and a
+// click on a day creates an event there; the route around it fetches the events.
+
 import { useAuth } from '@workspace/lib/auth';
 import {
     formatEventTime,
@@ -9,6 +13,7 @@ import {
     isFreeBusyEvent,
     WEEKDAY_HEADERS,
 } from '@workspace/lib/calendar';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
@@ -90,13 +95,13 @@ export function WeekView({
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
-                                                    'text-xs leading-tight px-1.5 py-1 rounded text-white truncate',
+                                                    'text-xs leading-tight px-1.5 py-1 rounded truncate',
                                                     eventPillStateClasses('block', freeBusy, inviteStatus),
                                                 )}
                                                 style={
                                                     inviteStatus === 'pending'
                                                         ? { borderColor: color, color }
-                                                        : { backgroundColor: color }
+                                                        : { backgroundColor: color, color: readableTextColor(color) }
                                                 }
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}

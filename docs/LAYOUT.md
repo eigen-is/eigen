@@ -83,7 +83,7 @@ The detail column's Location row reads the parent's `useBreadcrumb`, the query t
 
 `DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's ⋮ draw, for one item or a multi-selection, which gets only the rows with a `pluralLabel`. Each row is a `DriveActionMenuItem`, which the File menu and Trash's menu draw too. A row's `shortcut` is the hotkey constant the listing's key handler compares against, so the menu shows the key that acts; only the row's context menu names keys, because they act on the listing. The shared file actions come in through `FileActionMenuItems`, minus Save to Drive, which Drive's own Copy to… already says. Space, the detail preview and the menu row all go through the file-action registry, so none of them previews a folder ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
 
-`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field. It keeps no location of its own: its host holds one `DriveLocationValue` (owner, mount, folder), the browser draws that and asks for another through `onChange`, so a folder click, a mount click and a host that moves all go one way. A mount click asks for the mount with an empty folder id, which means its root. `useResolvedDriveLocation` is the one place that fills the root in, from the loaded root during render, and it stays empty while the root loads. The browser and the location field call it to draw, and a host that confirms a destination, such as `DriveLocationPicker` or the new chat dialog, calls it for what it hands on and keeps its confirm button disabled until the folder is there. `DriveLocationPicker` and `DriveFilePicker` mount their body inside `DialogContent`, so a closed picker reads no root, and the new chat dialog reads the viewer's own root.
+`DriveBrowser` is a lighter layer over the same table, with no dialogs and no detail column, for the file picker and the location field. It keeps no location of its own: its host holds one `DriveLocationValue` (owner, mount, folder), the browser draws that and asks for another through `onChange`, so a folder click, a mount click and a host that moves all go one way. A mount click asks for the mount with an empty folder id, which means its root. A phone has no room for the mount column, so it picks the drive from `DriveMountSelect` above the folders, which draws the same list of drives and asks the same way. `useResolvedDriveLocation` is the one place that fills the root in, from the loaded root during render, and it stays empty while the root loads. The browser and the location field call it to draw, and a host that confirms a destination, such as `DriveLocationPicker` or the new chat dialog, calls it for what it hands on and keeps its confirm button disabled until the folder is there. `DriveLocationPicker` and `DriveFilePicker` mount their body inside `DialogContent`, so a closed picker reads no root, and the new chat dialog reads the viewer's own root.
 
 ## Menus draw their rows in one order
 
@@ -161,6 +161,10 @@ Pink `#f6339a` (`packages/lib/src/constants/colors.ts`) comes first in `EIGEN_AC
 
 A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the nearest palette color by OKLab distance, and in doubt the lighter, less saturated step, because the originals are muted.
 
+## A document stays white in dark mode
+
+Dark mode themes the app around a document, never the document. The page in Docs, the grid in Sheets, the slide in Slides and the canvas in Vector stay white in either theme, while the bars, panels and menus around them follow it. This is intended (the owner, 14 Nov 2026). `.eigen-paper` pins the light palette on such a surface ([CANVAS.md](CANVAS.md)).
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way, so a user reads every Eigen menu alike, and a screen reader hears each row as checked or not.
@@ -194,9 +198,10 @@ A row's state is a class in `globals.css`, painted in the current app's color:
 | `eigen-list-item-active` | the open row | stripe and wash |
 | `eigen-list-item-cursor` | the keyboard cursor on another row | stripe only, so it reads apart from the open row |
 | `eigen-list-item-selected` | multi-selected | wash |
-| `eigen-tile` (`-active`, `-selected`) | grid tiles | a full border, because a stripe on a tile's label strip reads as stray chrome |
+| `eigen-tile-active`, `eigen-tile-selected` | the open or a multi-selected grid tile | a full border, because the wash would cover only a tile's label strip |
+| `eigen-tile-cursor` | the keyboard cursor on a grid tile | the row cursor's stripe on the tile's left edge, drawn over the thumbnail |
 
-A row takes every class that holds. A right-click or ⋮ selects its row without opening it, so the open row keeps its look.
+A row or tile takes every class that holds, so a selected tile under the cursor shows the border and the stripe. A right-click or ⋮ selects its row without opening it, so the open row keeps its look.
 
 One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it from the button's own rect, because a click made with Enter reports 0,0. `ContextMenuAnchor` portals its trigger to `document.body`, because a transformed ancestor, such as a dialog's centering translate, would otherwise move the menu.
 

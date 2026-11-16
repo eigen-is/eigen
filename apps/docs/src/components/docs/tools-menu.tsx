@@ -3,12 +3,12 @@
 // outline opens the outline's pane.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { AppBarMenu } from '@workspace/ui';
 import {
     DropdownMenuCheckboxItem,
     DropdownMenuItem,
     DropdownMenuShortcut,
 } from '@workspace/ui/components/dropdown-menu';
+import { AppBarMenu } from '@workspace/ui/components/layout/toolbar';
 import { TableOfContents, WholeWord } from 'lucide-react';
 
 export const WORD_COUNT_HOTKEY = 'Mod+Shift+C';

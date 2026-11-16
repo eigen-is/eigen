@@ -1,8 +1,8 @@
 // A grid of palette swatches with a check on the current color, for pickers such as text, fill and border
 // colors. By default it offers a gray ramp above the palette's lighter rows; a caller may pass its own rows.
 
-import type { EigenColor } from '@workspace/lib/constants';
-import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, isLightColor } from '@workspace/lib/constants';
+import type { EigenColor } from '@workspace/lib/constants/colors';
+import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, readableTextColor } from '@workspace/lib/constants/colors';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
 
@@ -79,10 +79,7 @@ export function ColorPicker({
                             onMouseDown={stopFocus}
                         >
                             {normalizedValue === color.value.toLowerCase() && (
-                                <Check
-                                    className="h-2 w-2"
-                                    style={{ color: isLightColor(color.value) ? '#000' : '#fff' }}
-                                />
+                                <Check className="h-2 w-2" style={{ color: readableTextColor(color.value) }} />
                             )}
                         </button>
                     ))}

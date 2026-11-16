@@ -7,10 +7,10 @@ import { useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@work
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { FILTER_LABELS } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: MimeRoute,

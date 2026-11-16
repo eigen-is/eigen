@@ -2,7 +2,7 @@
 // saves through its mount hooks. This file draws the dialog shell; the mount fields and their state live in MountForm,
 // which mounts with each opening.
 
-import { FormDialog } from '@workspace/ui';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { MountForm } from '@workspace/ui/components/mount';
 import type { ComponentProps } from 'react';
 

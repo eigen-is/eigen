@@ -83,3 +83,32 @@ test('the cursor on another row than the open one has the stripe only', async ()
     expect(rows.map((row) => row.classList.contains('eigen-list-item-active'))).toEqual([true, false]);
     expect(rows.map((row) => row.classList.contains('eigen-list-item-cursor'))).toEqual([false, true]);
 });
+
+test('the cursor walks the rows in the order they are drawn, a name under # included', async () => {
+    const opened: string[] = [];
+    const { container } = await renderInDocument(
+        createElement(PersonList<Person>, {
+            items: [
+                { id: 'bob', name: 'Bob' },
+                { id: 'omega', name: 'Ωmega' },
+                { id: 'alice', name: 'Alice' },
+            ],
+            searchQuery: '',
+            getId: (person) => person.id,
+            getName: (person) => person.name,
+            getSearchFields: (person) => [person.name],
+            onRowClick: (id) => opened.push(id),
+            renderPerson: (person) => createElement('span', null, person.id),
+            emptyState: null,
+        }),
+    );
+    const list = container.querySelector('[tabindex="0"]');
+    if (!list) throw new Error('no list');
+    for (let press = 0; press < 3; press++) {
+        await act(async () => {
+            list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+        });
+    }
+    const drawn = [...container.querySelectorAll('.eigen-list-item')].map((row) => row.textContent);
+    expect(opened).toEqual(drawn);
+});

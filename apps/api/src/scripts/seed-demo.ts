@@ -1,8 +1,8 @@
-// Builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance: a crew of personas in one org and its team, a
-// lived-in team drive with such files as docs, a budget sheet and a stickies board, and their mail, calendars, chats
-// and contacts. It boots the API in this process and acts as the personas through the product's own code, so
-// activity, file history and notifications fill in. The demo reset wipes the data root and runs it again, and a
-// completed setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN and EIGEN_DEMO_ADMIN_PASSWORD may be set.
+// Builds the "Tuimel Festival" demo world for an EIGEN_DEMO instance: a crew of personas in one org and its teams, a
+// lived-in team drive with such files as docs, a budget and a stickies board, their mail, calendars, chats and
+// contacts, and an outside guest. It boots the API in-process and acts as the personas through the product's own
+// code, so activity, history and notifications fill in. The demo reset wipes the data root and reruns it; a completed
+// setup is refused. It needs EIGEN_DATA_ROOT; MAIL_DOMAIN, DOMAIN and the EIGEN_DEMO_*_PASSWORD vars may be set.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import type { Schema } from '@tiptap/pm/model';
 import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import { MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
@@ -29,15 +29,29 @@ import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import { VCARD_MIMES } from '@workspace/lib/types/file-kinds';
+import { teamOwnerId } from '@workspace/lib/types/owner';
+import { parseIdList, serializeIdList } from '@workspace/lib/vector';
+import { eq } from 'drizzle-orm';
 import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
+import type { Contacts } from '../lib/contacts/contacts';
 import type { Drive } from '../lib/drive';
 import { textToHtml } from '../lib/mail/mail-parser/html';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB } from '../lib/mount/container-dbs';
 import { writeTempWithHash } from '../lib/storage';
 import type { User } from '../lib/user';
-import type { LeadRole, MailAttachment, SeededInvite, SeededMail, VCardSpec } from './demo/content';
+import type {
+    CanvasComment,
+    ChatLine,
+    LeadRole,
+    MailAttachment,
+    SeededInvite,
+    SeededMail,
+    SeededTime,
+    SeededVCardFile,
+    VCardSpec,
+} from './demo/content';
 import {
     ADMIN_AVATAR,
     ADMIN_LOCALPART,
@@ -46,8 +60,11 @@ import {
     BUDGET,
     CHATS,
     CONTACTS,
+    DEMO_MAIL_DOMAIN,
     DOCS,
     EVENTS,
+    emailFor,
+    HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
     NOTES,
@@ -63,7 +80,10 @@ import {
     TEAM_FOLDERS,
     TEAM_MOUNT_NAME,
     TEAM_NAME,
+    TECH_TEAM_MEMBERS,
+    TECH_TEAM_NAME,
     TRYING_EIGEN,
+    threadTimes,
     VCARD_FILES,
 } from './demo/content';
 import { buildDeckDoc } from './demo/deck-build';
@@ -84,13 +104,11 @@ if (!DATA_ROOT) {
 process.env['API_URL'] ||= 'http://localhost';
 
 // Setup reads both from the env, as it does after ./eigen setup.
-const MAIL_DOMAIN = (process.env['MAIL_DOMAIN'] ||= 'tuimel.example');
+const MAIL_DOMAIN = (process.env['MAIL_DOMAIN'] ||= DEMO_MAIL_DOMAIN);
 const DOMAIN = (process.env['DOMAIN'] ||= MAIL_DOMAIN);
 
-// Seeded mail links drive files with pills ("Open festival →"), and appUrl builds their links from the per-app
-// VITE_APP_*_URL vars. A `compose run` reads them from `.env.production`. Without them the links would point at
-// the dev localhost and be stored that way in the mail. So a missing one points at the deploy host, each app under
-// its own path, which is what the live API resolves for a real user's mail.
+// A seeded mail stores the link of each drive pill, built from the per-app VITE_APP_*_URL vars. A missing one would
+// bake in the dev localhost, so it points at the deploy host, each app under its own path, as the live API resolves.
 const WEB_ORIGIN = DOMAIN === 'localhost' ? 'http://localhost' : `https://${DOMAIN}`;
 for (const [name, path] of [
     ['VITE_APP_DRIVE_URL', '/drive'],
@@ -104,11 +122,11 @@ for (const [name, path] of [
     process.env[name] ||= `${WEB_ORIGIN}${path}`;
 }
 const ADMIN_PASSWORD = process.env['EIGEN_DEMO_ADMIN_PASSWORD'] || randomBytes(12).toString('base64url');
-// A random one is enough: the demo entry route resets each persona's password on every visit.
-const PERSONA_PASSWORD = randomBytes(18).toString('base64url');
+// The demo entry route resets each persona's password on every visit, so a demo box needs none of its own. A tool that
+// signs a persona in with a password sets one.
+const PERSONA_PASSWORD = process.env['EIGEN_DEMO_PERSONA_PASSWORD'] || randomBytes(18).toString('base64url');
 
-const emailFor = (localPart: string) => `${localPart}@${MAIL_DOMAIN}`;
-const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART);
+const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART, MAIL_DOMAIN);
 
 if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
     console.error(`Setup already completed at ${DATA_ROOT} (server/config.json exists). The reset script wipes first.`);
@@ -125,9 +143,9 @@ function lookup<V>(map: ReadonlyMap<string, V>, key: string): V {
     return value;
 }
 
-// A raw message from the MIME composer that the app's outbound mail uses. It calls the composer directly, not
-// through composeRfc822, so the seed sets the threading headers (Message-ID, In-Reply-To, References) itself.
-// With html, the message is multipart/alternative, so the mail client renders its lists and paragraphs.
+// A raw message from the MIME composer the app's outbound mail uses, called directly so the seed sets the threading
+// headers (Message-ID, In-Reply-To, References) itself, and any a receiving MTA would add. With html it is
+// multipart/alternative.
 async function buildRfc822(mail: {
     from: string;
     to: string;
@@ -140,6 +158,7 @@ async function buildRfc822(mail: {
     references?: string[];
     attachments?: { filename: string; contentType: string; content: string | Buffer }[];
     icalEvent?: { method: string; content: string };
+    headers?: Record<string, string>;
 }): Promise<Buffer> {
     return new MailComposer({
         from: mail.from,
@@ -153,6 +172,7 @@ async function buildRfc822(mail: {
         references: mail.references?.length ? mail.references.map((id) => `<${id}>`) : undefined,
         attachments: mail.attachments,
         icalEvent: mail.icalEvent,
+        headers: mail.headers,
     })
         .compile()
         .build();
@@ -183,6 +203,14 @@ function injectCommentMark(json: JSONContent, anchor: string, cardId: string): b
         if (injectCommentMark(node, anchor, cardId)) return true;
     }
     return false;
+}
+
+// A file a container keeps in its media/, such as a fixture photo or a vCard written at seed time.
+type MediaFile = { name: string; type: string; bytes: Buffer };
+
+function fixtureMedia(file: string): MediaFile {
+    const path = join(FIXTURES_DIR, file);
+    return { name: basename(path), type: Bun.file(path).type, bytes: readFileSync(path) };
 }
 
 // The demo docs are written as HTML; the editor's schema parses them into the JSON a doc stores.
@@ -243,10 +271,17 @@ async function main(): Promise<void> {
     const { serializeEventForImip } = await import('../lib/ical');
     const { lossCounter } = await import('../lib/document/transform/protocol');
     const { writeXlsx } = await import('../lib/export/sheets/xlsx/to-xlsx');
+    const { CHAT_ROOM_DB_CONFIG } = await import('../lib/chat/db-config');
+    const { messages } = await import('../lib/chat/schema');
+    const { grantAccessForReferences } = await import('../lib/mail/access-grants');
+    const { createGuestUser } = await import('../lib/auth/guest-auth');
+    const { reconcileShares } = await import('../lib/share');
 
-    // Small quotas and no open signup. The setup call already chose local-id storage. This runs before any home
-    // exists, because a user home fixes its mount type on its first init. The welcome mail is off, or it would be
-    // the first message in every persona's inbox and spoil the lived-in world.
+    // The one moment every seeded date counts back from.
+    const now = new Date();
+
+    // Before any home exists, because a home fixes its mount type on its first init. The welcome mail is off, or it
+    // would be the first message in every persona's inbox.
     await updateServerSettings({
         guests: { openSignup: false },
         quotas: { defaultMountMaxSizeMB: 50, maxUploadSizeMB: 5 },
@@ -256,56 +291,57 @@ async function main(): Promise<void> {
     // --- Personas: the user.create hook auto-joins each to the default org as `member`. ---
     for (const persona of PERSONAS) {
         await auth.api.createUser({
-            body: { email: emailFor(persona.key), password: PERSONA_PASSWORD, name: persona.name, role: 'user' },
+            body: {
+                email: emailFor(persona.key, MAIL_DOMAIN),
+                password: PERSONA_PASSWORD,
+                name: persona.name,
+                role: 'user',
+            },
         });
     }
     const userByKey = new Map<string, User>();
     for (const persona of PERSONAS) {
-        const user = await getUserByEmail(emailFor(persona.key));
+        const user = await getUserByEmail(emailFor(persona.key, MAIL_DOMAIN));
         if (!user) throw new Error(`Persona ${persona.key} not found after creation`);
         userByKey.set(persona.key, user);
     }
     const userForRole = (role: LeadRole): User => lookup(userByKey, personaByRole(role).key);
-    const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key);
+    const emailForRole = (role: LeadRole): string => emailFor(personaByRole(role).key, MAIL_DOMAIN);
 
-    // --- Avatars: each persona's portrait goes through the upload a user makes, so it sets user.image the same
-    // way. A missing or broken fixture is logged and skipped, never fatal. ---
-    const seedAvatar = async (user: User, fixtureFile: string): Promise<void> => {
-        const filePath = join(AVATARS_DIR, fixtureFile);
-        if (!existsSync(filePath)) {
-            console.warn(`avatar fixture missing, skipping: ${fixtureFile}`);
-            return;
-        }
+    // A portrait fixture uploaded into a book's avatar store, the upload a person makes from the card dialog.
+    const uploadPortrait = (contacts: Contacts, fixtureFile: string): Promise<string> =>
+        contacts.uploadAvatar(
+            new File([readFileSync(join(AVATARS_DIR, fixtureFile))], fixtureFile, { type: 'image/jpeg' }),
+        );
+
+    // --- Own cards: every account's portrait, and for a persona the job title, the festival and a phone. An update
+    // of your own card goes through writeUserProfile, which stores the avatar and sets user.image. ---
+    const seedOwnCard = async (
+        user: User,
+        avatarFile: string,
+        details?: Pick<CreateContactInput, 'jobTitle' | 'company' | 'phone'>,
+    ): Promise<void> => {
         const contacts = await resolveContacts(user, user.id);
         const me = await contacts.getMe();
-        if (!me) return;
-        const uploadedPath = await contacts.uploadAvatar(
-            new File([readFileSync(filePath)], fixtureFile, { type: 'image/jpeg' }),
-        );
+        if (!me) throw new Error(`No own card for ${user.email}`);
         const { id, ...fields } = me;
-        // An update of your own card goes through writeUserProfile, which stores the avatar and sets user.image.
-        await contacts.updateContact(id, { ...fields, avatar: uploadedPath });
+        await contacts.updateContact(id, { ...fields, ...details, avatar: await uploadPortrait(contacts, avatarFile) });
     };
     for (const persona of PERSONAS) {
-        try {
-            await seedAvatar(lookup(userByKey, persona.key), persona.avatar);
-        } catch (err) {
-            console.warn(`avatar seed failed for ${persona.key}:`, err instanceof Error ? err.message : err);
-        }
+        await seedOwnCard(lookup(userByKey, persona.key), persona.avatar, {
+            jobTitle: persona.title,
+            company: ORG_NAME,
+            phone: [persona.phone],
+        });
     }
     const adminUser = await getUserByEmail(ADMIN_EMAIL);
-    if (adminUser) {
-        try {
-            await seedAvatar(adminUser, ADMIN_AVATAR);
-        } catch (err) {
-            console.warn('avatar seed failed for admin:', err instanceof Error ? err.message : err);
-        }
-    }
+    if (!adminUser) throw new Error('The admin is missing after setup');
+    await seedOwnCard(adminUser, ADMIN_AVATAR);
 
     const orgId = getServerConfig()?.orgId;
     if (!orgId) throw new Error('orgId missing after setup');
 
-    // updateTeam needs the headers of a signed-in admin.
+    // The team calls need the headers of a signed-in admin.
     const signIn = await auth.api.signInEmail({
         returnHeaders: true,
         body: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
@@ -317,6 +353,13 @@ async function main(): Promise<void> {
     if (!cookieMatch) throw new Error('Could not obtain an admin session token');
     const adminHeaders = new Headers({ cookie: cookieMatch[0] });
 
+    // The leads have signed in before, so the admin's user list shows when each was last active. The sessions are
+    // not kept.
+    for (const persona of PERSONAS) {
+        if (!persona.role) continue;
+        await auth.api.signInEmail({ body: { email: emailFor(persona.key, MAIL_DOMAIN), password: PERSONA_PASSWORD } });
+    }
+
     // --- Team (the whole crew shares one workspace): the default team, which every persona joined
     // with the org, renamed from the org's name to the crew's. ---
     const teamId = getServerConfig()?.defaultTeamId;
@@ -325,26 +368,33 @@ async function main(): Promise<void> {
         body: { teamId, data: { name: TEAM_NAME, organizationId: orgId } },
         headers: adminHeaders,
     });
-
-    // --- Team avatar: the festival logo, through the same pipeline as the avatar route. A failure is logged and
-    // skipped, like a persona's. ---
-    try {
-        const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
-        const result = await generateImagePreview(logoBytes, 'image/webp', 'logo.webp', '', 'avatar', {
-            maxSize: 512,
-            quality: 80,
-            fit: 'cover',
+    // A second team, made and filled as the Admin app does. Each add reconciles the member's shares in its hook.
+    const techTeam = await auth.api.createTeam({
+        body: { name: TECH_TEAM_NAME, organizationId: orgId },
+        headers: adminHeaders,
+    });
+    for (const key of TECH_TEAM_MEMBERS) {
+        await auth.api.addTeamMember({
+            body: { teamId: techTeam.id, userId: lookup(userByKey, key).id, organizationId: orgId },
+            headers: adminHeaders,
         });
-        if (!result) throw new Error('avatar thumbnail generation failed');
-        await writeTeamAvatar(teamId, result.data);
-    } catch (err) {
-        console.warn('team avatar seed failed:', err instanceof Error ? err.message : err);
     }
 
-    // --- Team home: enable the calendar (starts disabled) and add the shared mount. ---
-    const teamHome = await getTeamHome(`team_${teamId}`);
+    // --- Team avatar: the festival logo, through the same pipeline as the avatar route. ---
+    const logoBytes = readFileSync(join(FIXTURES_DIR, 'branding', 'logo.webp'));
+    const logo = await generateImagePreview(logoBytes, 'image/webp', 'logo.webp', '', 'avatar', {
+        maxSize: 512,
+        quality: 80,
+        fit: 'cover',
+    });
+    if (!logo) throw new Error('The team avatar thumbnail failed');
+    await writeTeamAvatar(teamId, logo.data);
+
+    // --- Team home: enable the calendar (starts disabled) and add the shared mount, raised above the default quota
+    // for the crew's photos. ---
+    const teamHome = await getTeamHome(teamOwnerId(teamId));
     await teamHome.settings.set({ calendar: { enabled: true } });
-    const mount = await teamHome.addMount({ name: TEAM_MOUNT_NAME });
+    const mount = await teamHome.addMount({ name: TEAM_MOUNT_NAME, maxSizeMB: 100 });
     const teamMountId = mount.id;
     const teamDrive = teamHome.drive;
     const teamRoot = await teamDrive.getRootFolder(teamMountId);
@@ -356,16 +406,6 @@ async function main(): Promise<void> {
         const folder = await teamDrive.createFolder(teamMountId, teamRoot.id, name, userForRole('production'));
         folderId.set(name, folder.id);
     }
-
-    const postTo = async (
-        chatId: string,
-        author: User,
-        text: string,
-        attachments?: ChatAttachment[],
-    ): Promise<void> => {
-        const room = await teamDrive.getChat(teamMountId, chatId);
-        await room.postMessage(author, text, 'message', undefined, undefined, attachments);
-    };
 
     // Seeded team documents by content name, so chat lines can attach them as drive references.
     const teamDocs = new Map<string, DrivePath>();
@@ -416,28 +456,27 @@ async function main(): Promise<void> {
         avatar: '',
         labels: [],
     });
-    // The optional portrait is embedded as an inline PHOTO, read from the same avatars/ fixtures the
-    // personas use. A missing fixture is logged and skipped, never fatal, like a persona avatar.
-    const cardPhoto = (spec: VCardSpec): { bytes: Uint8Array; mediaType: string } | undefined => {
-        if (!spec.photo) return undefined;
-        const filePath = join(AVATARS_DIR, spec.photo);
-        if (!existsSync(filePath)) {
-            console.warn(`vcard photo fixture missing, skipping: ${spec.photo}`);
-            return undefined;
-        }
-        return { bytes: readFileSync(filePath), mediaType: 'image/jpeg' };
-    };
+    // The optional portrait is embedded as an inline PHOTO, read from the same avatars/ fixtures the personas use.
     const seedVCard = (spec: VCardSpec): string =>
-        createVCard({ ...contactInput(spec), photo: cardPhoto(spec) }, `demo-${spec.email}`);
-    for (const vcf of VCARD_FILES) {
-        await teamDrive.createFileFromData(
-            teamMountId,
-            lookup(folderId, vcf.folder),
-            vcf.name,
-            VCARD_MIMES[0],
-            Buffer.from(seedVCard(vcf.card), 'utf8'),
-            lookup(userByKey, vcf.uploader),
+        createVCard(
+            {
+                ...contactInput(spec),
+                photo: spec.photo
+                    ? { bytes: readFileSync(join(AVATARS_DIR, spec.photo)), mediaType: 'image/jpeg' }
+                    : undefined,
+            },
+            `demo-${spec.email}`,
         );
+    const vcardMedia = (vcf: SeededVCardFile): MediaFile => ({
+        name: vcf.name,
+        type: VCARD_MIMES[0],
+        bytes: Buffer.from(seedVCard(vcf.card), 'utf8'),
+    });
+    const vcardFiles = new Map(VCARD_FILES.map((vcf) => [vcf.name, vcf]));
+    for (const vcf of VCARD_FILES) {
+        const { name, type, bytes } = vcardMedia(vcf);
+        const folder = lookup(folderId, vcf.folder);
+        await teamDrive.createFileFromData(teamMountId, folder, name, type, bytes, lookup(userByKey, vcf.uploader));
     }
 
     // A new eigendoc holding the JSON, written as one update to its live collab doc.
@@ -461,14 +500,12 @@ async function main(): Promise<void> {
         return docPath;
     };
 
-    // --- Volunteer roster: a doc in volunteers/ that lists the crew, each name linked to its team contact card.
-    // It is built here, not in the content, because the links carry the team id and emails of this run. Every
-    // persona shares the team, so one link works for every visitor. The links have no host, so they work on
-    // whatever domain serves the demo. ---
+    // --- Volunteer roster: a doc in volunteers/ that links each name to its team contact card. It is built here,
+    // because the links carry this run's team id and emails. They have no host, so any domain serves them. ---
     {
         const author = userForRole('volunteers');
         const rosterItems = PERSONAS.map((persona) => {
-            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(persona.key))}`;
+            const url = `/contacts/team/${teamId}?contactId=${encodeURIComponent(emailFor(persona.key, MAIL_DOMAIN))}`;
             return `<li><a href="${url}">${persona.name}</a> - ${persona.title}</li>`;
         }).join('');
         const rosterHtml = [
@@ -488,64 +525,109 @@ async function main(): Promise<void> {
         teamDocs.set('crew roster', docPath);
     }
 
-    // Fixture files into a container's media/ folder, where a doc's figures and a canvas's images find them by name,
-    // so the document stays whole.
+    // Files into a container's media/ folder, where a doc's figures, a canvas's images and a chat's attachments find
+    // them by name, so the document stays whole.
     const uploadMedia = async (
         drive: Drive,
         mountId: string,
         container: DrivePath,
-        files: string[],
+        files: readonly MediaFile[],
         author: User,
-    ): Promise<void> => {
+    ): Promise<DrivePath[]> => {
         const mediaFolder = await drive.getChildByName(mountId, container.id, CONTAINER_MEDIA_FOLDER);
         if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
-        for (const file of files) {
-            const path = join(FIXTURES_DIR, file);
-            const bytes = readFileSync(path);
-            await drive.createFileFromData(mountId, mediaFolder.id, basename(path), Bun.file(path).type, bytes, author);
+        const uploads: DrivePath[] = [];
+        for (const { name, type, bytes } of files) {
+            uploads.push(await drive.createFileFromData(mountId, mediaFolder.id, name, type, bytes, author));
         }
+        return uploads;
     };
 
-    // --- Docs: each HTML spec becomes an eigendoc in one write, with its comment marks anchored first. The comment
-    // threads are chats inside the doc. The container comes first: its chat/ subfolder holds the threads the marks
-    // point at, and its media/ holds the photos its figures show. ---
+    // --- Threads: the room's own post stamps the seed minute, so a thread's rows are dated after it, in the order
+    // they were posted and never back in time, which the paging by time and row needs. Returns the first time. ---
+    const postThread = async (chat: DrivePath, start: SeededTime | Date, lines: readonly ChatLine[]): Promise<Date> => {
+        const room = await teamDrive.getChat(teamMountId, chat.id);
+        const times = threadTimes(now, start, lines.slice(1));
+        const posted: { id: string; createdAt: Date }[] = [];
+        for (const [i, line] of lines.entries()) {
+            const author = lookup(userByKey, line.author);
+            // An upload lands in the chat's own media/, where the thread resolves attachment names.
+            const files = [
+                ...(line.upload ?? []).map(fixtureMedia),
+                ...(line.attachVCards ?? []).map((name) => vcardMedia(lookup(vcardFiles, name))),
+            ];
+            const uploads = await uploadMedia(teamDrive, teamMountId, chat, files, author);
+            const attachments: ChatAttachment[] = [
+                ...(line.attach?.map(teamDocRef) ?? []),
+                ...uploads.map((upload) => upload.name),
+            ];
+            // A whisper names its reader by email, as the chat client sends one.
+            const whisperTo = line.whisperTo ? lookup(userByKey, line.whisperTo).email : undefined;
+            const { id } = await room.postMessage(
+                author,
+                line.text,
+                whisperTo ? 'whisper' : 'message',
+                whisperTo,
+                undefined,
+                attachments,
+            );
+            posted.push({ id, createdAt: times[i] });
+        }
+        const dataDb = await teamDrive.getChildByName(teamMountId, chat.id, CONTAINER_DATA_DB);
+        if (!dataDb) throw new Error(`data.db missing for ${chat.name}`);
+        await teamDrive.withDatabase(teamMountId, CHAT_ROOM_DB_CONFIG, dataDb.id, async ({ db }) => {
+            for (const { id, createdAt } of posted) {
+                await db.update(messages).set({ createdAt }).where(eq(messages.id, id));
+            }
+        });
+        return times[0];
+    };
+
+    // A comment's thread, posted as a chat in its container's chat/, and the card that names it, as old as the thread.
+    const seedCommentThread = async (
+        chatFolder: DrivePath,
+        comment: Omit<CanvasComment, 'element' | 'start'> & { start: SeededTime | Date; attach?: string[] },
+    ): Promise<CommentCard & { chatName: string; createdAt: number }> => {
+        const author = lookup(userByKey, comment.author);
+        const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', author);
+        const startedAt = await postThread(chat, comment.start, [
+            { author: comment.author, text: comment.text },
+            ...(comment.replies ?? []),
+        ]);
+        return {
+            id: crypto.randomUUID(),
+            title: comment.title,
+            description: '',
+            color: DEFAULT_CARD_COLOR,
+            chatName: chat.name,
+            creator: author.email,
+            createdAt: startedAt.getTime(),
+            attachments: comment.attach?.map(teamDocRef),
+        };
+    };
+
+    // --- Docs: each HTML spec becomes an eigendoc in one write, its comment marks anchored first. The container
+    // comes before it: its chat/ holds the threads the marks point at, and its media/ the photos its figures show. ---
     for (const doc of DOCS) {
         const author = userForRole(doc.author);
         const parentId = lookup(folderId, doc.folder);
         const docPath = await teamDrive.create(teamMountId, parentId, doc.name, 'doc', author);
         teamDocs.set(doc.name, docPath);
-        await uploadMedia(teamDrive, teamMountId, docPath, doc.media ?? [], author);
+        await uploadMedia(teamDrive, teamMountId, docPath, (doc.media ?? []).map(fixtureMedia), author);
 
-        // Comment threads are chats inside the container's chat/ subfolder.
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);
-        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard; chatName: string }[] = [];
+        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard & { chatName: string } }[] = [];
         for (const comment of doc.comments) {
-            const commentAuthor = lookup(userByKey, comment.author);
-            const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', commentAuthor);
-            await postTo(chat.id, commentAuthor, comment.text);
-            for (const reply of comment.replies ?? []) {
-                await postTo(chat.id, lookup(userByKey, reply.author), reply.text);
-            }
             // The title is the anchored text, as the editor makes it.
-            const card: CommentCard = {
-                id: crypto.randomUUID(),
-                title: comment.anchor.slice(0, 100),
-                description: '',
-                color: DEFAULT_CARD_COLOR,
-                chatName: chat.name,
-                creator: commentAuthor.email,
-                createdAt: Date.now(),
-                attachments: comment.attach?.map(teamDocRef),
-            };
+            const card = await seedCommentThread(chatFolder, { ...comment, title: comment.anchor.slice(0, 100) });
             if (!injectCommentMark(docJson, comment.anchor, card.id)) {
                 throw new Error(`Anchor "${comment.anchor}" not found in "${doc.name}"`);
             }
-            cards.push({ spec: comment, card, chatName: chat.name });
+            cards.push({ spec: comment, card });
         }
-        // The doc's one write, with the anchored marks. The cards land in the comments Y.Map the panel renders
-        // from. The collab doc opens right before the write, because a document that no socket joins closes a
+        // The collab doc opens right before the doc's one write, because a document that no socket joins closes a
         // minute after its open, and a write after that close is lost.
         const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
         const marked = prosemirrorJSONToYDoc(docSchema(), docJson, 'default');
@@ -558,28 +640,49 @@ async function main(): Promise<void> {
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);
         });
-        for (const { spec, card, chatName } of cards) {
+        for (const { spec, card } of cards) {
             if (!spec.assignTo) continue;
             const commentAuthor = lookup(userByKey, spec.author);
-            const assignee = userForRole(spec.assignTo);
-            await teamDrive.assignComment(teamMountId, docPath.id, chatName, assignee.email, commentAuthor, card.title);
+            const assignee = userForRole(spec.assignTo).email;
+            await teamDrive.assignComment(teamMountId, docPath.id, card.chatName, assignee, commentAuthor, card.title);
         }
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
-    // --- The containers built straight into their Y.Doc from a typed spec, with no fixture bytes, such as the site
-    // plan, the sponsor deck and the budget. The images a spec names go into the container's media/ first. ---
+    // --- The containers built straight into their Y.Doc from a typed spec, such as the site plan and the budget. A
+    // canvas comment is written in the editor's order: the thread, the card, then its id on the element. ---
     const seedBuiltContainer = async (
-        spec: { folder: string; name: string; author: LeadRole },
+        spec: { folder: string; name: string; author: LeadRole; comments?: CanvasComment[] },
         type: 'vector' | 'slides' | 'sheets',
         imageFiles: string[],
         build: (doc: Y.Doc) => void,
     ): Promise<DrivePath> => {
         const author = userForRole(spec.author);
         const container = await teamDrive.create(teamMountId, lookup(folderId, spec.folder), spec.name, type, author);
-        await uploadMedia(teamDrive, teamMountId, container, imageFiles, author);
+        await uploadMedia(teamDrive, teamMountId, container, imageFiles.map(fixtureMedia), author);
+        const chatFolder = await teamDrive.getChildByName(teamMountId, container.id, CONTAINER_CHAT_FOLDER);
+        if (!chatFolder) throw new Error(`chat/ subfolder missing for ${container.name}`);
+        const cards: { elementId: string; card: CommentCard }[] = [];
+        for (const comment of spec.comments ?? []) {
+            cards.push({ elementId: `el-${comment.element}`, card: await seedCommentThread(chatFolder, comment) });
+        }
+        // The collab doc opens right before its one write, as a doc's does above.
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
         build(collab.doc);
+        const anchored = cards.map(({ elementId, card }) => {
+            const element = collab.doc.getMap('elements').get(elementId);
+            if (!(element instanceof Y.Map))
+                throw new Error(`"${spec.name}" has no element ${elementId} to comment on`);
+            return { element, card };
+        });
+        collab.doc.transact(() => {
+            for (const { element, card } of anchored) {
+                writeCommentCard(collab.doc, card);
+                const held = element.get('commentCardIds');
+                const ids = parseIdList(typeof held === 'string' ? held : '');
+                element.set('commentCardIds', serializeIdList([...ids, card.id]));
+            }
+        });
         await teamDrive.flushContainerDb(teamMountId, container.id);
         return container;
     };
@@ -623,61 +726,59 @@ async function main(): Promise<void> {
     await teamMount.createFolder(boardId, CONTAINER_MEDIA_FOLDER);
     await teamMount.createFolder(boardId, CONTAINER_CHAT_FOLDER);
     await teamDrive.recordFileEvent(teamMountId, boardId, boardAuthor, { eventType: 'created' });
-    teamDocs.set(KANBAN.name, await teamMount.getActivePath(boardId));
+    const boardPath = await teamMount.getActivePath(boardId);
+    teamDocs.set(KANBAN.name, boardPath);
 
-    // Card chat threads work like doc comments: a real chat in the container's chat/ subfolder, started by the
-    // card's creator and linked back onto the card by name.
+    // A card's thread is a chat in the board's chat/, as old as the card. Its cover is an upload into the board's
+    // media/ on its attachments, because a card's first image attachment is its cover. The board's author hands it out.
     const boardChatFolder = await teamDrive.getChildByName(teamMountId, boardId, CONTAINER_CHAT_FOLDER);
     if (!boardChatFolder) throw new Error(`chat/ subfolder missing for ${KANBAN.name}`);
-    const cardChatNames: string[] = [];
-    for (const card of KANBAN.cards) {
-        const cardAuthor = lookup(userByKey, card.creator);
-        const chat = await teamDrive.create(teamMountId, boardChatFolder.id, card.chat, 'chat', cardAuthor);
-        await postTo(chat.id, cardAuthor, card.chatText);
-        for (const reply of card.chatReplies ?? []) {
-            const replyAuthor = lookup(userByKey, reply.author);
-            const attachments: ChatAttachment[] = reply.attach?.map(teamDocRef) ?? [];
-            // An uploaded copy lands in the chat's own media/, where the thread resolves attachment names.
-            for (const name of reply.attachVCards ?? []) {
-                const vcf = VCARD_FILES.find((file) => file.name === name);
-                if (!vcf) throw new Error(`Card chat reply attaches unknown vCard file '${name}'`);
-                const chatMedia = await teamDrive.getChildByName(teamMountId, chat.id, CONTAINER_MEDIA_FOLDER);
-                if (!chatMedia) throw new Error(`media/ subfolder missing for ${chat.name}`);
-                const upload = await teamDrive.createFileFromData(
-                    teamMountId,
-                    chatMedia.id,
-                    vcf.name,
-                    VCARD_MIMES[0],
-                    Buffer.from(seedVCard(vcf.card), 'utf8'),
-                    replyAuthor,
-                );
-                attachments.push(upload.name);
-            }
-            await postTo(chat.id, replyAuthor, reply.text, attachments);
+    const boardCreatedAt = now.getTime() - 14 * 86_400_000;
+    const boardCards: { chatName: string; createdAt: number; attachments: ChatAttachment[] }[] = [];
+    for (const [i, card] of KANBAN.cards.entries()) {
+        const { chatName, createdAt } = await seedCommentThread(boardChatFolder, {
+            card: card.chat,
+            title: card.title,
+            author: card.creator,
+            text: card.chatText,
+            start: card.start ?? new Date(boardCreatedAt + (i + 1) * 86_400_000),
+            replies: card.chatReplies,
+        });
+        const cover = card.cover ? [fixtureMedia(card.cover)] : [];
+        const covers = await uploadMedia(teamDrive, teamMountId, boardPath, cover, lookup(userByKey, card.creator));
+        boardCards.push({
+            chatName,
+            createdAt,
+            attachments: [...covers.map((upload) => upload.name), ...(card.attach?.map(teamDocRef) ?? [])],
+        });
+        if (card.assignTo) {
+            const assignee = emailForRole(card.assignTo);
+            await teamDrive.assignComment(teamMountId, boardId, chatName, assignee, boardAuthor, card.title);
         }
-        cardChatNames.push(chat.name);
+        if (card.resolvedBy) {
+            const resolver = lookup(userByKey, card.resolvedBy);
+            await teamDrive.setCommentStatus(teamMountId, boardId, chatName, 'resolved', resolver, card.title);
+        }
     }
 
-    // The fixture stores card and column creators as bare persona keys. They become this run's emails, so the board
-    // shows author names under any MAIL_DOMAIN. Every card also gets the default card color, its chat link and a
-    // createdAt relative to the seed time.
-    const boardCreatedAt = Date.now() - 14 * 86_400_000;
+    // The fixture stores creators as bare persona keys, which become this run's emails. Its createdAt is the day it
+    // was authored, so every card gets one relative to the seed.
     const board = await teamDrive.getCollabDocument(teamMountId, boardId);
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 if (!(entry instanceof Y.Map)) continue;
-                entry.set('creator', emailFor(entry.get('creator')));
+                entry.set('creator', emailFor(entry.get('creator'), MAIL_DOMAIN));
             }
         }
         const tasksMap = getItemMapRoot(board.doc, 'tasks');
-        for (const [i, spec] of KANBAN.cards.entries()) {
+        for (const [i, { chatName, createdAt, attachments }] of boardCards.entries()) {
             const task = tasksMap.get(`card-${i + 1}`);
             if (!(task instanceof Y.Map)) continue;
             task.set('color', DEFAULT_CARD_COLOR);
-            task.set('chatName', cardChatNames[i]);
-            task.set('createdAt', boardCreatedAt + (i + 1) * 86_400_000); // a card a day after the board
-            if (spec.attach) task.set('attachments', spec.attach.map(teamDocRef));
+            task.set('chatName', chatName);
+            task.set('createdAt', createdAt);
+            if (attachments.length > 0) task.set('attachments', attachments);
         }
     });
     await teamDrive.flushContainerDb(teamMountId, boardId);
@@ -686,27 +787,14 @@ async function main(): Promise<void> {
     for (const channel of CHATS) {
         const first = lookup(userByKey, channel.messages[0].author);
         const chat = await teamDrive.create(teamMountId, lookup(folderId, 'chats'), channel.name, 'chat', first);
-        const room = await teamDrive.getChat(teamMountId, chat.id);
-        for (const line of channel.messages) {
-            const attachments = line.attach?.map(teamDocRef);
-            await room.postMessage(
-                lookup(userByKey, line.author),
-                line.text,
-                'message',
-                undefined,
-                undefined,
-                attachments,
-            );
-        }
+        await postThread(chat, channel.start, channel.messages);
     }
 
     // --- Calendar: team events. The team calendar is shared, so an event sends no invitations. ---
     const defaultCalendar = (await teamHome.calendar.getCalendars()).find((calendar) => calendar.isDefault);
     if (!defaultCalendar) throw new Error('Team default calendar missing');
-    const now = new Date();
-    // Anchor the festival on a weekend: the first Saturday at least ~3 weeks out (so it lands 20-26
-    // days ahead). Every event is placed relative to this Saturday, so the festival is always Sat/Sun
-    // and the go/no-go the Friday before, whatever weekday the hourly reseed happens to run on.
+    // The festival is the first Saturday at least 20 days out. Every event is placed from it, so the weekdays hold
+    // whatever day the hourly reseed runs on.
     const festivalSaturday = new Date(now);
     festivalSaturday.setDate(festivalSaturday.getDate() + 20);
     while (festivalSaturday.getDay() !== 6) festivalSaturday.setDate(festivalSaturday.getDate() + 1);
@@ -724,9 +812,8 @@ async function main(): Promise<void> {
     for (const event of EVENTS) {
         let { start, end } = timedSlot(event);
         if (event.allDay) {
-            // An all-day event is stored as UTC midnight with an exclusive end, as the create-event dialog and the
-            // CalDAV import store it. The calendar groups all-day events by their UTC date, so local midnight
-            // would move the festival a day early in a timezone east of UTC.
+            // An all-day event is stored as UTC midnight with an exclusive end, as the create-event dialog stores
+            // it. The calendar groups them by UTC date, so local midnight would move the festival a day early.
             start = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()));
             end = new Date(start);
             end.setUTCDate(end.getUTCDate() + 2); // the festival Saturday and Sunday
@@ -734,7 +821,12 @@ async function main(): Promise<void> {
         const organizer = userForRole(event.organizer);
         const attendees: Attendee[] = event.attendees.map((ref) => {
             const persona = resolvePersona(ref);
-            return { email: emailFor(persona.key), name: persona.name, status: 'accepted', role: 'required' };
+            return {
+                email: emailFor(persona.key, MAIL_DOMAIN),
+                name: persona.name,
+                status: event.replies?.[persona.key] ?? 'accepted',
+                role: 'required',
+            };
         });
         const data: EventData = {
             attendees,
@@ -753,7 +845,7 @@ async function main(): Promise<void> {
         });
     }
 
-    // --- Shifts: one event in each persona's own calendar, which their home makes on first open. ---
+    // --- Shifts: personal lines in each persona's own calendar, which their home makes on first open. ---
     for (const shift of SHIFTS) {
         const owner = lookup(userByKey, shift.persona);
         const { calendar } = await getHome(owner.id);
@@ -773,7 +865,7 @@ async function main(): Promise<void> {
     // A drive-reference to the shared team drive root, for all-hands mails that link the workspace.
     const teamDriveRef: AttachmentReference = {
         type: 'reference',
-        ownerId: `team_${teamId}`,
+        ownerId: teamOwnerId(teamId),
         mountId: teamMountId,
         id: teamRoot.id,
         name: TEAM_MOUNT_NAME,
@@ -799,8 +891,6 @@ async function main(): Promise<void> {
         };
     };
     // An invitation as an outside calendar sends one: the shipped iMIP writer over the event its organizer holds.
-    // Seeded mail carries no DKIM verdict, so delivery leaves the persona's calendar alone, and the mail shows the
-    // invitation card all the same.
     const inviteIcs = (invite: SeededInvite, organizer: { name: string; email: string }, attendee: User): string => {
         const { start, end } = timedSlot(invite);
         const event: CalendarEvent = {
@@ -822,7 +912,7 @@ async function main(): Promise<void> {
             sequence: 0,
             etag: '',
             data: {
-                organizer: { userId: '', email: organizer.email, name: organizer.name },
+                organizer: { email: organizer.email, name: organizer.name },
                 attendees: [{ email: attendee.email, name: attendee.name, status: 'pending', role: 'required' }],
             },
             createByUserId: null,
@@ -836,18 +926,21 @@ async function main(): Promise<void> {
         if (message.fromExternal) return { name: message.fromExternal.name, address: message.fromExternal.email };
         if (!message.from) throw new Error('A seeded message names no sender');
         const persona = resolvePersona(message.from);
-        return { name: persona.name, address: emailFor(persona.key) };
+        return { name: persona.name, address: emailFor(persona.key, MAIL_DOMAIN) };
     };
-    // Threads one flow's messages: the date, the Re: prefix, the In-Reply-To and References chain, and the quote.
-    // Each branch below only picks the sender and the recipient and delivers. A reply quotes the message before it,
-    // as Eigen's composer does, so the last reply holds the whole thread. Its text part is the text of its HTML, as
-    // in a reply sent from Eigen.
+    // Threads one flow's messages: the date, the Re: prefix, the reference chain and the quote. A reply quotes the
+    // message before it and its text part is the text of its HTML, both as Eigen's composer writes a reply.
     const threadState = (subject: string) => {
         const references: string[] = [];
         let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
         return async (
             message: SeededMail['messages'][number],
-            parts: { to: string; html?: string; icalEvent?: { method: string; content: string } },
+            parts: {
+                to: string;
+                html?: string;
+                icalEvent?: { method: string; content: string };
+                headers?: Record<string, string>;
+            },
         ): Promise<Buffer> => {
             const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
             date.setHours(message.hour, 0, 0, 0);
@@ -867,6 +960,7 @@ async function main(): Promise<void> {
                 references: references.length ? references : undefined,
                 attachments: message.attachments?.map(mailAttachment),
                 icalEvent: parts.icalEvent,
+                headers: parts.headers,
             });
             references.push(messageId);
             previous = { id: messageId, from, date, html: reply ?? ownHtml };
@@ -889,11 +983,31 @@ async function main(): Promise<void> {
                     : externalParty
                       ? `${externalParty.name} <${externalParty.email}>`
                       : recipient.email;
-                const icalEvent =
+                // An invitation arrives as our MTA hands over a signed one, with its DKIM verdict, so delivery files it
+                // in the persona's calendar as a pending invitation.
+                const invite =
                     external && message.invite
-                        ? { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) }
-                        : undefined;
-                const buffer = await nextInThread(message, { to, html: message.html, icalEvent });
+                        ? {
+                              icalEvent: { method: 'REQUEST', content: inviteIcs(message.invite, external, recipient) },
+                              headers: {
+                                  'Authentication-Results': `${MAIL_DOMAIN}; dkim=pass header.d=${external.email.split('@')[1]}`,
+                              },
+                          }
+                        : {};
+                // The persona's own message links documents as a send does that grants the outside party read access.
+                let html = message.html;
+                if (!external && message.attachDocs) {
+                    if (!externalParty) throw new Error(`'${flow.subject}' links documents to nobody outside`);
+                    const refs = message.attachDocs.map(teamDocRef);
+                    await grantAccessForReferences(
+                        recipient,
+                        refs,
+                        refs.map((ref) => ref.id),
+                        [externalParty.email],
+                    );
+                    html = (html ?? textToHtml(message.text)) + renderAttachmentPills(refs, externalParty.email);
+                }
+                const buffer = await nextInThread(message, { to, html, ...invite });
                 const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
                 // The persona's own replies belong in their Sent box, not their inbox. They move there and are
                 // marked read, as mail you sent is.
@@ -926,7 +1040,7 @@ async function main(): Promise<void> {
                     const deliveredId = await home.mail.mailboxDeliver(buffer);
                     copies.set(persona.key, deliveredId);
                     // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
-                    if (emailFor(persona.key) === senderAddress) {
+                    if (emailFor(persona.key, MAIL_DOMAIN) === senderAddress) {
                         await home.mail.messageMove(deliveredId, MAILBOX_SENT);
                         await home.mail.messageSetRead(deliveredId, true);
                         const answeredId = previousCopies.get(persona.key);
@@ -938,14 +1052,33 @@ async function main(): Promise<void> {
         }
     }
 
-    // --- Contacts: the external ecosystem in a few leads' address books. ---
+    // --- The one guest: Hein opened Saar's link and signed in, which made his account and read his share into it. ---
+    await reconcileShares(await createGuestUser(HEIN_KLARENBEEK.email));
+
+    // --- Contacts: the external ecosystem in a few leads' address books, with their labels and portraits. ---
     for (const contact of CONTACTS) {
         const owner = userForRole(contact.owner);
         const contacts = await resolveContacts(owner, owner.id);
-        await contacts.addContact(contactInput(contact));
+        const labelIds = new Map((await contacts.getLabels()).map((label) => [label.name, label.id]));
+        for (const name of contact.labels ?? []) {
+            if (labelIds.has(name)) continue;
+            // A new label takes the next accent color after the ones the book holds.
+            labelIds.set(
+                name,
+                await contacts.addLabel({
+                    name,
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[labelIds.size % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+                }),
+            );
+        }
+        await contacts.addContact({
+            ...contactInput(contact),
+            labels: contact.labels?.map((name) => lookup(labelIds, name)),
+            avatar: contact.photo ? await uploadPortrait(contacts, contact.photo) : '',
+        });
     }
 
-    // --- Personal-drive files shared person-to-person (shared-with-me variety). ---
+    // --- Personal-drive files shared with a lead or a team (shared-with-me variety). ---
     for (const share of PERSONAL_SHARES) {
         const owner = userForRole(share.owner);
         const ownerHome = await getHome(owner.id);
@@ -962,20 +1095,30 @@ async function main(): Promise<void> {
         await ownerHome.drive.updateACLDelta(
             'default',
             file.id,
-            { add: [{ id: emailForRole(share.shareWith), read: true, write: false }] },
+            {
+                add: [
+                    {
+                        id:
+                            share.shareWith === TECH_TEAM_NAME
+                                ? teamOwnerId(techTeam.id)
+                                : emailForRole(share.shareWith),
+                        read: true,
+                        write: false,
+                    },
+                ],
+            },
             undefined,
             undefined,
             owner,
         );
     }
 
-    // --- Personal docs: a private "my notes" and a "trying eigen" scratch doc in every persona's own drive (same
-    // content for all). Each JSON is built once and written into each persona's own home drive, its photos into the
-    // doc's media/. ---
+    // --- Personal docs: "my notes" and "trying eigen" in every persona's own drive, the same for all. Each JSON is
+    // built once, and its photos go into the doc's media/. ---
     const personalDocs = [NOTES, TRYING_EIGEN].map((doc) => ({
         name: doc.name,
         json: htmlToDocJson(docSchema(), doc.html),
-        media: doc.media ?? [],
+        media: (doc.media ?? []).map(fixtureMedia),
     }));
     for (const persona of PERSONAS) {
         const owner = lookup(userByKey, persona.key);

@@ -1,11 +1,11 @@
 ---
 title: "Create a recurring event"
-description: "Set an event to repeat daily, weekly, monthly, or on a custom schedule, and control what changes when you edit or delete one occurrence."
+description: "Set an event to repeat daily, weekly, monthly, yearly or every weekday, and control what changes when you edit or delete one occurrence."
 type: how-to
 tags: [calendar, events, recurring, repeat]
 related: [calendar/create-event]
 order: 80
-updated: 2026-11-11
+updated: 2026-11-15
 ---
 
 A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the occurrences automatically. You can later edit or delete a single occurrence, all future ones from a given date, or the whole series.

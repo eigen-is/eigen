@@ -2,9 +2,9 @@
 // from Tools or its shortcut for example. It counts the body's words and characters, and a selection's out of the whole.
 
 import type { Editor } from '@tiptap/react';
-import { FormDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter } from '@workspace/ui/components/dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { useState } from 'react';
 import type { TextCounts } from './word-count';
 import { countWords } from './word-count';

@@ -323,6 +323,11 @@ export function isLightColor(hex: string): boolean {
     return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.5;
 }
 
+// The text or icon color that reads on a background a person picked, such as a calendar's or a label's.
+export function readableTextColor(background: string): '#000' | '#fff' {
+    return isLightColor(background) ? '#000' : '#fff';
+}
+
 // A #rrggbb color moved toward white by an amount from 0 to 1. A color that is no hex stays as it is.
 export function lightenColor(hex: string, amount: number): string {
     const channels = hexChannels(hex, [6, 8]);

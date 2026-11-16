@@ -151,7 +151,7 @@ describe('a WebDAV lock holds its Home', () => {
                 ancestorPathIds: [],
                 descendantPathIds: [],
             }),
-        ).toThrow('Home is closing');
+        ).toThrow('Reloading. Try again in a moment.');
         await closing;
     });
 });

@@ -72,7 +72,9 @@ const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realComments = { ...(await import('@workspace/lib/comments')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realSheet = { ...(await import('@workspace/sheet')) };
-const realUi = { ...(await import('@workspace/ui')) };
+const realLayout = { ...(await import('@workspace/ui/components/layout/app')) };
+const realToolbar = { ...(await import('@workspace/ui/components/layout/toolbar')) };
+const realDropOverlay = { ...(await import('@workspace/ui/components/file-drop-overlay')) };
 const realUiComments = { ...(await import('@workspace/ui/components/comments')) };
 const realSearch = { ...(await import('@workspace/ui/components/search/doc-search-provider')) };
 const realCards = { ...(await import('@workspace/ui/components/cards')) };
@@ -100,17 +102,20 @@ mock.module('@workspace/sheet', () => ({
         return props.toolbarRightItems;
     },
 }));
-mock.module('@workspace/ui', () => ({
-    ...realUi,
+mock.module('@workspace/ui/components/layout/app', () => ({
+    ...realLayout,
     CollabDocumentGate: Children,
+    UnsyncedEditsGuard: Nothing,
+    useLayout: () => layout,
+}));
+mock.module('@workspace/ui/components/layout/toolbar', () => ({
+    ...realToolbar,
     DocumentShareCluster: ({ onToggleCommentPanel }: { onToggleCommentPanel: () => void }) => {
         seen.toggleComments = onToggleCommentPanel;
         return null;
     },
-    FileDropOverlay: Nothing,
-    UnsyncedEditsGuard: Nothing,
-    useLayout: () => layout,
 }));
+mock.module('@workspace/ui/components/file-drop-overlay', () => ({ ...realDropOverlay, FileDropOverlay: Nothing }));
 mock.module('@workspace/ui/components/comments', () => ({
     ...realUiComments,
     CommentHoverCard: (props: HoverCardProps) => {
@@ -138,7 +143,9 @@ afterAll(() => {
     mock.module('@workspace/lib/comments', () => realComments);
     mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('@workspace/sheet', () => realSheet);
-    mock.module('@workspace/ui', () => realUi);
+    mock.module('@workspace/ui/components/layout/app', () => realLayout);
+    mock.module('@workspace/ui/components/layout/toolbar', () => realToolbar);
+    mock.module('@workspace/ui/components/file-drop-overlay', () => realDropOverlay);
     mock.module('@workspace/ui/components/comments', () => realUiComments);
     mock.module('@workspace/ui/components/search/doc-search-provider', () => realSearch);
     mock.module('@workspace/ui/components/cards', () => realCards);

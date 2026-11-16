@@ -13,14 +13,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
-import {
-    CenteredToolbar,
-    DocumentShareCluster,
-    EditMenu,
-    FileMenu,
-    ToolbarSeparator,
-    TooltipButton,
-} from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ClipboardMenuItems } from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
@@ -33,6 +25,14 @@ import {
     DropdownMenuShortcut,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import {
+    CenteredToolbar,
+    DocumentShareCluster,
+    EditMenu,
+    FileMenu,
+    ToolbarSeparator,
+    TooltipButton,
+} from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { focusLeftToEditor, Menubar } from '@workspace/ui/components/menubar';

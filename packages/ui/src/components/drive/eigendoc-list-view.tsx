@@ -4,9 +4,9 @@
 // viewer from that route, and a selected row goes into its URL.
 
 import { openDocument } from '@workspace/lib/api';
-import type { AuthUser } from '@workspace/lib/auth';
 import type { validateDriveSearch } from '@workspace/lib/drive';
 import { useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';

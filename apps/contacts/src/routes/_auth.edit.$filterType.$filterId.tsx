@@ -4,7 +4,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
-import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useEffect } from 'react';
 import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
 

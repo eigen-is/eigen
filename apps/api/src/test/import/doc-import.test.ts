@@ -449,7 +449,7 @@ describe('Eigendoc docx import/convert', () => {
         try {
             const res = await convertRequest(uploaded.id);
             expect(res.status).toBe(413);
-            expect(await res.text()).toBe('Source file too large');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
@@ -496,7 +496,7 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await importRequest(docPath.id, docx);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         expect(await readDocJson(docPath.id)).toEqual(before);
         expect(await mediaNames(docPath.id)).toEqual([]);
@@ -510,7 +510,7 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await importRequest(docPath.id, docx);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         expect(await readDocJson(docPath.id)).toEqual(before);
         expect(await mediaNames(docPath.id)).toEqual([await docImageName(docPath.id)]);
@@ -521,7 +521,7 @@ describe('docx import quota', () => {
         await withMountRoom(IMAGE_BYTES / 2, async () => {
             const res = await convertRequest(uploaded.id);
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         });
         const home = await getHome(ctx.alice.user.id);
         const { mount } = await home.drive.resolveFile(mountId, rootId);

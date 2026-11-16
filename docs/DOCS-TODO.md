@@ -38,6 +38,8 @@ The backlog for the Docs app: the editor, its docx and PDF round trip, and the p
 
 - **Typing in a text box on a phone, and peer carets in a box** (M): On a phone a box can be selected and set up in Format › Text box, but its text is read-only, as a note's is. A box's editor has no collaboration of its own, so no peer's caret draws inside it. Both need the story edited in an editor of its own; a phone's must mount where the keyboard reaches it.
 
+- **A View menu** (S): Docs has no View menu, so Show outline sits in Tools (`apps/docs/src/components/docs/tools-menu.tsx`). As Google ([LAYOUT.md](LAYOUT.md#the-bars-menus-come-in-googles-order)), View holds Show outline. The shared Help menu with keyboard shortcuts is a [ROADMAP.md](ROADMAP.md) row.
+
 ## Bugs and small fixes
 
 Verified, bounded, cheap to fix on the next touch.
@@ -55,6 +57,8 @@ Verified, bounded, cheap to fix on the next touch.
 - **⌘Z right after a panel change undoes nothing** (S): A change in a Docs properties panel leaves the focus on the panel's control, so ⌘Z reaches no editor until the user clicks back in the page; Edit › Undo and the toolbar's Undo work. Every panel has it, the table of contents' included. Fix: one keydown on the sidebar that sends undo and redo (`undoChord`, `packages/ui/src/lib/undoChord.ts`) to `activeEditor` when the target is not a text field, so a field's own undo stays the browser's.
 
 - **Plain text after Word's own Update Table is unverified** (XS): The docx writes Plain text as a right tab with no leader on each entry and in the `toc N` styles ([EXPORT.md](EXPORT.md#a-table-of-contents-is-words-toc-field-its-entries-derived-both-ways)), checked in LibreOffice only. Word may write its own dotted tab on each entry when it updates the table, which would read back as Dotted. Check on Word desktop: export a Plain text table of contents, Update Table, save and import; if the dots come back, find what Word keeps and write that.
+
+- **Undoing a new list item leaves a tall caret beside the next figure** (S): Seen while filming the Docs About page on the production plan, not traced. After a new list item is undone, the caret draws as a bar as tall as the figure that follows, beside it, instead of a line-high caret in the text. Start with where the undo puts the selection and how the caret is drawn next to a figure.
 
 - **A doc whose first block is a table of contents warns on load** (XS): Each load logs ProseMirror's "TextSelection endpoint not pointing into a node with inline content (doc)" in the console, seen in a browser pass on the table of contents panel branch. Unverified whether it predates that branch. A text selection set at the doc's start, where the first block is an atom with no inline content, would log it; find what sets it on load and use `Selection.near` or `atStart` there.
 

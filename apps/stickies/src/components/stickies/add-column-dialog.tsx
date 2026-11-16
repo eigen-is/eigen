@@ -1,8 +1,8 @@
 // The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
 // writes the column into the board's document.
 
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 

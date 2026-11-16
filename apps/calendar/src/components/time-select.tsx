@@ -1,51 +1,14 @@
 // The time picker of the event dialogs: a text field with a list of quarter hours, which for an end time shows each
-// slot's duration and whether it falls on a later day. The same file holds the "hh:mm" helpers the dialogs use to
-// pick a default start and to keep an end after its start.
+// slot's duration and whether it falls on a later day. Its value is "hh:mm" on a 24-hour clock, which the dialogs parse
+// back into a date, so this file also holds the helpers that write and read that shape, such as a default start.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
-import { formatTime } from '@workspace/lib/date';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 
-function formatTimeSlot(time: string): string {
-    const [h, m] = time.split(':').map(Number);
-    const d = new Date(2000, 0, 1, h, m);
-    return formatTime(d);
-}
-
-function generateTimeSlots(): string[] {
-    const slots: string[] = [];
-    for (let h = 0; h < 24; h++) {
-        for (let m = 0; m < 60; m += 15) {
-            slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-        }
-    }
-    return slots;
-}
-
-const TIME_SLOTS = generateTimeSlots();
-
-export function timeToMinutes(time: string): number {
-    const [h, m] = time.split(':').map(Number);
-    if (Number.isNaN(h) || Number.isNaN(m)) return -1;
-    return h * 60 + m;
-}
-
-function formatDuration(startMinutes: number, endMinutes: number): string {
-    let diff = endMinutes - startMinutes;
-    if (diff <= 0) diff += 24 * 60;
-    const hours = Math.floor(diff / 60);
-    const mins = diff % 60;
-    if (hours === 0) return `(${mins}m)`;
-    if (mins === 0) return `(${hours}h)`;
-    return `(${hours}h${mins}m)`;
-}
-
-function isValidTime(str: string): boolean {
-    return /^(\d|0\d|1\d|2[0-3]):[0-5]\d$/.test(str);
-}
+const TIME_SLOTS = Array.from({ length: 24 * 4 }, (_, i) => minutesToTime(i * 15));
 
 type TimeSelectProps = {
     value: string;
@@ -59,7 +22,6 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
     const [open, setOpen] = useState(false);
     const [inputValue, setInputValue] = useState(value);
     const listRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
     const refMinutes = referenceTime ? timeToMinutes(referenceTime) : null;
     const minMinutes = minTime ? timeToMinutes(minTime) : -1;
 
@@ -67,29 +29,13 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
         minMinutes >= 0
             ? (() => {
                   const slots: Array<{ time: string; dayOffset: number }> = [];
-                  const maxDuration = 23 * 60 + 45;
-                  const maxSlots = 95;
-                  for (let i = 0; i <= maxSlots; i++) {
-                      const totalMinutes = minMinutes + i * 15;
-                      const duration = 15 + i * 15;
-
-                      if (duration > maxDuration) break;
-
-                      let dayOffset = 0;
-                      let timeMinutes = totalMinutes;
-
-                      if (totalMinutes >= 24 * 60) {
-                          dayOffset = Math.floor(totalMinutes / (24 * 60));
-                          timeMinutes = totalMinutes % (24 * 60);
-                      }
-
-                      const hours = Math.floor(timeMinutes / 60);
-                      const minutes = timeMinutes % 60;
-                      const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-
-                      slots.push({ time: timeString, dayOffset });
+                  for (let offset = 0; offset < 24 * 60 - 15; offset += 15) {
+                      const totalMinutes = minMinutes + offset;
+                      slots.push({
+                          time: minutesToTime(totalMinutes % (24 * 60)),
+                          dayOffset: Math.floor(totalMinutes / (24 * 60)),
+                      });
                   }
-
                   return slots;
               })()
             : TIME_SLOTS.map((time) => ({ time, dayOffset: 0 }));
@@ -99,33 +45,31 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
     }, [value]);
 
     useEffect(() => {
-        if (open) {
-            setTimeout(() => {
-                if (!listRef.current) return;
+        if (!open) return;
+        const timer = setTimeout(() => {
+            if (!listRef.current) return;
 
-                const valueInMinutes = timeToMinutes(value);
-                if (valueInMinutes === -1) return;
-                const target = filteredTimeSlots.reduce((prev, curr) => {
-                    const prevDiff = Math.abs(timeToMinutes(prev.time) - valueInMinutes);
-                    const currDiff = Math.abs(timeToMinutes(curr.time) - valueInMinutes);
-                    return prevDiff < currDiff ? prev : curr;
-                });
+            const valueInMinutes = timeToMinutes(value);
+            if (valueInMinutes === -1) return;
+            const target = filteredTimeSlots.reduce((prev, curr) => {
+                const prevDiff = Math.abs(timeToMinutes(prev.time) - valueInMinutes);
+                const currDiff = Math.abs(timeToMinutes(curr.time) - valueInMinutes);
+                return prevDiff < currDiff ? prev : curr;
+            });
 
-                const idx = filteredTimeSlots.findIndex((slot) => slot.time === target.time);
+            const idx = filteredTimeSlots.findIndex((slot) => slot.time === target.time);
 
-                listRef.current.children.item(idx)?.scrollIntoView({ block: 'center' });
-            }, 100);
-        }
+            listRef.current.children.item(idx)?.scrollIntoView({ block: 'center' });
+        }, 100);
+        return () => clearTimeout(timer);
     }, [open, value]);
 
     const commitInput = () => {
         const trimmed = inputValue.trim();
         if (isValidTime(trimmed)) {
-            const [h, m] = trimmed.split(':');
-            const formattedTime = `${String(parseInt(h, 10)).padStart(2, '0')}:${m.padStart(2, '0')}`;
-            const minutes = timeToMinutes(formattedTime);
+            const minutes = timeToMinutes(trimmed);
             const dayOffset = refMinutes != null && minutes <= refMinutes ? 1 : 0;
-            onChange(formattedTime, dayOffset);
+            onChange(minutesToTime(minutes), dayOffset);
         } else {
             setInputValue(value);
         }
@@ -136,7 +80,6 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
             <PopoverTrigger asChild>
                 <div className="relative">
                     <Input
-                        ref={inputRef}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onBlur={commitInput}
@@ -154,12 +97,12 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
                     />
                 </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[180px] p-0" align="start" onOpenAutoFocus={(e: Event) => e.preventDefault()}>
+            <PopoverContent className="w-[180px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                 <div
                     ref={listRef}
                     className="max-h-[240px] overflow-y-auto p-1"
                     tabIndex={-1}
-                    onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
+                    onWheel={(e) => {
                         e.stopPropagation();
                     }}
                 >
@@ -177,7 +120,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
                                 setOpen(false);
                             }}
                         >
-                            {formatTimeSlot(slot.time)}
+                            {slot.time}
                             {refMinutes != null && (
                                 <span className="text-muted-foreground ml-2 text-xs">
                                     {formatDuration(refMinutes, timeToMinutes(slot.time) + slot.dayOffset * 24 * 60)}
@@ -191,20 +134,14 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
     );
 }
 
-export function toTimeString(date: Date): string {
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-}
-
 export function roundToNext15Minutes(date: Date): Date {
     const d = new Date(date);
-    const mins = d.getMinutes();
-    const remainder = mins % 15;
-    if (remainder > 0) {
-        d.setMinutes(mins + (15 - remainder), 0, 0);
-    } else {
-        d.setMinutes(mins, 0, 0);
-    }
+    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
     return d;
+}
+
+export function toTimeString(date: Date): string {
+    return minutesToTime(date.getHours() * 60 + date.getMinutes());
 }
 
 // The end of an event that starts at `start`, as the dialog's date and time fields: past midnight it is the next day.
@@ -213,11 +150,39 @@ export function endAfter(start: Date, minutes: number): { date: string; time: st
     return { date: toLocalDateString(end), time: toTimeString(end) };
 }
 
+// The end once the start moves to `start`: it stays while it is at least 15 minutes later, on any day.
+export function endForStart(start: Date, end: { date: string; time: string }): { date: string; time: string } {
+    if (new Date(`${end.date}T${end.time}`).getTime() - start.getTime() >= 15 * 60_000) return end;
+    return endAfter(start, 30);
+}
+
 export function addMinutes(time: string, minutes: number): string {
     let totalMins = timeToMinutes(time) + minutes;
     if (totalMins >= 24 * 60) totalMins -= 24 * 60;
     if (totalMins < 0) totalMins += 24 * 60;
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    return minutesToTime(totalMins);
+}
+
+export function timeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return -1;
+    return h * 60 + m;
+}
+
+function minutesToTime(minutes: number): string {
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
+function formatDuration(startMinutes: number, endMinutes: number): string {
+    let diff = endMinutes - startMinutes;
+    if (diff <= 0) diff += 24 * 60;
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+    if (hours === 0) return `(${mins}m)`;
+    if (mins === 0) return `(${hours}h)`;
+    return `(${hours}h${mins}m)`;
+}
+
+function isValidTime(str: string): boolean {
+    return /^(\d|0\d|1\d|2[0-3]):[0-5]\d$/.test(str);
 }

@@ -25,7 +25,7 @@ import type { InvitationRequest } from './types';
 // a series carries its `exceptions`, so a guest's copy never shows a moved or deleted date at its old slot.
 export async function propagateInvitation(
     organizerHome: Home,
-    organizer: Organizer,
+    organizer: HomeOrganizer,
     event: CalendarEvent,
     user: User,
     oldAttendees: readonly Attendee[],
@@ -159,9 +159,12 @@ export function answeredOccurrence(event: CalendarEvent): string | undefined {
     return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }
 
+// The organizer as the Home that holds the event names it: its own id, whatever the file stores.
+type HomeOrganizer = Organizer & { userId: string };
+
 // A guest answers the ORGANIZER, and only the calendar's own Home holds the event, so every message names the one its
 // file stores. A file that stores none is organized by the Home's user, or on a team, which has no address, by `user`.
-export function organizerOf(organizerHome: Home, user: User | undefined, stored?: Organizer): Organizer {
+export function organizerOf(organizerHome: Home, user: User | undefined, stored?: Organizer): HomeOrganizer {
     const named = stored ?? (organizerHome.user.email ? organizerHome.user : user);
     return { userId: organizerHome.user.id, email: named?.email ?? '', name: named?.name };
 }
@@ -169,7 +172,7 @@ export function organizerOf(organizerHome: Home, user: User | undefined, stored?
 // The REQUEST one guest on this server gets. A series carries its master and every exception, and an occurrence the
 // guest isn't on travels as cancelled. One occurrence names its series' id and key, so the guest's series takes it.
 function invitationRequest(
-    organizer: Organizer,
+    organizer: HomeOrganizer,
     createByUserId: string,
     email: string,
     event: CalendarEvent,

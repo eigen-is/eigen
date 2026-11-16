@@ -1,14 +1,14 @@
 // What a canvas tells its peers: the user's identity, selection, frame and cursor, published on the provider's Yjs
 // awareness. The canvas editor calls it, and the shared cursor layer uses peerOnFrame to hide peers on another page.
 
-import type { AuthUser } from '@workspace/lib/auth';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type { CursorPeerState } from '../../collab';
 import { useAwarenessIdentity, useThrottledAwarenessField } from '../../collab';
 
-// The canvas awareness shape: the shared cursor-layer fields plus the frame the peer is on. Engine-
-// private — frameId never enters the shared CursorPeerState.
+// The frame a peer is on matters only to the canvas, so it is added here and never enters the shared
+// CursorPeerState.
 export type CanvasPeerState = CursorPeerState & { frameId?: string };
 
 // A peer belongs to the frame they are on. A peer that has not published one reads as '', the same value

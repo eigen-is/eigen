@@ -177,11 +177,10 @@ A deletion leaves the entries naming that person on other owners' paths on purpo
 
 ### Pull Routes
 
-Reconciliation reads through the home relay's `getFromHomes`. Two routes answer from the same reads, each returning only the caller's own shares on that owner, the drive one without the paths in the trash (`Drive.getSharedWith`):
+Reconciliation reads through the home relay's `getFromHomes`. One route answers from the same reads, returning only the caller's own calendar shares on that owner:
 
 ```
 GET /calendar/:ownerId/shared-with-me
-GET /drive/:ownerId/shared-with-me
 ```
 
 The fan-out runs only when a share changes, which is rare. The data stays in the owner's Home, and recipients read it on demand, so the cost stays small.

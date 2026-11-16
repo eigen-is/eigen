@@ -3,7 +3,7 @@
 
 import { Link } from '@tanstack/react-router';
 import { usePublicConfig } from '@workspace/lib/public';
-import { VersionLabel } from '@workspace/ui';
+import { VersionLabel } from '@workspace/ui/components/layout/app';
 import { cn } from '@workspace/ui/lib/utils';
 
 const LINK = 'hover:text-foreground';

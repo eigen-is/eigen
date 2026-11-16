@@ -357,7 +357,7 @@ function stamped({ event, stamps }: ReadEvent): StoredEvent {
         event.data || stamps.organizerEventId || stamps.color
             ? {
                   ...event.data,
-                  organizer: organizer ? { ...organizer, userId: stamps.organizerUserId ?? '' } : undefined,
+                  organizer: organizer ? { ...organizer, userId: stamps.organizerUserId ?? undefined } : undefined,
                   organizerEventId: stamps.organizerEventId ?? undefined,
                   color: stamps.color ?? undefined,
               }
@@ -458,8 +458,8 @@ function readResource(resource: ICAL.Component, triesRule: boolean): ReadResult 
             if (organizerProp) {
                 const email = calAddress(organizerProp.getFirstValue());
                 const cn = organizerProp.getFirstParameter('cn') || email;
-                // The invitation link is a stamp, so it is empty here and filled by the trusted projection.
-                organizer = { userId: '', email, name: cn !== email ? cn : undefined };
+                // The invitation link is a stamp, so the trusted projection adds the organizer's Home.
+                organizer = { email, name: cn !== email ? cn : undefined };
             }
 
             const data: EventData | null =

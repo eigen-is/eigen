@@ -9,12 +9,12 @@
 #     the files an unfinished update left; the backup it makes on the running API before it writes anything, and
 #     the handover, typed on a terminal too; --no-backup with Eigen stopped; a refusal while eigen-api reads a
 #     .env.production replaced since it started, or cannot be asked; an interrupt in the backup wait, which stops and
-#     restarts nothing;
+#     restarts nothing; a rollback pin that cannot be pulled back, which leaves every old image;
 #   - the restart notice: --in and its message, refused before anything runs when wrong; the notice after the pulls
 #     and the countdown before the backup, or before the stop of a rollback or restore; a TERM, a hangup and a failed
 #     backup each taking it back; a failed notice with and without a wait;
 #   - backup on the running API, refused in the same .env.production cases, and restart stopping eigen-api first;
-#   - stop, and a running server backup or its upload waited out before it;
+#   - stop, a running server backup or its upload waited out before it, and an ask that never returns given up;
 #   - restore: the stage and the swap and what each failure leaves, an archive uid 1000 cannot read, a restore that
 #     cannot write its files, a swap that was cut off and finished first (with no .env.production too), and a
 #     restore on a new machine from the launcher alone;
@@ -40,7 +40,8 @@ trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
 # info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail,
-# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled;
+# and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled, and
+# STUB_GONE on that one image;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a
 # dovecot image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the
@@ -53,8 +54,8 @@ trap 'rm -rf "$FIX"' EXIT
 # running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, compose exec of backup prints
 # archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and exits STUB_NOTICE, one of
 # status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=fail fails as one that is not
-# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any
-# other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
+# answering. With STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, hang never answers, -
+# names nothing and any other is printed, and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums
 # STUB_MOUNTED, the file eigen-api mounts, or else .env.production. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
@@ -103,6 +104,7 @@ case $1 in
                         sed 1d "$STUB_ASKS" >"$STUB_ASKS.next" && mv "$STUB_ASKS.next" "$STUB_ASKS"
                         case $answer in
                             fail) echo '■  Eigen is not answering.' >&2; exit 1 ;;
+                            hang) exec sleep 600 ;;
                             '' | -) ;;
                             *) printf '%s\n' "$answer" ;;
                         esac
@@ -115,6 +117,7 @@ case $1 in
     image)
         for ref; do :; done
         if [ "$2" = inspect ] && [ "${STUB_IMAGE:-0}" = 1 ] && ! grep -qxF "pull $ref" "$STUB_LOG"; then exit 1; fi
+        if [ "$2" = inspect ] && [ "$ref" = "${STUB_GONE:-}" ]; then exit 1; fi
         revision=${STUB_LABEL_REVISION:-abc1234}
         if [ -n "${STUB_MOVED:-}" ] && [ "$(grep -c '^pull [^ ]*/api:' "$STUB_LOG")" -ge 2 ]; then revision=$STUB_MOVED; fi
         case $* in
@@ -241,7 +244,7 @@ launch() {
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_RUN_CODE \
         STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
-        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS; do
+        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS STUB_GONE; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -553,6 +556,14 @@ for SHELL_NAME in dash busybox host; do
             else
                 fail "$SHELL_NAME: restart in group 4242 with a primary user: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
             fi
+            # As Alpine's and Fedora's halt has root's group.
+            printf 'root:x:0:0::/root:/bin/sh\nhalt:x:7:4242::/sbin:/sbin/halt\n' >"$FIX/passwd"
+            LAUNCH_GROUP=$FIX/group LAUNCH_PASSWD=$FIX/passwd launch release restart
+            if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -qF -- "$SHARE 4242"; then
+                ok "$SHELL_NAME: a system account, below uid 1000, that has the group as primary does not share it"
+            else
+                fail "$SHELL_NAME: restart in group 4242 with a system account: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+            fi
         fi
         # Two restarts in one command, the swap's and the command's own, say it once.
         regroup release 100
@@ -794,6 +805,14 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: stop past one failed first ask: exit $CODE, '$OUT'"
     fi
+    # An exec on a daemon that stopped answering never returns, and launch kills a stop that waits for it.
+    launch_asked hang - -- stop
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$OUT" | grep -q 'did not say' && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' &&
+        [ "$(asked)" = 2 ]; then
+        ok "$SHELL_NAME: stop gives up an ask that never returns, asks once more, and stops"
+    else
+        fail "$SHELL_NAME: stop past an ask that never returns: exit $CODE, '$OUT', '$ERR', asked $(asked) times"
+    fi
     launch_asked "$BACKUP_RUNS" "$BACKUP_RUNS" fail "$BACKUP_RUNS" - -- stop
     if [ "$CODE" = 0 ] && waited_for_backup && ! printf '%s\n' "$OUT" | grep -q 'did not say' && [ "$(asked)" -ge 5 ]; then
         ok "$SHELL_NAME: stop waits on past one failed ask until the server backup has ended"
@@ -889,6 +908,20 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
     rm "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    reset_release
+    # On the containerd store a rollback pin not pulled back by digest is dangling, and any prune would remove it.
+    printf '%s\n' EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local \
+        EIGEN_FRONTEND_IMAGE=ghcr.io/eigen-is/eigen/frontend@sha256:fff >>"$FIX/release/.env.production"
+    STUB_GONE=ghcr.io/eigen-is/eigen/frontend@sha256:fff STUB_FAIL=ghcr.io/eigen-is/eigen/frontend@sha256:fff \
+        STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -qx 'pull ghcr.io/eigen-is/eigen/frontend@sha256:fff' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq '^image (rm|prune) ' &&
+        printf '%s\n' "$OUT" | grep -q '▲  No old image was removed, since one a rollback needs could not be downloaded again.'; then
+        ok "$SHELL_NAME: update removes no old image when it cannot pull back what a rollback pins, and says so"
+    else
+        fail "$SHELL_NAME: update past a failed pull-back: exit $CODE, '$OUT', '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     reset_release
 
     # --in: the notice goes out after every pull, the wait counts down in the launcher, and the backup follows it.

@@ -2,7 +2,7 @@
 // link in Space's nav, and ProfileEditor does the editing.
 
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { ProfileEditor } from '../components/space/profile-editor';
 
 export const Route = createFileRoute('/_auth/user')({

@@ -23,7 +23,7 @@ import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
-import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
+import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE, payloadTooLarge } from '../core';
 import type { Home } from '../home';
 import { renderAttachmentLinksText } from '../mailer/mail-template';
 import type { OutboundMail } from '../mailer/mailer';
@@ -52,10 +52,6 @@ function draftIdOf(email: NewDraft): string | undefined {
     const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
-}
-
-export function attachmentTooLarge(maxSize: number): ApiError {
-    return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
 }
 
 // An answer to the browser names a part and its size. The bytes come from the part's own route, because the browser's
@@ -380,7 +376,7 @@ export class Mail {
                 );
             }
         } catch (e) {
-            if (e instanceof MaxFileSizeExceededError) throw attachmentTooLarge(maxSize);
+            if (e instanceof MaxFileSizeExceededError) throw payloadTooLarge();
             throw e;
         }
 
@@ -399,7 +395,7 @@ export class Mail {
                 let size = 0;
                 return streamStorageFile(source, (chunk) => {
                     size += chunk.byteLength;
-                    if (size > maxSize) throw attachmentTooLarge(maxSize);
+                    if (size > maxSize) throw payloadTooLarge();
                     writer.write(chunk);
                 });
             },

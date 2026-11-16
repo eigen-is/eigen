@@ -52,7 +52,7 @@ export function parseHeaders(head: Buffer): PartHeaders {
     const contentType = structured(contentTypeLine ? contentTypeLine.value : defaultContentType(contentDisposition));
 
     const dateLine = lines.findLast((line) => line.key === 'date');
-    const date = dateLine ? new Date(dateLine.value) : undefined;
+    const date = dateLine && new Date(dateLine.value);
     const subject = last('subject');
     const messageId = last('message-id');
     const inReplyTo = last('in-reply-to');
@@ -75,7 +75,7 @@ export function parseHeaders(head: Buffer): PartHeaders {
                 .trim() ?? '',
         contentId: last('content-id'),
         subject: subject && libmime.decodeWords(subject),
-        date: date && Number.isNaN(date.getTime()) ? new Date() : date,
+        date: date && !Number.isNaN(date.getTime()) ? date : undefined,
         from: addresses('from').at(-1),
         replyTo: addresses('reply-to').at(-1),
         to: oneOrMany(addresses('to')),

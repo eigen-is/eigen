@@ -1,16 +1,24 @@
+// The typed value of a people-picking field, such as a guest list, a share dialog or a new chat. It parses the
+// "Name <email>" text a picked suggestion arrives as, and names a typed address by the user's contact for it, so
+// every field reads a known address the same way. The caller's `onAdd` decides whether the person is taken.
+
+import { useContacts } from '@workspace/lib/contacts';
+import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import type { ParsedContactInput } from '@workspace/lib/validation';
 import { parseContactInput } from '@workspace/lib/validation';
 import { useState } from 'react';
 
-// Shared input plumbing for people-picking dialogs: tracks the typed value, parses the
-// "Name <email>" string a picked suggestion arrives as, and hands the contact to `onAdd`,
-// which returns whether it was accepted — false keeps the raw text in the field for editing.
+// `onAdd` returns false to refuse the person, which keeps the raw text in the field for editing.
 export function useContactInput(onAdd: (contact: NonNullable<ParsedContactInput>) => boolean) {
+    const { data: contacts } = useContacts();
     const [value, setValue] = useState('');
 
     const trySubmit = (input: string): boolean => {
         const parsed = parseContactInput(input);
-        if (!parsed || !onAdd(parsed)) return false;
+        if (!parsed) return false;
+        const known = contacts && findContactByEmail(contacts, parsed.email);
+        const displayName = parsed.displayName ?? ((known && contactFullName(known)) || undefined);
+        if (!onAdd({ email: parsed.email, displayName })) return false;
         setValue('');
         return true;
     };

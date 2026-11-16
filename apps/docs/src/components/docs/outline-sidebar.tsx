@@ -5,7 +5,9 @@
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { readOutline } from '@workspace/lib/docs/eigendoc';
-import { Column, EmptyState, SidebarItem, ToolbarTitle, TooltipButton, useLayout } from '@workspace/ui';
+import { Column, EmptyState, useLayout } from '@workspace/ui/components/layout/app';
+import { SidebarItem } from '@workspace/ui/components/layout/sidebar';
+import { ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { cn } from '@workspace/ui/lib/utils';
 import { TableOfContents, X } from 'lucide-react';
 

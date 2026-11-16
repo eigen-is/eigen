@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-12
+updated: 2026-11-14
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -17,7 +17,7 @@ For dragging an item onto a folder, see [Rename, move, and organize files](/supp
 
 1. Right-click the file or folder (or click the **⋮** button at the end of its row).
 2. Choose **Move to…**.
-3. In the **Move to** dialog, pick the drive on the left, then click through the folders to the one you want.
+3. In the **Move to** dialog, pick the drive on the left (on a phone, from the drive list at the top), then click through the folders to the one you want.
 4. Click **Move here**.
 
 The picker starts in the folder you are browsing. The row at the top shows where you are, and you can click any part of it to step back up. To put the item somewhere that does not exist yet, click **New folder** and give it a name.

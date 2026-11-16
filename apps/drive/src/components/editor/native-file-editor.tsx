@@ -7,7 +7,7 @@ import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, ErrorState, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
 import { lazy, Suspense, useState } from 'react';
 import { ViewToolbar } from './editor-toolbar';
 

@@ -7,7 +7,7 @@ tags: [docs, search, find, replace, editing]
 related: [docs/create-and-edit, docs/comments, getting-started/search-and-command-palette]
 crossSections: [sheets]
 order: 25
-updated: 2026-10-28
+updated: 2026-11-15
 ---
 
 Every Eigen editor has a find bar for searching the document you already have open. It works the same way in Docs, Sheets, Slides, Stickies boards, drawings, and the text and code editors built into Drive, and in some of them it replaces what it finds as well.
@@ -58,7 +58,7 @@ A replace is an ordinary edit, so you can undo it. Press **⌘Z** (**Ctrl+Z**) w
 
 <div class="eigen-callout">
 
-In Sheets, a replace rewrites the contents of a cell. Cells holding a formula are left alone, even when the result they show matches your term, and so are locked cells on a protected sheet. Those cells stay in the match count afterwards.
+In Sheets, a replace rewrites the contents of a cell. Cells holding a formula are left alone, even when the result they show matches your term. Those cells stay in the match count afterwards.
 
 </div>
 

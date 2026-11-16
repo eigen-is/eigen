@@ -4,7 +4,7 @@
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box } from '@workspace/lib/vector';
-import { ObjectTransform } from '@workspace/ui';
+import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import type { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';

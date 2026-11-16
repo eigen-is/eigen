@@ -18,11 +18,13 @@ import type { PaletteSelectionAction } from '@workspace/lib/types/command-palett
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { Column, ColumnLayout, DeleteDialog, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
+import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';

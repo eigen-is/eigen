@@ -12,7 +12,7 @@ import {
     useEvents,
     useSharedCalendars,
 } from '@workspace/lib/calendar';
-import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useCallback, useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
 import { CreateEventDialog } from '../components/create-event-dialog';

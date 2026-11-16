@@ -6,15 +6,17 @@ import { createFileRoute } from '@tanstack/react-router';
 import { getDemoEnterUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useJoinWaitlist, usePublicConfig } from '@workspace/lib/public';
-import { AppShell, EigenCyclingLogo } from '@workspace/ui';
+import { EigenCyclingLogo } from '@workspace/ui/components/braket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { AppShell } from '@workspace/ui/components/layout/app';
 import { Textarea } from '@workspace/ui/components/textarea';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { LandingBlocks } from '../components/landing-blocks';
+import { LandingLinks } from '../components/landing-links';
 import { SitePage } from '../components/site-page';
 
 export const Route = createFileRoute('/')({
@@ -27,7 +29,6 @@ function HomeComponent() {
     const [notes, setNotes] = useState('');
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
-    const landingLinks = config?.landingLinks ?? [];
     const demoMode = config?.demoMode ?? false;
     const showInstall = config?.showInstall ?? false;
     const { isAuthenticated } = useAuth();
@@ -95,18 +96,7 @@ function HomeComponent() {
                                     Join waitlist
                                 </Button>
                             )}
-                            {landingLinks.map((link) => (
-                                <Button
-                                    key={`${link.title}:${link.url}`}
-                                    variant="outline"
-                                    className="px-6 py-2 flex-3"
-                                    asChild
-                                >
-                                    <a href={link.url} rel="noopener">
-                                        {link.title}
-                                    </a>
-                                </Button>
-                            ))}
+                            <LandingLinks />
                         </div>
                     ) : (
                         <Card className="w-full max-w-md text-left">

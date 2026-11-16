@@ -1,6 +1,10 @@
-// Writes Eigen-owned edits back into a stored card while preserving every byte Eigen does not own.
+// Writes the fields Eigen owns, such as the name, emails and photo, into a stored vCard and keeps every byte it
+// doesn't own, so a card a phone wrote survives an edit in the web app. It also builds a new card from scratch.
+// The contacts store calls it on every REST write.
+
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Address } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { makeLine, photoParams, serializeVCardLines, splitValue, unescapeText } from './ast';
 import { ISO_DATE } from './parse';
 import type { CardEdits, ParsedCard, VCardLine } from './types';
@@ -15,7 +19,7 @@ function addressEquals(a: Address, b: Address): boolean {
     );
 }
 
-// PO;ext;street;locality;region;code;country — Eigen owns only the last five components.
+// The ADR value is PO box, extended, street, locality, region, code and country, and Eigen owns only the last five.
 function buildAddressValue(a: Address): string {
     return `;;${escapeContentText(a.street ?? '')};${escapeContentText(a.city ?? '')};${escapeContentText(a.state ?? '')};${escapeContentText(a.zipCode ?? '')};${escapeContentText(a.country ?? '')}`;
 }
@@ -65,7 +69,7 @@ function buildNameValue(card: ParsedCard, first: string, last: string): string {
     return rest.length === 0 ? `${owned};;;` : `${owned};${rest.join(';')}`;
 }
 
-// Order-insensitive multiset equality — CATEGORIES is a set of labels, order carries no meaning.
+// CATEGORIES is a set of labels, so two lists are the same whatever their order.
 function sameNames(a: string[], b: string[]): boolean {
     if (a.length !== b.length) return false;
     const x = [...a].sort();
@@ -143,7 +147,11 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         const last = edits.lastName ?? card.lastName;
         if (first !== card.firstName || last !== card.lastName) {
             result = rewriteOwned(result, 'N', buildNameValue(card, first, last));
-            result = rewriteOwned(result, 'FN', escapeContentText(`${first} ${last}`.trim()));
+            result = rewriteOwned(
+                result,
+                'FN',
+                escapeContentText(contactFullName({ firstName: first, lastName: last })),
+            );
         }
     }
     if (edits.company !== undefined) {
@@ -207,7 +215,7 @@ export function createVCard(
         makeLine('PRODID', '-//Eigen//CardDAV//EN'),
         makeLine('UID', uid),
         makeLine('N', `${escapeContentText(input.lastName)};${escapeContentText(input.firstName)};;;`),
-        makeLine('FN', escapeContentText(`${input.firstName} ${input.lastName}`.trim())),
+        makeLine('FN', escapeContentText(contactFullName(input))),
     ];
     for (const email of input.email) lines.push(makeLine('EMAIL', escapeContentText(email)));
     for (const phone of input.phone) lines.push(makeLine('TEL', escapeContentText(phone)));

@@ -4,8 +4,8 @@
 
 import { useSpaceSettings, useTheme, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { celebrationsOn, isUserTheme, THEMES } from '@workspace/lib/types/settings';
-import { LoadingState } from '@workspace/ui';
 import { Label } from '@workspace/ui/components/label';
+import { LoadingState } from '@workspace/ui/components/layout/app';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Switch } from '@workspace/ui/components/switch';
 

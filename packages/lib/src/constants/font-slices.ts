@@ -1,5 +1,5 @@
 // Every bundled face is cut into slices, each one file that draws a range of characters, as Google Fonts serves its
-// fonts. FONT_SLICES lists them, written by the vendoring script beside the fonts.css that loads them in the apps.
+// fonts. FONT_SLICES lists them, written by the vendoring script beside the font CSS that loads them in the apps.
 // slicesFor picks the slices a text needs, so an export or a downloaded image embeds only those, each as the rule
 // fontFaceCss writes. The table is large, so only code that embeds fonts imports this module. In the browser, that
 // code loads it with a dynamic import when a download starts.
@@ -34,7 +34,7 @@ export const EMOJI_COMPONENTS: ReadonlySet<number> = new Set([
 export const FIRST_NON_ASCII = 0x80;
 
 // One slice as the @font-face rule that loads it from src: a data: URI of its bytes where an export or a downloaded
-// image embeds it, or the relative URL fonts.css uses.
+// image embeds it, or the relative URL the font CSS uses.
 export function fontFaceCss(slice: FontSlice, src: string): string {
     return `@font-face {
     font-family: "${slice.family}";

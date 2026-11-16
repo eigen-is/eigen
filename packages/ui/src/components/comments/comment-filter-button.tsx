@@ -3,7 +3,7 @@
 
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_COLORS, readableTextColor } from '@workspace/lib/constants/colors';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Button } from '@workspace/ui/components/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
@@ -87,7 +87,7 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
                                             {active && (
                                                 <Check
                                                     className="h-2 w-2"
-                                                    style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
+                                                    style={{ color: readableTextColor(c.value) }}
                                                 />
                                             )}
                                         </button>

@@ -3,12 +3,12 @@
 
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useIsOrgOwner, useSetupStatus } from '@workspace/lib/admin';
-import type { RouterAppContext } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { useServerSettings } from '@workspace/lib/settings';
-import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
+import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { Button } from '@workspace/ui/components/button';
+import { AppShell, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
 import { AdminSidebar } from '../components/admin/admin-sidebar';
 import { SetupWizard } from '../components/admin/setup-wizard';
 
@@ -33,7 +33,7 @@ function AdminRoot() {
             />
         );
     }
-    // Never infer "configured" from absent data — only a resolved status decides.
+    // Missing data never means the server is configured, so only a resolved status decides.
     if (!setupStatus) return <LoadingState />;
     if (setupStatus.setupRequired) return <SetupWizard status={setupStatus} setupToken={setupToken} />;
 

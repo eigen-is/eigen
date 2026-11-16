@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { isRedirect } from '@tanstack/react-router';
-import type { AuthUser } from '@workspace/lib/auth';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import { createAuthRouteOptions } from '../../../../components/layout/pages/auth-route';
 
 const user: AuthUser = {

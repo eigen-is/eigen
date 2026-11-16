@@ -14,9 +14,9 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS } from '@workspace/lib/types/settings';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { numberAtStep } from '@workspace/ui/components/properties-panel';

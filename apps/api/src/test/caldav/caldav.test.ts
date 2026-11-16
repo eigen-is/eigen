@@ -1782,7 +1782,7 @@ describe('CalDAV', () => {
                     dtstamp: null,
                     recurrenceDate: null,
                     recurrenceId: null,
-                    data: { organizer: { userId: '', email: 'boss@example.com', name: 'Boss' } },
+                    data: { organizer: { email: 'boss@example.com', name: 'Boss' } },
                 },
                 'boss@example.com',
             );

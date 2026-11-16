@@ -6,7 +6,8 @@
 import { getMarkRange } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
 import { webLinkHref } from '@workspace/lib/validation';
-import { FormDialog, FormDialogForm, LinkAddressField, LinkTextField } from '@workspace/ui';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { useState } from 'react';
 
 // href is the link being edited, or empty for a new one. The selection stays as it is until OK.

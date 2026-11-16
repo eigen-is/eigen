@@ -8,8 +8,8 @@ import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamQuotaOverrides, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { getTeamHomePath, PATHS } from '../config/paths';
-import { ApiError, JsonStore } from '../core';
+import { getTeamHomePath } from '../config/paths';
+import { ApiError } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig, newMountSettings } from '../mount';
 import { checkS3Connection } from '../storage';
@@ -28,9 +28,7 @@ export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
 
 export class TeamHome extends Home {
     public readonly teamId: string;
-    public override readonly settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, {
-        calendar: { enabled: false },
-    });
+    public override readonly settings = this.settingsStore<TeamSettings>({ calendar: { enabled: false } });
 
     // No event stream keeps a team home open, only an open document of the team does, so it gets a longer idle.
     protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
@@ -100,8 +98,6 @@ export class TeamHome extends Home {
         // A mistyped s3Config would replace the working storage with a dead one, and every write would then pile up
         // in the upload queue.
         if (existing.storageType === 's3' && update.s3Config) await refuseDeadBucket(update.s3Config);
-        // The next home loads its own copy of the settings, so a save through this one once it closes is lost to it.
-        this.refuseIfClosing();
 
         // Only the changed fields are saved. The store merges them into what it holds at that moment,
         // so a change saved by someone else during the check stays.

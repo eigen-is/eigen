@@ -243,7 +243,7 @@ describe('Calendar Invites', () => {
                     recurrenceDate: null,
                     recurrenceId: null,
                     data: {
-                        organizer: { userId: '', email: 'org@example.com', name: 'Org' },
+                        organizer: { email: 'org@example.com', name: 'Org' },
                         attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
                     },
                 },

@@ -107,8 +107,8 @@ describe('Share Registry', () => {
             expect(found.permission).toBe('read');
         });
 
-        test('GET /drive/:ownerId/shared-with-me returns shared paths', async () => {
-            const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.alice.user.id}/shared-with-me`);
+        test('GET /drive/:ownerId/shared/with-me returns shared paths', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
             expect(res.status).toBe(200);
             const results = await assertJson<DrivePath[]>(res);
             expect(results.length).toBeGreaterThan(0);
@@ -127,7 +127,7 @@ describe('Share Registry', () => {
 
             const driveRes = await authedRequest(
                 ctx.charlie.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/shared-with-me`,
+                `/drive/${ctx.charlie.user.id}/shared/with-me`,
             );
             expect(driveRes.status).toBe(200);
             const driveResults = await assertJson<DrivePath[]>(driveRes);

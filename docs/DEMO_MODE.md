@@ -49,7 +49,7 @@ Swapping database files under open handles is the `SQLITE_IOERR_VNODE` hazard, s
 5. Runs the seeder in a throwaway container off the current image.
 6. Starts `eigen-api` only if the seeder wrote its last file, `data/server/.demo-seeded`. A failed seed leaves the API stopped rather than showing strangers a server that is not set up.
 
-Wiping the full root instead of restoring a golden tarball keeps every timestamp under an hour old, rebuilds the auth database from current code, and erases rogue keys, orgs and 2FA enrollments. Only local mounts work: an `s3` mount keeps its bytes outside the data root, where the wipe cannot reach.
+Wiping the full root instead of restoring a golden tarball dates the whole world from the hour of the reset, so the festival is always three weeks out. It also rebuilds the auth database from current code and erases rogue keys, orgs and 2FA enrollments. Only local mounts work: an `s3` mount keeps its bytes outside the data root, where the wipe cannot reach.
 
 ## A demo box is a release install with the reset turned on
 
@@ -65,21 +65,31 @@ systemctl enable --now eigen-demo-reset.timer
 
 A server backup runs inside the API and holds no `.eigen/lock` ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), so a reset that starts while one runs stops the API under it, and the archive's record says it failed. A demo box has nothing worth backing up: the next reset wipes it anyway.
 
+## Every seeded word belongs to the Tuimel crew
+
+The demo is one story: the crew of the Tuimel Festival (the `PERSONAS` in `apps/api/src/scripts/demo/content.ts`, from the festival director to the stage and tech lead) building their festival. Every text added to the seed, such as a mail, a chat line, a document or a card, is something one of them would write about that work, in the voice their existing chats and mails already have. Nothing is product-demo filler or a feature written for its own sake: a feature shows because the crew uses it for the festival. Read the neighbouring content before adding to it, and ask the owner before a new persona, a new storyline or a change in tone.
+
 ## The seeder drives the product, not the databases
 
 The seeder imports the app in-process, completes setup through `POST /setup/complete`, then acts as the personas through the same domain calls a route makes. Activity panels, file history, watchers and the bell fill in for free, and every reset dogfoods the importers. Where a route does part of the work itself, the seeder mirrors it, such as the bell notification of a comment assignment.
 
-It applies the demo's settings before any home exists, because a home fixes its mount type on first open: `local-id` storage, no guest signup, small quotas, and no welcome mail, which would land as every persona's first message. Persona ids are random on each rebuild. Personas are keyed by email, and everything the data model keys on (ACLs, comment cards, attendees, a board's `creator`) resolves by email.
+It applies the demo's settings before any home exists, because a home fixes its mount type on first open: `local-id` storage, no guest signup, small quotas, and no welcome mail, which would land as every persona's first message. Only the crew's team drive is raised, to 100 MB for its photos. Persona ids are random on each rebuild. Personas are keyed by email, and everything the data model keys on (ACLs, comment cards, attendees, a board's `creator`) resolves by email.
+
+The Admin app's lists fill the way an admin fills them. A second team, `stage & tech`, is made and filled through better-auth's `createTeam` and `addTeamMember`, and Saar shares her site access notes with it. Hein, the fencing supplier, is the one guest: `createGuestUser` makes his account as the guest sign-in does, and `reconcileShares` reads in the site plan Saar shared with him ([§ Mail threads because the seeder owns its headers](#mail-threads-because-the-seeder-owns-its-headers)). Each lead signs in once through `signInEmail`, so the user list shows when they were last active.
 
 In production better-auth prefixes cookie names with `__Secure-`, so the seeder keeps the whole `name=value` pair from `Set-Cookie` for its admin session. Rebuilding the name aborts the seed on a real box.
 
-`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs are HTML that `htmlToDocJson` parses with the editor's schema into the doc's JSON, written as one update. They skip docx, which has no slot for an equation's LaTeX. So the HTML is what the schema parses: a table, a footnote as `span[data-type="footnote"]`, a figure as `span.figure` around an `img[data-media-name]`, and an equation as the `<math display="block">` that `writeMathml(readLatex(tex), tex)` writes, so its panel opens on the LaTeX. A figure's photo is uploaded into the doc's `media/` from the doc's `media` list. Each persona's own drive gets `my notes` and `trying eigen`, the same for all. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match. A file in a card chat is seeded as an upload into the chat's own `media/`, the way a user's upload lands, because a drive-reference chip to a plain file breaks. A seeded `attach` names a document, and only one the seeder made earlier.
+`apps/api/src/scripts/demo/content.ts` holds the personas and every text as data. Docs are HTML that `htmlToDocJson` parses with the editor's schema into the doc's JSON, written as one update. They skip docx, which has no slot for an equation's LaTeX. So the HTML is what the schema parses: a table, a footnote as `span[data-type="footnote"]`, a figure as `span.figure` around an `img[data-media-name]`, and an equation as the `<math display="block">` that `writeMathml(readLatex(tex), tex)` writes, so its panel opens on the LaTeX. A figure's photo is uploaded into the doc's `media/` from the doc's `media` list. Each persona's own drive gets `my notes` and `trying eigen`, the same for all. Comment threads are real chats in the container's `chat/` folder, and each card's anchor is a `comment` mark, as the editor writes them. Every seeded card gets `DEFAULT_CARD_COLOR`, the card dialog's fallback, so seeded and hand-made cards match. A file in a thread, such as Timo's storm photo in the production channel or a vCard in a card chat, is seeded as an upload into the chat's own `media/`, the way a user's upload lands, because a drive-reference chip to a plain file breaks. A seeded `attach` names a document, and only one the seeder made earlier.
+
+Every thread, a channel or the chat under a comment or a card, is posted through `ChatRoom.postMessage`, which stamps the seed minute. Then `messages.createdAt` is set in the room's own `data.db`, each line at the thread's `start` plus its `gap` or at its own `at` (`threadTimes`), so a thread reads as grown over days. No line is dated before the one it follows, because the room pages its messages by time and then by row. A comment card's `createdAt` is its thread's first time.
 
 ## The stickies board is a byte-copied fixture
 
 The seeder copies the board's `data.db` and `comments.db` from `demo/fixtures/` into a new container. That is legal because a container names its internals by name, never by path id.
 
-The board is generated by `demo/author-fixtures.ts` from `KANBAN`. The seeder rewrites each `creator` key to a runtime email and sets `createdAt` relative to the seed, because the fixture bakes the day it was authored, weeks before the chat replies under its cards.
+The board is generated by `demo/author-fixtures.ts` from `KANBAN`. The seeder rewrites each `creator` key to a runtime email and sets `createdAt` relative to the seed, because the fixture bakes the day it was authored, weeks before the chat replies under its cards. A card's thread starts at that `createdAt`.
+
+The rest of a card goes through the calls the card's own menu and dialog make. Its cover is an upload into the board's `media/`, listed in its `attachments`, because a card's first image attachment is its cover. The board's author hands a card out with `assignComment`, which rings the assignee's bell, and a crew member closes one with `setCommentStatus`.
 
 A card chat reply can `attach` seeded team documents as drive references, or `attachVCards` uploaded into the chat's `media/` folder like a user's upload. Don't `attach` a plain file: a drive-reference chip to a file opens Drive in a new tab.
 
@@ -87,11 +97,15 @@ A card chat reply can `attach` seeded team documents as drive references, or `at
 
 The budget (`demo/sheet-build.ts`), the site plan (`demo/vector-build.ts`) and the sponsor deck (`demo/deck-build.ts`) are written straight into fresh Y.Docs, because frozen bytes cannot survive a change to the stored shape and a spec can.
 
-A `SheetSpec` is one tab: its columns, its rows of text, numbers and formulas, and its data bars, red-below-zero rules, dropdowns and charts by A1 range. `buildWorkbook` writes them in the shapes the editor stores, each chart's refs naming its tab by id, and runs `recalcSheets` once, as the xlsx importer does. So the snapshot is stored as computed and opens with its values. The budget's second tab holds a column chart and a pie over the first. The same builder makes the quote a seeded mail attaches, through the shipped `writeXlsx`.
+A `SheetSpec` is one tab: its columns, its rows of text, numbers and formulas, and its data bars, red-below-zero rules, dropdowns and charts by A1 range. `buildWorkbook` writes them in the shapes the editor stores, each chart's refs naming its tab by id, and runs `recalcSheets` once, as the xlsx importer does. So the snapshot is stored as computed and opens with its values. The budget's costs column chart sits beside the table on its Budget tab, level with its top and smaller than Insert's default, so a 1000-pixel-wide page shows both whole and an edited cost moves its bar in the same view; the Charts tab holds the income pie. The same builder makes the quote a seeded mail attaches, through the shipped `writeXlsx`.
 
 The site plan is one typed spec. Every element carries the full field set the editor writes. Ids, indices and roughjs seeds are deterministic, so every reseed renders the same jitter. Text is sized with `measureLabel` (`@workspace/lib/vector`), since the seeder has no DOM. Arrows settle through the lib's `followBindings`, as in the editor.
 
 To check a site plan change without a browser, build a Y.Doc with `buildVectorDoc`, render it with `readVectorFromDoc` and `sceneToSvg`, and open the SVG.
+
+A deck's chart is the parts Insert → Chart writes, with the slide's inline data in place of the sample's, no legend, and the deck's style table for its fill and color. Each of the deck's element ids is `el-<slide key>-<kind>-<n>`, the name a canvas comment points at.
+
+A canvas comment, such as Timo's on the site plan's wind cover or Bram's on the sponsors chart, is written in the editor's order: the thread's chat in the container's `chat/`, the card in the `comments` map, then the card's id in the element's `commentCardIds`. The threads are posted first, and the collab doc opens only for the one write after them, because a document no socket joins closes a minute after its open and a write after that close is lost.
 
 ## Mail threads because the seeder owns its headers
 
@@ -99,16 +113,31 @@ To check a site plan change without a browser, build a Y.Doc with `buildVectorDo
 
 An attachment is fixture bytes, a vCard from the shipped writer, or a `workbook` the shipped xlsx exporter writes. A drive-reference pill links through the `VITE_APP_*_URL` vars, which the seeder points at the demo host, so no pill bakes in a localhost URL.
 
-An external message can carry an `invite`, which `serializeEventForImip`, the shipped iMIP writer, turns into the `text/calendar` part an outside calendar sends. Seeded mail carries no DKIM verdict, so `mailboxDeliver` takes the unverified sender's path and leaves the persona's calendar alone. The mail still shows the invitation card, because `messageGet` reads the card from the attachment, whoever sent it. The calendars get their events directly: the team's from `EVENTS`, and one shift from `SHIFTS` in each persona's own calendar.
+A persona's own message to someone outside can `attachDocs`: the seeder grants that person read access through `grantAccessForReferences`, the grant the composer's send makes, and adds the documents' pills to the body. That is how Saar's site plan reaches Hein.
+
+An external message can carry an `invite`, which `serializeEventForImip`, the shipped iMIP writer, turns into the `text/calendar` part an outside calendar sends. Such a message also carries the `Authentication-Results` line our own MTA writes for an aligned DKIM pass, so `mailboxDeliver` runs the real `processInboundImip` and the culture fund's walk-through lands in Bram's calendar as a pending invitation. All other seeded mail carries no verdict, so its delivery leaves every calendar alone. The calendars get the rest of their events directly: the team's from `EVENTS`, and two lines from `SHIFTS` in each persona's own calendar.
 
 ## Running the seeder
 
-Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
+Locally: `cd apps/api && EIGEN_DATA_ROOT=/abs/data MAIL_DOMAIN=tuimel.example bun run src/scripts/seed-demo.ts`. `EIGEN_DEMO_ADMIN_PASSWORD` and `EIGEN_DEMO_PERSONA_PASSWORD` fix the admin's and every persona's password, for a tool that signs in as them, such as the About pages' capture tool ([HELP-CENTER.md § Filming the demo](HELP-CENTER.md#filming-the-demo)); unset, each is random. On a box the reset runs it by absolute path, because the image's working directory is `/app/apps/api`. `seed-demo.test.ts` spawns the whole seeder in about 30 s, so it runs on CI, and locally with `EIGEN_SLOW_TESTS=1` after you touch `scripts/demo/` or a reader it decodes with ([TESTING.md](TESTING.md)).
+
+## The About films show only what the demo holds
+
+The About pages film the demo world ([HELP-CENTER.md § Filming the demo](HELP-CENTER.md#filming-the-demo)), so a feature the seed never uses can't be filmed. The filming found these gaps, each checked against `apps/api/src/scripts/demo/content.ts` and `seed-demo.ts`. None is approved: each waits for the owner, the first two under [§ Every seeded word belongs to the Tuimel crew](#every-seeded-word-belongs-to-the-tuimel-crew). Sizes are S and M as in [ROADMAP.md](ROADMAP.md).
+
+| App | What the demo lacks | Who would write it, and why it fits the festival | Size |
+|---|---|---|---|
+| Drive | No file has an edit history, so Version history is empty: each document is written once | Saar's production plan, edited over days | M |
+| Admin | One admin, the setup account | Anouk as the second admin. The visitor pool takes plain members only (`getDemoPersonaPool`), so she leaves the pool of 20 | S |
+| Admin | No backup in any list. Backups sit beside the data root (`backupsDirPath`), outside the hourly wipe, so a seeded backup needs the reset to clear them too | The office account's nightly backup | M |
+
+An S3 team drive is not on the list: an `s3` mount keeps its bytes outside the data root, where the hourly wipe cannot reach ([§ The hourly reset runs outside the app](#the-hourly-reset-runs-outside-the-app)).
 
 ## Accepted residuals
 
 - A visitor's offensive content stays visible until the next reset.
 - An idle visitor is not signed out on the hour. The wipe drops their session, so their next request finds none.
+- The Activity panel's events, the bell's notifications and the comment index's `lastActivityAt` carry the seed minute, which the product stamps when the seeder acts, as it does for every other seeded event. So a thread reads days old while its folder's activity says just now.
 
 ## See also
 

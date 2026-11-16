@@ -1,10 +1,11 @@
 // Receives an upload without holding it in memory. It reads a multipart request part by part,
 // writes each file to a temp file on the mount, and hashes it on the way. The caller gets the
 // temp ids, hashes and sizes, and moves the files into place. On any failure it deletes the temp
-// files it made. Drive calls it when an upload request arrives.
+// files it made. A file past `cap`, the upload limit or the mount's room if lower, answers 413.
+// Drive calls it when an upload request arrives.
 
 import type { CryptoHasher, FileSink } from 'bun';
-import { ApiError } from '../core';
+import { ApiError, payloadTooLarge } from '../core';
 import type { Mount } from '../mount';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 
@@ -24,16 +25,12 @@ type InFlightFile = {
     mimeType: string;
 };
 
-export async function streamFilesToTemp(
-    mount: Mount,
-    request: Request,
-    maxSizePerFile: number,
-): Promise<StreamResult[]> {
+export async function streamFilesToTemp(mount: Mount, request: Request, cap: number): Promise<StreamResult[]> {
     const results: StreamResult[] = [];
     let current: InFlightFile | null = null;
 
     try {
-        for await (const event of parseMultipartRequest(request, { maxFileSize: maxSizePerFile })) {
+        for await (const event of parseMultipartRequest(request, { maxFileSize: cap })) {
             if (event.type === 'part') {
                 if (!event.filename) continue; // non-file field: chunks fall through unconsumed
                 const tempId = crypto.randomUUID();
@@ -62,7 +59,6 @@ export async function streamFilesToTemp(
             }
         }
     } catch (e) {
-        // Clean up the in-flight file and any temp files from already-parsed parts
         if (current) {
             try {
                 await current.writer.end();
@@ -70,9 +66,7 @@ export async function streamFilesToTemp(
             await mount.cleanupTemp(current.tempId);
         }
         await Promise.all(results.map((r) => mount.cleanupTemp(r.tempId)));
-        if (e instanceof MaxFileSizeExceededError) {
-            throw new ApiError(413, 'File exceeds maximum upload size');
-        }
+        if (e instanceof MaxFileSizeExceededError) throw payloadTooLarge();
         throw e;
     }
 

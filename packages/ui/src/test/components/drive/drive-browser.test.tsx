@@ -1,7 +1,7 @@
 // The folder browser inside the pickers, drawn for real under its real hosts: a folder picker such as Move to, the
 // Location field alone, and the file picker. Each opens where its host says, or at the drive's root, a folder or a
 // mount click moves it and the host's confirm gets that place, a host that moves moves the browser, and New folder
-// creates in the folder shown. Only the Drive reads are faked, by a small tree held here.
+// creates in the folder shown. A phone's drive select offers the mount column's drives. Only the Drive reads are faked, by a small tree held here.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
@@ -107,8 +107,9 @@ const crumbs = () =>
     [...(document.querySelector('[data-slot="breadcrumb-list"]')?.querySelectorAll('a, [aria-current]') ?? [])].map(
         (crumb) => crumb.textContent,
     );
+// The phone's drive select is a button named for its drive too, so it is left out.
 const buttonNamed = (label: string) => {
-    const found = [...document.querySelectorAll('button')].filter(
+    const found = [...document.querySelectorAll<HTMLButtonElement>('button:not([data-slot="select-trigger"])')].filter(
         (b) => b.textContent === label || b.getAttribute('aria-label') === label,
     );
     const button = found.at(-1);
@@ -292,6 +293,37 @@ test('the browser shows the folder its host holds, so it stays put under a host 
     expect(onChange.mock.calls.at(-1)).toEqual([{ ownerId: ME, mountId: 'default', folderId: '' }]);
     expect(rowNames()).toEqual(['Plans']);
     expect(crumbs()).toEqual(['Drive', 'Docs']);
+});
+
+// A phone hides the mount column and picks the drive from a select above the folders instead.
+const driveSelect = () => {
+    const trigger = document.querySelector('[data-slot="select-trigger"]');
+    if (!trigger) throw new Error('no drive select');
+    return trigger;
+};
+const driveOptions = () => [
+    ...(document.querySelector('[data-slot="select-content"]')?.querySelectorAll('[role="option"]') ?? []),
+];
+async function openDriveSelect() {
+    const trigger = driveSelect();
+    await act(async () => {
+        trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        trigger.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+}
+
+test('the drive select lists the drives the mount column does, and a pick opens that drive at its root', async () => {
+    await openField({ ownerId: ME, mountId: 'default', folderId: 'docs' });
+    expect(driveSelect().textContent).toBe('Drive');
+    await openDriveSelect();
+    expect(driveOptions().map((option) => option.textContent)).toEqual(['Drive', 'Design drive']);
+    const team = driveOptions().find((option) => option.textContent === 'Design drive');
+    await act(async () => {
+        team?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        team?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onChange.mock.calls).toEqual([[{ ownerId: TEAM, mountId: TEAM_MOUNT, folderId: '' }]]);
 });
 
 // The file picker, as File > Open and the imports open it.

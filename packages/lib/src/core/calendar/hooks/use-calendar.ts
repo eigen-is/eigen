@@ -243,7 +243,11 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
     });
 }
 
-export function useAllSharedCalendarEvents(sharedCalendars: readonly SharedCalendar[], from: number, to: number) {
+export function useAllSharedCalendarEvents(
+    sharedCalendars: readonly SharedCalendar[],
+    from: number,
+    to: number,
+): { data: CalendarEventOccurrence[]; isLoading: boolean } {
     const visibleShared = sharedCalendars.filter((sc) => sc.visible);
 
     const results = useQueries({

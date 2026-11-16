@@ -46,7 +46,15 @@ const BELOW_ZERO_FORMAT = { textColor: eigenColor('red', 700), cellColor: eigenC
 // The workbook's sheets with every formula computed.
 export function buildWorkbook(specs: readonly SheetSpec[]): Sheet[] {
     const ids = new Map(specs.map((spec, i) => [spec.name, sheetIdAt(i)]));
-    return recalcSheets(specs.map((spec, i) => buildSheet(spec, i, ids)));
+    // Chart ids count across the workbook, as the importer's do: an export draws every tab in one document, with SVG
+    // defs scoped by chart id.
+    let chartsBefore = 0;
+    const sheets = specs.map((spec, i) => {
+        const sheet = buildSheet(spec, i, ids, chartsBefore);
+        chartsBefore += spec.charts?.length ?? 0;
+        return sheet;
+    });
+    return recalcSheets(sheets);
 }
 
 // The workbook as a sheets container's snapshot, written the way an import commits one.
@@ -56,7 +64,7 @@ export function buildWorkbookDoc(doc: Y.Doc, specs: readonly SheetSpec[]): void 
 
 const sheetIdAt = (order: number) => `sheet-${order + 1}`;
 
-function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, string>): Sheet {
+function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, string>, chartsBefore: number): Sheet {
     const celldata: CellWithRowAndCol[] = [];
     const borderInfo: Record<string, CellBorderSides> = {};
     for (const [r, row] of spec.rows.entries()) {
@@ -68,7 +76,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, str
         }
     }
 
-    // The rules are numbered and ordered as the spec lists them, as the charts below are.
+    // The rules are numbered and ordered as the spec lists them.
     const conditionalFormats: Record<string, ConditionalFormatRule> = {};
     const format = () => ({
         id: `format-${Object.keys(conditionalFormats).length + 1}`,
@@ -121,10 +129,10 @@ function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, str
         dataValidations,
         charts,
     };
-    // Each chart is a one-series range chart at Insert's default size, stacked above the ones before it, as a second
-    // Insert would put it. One series needs no legend, and a pie names its own slices.
+    // Each chart is a one-series range chart, at Insert's default size unless its spec gives one, stacked above the
+    // ones before it as a second Insert would put it. One series needs no legend, and a pie names its own slices.
     for (const [i, chart] of (spec.charts ?? []).entries()) {
-        const id = `chart-${i + 1}`;
+        const id = `chart-${chartsBefore + i + 1}`;
         const defaults = defaultChartSpec(chart.type, {
             source: 'range',
             categories: chartRef(chart.categories, ids),
@@ -133,7 +141,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: ReadonlyMap<string, str
         charts[id] = {
             id,
             index: nextFloatingIndex(sheet),
-            ...sheetFloatingBox({ x: chart.x, y: chart.y, ...CHART_DEFAULT_SIZE }),
+            ...sheetFloatingBox({ x: chart.x, y: chart.y, ...(chart.size ?? CHART_DEFAULT_SIZE) }),
             ...newChartSpecParts({ ...defaults, title: { text: chart.title }, legend: { position: 'none' } }),
         };
     }

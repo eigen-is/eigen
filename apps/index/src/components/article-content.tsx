@@ -1,36 +1,40 @@
-// The rendered body of an article, a post or the changelog, in the site's prose style. The build leaves the HTML
-// and a marker for each media grid, so this draws the HTML as it is and each grid as a component, and lets a
-// click on a heading with a link icon copy the link. Every page of the public site that shows Markdown uses it.
+// The rendered body of an article, a post or the changelog, on every page that shows Markdown. The build leaves the
+// HTML with a marker for each block a component draws: a media block, such as a carousel or a media grid, and a block
+// of the page's own, such as the About overview's app rows. This draws the HTML and the media in the site's prose
+// style and the page's blocks outside it, copies a heading's link on a click, and holds the page's one lightbox,
+// which every picture and film opens bigger in.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { cn } from '@workspace/ui/lib/utils';
-import type { MouseEvent } from 'react';
-import { useMemo } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
+import { Fragment, useState } from 'react';
 import type { ArticleBody } from '../content/manifest';
+import { MediaCarousel } from './media-carousel';
 import { MediaGrid } from './media-grid';
+import type { LightboxItem, OpenLightbox } from './media-lightbox';
+import { MediaLightbox } from './media-lightbox';
+import { MediaVideo } from './media-video';
 
-type ArticleContentProps = { body: ArticleBody; className?: string };
+// `blocks` holds what each of the page's own blocks shows, by name, such as `apps` for `::: apps`.
+type ArticleContentProps = { body: ArticleBody; blocks?: Readonly<Record<string, ReactNode>>; className?: string };
 
-export function ArticleContent({ body, className }: ArticleContentProps) {
-    const parts = useMemo(() => {
-        const segments: Array<{ html: string } | { grid: number }> = [];
-        const regex = /<p>\[MEDIAGRID:(\d+)\]<\/p>/g;
-        let last = 0;
-        let match: RegExpExecArray | null = regex.exec(body.html);
-        while (match !== null) {
-            segments.push({ html: body.html.slice(last, match.index) });
-            segments.push({ grid: Number(match[1]) });
-            last = match.index + match[0].length;
-            match = regex.exec(body.html);
+export function ArticleContent({ body, blocks, className }: ArticleContentProps) {
+    const [lightbox, setLightbox] = useState<{ items: readonly LightboxItem[]; index: number; open: boolean }>({
+        items: [],
+        index: 0,
+        open: false,
+    });
+    const openLightbox: OpenLightbox = (items, index) => setLightbox({ items, index, open: true });
+
+    // A picture opens bigger unless a link or a button holds it. A heading copies its link only where its icon
+    // shows, as touch screens hide it, and never over a selection.
+    const onMarkdownClick = (e: MouseEvent) => {
+        if (!(e.target instanceof Element)) return;
+        const image = e.target.closest('img');
+        if (image && !image.closest('a, button')) {
+            openLightbox([{ type: 'image', src: image.getAttribute('src') ?? '', caption: image.alt || undefined }], 0);
+            return;
         }
-        segments.push({ html: body.html.slice(last) });
-        return segments;
-    }, [body.html]);
-
-    // A click on a heading that shows its link icon copies a link to that section instead of jumping to it. A drag that
-    // selects text, a link in the heading's text and a touch screen, where the icon is hidden, are left alone.
-    const copyHeadingLink = (e: MouseEvent<HTMLDivElement>) => {
-        if (!(e.target instanceof Element) || !window.getSelection()?.isCollapsed) return;
+        if (!window.getSelection()?.isCollapsed) return;
         const link = e.target.closest('a');
         if (link && !link.classList.contains('heading-anchor')) return;
         const anchor = e.target.closest('h2, h3')?.querySelector('a.heading-anchor');
@@ -40,17 +44,43 @@ export function ArticleContent({ body, className }: ArticleContentProps) {
         copyToClipboard(`${location.origin}${location.pathname}#${id}`, 'Link copied to clipboard');
     };
 
+    // One section per block of the page's own: the block, then the Markdown and the media up to the next one.
+    const sections: { block?: string; prose: ReactNode[] }[] = [{ prose: [] }];
+    for (const [i, piece] of body.html.split(BLOCK_MARKER).entries()) {
+        const { prose } = sections[sections.length - 1];
+        if (i % 2 === 0) {
+            // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
+            if (piece)
+                prose.push(<div key={i} onClick={onMarkdownClick} dangerouslySetInnerHTML={{ __html: piece }} />);
+        } else if (/^\d+$/.test(piece)) {
+            const media = body.media[Number(piece)];
+            if (media.kind === 'grid') prose.push(<MediaGrid key={i} {...media} onOpen={openLightbox} />);
+            if (media.kind === 'video') prose.push(<MediaVideo key={i} {...media} onOpen={openLightbox} />);
+            if (media.kind === 'carousel') prose.push(<MediaCarousel key={i} {...media} onOpen={openLightbox} />);
+        } else {
+            sections.push({ block: piece, prose: [] });
+        }
+    }
+
     return (
-        <div className={cn('eigen-prose site-prose', className)} onClick={copyHeadingLink}>
-            {parts.map((part, i) => {
-                if ('grid' in part) {
-                    const grid = body.mediaGrids[part.grid];
-                    return grid ? <MediaGrid key={i} columns={grid.columns} items={grid.items} /> : null;
-                }
-                if (!part.html) return null;
-                // Safe: build-time-rendered HTML from trusted, in-repo Markdown.
-                return <div key={i} dangerouslySetInnerHTML={{ __html: part.html }} />;
-            })}
-        </div>
+        <>
+            <div className={className}>
+                {sections.map(({ block, prose }, i) => (
+                    <Fragment key={i}>
+                        {block && blocks?.[block]}
+                        {prose.length > 0 && <div className="eigen-prose site-prose">{prose}</div>}
+                    </Fragment>
+                ))}
+            </div>
+            <MediaLightbox
+                {...lightbox}
+                onIndexChange={(index) => setLightbox((current) => ({ ...current, index }))}
+                onOpenChange={(open) => setLightbox((current) => ({ ...current, open }))}
+            />
+        </>
     );
 }
+
+// The build's marker for a block: the name of one the page draws, such as `apps`, or the number of a media block.
+// Split on it, the pieces at odd places are the captured names and numbers.
+const BLOCK_MARKER = /<p>\[BLOCK:([\w-]+)\]<\/p>/;

@@ -2,7 +2,7 @@
 // server's public config and draws nothing until that has loaded. The About dialog and the public site's footer
 // both show it, each inside its own link to the changelog.
 
-import { formatInputDate } from '@workspace/lib/date';
+import { toLocalDateString } from '@workspace/lib/calendar';
 import { usePublicConfig } from '@workspace/lib/public';
 
 export function VersionLabel() {
@@ -16,7 +16,7 @@ export function VersionLabel() {
                 <>
                     {' · '}
                     {config.commit}
-                    {config.builtAt && ` · ${formatInputDate(config.builtAt)}`}
+                    {config.builtAt && ` · ${toLocalDateString(config.builtAt)}`}
                 </>
             )}
         </>

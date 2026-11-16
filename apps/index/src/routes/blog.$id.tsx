@@ -3,7 +3,7 @@
 // mounts its own page, so the next one opens at the top.
 
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { ErrorState, LoadingState, useLayout } from '@workspace/ui';
+import { ErrorState, LoadingState, useLayout } from '@workspace/ui/components/layout/app';
 import { useEffect } from 'react';
 import { BlogPost } from '../components/blog-post';
 import { SitePage } from '../components/site-page';

@@ -7,10 +7,16 @@ import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection, UnreadDot } from '@workspace/ui';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { StorageUsage } from '@workspace/ui/components/home';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
+import { UnreadDot } from '@workspace/ui/components/unread-dot';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
@@ -29,8 +35,8 @@ type ChatItemProps = {
 };
 
 function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
-    // Empty preloadedBreadcrumb skips the (irrelevant) inherited-access fetch — sidebar
-    // only cares about owner + direct ACL, never ancestor folders.
+    // The sidebar needs only the owner and the direct access entries, so an empty breadcrumb skips the fetch of
+    // the access a chat inherits from its folders.
     const { allEntries } = useDriveAccess(chat, undefined, []);
     const label = stripEigenExtension(chat.name || 'Unnamed chat');
     const to = `/${chat.ownerId}/${chat.mountId}/${chat.id}`;
@@ -116,7 +122,7 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                     </SidebarSection>
                 )}
 
-                {/* Guests manage no storage — drive's guest sidebar omits this too. */}
+                {/* A guest manages no storage, so their sidebar shows no usage, as in Drive. */}
                 {!isGuest && <StorageUsage className="mt-auto" condensed={condensed} />}
             </SidebarBody>
 

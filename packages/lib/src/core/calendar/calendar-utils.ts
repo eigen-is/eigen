@@ -121,14 +121,14 @@ export function utcToLocal(date: Date, tz: string): LocalComponents {
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
-        hour12: false,
+        hourCycle: 'h23',
     }).formatToParts(date);
     const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
     return {
         year: get('year'),
         month: get('month'),
         day: get('day'),
-        hour: get('hour') % 24,
+        hour: get('hour'),
         minute: get('minute'),
         second: get('second'),
     };
@@ -177,12 +177,6 @@ export function formatEventWhen(
     const tz = allDay ? 'UTC' : (normalizeTimezone(timezone) ?? fallbackTimeZone);
     const date = (d: Date) => formatDayMonth(d, { weekday: 'long', year: true, timeZone: tz });
     const dayKey = (d: Date) => dateFormatter({ timeZone: tz }).format(d);
-    const timeOpts: Intl.DateTimeFormatOptions = {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: tz,
-    };
 
     if (allDay) {
         // All-day endTime is exclusive, so the displayed end date is one day earlier than the stored one.
@@ -192,10 +186,9 @@ export function formatEventWhen(
     }
 
     if (dayKey(start) === dayKey(end)) {
-        const time = dateFormatter(timeOpts);
-        return `${date(start)} · ${time.format(start)} – ${time.format(end)}`;
+        return `${date(start)} · ${formatTime(start, tz)} – ${formatTime(end, tz)}`;
     }
-    const when = (d: Date) => `${date(d)}, ${dateFormatter(timeOpts).format(d)}`;
+    const when = (d: Date) => `${date(d)}, ${formatTime(d, tz)}`;
     return `${when(start)} – ${when(end)}`;
 }
 
@@ -292,14 +285,7 @@ type SeriesEdit = {
     endTime: Date;
 };
 
-type SeriesEditPatch = {
-    title?: string;
-    description?: string | null;
-    location?: string | null;
-    allDay?: boolean;
-    startTime?: Date;
-    endTime?: Date;
-};
+type SeriesEditPatch = Partial<SeriesEdit>;
 
 // "All events in series" is edited from one occurrence but saved on the master, so what the user changed travels
 // as a delta: taking the dialog's own times would drop every occurrence before the one they opened.

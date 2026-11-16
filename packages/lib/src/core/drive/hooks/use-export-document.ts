@@ -14,7 +14,12 @@ export function toastExportSummary(headers: Headers): void {
     if (summary) toast.info(decodeURIComponent(summary));
 }
 
-export function useExportDocument() {
+type DocumentExport = {
+    exportDocument: (ownerId: string, mountId: string, pathId: string, format: string) => Promise<void>;
+    isExporting: boolean;
+};
+
+export function useExportDocument(): DocumentExport {
     const { download, isDownloading } = useFileDownload();
 
     const exportDocument = useCallback(

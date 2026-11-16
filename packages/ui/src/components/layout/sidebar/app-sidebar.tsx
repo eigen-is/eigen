@@ -2,10 +2,10 @@
 // of file, such as All images, the sharing pages and the team drives. A guest sees only what was shared with them.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
-import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useRootFolder, useTrash } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { EigenDocType } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';

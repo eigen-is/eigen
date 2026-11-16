@@ -6,9 +6,14 @@ import { useLabels } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
-import { RecentFilesSidebarItem, SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { LabelManager } from '@workspace/ui/components/labels';
+import {
+    RecentFilesSidebarItem,
+    SidebarBody,
+    SidebarItem,
+    SidebarSection,
+} from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { UserRoundPlus, UsersRound } from 'lucide-react';

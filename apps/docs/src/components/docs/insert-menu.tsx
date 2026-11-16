@@ -6,7 +6,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import type { BandEdge } from '@workspace/lib/docs/eigendoc';
-import { AppBarMenu } from '@workspace/ui';
 import { CHART_TYPE_OPTIONS } from '@workspace/ui/components/charts';
 import {
     DropdownMenuItem,
@@ -16,6 +15,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { AppBarMenu } from '@workspace/ui/components/layout/toolbar';
 import {
     ChartColumn,
     CodeXml,

@@ -2,10 +2,11 @@
 // that start a backup, upload or delete an archive, and test the backup bucket. Only the server's owner may call
 // the routes behind them.
 
+import type { UseQueryResult } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { serverBackupApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { BackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -36,7 +37,7 @@ export function useServerArchives() {
 }
 
 // The server backups and uploads, polled while one runs; one that ends refetches the archive list.
-export function useServerBackupJobs() {
+export function useServerBackupJobs(): UseQueryResult<BackupJob[]> {
     return useBackupJobs(useServerOwnerId(), serverBackupKeys.archives());
 }
 

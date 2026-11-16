@@ -6,7 +6,7 @@ import { useAuth } from '@workspace/lib/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
-import { useLayout } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app';
 import { ColorRow, PropertySection, useAspectLock } from '@workspace/ui/components/properties-panel';
 import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {

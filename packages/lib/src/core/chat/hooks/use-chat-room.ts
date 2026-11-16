@@ -3,6 +3,7 @@
 // attachments waiting. A chat file and a comment thread on a document both render through it. Its state belongs to one
 // room, so the component that calls it is keyed by the chat's id.
 
+import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { CONTAINER_MEDIA_FOLDER } from '../../../constants/container';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
@@ -27,9 +28,30 @@ import { useAutoMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
+export type ChatRoomState = {
+    messages: readonly ChatMessage[];
+    isLoading: boolean;
+    chatName: string;
+    chatPath: DrivePath | null | undefined;
+    roomMembers: readonly RoomMember[];
+    readOnly: boolean;
+    disabled: boolean;
+    currentUserEmail: string;
+    mediaFolderId: string | null;
+    handleSendMessage: (rawContent: string, files?: readonly File[]) => Promise<boolean>;
+    handleEditMessage: (messageId: string, content: string) => Promise<ChatMessage>;
+    handleDeleteMessage: (messageId: string) => Promise<{ success: boolean }>;
+    hasOlderMessages: boolean;
+    isFetchingOlderMessages: boolean;
+    fetchOlderMessages: UseInfiniteQueryResult<InfiniteData<ChatMessage[]>>['fetchNextPage'];
+    driveAttachments: readonly ChatAttachment[];
+    addDriveAttachments: (paths: readonly DrivePath[]) => Promise<void>;
+    removeDriveAttachment: (attachment: ChatAttachment) => void;
+};
+
 // `containerPathId` is set for a comment thread. It is the document the thread comments on, and the
 // thread's notifications are tagged with it. A standalone chat is tagged with itself.
-export function useChatRoom(ownerId: string, mountId: string, chatId: string, containerPathId?: string) {
+export function useChatRoom(ownerId: string, mountId: string, chatId: string, containerPathId?: string): ChatRoomState {
     const { user } = useAuth();
 
     const messagesQuery = useMessages(ownerId, mountId, chatId);

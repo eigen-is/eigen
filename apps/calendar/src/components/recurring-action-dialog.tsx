@@ -1,7 +1,7 @@
 // Asks which events of a series an edit or a delete applies to: this one, this and the following ones, or all. The
 // event dialogs open it before they change a recurring event, and OK hands the choice to their onConfirm.
 
-import { FormDialog, FormDialogForm } from '@workspace/ui';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { useState } from 'react';

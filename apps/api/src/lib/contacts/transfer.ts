@@ -5,6 +5,7 @@
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
 import { ApiError, decodeUtf8Strict, NOT_A_VCARD_FILE, NOT_UTF8_FILE, VCARD_IMPORT_MAX_CARDS } from '../core';
+import { insufficientStorage } from '../core/errors';
 import {
     makeLine,
     parseVCard,
@@ -128,7 +129,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             } else if (put.error === 'uid-conflict') {
                 result.skipped++;
             } else if (put.error === 'quota') {
-                throw new ApiError(507, `Storage quota exceeded after importing ${result.imported} contacts`);
+                throw insufficientStorage();
             } else {
                 result.failed++;
             }

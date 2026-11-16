@@ -27,9 +27,9 @@ import {
     readFrameSide,
 } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
-import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import type { CoupledSize } from '@workspace/ui/components/properties-panel';
+import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import type { ReactNode } from 'react';

@@ -71,7 +71,7 @@ async function openDraft(options: Partial<Parameters<typeof useDraft>[0]>, answe
         act(async () => void (await change(composer())));
     // Sends what the composer would send now: a save when anything changed, none otherwise.
     const flush = () => act(async () => void (await composer().flushAndGetDraft()));
-    return { saves, run, flush, chips: () => composer().state.attachments };
+    return { saves, run, flush, chips: () => composer().state.attachments, body: () => composer().state.body };
 }
 
 const uploading = (filename: string, contentType = 'application/pdf'): AttachmentMeta => ({
@@ -287,6 +287,23 @@ describe('closing the composer while a save is in flight', () => {
 
         await answer(1);
         expect(saves.length).toBe(2);
+    });
+});
+
+describe('a reply opens on an empty line above its quote', () => {
+    const quote = '<p>On Mon, Bob wrote:</p><blockquote><p>Lunch?</p></blockquote>';
+
+    test('without a signature, the line the user types on comes first', async () => {
+        const { body } = await openDraft({ prefillDraft: { subject: 'RE: Lunch', html: quote } });
+        expect(body()).toBe(`<p><br></p>${quote}`);
+    });
+
+    test('with a signature, the line comes before the signature, and the quote after it', async () => {
+        const { body } = await openDraft({
+            prefillDraft: { subject: 'RE: Lunch', html: quote },
+            signatureHtml: '<p>Alice</p>',
+        });
+        expect(body()).toBe(`<p><br></p><p>Alice</p><p><br></p>${quote}`);
     });
 });
 

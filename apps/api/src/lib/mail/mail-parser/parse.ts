@@ -1,8 +1,10 @@
 // Eigen's own mail parser: from a message's raw bytes to its body as text and HTML, its attachments and its header
 // fields. Its contract is a golden corpus. Callers such as the mail store and the `.eml` preview read through it.
 
+import { formatDayMonth, formatTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
+import { isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
@@ -22,6 +24,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
     const root = splitMime(bytes);
     const attachments: Attachment[] = [];
     const cidImages: CidImage[] = [];
+    const calendarBodies: Attachment[] = [];
     const bodies = new Map<MimePart, string>();
     let hasText = false;
     let hasHtml = false;
@@ -58,6 +61,7 @@ export function parseMail(bytes: Buffer): ParsedMail {
                     const method = headers.contentType.params['method']?.toUpperCase();
                     const calendarMethod = IMIP_METHODS.find((known) => known === method);
                     if (calendarMethod) attachment.calendarMethod = calendarMethod;
+                    if (declared !== 'attachment') calendarBodies.push(attachment);
                 }
                 attachments.push(attachment);
                 if (headers.contentId) {
@@ -90,8 +94,11 @@ export function parseMail(bytes: Buffer): ParsedMail {
                 html: `<strong>${escapeHtml(headers.subject)}</strong>`,
             });
         }
-        if (headers.date)
-            rows.push({ key: 'Date', text: headers.date.toUTCString(), html: headers.date.toUTCString() });
+        if (headers.date) {
+            // The server knows no reader's zone, so the time names UTC.
+            const date = `${formatDayMonth(headers.date, { year: true, timeZone: 'UTC' })}, ${formatTime(headers.date, 'UTC')} UTC`;
+            rows.push({ key: 'Date', text: date, html: date });
+        }
         addressRow('To', headers.to);
         addressRow('Cc', headers.cc);
         addressRow('Bcc', headers.bcc);
@@ -123,6 +130,13 @@ export function parseMail(bytes: Buffer): ParsedMail {
 
     collect(root);
     render(root, false);
+
+    // A calendar body is the invite card's only while a calendar file repeats it. Alone, as Outlook sends it, the
+    // body is the one file to save or import.
+    const calendarFile = attachments.some(
+        (part) => !calendarBodies.includes(part) && isIcsFile(part.contentType, part.filename ?? ''),
+    );
+    if (calendarFile) for (const part of calendarBodies) part.invitationBody = true;
 
     const { headers } = root;
     return {

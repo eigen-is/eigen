@@ -1,12 +1,14 @@
 // The data of the "Tuimel Festival" demo world, a small volunteer-run arts and music festival three weeks out: its
-// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few one-line helpers that
-// spell some of it, such as an equation's MathML. The demo seeder turns it into a live workspace through the real
-// product surfaces, so a richer pass changes data here, not mechanics. Personas resolve by `<key>@<MAIL_DOMAIN>`, so
-// ids may differ per rebuild. All names, acts and vendors are fictional.
+// personas, folders and the text of its documents, mail, events, chats and contacts, plus a few small helpers that
+// spell or read some of it, such as an equation's MathML and a thread's times. The demo seeder turns it into a live
+// workspace through the real product surfaces, so a richer pass changes data here, not mechanics. Personas resolve
+// by `<key>@<MAIL_DOMAIN>`, so ids may differ per rebuild. All names, acts and vendors are fictional.
 
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
 import type { FillPaint } from '@workspace/lib/types/background';
+import type { Attendee } from '@workspace/lib/types/calendar';
+import type { ChartType } from '@workspace/lib/types/chart';
 import type {
     Arrowhead,
     Corners,
@@ -35,37 +37,99 @@ export type Persona = {
     title: string;
     role?: LeadRole; // set for the 8 named leads
     avatar: string; // fixture filename under fixtures/avatars/ (curated Unsplash portrait, see CREDITS.md)
+    phone: string;
 };
 
 // 8 named leads do the visible authoring; 12 lighter crew fill the roster and @-mention lists.
 export const PERSONAS: Persona[] = [
-    { key: 'anouk', name: 'Anouk de Wit', title: 'Festival director', role: 'director', avatar: 'anouk.jpg' },
-    { key: 'joris', name: 'Joris Bakker', title: 'Programming lead', role: 'programming', avatar: 'joris.jpg' },
-    { key: 'saar', name: 'Saar Vermeer', title: 'Production & logistics lead', role: 'production', avatar: 'saar.jpg' },
-    { key: 'mees', name: 'Mees de Groot', title: 'Comms & marketing', role: 'comms', avatar: 'mees.jpg' },
-    { key: 'nour', name: 'Nour El Amrani', title: 'Volunteer coordinator', role: 'volunteers', avatar: 'nour.jpg' },
-    { key: 'bram', name: 'Bram Visser', title: 'Finance & ticketing', role: 'finance', avatar: 'bram.jpg' },
-    { key: 'timo', name: 'Timo Jansen', title: 'Stage & tech lead', role: 'tech', avatar: 'timo.jpg' },
-    { key: 'lieke', name: 'Lieke Smits', title: 'Artist liaison & hospitality', role: 'liaison', avatar: 'lieke.jpg' },
-    { key: 'fenna', name: 'Fenna Bos', title: 'Bar coordinator', avatar: 'fenna.jpg' },
-    { key: 'daan', name: 'Daan Mulder', title: 'Gate & wristbands', avatar: 'daan.jpg' },
-    { key: 'sanne', name: 'Sanne Kok', title: 'Stage crew', avatar: 'sanne.jpg' },
-    { key: 'ravi', name: 'Ravi Nair', title: 'Site crew', avatar: 'ravi.jpg' },
-    { key: 'joost', name: 'Joost Peters', title: 'Workshops host', avatar: 'joost.jpg' },
-    { key: 'imke', name: 'Imke de Vries', title: 'First aid', avatar: 'imke.jpg' },
-    { key: 'lars', name: 'Lars Hendriks', title: 'Waste & recycling', avatar: 'lars.jpg' },
-    { key: 'yara', name: 'Yara Haddad', title: 'Camping host', avatar: 'yara.jpg' },
-    { key: 'pieter', name: 'Pieter van Dijk', title: 'Box office', avatar: 'pieter.jpg' },
-    { key: 'maud', name: 'Maud Willems', title: 'Runner', avatar: 'maud.jpg' },
-    { key: 'sem', name: 'Sem Dekker', title: 'Décor & art', avatar: 'sem.jpg' },
-    { key: 'tessa', name: 'Tessa Meijer', title: 'Sound assistant', avatar: 'tessa.jpg' },
+    {
+        key: 'anouk',
+        name: 'Anouk de Wit',
+        title: 'Festival director',
+        role: 'director',
+        avatar: 'anouk.jpg',
+        phone: '+31 6 2010 4401',
+    },
+    {
+        key: 'joris',
+        name: 'Joris Bakker',
+        title: 'Programming lead',
+        role: 'programming',
+        avatar: 'joris.jpg',
+        phone: '+31 6 2010 4402',
+    },
+    {
+        key: 'saar',
+        name: 'Saar Vermeer',
+        title: 'Production & logistics lead',
+        role: 'production',
+        avatar: 'saar.jpg',
+        phone: '+31 6 2010 4403',
+    },
+    {
+        key: 'mees',
+        name: 'Mees de Groot',
+        title: 'Comms & marketing',
+        role: 'comms',
+        avatar: 'mees.jpg',
+        phone: '+31 6 2010 4404',
+    },
+    {
+        key: 'nour',
+        name: 'Nour El Amrani',
+        title: 'Volunteer coordinator',
+        role: 'volunteers',
+        avatar: 'nour.jpg',
+        phone: '+31 6 2010 4405',
+    },
+    {
+        key: 'bram',
+        name: 'Bram Visser',
+        title: 'Finance & ticketing',
+        role: 'finance',
+        avatar: 'bram.jpg',
+        phone: '+31 6 2010 4406',
+    },
+    {
+        key: 'timo',
+        name: 'Timo Jansen',
+        title: 'Stage & tech lead',
+        role: 'tech',
+        avatar: 'timo.jpg',
+        phone: '+31 6 2010 4407',
+    },
+    {
+        key: 'lieke',
+        name: 'Lieke Smits',
+        title: 'Artist liaison & hospitality',
+        role: 'liaison',
+        avatar: 'lieke.jpg',
+        phone: '+31 6 2010 4408',
+    },
+    { key: 'fenna', name: 'Fenna Bos', title: 'Bar coordinator', avatar: 'fenna.jpg', phone: '+31 6 2010 4409' },
+    { key: 'daan', name: 'Daan Mulder', title: 'Gate & wristbands', avatar: 'daan.jpg', phone: '+31 6 2010 4410' },
+    { key: 'sanne', name: 'Sanne Kok', title: 'Stage crew', avatar: 'sanne.jpg', phone: '+31 6 2010 4411' },
+    { key: 'ravi', name: 'Ravi Nair', title: 'Site crew', avatar: 'ravi.jpg', phone: '+31 6 2010 4412' },
+    { key: 'joost', name: 'Joost Peters', title: 'Workshops host', avatar: 'joost.jpg', phone: '+31 6 2010 4413' },
+    { key: 'imke', name: 'Imke de Vries', title: 'First aid', avatar: 'imke.jpg', phone: '+31 6 2010 4414' },
+    { key: 'lars', name: 'Lars Hendriks', title: 'Waste & recycling', avatar: 'lars.jpg', phone: '+31 6 2010 4415' },
+    { key: 'yara', name: 'Yara Haddad', title: 'Camping host', avatar: 'yara.jpg', phone: '+31 6 2010 4416' },
+    { key: 'pieter', name: 'Pieter van Dijk', title: 'Box office', avatar: 'pieter.jpg', phone: '+31 6 2010 4417' },
+    { key: 'maud', name: 'Maud Willems', title: 'Runner', avatar: 'maud.jpg', phone: '+31 6 2010 4418' },
+    { key: 'sem', name: 'Sem Dekker', title: 'Décor & art', avatar: 'sem.jpg', phone: '+31 6 2010 4419' },
+    { key: 'tessa', name: 'Tessa Meijer', title: 'Sound assistant', avatar: 'tessa.jpg', phone: '+31 6 2010 4420' },
 ];
 
 export const ADMIN_NAME = 'Tuimel Admin';
 export const ADMIN_LOCALPART = 'office';
+// The mail domain the seeder uses when MAIL_DOMAIN is unset.
+export const DEMO_MAIL_DOMAIN = 'tuimel.example';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
+// A second team, for the stage and tech crew. Saar shares her site access notes with it.
+export const TECH_TEAM_NAME = 'stage & tech';
+export const TECH_TEAM_MEMBERS = ['timo', 'sanne', 'tessa'];
 export const TEAM_MOUNT_NAME = 'festival';
 
 // All seeded directory and file names are lowercase. Chat channels live under `chats/`.
@@ -80,6 +144,38 @@ export const TEAM_FOLDERS = [
 ] as const;
 export type TeamFolder = (typeof TEAM_FOLDERS)[number];
 
+// --- Threads: a chat channel, and the chat under a doc comment, a board card or a canvas comment ---
+
+// A day counted back from the day of the seed, at a local time.
+export type SeededTime = { daysAgo: number; hour: number; minute: number };
+
+// One message of a thread. Its time is `gap` minutes after the message before, 2 when left out, or `at` when it
+// opens a later day. A thread's first message takes the thread's start and neither of the two.
+export type ChatLine = {
+    author: string; // persona key
+    text: string;
+    // Seeded team documents, posted as drive references. The seeder resolves them to ids at seed time, so a document
+    // can only be attached from content seeded after it.
+    attach?: string[];
+    attachVCards?: string[]; // VCARD_FILES names, uploaded into the chat's own media/ as a user's upload lands
+    upload?: string[]; // fixture paths, uploaded into the chat's media/ the same way
+    whisperTo?: string; // persona key: only they and the author read the text
+    gap?: number;
+    at?: SeededTime;
+};
+
+// A comment on one element of a canvas, such as a shape of the site plan or a chart on a slide.
+export type CanvasComment = {
+    card: string; // slug of the thread's chat name (lowercase, no extension)
+    // The element's id without its `el-`: a shape's key, or a slide's key with the kind and number of what sits on it.
+    element: string;
+    title: string;
+    author: string; // persona key
+    text: string;
+    start: SeededTime;
+    replies?: ChatLine[];
+};
+
 // --- Documents (written as HTML, parsed by the editor's schema into each eigendoc) ---
 
 export type DocComment = {
@@ -90,7 +186,8 @@ export type DocComment = {
     anchor: string;
     author: string; // persona key
     text: string;
-    replies?: { author: string; text: string }[];
+    start: SeededTime;
+    replies?: ChatLine[];
     assignTo?: LeadRole; // records an `assigned` activity + notification
     attach?: string[]; // seeded team documents pinned to the card
 };
@@ -106,6 +203,10 @@ export type SeededDoc = {
 
 // A doc in each persona's own drive: no folder, author or comments.
 export type PersonalDoc = Pick<SeededDoc, 'name' | 'html' | 'media'>;
+
+// A displayed equation as the docs editor stores one: MathML with the typed LaTeX as its annotation, in a paragraph.
+const displayedEquation = (latex: string) =>
+    `<p>${writeMathml(readLatex(latex), latex).replace('<math', '<math display="block"')}</p>`;
 
 export const DOCS: SeededDoc[] = [
     {
@@ -127,6 +228,12 @@ export const DOCS: SeededDoc[] = [
             '<tr><td>Saturday and Sunday</td><td>Doors at midday</td><td>Everyone</td></tr>',
             '<tr><td>Monday</td><td>Strike</td><td>Site crew</td></tr>',
             '</tbody></table>',
+            '<h2>Power</h2>',
+            "<p>Timo's sum for Saturday night, when everything runs at once:</p>",
+            displayedEquation(
+                '38 + 22 + 14 + 6 = 80\\,\\text{kW} \\le 2 \\times 60\\,\\text{kVA} \\times 0.8 = 96\\,\\text{kW}',
+            ),
+            '<p>Main stage 38, second stage 22, bar and food trucks 14, site light and camping 6. The backup gives 48 kW on its own, so it carries the second stage alone if a unit trips.</p>',
             '<h2>Responsibilities</h2>',
             '<p>Programming owns the line-up and stage times. Production owns the site and logistics. Volunteers owns the shift roster. Finance owns tickets and the budget. Comms owns the public info.</p>',
             '<h2>Open risks</h2>',
@@ -139,9 +246,10 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'short on crew for the build weekend',
                 author: 'saar',
                 text: "We're still about 10 volunteers short for the build weekend. Can we push the call-out again?",
+                start: { daysAgo: 5, hour: 9, minute: 40 },
                 attach: ['crew roster'],
                 replies: [
-                    { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.' },
+                    { author: 'nour', text: 'On it, sending a fresh call-out to the mailing list today.', gap: 18 },
                     { author: 'saar', text: '/highfive' },
                 ],
                 assignTo: 'volunteers',
@@ -151,8 +259,13 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'wind cover for the second stage',
                 author: 'timo',
                 text: 'The Sunday forecast for the field looks rough. Do we tent the second stage?',
+                start: { daysAgo: 6, hour: 17, minute: 5 },
                 replies: [
-                    { author: 'saar', text: "Let's decide at the go/no-go. Getting a quote for wind-rated cover." },
+                    {
+                        author: 'saar',
+                        text: "Let's decide at the go/no-go. Getting a quote for wind-rated cover.",
+                        gap: 205,
+                    },
                 ],
             },
             {
@@ -160,7 +273,8 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'Shuttle buses from the nearest station',
                 author: 'joris',
                 text: 'Last shuttle at 01:00 or 02:00? It affects the closing set.',
-                replies: [{ author: 'mees', text: "02:00, I'll put it on the info page." }],
+                start: { daysAgo: 7, hour: 14, minute: 20 },
+                replies: [{ author: 'mees', text: "02:00, I'll put it on the info page.", gap: 45 }],
             },
         ],
     },
@@ -180,6 +294,7 @@ export const DOCS: SeededDoc[] = [
                 anchor: 'full line-up reveal',
                 author: 'anouk',
                 text: 'Can we lead with the line-up reveal date instead of the theme?',
+                start: { daysAgo: 3, hour: 11, minute: 10 },
             },
         ],
     },
@@ -201,6 +316,7 @@ export type SheetChartSpec = {
     values: string;
     x: number; // the chart's box on the grid, in pixels from A1
     y: number;
+    size?: { width: number; height: number }; // Insert's default size when missing
 };
 
 export type SheetSpec = {
@@ -216,6 +332,8 @@ export type SheetSpec = {
 const EUR = '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)';
 const BUDGET_STATUSES = ['confirmed', 'pending', 'paid'];
 
+const BUDGET_COLUMNS = [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }];
+
 export const BUDGET = {
     folder: 'finance' as const satisfies TeamFolder,
     name: 'budget', // lowercase, no extension
@@ -223,7 +341,7 @@ export const BUDGET = {
     sheets: [
         {
             name: 'Budget',
-            columns: [{ width: 218 }, { width: 128, format: EUR }, { width: 110 }],
+            columns: BUDGET_COLUMNS,
             rows: [
                 { cells: ['Item', 'Amount (EUR)', 'Status'], style: 'header' },
                 { cells: [] },
@@ -250,11 +368,6 @@ export const BUDGET = {
                 { range: 'C4:C7', options: BUDGET_STATUSES },
                 { range: 'C11:C16', options: BUDGET_STATUSES },
             ],
-        },
-        {
-            name: 'Charts',
-            columns: [],
-            rows: [],
             charts: [
                 {
                     type: 'column',
@@ -262,16 +375,25 @@ export const BUDGET = {
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A11:A16',
                     values: 'Budget!B11:B16',
-                    x: 20,
-                    y: 20,
+                    // Beside the table and level with its top, small enough that both fit a 1000-pixel-wide page.
+                    x: BUDGET_COLUMNS.reduce((sum, column) => sum + column.width, 0) + 24,
+                    y: 0,
+                    size: { width: 440, height: 320 },
                 },
+            ],
+        },
+        {
+            name: 'Charts',
+            columns: [],
+            rows: [],
+            charts: [
                 {
                     type: 'pie',
                     title: 'Income',
                     seriesName: 'Amount (EUR)',
                     categories: 'Budget!A4:A7',
                     values: 'Budget!B4:B7',
-                    x: 640,
+                    x: 20,
                     y: 20,
                 },
             ],
@@ -283,7 +405,7 @@ export const BUDGET = {
 export const GENERATOR_QUOTE: SheetSpec[] = [
     {
         name: 'Quote',
-        columns: [{ width: 260 }, { width: 70 }, { width: 110, format: EUR }, { width: 120, format: EUR }],
+        columns: [{ width: 330 }, { width: 70 }, { width: 110, format: EUR }, { width: 120, format: EUR }],
         rows: [
             { cells: ['Item', 'Qty', 'Price', 'Total'], style: 'header' },
             { cells: ['Generator 60 kVA, Thursday to Monday', 2, 1240, '=B2*C2'] },
@@ -324,13 +446,26 @@ export type DeckImage = {
     height: number;
 };
 
-// Drawn bottom-up: images, then every text on top.
+// A chart of inline data, as Insert → Chart places one on a slide, with no title and no legend.
+export type DeckChart = {
+    type: ChartType;
+    categories: string[];
+    series: { name: string; values: number[]; color?: string }[]; // color: default the palette's
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    font?: string; // an EIGEN_FONTS name; default the deck's Inter
+};
+
+// Drawn bottom-up: images, then charts, then every text on top.
 export type DeckSlide = {
     key: string;
     name: string; // the slide's name in the rail
     background: FillPaint;
     texts: DeckText[];
     images?: DeckImage[];
+    charts?: DeckChart[];
 };
 
 // The deck's ink: every text box that does not name its own color is built in this.
@@ -341,8 +476,8 @@ const DECK_MUTED = '#444444';
 const DECK_HAND = 'Excalifont';
 // The same sunrise behind every slide.
 const DECK_BACKGROUND: FillPaint = { type: 'gradient', from: '#fff085', to: '#e17100', angle: 180 };
-// After the title, every slide is one layout: a heading over a single line of body copy, both centered
-// in a 1536px column. Only the words change.
+// Most slides after the title are one layout: a heading over a single line of body copy, both centered in a
+// 1536px column. The place moves the two into a column beside its photo; the sponsors slide lifts them over a chart.
 const DECK_HEADING = {
     x: 192,
     y: 340,
@@ -409,6 +544,21 @@ export const SPONSOR_DECK = {
             ],
         },
         {
+            key: 'the-place',
+            name: 'The place',
+            background: DECK_BACKGROUND,
+            images: [{ file: 'images/dune-sunset.webp', x: 992, y: 190, width: 736, height: 552 }],
+            texts: [
+                { ...DECK_HEADING, x: 192, width: 720, html: '<p>The place</p>' },
+                {
+                    ...DECK_BODY,
+                    x: 192,
+                    width: 720,
+                    html: '<p>A meadow behind the dunes at Hoeve Tuimelaar, five minutes from the sea</p>',
+                },
+            ],
+        },
+        {
             key: 'why-partner',
             name: 'Why partner with us',
             background: DECK_BACKGROUND,
@@ -433,6 +583,32 @@ export const SPONSOR_DECK = {
             ],
         },
         {
+            key: 'sponsors',
+            name: "This year's sponsors",
+            background: DECK_BACKGROUND,
+            charts: [
+                {
+                    type: 'column',
+                    categories: ['Friend', 'Partner', 'Stage partner'],
+                    series: [{ name: 'Sponsors so far', values: [8, 2, 1], color: '#0084d1' }],
+                    x: 460,
+                    y: 330,
+                    width: 1000,
+                    height: 520,
+                    font: DECK_HAND,
+                },
+            ],
+            texts: [
+                { ...DECK_HEADING, y: 120, height: 120, html: "<p>This year's sponsors</p>" },
+                {
+                    ...DECK_BODY,
+                    y: 240,
+                    height: 80,
+                    html: '<p>Friend €250 · Partner €1,000 · Stage partner €2,000</p>',
+                },
+            ],
+        },
+        {
             key: 'lets-talk',
             name: "Let's talk",
             background: DECK_BACKGROUND,
@@ -442,22 +618,36 @@ export const SPONSOR_DECK = {
             ],
         },
     ] satisfies DeckSlide[],
+    comments: [
+        {
+            card: 'sponsor-numbers',
+            element: 'sponsors-chart-0',
+            title: 'Sponsor numbers',
+            author: 'bram',
+            text: 'Numbers are from the budget: 8 friends, 2 partners, 1 stage partner. All paid.',
+            start: { daysAgo: 2, hour: 10, minute: 20 },
+            replies: [{ author: 'mees', text: "Thanks. I'll update it when the next one signs." }],
+        },
+    ] satisfies CanvasComment[],
 };
 
-// --- Stickies board fixture (authored once, byte-copied in; creator = persona email) ---
+// --- Stickies board fixture (authored once, byte-copied in) ---
 
 export type CardSpec = {
     title: string;
     description: string;
     column: string; // must be one of KANBAN.columns
     creator: string; // persona key; domainised into an email by the seeder
-    // Linked chat thread, mirroring DocComment: a real chat inside the container's chat/ subfolder,
-    // seeded by the creator persona (chat) and referenced back by name (chatName on the card).
+    // The card's chat thread, as a DocComment has one: a chat in the board's chat/ subfolder, started by the creator
+    // when the card was made.
     chat: string; // slug, lowercase, no extension
     chatText: string;
-    // attachVCards names VCARD_FILES entries, uploaded into the chat's own media/ the way a user's upload lands.
-    chatReplies?: { author: string; text: string; attach?: string[]; attachVCards?: string[] }[];
+    start?: SeededTime; // left out, a day after the board per place in the list
+    chatReplies?: ChatLine[];
     attach?: string[]; // seeded team documents pinned to the card
+    cover?: string; // fixture path, uploaded into the board's media/; the card's first image attachment is its cover
+    assignTo?: LeadRole; // by the board's author
+    resolvedBy?: string; // persona key
 };
 
 export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; cards: CardSpec[] } = {
@@ -473,14 +663,14 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'headliner-contract',
             chatText: 'Signed and countersigned today.',
             chatReplies: [
-                { author: 'anouk', text: "Nice one, let's get it into the press release." },
+                { author: 'anouk', text: "Nice one, let's get it into the press release.", gap: 25 },
                 { author: 'joris', text: '/cheer' },
             ],
         },
         {
             title: 'Order fencing',
-            // TipTap task-list HTML (rendered by NoteCard + the card editor) so this card shows a
-            // checklist with a progress badge. Keep the <li data-checked> shape — NoteCard counts it.
+            // Task-list HTML, so this card shows a checklist with a progress badge, which counts the
+            // <li data-checked> items.
             description:
                 '<ul data-type="taskList">' +
                 '<li data-checked="true" data-type="taskItem"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Get quotes from two suppliers</p></div></li>' +
@@ -492,7 +682,11 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'fencing-order',
             chatText: 'Getting quotes in for the build-weekend delivery.',
             chatReplies: [
-                { author: 'timo', text: 'See if they can drop it Thursday, we need the site clear before that.' },
+                {
+                    author: 'timo',
+                    text: 'See if they can drop it Thursday, we need the site clear before that.',
+                    gap: 40,
+                },
             ],
         },
         {
@@ -502,7 +696,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'mees',
             chat: 'lineup-publish',
             chatText: 'Holding this until the last two acts confirm.',
-            chatReplies: [{ author: 'joris', text: 'Should have both locked in by Friday.' }],
+            chatReplies: [{ author: 'joris', text: 'Should have both locked in by Friday.', gap: 95 }],
         },
         {
             title: 'Recruit 10 more volunteers',
@@ -511,7 +705,9 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'nour',
             chat: 'volunteer-recruit',
             chatText: 'Still about 10 short for the build weekend. Call-out goes out today.',
-            chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.' }],
+            start: { daysAgo: 5, hour: 10, minute: 15 },
+            chatReplies: [{ author: 'anouk', text: 'Let me know if you want a hand drafting it.', gap: 30 }],
+            assignTo: 'volunteers',
         },
         {
             title: 'Fix generator quote',
@@ -521,7 +717,11 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'generator-quote',
             chatText: 'Chasing numbers for two generators plus a backup.',
             chatReplies: [
-                { author: 'timo', text: 'Make sure the backup can carry the second stage on its own if it has to.' },
+                {
+                    author: 'timo',
+                    text: 'Make sure the backup can carry the second stage on its own if it has to.',
+                    gap: 50,
+                },
             ],
             attach: ['site plan'],
         },
@@ -532,7 +732,7 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'daan',
             chat: 'wristbands-print',
             chatText: 'Three tiers, camping included. Sending the design to print this week.',
-            chatReplies: [{ author: 'anouk', text: "Nice, post a preview here when it's back." }],
+            chatReplies: [{ author: 'anouk', text: "Nice, post a preview here when it's back.", gap: 20 }],
         },
         {
             title: 'Book shuttle buses',
@@ -541,7 +741,8 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             creator: 'saar',
             chat: 'shuttle-buses',
             chatText: 'Booked. Every 30 minutes from the station.',
-            chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page." }],
+            chatReplies: [{ author: 'mees', text: "I'll put the schedule on the info page.", gap: 65 }],
+            resolvedBy: 'saar',
         },
         {
             title: 'Sunday wind cover',
@@ -551,13 +752,19 @@ export const KANBAN: { folder: TeamFolder; name: string; columns: string[]; card
             chat: 'wind-cover',
             chatText: 'Forecast for the field is turning windy Sunday. Need a call on tenting the second stage.',
             chatReplies: [
-                { author: 'saar', text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then." },
+                {
+                    author: 'saar',
+                    text: "Let's decide at the go/no-go, I'll get a wind-cover quote before then.",
+                    gap: 35,
+                },
                 {
                     author: 'saar',
                     text: 'Quote is in from Dekzeil & Zo. They have a stage rain cover free that weekend, wind rated. Their card is attached if you want to talk sizes.',
                     attachVCards: ['dekzeil & zo.vcf'],
+                    at: { daysAgo: 3, hour: 15, minute: 30 },
                 },
             ],
+            cover: 'images/storm-over-the-field.webp',
         },
     ],
 };
@@ -633,22 +840,24 @@ export type SeededVCardFile = {
     card: VCardSpec;
 };
 
+// The wind-cover supplier: his card in the team drive, and the same card in Saar's own book.
+const RUUD_DEKKER: VCardSpec = {
+    firstName: 'Ruud',
+    lastName: 'Dekker',
+    email: 'ruud@dekzeil-en-zo.example',
+    phone: '+31 6 2244 8890',
+    company: 'Dekzeil & Zo',
+    jobTitle: 'Rentals',
+    notes: 'Tarps and tents. Quoted the rain cover for the second stage.',
+    photo: 'ruud.jpg',
+};
+
+// The fencing supplier, who writes to Ravi and Saar and sits in Saar's book. Saar shares the site plan with him, so
+// he is the demo's one guest.
+export const HEIN_KLARENBEEK = { name: 'Hein Klarenbeek', email: 'hein@hekwerkverhuur.example' };
+
 export const VCARD_FILES: SeededVCardFile[] = [
-    {
-        folder: 'production',
-        name: 'dekzeil & zo.vcf',
-        uploader: 'saar',
-        card: {
-            firstName: 'Ruud',
-            lastName: 'Dekker',
-            email: 'ruud@dekzeil-en-zo.example',
-            phone: '+31 6 2244 8890',
-            company: 'Dekzeil & Zo',
-            jobTitle: 'Rentals',
-            notes: 'Tarps and tents. Quoted the rain cover for the second stage.',
-            photo: 'ruud.jpg',
-        },
-    },
+    { folder: 'production', name: 'dekzeil & zo.vcf', uploader: 'saar', card: RUUD_DEKKER },
 ];
 
 // --- Site plan. Scene units are pixels, y down, and a shape's label is its own text, centered in it. Shape keys
@@ -702,7 +911,7 @@ export type SitePlanText = {
 // A (poly)line in absolute scene points; `round` curves through the vertices.
 export type SitePlanLine = {
     points: [number, number][];
-    freedraw?: boolean; // a pen stroke instead of a line (roundness ignored)
+    freedraw?: boolean; // a pen stroke instead of a line (roundness and strokeStyle ignored)
     stroke?: string;
     strokeWidth?: number;
     strokeStyle?: StrokeStyle;
@@ -773,17 +982,37 @@ export const SITE_PLAN = {
             ],
             stroke: '#adb5bd',
         },
-        // The art trail winding from the workshops to the camping field.
+        // The art trail winding from the workshops to the camping field, drawn by hand.
         {
             points: [
                 [365, 790],
-                [560, 808],
-                [780, 792],
-                [990, 762],
+                [394, 795],
+                [423, 794],
+                [451, 801],
+                [480, 802],
+                [509, 801],
+                [538, 803],
+                [567, 809],
+                [595, 807],
+                [624, 802],
+                [653, 804],
+                [682, 799],
+                [710, 795],
+                [740, 796],
+                [768, 790],
+                [797, 792],
+                [826, 786],
+                [854, 780],
+                [883, 779],
+                [911, 771],
+                [940, 770],
+                [969, 768],
+                [991, 755],
+                [1003, 728],
                 [1010, 700],
             ],
+            freedraw: true,
             stroke: '#9c36b5',
-            strokeStyle: 'dotted',
         },
     ] satisfies SitePlanLine[],
     shapes: [
@@ -1203,56 +1432,120 @@ export const SITE_PLAN = {
         { text: 'camping, gate & meadow', x: 1352, y: 843, fontSize: 12, color: NOTE },
         { text: 'first aid', x: 1352, y: 863, fontSize: 12, color: NOTE },
     ] satisfies SitePlanText[],
+    comments: [
+        {
+            card: 'wind-cover-footprint',
+            element: 'wind-cover',
+            title: 'Wind cover footprint',
+            author: 'timo',
+            text: 'If we tent it, the red line is the room it needs. Ruud wants 3 m clear on every side for the guy lines.',
+            start: { daysAgo: 2, hour: 15, minute: 20 },
+            replies: [
+                {
+                    author: 'saar',
+                    text: "Fits, just. The toilets on that side may have to shift a little. I'll pace it out on the site visit.",
+                },
+                { author: 'timo', text: '/highfive' },
+            ],
+        },
+    ] satisfies CanvasComment[],
 };
 
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
-// `attach` names seeded team documents, posted as drive-reference attachments. The seeder resolves them to ids at
-// seed time, so a document can only be attached from content seeded after it.
-export type ChatLine = { author: string; text: string; attach?: string[] };
-export type SeededChat = { name: string; messages: ChatLine[] };
+export type SeededChat = { name: string; start: SeededTime; messages: ChatLine[] };
 
 export const CHATS: SeededChat[] = [
     {
         name: 'production',
+        start: { daysAgo: 8, hour: 9, minute: 12 },
         messages: [
             { author: 'saar', text: 'Build weekend plan is up in the drive. Shout if a slot clashes.' },
-            { author: 'timo', text: 'Power run looks fine. One generator quote still open.' },
-            { author: 'daan', text: 'Wristbands ordered. Three tiers, camping included.' },
-            { author: 'timo', text: 'Heads up: the Sunday forecast for the field is turning windy.' },
-            { author: 'saar', text: 'How bad? The second stage is the exposed one.' },
-            { author: 'timo', text: 'Gusts into the evening. No shelter out there right now.' },
-            { author: 'saar', text: '/groan' },
-            { author: 'sanne', text: 'we could move the quieter acts to the barn stage sunday?' },
-            { author: 'anouk', text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote." },
-            { author: 'saar', text: 'On it. Will have numbers before the meeting.' },
-            { author: 'ravi', text: 'Site crew can re-peg the second stage either way. Ready for both.' },
-            { author: 'timo', text: '/highfive' },
+            { author: 'timo', text: 'Power run looks fine. One generator quote still open.', gap: 28 },
+            {
+                author: 'daan',
+                text: 'Wristbands ordered. Three tiers, camping included.',
+                at: { daysAgo: 7, hour: 11, minute: 30 },
+            },
+            {
+                author: 'timo',
+                text: 'Heads up: the Sunday forecast for the field is turning windy.',
+                at: { daysAgo: 6, hour: 16, minute: 48 },
+            },
+            { author: 'saar', text: 'How bad? The second stage is the exposed one.', gap: 3 },
+            {
+                author: 'timo',
+                text: 'Gusts into the evening. No shelter out there right now.',
+                upload: ['images/storm-over-the-field.webp'],
+            },
+            { author: 'saar', text: '/groan', gap: 0 },
+            { author: 'sanne', text: 'we could move the quieter acts to the barn stage sunday?', gap: 27 },
+            {
+                author: 'anouk',
+                text: "Let's keep the option open and decide at the go/no-go. Get a wind-cover quote.",
+                gap: 175,
+            },
+            { author: 'saar', text: 'On it. Will have numbers before the meeting.', gap: 7 },
+            {
+                author: 'ravi',
+                text: 'Site crew can re-peg the second stage either way. Ready for both.',
+                at: { daysAgo: 5, hour: 8, minute: 5 },
+            },
+            { author: 'timo', text: '/highfive', gap: 15 },
             {
                 author: 'saar',
                 text: 'Site plan draft is up, based on last year. We walk it on the site visit and make it final after. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
                 attach: ['site plan'],
+                at: { daysAgo: 2, hour: 14, minute: 40 },
             },
-            { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.' },
-            { author: 'timo', text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.' },
+            { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.', gap: 22 },
+            {
+                author: 'timo',
+                text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.',
+                gap: 88,
+            },
         ],
     },
     {
         name: 'volunteers',
+        start: { daysAgo: 5, hour: 10, minute: 5 },
         messages: [
             { author: 'nour', text: "We're about 10 short for the build weekend. Pushing the call-out today." },
-            { author: 'maud', text: 'i can bring two friends for load-in thursday' },
-            { author: 'maud', text: '*friday' },
-            { author: 'nour', text: 'Nice, added you three to the roster.', attach: ['crew roster'] },
-            { author: 'maud', text: '/allthethings' },
-            { author: 'yara', text: 'Camping host desk needs one more for the night shift.' },
-            { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.' },
-            { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out." },
-            { author: 'lars', text: 'Waste team is set. Extra bins arrive with the fencing.' },
-            { author: 'pieter', text: 'Box office wants two runners at peak. Any takers?' },
-            { author: 'maud', text: 'Put me down as a runner for Saturday peak.' },
-            { author: 'nour', text: 'Thanks all. Roster is looking a lot healthier.' },
-            { author: 'maud', text: '/cheer' },
+            { author: 'maud', text: 'i can bring two friends for load-in thursday', gap: 35 },
+            { author: 'maud', text: '*friday', gap: 1 },
+            { author: 'nour', text: 'Nice, added you three to the roster.', attach: ['crew roster'], gap: 34 },
+            {
+                author: 'nour',
+                text: 'What are your friends called? The roster just says Maud plus two.',
+                whisperTo: 'maud',
+                gap: 0,
+            },
+            { author: 'maud', text: '/allthethings', gap: 1 },
+            {
+                author: 'yara',
+                text: 'Camping host desk needs one more for the night shift.',
+                at: { daysAgo: 4, hour: 9, minute: 30 },
+            },
+            { author: 'imke', text: 'First aid is covered for both days, one gap Sunday morning.', gap: 220 },
+            { author: 'nour', text: "I'll flag the Sunday morning gap in the call-out.", gap: 15 },
+            {
+                author: 'lars',
+                text: 'Waste team is set. Extra bins arrive with the fencing.',
+                at: { daysAgo: 3, hour: 8, minute: 45 },
+            },
+            {
+                author: 'pieter',
+                text: 'Box office wants two runners at peak. Any takers?',
+                at: { daysAgo: 2, hour: 17, minute: 30 },
+            },
+            { author: 'maud', text: '/me puts both hands up' },
+            { author: 'maud', text: 'Put me down as a runner for Saturday peak.', gap: 30 },
+            {
+                author: 'nour',
+                text: 'Thanks all. Roster is looking a lot healthier.',
+                at: { daysAgo: 1, hour: 9, minute: 20 },
+            },
+            { author: 'maud', text: '/cheer', gap: 1 },
         ],
     },
 ];
@@ -1297,6 +1590,9 @@ export type SeededMail = {
         // `text` stays as the plain-text fallback (multipart/alternative) when this is set.
         html?: string;
         attachments?: MailAttachment[];
+        // Seeded team documents, linked as pills and shared read-only with the outside party, as a send does when
+        // the sender grants access. Only on a persona's message to an external party.
+        attachDocs?: string[];
         invite?: SeededInvite; // only on a message from an external sender
     }[];
 };
@@ -1426,6 +1722,7 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 4,
                 hour: 16,
                 text: 'Hi Marijke,\n\nBudget is attached. Estimating around two thousand visitors across the weekend, similar to last edition. See you at the call.\n\nBram',
+                attachments: [{ filename: 'tuimel budget.xlsx', workbook: BUDGET.sheets }],
             },
         ],
     },
@@ -1532,7 +1829,7 @@ export const MAILS: SeededMail[] = [
         subject: 'Fencing delivery',
         messages: [
             {
-                fromExternal: { name: 'Hein Klarenbeek', email: 'hein@hekwerkverhuur.example' },
+                fromExternal: HEIN_KLARENBEEK,
                 daysAgo: 6,
                 hour: 8,
                 text: 'Hi Ravi,\n\nFencing is loaded and coming Thursday, same as last year. Where do you want the pallets dropped this time?\n\nHein\nHekwerkverhuur Vlierzand',
@@ -1542,6 +1839,26 @@ export const MAILS: SeededMail[] = [
                 daysAgo: 6,
                 hour: 13,
                 text: 'Hi Hein,\n\nDrop them by the north track this year, closer to where we are building. Saar can meet you there.\n\nRavi',
+            },
+        ],
+    },
+    {
+        kind: 'inbox-thread',
+        to: 'production',
+        subject: 'Site plan for the fencing drop',
+        messages: [
+            {
+                from: 'saar',
+                daysAgo: 5,
+                hour: 9,
+                text: 'Hi Hein,\n\nRavi tells me the pallets go by the north track this year. I have shared our site plan with you so you can see where the fence line runs. The link is below, it opens in your browser.\n\nI will be at the track from eight on Thursday.\n\nSaar',
+                attachDocs: [SITE_PLAN.name],
+            },
+            {
+                fromExternal: HEIN_KLARENBEEK,
+                daysAgo: 5,
+                hour: 12,
+                text: 'Hi Saar,\n\nThanks, that helps. I see the gate sits on the south side, so we will stack the gate panels apart from the rest. See you Thursday.\n\nHein\nHekwerkverhuur Vlierzand',
             },
         ],
     },
@@ -1698,6 +2015,7 @@ export type SeededEvent = {
     description?: string;
     organizer: LeadRole;
     attendees: (LeadRole | string)[]; // role or persona key
+    replies?: Record<string, Exclude<Attendee['status'], 'accepted'>>; // by persona key; every other guest accepted
 };
 
 export const EVENTS: SeededEvent[] = [
@@ -1761,11 +2079,53 @@ export const EVENTS: SeededEvent[] = [
         description: 'Final call, including Sunday wind cover.',
         organizer: 'director',
         attendees: ['director', 'production', 'tech', 'programming', 'finance'],
+        replies: { joris: 'tentative' },
+    },
+    {
+        title: 'Load-in',
+        daysFromFestival: -1,
+        startHour: 12,
+        durationHours: 2,
+        location: 'Hoeve Tuimelaar, Vlierzand',
+        description: 'Backline, bar and catering in through the north track.',
+        organizer: 'production',
+        attendees: ['production', 'tech', 'liaison', 'sanne', 'tessa', 'ravi', 'fenna'],
+    },
+    {
+        title: 'Soundchecks',
+        daysFromFestival: -1,
+        startHour: 14,
+        durationHours: 3,
+        location: 'Hoeve Tuimelaar, Vlierzand',
+        description: 'Main stage first, second stage from half past three.',
+        organizer: 'tech',
+        attendees: ['tech', 'programming', 'liaison', 'sanne', 'tessa'],
+    },
+    {
+        title: 'Volunteer briefing',
+        daysFromFestival: 0,
+        startHour: 10,
+        durationHours: 1,
+        location: 'Crew cabin',
+        description: 'Shifts, radios and who to call.',
+        organizer: 'volunteers',
+        attendees: ['volunteers', 'daan', 'fenna', 'imke', 'lars', 'yara', 'pieter', 'maud'],
+    },
+    {
+        title: 'Strike',
+        daysFromFestival: 2,
+        startHour: 9,
+        durationHours: 6,
+        location: 'Hoeve Tuimelaar, Vlierzand',
+        description: 'Stages down, fencing stacked, field back to Griet.',
+        organizer: 'production',
+        attendees: ['production', 'tech', 'ravi', 'lars', 'sanne', 'liaison'],
+        replies: { lieke: 'declined' },
     },
 ];
 
-// --- Shifts: one personal event per persona, in their own calendar rather than the team's. Days are relative to the
-// festival Saturday, as EVENTS are. ---
+// --- Shifts: two personal lines per persona, such as a shift or an errand, in their own calendar rather than the
+// team's. Days are relative to the festival Saturday, as EVENTS are. ---
 
 export type SeededShift = {
     persona: string; // persona key
@@ -1777,30 +2137,63 @@ export type SeededShift = {
 
 export const SHIFTS: SeededShift[] = [
     { persona: 'anouk', title: 'Walk the field before doors', daysFromFestival: 0, startHour: 10, durationHours: 1 },
+    { persona: 'anouk', title: 'Dinner with the crew', daysFromFestival: -1, startHour: 19, durationHours: 2 },
     { persona: 'joris', title: 'Artist check-in desk', daysFromFestival: 0, startHour: 12, durationHours: 3 },
+    { persona: 'joris', title: 'Pick up Wolf at the station', daysFromFestival: 0, startHour: 10, durationHours: 1 },
     { persona: 'saar', title: 'Site walk with Ravi', daysFromFestival: -1, startHour: 9, durationHours: 2 },
+    { persona: 'saar', title: 'Meet Hein at the north track', daysFromFestival: -2, startHour: 8, durationHours: 1 },
     { persona: 'mees', title: 'Socials: doors and first act', daysFromFestival: 0, startHour: 12, durationHours: 2 },
-    { persona: 'nour', title: 'Volunteer briefing', daysFromFestival: 0, startHour: 10, durationHours: 1 },
+    {
+        persona: 'mees',
+        title: 'Golden hour photos on the dune path',
+        daysFromFestival: 0,
+        startHour: 20,
+        durationHours: 1,
+    },
+    { persona: 'nour', title: 'Volunteer check-in desk', daysFromFestival: 0, startHour: 11, durationHours: 3 },
+    { persona: 'nour', title: 'Call Femke about gate duty', daysFromFestival: -2, startHour: 19, durationHours: 1 },
     { persona: 'bram', title: 'Box office cash-up', daysFromFestival: 0, startHour: 22, durationHours: 1 },
-    { persona: 'timo', title: 'Soundcheck second stage', daysFromFestival: -1, startHour: 14, durationHours: 3 },
+    { persona: 'bram', title: 'Collect the cash float', daysFromFestival: -1, startHour: 15, durationHours: 1 },
+    { persona: 'timo', title: 'Generators in with Rob', daysFromFestival: -2, startHour: 9, durationHours: 2 },
+    { persona: 'timo', title: 'Line check, barn stage', daysFromFestival: 0, startHour: 11, durationHours: 1 },
     { persona: 'lieke', title: 'Artist hospitality shift', daysFromFestival: 0, startHour: 14, durationHours: 4 },
+    { persona: 'lieke', title: 'Quiet room ready for Wolf', daysFromFestival: 0, startHour: 12, durationHours: 1 },
     { persona: 'fenna', title: 'Bar shift', daysFromFestival: 0, startHour: 16, durationHours: 6 },
+    { persona: 'fenna', title: 'Kegs in from Brouwerij Vlier', daysFromFestival: -1, startHour: 15, durationHours: 2 },
     { persona: 'daan', title: 'Gate shift', daysFromFestival: 0, startHour: 11, durationHours: 5 },
+    { persona: 'daan', title: 'Count the wristbands with Bram', daysFromFestival: -1, startHour: 16, durationHours: 1 },
     { persona: 'sanne', title: 'Stage crew, second stage', daysFromFestival: 0, startHour: 13, durationHours: 6 },
+    { persona: 'sanne', title: 'Changeover, barn stage', daysFromFestival: 1, startHour: 14, durationHours: 2 },
     { persona: 'ravi', title: 'Re-peg the second stage', daysFromFestival: 1, startHour: 8, durationHours: 2 },
+    { persona: 'ravi', title: 'Stack the fencing for Hein', daysFromFestival: 2, startHour: 13, durationHours: 2 },
     { persona: 'joost', title: 'Workshop: screen printing', daysFromFestival: 1, startHour: 13, durationHours: 2 },
+    { persona: 'joost', title: 'Set up the workshop tent', daysFromFestival: -1, startHour: 15, durationHours: 2 },
     { persona: 'imke', title: 'First aid post', daysFromFestival: 0, startHour: 12, durationHours: 6 },
+    { persona: 'imke', title: 'Hand over to Willem', daysFromFestival: 1, startHour: 8, durationHours: 1 },
     { persona: 'lars', title: 'Waste round', daysFromFestival: 0, startHour: 18, durationHours: 3 },
+    { persona: 'lars', title: 'Extra bins out', daysFromFestival: -2, startHour: 10, durationHours: 2 },
     { persona: 'yara', title: 'Camping host night shift', daysFromFestival: -1, startHour: 22, durationHours: 6 },
+    { persona: 'yara', title: 'Toilets placed, camping field', daysFromFestival: -1, startHour: 9, durationHours: 1 },
     { persona: 'pieter', title: 'Box office', daysFromFestival: 0, startHour: 11, durationHours: 5 },
+    { persona: 'pieter', title: 'Charge the scanners', daysFromFestival: -1, startHour: 20, durationHours: 1 },
     { persona: 'maud', title: 'Runner, Saturday peak', daysFromFestival: 0, startHour: 15, durationHours: 4 },
+    {
+        persona: 'maud',
+        title: 'Train to Vlierzand with the two',
+        daysFromFestival: -1,
+        startHour: 10,
+        durationHours: 1,
+    },
     { persona: 'sem', title: 'Hang the art on the dune path', daysFromFestival: -1, startHour: 10, durationHours: 4 },
+    { persona: 'sem', title: 'Find the angle with Iris', daysFromFestival: -1, startHour: 14, durationHours: 1 },
     { persona: 'tessa', title: 'Sound assistant, main stage', daysFromFestival: 0, startHour: 13, durationHours: 7 },
+    { persona: 'tessa', title: 'Coil the cables, main stage', daysFromFestival: 1, startHour: 23, durationHours: 1 },
 ];
 
 // --- Contacts (external ecosystem, added to a few leads' address books) ---
 
-export type SeededContact = VCardSpec & { owner: LeadRole };
+// `labels` are label names. The seeder adds one the owner's book does not hold yet.
+export type SeededContact = VCardSpec & { owner: LeadRole; labels?: string[] };
 
 export const CONTACTS: SeededContact[] = [
     {
@@ -1821,6 +2214,7 @@ export const CONTACTS: SeededContact[] = [
         company: 'Hoeve Tuimelaar',
         jobTitle: 'Farmer',
         notes: 'Owns the field. Gate code by text.',
+        labels: ['Important'],
     },
     {
         owner: 'production',
@@ -1830,7 +2224,31 @@ export const CONTACTS: SeededContact[] = [
         company: 'Duin Shuttle',
         jobTitle: 'Operations',
         notes: 'Shuttle buses, 30-minute loop.',
+        labels: ['Suppliers'],
     },
+    {
+        owner: 'production',
+        firstName: 'Rob',
+        lastName: 'Tempel',
+        email: 'rob@vlierkracht-verhuur.example',
+        phone: '+31 6 2010 4431',
+        company: 'Vlierkracht Verhuur',
+        jobTitle: 'Rentals',
+        notes: 'Generators. Two 60 kVA plus a backup, in on Thursday.',
+        labels: ['Suppliers'],
+    },
+    {
+        owner: 'production',
+        firstName: 'Hein',
+        lastName: 'Klarenbeek',
+        email: HEIN_KLARENBEEK.email,
+        phone: '+31 6 2010 4432',
+        company: 'Hekwerkverhuur Vlierzand',
+        jobTitle: 'Deliveries',
+        notes: 'Fencing, same as last year. Drops at the north track.',
+        labels: ['Suppliers'],
+    },
+    { ...RUUD_DEKKER, owner: 'production', labels: ['Suppliers'] },
     {
         owner: 'finance',
         firstName: 'Marijke',
@@ -1860,13 +2278,13 @@ export const CONTACTS: SeededContact[] = [
     },
 ];
 
-// --- Personal-drive files shared person-to-person (shared-with-me variety) ---
+// --- Personal-drive files shared with a lead or a team (shared-with-me variety) ---
 
 export type SeededShare = {
     owner: LeadRole;
     name: string; // lowercase filename
     body: string;
-    shareWith: LeadRole;
+    shareWith: LeadRole | typeof TECH_TEAM_NAME; // a lead, or the tech team
 };
 
 export const PERSONAL_SHARES: SeededShare[] = [
@@ -1874,7 +2292,7 @@ export const PERSONAL_SHARES: SeededShare[] = [
         owner: 'production',
         name: 'site access notes.txt',
         body: 'Gate code by text from Griet. Deliveries via the north track. Water point is behind the barn.',
-        shareWith: 'tech',
+        shareWith: TECH_TEAM_NAME,
     },
     {
         owner: 'liaison',
@@ -1917,10 +2335,6 @@ export const NOTES: PersonalDoc = {
     ].join(''),
 };
 
-// A displayed equation as the docs editor stores one: MathML with the typed LaTeX as its annotation, in a paragraph.
-const displayedEquation = (latex: string) =>
-    `<p>${writeMathml(readLatex(latex), latex).replace('<math', '<math display="block"')}</p>`;
-
 // Insert → Chart's chart as the docs editor stores one, in a paragraph, with the Artist sketch, cross-hatched bars and
 // the hand-drawn font. The fixed seed draws the same wobble on every rebuild.
 const sketchedChart = () => {
@@ -1960,4 +2374,28 @@ export function personaByKey(key: string): Persona {
     const persona = PERSONAS.find((p) => p.key === key);
     if (!persona) throw new Error(`No persona for key ${key}`);
     return persona;
+}
+
+// The time of every message of a thread, the first at `start` and each later one by its `gap` or `at`. A day counts
+// back on the calendar from `now`, so a clock change in between moves no message to another day.
+export function threadTimes(now: Date, start: SeededTime | Date, later: readonly ChatLine[]): Date[] {
+    const timeOf = ({ daysAgo, hour, minute }: SeededTime): Date => {
+        const time = new Date(now);
+        time.setDate(time.getDate() - daysAgo);
+        time.setHours(hour, minute, 0, 0);
+        return time;
+    };
+    let previous = start instanceof Date ? start : timeOf(start);
+    const times = [previous];
+    for (const { text, gap = 2, at } of later) {
+        const time = at ? timeOf(at) : new Date(previous.getTime() + gap * 60_000);
+        if (time < previous) throw new Error(`The seeded message "${text}" is dated before the one it follows`);
+        times.push(time);
+        previous = time;
+    }
+    return times;
+}
+
+export function emailFor(localPart: string, mailDomain: string): string {
+    return `${localPart}@${mailDomain}`;
 }

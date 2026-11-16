@@ -1,7 +1,8 @@
-// How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
-// hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
-// passes to show it. onEtagWriteError is that onError for a write that sends an etag. wasToasted tells a caller that
-// also sees the rejection that a toast already showed it, and isRefusal tells a dialog whether another try could help.
+// How a failed request reaches the user: AppError reads the server's message and the status from what Eden or a fetch
+// hands back, naming the status only when the server sent no message of its own. getErrorMessage turns it into the
+// toast's text, and onMutationError is the onError every mutation hook passes to show it. onEtagWriteError is that
+// onError for a write that sends an etag. wasToasted tells a caller that also sees the rejection that a toast already
+// showed it, and isRefusal tells a dialog whether another try could help.
 
 import { toast } from 'sonner';
 import { isRecord } from './guards';
@@ -18,7 +19,7 @@ const STATUS_MESSAGES: Record<number, string> = {
     429: 'Too many requests',
     500: 'Server error',
     503: 'Service unavailable',
-    507: 'Insufficient storage',
+    507: 'Not enough storage left',
 };
 
 export class AppError extends Error {
@@ -28,24 +29,27 @@ export class AppError extends Error {
     public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
-        super(messageFromBody(response.error?.value, status));
+        super(messageFromBody(response.error?.value) ?? `${STATUS_MESSAGES[status] ?? 'Request failed'} (${status})`);
         this.status = status;
     }
 }
 
 // Elysia keeps a validation error's `message` and `summary` out of production bodies, and a rejected schema arrives
-// as `{ type, on, found }` with nothing to read, so the status has to carry the meaning there.
-function messageFromBody(value: unknown, status: number): string {
-    const fallback = STATUS_MESSAGES[status] ?? 'Request failed';
-    if (typeof value === 'string') return value.trim() || fallback;
+// as `{ type, on, found }` with nothing to read, so the status has to carry the meaning there. A proxy that answers
+// for a server it can't reach sends an HTML page, which is no message either.
+function messageFromBody(value: unknown): string | undefined {
+    if (typeof value === 'string') {
+        const text = value.trim();
+        return text === '' || text.startsWith('<') ? undefined : text;
+    }
     if (isRecord(value)) {
         const first = Array.isArray(value.errors) ? value.errors[0] : null;
         const firstDetail = isRecord(first)
             ? (readString(first, 'summary') ?? readString(first, 'message'))
             : undefined;
-        return readString(value, 'message') ?? readString(value, 'summary') ?? firstDetail ?? fallback;
+        return readString(value, 'message') ?? readString(value, 'summary') ?? firstDetail;
     }
-    return value === null || value === undefined || Array.isArray(value) ? fallback : String(value);
+    return value === null || value === undefined || Array.isArray(value) ? undefined : String(value);
 }
 
 function readString(source: Record<string, unknown>, key: string): string | undefined {
@@ -68,13 +72,12 @@ export function isRefusal(error: unknown): boolean {
 }
 
 export function getErrorMessage(error: unknown): string {
-    if (error instanceof AppError) return `${error.message} (${error.status})`;
     if (error instanceof Error) return error.message;
     return String(error);
 }
 
-// Errors a toast has already been shown for, so a caller that also sees the rejection, such as CardForm, can swallow
-// exactly those and let anything else surface.
+// Errors a toast has already been shown for, so a caller that also sees the rejection can swallow exactly those and
+// let anything else surface, without telling the user twice.
 const toastedErrors = new WeakSet<object>();
 
 function markToasted(error: unknown): void {

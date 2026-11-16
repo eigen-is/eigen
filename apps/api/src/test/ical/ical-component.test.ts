@@ -514,7 +514,7 @@ describe('stamp trust', () => {
         const { events } = parseIcs(vcal(VTZ_AMS, forged));
         const [master, exclusion] = events;
 
-        expect(master.data?.organizer?.userId).toBe('');
+        expect(master.data?.organizer?.userId).toBeUndefined();
         expect(master.data?.organizerEventId).toBeUndefined();
         expect(master.data?.color).toBeUndefined();
         expect(Object.keys(master)).not.toContain('eventId');

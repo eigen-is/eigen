@@ -454,11 +454,6 @@ export class SharedDrive {
         return this.drive.inviteToChat(mountId, chatId, email, this.user, target);
     }
 
-    // No access check: the list only holds paths whose ACL lets this user read them.
-    public async getSharedWith(user: User): Promise<DrivePath[]> {
-        return this.drive.getSharedWith(user);
-    }
-
     // ---- Chats and comments ----
 
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {

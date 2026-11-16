@@ -5,10 +5,10 @@ type: troubleshooting
 tags: [drive, upload, storage, quota]
 related: [drive/upload-files]
 order: 200
-updated: 2026-11-12
+updated: 2026-11-14
 ---
 
-When a Drive upload fails, a card appears at the bottom-right of the screen showing **Upload failed**, and a separate message says why, such as **Upload too large (413)**. Two common causes are a file that exceeds the maximum size limit, and a drive that has reached its storage quota.
+When a Drive upload fails, a card appears at the bottom-right of the screen showing **Upload failed**, and a separate message says why, such as **Upload too large**. Two common causes are a file that exceeds the maximum size limit, and a drive that has reached its storage quota.
 
 ## The file is too large
 
@@ -18,7 +18,7 @@ Each Eigen installation has a maximum size for a single uploaded file. If your f
 
 ## Your storage is full
 
-Each drive has a storage quota. If the drive is already at or near its limit, an upload fails even if the file itself is small enough. Drive checks the free space first, so the upload fails straight away, not part-way through.
+Each drive has a storage quota. If the drive is already at or near its limit, an upload fails with **Not enough storage left**, even if the file itself is small enough. A file larger than the space that is left fails part-way through with **Upload too large**.
 
 **How to check your storage:** The storage bar at the bottom of the sidebar shows how much space you have used and how much is available. In Drive or any other Eigen app, look for the **Storage** progress bar at the very bottom of the left sidebar.
 

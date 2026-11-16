@@ -18,7 +18,7 @@ const { AuthProvider } = await import('@workspace/lib/auth');
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { CommandPaletteProvider } = await import('@workspace/ui');
+const { CommandPaletteProvider } = await import('@workspace/ui/components/layout/app');
 const { EditorToolbar } = await import('../../../components/docs/editor-toolbar');
 const { PositionedFigures } = await import('../../../components/docs/extensions/positioned-figure');
 

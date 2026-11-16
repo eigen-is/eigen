@@ -12,11 +12,12 @@ import {
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
 } from '@workspace/lib/vector';
-import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { ContextMenuAnchor, MenuSections, useContextMenu } from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {
@@ -69,13 +70,18 @@ export function SlideEditor({
     // canWrite. Tablets count as desktop here.
     const canEdit = canWrite && !isMobile;
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, SLIDES_STYLE_DEFAULTS);
-    const { frameId, setFrameId, index: frameIndex, step: stepFrame } = useActiveFrame(doc.frames);
+    const { selectedIds, setSelectedIds, toggle } = useSelection();
+    const {
+        frameId,
+        setFrameId,
+        index: frameIndex,
+        step: stepFrame,
+    } = useActiveFrame(doc.frames, doc.elements, setSelectedIds);
     const { dragActiveId, handleDragStart, handleDragEnd } = useSlideDnd({
         frames: doc.frames,
         moveFrame: doc.moveFrame,
     });
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
-    const { selectedIds, setSelectedIds, toggle } = useSelection();
     // The canvas reports an open text editor, so the toolbar's Edit rows stand down as the canvas's keys do.
     const [textEditing, setTextEditing] = useState(false);
     const { user } = useAuth();

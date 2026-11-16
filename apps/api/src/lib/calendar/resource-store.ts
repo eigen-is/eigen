@@ -115,7 +115,7 @@ export function prepareResource(
         status: event.status,
         data: event.data,
         organizerEventId: event.data?.organizerEventId ?? null,
-        organizerUserId: event.data?.organizer?.userId || null,
+        organizerUserId: event.data?.organizer?.userId ?? null,
         sequence: event.sequence,
         createByUserId: event.createByUserId,
         createdAt: event.createdAt ?? now,

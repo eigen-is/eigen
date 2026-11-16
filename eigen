@@ -294,6 +294,18 @@ api_cli() {
     dc exec $tty -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh "$@"
 }
 
+# api_ask <command…>: api_cli for what the API answers at once, given up after 20 s, as an exec through a daemon that
+# stopped answering never returns. By exec the job is docker itself, which hands the kill on to its compose plugin.
+api_ask() {
+    (docker() { exec docker "$@"; }; api_cli "$@") &
+    asked=$! deadline=$(($(date +%s) + 20))
+    while kill -0 "$asked" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "$deadline" ]; then kill "$asked" 2>/dev/null || :; fi
+        sleep "$TICK" 2>/dev/null || TICK=1
+    done
+    wait "$asked"
+}
+
 # columns: the width of the terminal, 80 when it cannot be read.
 columns() {
     width=$(stty size </dev/tty 2>/dev/null || :)
@@ -553,14 +565,15 @@ share_env() {
 
 # backups_group: the group of the install folder, which is the operator's, or nothing when other users of the host share
 # it. A gid below 1000 other than root's is a system's shared group, such as users. So is one that lists another member,
-# or that another user has as primary group.
+# or that another login user, uid 1000 or above, has as primary group: Alpine's and Fedora's sync, halt and shutdown have
+# root's.
 backups_group() {
     gid=${EIGEN_OWNER#*:}
     if [ "$gid" != 0 ] && [ "$gid" -lt 1000 ]; then return 0; fi
     owner=$(ls -ld . | awk '{ print $3 }')
     members=$({ getent group "$gid" || grep "^[^:]*:[^:]*:$gid:" /etc/group; } 2>/dev/null | cut -d: -f4)
     if printf '%s\n' "$members" | tr ',' '\n' | grep -qvx -e "$owner" -e ''; then return 0; fi
-    primary=$({ getent passwd || cat /etc/passwd; } 2>/dev/null | awk -F: -v gid="$gid" '$4 == gid { print $1 }')
+    primary=$({ getent passwd || cat /etc/passwd; } 2>/dev/null | awk -F: -v gid="$gid" '$4 == gid && $3 >= 1000 { print $1 }')
     if printf '%s\n' "$primary" | grep -qvx -e "$owner" -e ''; then return 0; fi
     printf '%s\n' "$gid"
 }
@@ -644,7 +657,7 @@ stop() {
 # running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
 # line, or nothing. It fails when the API does not answer, and then prints nothing.
 running_backup() {
-    running=$(api_cli status --running </dev/null 2>/dev/null) || return 1
+    running=$(api_ask status --running </dev/null 2>/dev/null) || return 1
     printf '%s\n' "$running"
 }
 
@@ -910,12 +923,14 @@ refresh_fail2ban() {
     fi
 }
 
-# prune_images [image…]: the images an update leaves behind. Keeps those, the rollback's, and the images PINS
-# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes, and
-# which a CLI from 29 on hides without --all. Best effort.
+# prune_images [pin…]: the images an update leaves behind. Keeps those pins, the rollback's, and the images PINS
+# names, and removes the rest by ID. On the containerd store a moved tag leaves an old build of main dangling, which
+# the prune at the end would take, so the pins are pulled back by digest first: only their manifests download. A pin
+# that cannot be pulled back fails it before it removes anything; the rest is best effort.
 prune_images() {
     keep=' '
     for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
+    pull_refs $(printf '%s\n' "$@" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p') || return 1
     for name in $IMAGES; do
         remove=$(docker image ls --all "$REGISTRY/$name" --digests \
             --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
@@ -1148,7 +1163,7 @@ warn_restart() {
 # a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
 # cannot take it holds nothing up.
 announce() {
-    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+    told=$(api_ask restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
         </dev/null 2>&1) || {
         if [ "$1" = 0 ]; then
             say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
@@ -1167,7 +1182,7 @@ announce() {
 }
 
 # unannounce: takes the notice back. The API it asks may be down.
-unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
+unannounce() { api_ask restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
 
 # countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
 # sees one line count down, as shutdown warns; a log gets it once.
@@ -1444,7 +1459,10 @@ update_apply() {
     if [ -n "$saved" ]; then printf '%s\n%s\n' "$saved" "$old_pins" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
-    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
+    STEP_GOES_ON=1
+    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins ||
+        say "$YELLOW" '▲' "No old image was removed, since one a rollback needs could not be downloaded again."
+    STEP_GOES_ON=''
     say "$GREEN" '◇' "Eigen $old → $new is running at https://$domain/"
     if [ -n "$saved" ]; then
         say "$GRAY" '│' "Saved before the update: backups/$saved"

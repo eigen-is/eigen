@@ -1,0 +1,52 @@
+// The Calendar page's opening loop: in the festival's month, the production lead opens the go/no-go meeting on the eve
+// of the festival and unfolds its guest list with each answer. She closes it, hides the team's calendar so only her
+// own two lines are left, and shows it again, so the loop ends where it began.
+
+import { pointOn } from '../lib/cursor';
+import type { Scene } from '../lib/scene';
+import { VIEWPORT } from '../lib/scene';
+
+// The empty sidebar under the calendars, as a day cell lights up under the pointer.
+const REST = { x: 130, y: 470 };
+
+export const calendarHero = {
+    name: 'calendar-hero',
+    kind: 'video',
+    theme: 'dark',
+    viewport: VIEWPORT,
+    apps: ['calendar'],
+    personas: ['saar'],
+    setup: async ({ pages: [page], cursors: [cursor], stack }) => {
+        await page.goto(stack.appUrl('calendar'));
+        const meeting = page.getByText('Go / no-go meeting').first();
+        await meeting.waitFor();
+        // The festival week is the month's last row, under the window's foot, so she steps on to the month it opens.
+        for (let month = 0; month < 3; month++) {
+            // Whole inside the window, where a click can reach it.
+            const box = await meeting.boundingBox();
+            if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) break;
+            await page.getByRole('button', { name: 'Next month' }).dispatchEvent('click');
+            await Bun.sleep(800);
+        }
+        await Bun.sleep(2000);
+        await cursor.moveTo(REST, { duration: 1 });
+    },
+    run: async ({ pages: [page], cursors: [cursor] }) => {
+        await Bun.sleep(1000);
+        await cursor.click(await pointOn(page.getByText('Go / no-go meeting')));
+        await Bun.sleep(1500);
+        await cursor.click(await pointOn(page.getByRole('button', { name: '5 guests' })));
+        await Bun.sleep(3000);
+        await cursor.click(await pointOn(page.getByRole('button', { name: 'Close' }).last()));
+        await Bun.sleep(1000);
+        // A calendar's row in the sidebar starts with its tick box.
+        const teamRow = page.locator('div.group', { has: page.getByText('festival crew', { exact: true }) });
+        const toggle = await pointOn(teamRow.getByRole('button'));
+        await cursor.click(toggle);
+        await Bun.sleep(2000);
+        await cursor.click(toggle);
+        await Bun.sleep(1200);
+        await cursor.moveTo(REST, { duration: 900 });
+        await Bun.sleep(800);
+    },
+} satisfies Scene;

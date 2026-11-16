@@ -3,8 +3,8 @@
 
 import type { SlideSize } from '@workspace/lib/vector';
 import { oneOf, SLIDE_SIZE_KEYS } from '@workspace/lib/vector';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { FieldLegend, FieldSet } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { useState } from 'react';

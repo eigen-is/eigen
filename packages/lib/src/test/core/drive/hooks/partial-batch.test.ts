@@ -98,7 +98,7 @@ describe.each([
         if (!(error instanceof PartialBatchError)) return;
         expect(error.succeeded.map((p) => p.id)).toEqual(['a', 'b']);
         expect(error.failed).toEqual([BAD]);
-        expect(toasts).toEqual([`error: Failed to ${verb} 1 of 3 items: No access (403)`]);
+        expect(toasts).toEqual([`error: Failed to ${verb} 1 of 3 items: No access`]);
     });
 
     test('a retry with the failed items sends only those', async () => {
@@ -114,7 +114,7 @@ describe.each([
         const { AppError } = await import('../../../../core/api-error');
         const { error } = await run(hook, [BAD]);
         expect(error).toBeInstanceOf(AppError);
-        expect(toasts).toEqual(['error: No access (403)']);
+        expect(toasts).toEqual(['error: No access']);
     });
 
     test('a batch that went through resolves with its items', async () => {

@@ -1,7 +1,7 @@
 // The month view draws the visible calendars' events and the shared ones, four to a day with a count of the
 // rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
-// cancels that day alone, and a click on a day creates an event there. A calendar's options button in the sidebar
-// shows on hover only.
+// cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
+// the view, and a calendar's options button in the sidebar shows on hover only.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -180,15 +180,41 @@ test('a day holds four events, all-day first, and counts the rest', async () => 
     expect(container.textContent).toContain('1 more');
 });
 
+test("an all-day pill's title is black on a light color and white on a dark one", async () => {
+    const allDay = (title: string, color: string) =>
+        event({
+            title,
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 20)),
+            endTime: new Date(Date.UTC(2026, 9, 21)),
+            data: { color },
+        });
+    ownEvents.data = [allDay('Pale', '#fef9c2'), allDay('Deep', '#193cb8')];
+    const { container } = await open();
+    expect([pill(container, 'Pale'), pill(container, 'Deep')].map((p) => p?.getAttribute('style'))).toEqual([
+        expect.stringMatching(/(^|; )color: #000;/),
+        expect.stringMatching(/(^|; )color: #fff;/),
+    ]);
+});
+
 test('while the events load the grid waits', async () => {
     ownEvents.isLoading = true;
     const { container } = await open();
     expect(container.textContent).not.toContain('MON');
 });
 
+test('the previous and next buttons are named for the view', async () => {
+    const { container } = await open();
+    const named = (name: string) => container.querySelector(`button[aria-label="${name}"]`);
+    expect([named('Previous month'), named('Next month')]).toEqual([
+        expect.any(HTMLButtonElement),
+        expect.any(HTMLButtonElement),
+    ]);
+});
+
 test("the next button moves to the next month's range", async () => {
     const { container, path } = await open();
-    await click(container.querySelector('.lucide-chevron-right')?.closest('button'));
+    await click(container.querySelector('button[aria-label="Next month"]'));
     const november = realCalendar.getMonthRange(new Date(2026, 10, 15));
     expect(path()).toBe(`/view/month/${november.from}/${november.to}`);
 });

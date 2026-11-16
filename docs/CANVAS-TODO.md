@@ -24,6 +24,8 @@ The backlog for the canvas apps: Slides, Vector, Stickies and the canvas engine 
 
 - **Text on a curve in Slides and Vector** (M–L): A text block lays out in a straight box only ([CANVAS.md](CANVAS.md#text-is-one-block-that-the-closed-shapes-share)), so a round badge or an arched banner can't set its text along its shape ([PROPOSAL_CLIPART.md](proposals/PROPOSAL_CLIPART.md#6-poster-pieces)). Text along a circle or an arch, at least, in a new text field (additive). The live canvas and the SVG can use `textPath`. Check each export before promising it: pptx has warped text (`prstTxWarp`), and what WeasyPrint draws from an SVG `textPath` is unverified.
 
+- **Slide and Arrange menus in Slides** (M): The Slides bar has File, Edit and Insert (`packages/ui/src/components/vector/canvas-toolbar.tsx`). The slide rows live only on a thumbnail's menu and the order rows only on an object's right-click menu. As Google Slides: a Slide menu for new, duplicate and delete, and an Arrange menu for order and align, both after Insert.
+
 ## Bugs and small fixes
 
 Verified, bounded, cheap to fix on the next touch.

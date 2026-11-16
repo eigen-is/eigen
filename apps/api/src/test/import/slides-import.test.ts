@@ -273,7 +273,7 @@ describe('Convert to Slides', () => {
         try {
             await expect(convertToDocument(drive, mount, path, 'eigenslides', alice, maxBytes)).rejects.toMatchObject({
                 status: 413,
-                message: 'Source file too large',
+                message: 'Upload too large',
             });
             expect(readSpy).toHaveBeenCalledWith(path.id, maxBytes + 1);
         } finally {

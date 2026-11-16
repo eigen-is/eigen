@@ -4,7 +4,6 @@
 
 import type { Editor } from '@tiptap/react';
 import { useIsCompactToolbar } from '@workspace/lib/media';
-import { AppBarMenu, TooltipButton } from '@workspace/ui';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -12,6 +11,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { AppBarMenu, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Menubar } from '@workspace/ui/components/menubar';
 import { Separator } from '@workspace/ui/components/separator';
 import {

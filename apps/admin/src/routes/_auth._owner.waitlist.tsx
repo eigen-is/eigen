@@ -11,8 +11,11 @@ import {
 } from '@workspace/lib/admin';
 import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
-import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, SearchBar, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { UserItem } from '@workspace/ui/components/user';

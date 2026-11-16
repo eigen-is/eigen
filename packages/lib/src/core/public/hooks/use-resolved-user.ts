@@ -1,6 +1,10 @@
+// The name, email line and avatar to show for a user or team, such as on an avatar, a comment or a share
+// entry. The user's own contact card wins, then the server's public profile, then what the caller passed.
+
 import { API_HOST, getPublicAvatarUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
-import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types';
+import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
+import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from '@workspace/lib/types/owner';
 import { usePublicUser } from './use-public';
 
 type UseResolvedUserParams = {
@@ -10,7 +14,9 @@ type UseResolvedUserParams = {
     imageUrl?: string;
 };
 
-export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams) {
+type ResolvedUser = { displayName: string; resolvedEmail: string; avatarSrc: string; isLoading: boolean };
+
+export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams): ResolvedUser {
     const { data: dataContacts, isLoading: isLoadingContacts } = useContacts();
 
     const parsed = parseOwnerId(userId || email || '');
@@ -18,13 +24,12 @@ export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUs
     // The public endpoint resolves teams too, so a non-member still gets a name.
     const { data: dataPublic, isLoading: isLoadingPublic } = usePublicUser(userId || email || '');
 
-    const contact =
-        !isLoadingContacts && email && dataContacts ? dataContacts.find((c) => c.email.includes(email)) : null;
+    const contact = !isLoadingContacts && email && dataContacts ? findContactByEmail(dataContacts, email) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
     const url = imageUrl !== undefined ? imageUrl || null : contact?.avatar || publicUser?.avatar || null;
     const displayName =
-        (contact && `${contact.firstName} ${contact.lastName}`.trim()) ||
+        (contact && contactFullName(contact)) ||
         publicUser?.name?.trim() ||
         name ||
         // An email reads fine as a last resort; a `team_<id>` doesn't, so teams stop here.

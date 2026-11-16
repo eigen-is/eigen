@@ -14,11 +14,13 @@ import {
 } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
-import { DeleteDialog, EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
@@ -84,7 +86,6 @@ function ContactsRoute() {
         });
     };
 
-    // Shared by the list context menu and the detail kebab — toggle one label across the batch.
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
         const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
         await Promise.allSettled(
@@ -109,8 +110,6 @@ function ContactsRoute() {
         <ContactsListToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
-            // Team members carry a single display name — no first/last sort to offer, and the
-            // member list holds no cards to import into or export.
             onSortChange={filterType === 'team' ? undefined : setSortBy}
             onImportClick={filterType === 'team' ? undefined : () => setImportOpen(true)}
         />
@@ -208,11 +207,7 @@ function ContactsRoute() {
                         ? `Are you sure you want to delete ${deleteTargets.length} contacts`
                         : 'Are you sure you want to delete'
                 }
-                itemName={
-                    deleteTargets.length === 1
-                        ? `${deleteTargets[0].firstName} ${deleteTargets[0].lastName}`
-                        : undefined
-                }
+                itemName={deleteTargets.length === 1 ? contactFullName(deleteTargets[0]) : undefined}
                 onDelete={handleConfirmDelete}
             />
 

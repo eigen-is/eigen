@@ -18,7 +18,6 @@ import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { canUploadServerArchive } from '@workspace/lib/validation';
-import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -27,8 +26,11 @@ import {
     CodeBlockContent,
     CodeBlockCopyButton,
 } from '@workspace/ui/components/code-block';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { ErrorState, LoadingState, SettingsSection } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { S3ConfigCard } from '@workspace/ui/components/mount';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { AlertTriangle, Archive, X } from 'lucide-react';

@@ -2,8 +2,8 @@
 // toolbar. The new team joins the list, where the admin opens it to add members and drives.
 
 import { useCreateTeam } from '@workspace/lib/admin';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 

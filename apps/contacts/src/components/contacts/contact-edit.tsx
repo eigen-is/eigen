@@ -4,17 +4,21 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
+import { readableTextColor } from '@workspace/lib/constants/colors';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
-import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
+import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Textarea } from '@workspace/ui/components/textarea';
+import { useContactAvatarUpload } from '@workspace/ui/components/use-contact-avatar-upload';
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';
@@ -126,7 +130,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                         <form onSubmit={handleSubmit} className="space-y-8">
                             <div className="flex justify-center mb-8">
                                 <AvatarEditor
-                                    name={`${contact.firstName} ${contact.lastName}`}
+                                    name={contactFullName(contact)}
                                     email={contact.email[0]}
                                     imageUrl={avatar ?? ''}
                                     onRemove={avatar ? () => setAvatar(null) : undefined}
@@ -165,11 +169,13 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                         return (
                                                             <Badge
                                                                 key={index}
-                                                                className="px-3 py-1 text-primary-foreground"
-                                                                style={{
-                                                                    backgroundColor:
-                                                                        labelObj?.color || 'var(--primary)',
-                                                                }}
+                                                                className="px-3 py-1"
+                                                                style={
+                                                                    labelObj && {
+                                                                        backgroundColor: labelObj.color,
+                                                                        color: readableTextColor(labelObj.color),
+                                                                    }
+                                                                }
                                                             >
                                                                 {labelObj?.name}
                                                                 <button

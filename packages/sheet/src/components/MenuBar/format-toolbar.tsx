@@ -3,7 +3,7 @@
 // is still a row of that menu. A viewer gets no icon row.
 
 import { nextFontSize } from '@workspace/lib/constants/fonts';
-import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
+import { ToolbarSeparator, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';

@@ -14,11 +14,17 @@ import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
-import { CollabDocumentGate, ColumnLayout, Column as LayoutColumn, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, CommentNoteCard, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    CollabDocumentGate,
+    ColumnLayout,
+    Column as LayoutColumn,
+    UnsyncedEditsGuard,
+    useLayout,
+} from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useCallback, useMemo, useRef, useState } from 'react';

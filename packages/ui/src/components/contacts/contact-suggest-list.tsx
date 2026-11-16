@@ -1,3 +1,6 @@
+// The dropdown of matching people under an address field, such as a guest list or a chat's @-mention. Its caller
+// owns the matches and the highlighted row; a row is picked on mouse down, before the field's blur closes the list.
+
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { cn } from '@workspace/ui/lib/utils';
 import { useRef } from 'react';
@@ -5,13 +8,13 @@ import { useScrollToIndex } from '../../hooks/use-scroll-to-index';
 import { UserItem } from '../user/user-item';
 
 type ContactSuggestListProps = {
-    items: ContactSuggestion[];
+    items: readonly ContactSuggestion[];
     selectedIndex: number;
     onSelect: (suggestion: ContactSuggestion) => void;
     className?: string;
 };
 
-export function ContactSuggestList({ items, selectedIndex, onSelect, className = '' }: ContactSuggestListProps) {
+export function ContactSuggestList({ items, selectedIndex, onSelect, className }: ContactSuggestListProps) {
     const listRef = useRef<HTMLUListElement>(null);
     useScrollToIndex(listRef, selectedIndex);
 

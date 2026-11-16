@@ -8,14 +8,13 @@ import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { isRoleAddress } from '../config/server-config';
-import { ApiError } from '../core/errors';
+import { ApiError, payloadTooLarge } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { downloadName } from '../drive/serve-file';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user';
 import type { Mail } from './mail-domain';
-import { attachmentTooLarge } from './mail-domain';
 
 export async function getMailClient(user: User): Promise<Mail> {
     const home = await getHome(user.id);
@@ -68,7 +67,7 @@ export async function attachFromDrive(
 
     const drive = await getSharedDrive(sourceOwnerId, user);
     const { mount, path } = await drive.resolveFile(sourceMountId, sourcePathId);
-    if (path.size > maxSize) throw attachmentTooLarge(maxSize);
+    if (path.size > maxSize) throw payloadTooLarge();
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
     if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');
@@ -106,7 +105,7 @@ export async function saveAttachmentsToDrive(
         const att = attachments[index];
         const filename = mailAttachmentName(att, index);
         const content = Buffer.from(att.content);
-        if (content.byteLength > maxSize) throw attachmentTooLarge(maxSize);
+        if (content.byteLength > maxSize) throw payloadTooLarge();
         return { filename, contentType: att.contentType, content };
     });
 

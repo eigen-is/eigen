@@ -34,7 +34,7 @@ Types flow end to end: Elysia handler return type → Eden Treaty → hook → c
 - Eden responses keep their inferred type: the backend handler or domain method gets an explicit return type from `packages/lib/src/types/`
 - Shared types live in `packages/lib/src/types/[domain].ts`, never redefined; a missing one is added there. Only the leaves `@workspace/math` and `@workspace/formula` own their own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
-- Infer locally, annotate publicly: explicit return types on backend route handlers, domain methods and hooks, none where TypeScript infers
+- Infer locally, annotate publicly: explicit return types on backend route handlers, domain methods and hooks, none where TypeScript infers. A hook that returns its `useQuery`, `useInfiniteQuery` or `useMutation` call as it is takes none: the route's type already flows through it from Eden, and a written one would only repeat it
 - `import type` as its own statement beside the value import from the same module, so each import fits on one line
 - Drizzle `.$inferSelect` for row types, never hand-written column types
 - One type per concept: pass `User` or `DrivePath` even when a function reads two fields, never a narrower projection; convert a library's narrower shape where it enters. Test fixtures may keep their own
@@ -65,7 +65,7 @@ Workspace imports resolve through each package's `exports` map, never tsconfig a
 
 ### Dates and labels
 
-**User-visible dates are day-month-year**: "5 January 2026", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Use `formatDayMonth` / `formatDate` from `@workspace/lib/date` (not `'en-GB'`), and `d MMM yyyy` for hand-built shapes. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari"; fix a sibling that passes `[]` on touch. A plain number's `.toLocaleString()` stays. Other spelling is en-US: fix British spelling on touch.
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Times are 24-hour, "09:05", never "9:05 AM", from `formatTime`. Use `formatDayMonth` / `formatDate` from `@workspace/lib/date` (not `'en-GB'`), and `d MMM yyyy` for hand-built shapes. Every `toLocale*String` on a date passes `'en'`, never `[]` or no locale, or a Dutch browser writes "januari"; fix a sibling that passes `[]` on touch. A plain number's `.toLocaleString()` stays. Other spelling is en-US: fix British spelling on touch.
 
 **UI labels are sentence case**: only the first word and proper nouns start with a capital ("Keep aspect ratio"), in buttons, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. `bun scripts/check-standards.ts` fails a capital after the first word in a label prop or element; `PROPER_NOUNS` in `scripts/sentence-case.ts` is the one list of names that keep theirs. Help-center articles quote labels exactly, so a renamed label changes the articles that bold it in the same commit.
 

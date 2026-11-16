@@ -120,6 +120,6 @@ describe('an event write that meets a 412', () => {
             status: 409,
         };
         await runMove();
-        expect(toasts).toEqual(['error: The target calendar already holds this event (409)']);
+        expect(toasts).toEqual(['error: The target calendar already holds this event']);
     });
 });

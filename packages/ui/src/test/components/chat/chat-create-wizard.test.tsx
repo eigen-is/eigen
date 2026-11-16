@@ -1,8 +1,10 @@
 // The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
 // with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
 // removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the
-// second step is a button that opens the folder browser, and a chat made after that goes into the folder it shows.
+// second step is a button that opens the folder browser, and a chat made after that goes into the folder it shows. A
+// typed address that is one of the user's contacts names the chat by the contact's name.
 import { afterAll, expect, mock, test } from 'bun:test';
+import type { Contact } from '@workspace/lib/types/contact';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -39,6 +41,16 @@ mock.module('@workspace/lib/chat', () => ({
     }),
     useFindChatByMembers: () => ({ data: [], isPending: false }),
 }));
+const grace: Contact = {
+    id: 'grace',
+    etag: '',
+    firstName: 'Grace',
+    lastName: 'Hopper',
+    email: ['Grace@example.com'],
+    phone: [],
+};
+const realContacts = { ...(await import('@workspace/lib/contacts')) };
+mock.module('@workspace/lib/contacts', () => ({ ...realContacts, useContacts: () => ({ data: [grace] }) }));
 const realHome = { ...(await import('@workspace/lib/home')) };
 mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: myTeams }) }));
 // The root of the viewer's drive, once it has loaded. The browser's other reads fail and draw an empty browser.
@@ -52,6 +64,7 @@ mock.module('@workspace/lib/drive', () => ({
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/chat', () => realChat);
+    mock.module('@workspace/lib/contacts', () => realContacts);
     mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('@workspace/lib/home', () => realHome);
 });
@@ -136,9 +149,9 @@ const letsChat = () => {
     return button;
 };
 
-async function openSecondStep() {
+async function openSecondStep(...emails: string[]) {
     await openWizard();
-    await pick('ada@example.com');
+    for (const email of emails.length ? emails : ['ada@example.com']) await pick(email);
     // The first step waits for its debounced look for an existing chat with these people.
     await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
     await act(async () => letsChat().click());
@@ -176,4 +189,9 @@ test('once the location is opened, the chat waits for the drive’s root and goe
     expect(letsChat().disabled).toBe(false);
     await act(async () => letsChat().click());
     expect(createdRooms).toEqual([expect.objectContaining({ parentId: 'root', members: ['ada@example.com'] })]);
+});
+
+test("a typed contact's address names the chat by the contact, and an unknown one by its local part", async () => {
+    await openSecondStep('ada@example.com', 'grace@example.com');
+    expect(document.querySelector<HTMLInputElement>('#chat-wizard-name')?.value).toBe('ada & Grace Hopper');
 });

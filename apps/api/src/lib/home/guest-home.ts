@@ -3,8 +3,7 @@
 // because everything in it belongs to the people who shared it.
 
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { getGuestHomePath, PATHS } from '../config/paths';
-import { JsonStore } from '../core';
+import { getGuestHomePath } from '../config/paths';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -12,7 +11,7 @@ import type { HomeSettings } from './home';
 import { Home, homeSize } from './home';
 
 export class GuestHome extends Home {
-    public override readonly settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
+    public override readonly settings = this.settingsStore<HomeSettings>({});
 
     public constructor(user: User, onClosed?: () => void) {
         super(user, getGuestHomePath(user.id), onClosed);

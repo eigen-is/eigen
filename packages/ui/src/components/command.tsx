@@ -1,3 +1,6 @@
+// shadcn's Command on cmdk: a filterable list with an input and keyboard selection, such as the command palette's
+// rows or the member picker in a comment.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { Command as CommandPrimitive } from 'cmdk';
 import { SearchIcon } from 'lucide-react';
@@ -59,16 +62,6 @@ function CommandGroup({ className, ...props }: React.ComponentProps<typeof Comma
     );
 }
 
-function CommandSeparator({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Separator>) {
-    return (
-        <CommandPrimitive.Separator
-            data-slot="command-separator"
-            className={cn('-mx-1 h-px bg-border', className)}
-            {...props}
-        />
-    );
-}
-
 function CommandItem({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Item>) {
     return (
         <CommandPrimitive.Item
@@ -82,23 +75,4 @@ function CommandItem({ className, ...props }: React.ComponentProps<typeof Comman
     );
 }
 
-function CommandShortcut({ className, ...props }: React.ComponentProps<'span'>) {
-    return (
-        <span
-            data-slot="command-shortcut"
-            className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)}
-            {...props}
-        />
-    );
-}
-
-export {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-    CommandSeparator,
-    CommandShortcut,
-};
+export { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList };

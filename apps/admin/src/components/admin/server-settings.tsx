@@ -26,10 +26,11 @@ import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/type
 import type { LandingLink, ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { LoadingState, SettingsFooter, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';

@@ -155,7 +155,7 @@ test('Enter in the guest field adds the guest and saves nothing, and the guest g
 
     await act(async () => button('Save')?.click());
     expect(createEvent.mutateAsync.mock.calls[0]?.[0].data).toEqual({
-        attendees: [{ email: 'ada@example.org', name: 'ada', status: 'pending', role: 'required' }],
+        attendees: [{ email: 'ada@example.org', name: undefined, status: 'pending', role: 'required' }],
     });
 });
 

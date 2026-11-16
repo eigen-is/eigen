@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -249,14 +249,14 @@ describe('iMIP Outbound Email Composition', () => {
 
     test('invitation mail labels a zone-less event UTC instead of guessing the server zone', () => {
         const mail = invite(MOCK_EVENT, organizer);
-        expect(mail.text).toContain('10:00 AM – 11:00 AM (UTC)');
+        expect(mail.text).toContain('10:00 – 11:00 (UTC)');
         expect(mail.html).toContain('(UTC)');
     });
 
     test('invitation mail renders a stored zone as its own wall clock and names it', () => {
         const mail = invite({ ...MOCK_EVENT, timezone: 'Europe/Amsterdam' }, organizer);
-        expect(mail.text).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
-        expect(mail.html).toContain('12:00 PM – 1:00 PM (Europe/Amsterdam)');
+        expect(mail.text).toContain('12:00 – 13:00 (Europe/Amsterdam)');
+        expect(mail.html).toContain('12:00 – 13:00 (Europe/Amsterdam)');
     });
 
     test('invitation mail says how a series repeats, right after when', () => {
@@ -1031,7 +1031,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
                 dtstamp: null,
                 recurrenceDate: null,
                 recurrenceId: null,
-                data: { organizer: { userId: '', email: 'outlook@external.com', name: 'Outlook' } },
+                data: { organizer: { email: 'outlook@external.com', name: 'Outlook' } },
             },
             'outlook@external.com',
         );
@@ -1170,6 +1170,41 @@ describe('iMIP inbound sender binding (audit P1-7a)', () => {
         const [stored] = await home.calendar.getEventsByUid(event.uid);
         expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['accepted']);
         expect(home.calendar.calendarRow(bobCalendarId)?.ctag).toBe(ctag + 1);
+    });
+
+    test('a REPLY without DTSTART answers nothing and is logged', async () => {
+        const home = await getHome(ctx.bob.user.id);
+        const event = await home.calendar.createEvent(bobCalendarId, {
+            title: 'No Start',
+            startTime: new Date('2026-05-05T10:00:00Z'),
+            endTime: new Date('2026-05-05T11:00:00Z'),
+            allDay: false,
+            data: { attendees: [{ email: 'nostart@external.com', status: 'pending', role: 'required' }] },
+        });
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'ATTENDEE;PARTSTAT=ACCEPTED:mailto:nostart@external.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const info = spyOn(console, 'info').mockImplementation(() => {});
+        let logged: unknown[];
+        try {
+            await processInboundImip(home, calendarMail(ics, 'nostart@external.com'), {
+                verified: true,
+                reason: 'dkim pass',
+            });
+            logged = info.mock.calls.flat();
+        } finally {
+            mock.restore();
+        }
+        expect(logged).toContain('iMIP: skipped 1 unreadable events from nostart@external.com');
+        const [stored] = await home.calendar.getEventsByUid(event.uid);
+        expect(stored.data?.attendees?.map((attendee) => attendee.status)).toEqual(['pending']);
     });
 
     test('a REPLY answers its first five dates of a series', async () => {
@@ -2413,7 +2448,7 @@ describe('iMIP inbound self-addressed messages', () => {
                 dtstamp: null,
                 recurrenceDate: null,
                 recurrenceId: null,
-                data: { organizer: { userId: '', email: ctx.charlie.user.email, name: 'Charlie' } },
+                data: { organizer: { email: ctx.charlie.user.email, name: 'Charlie' } },
             },
             ctx.charlie.user.email,
         );

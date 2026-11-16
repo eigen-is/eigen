@@ -1,3 +1,7 @@
+// The people list under a chat composer: the room's members that match what follows an @, or the target a slash
+// command such as /invite asks for, which may also come from the user's contacts. The composer shows it and moves
+// its selection, and the list reports what it shows so a key press can pick an entry.
+
 import { useContactSuggestions } from '@workspace/lib/contacts';
 import type { RoomMember } from '@workspace/lib/types/chat';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
@@ -6,12 +10,12 @@ import { ContactSuggestList } from '../contacts/contact-suggest-list';
 
 type ChatPlayerSuggestProps = {
     query: string;
-    roomMembers: RoomMember[];
+    roomMembers: readonly RoomMember[];
     onSelect: (email: string) => void;
     visible: boolean;
     selectedIndex: number;
     onItemsChange: (count: number, emails: string[]) => void;
-    includeContacts?: boolean;
+    includeContacts: boolean;
 };
 
 export function ChatPlayerSuggest({
@@ -21,7 +25,7 @@ export function ChatPlayerSuggest({
     visible,
     selectedIndex,
     onItemsChange,
-    includeContacts = true,
+    includeContacts,
 }: ChatPlayerSuggestProps) {
     const { suggestions: contactSuggestions } = useContactSuggestions(query, true);
 
@@ -35,29 +39,23 @@ export function ChatPlayerSuggest({
                 return m.email.toLowerCase().includes(q) || m.displayName.toLowerCase().includes(q);
             })
             .map((m) => ({
-                // Chat room participants — not workspace team members. The discriminator
-                // routes downstream consumers (e.g. the palette's contact provider) to the
-                // personal-contact landing, not a team-scoped page that wouldn't exist.
+                // A room member is no team member, so it opens as a personal contact, not on a team's page.
                 kind: 'personal',
                 id: m.email,
                 displayName: m.displayName,
                 email: m.email,
             }));
 
-        if (!includeContacts) {
-            if (q && memberSuggestions.some((s) => s.email.toLowerCase() === q)) return [];
-            return memberSuggestions;
-        }
-
         const seen = new Set<string>();
         const merged: ContactSuggestion[] = [];
-        for (const s of [...memberSuggestions, ...contactSuggestions]) {
+        for (const s of includeContacts ? [...memberSuggestions, ...contactSuggestions] : memberSuggestions) {
             const key = s.email.toLowerCase();
             if (!seen.has(key)) {
                 seen.add(key);
                 merged.push(s);
             }
         }
+        // A query that is already a whole address needs no list.
         if (q && merged.some((s) => s.email.toLowerCase() === q)) return [];
         return merged;
     }, [visible, query, roomMembers, contactSuggestions, includeContacts]);

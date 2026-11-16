@@ -1,6 +1,9 @@
+// The toolbar above Calendar's month and week views: Today, previous and next, the title with the month or the
+// week's dates, and the view choice. On a phone, Today and the views fold into a kebab menu. The view route owns
+// the date and the mode and passes in the handlers that change them.
+
 import type { ViewMode } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
-import { KebabTrigger, Toolbar, ToolbarTitle, useLayout } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     ChoiceMenuItems,
@@ -9,10 +12,11 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@workspace/ui/components/dropdown-menu';
+import { useLayout } from '@workspace/ui/components/layout/app';
+import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-// The view select and the phone's kebab offer the same views.
 const VIEW_MODES: { value: ViewMode; label: string }[] = [
     { value: 'month', label: 'Month' },
     { value: 'week', label: 'Week' },
@@ -46,7 +50,6 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
         return `${startOfWeek.getDate()} – ${endOfWeek.getDate()} ${startMonth} ${endYear}`;
     }
-    // Across a year boundary, stamp both years (e.g. "29 Dec 2026 – 4 Jan 2027").
     if (startYear !== endYear) {
         return `${startOfWeek.getDate()} ${startMonth} ${startYear} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
     }
@@ -72,17 +75,12 @@ export function CalendarToolbar({
                     </Button>
                 )}
                 <div className="flex items-center">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrev}>
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNext}>
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    <TooltipButton icon={ChevronLeft} tooltipText={`Previous ${viewMode}`} onClick={onPrev} />
+                    <TooltipButton icon={ChevronRight} tooltipText={`Next ${viewMode}`} onClick={onNext} />
                 </div>
                 <ToolbarTitle className="text-lg">{formatTitle(currentDate, viewMode)}</ToolbarTitle>
             </div>
 
-            {/* Mobile folds Today + the view select into a kebab. */}
             {isMobile ? (
                 <DropdownMenu>
                     <KebabTrigger title="View options" />

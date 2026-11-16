@@ -1,7 +1,10 @@
+// Space's root route: the app shell around every account settings page. Anyone signed in gets Space's nav
+// beside the page, and a signed-out visitor only the shell. The page scrolls on its own, apart from the nav.
+
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import type { RouterAppContext } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
-import { AppShell } from '@workspace/ui';
+import type { RouterAppContext } from '@workspace/lib/types/auth';
+import { AppShell } from '@workspace/ui/components/layout/app';
 import { SpaceSidebar } from '../components/space/space-sidebar';
 
 function SpaceRoot() {

@@ -10,7 +10,11 @@ import { isContainerType } from '../../../types/drive';
 import { toAttachmentReference } from '../../../types/drive-reference';
 import { useCopyToMediaFolder, useUploadFile } from '../../drive';
 
-export function useResolveCardAttachments(ownerId: string, mountId: string, mediaFolderId: string | null) {
+export function useResolveCardAttachments(
+    ownerId: string,
+    mountId: string,
+    mediaFolderId: string | null,
+): (drafts: readonly CardAttachmentDraft[]) => Promise<ChatAttachment[]> {
     const uploadFile = useUploadFile(ownerId, mountId);
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
 

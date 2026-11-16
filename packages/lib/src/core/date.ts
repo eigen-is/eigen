@@ -1,14 +1,9 @@
-// Date and time formatting for every app, always day-month-year in English, with the formatters cached because a
-// long list formats one date per row. The backend uses it too, for example in the CLI.
+// Date and time formatting for every app, always day-month-year in English with a 24-hour clock, with the formatters
+// cached because a long list formats one date per row. The backend uses it too, for example in the CLI.
 
-export function formatTime(date: Date | string | number): string {
-    const d = new Date(date);
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour = h % 12 || 12;
-    if (m === 0) return `${hour} ${ampm}`;
-    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+// "09:05" on a 24-hour clock, in the local zone or in the given one.
+export function formatTime(date: Date | string | number, timeZone?: string): string {
+    return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date(date));
 }
 
 // Constructing an Intl.DateTimeFormat costs about as much as formatting a thousand dates, and a Drive
@@ -49,9 +44,8 @@ export function formatDate(date: Date | string | number): string {
     return formatDayMonth(new Date(date), { year: true });
 }
 
-// "8 Jun 2026" for a bare YYYY-MM-DD calendar date. Parses the parts as a *local* date —
-// `new Date("2026-06-08")` reads the string as UTC midnight, which renders the day before for
-// viewers west of UTC and mismatches between prerender (build TZ) and hydration (viewer TZ).
+// "8 Jun 2026" for a bare YYYY-MM-DD calendar date. `new Date("2026-06-08")` reads UTC midnight, the day before
+// west of UTC, so the parts are read as a local date.
 export function formatDateOnly(isoDate: string): string {
     const [year, month, day] = isoDate.split('-').map(Number);
     return formatDayMonth(new Date(year, month - 1, day), { year: true });
@@ -68,16 +62,9 @@ export function isToday(date: Date): boolean {
 
 export function formatDateTime(date: Date | string | number): string {
     const d = new Date(date);
-    const isSameYear = d.getFullYear() === new Date().getFullYear();
-
-    if (isToday(d)) {
-        return `Today, ${formatTime(d)}`;
-    }
-    if (isSameYear) {
-        return `${formatDayMonth(d)}, ${formatTime(d)}`;
-    }
-
-    return `${formatDate(d)}, ${formatTime(d)}`;
+    if (isToday(d)) return `Today, ${formatTime(d)}`;
+    const day = d.getFullYear() === new Date().getFullYear() ? formatDayMonth(d) : formatDate(d);
+    return `${day}, ${formatTime(d)}`;
 }
 
 export function formatTimeAgo(date: Date | string | number): string {
@@ -98,8 +85,4 @@ export function formatFullDateTime(date: Date | string | number): string {
 
 export function formatMonth(date: Date | string | number, style: 'long' | 'short' = 'long'): string {
     return new Date(date).toLocaleDateString('en', { month: style });
-}
-
-export function formatInputDate(date: Date | string | number): string {
-    return new Date(date).toISOString().slice(0, 10);
 }

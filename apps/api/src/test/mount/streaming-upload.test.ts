@@ -199,7 +199,7 @@ describe('Streaming Upload', () => {
             );
             expect(res.status).toBe(413);
             // The parser's MaxFileSizeExceededError mapping in streamFilesToTemp
-            expect(await res.text()).toBe('File exceeds maximum upload size');
+            expect(await res.text()).toBe('Upload too large');
         } finally {
             await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
@@ -230,7 +230,7 @@ describe('Streaming Upload', () => {
                 { method: 'POST', body: formData },
             );
             expect(res.status).toBe(507);
-            expect(await res.text()).toBe('Insufficient Storage');
+            expect(await res.text()).toBe('Not enough storage left');
         } finally {
             await restore();
         }

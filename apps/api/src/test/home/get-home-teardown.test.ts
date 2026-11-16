@@ -1,11 +1,13 @@
 import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import * as path from 'node:path';
-import { auth } from '../../lib/auth/auth';
+import { orgOwnerId } from '@workspace/lib/types';
+import { organization } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
-import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome, getUserHome, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { getTestContext } from '../setup';
 
@@ -15,8 +17,13 @@ import { getTestContext } from '../setup';
 const USER_IDLE_MS = 5 * 60_000;
 
 describe('getHome teardown race', () => {
+    let orgId: string;
+
     beforeAll(async () => {
         await getTestContext();
+        const org = getAuthDrizzleDb().select({ id: organization.id }).from(organization).get();
+        if (!org) throw new Error('No organization found in test DB');
+        orgId = org.id;
     });
 
     async function createHomeUser(email: string): Promise<string> {
@@ -103,7 +110,9 @@ describe('getHome teardown race', () => {
         const home = await getHome(userId);
 
         await home.close();
-        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB)).rejects.toThrow('Home is closing');
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB)).rejects.toThrow(
+            'Reloading. Try again in a moment.',
+        );
     });
 
     // The close takes its list of databases to close part way through, so one opened meanwhile could be missed.
@@ -112,7 +121,9 @@ describe('getHome teardown race', () => {
         const home = await getHome(userId);
 
         const closing = home.close();
-        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, 'probe.db')).rejects.toThrow('Home is closing');
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, 'probe.db')).rejects.toThrow(
+            'Reloading. Try again in a moment.',
+        );
         await closing;
     });
 
@@ -134,8 +145,68 @@ describe('getHome teardown race', () => {
         } catch (err) {
             refusal = err;
         }
-        expect(refusal).toMatchObject({ status: 503, message: 'Home is closing' });
+        expect(refusal).toMatchObject({ status: 503, message: 'Reloading. Try again in a moment.' });
         await closing;
+    });
+
+    // The next home loads its own copy of the file, so a save through the old one must not reach the disk.
+    test('a closed home refuses a settings save and writes none of it', async () => {
+        const userId = await createHomeUser('closed-refuses-save@test.eigen.is');
+        const old = await getUserHome(userId);
+        await old.close();
+
+        await expect(old.settings.set({ theme: 'dark' })).rejects.toMatchObject({
+            status: 503,
+            message: 'Reloading. Try again in a moment.',
+        });
+        expect(JSON.parse(readFileSync(path.join(old.homeDir, PATHS.SETTINGS), 'utf8')).theme).toBeUndefined();
+    });
+
+    // A save still behind another when the close starts would otherwise be written under the next home.
+    test('a home that is closing refuses a settings save', async () => {
+        const userId = await createHomeUser('closing-refuses-save@test.eigen.is');
+        const home = await getUserHome(userId);
+
+        const first = home.settings.set({ celebrations: false });
+        const closing = home.close();
+        await expect(home.settings.set({ theme: 'dark' })).rejects.toMatchObject({
+            status: 503,
+            message: 'Reloading. Try again in a moment.',
+        });
+        await first;
+        await closing;
+
+        expect((await getUserHome(userId)).settings.get()).toMatchObject({ celebrations: false });
+        await evictHome(userId);
+    });
+
+    // An org home has no parts, so its close takes no turn of the event loop unless it waits for the save.
+    test('a close waits for the settings save being written', async () => {
+        const ownerId = orgOwnerId(orgId);
+        const home = await getHome(ownerId);
+        const { promise: released, resolve: release } = Promise.withResolvers<void>();
+        const writeAtomic = home.fs.writeAtomic.bind(home.fs);
+        const write = spyOn(home.fs, 'writeAtomic').mockImplementation(async (...args) => {
+            await released;
+            return writeAtomic(...args);
+        });
+        try {
+            const saving = home.settings.set({});
+            let closed = false;
+            const closing = home.close().then(() => {
+                closed = true;
+            });
+            await Bun.sleep(0);
+            expect(write).toHaveBeenCalledTimes(1);
+            expect(closed).toBe(false);
+
+            release();
+            await Promise.all([saving, closing]);
+        } finally {
+            release();
+            write.mockRestore();
+            await evictHome(ownerId);
+        }
     });
 
     // An event stream ends from here, so its tab reconnects to the next home before this one's databases close.

@@ -83,7 +83,7 @@ function appUrlsPlugin(): Plugin {
     };
 }
 
-const APP_PORTS: Record<string, number> = {
+export const APP_PORTS: Record<string, number> = {
     index: 3000,
     mail: 3001,
     drive: 3002,

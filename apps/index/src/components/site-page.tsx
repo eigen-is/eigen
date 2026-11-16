@@ -3,7 +3,7 @@
 // section's color, which washes the rows and marks the table of contents inside it, and a page with a trail passes
 // it as the toolbar, the bar the apps keep their location in. The top bar sits outside.
 
-import { Column, ColumnLayout } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import type { ReactNode } from 'react';
 import { SiteFooter } from './site-footer';
 
@@ -37,7 +37,8 @@ export function SitePage({ color, toolbar, children }: SitePageProps) {
                     )
                 }
             >
-                <div className="h-full overflow-y-auto scroll-smooth">
+                {/* A size container, so a carousel in the content can run to the page's right edge. */}
+                <div className="@container h-full overflow-y-auto scroll-smooth">
                     <div className="flex min-h-full flex-col">
                         <div className="flex flex-1 flex-col" style={style}>
                             {children}

@@ -2,7 +2,7 @@
 // that run, and the actions that back up, verify, restore, upload and delete. The backups folder on the server is the
 // durable record: the SSE poke and the polling below only decide when to ask it again.
 
-import type { QueryKey } from '@tanstack/react-query';
+import type { QueryKey, UseQueryResult } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { backupApi, getBackupUploadUrl } from '@workspace/lib/api';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
@@ -38,7 +38,10 @@ export function useBackupArtifacts(ownerId: string) {
 }
 
 // `listKey` is the list a finished job changes: the home's artifacts, or the server archives.
-export function useBackupJobs(ownerId: string, listKey: QueryKey = backupKeys.artifacts(ownerId)) {
+export function useBackupJobs(
+    ownerId: string,
+    listKey: QueryKey = backupKeys.artifacts(ownerId),
+): UseQueryResult<BackupJob[]> {
     const isGuest = useIsGuest();
     const queryClient = useQueryClient();
     const query = useQuery({

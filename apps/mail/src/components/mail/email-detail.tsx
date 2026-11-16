@@ -4,8 +4,8 @@
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
-import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
+import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { MessageView } from '@workspace/ui/components/mail';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/print-element';

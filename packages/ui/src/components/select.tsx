@@ -1,3 +1,6 @@
+// shadcn's Select on Radix: a dropdown that picks one value from a list, such as a calendar's view or an event's
+// repeat rule.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { Select as SelectPrimitive } from 'radix-ui';
@@ -154,15 +157,4 @@ function SelectScrollDownButton({
     );
 }
 
-export {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectScrollDownButton,
-    SelectScrollUpButton,
-    SelectSeparator,
-    SelectTrigger,
-    SelectValue,
-};
+export { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue };

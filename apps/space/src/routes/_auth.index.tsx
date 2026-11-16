@@ -7,7 +7,8 @@ import { useIsAdmin } from '@workspace/lib/admin';
 import { getSupportUrl } from '@workspace/lib/api';
 import { adminApp } from '@workspace/lib/apps';
 import { useEnabledApps } from '@workspace/lib/public';
-import { Column, ColumnLayout, EigenCyclingLogo, KetTile } from '@workspace/ui';
+import { EigenCyclingLogo, KetTile } from '@workspace/ui/components/braket';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import { LifeBuoy } from 'lucide-react';
 
 export const Route = createFileRoute('/_auth/')({

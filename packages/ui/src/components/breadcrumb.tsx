@@ -2,7 +2,7 @@
 // BreadcrumbLink's asChild lets a router link take the link's look.
 
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Slot } from 'radix-ui';
 import type * as React from 'react';
 
@@ -72,27 +72,4 @@ function BreadcrumbSeparator({ children, className, ...props }: React.ComponentP
     );
 }
 
-function BreadcrumbEllipsis({ className, ...props }: React.ComponentProps<'span'>) {
-    return (
-        <span
-            data-slot="breadcrumb-ellipsis"
-            role="presentation"
-            aria-hidden="true"
-            className={cn('flex size-9 items-center justify-center', className)}
-            {...props}
-        >
-            <MoreHorizontal className="size-4" />
-            <span className="sr-only">More</span>
-        </span>
-    );
-}
-
-export {
-    Breadcrumb,
-    BreadcrumbEllipsis,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-};
+export { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator };

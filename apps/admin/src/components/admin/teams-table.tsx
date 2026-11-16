@@ -5,8 +5,11 @@
 import { formatDate } from '@workspace/lib/date';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import type { SortDir } from '@workspace/ui';
-import { EmptyState, nextSortDir, SearchBar, SortHeader, SortHeaderRow, TooltipButton } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
+import type { SortDir } from '@workspace/ui/components/sort-header';
+import { nextSortDir, SortHeader, SortHeaderRow } from '@workspace/ui/components/sort-header';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';

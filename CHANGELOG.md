@@ -7,24 +7,31 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
+- **Pictures and films on the site** — in help articles and blog posts, a click opens a picture or film bigger, and each has a thin border. A page can show a looping film or a carousel of pictures and films
 
 ### Changed
 
 - **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
 - **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
+- **Times on a 24-hour clock** — Calendar, Mail, Drive, chat, comments, version history and the admin pages write times as 09:00 and 14:30, not 9 AM and 2:30 PM. So does an invitation email
+- **Forwarded mail** — the details above a message forwarded inside another give its date as 14 Nov 2026, 15:42 UTC instead of Sat, 14 Nov 2026 15:42:11 GMT, and no date at all when the original's can't be read
+- **Error messages** — an error that says why, such as "Folders can be nested at most 256 levels deep", no longer ends in a code like (400). The code shows only when the server gave no reason
 - **Uploads** — an image or file that fails to upload into a document or a chat says why, such as a file over the size limit, instead of a bare error code. An upload in Drive can be stopped from its progress card
 - **Team drive storage** — giving a team drive new storage, or turning one on or off, reconnects the team's open documents. They show "Storage unavailable" for a few seconds and keep every edit
 - **Lists across many drives** — **Shared with me**, **Recent** and **Watched** open at most four other people's or teams' drives at a time, so one long list doesn't stall the server for everyone. A drive that takes over four seconds to open is left out of that load
 - **Line spacing in Docs** — text draws at its own font's line height, as in Word and Google Docs, so a line spacing of 1.15 is the same 1.15 after an import or an export to Word, whatever the font. Text in Source Serif 4, JetBrains Mono or Excalifont sits on taller lines than before, about an eighth for Source Serif 4. A document imported from Word in such a font before this change shows looser lines until you set its line spacing again
 - **Number formats in Sheets** — numbers round as in Excel, so 1.005 under 0.00 shows 1.01, very small numbers show their digits, a time just before midnight shows the next day, dates before 1900 show their weekday, and Excel's long date shows March 5, not March 05. Chart labels too
 - **Dates in early 1900 in Sheets** — a date in January or February 1900 shows one day earlier than in Excel, as in Google Sheets, since 1900 had no 29 February
+- **The demo budget in Sheets** — its costs chart sits beside the table, so a changed cost moves its bar in view. The income pie stays on the Charts tab
+- **The demo** — the festival crew's world holds more of their work, such as a sponsor chart in the deck, comments on the site plan, a guest from the fencing hire and a second team
 
 ### Fixed
 
 - **Trash in Drive** — the Trash and its sidebar count include what was deleted from every drive of yours and from your team drives, so anyone in the team can restore it. **Empty trash** empties only your own drives, and its dialog says so. A drive whose trash fails to load is named above the list
 - **Moving several items in Drive** — when some of them fail, the **Move to** dialog keeps only those, so **Move here** again leaves the moved ones alone. **Delete permanently** in the Trash does the same
 - **Copying to another drive** — the copy appears once it is complete, and a copied document is found by searching its text right away
+- **Size and storage errors** — a file past its size limit fails with "Upload too large" and one past the storage left with "Not enough storage left", the same words in Drive, Mail, Contacts and Calendar
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a "shared with you" or "removed your access" notification
 - **Sharing with your own team** — a file you share with a team you are in stays out of your own **Shared with me** and sends you no notice. A team drive's file shared with a member shows only in the team drive
@@ -42,6 +49,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Shared and Recent in Drive** — **Shared by me**, **Shared with me**, **Recent** and **Watched** show a renamed, moved or deleted item right away, not minutes later
 - **Restoring several items in Drive** — when some of them fail, one message says how many, and those stay in the Trash
 - **Empty lists in Drive** — the empty text sits in the middle of the list again, in Drive and in the file lists of Docs, Sheets, Slides, Stickies and Vector
+- **New in a shared folder** — in a folder someone shared with you to view only, **New** in the Drive sidebar is greyed out instead of failing with "No write permission"
 - **Move to in Drive** — for an item of another drive, such as a team's file in a document app's list, the **Move to** dialog starts in that item's drive
 - **Calendars of a team you left** — the calendars of a team you left, or of a deleted team, leave your calendar list, unless that team still shares them with you
 - **Your name from your contact card** — editing your own card in Contacts with no last name leaves no trailing space after your name
@@ -50,6 +58,20 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Filters and deleted headers in Sheets** — deleting a filter's header row or its columns shows the rows it hid again, instead of leaving them hidden with no filter to bring them back
 - **Whole-column rules and charts in Sheets** — a conditional format, validation rule or chart on a whole column, such as `B:B`, still covers the whole column after you insert or delete rows. A rule on the sheet's last row or column alone goes when an insert pushes it off
 - **TEXT in Sheets** — `TEXT` with a number format it can't read shows `#VALUE!`, not `#ERROR!`
+- **Changing slides in Slides** — going to another slide drops the selection on the slide you left, so the properties panel no longer edits a box you can't see
+- **Invitations in Mail** — an invitation shows one attachment, its `invite.ics`, without a nameless second chip beside it. An invitation that sends only the calendar keeps its chip and **Import to Calendar**
+- **Replies in Mail** — a reply has no blank lines between your text and the quoted message
+- **Keyboard in Contacts** — the highlighted person is the one Enter opens, also when the list holds a name filed under #, such as Łukasz or Иван
+- **Names in Contacts** — a contact saved with capitals in its address, such as Grace@example.com, shows its name and photo wherever that person appears
+- **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode
+- **Guest count in Calendar** — the organizer counts as an accepted guest, so the replies add up to the number of guests
+- **Guest names in Calendar** — a guest you add by typing an address takes the name from your contacts, or shows the address, not the part before the @
+- **Arrows in Calendar** — the previous and next buttons say where they go, such as Next month, on hover and to a screen reader
+- **New chats** — a chat you start with a contact by typing their address is named after the contact, not the part before the @
+- **Keyboard in Drive's grid** — the item under the keyboard cursor gets the stripe a list row shows, so it no longer looks selected
+- **Team drives on a phone** — **Move to**, **Copy to** and **Save to Drive** have a drive picker above the folders on a phone, so a file can go to a team drive
+- **Stopping Eigen** — when Docker stops answering, `./eigen stop`, `update` and `rollback` give up asking Eigen whether a backup runs after 20 s, instead of waiting for good
+- **Rolling back on the main channel** — an update keeps every image of the build before, not only the server's, also when the registry fails while it cleans up, so `./eigen rollback` needs no download
 
 ## [0.4.3] - 2026-11-11
 

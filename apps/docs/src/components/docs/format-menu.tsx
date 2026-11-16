@@ -11,7 +11,6 @@ import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
-import { AppBarMenu } from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     ChoiceMenuItems,
@@ -23,6 +22,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { AppBarMenu } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import type { LucideIcon } from 'lucide-react';
 import {

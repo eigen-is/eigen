@@ -2,8 +2,8 @@
 // The toolbar opens it from the Format menu, and OK restarts the numbering there.
 
 import type { Editor } from '@tiptap/react';
-import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 import { restartNumbering } from './list-numbering';

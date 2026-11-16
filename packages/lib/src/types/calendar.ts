@@ -16,7 +16,8 @@ export type Attendee = {
     role: 'required' | 'optional';
 };
 
-export type Organizer = { userId: string; email: string; name?: string };
+// `userId` is the organizer's Home, known only from the invitation link a guest's copy carries.
+export type Organizer = { userId?: string; email: string; name?: string };
 
 export type EventData = {
     reminders?: Reminder[];

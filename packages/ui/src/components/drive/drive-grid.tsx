@@ -92,7 +92,8 @@ export function DriveGrid({
                                         item={item}
                                         controller={controller}
                                         longPressBind={longPress.bind}
-                                        isActive={activeItemId === item.id || controller.selectedIndex === index}
+                                        isActive={activeItemId === item.id}
+                                        isCursor={controller.selectedIndex === index}
                                         isSelected={controller.selection.isSelected(item.id)}
                                         disabled={isItemDisabled?.(item) ?? false}
                                         getItemHref={getItemHref}

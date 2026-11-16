@@ -7,20 +7,14 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import {
-    useCheckPermissions,
-    useFolderContent,
-    useIsEffectiveOwner,
-    usePathInfo,
-    validateDriveSearch,
-} from '@workspace/lib/drive';
+import { useCanWriteFolder, useFolderContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
-import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { LoadingState, RequestAccessView } from '@workspace/ui/components/layout/app';
 import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
@@ -69,10 +63,8 @@ function FolderRoute() {
         if (selectedItemUrl) window.location.replace(selectedItemUrl);
     }, [selectedItemUrl]);
 
-    // One capability set for menus, detail column and quick look; owners skip the permissions round trip.
-    const isOwner = useIsEffectiveOwner(ownerId);
-    const { data: permissions } = useCheckPermissions(ownerId, mountId, isOwner || skipDataFetch ? undefined : pathId);
-    const capabilities = browseCapabilities(isOwner || permissions?.canWrite === true);
+    // One capability set for menus, detail column and quick look.
+    const capabilities = browseCapabilities(useCanWriteFolder(ownerId, mountId, pathId));
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,

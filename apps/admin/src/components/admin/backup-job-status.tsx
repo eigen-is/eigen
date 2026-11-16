@@ -2,7 +2,8 @@
 // or failed one leaves until it is dismissed. The account and server backup sections show it under their buttons.
 
 import type { BackupJob } from '@workspace/lib/types/backup';
-import { EigenLoader, TooltipButton } from '@workspace/ui';
+import { EigenLoader } from '@workspace/ui/components/braket';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Progress } from '@workspace/ui/components/progress';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';

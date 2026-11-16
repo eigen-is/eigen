@@ -1,3 +1,7 @@
+// Builds what the `.eml` quick look shows: the envelope, a body sanitized more strictly than the reader's, and the
+// files the message carries. The transform child runs it for a Drive file or a mail part, and Drive's preview cache
+// keeps the JSON. It bounds what the parser leaves unbounded.
+
 import {
     FETCHING_ATTRS,
     LINK_TAGS,
@@ -6,6 +10,7 @@ import {
     stripRemoteRefs,
 } from '@workspace/lib/mail/remote-content';
 import type { ParsedMail } from '@workspace/lib/types/mail';
+import { isListedFile } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../core/errors';
@@ -78,6 +83,7 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
         throw new ApiError(422, 'Could not read this file');
     }
 
+    const files = parsed.attachments.filter(isListedFile);
     return {
         subject: parsed.subject ?? '',
         from: parsed.from ?? null,
@@ -86,10 +92,10 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
         date: parsed.date?.toISOString() ?? null,
         html: parsed.html === null ? null : boundedHtml(parsed.html),
         text: parsed.text?.slice(0, EML_PREVIEW_MAX_TEXT_CHARS) ?? null,
-        attachments: parsed.attachments
+        attachments: files
             .slice(0, EML_PREVIEW_MAX_ATTACHMENTS)
             .map(({ filename, contentType, size }) => ({ filename, contentType, size })),
-        remainingAttachments: Math.max(parsed.attachments.length - EML_PREVIEW_MAX_ATTACHMENTS, 0),
+        remainingAttachments: Math.max(files.length - EML_PREVIEW_MAX_ATTACHMENTS, 0),
     };
 }
 

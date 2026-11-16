@@ -1,18 +1,21 @@
-// A downloaded image embeds the slices its text draws with, which the browser fetches as the files fonts.css loads:
+// A downloaded image embeds the slices its text draws with, which the browser fetches as the files the font CSS loads:
 // the range data names each by its path under assets/fonts/, and the server embeds the same slices
-// (apps/api/src/test/export/fonts.test.ts), so no side keeps a font list of its own. fonts.css is generated from the
-// range data, one rule per slice.
+// (apps/api/src/test/export/fonts.test.ts), so no side keeps a font list of its own. fonts.css and fonts-cjk.css are
+// generated from the range data, one rule per slice.
 import { expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { FontSlice } from '@workspace/lib/constants/font-slices';
 import { FONT_SLICES } from '@workspace/lib/constants/font-slices';
-import { FONT_FACES } from '@workspace/lib/constants/fonts';
+import { FALLBACK_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
+
+const CJK_FAMILIES = new Set(FALLBACK_FONTS.filter((font) => font.kind === 'cjk').map((font) => font.family));
 
 const SRC = path.join(import.meta.dir, '../../..');
 
-test('fonts.css loads the slices of the range data, each a woff2 the image writer can fetch', () => {
-    const css = fs.readFileSync(path.join(SRC, 'styles/fonts.css'), 'utf8');
-    const loaded = css
+function loadedSlices(file: string): string[] {
+    const css = fs.readFileSync(path.join(SRC, 'styles', file), 'utf8');
+    return css
         .split('@font-face')
         .slice(1)
         .map((block) => {
@@ -24,11 +27,14 @@ test('fonts.css loads the slices of the range data, each a woff2 the image write
             const file = block.match(/url\("\.\.\/assets\/fonts\/([^"]+)"\)/)?.[1];
             return `${field('font-family')} | ${file} | ${field('font-weight')} | ${field('font-style')} | ${field('unicode-range')}`;
         });
-    const slices = FONT_SLICES.map(
-        (slice) => `"${slice.family}" | ${slice.file} | ${slice.weight} | ${slice.style} | ${slice.unicodeRange}`,
-    );
+}
 
-    expect(loaded).toEqual(slices);
+test('fonts.css and fonts-cjk.css load the slices of the range data, each a woff2 the image writer can fetch', () => {
+    const row = (slice: FontSlice) =>
+        `"${slice.family}" | ${slice.file} | ${slice.weight} | ${slice.style} | ${slice.unicodeRange}`;
+    const cjk = (slice: FontSlice) => CJK_FAMILIES.has(slice.family);
+    expect(loadedSlices('fonts.css')).toEqual(FONT_SLICES.filter((slice) => !cjk(slice)).map(row));
+    expect(loadedSlices('fonts-cjk.css')).toEqual(FONT_SLICES.filter(cjk).map(row));
     for (const slice of FONT_SLICES) {
         // The writer's glob, assets/fonts/*/*.woff2.
         expect(slice.file).toMatch(/^[^/]+\/[^/]+\.woff2$/);

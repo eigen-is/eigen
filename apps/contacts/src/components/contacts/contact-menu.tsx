@@ -2,13 +2,14 @@
 // labels, Export and Delete, and the dialogs those rows open. Also isSelfContact, the one test of whether a card is the
 // signed-in user's own, which every contact surface asks.
 
-import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import { useMailEnabled } from '@workspace/lib/public';
+import type { AuthUser } from '@workspace/lib/types/auth';
 import type { Contact } from '@workspace/lib/types/contact';
+import { contactFullName } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
@@ -70,7 +71,7 @@ export function useContactMenu(): {
         );
         const eligiblePeople = eligible.map((contact) => ({
             email: contact.email.find((email) => email.trim().length > 0)?.trim() ?? '',
-            name: `${contact.firstName} ${contact.lastName}`.trim(),
+            name: contactFullName(contact),
         }));
         const canReach = eligible.length > 0;
         const canMail = canReach && mailEnabled;

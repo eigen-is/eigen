@@ -172,7 +172,8 @@ export async function processInboundImip(
         return;
     }
 
-    const { events, method: parsedMethod } = parseIcs(calAttachment.ics);
+    const { events, method: parsedMethod, skipped } = parseIcs(calAttachment.ics);
+    if (skipped > 0) console.info(`iMIP: skipped ${skipped} unreadable events from ${sender}`);
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 

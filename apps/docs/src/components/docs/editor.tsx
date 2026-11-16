@@ -34,7 +34,6 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
-import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -55,6 +54,7 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';

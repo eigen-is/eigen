@@ -6,7 +6,7 @@ import { createFileRoute, Outlet } from '@tanstack/react-router';
 import { useMembers } from '@workspace/lib/admin';
 import { authClient } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
-import { EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { EmptyState, LoadingState, useLayout } from '@workspace/ui/components/layout/app';
 import { createAuthRouteOptions } from '@workspace/ui/components/layout/pages';
 import { useEffect, useRef } from 'react';
 

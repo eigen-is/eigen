@@ -1,0 +1,5 @@
+/* The styles an app loads: globals.css, and the rules of the Chinese and Korean font faces, which only text people
+   type needs, so the website leaves them out. */
+
+@import "./globals.css";
+@import "./fonts-cjk.css";

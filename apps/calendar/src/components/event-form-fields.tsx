@@ -12,7 +12,7 @@ import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
-import { addMinutes, endAfter, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
+import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, toTimeString } from './time-select';
 
 type EventFormFieldsProps = {
     titlePlaceholder: string;
@@ -80,22 +80,15 @@ export function EventFormFields({
 }: EventFormFieldsProps) {
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-
-        const minEnd = addMinutes(newStart, 15);
-        const currentEndMinutes = timeToMinutes(endTime);
-        const minEndMinutes = timeToMinutes(minEnd);
-
-        if (currentEndMinutes < minEndMinutes) {
-            const end = endAfter(new Date(`${startDate}T${newStart}`), 30);
-            setEndTime(end.time);
-            setEndDate(end.date);
-        }
+        const end = endForStart(new Date(`${startDate}T${newStart}`), { date: endDate, time: endTime });
+        setEndTime(end.time);
+        setEndDate(end.date);
     };
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
         const d = new Date(`${startDate}T00:00`);
-        if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
+        d.setDate(d.getDate() + dayOffset);
         setEndDate(toLocalDateString(d));
     };
 
