@@ -25,8 +25,9 @@ type Shape = {
 function marked(shape: Shape, n: number): number {
     const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }], false);
     const index = new ReverseIndex();
-    factsOf(workbook);
-    index.rebuild(workbook);
+    for (const sheet of workbook.sheets) index.forget(sheet);
+    const facts = factsOf(workbook);
+    index.rebuild(workbook, (shape) => facts[shape]);
     const seeds = shape.seeds(n);
     let best = Number.POSITIVE_INFINITY;
     for (let run = 0; run < 7; run += 1) {
@@ -222,8 +223,9 @@ describe('the work of a marking grows with the workbook, not with its square', (
             true,
         );
         const index = new ReverseIndex();
-        factsOf(workbook);
-        index.rebuild(workbook);
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
         const seeds: number[] = [];
         for (let i = 0; i < 400; i += 1) {
             const row = 100 + Math.floor(next() * (n - 200));
@@ -256,8 +258,9 @@ describe('the work of a marking grows with the workbook, not with its square', (
             true,
         );
         const index = new ReverseIndex();
-        factsOf(workbook);
-        index.rebuild(workbook);
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
         index.mark(workbook, [0, 0, 0, 0], false);
         expect(workbook.sheets[0].columns.map((column) => column.pending)).toEqual([0, 1, 1, 0, 0, 0, 1]);
     });
@@ -320,12 +323,15 @@ describe('the shapes that take the clock', () => {
             false,
         );
         const index = new ReverseIndex();
-        factsOf(workbook);
-        index.rebuild(workbook);
-        expect(index.clocks).toEqual([0, 2, 3, 2, 4, 1, 1, 1, 9, 9]);
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
+        // The blocks that take the clock, each without its shape.
+        const clocks = () => index.reading([], [Fact.Clock]).filter((_, at) => at % 6 < 5);
+        expect(clocks()).toEqual([0, 2, 3, 2, 4, 1, 1, 1, 9, 9]);
         workbook.setValue(workbook.sheets[1], 9, 1, 3);
         index.forget(workbook.sheets[1]);
-        index.rebuild(workbook);
-        expect(index.clocks).toEqual([0, 2, 3, 2, 4]);
+        index.rebuild(workbook, (shape) => workbook.shapes.facts[shape]);
+        expect(clocks()).toEqual([0, 2, 3, 2, 4]);
     });
 });

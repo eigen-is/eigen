@@ -1,16 +1,16 @@
-// The areas some entries read, listed per sheet so that the entries that read a span of rows of one column are found
-// by its rows. `ReverseIndex` keeps one for what the references of the shapes name and one for what formulas worked
-// out as they ran. An entry is listed under the aligned blocks of columns that tile its columns, sorted by row, so a
-// lookup tests rows only. Following a span flags the hosts of the entries that read it and adds them to the work of
-// the marking, which writes scratch here that `restore` puts back at its end.
+// The areas some entries read of one sheet, listed so that the entries that read a span of rows of one column are
+// found by its rows. `ReverseIndex` keeps one per sheet that is read, for what the references of the shapes name,
+// and one for what formulas worked out as they ran. An entry is listed under the aligned blocks of columns that tile
+// its columns, sorted by row, so a lookup tests rows only. Following a span flags the hosts of the entries that read
+// it and adds them to the work of the marking, which writes scratch here that `restore` puts back at its end.
 
 import type { Column } from '../store/column';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 
-// An entry is twelve numbers: its hosts, the two ends of the reference along the rows and along the columns,
-// which of the four move with a host, and for a range the host rows it flagged in the marking that is running.
+// An entry is twelve numbers: its hosts and where their sheet sits in the listing's list, the two ends of the
+// reference along the rows and the columns, which of the four move with a host, and the host rows a range flagged.
 const HOST_SHEET = 0;
 const HOST_TOP = 1;
 const HOST_BOTTOM = 2;
@@ -20,7 +20,7 @@ const ROW_ENDS = 5;
 const COLUMN_ENDS = 7;
 const MOVES = 9;
 const FLAGGED = 10;
-// One past the last of those rows, and -1 while the entry flagged none.
+// One past the last row a range flagged in the marking that is running, and -1 while it flagged none.
 const FLAGGED_END = 11;
 // Beside the four bits of `MOVES`: the reference is a range.
 export const RANGE = 16;
@@ -35,71 +35,30 @@ const BOTTOM = 1;
 const REACH = 2;
 const ENTRY = 3;
 
-const NONE = new Int32Array(0);
-
 export class Listing {
-    private entries = new Int32Array(0);
-    // Per sheet that is read, its listings: block by block, the narrowest blocks first, sorted by first row in each.
-    private lists: Int32Array[] = [];
-    // Per sheet, where the listings of each block start, with one more at the end, and per width of block in use
-    // four numbers: the power of two, its first and last block in use, and where its first block sits in `starts`.
-    private starts: Int32Array[] = [];
-    private levels: number[][] = [];
+    private readonly entries: Int32Array;
+    // The sheets of the hosts.
+    private readonly hosts: readonly Sheet[];
+    // The listings: block by block, the narrowest blocks first, sorted by first row in each.
+    private readonly list: Int32Array;
+    // Where the listings of each block start, with one more at the end, and per width of block in use four
+    // numbers: the power of two, its first and last block in use, and where its first block sits in `starts`.
+    private readonly starts: Int32Array;
+    private readonly levels: number[] = [];
     // The spans the marking has still to follow, which every listing of one index adds to.
     private readonly work: number[];
-    // What a marking wrote here and puts back before it returns: the sheet, place and old value of each `REACH`
-    // it lowered, and the entries that hold flagged rows.
+    // What a marking wrote here and puts back before it returns: the place and old value of each `REACH` it
+    // lowered, and the entries that hold flagged rows.
     private readonly lowered: number[] = [];
     private readonly recorded: number[] = [];
 
-    public constructor(work: number[]) {
+    // Lists some entries. `read` holds what each reads of the sheet: first and last row, first and last column, and
+    // where the entry starts.
+    public constructor(work: number[], hosts: readonly Sheet[], entries: readonly number[], read: readonly number[]) {
         this.work = work;
-    }
-
-    // Lists the entries again. Per sheet, `areas` holds what each entry reads of it: first and last row, first and
-    // last column, and where the entry starts.
-    public build(entries: readonly number[], areas: readonly (readonly number[])[]): void {
+        this.hosts = hosts;
         this.entries = new Int32Array(entries);
-        this.lists = [];
-        this.starts = [];
-        this.levels = [];
-        for (const read of areas) this.list(read);
-    }
-
-    // Flags the hosts of every entry that reads a span of rows of one column.
-    public follow(sheets: readonly Sheet[], sheet: number, column: number, from: number, to: number): void {
-        const starts = this.starts[sheet];
-        const levels = this.levels[sheet];
-        // A sheet that came after the entries were listed is read by none of them.
-        if (levels === undefined) return;
-        for (let l = 0; l < levels.length; l += 4) {
-            const block = column >> levels[l];
-            if (block < levels[l + 1] || block > levels[l + 2]) continue;
-            const slot = levels[l + 3] + block - levels[l + 1];
-            if (starts[slot] < starts[slot + 1]) {
-                this.search(sheets, sheet, starts[slot], starts[slot + 1], column, from, to);
-            }
-        }
-    }
-
-    public restore(): void {
-        const { entries, lowered, recorded } = this;
-        for (let i = lowered.length - 3; i >= 0; i -= 3) this.lists[lowered[i]][lowered[i + 1]] = lowered[i + 2];
-        for (const entry of recorded) entries[entry + FLAGGED_END] = -1;
-        lowered.length = 0;
-        recorded.length = 0;
-    }
-
-    // Lists what the entries read of one sheet.
-    private list(read: readonly number[]): void {
         const count = read.length / 5;
-        // A sheet no entry reads has no block in use, which is all a lookup asks of it.
-        if (count === 0) {
-            this.lists.push(NONE);
-            this.starts.push(NONE);
-            this.levels.push([]);
-            return;
-        }
         // The first row and the place of each area in one number, so that a plain sort orders them by row.
         const order = new Float64Array(count);
         for (let i = 0; i < count; i += 1) order[i] = read[i * 5] * count + i;
@@ -132,7 +91,7 @@ export class Listing {
             if (tiles[t + 1] < firsts[level]) firsts[level] = tiles[t + 1];
             if (tiles[t + 1] > lasts[level]) lasts[level] = tiles[t + 1];
         }
-        const levels: number[] = [];
+        const { levels } = this;
         // Per power of two, where its block 0 would sit in `starts`.
         const bases = new Int32Array(LEVELS);
         let slots = 0;
@@ -157,28 +116,38 @@ export class Listing {
             list[at + ENTRY] = read[tiles[t + 2] + 4];
         }
         for (let slot = 0; slot < slots; slot += 1) reachOf(list, starts[slot], starts[slot + 1]);
-        this.lists.push(list);
-        this.starts.push(starts);
-        this.levels.push(levels);
+        this.list = list;
+        this.starts = starts;
     }
 
-    // Flags the hosts of the listings from `low` up to `high` of one sheet that read a span, and gives the largest
-    // last row among those whose entry may still have a host to flag.
-    private search(
-        sheets: readonly Sheet[],
-        sheet: number,
-        low: number,
-        high: number,
-        column: number,
-        from: number,
-        to: number,
-    ): number {
-        const list = this.lists[sheet];
+    // Flags the hosts of every entry that reads a span of rows of one column.
+    public follow(column: number, from: number, to: number): void {
+        const { starts, levels } = this;
+        for (let l = 0; l < levels.length; l += 4) {
+            const block = column >> levels[l];
+            if (block < levels[l + 1] || block > levels[l + 2]) continue;
+            const slot = levels[l + 3] + block - levels[l + 1];
+            if (starts[slot] < starts[slot + 1]) this.search(starts[slot], starts[slot + 1], column, from, to);
+        }
+    }
+
+    public restore(): void {
+        const { entries, list, lowered, recorded } = this;
+        for (let i = lowered.length - 2; i >= 0; i -= 2) list[lowered[i]] = lowered[i + 1];
+        for (const entry of recorded) entries[entry + FLAGGED_END] = -1;
+        lowered.length = 0;
+        recorded.length = 0;
+    }
+
+    // Flags the hosts of the listings from `low` up to `high` that read a span, and gives the largest last row
+    // among those whose entry may still have a host to flag.
+    private search(low: number, high: number, column: number, from: number, to: number): number {
+        const { list } = this;
         const middle = (low + high) >> 1;
         const at = middle * 4;
         const reach = list[at + REACH];
         if (reach < from) return reach;
-        const before = low < middle ? this.search(sheets, sheet, low, middle, column, from, to) : -1;
+        const before = low < middle ? this.search(low, middle, column, from, to) : -1;
         // The listings after this one start lower still.
         if (list[at + TOP] > to) return reach;
         let own = list[at + BOTTOM];
@@ -186,7 +155,7 @@ export class Listing {
             const { entries } = this;
             const entry = list[at + ENTRY];
             const moves = entries[entry + MOVES];
-            const host = entries[entry + HOST_SHEET];
+            const host = this.hosts[entries[entry + HOST_SHEET]];
             const top = Math.max(entries[entry + HOST_TOP], firstHost(from, entries, entry + ROW_ENDS, moves));
             const bottom = Math.min(entries[entry + HOST_BOTTOM], lastHost(to, entries, entry + ROW_ENDS, moves));
             const left = Math.max(
@@ -203,11 +172,11 @@ export class Listing {
             // either side of them are scanned. Rows apart from them start the record again.
             const apart = (moves & RANGE) === 0 || top > end || bottom + 1 < flagged;
             for (let c = left; c <= right; c += 1) {
-                const held = sheets[host].columns[c];
-                if (apart) flag(this.work, host, c, held, top, bottom);
+                const held = host.columns[c];
+                if (apart) flag(this.work, host.place, c, held, top, bottom);
                 else {
-                    flag(this.work, host, c, held, top, flagged - 1);
-                    flag(this.work, host, c, held, end, bottom);
+                    flag(this.work, host.place, c, held, top, flagged - 1);
+                    flag(this.work, host.place, c, held, end, bottom);
                 }
             }
             if (moves & RANGE && top <= bottom) {
@@ -220,10 +189,10 @@ export class Listing {
                 if (all) own = -1;
             }
         }
-        const after = middle + 1 < high ? this.search(sheets, sheet, middle + 1, high, column, from, to) : -1;
+        const after = middle + 1 < high ? this.search(middle + 1, high, column, from, to) : -1;
         const live = Math.max(before, own, after);
         if (live < reach) {
-            this.lowered.push(sheet, at + REACH, reach);
+            this.lowered.push(at + REACH, reach);
             list[at + REACH] = live;
         }
         return live;

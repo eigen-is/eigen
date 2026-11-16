@@ -170,12 +170,13 @@ function run(seed: number, books: number): Marked {
         );
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);
         const index = new ReverseIndex();
+        for (const sheet of workbook.sheets) index.forget(sheet);
         let readers: Reader[] = [];
         // The index is built again, and every other formula that resolves gets a record of up to three areas
         // anywhere, in the block of the formulas and far from it.
         const rebuild = () => {
             const facts = factsOf(workbook);
-            index.rebuild(workbook);
+            index.rebuild(workbook, (shape) => facts[shape]);
             readers = readersOf(workbook, facts, false);
             const records = new Map<number, Map<number, number[]>>();
             for (const reader of readers) {
@@ -194,7 +195,7 @@ function run(seed: number, books: number): Marked {
                 records.set(column, (records.get(column) ?? new Map()).set(reader.row, record));
                 counts.recorded += record.length / 5;
             }
-            index.listRecords(workbook.sheets.length, records);
+            index.listRecords(workbook.sheets, records);
         };
         rebuild();
         for (let marking = 0; marking < 14; marking += 1) {
