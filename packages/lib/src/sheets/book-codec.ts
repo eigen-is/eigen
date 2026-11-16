@@ -57,7 +57,8 @@ export function encodeBook(book: BookContent): string {
 }
 
 // The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet or too
-// many, two sheets with one id, a formula index past the list, or a sheet the guard refuses. It never throws.
+// many, two sheets with one id or two records of one type with one id, a formula index past the list, or a sheet the
+// guard refuses. It never throws.
 export function decodeBook(text: string): BookContent | null {
     let value: unknown;
     try {
@@ -72,6 +73,8 @@ export function decodeBook(text: string): BookContent | null {
         return null;
     const decoded: SheetContent[] = [];
     const ids = new Set<string>();
+    // A type's name holds no space, so the first one ends it.
+    const records = new Set<string>();
     for (const sheet of sheets) {
         if (!isRecord(sheet) || !Array.isArray(sheet['cells'])) return null;
         const cells: unknown[] = [];
@@ -83,6 +86,12 @@ export function decodeBook(text: string): BookContent | null {
         const content = { ...sheet, cells };
         if (!isSheetContent(content) || ids.has(content.id)) return null;
         ids.add(content.id);
+        for (const [type, of] of Object.entries(content.records)) {
+            for (const id of Object.keys(of ?? {})) {
+                if (records.has(`${type} ${id}`)) return null;
+                records.add(`${type} ${id}`);
+            }
+        }
         decoded.push(content);
     }
     return { g, now, seed, computed, sheets: decoded };
