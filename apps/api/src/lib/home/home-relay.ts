@@ -149,13 +149,6 @@ export async function drainHomeDeliveries(): Promise<void> {
     }
 }
 
-// A delivery can hang on a home that is slow to close, such as during a bucket outage. It must not hang a shutdown, or
-// use up the time the mounts need to upload. What is left when the bound is over is lost, as in a crash.
-export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
-    if (await settlesWithin(drainHomeDeliveries(), boundMs)) return;
-    console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home pushes left`);
-}
-
 // --- Broadcasts ---
 
 // A closed home has no tab to tell, so this opens no home and stores nothing.

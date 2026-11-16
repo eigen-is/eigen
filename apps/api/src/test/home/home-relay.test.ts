@@ -12,7 +12,6 @@ import { getSharedDatabase } from '../../lib/drive/shared';
 import { sharedPaths } from '../../lib/drive/shared-schema';
 import * as getHomeModule from '../../lib/home/get-home';
 import {
-    drainDeliveriesWithin,
     drainHomeDeliveries,
     getFromHomes,
     HOME_OPEN_DEADLINE_MS,
@@ -23,6 +22,7 @@ import * as teamModule from '../../lib/team/team';
 import type { User } from '../../lib/user';
 import { getMemberships } from '../../lib/user';
 import * as userModule from '../../lib/user/user';
+import { settlesWithin } from '../../utils/timing';
 import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
@@ -725,26 +725,25 @@ describe('A graceful shutdown', () => {
     });
 
     // A delivery stuck on a home that never opens must not hold the shutdown, or eat the time the
-    // mounts need to upload. The wait gives up at its bound and logs what is left.
+    // mounts need to upload. The shutdown bounds its wait as this test does.
     test('stops waiting for a delivery that never settles once the bound is over', async () => {
         const tag = 'relay-drain:stalled';
         const held = holdMemberHomes();
-        const warnings = spyOn(console, 'warn').mockImplementation(() => {});
         let drainedFirst: boolean;
-        let logged: unknown[][];
+        let settled: boolean;
         try {
             pushToHomes([members[0].id], {
                 type: 'notification',
                 notification: { type: 'admin-alert', title: 'Stalled', tag },
             });
-            drainedFirst = await answersFirst(drainDeliveriesWithin(100));
+            const bounded = settlesWithin(drainHomeDeliveries(), 100);
+            drainedFirst = await answersFirst(bounded);
+            settled = await bounded;
         } finally {
-            logged = warnings.mock.calls;
-            warnings.mockRestore();
             held.release();
         }
         expect(drainedFirst).toBe(true);
-        expect(logged.some((call) => String(call[0]).includes('1 home pushes'))).toBe(true);
+        expect(settled).toBe(false);
 
         await drainHomeDeliveries();
         expect(await notificationsWithTag(members[0], tag)).toHaveLength(1);
