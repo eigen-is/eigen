@@ -19,8 +19,10 @@ import type {
     Op,
     Placed,
     RecordOp,
+    RecordType,
     Rect,
     Run,
+    SheetContent,
     SheetFields,
     SheetOp,
     Span,
@@ -28,10 +30,10 @@ import type {
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import type { Book, Random } from './book-fixtures';
-import { below, FORMULAS, randomBook } from './book-fixtures';
+import { below, FORMULAS, randomBook, randomSheet } from './book-fixtures';
 import { decoded, fold } from './bytes';
 import type { Model, ModelSheet } from './model';
-import { chartOf, formulaRule, ref } from './records-fixtures';
+import { chartData, chartOf, formulaRule, ref } from './records-fixtures';
 
 // A formula typed with the name of a sheet that is not there: a rename or an add of a sheet to that name binds it,
 // and its inverse writes the typed text back. An input typed with the name of a sheet the book holds is bound.
@@ -92,8 +94,8 @@ function uncomputedBook(random: Random): Book {
             });
             if (random() < 0.5) cells.push([70, 3, { f: TYPED_WITH_NAME }]);
             cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-            const { filter } = sheet.records;
-            if (!filter?.f) return { ...sheet, cells };
+            const [filter] = Object.keys(sheet.records.filter ?? {});
+            if (!filter) return { ...sheet, cells };
             // A filter often runs from the first line, or to the last, where its header moves and its end stays.
             const rect = pick<Rect>(random, [
                 [2, 0, 20, 4],
@@ -101,7 +103,7 @@ function uncomputedBook(random: Random): Book {
                 [2, 0, GRID_ROWS - 1, 4],
                 [0, 0, 20, GRID_COLUMNS - 1],
             ]);
-            return { ...sheet, cells, records: { ...sheet.records, filter: { f: { rect } } } };
+            return { ...sheet, cells, records: { ...sheet.records, filter: { [filter]: { rect } } } };
         }),
     };
 }
@@ -142,12 +144,20 @@ export function randomAnyOp(random: Random, model: Model): Op {
 // A merge made over a cell of a merge of its sheet, which the store refuses, or made fresh where a sheet holds none.
 function randomMergeOp(random: Random, model: Model): RecordOp {
     const merged = [...model.sheets.values()].filter(({ records }) => records.merge.size > 0);
-    const id = `m${below(random, 5)}`;
+    const n = below(random, 5);
     if (merged.length === 0) {
         const { id: sheet } = someSheet(random, model);
-        return { kind: 'record', sheet, type: 'merge', id, set: { rect: smallRect(random) }, whole: 1 };
+        return {
+            kind: 'record',
+            sheet,
+            type: 'merge',
+            id: `${sheet}m${n}`,
+            set: { rect: smallRect(random) },
+            whole: 1,
+        };
     }
     const { id: sheet, records } = pick(random, merged);
+    const id = `${sheet}m${n}`;
     const [top, left, bottom, right] = pick(random, [...records.merge.values()]).rect;
     const row = top + below(random, bottom - top + 1);
     const column = left + below(random, right - left + 1);
@@ -283,9 +293,16 @@ export function randomFormatOp(random: Random, model: Model): FormatOp {
 export function randomRecordOp(random: Random, model: Model): RecordOp {
     const held = someSheet(random, model);
     const sheet = random() < 0.04 ? 'nosheet' : held.id;
-    // The id of a record of the type the sheet holds, or a new one.
-    const idOf = (ids: Iterable<string>, fresh: string) => (random() < 0.7 ? pick(random, [...ids, fresh]) : fresh);
-    const fresh = (prefix: string) => `${held.id}${prefix}${below(random, 5)}`;
+    // The id of a record of the type the sheet holds, or a new one, or now and then one another sheet holds for the
+    // type, which a make may not take.
+    const idOf = (type: Exclude<RecordType, 'sheet'>, prefix: string) => {
+        const fresh = `${held.id}${prefix}${below(random, 5)}`;
+        const elsewhere = [...model.sheets.values()].flatMap((other) =>
+            other === held ? [] : [...other.records[type].keys()],
+        );
+        if (elsewhere.length > 0 && random() < 0.05) return pick(random, elsewhere);
+        return random() < 0.7 ? pick(random, [...held.records[type].keys(), fresh]) : fresh;
+    };
     // Now and then a rectangle that reaches the grid's last row or column, which stays reaching it.
     const reaching = (): Rect => {
         const [top, left, bottom, right] = smallRect(random);
@@ -312,7 +329,7 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'sheet', id: sheet, set };
         }
         case 2: {
-            const id = idOf(records.merge.keys(), fresh('m'));
+            const id = idOf('merge', 'm');
             const [top, left, bottom, right] = smallRect(random);
             // Now and then over another merge of the sheet, which it may not overlap.
             const others = [...records.merge].filter(([other]) => other !== id);
@@ -323,7 +340,7 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'merge', id, set: { rect }, whole: 1 };
         }
         case 3: {
-            const id = idOf(records.filter.keys(), fresh('f'));
+            const id = idOf('filter', 'f');
             // Often from the first row or column to the last, where the header moves and the end stays.
             const [top, left, bottom, right] = smallRect(random);
             const rect = pick<() => Rect>(random, [
@@ -338,8 +355,8 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'filter', id, set: { rect }, whole: 1 };
         }
         case 4: {
-            const id = idOf(records.filterColumn.keys(), fresh('k'));
-            const filter = idOf(records.filter.keys(), 'nofilter');
+            const id = idOf('filterColumn', 'k');
+            const filter = random() < 0.7 ? pick(random, [...records.filter.keys(), 'nofilter']) : 'nofilter';
             const first = below(random, 9);
             const rows: Span[] = pick(random, [
                 [],
@@ -359,20 +376,20 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'filterColumn', id, set, whole: 1 };
         }
         case 5: {
-            const id = idOf(records.comment.keys(), fresh('c'));
+            const id = idOf('comment', 'c');
             const set = { row: below(random, 14), column: below(random, 8) };
             if (mode === 0) return { kind: 'record', sheet, type: 'comment', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'comment', id, set: { row: set.row } };
             return { kind: 'record', sheet, type: 'comment', id, set, whole: 1 };
         }
         case 6: {
-            const id = idOf(records.conditionalFormat.keys(), fresh('r'));
+            const id = idOf('conditionalFormat', 'r');
             if (mode === 0) return { kind: 'record', sheet, type: 'conditionalFormat', id };
             const set = formulaRule([reaching(), reaching()], pick(random, ['=RC>1', '=R[1]C[1]="x"', '=[s0]!R1C1>0']));
             return { kind: 'record', sheet, type: 'conditionalFormat', id, set, whole: 1 };
         }
         case 7: {
-            const id = idOf(records.validation.keys(), fresh('v'));
+            const id = idOf('validation', 'v');
             const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
             if (mode === 0) return { kind: 'record', sheet, type: 'validation', id };
             if (mode === 1) {
@@ -383,7 +400,7 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'validation', id, set, whole: 1 };
         }
         case 8: {
-            const id = idOf(records.image.keys(), fresh('i'));
+            const id = idOf('image', 'i');
             const box = { index: pick(random, ORDERS), x: below(random, 90), y: 2, width: 30, height: 40 };
             if (mode === 0) return { kind: 'record', sheet, type: 'image', id };
             if (mode === 1) {
@@ -393,7 +410,7 @@ export function randomRecordOp(random: Random, model: Model): RecordOp {
             return { kind: 'record', sheet, type: 'image', id, set: { ...box, mediaName: `${id}.png` }, whole: 1 };
         }
         default: {
-            const id = idOf(records.chart.keys(), fresh('g'));
+            const id = idOf('chart', 'g');
             if (mode === 0) return { kind: 'record', sheet, type: 'chart', id };
             if (mode === 1) return { kind: 'record', sheet, type: 'chart', id, set: { x: below(random, 90) } };
             const values = ref(held.id, [below(random, 5), 6 + below(random, 5)], [0, 0]);
@@ -452,12 +469,12 @@ export function randomEndOp(random: Random, model: Model): InputOp | FormatOp | 
             set: { rect: [12, column - 1, 12, column] },
             whole: 1,
         }),
-        () => ({ kind: 'record', sheet, type: 'filter', id: 'f', set: { rect: [2, 0, row, 4] }, whole: 1 }),
+        () => ({ kind: 'record', sheet, type: 'filter', id: `${sheet}f`, set: { rect: [2, 0, row, 4] }, whole: 1 }),
         () => ({
             kind: 'record',
             sheet,
             type: 'filterColumn',
-            id: 'ke',
+            id: `${sheet}ke`,
             set: { filter, column: 1, rows: [[row - 1, row]] },
             whole: 1,
         }),
@@ -465,7 +482,7 @@ export function randomEndOp(random: Random, model: Model): InputOp | FormatOp | 
             kind: 'record',
             sheet,
             type: 'validation',
-            id: 've',
+            id: `${sheet}ve`,
             set: { ranges: [[row, 0, row, 1]], order: 'a2', rule },
             whole: 1,
         }),
@@ -473,7 +490,7 @@ export function randomEndOp(random: Random, model: Model): InputOp | FormatOp | 
             kind: 'record',
             sheet,
             type: 'conditionalFormat',
-            id: 're',
+            id: `${sheet}re`,
             set: formulaRule([[0, column, 2, column]], '=RC>1'),
             whole: 1,
         }),
@@ -503,60 +520,59 @@ export function randomLineReaderOp(random: Random, model: Model): InputOp {
     return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 4), left + below(random, 2)], { f }]] };
 }
 
-// A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range
-// or a comment, one a little larger, or a whole column or row. Half the moves land near where they start, so the block
-// overlaps itself in every direction; now and then either sheet is one the book does not hold.
+// A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range,
+// a comment or a chart's series, one a little larger, or a whole column or row. Half the moves land near where they
+// start, so the block overlaps itself in every direction; now and then either sheet is one the book does not hold.
 export function randomMoveOp(random: Random, model: Model): MoveOp {
     const held = someSheet(random, model);
     const sheet = random() < 0.04 ? 'nosheet' : held.id;
     const { merge, comment, conditionalFormat, validation } = held.records;
-    // A sheet added from a copy holds the ids of the sheet it copies, so a block that brings one may clash there.
-    const ids = [...merge.keys(), ...comment.keys()];
-    const twins = [...model.sheets.values()].filter(
-        (other) => other !== held && ids.some((id) => other.records.merge.has(id) || other.records.comment.has(id)),
-    );
-    const twin = twins.length > 0 && random() < 0.5 ? pick(random, twins) : undefined;
-    const toSheet = twin?.id ?? (random() < 0.6 ? sheet : sheetId(random, model));
+    const toSheet = random() < 0.6 ? sheet : sheetId(random, model);
     const placed: Rect[] = [
         ...[...merge.values()].map(({ rect }) => rect),
         ...[...comment.values()].map(({ row, column }): Rect => [row, column, row, column]),
         ...[...conditionalFormat.values(), ...validation.values()].flatMap(({ ranges }) => ranges),
+        ...chartRefsOn(model, held.id),
     ].filter(([top, left, bottom, right]) => bottom - top < 40 && right - left < 40);
     const row = below(random, 14);
     const column = below(random, 8);
-    const shared = [...merge].filter(([id]) => twin?.records.merge.has(id)).map(([, { rect }]) => rect);
-    for (const [id, { row, column }] of comment)
-        if (twin?.records.comment.has(id)) shared.push([row, column, row, column]);
-    const from =
-        shared.length > 0
-            ? pick(random, shared)
-            : pick<() => Rect>(random, [
-                  () => smallRect(random),
-                  () => smallRect(random),
-                  () => smallRect(random),
-                  () => smallRect(random),
-                  () => [row, column, row, column],
-                  () => {
-                      if (placed.length === 0) return smallRect(random);
-                      const [top, left, bottom, right] = pick(random, placed);
-                      const grow = random() < 0.5 ? 0 : 1;
-                      return [
-                          Math.max(0, top - grow),
-                          Math.max(0, left - grow),
-                          Math.min(GRID_ROWS - 1, bottom + grow),
-                          Math.min(GRID_COLUMNS - 1, right + grow),
-                      ];
-                  },
-                  () =>
-                      random() < 0.5
-                          ? [0, column, GRID_ROWS - 1, column + below(random, 2)]
-                          : [row, 0, row, GRID_COLUMNS - 1],
-              ])();
+    const from = pick<() => Rect>(random, [
+        () => smallRect(random),
+        () => smallRect(random),
+        () => smallRect(random),
+        () => smallRect(random),
+        () => [row, column, row, column],
+        () => {
+            if (placed.length === 0) return smallRect(random);
+            const [top, left, bottom, right] = pick(random, placed);
+            const grow = random() < 0.5 ? 0 : 1;
+            return [
+                Math.max(0, top - grow),
+                Math.max(0, left - grow),
+                Math.min(GRID_ROWS - 1, bottom + grow),
+                Math.min(GRID_COLUMNS - 1, right + grow),
+            ];
+        },
+        () =>
+            random() < 0.5 ? [0, column, GRID_ROWS - 1, column + below(random, 2)] : [row, 0, row, GRID_COLUMNS - 1],
+    ])();
     const [top, left, bottom, right] = from;
     // A move near its start lands less than its own size away, so it overlaps itself when it stays on its sheet.
     const near = random() < 0.6;
     const toward = (start: number, size: number, room: number) =>
         Math.min(room, Math.max(0, near ? start + below(random, 2 * size + 1) - size : below(random, 16)));
+    // Now and then the block lands on a chart's series it is large enough to cover, where it fits on the grid.
+    const covered = chartRefsOn(model, toSheet).filter(
+        ([t, l, b, r]) =>
+            b - t <= bottom - top &&
+            r - l <= right - left &&
+            t + bottom - top < GRID_ROWS &&
+            l + right - left < GRID_COLUMNS,
+    );
+    if (covered.length > 0 && random() < 0.2) {
+        const [toRow, toColumn] = pick(random, covered);
+        return { kind: 'move', sheet, from, toSheet, toRow, toColumn };
+    }
     return {
         kind: 'move',
         sheet,
@@ -564,6 +580,48 @@ export function randomMoveOp(random: Random, model: Model): MoveOp {
         toSheet,
         toRow: toward(top, Math.max(1, bottom - top), GRID_ROWS - 1 - (bottom - top)),
         toColumn: toward(left, Math.max(1, right - left), GRID_COLUMNS - 1 - (right - left)),
+    };
+}
+
+// The rectangles the series of every chart of the book read on one sheet.
+export function chartRefsOn(model: Model, sheet: string): Rect[] {
+    const charts = [...model.sheets.values()].flatMap(({ records }) => [...records.chart.values()]);
+    return charts.flatMap((chart) =>
+        (chartData(chart)?.series ?? []).flatMap(({ values }): Rect[] =>
+            values?.sheetId === sheet ? [[values.row[0], values.column[0], values.row[1], values.column[1]]] : [],
+        ),
+    );
+}
+
+// A sheet copied whole under a new id, as a writer copies one: its records take ids of their own, as an id names one
+// record of its type in the whole book, and a filter's columns the new id of their filter.
+export function copyOf(sheet: SheetContent, id: string): SheetContent {
+    let made = 0;
+    const fresh = () => `${id}.${made++}`;
+    const { records } = sheet;
+    const filters = new Map(Object.keys(records.filter ?? {}).map((old) => [old, fresh()]));
+    const renamed = <R>(of: { [id: string]: R } | undefined, change: (record: R) => R = (record) => record) =>
+        of && Object.fromEntries(Object.values(of).map((record) => [fresh(), change(record)]));
+    return {
+        ...sheet,
+        id,
+        records: {
+            merge: renamed(records.merge),
+            filter:
+                records.filter &&
+                Object.fromEntries(
+                    Object.entries(records.filter).map(([old, filter]) => [filters.get(old) ?? old, filter]),
+                ),
+            filterColumn: renamed(records.filterColumn, (column) => ({
+                ...column,
+                filter: filters.get(column.filter) ?? column.filter,
+            })),
+            comment: renamed(records.comment),
+            conditionalFormat: renamed(records.conditionalFormat),
+            validation: renamed(records.validation),
+            image: renamed(records.image),
+            chart: renamed(records.chart),
+        },
     };
 }
 
@@ -586,12 +644,16 @@ export function randomLandingReaderOp(random: Random, model: Model): InputOp {
     return { kind: 'input', sheet: sheetId(random, model), cells };
 }
 
-// An add of a random sheet with something of every part, now and then under an id the book holds, a name in use in any
-// letter case or at its 31 characters, the name a formula waits for, or hidden; or a delete of a sheet, shown or
+// An add of a random sheet with something of every part, now and then under an id the book holds, with record ids a
+// sheet of the book holds, a name in use in any letter case or at its 31 characters, the name a formula waits for, or
+// hidden; or a delete of a sheet, shown or
 // hidden, the last shown one, one that formulas read, or one the book does not hold.
 export function randomSheetOp(random: Random, model: Model): SheetOp {
     if (random() < 0.4) return { kind: 'sheet', delete: sheetId(random, model) };
-    const [sheet] = randomBook(random).sheets;
+    const id = random() < 0.05 ? someSheet(random, model).id : `n${below(random, 1_000_000)}`;
+    // A writer that copies a sheet mints new ids for its records; now and then one keeps the ids of a sheet the book
+    // holds.
+    const sheet = randomSheet(random, 0, random() < 0.1 ? someSheet(random, model).id : id);
     const held = someSheet(random, model).fields.name;
     const name = pick(random, [
         `New ${below(random, 6)}`,
@@ -601,7 +663,6 @@ export function randomSheetOp(random: Random, model: Model): SheetOp {
         LONG_NAME,
         LONG_NAME.toUpperCase(),
     ]);
-    const id = random() < 0.05 ? someSheet(random, model).id : `n${below(random, 1_000_000)}`;
     const cells = [...sheet.cells];
     if (random() < 0.5) cells.push([71, 3, { f: typedWithName(random, model) }]);
     if (random() < 0.3) cells.push([72, 3, { v: 5, spill: 1 }]);

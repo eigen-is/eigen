@@ -445,6 +445,11 @@ function applyFormat(model: Model, op: FormatOp): null {
 function applyRecord(model: Model, op: RecordOp): RefusalKey | null {
     const sheet = model.sheets.get(op.sheet);
     if (!sheet) return null;
+    // A record's id is unique in the book among the records of its type, so a make under one another sheet holds is
+    // refused, whatever else the make would meet.
+    if (op.whole && [...model.sheets.values()].some((other) => other !== sheet && other.records[op.type].has(op.id))) {
+        return 'id-in-use';
+    }
     if (op.type === 'sheet') {
         const { name, hide } = op.set;
         const others = [...model.sheets.values()].filter((other) => other !== sheet);
@@ -729,19 +734,12 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
     const covered = [...to.records.merge].filter(
         ([id, { rect }]) => meets(rect, target) && !(from === to && carried.some(([other]) => other === id)),
     );
-    // The comments the block lands on go too, but for those it brings. A record it brings from another sheet whose id
-    // that sheet keeps for another record refuses.
+    // The comments the block lands on go too, but for those it brings.
     const brought = [...from.records.comment].filter(([, { row, column }]) => inside(row, column, block));
     const landed = [...to.records.comment].filter(
         ([id, { row, column }]) =>
             inside(row, column, target) && !(from === to && brought.some(([other]) => other === id)),
     );
-    const keeps = (held: ReadonlyMap<string, unknown>, gone: readonly [string, unknown][], id: string) =>
-        held.has(id) && !gone.some(([other]) => other === id);
-    const clash =
-        from !== to &&
-        (carried.some(([id]) => keeps(to.records.merge, covered, id)) ||
-            brought.some(([id]) => keeps(to.records.comment, landed, id)));
     const move: Move = {
         fromSheet: op.sheet,
         row: top,
@@ -753,10 +751,9 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         toColumn: op.toColumn,
     };
     // The sheets refuse one by one, the one the block leaves first and the one it lands on next, as every reader asks
-    // them; the engine moves the cells after. Where the block lands a cut refuses first, then a clash, then a rule.
+    // them; the engine moves the cells after. Where the block lands a cut refuses first, then a rule.
     for (const sheet of new Set([from, to, ...model.sheets.values()])) {
         if (sheet === to && covered.some(([, { rect }]) => !within(rect, target))) return 'merge-cut';
-        if (sheet === to && clash) return 'id-in-use';
         const refusal = moveOfRules(sheet, op, move);
         if (refusal) return refusal;
     }
@@ -792,6 +789,24 @@ function applyMove(model: Model, op: MoveOp): RefusalKey | null {
         if (!inside(comment.row, comment.column, block)) continue;
         from.records.comment.delete(id);
         to.records.comment.set(id, { row: comment.row + down, column: comment.column + across });
+    }
+    // A chart on any sheet reads its cells by sheet and place: those wholly in the block it reads where they landed.
+    for (const sheet of model.sheets.values()) {
+        for (const [id, chart] of sheet.records.chart) {
+            const next = mapChartRefs(chart, (ref) => {
+                const { sheetId, row, column } = ref;
+                if (sheetId !== op.sheet || !inside(row[0], column[0], block) || !inside(row[1], column[1], block)) {
+                    return ref;
+                }
+                return {
+                    sheetId: op.toSheet,
+                    row: [row[0] + down, row[1] + down],
+                    column: [column[0] + across, column[1] + across],
+                };
+            });
+            if (exceedsChartSpecBytes(next)) return 'key-too-long';
+            sheet.records.chart.set(id, next);
+        }
     }
     // On one sheet the rule ranges wholly in the block go along too.
     if (from !== to) return null;
@@ -845,6 +860,11 @@ function applySheet(model: Model, op: SheetOp): RefusalKey | null {
     }
     // A sheet whose id the workbook holds is skipped alone.
     if (model.sheets.has(op.add.id)) return null;
+    // One whose records bring an id the book holds for their type is refused.
+    const ids = (records: SheetContent['records']) =>
+        Object.entries(records).flatMap(([type, of]) => Object.keys(of ?? {}).map((id) => `${type} ${id}`));
+    const held = new Set([...model.sheets.values()].flatMap((sheet) => ids(listed(sheet.records))));
+    if (ids(op.add.records).some((id) => held.has(id))) return 'id-in-use';
     // A name in use takes the first free suffix, from ` (2)`, with the name cut to make room for it.
     const taken = new Set([...model.sheets.values()].map((sheet) => sheetNameKey(sheet.fields.name)));
     let name = op.add.fields.name;

@@ -51,8 +51,9 @@ function names(book: Workbook): string[] {
 }
 
 // A sheet that holds something of every part: cells of every kind, a spill mark, looks said the long way round, line
-// keys in pieces and a record of every type.
+// keys in pieces and a record of every type, under ids tagged with its own, as ids are unique in the whole book.
 function fullSheet(id: string, fields: Partial<SheetFields> = {}): SheetContent {
+    const own = (name: string) => `${name}.${id}`;
     return sheetOf(id, fields, {
         cells: [
             [0, 0, { v: 2 }],
@@ -84,20 +85,20 @@ function fullSheet(id: string, fields: Partial<SheetFields> = {}): SheetContent 
         ],
         columns: [[[0, 0], { hidden: 1 }]],
         records: {
-            merge: { m: { rect: [20, 0, 21, 1] } },
-            filter: { f: { rect: [30, 0, 40, 3] } },
-            filterColumn: { k: { filter: 'f', column: 1, rows: [[31, 32]] } },
-            comment: { c1: { row: 0, column: 0 }, c2: { row: 1, column: 0 } },
-            conditionalFormat: { r: formulaRule([[0, 0, 9, 0]], '=RC>1') },
+            merge: { [own('m')]: { rect: [20, 0, 21, 1] } },
+            filter: { [own('f')]: { rect: [30, 0, 40, 3] } },
+            filterColumn: { [own('k')]: { filter: own('f'), column: 1, rows: [[31, 32]] } },
+            comment: { [own('c1')]: { row: 0, column: 0 }, [own('c2')]: { row: 1, column: 0 } },
+            conditionalFormat: { [own('r')]: formulaRule([[0, 0, 9, 0]], '=RC>1') },
             validation: {
-                v: {
+                [own('v')]: {
                     ranges: [[0, 2, 3, 2]],
                     order: 'a1',
                     rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
                 },
             },
-            image: { i: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: 'picture.png' } },
-            chart: { g: { index: 'a1', x: 0, y: 0, width: 1, height: 1, ...PARTS } },
+            image: { [own('i')]: { index: 'a0', x: 1, y: 2, width: 30, height: 40, mediaName: 'picture.png' } },
+            chart: { [own('g')]: { index: 'a1', x: 0, y: 0, width: 1, height: 1, ...PARTS } },
         },
     });
 }
@@ -152,6 +153,36 @@ describe('engine/book/apply-sheet — an add', () => {
         const book = new Workbook(bookOf(sheetOf('a'), sheetOf('b', { order: 'a1' })));
         const before = bytes(book);
         expect(applyOps(book, [addOf(fullSheet('b', { name: 'Other' }))])).toEqual([]);
+        expect(bytes(book)).toBe(before);
+    });
+
+    test('an add that holds a record under an id the book holds for its type is refused before anything is written', () => {
+        const base = bookOf(sheetOf('a'), fullSheet('b', { order: 'a1' }));
+        const book = new Workbook(base);
+        const before = bytes(book);
+        const twin = (records: SheetContent['records']) => addOf(sheetOf('n', { order: 'a2' }, { records }));
+        expect(refusalOf(() => applyOps(book, [twin({ comment: { 'c2.b': { row: 5, column: 5 } } })]))).toBe(
+            'id-in-use',
+        );
+        expect(refusalOf(() => applyOps(book, [twin({ chart: fullSheet('b').records.chart })]))).toBe('id-in-use');
+        expect(bytes(book)).toBe(before);
+        expect([...book.sheets.keys()]).toEqual(['a', 'b']);
+        const model = modelAfter(modelOf(base), {
+            now: 1,
+            seed: 1,
+            ops: [twin({ chart: fullSheet('b').records.chart })],
+        });
+        expect(model).toBe('id-in-use');
+        // An id is its type's own, so a merge may take a comment's id.
+        expectLaw2(base, [twin({ merge: { 'c2.b': { rect: [5, 5, 6, 6] } } })]);
+        // A delete takes the sheet's ids out of the book, so the add that undoes it lands, in its batch or after.
+        const listed = book.content().sheets[1];
+        expectLaw2(base, [
+            { kind: 'sheet', delete: 'b' },
+            addOf({ ...listed, fields: { ...listed.fields, name: 'B' } }),
+        ]);
+        const inverse = applyOps(book, [{ kind: 'sheet', delete: 'b' }]);
+        applyOps(book, inverse);
         expect(bytes(book)).toBe(before);
     });
 
@@ -250,7 +281,7 @@ describe('engine/book/apply-sheet — a delete', () => {
         const inverse = applyOps(book, [{ kind: 'sheet', delete: 'b' }]);
         expect(inverse).toEqual([{ kind: 'sheet', add: listed }]);
         expect([...book.sheets.keys()]).toEqual(['a']);
-        expect(opReferences(inverse[0])).toEqual({ media: ['picture.png'], comments: ['c1', 'c2'] });
+        expect(opReferences(inverse[0])).toEqual({ media: ['picture.png'], comments: ['c1.b', 'c2.b'] });
         expectLaw2(content, [{ kind: 'sheet', delete: 'b' }]);
     });
 
@@ -344,6 +375,6 @@ describe('engine/book/apply-sheet — the content read', () => {
             'merge',
             'validation',
         ]);
-        expect(add.records.chart?.g).toEqual({ index: 'a1', x: 0, y: 0, width: 1, height: 1, ...PARTS });
+        expect(add.records.chart?.['g.b']).toEqual({ index: 'a1', x: 0, y: 0, width: 1, height: 1, ...PARTS });
     });
 });

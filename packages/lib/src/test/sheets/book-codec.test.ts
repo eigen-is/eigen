@@ -150,8 +150,14 @@ function randomSheet(next: () => number, index: number): SheetContent {
         bands.push(first, pairs.length / 2, ...pairs);
     }
     const records: SheetContent['records'] = {};
+    // A record's id is unique in the whole book, so each sheet tags the ids it takes, and a column its filter's.
     for (const [type, items] of Object.entries(RECORDS)) {
-        if (next() < 0.4) Object.assign(records, { [type]: items });
+        if (next() >= 0.4) continue;
+        const tagged = Object.entries(items).map(([id, item]) => [
+            `${id}.${index}`,
+            'filter' in item ? { ...item, filter: `${item.filter}.${index}` } : item,
+        ]);
+        Object.assign(records, { [type]: Object.fromEntries(tagged) });
     }
     const fields: SheetContent['fields'] = { name: `Sheet ${index}`, order: pick(next, ['a0', 'a1', 'a5']) };
     if (next() < 0.3) Object.assign(fields, { hide: 1, color: '#f00', grid: 0 });
@@ -459,6 +465,17 @@ describe('refusal', () => {
         const twin = { ...BOOK.sheets[1], fields: { name: 'Twin', order: 'a2' } };
         expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's1' }] }))).toBeNull();
         expect(decodeBook(encodeBook({ ...BOOK, sheets: [...BOOK.sheets, { ...twin, id: 's3' }] }))).not.toBeNull();
+    });
+
+    test('of two sheets that hold a record of one type under one id', () => {
+        const twin = (records: SheetContent['records']) => ({ ...BOOK.sheets[1], records });
+        const book = (records: SheetContent['records']) =>
+            decodeBook(encodeBook({ ...BOOK, sheets: [BOOK.sheets[0], twin(records)] }));
+        expect(book({ comment: { 'card-9': { row: 4, column: 4 } } })).toBeNull();
+        expect(book({ chart: { c1: RECORDS.chart.c1 } })).toBeNull();
+        // Ids are a type's own: a merge may share its id with a comment.
+        expect(book({ merge: { 'card-9': { rect: [4, 4, 5, 5] } } })).not.toBeNull();
+        expect(book({ comment: { 'card-8': { row: 4, column: 4 } } })).not.toBeNull();
     });
 
     test('of a clock, a generation or a head out of range', () => {

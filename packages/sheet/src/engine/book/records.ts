@@ -21,6 +21,7 @@ import type {
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
 import { covers, within } from '@workspace/lib/sheets/rect';
+import { mapChartRefs } from '../chart-data';
 import {
     chartAfter,
     commentAfter,
@@ -127,6 +128,11 @@ export class SheetRecords {
 
     public records<T extends Kind>(type: T): ReadonlyMap<string, Records[T]> {
         return this.stored[type];
+    }
+
+    // Whether this sheet holds a record of one of the types of `records` under one of its ids.
+    public sharesId(records: SheetContent['records']): boolean {
+        return KINDS.some((type) => Object.keys(records[type] ?? {}).some((id) => this.stored[type].has(id)));
     }
 
     // The records as a snapshot holds them: by type and by id in order, a type with no record left out.
@@ -317,10 +323,10 @@ export class SheetRecords {
         };
     }
 
-    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments and the merges wholly
-    // in it go along, on one sheet its rule ranges too. A merge or a comment it lands on goes, a merge it cuts anywhere
-    // refuses, and so does a record it brings whose id the sheet it lands on keeps.
-    public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'id-in-use' | 'key-too-long' {
+    // A block moved on this sheet or to another, `source` being the sheet it leaves: its comments, the merges and the
+    // chart refs wholly in it go along, on one sheet its rule ranges too. A merge or a comment it lands on goes, and a
+    // merge it cuts anywhere refuses.
+    public planMove(op: MoveOp, source: SheetRecords): Planned | 'merge-cut' | 'key-too-long' {
         const block = op.from;
         const [top, left, bottom, right] = block;
         const rowShift = op.toRow - top;
@@ -359,29 +365,16 @@ export class SheetRecords {
         if (toHere) {
             // What lies under where the block lands goes, merges and comments alike, but for what the block brings.
             const moving = new Set(comments.map(([id]) => id));
-            const removed = { merge: new Set<string>(), comment: new Set<string>() };
             for (const [id, rect] of this.places.merge.meeting(target)) {
                 if (oneSheet && carried.has(id)) continue;
                 if (!within(rect, target)) return 'merge-cut';
-                removed.merge.add(id);
                 restore.push(this.wholeOp('merge', id, { rect }));
                 writes.push(() => this.replace('merge', id, undefined));
             }
             for (const [id, [row, column]] of this.places.comment.meeting(target)) {
                 if (oneSheet && moving.has(id)) continue;
-                removed.comment.add(id);
                 restore.push(this.wholeOp('comment', id, { row, column }));
                 writes.push(() => this.replace('comment', id, undefined));
-            }
-            // Ids are a sheet's own, so a block from another sheet may bring one this sheet keeps for another record:
-            // it is refused, as a comment's id is its thread's outside the workbook.
-            if (!oneSheet) {
-                for (const id of carried.keys()) {
-                    if (this.stored.merge.has(id) && !removed.merge.has(id)) return 'id-in-use';
-                }
-                for (const id of moving) {
-                    if (this.stored.comment.has(id) && !removed.comment.has(id)) return 'id-in-use';
-                }
             }
             for (const [id, rect] of carried) writes.push(() => this.replace('merge', id, { rect: shifted(rect) }));
             for (const [id, [row, column]] of comments) {
@@ -393,14 +386,18 @@ export class SheetRecords {
             for (const [id] of comments) writes.push(() => this.replace('comment', id, undefined));
         }
 
+        // A range wholly in the block goes along; one the block lands on stays, and as the move back would take it,
+        // undo puts it back. A rule's ranges keep to its sheet, while a chart's refs follow the block to another.
+        const along = (sheet: string, range: Rect) => sheet === op.sheet && within(range, block);
+        const landedOn = (sheet: string, range: Rect) =>
+            sheet === op.toSheet && !along(sheet, range) && within(range, target);
         const carries = oneSheet && fromHere;
         // The list itself when no range moves.
         const moved = (list: Rect[]): Rect[] =>
-            carries && list.some((range) => within(range, block))
-                ? list.map((range) => (within(range, block) ? shifted(range) : range))
+            carries && list.some((range) => along(this.sheet, range))
+                ? list.map((range) => (along(this.sheet, range) ? shifted(range) : range))
                 : list;
-        const returns = (list: readonly Rect[]) =>
-            carries && list.some((range) => !within(range, block) && within(range, target));
+        const returns = (list: readonly Rect[]) => carries && list.some((range) => landedOn(this.sheet, range));
         for (const [id, validation] of this.stored.validation) {
             const ranges = moved(validation.ranges);
             if (ranges !== validation.ranges)
@@ -423,6 +420,19 @@ export class SheetRecords {
             if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule) || returns(rule.ranges)) {
                 restore.push(this.wholeOp('conditionalFormat', id, rule));
             }
+        }
+        for (const [id, chart] of this.stored.chart) {
+            let landed = false;
+            const next = mapChartRefs(chart, (ref) => {
+                const range: Rect = [ref.row[0], ref.column[0], ref.row[1], ref.column[1]];
+                landed ||= landedOn(ref.sheetId, range);
+                if (!along(ref.sheetId, range)) return ref;
+                const [t, l, b, r] = shifted(range);
+                return { ...ref, sheetId: op.toSheet, row: [t, b], column: [l, r] };
+            });
+            if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
+            if (next !== chart) writes.push(() => this.replace('chart', id, next));
+            if (landed) restore.push(this.restoreOp('chart', id, chart, false));
         }
         return {
             restore: inOrder(restore),

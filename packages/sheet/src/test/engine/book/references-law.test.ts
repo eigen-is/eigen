@@ -5,7 +5,7 @@ import { opReferences } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, randomAnyOp, randomBookContent, randomMoveOp, randomSheetOp, someSheet } from './batches';
+import { batchOf, copyOf, randomAnyOp, randomBookContent, randomMoveOp, randomSheetOp, someSheet } from './batches';
 import type { Random } from './book-fixtures';
 import { below, randomOf } from './book-fixtures';
 import type { Model } from './model';
@@ -74,12 +74,8 @@ function referenceOp(random: Random, model: Model, book: Workbook): Op {
         () => {
             const part = book.sheets.get(sheet);
             if (!part) return randomSheetOp(random, model);
-            const add = book.sheetContent(sheet, part);
-            const name = `Copy ${below(random, 1000)}`;
-            return {
-                kind: 'sheet',
-                add: { ...add, id: `copy${below(random, 1_000_000)}`, fields: { ...add.fields, name } },
-            };
+            const add = copyOf(book.sheetContent(sheet, part), `copy${below(random, 1_000_000)}`);
+            return { kind: 'sheet', add: { ...add, fields: { ...add.fields, name: `Copy ${below(random, 1000)}` } } };
         },
         () => randomMoveOp(random, model),
         () => randomSheetOp(random, model),

@@ -20,6 +20,7 @@ import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
 import {
     batchOf,
+    chartRefsOn,
     randomBookContent,
     randomFormatOp,
     randomInputOp,
@@ -474,7 +475,11 @@ describe('engine/book/apply-move — the laws over random books and batches of m
                     },
                     single ? 1 : 5,
                 );
-                for (const op of ops.ops) if (op.kind === 'move') count(classOf(model, op));
+                for (const op of ops.ops) {
+                    if (op.kind !== 'move') continue;
+                    count(classOf(model, op));
+                    for (const part of chartsMet(model, op)) count(part);
+                }
                 const before = bytes(book);
                 const expected = modelAfter(model, ops);
                 if (typeof expected === 'string') {
@@ -510,10 +515,32 @@ describe('engine/book/apply-move — the laws over random books and batches of m
             expect(at(key)).toBeGreaterThan(40);
         }
         expect(at('refused merge-cut')).toBeGreaterThan(100);
-        expect(at('refused id-in-use')).toBeGreaterThan(10);
         for (const key of ['looks', 'content', 'records', 'lost']) expect(at(`part ${key}`)).toBeGreaterThan(30);
+        expect(at('chart along')).toBeGreaterThan(60);
+        expect(at('chart across')).toBeGreaterThan(15);
+        expect(at('chart partly')).toBeGreaterThan(80);
+        expect(at('chart landed on')).toBeGreaterThan(20);
     }, 300_000);
 });
+
+// What a move does to the series of the charts of the book: one wholly in the block goes along, on its sheet or
+// across, one partly in it stays, as does one the block lands on.
+function chartsMet(model: Model, { sheet, toSheet, from, toRow, toColumn }: MoveOp): string[] {
+    if (!model.sheets.has(sheet) || !model.sheets.has(toSheet)) return [];
+    const target: Rect = [toRow, toColumn, toRow + from[2] - from[0], toColumn + from[3] - from[1]];
+    const within = (inner: Rect, outer: Rect) =>
+        inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
+    const meets = (a: Rect, b: Rect) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+    const parts = new Set<string>();
+    for (const range of chartRefsOn(model, sheet)) {
+        if (within(range, from)) parts.add(sheet === toSheet ? 'chart along' : 'chart across');
+        else if (meets(range, from)) parts.add('chart partly');
+    }
+    for (const range of chartRefsOn(model, toSheet)) {
+        if (within(range, target) && !(sheet === toSheet && within(range, from))) parts.add('chart landed on');
+    }
+    return [...parts];
+}
 
 // What a move does, by where its block lands against where it is.
 function classOf(model: Model, { sheet, toSheet, from, toRow, toColumn }: MoveOp): string {

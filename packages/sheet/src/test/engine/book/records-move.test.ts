@@ -2,15 +2,20 @@
 // refuses, and for every case that the reverse move and then the returned record ops give back the records.
 
 import { describe, expect, test } from 'bun:test';
+import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { DataValidationRule } from '@workspace/lib/sheets';
 import type { MoveOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import {
     applyRecordOps,
+    chartData,
+    chartOf,
     contentOf,
     formulaRule,
     keyOf,
     keyOfRule,
     moveBlock,
+    ref,
     reverseOf,
     sheetNamed,
     sheetOf,
@@ -98,26 +103,10 @@ describe('comments', () => {
     });
 });
 
-describe('ids the sheet a block lands on holds', () => {
+describe('a block that lands on its own records', () => {
     const onS: Records = { merge: { m: { rect: [1, 1, 1, 2] } }, comment: { c: { row: 2, column: 2 } } };
 
-    test('a merge or a comment brought from another sheet under an id the sheet keeps elsewhere refuses the move', () => {
-        expect(refused(onS, move('T'), { merge: { m: { rect: [9, 9, 9, 10] } } })).toEqual([null, 'id-in-use']);
-        expect(refused(onS, move('T'), { comment: { c: { row: 9, column: 9 } } })).toEqual([null, 'id-in-use']);
-    });
-
-    test('the record of that id where the block lands goes, as any landed-on record does, and comes back', () => {
-        for (const onT of [
-            { merge: { m: { rect: [5, 4, 5, 5] } } },
-            { comment: { c: { row: 4, column: 4 } } },
-        ] as const) {
-            const { t } = moved(onS, move('T'), onT);
-            expect(t).toEqual({ merge: { m: { rect: [4, 4, 4, 5] } }, comment: { c: { row: 5, column: 5 } } });
-            roundTrips(onS, move('T'), onT);
-        }
-    });
-
-    test('on one sheet an id is the record itself', () => {
+    test('carries them, as they are not records it lands on', () => {
         expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toEqual([null, null]);
         roundTrips(onS, move('S', [1, 1, 2, 2], 2, 1));
     });
@@ -251,7 +240,62 @@ describe('the formula of a conditional format', () => {
     });
 });
 
-test('a move leaves the filter, the frozen panes, images and charts as they were', () => {
+describe('chart refs', () => {
+    const reading = (values: CellRangeRef): Records => ({
+        chart: { g: chartOf({ categories: null, series: [{ id: 's', name: 'n', values }] }) },
+    });
+    const refOf = (records: Records) => chartData(records.chart?.g)?.series[0].values;
+
+    test('a ref wholly in the block follows it, on one sheet and to another, and the move back brings it home', () => {
+        const records = reading(ref('S', [1, 2], [1, 1]));
+        expect(refOf(moved(records, move()).s)).toEqual(ref('S', [4, 5], [4, 4]));
+        expect(refOf(moved(records, move('T')).s)).toEqual(ref('T', [4, 5], [4, 4]));
+        expect(moved(records, move('T')).restore).toEqual([]);
+        roundTrips(records, move());
+        roundTrips(records, move('T'));
+    });
+
+    test('a chart on another sheet follows the block it reads', () => {
+        const onT = reading(ref('S', [1, 2], [1, 1]));
+        expect(refOf(moved({}, move(), onT).t)).toEqual(ref('S', [4, 5], [4, 4]));
+        roundTrips({}, move(), onT);
+    });
+
+    test('a ref partly in the block stays, the chart itself', () => {
+        const records = reading(ref('S', [1, 3], [1, 1]));
+        const sheets = book(records);
+        const before = sheetNamed(sheets, 'S').records('chart').get('g');
+        moveBlock(sheets, move());
+        expect(sheetNamed(sheets, 'S').records('chart').get('g')).toBe(before);
+        roundTrips(records, move());
+    });
+
+    test('a ref that follows the block past the chart size bound refuses the move', () => {
+        const [chart] = Object.values(reading(ref('S', [1, 2], [1, 1])).chart ?? {});
+        // The title padded with spaces as far as the bound allows: a ref on rows with more digits passes it.
+        const padded = (n: number) => ({ ...chart, specTitle: `${chart.specTitle.slice(0, -1)}${' '.repeat(n)}}` });
+        let n = 0;
+        for (let step = 2 ** 16; step >= 1; step /= 2) if (!exceedsChartSpecBytes(padded(n + step))) n += step;
+        const records: Records = { chart: { g: padded(n) } };
+        expect(refused(records, move('S', [1, 1, 2, 2], 100_000, 1))).toEqual(['key-too-long', null]);
+        expect(refused(records, move('S', [1, 1, 2, 2], 4, 1))).toEqual([null, null]);
+    });
+
+    test('a ref the block lands on stays, and the restore puts it back after the move back took it', () => {
+        for (const [records, op] of [
+            [reading(ref('S', [4, 5], [4, 4])), move()],
+            [reading(ref('T', [4, 5], [4, 4])), move('T')],
+            [reading(ref('S', [2, 3], [2, 2])), move('S', [1, 1, 2, 2], 2, 2)],
+        ] as const) {
+            const { s, restore } = moved(records, op);
+            expect(refOf(s)).toEqual(refOf(records));
+            expect(restore.map(({ type, id }) => [type, id])).toEqual([['chart', 'g']]);
+            roundTrips(records, op);
+        }
+    });
+});
+
+test('a move leaves the filter, the frozen panes and images as they were', () => {
     const records: Records = {
         filter: { f: { rect: [0, 0, 9, 9] } },
         filterColumn: { k: { filter: 'f', column: 1, rows: [[2, 2]] } },

@@ -1,8 +1,8 @@
 // The applier of a `record` op, which the frame calls for each op of a batch: one record of a sheet made, changed or
 // deleted, such as a merge or a filter, or fields of the sheet itself set, such as its name. The sheet's record store
-// writes it and hands back the ops that undo it. What the store cannot see is checked here first: a new name against
-// the other sheets, and that a sheet stays shown. A new name and tab place go to the engine first, as formulas read
-// sheets by both; a name no sheet had binds formulas typed with it, so the inverse renames back, then writes them.
+// writes it and hands back the ops that undo it. What the store cannot see is checked here first: a new record's id
+// and a new name against the other sheets, and that a sheet stays shown. A new name and tab place go to the engine
+// first, as formulas read sheets by both; the inverse of a name that bound formulas renames back, then writes them.
 
 import { sheetNameKey } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
@@ -15,6 +15,12 @@ export function applyRecord(book: Workbook, op: RecordOp): (RecordOp | InputOp)[
     const sheet = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
     if (!sheet) return [];
+    // An id names one record of its type in the whole book.
+    if (
+        op.whole &&
+        [...book.sheets].some(([id, other]) => id !== op.sheet && other.records.records(op.type).has(op.id))
+    )
+        throw new Refusal('id-in-use');
     let lost: InputOp[] = [];
     if (op.type === 'sheet') {
         const { fields } = sheet.records;
