@@ -110,15 +110,15 @@ export function modelAfter(model: Model, batch: Pick<Batch, 'now' | 'seed' | 'op
     return next;
 }
 
-// The model as a snapshot holds it, in the one form a workbook walks back to: computed when it holds no formula,
-// as the model computes none.
+// The model as a snapshot holds it, in the one form a workbook walks back to: computed when it holds no formula
+// but those this build cannot evaluate, as the model computes none.
 export function contentOfModel(model: Model): Book {
     const sheets = [...model.sheets.values()].sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
     return {
         g: model.g,
         now: model.now,
         seed: model.seed,
-        computed: !sheets.some(({ cells }) => [...cells.values()].some((cell) => cell.f !== undefined)),
+        computed: !sheets.some(({ cells }) => [...cells.values()].some(({ f }) => f !== undefined && !isKept(f))),
         sheets: sheets.map((sheet) => {
             const cells = [...sheet.cells].map(([place, cell]): Placed<CellRecord> => [...placeOf(place), cell]);
             cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
@@ -231,11 +231,12 @@ function listed(maps: RecordMaps): SheetContent['records'] {
 }
 
 // What a cell holds: a value beside a formula is the engine's to compute, but for a formula this build cannot
-// evaluate, which keeps the value it was given. Given none, or #REF!, it reads #REF! either way.
+// evaluate, which keeps the value it was given, and holds #REF! given none.
 function held(cell: CellContent): CellContent {
     if (cell.f === undefined) return cell;
     const { v, e, ...rest } = cell;
-    return v !== undefined && !(e && v === '#REF!') && isKept(cell.f) ? cell : rest;
+    if (!isKept(cell.f)) return rest;
+    return v === undefined ? { ...rest, v: '#REF!', e: 1 } : cell;
 }
 
 function isKept(text: string): boolean {

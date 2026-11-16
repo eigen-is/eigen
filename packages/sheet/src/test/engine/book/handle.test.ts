@@ -395,9 +395,9 @@ function expectSheetReads(sheet: Sheet, model: Model, modelSheet: ModelSheet): v
     for (const [row, column] of placesOf(modelSheet)) {
         const held = modelSheet.cells.get(`${row},${column}`);
         const read = sheet.content(row, column);
-        // The model holds a formula without its value: the engine says whether one is given.
+        // The model holds a formula without its value, but for one this build cannot evaluate.
         const { v: _, e: __, ...formula } = read ?? {};
-        expect(read && read.f !== undefined ? formula : read).toEqual(held ?? null);
+        expect(read?.f !== undefined && held?.v === undefined ? formula : read).toEqual(held ?? null);
         expect(sheet.hasFormula(row, column)).toBe(held?.f !== undefined);
         if (held?.f === undefined) expect(sheet.value(row, column)).toEqual(modelValue(held));
         expect(sheet.look(row, column)).toEqual(model.looks[modelSheet.looks.look(row, column)]);
