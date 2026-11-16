@@ -19,6 +19,9 @@ export function SiteFooter() {
                 </Link>
             )}
             <nav className="ml-auto flex flex-wrap gap-x-5 gap-y-1">
+                <Link to="/about" className={LINK}>
+                    About
+                </Link>
                 <Link to="/support" className={LINK}>
                     Support
                 </Link>

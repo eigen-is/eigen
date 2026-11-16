@@ -21,6 +21,7 @@ export type PaletteScope = 'mail' | 'file' | 'doc' | 'actions' | 'contacts' | 'h
 type ResultGroup =
     | 'top-hit'
     | 'suggested'
+    | 'recent'
     | 'smart'
     | 'selection'
     | 'doc-content'

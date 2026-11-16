@@ -23,7 +23,7 @@ function RecentRoute() {
     const { user } = Route.useRouteContext();
     const { pid, uid, mid } = Route.useSearch();
 
-    const { data: recentPaths = [], isLoading, error } = useRecentPaths();
+    const { data: recentPaths = [], isLoading, error } = useRecentPaths(true);
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
     const [sort, setSort] = useState<DriveSort>({ key: 'modified', dir: 'desc' });
     const lastActivity = useMemo(

@@ -1,3 +1,7 @@
+// The command palette's results for what is typed: it asks every source, such as commands, files, mail and help,
+// and hands their rows to buildSections. The dialog runs it while closed too, so the recent files, which show
+// before anything is typed, are read only while the palette is open.
+
 import type { CommandContext, PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { useMemo, useRef } from 'react';
 import { SUGGESTED_COMMAND_IDS } from '../commands';
@@ -10,21 +14,15 @@ import { useDocSearchResults } from '../providers/doc-search';
 import { useFileSearchResults } from '../providers/file-search';
 import { useHelpSearchResults } from '../providers/help-search';
 import { useMailSearchResults } from '../providers/mail-search';
+import { useRecentFileResults } from '../providers/recent-files';
 import { useSmartResults } from '../providers/smart';
 
-// Hold an async source's last results while ITS OWN query is in flight. The synchronous
-// sources (actions/contacts/smart) rebuild on every keystroke; each async source
-// (mail/file/help) stays put until its own results land — so the live FE results stay
-// responsive while the remote sections never collapse or flicker, and a slow source
-// (e.g. Pagefind's first WASM load) can't freeze the others. Writing to a ref in render
-// is the React docs' caching pattern ("You Might Not Need an Effect").
-function useStableWhilePending(results: PaletteResult[], isPending: boolean): PaletteResult[] {
-    const ref = useRef(results);
-    if (!isPending) ref.current = results;
-    return ref.current;
-}
-
-export function useCommandResults(ctx: CommandContext, input: string, scope?: PaletteScope): Sections {
+export function useCommandResults(
+    ctx: CommandContext,
+    input: string,
+    scope: PaletteScope | undefined,
+    open: boolean,
+): Sections {
     const parsed = parseQuery(input);
     // A typed prefix (mail:, file:, >, @, ?) is the strongest signal — if the user typed
     // one, honor it over the chip scope they set earlier via Tab.
@@ -37,6 +35,7 @@ export function useCommandResults(ctx: CommandContext, input: string, scope?: Pa
     const mail = useMailSearchResults(ctx, input, effectiveScope);
     const file = useFileSearchResults(ctx, input, effectiveScope);
     const help = useHelpSearchResults(input, effectiveScope);
+    const recent = useRecentFileResults(ctx, input, open);
 
     // docComment is async but doc (sync IN DOCUMENT) is not — smoothing only the comment section
     // keeps the sync section instant while IN COMMENTS never collapses mid-flight.
@@ -56,10 +55,31 @@ export function useCommandResults(ctx: CommandContext, input: string, scope?: Pa
                 mail: stableMail,
                 file: stableFile,
                 help: stableHelp,
+                recent,
                 input,
                 scope: effectiveScope,
                 suggestedCommandIds: SUGGESTED_COMMAND_IDS,
             }),
-        [action, contact, smart, doc, stableDocComment, stableMail, stableFile, stableHelp, input, effectiveScope],
+        [
+            action,
+            contact,
+            smart,
+            doc,
+            stableDocComment,
+            stableMail,
+            stableFile,
+            stableHelp,
+            recent,
+            input,
+            effectiveScope,
+        ],
     );
+}
+
+// Holds an async source's last results while its own query is in flight, so its section never flickers and a slow
+// source, such as Pagefind's first load, can't freeze the others (the React docs' ref-in-render caching pattern).
+function useStableWhilePending(results: PaletteResult[], isPending: boolean): PaletteResult[] {
+    const ref = useRef(results);
+    if (!isPending) ref.current = results;
+    return ref.current;
 }

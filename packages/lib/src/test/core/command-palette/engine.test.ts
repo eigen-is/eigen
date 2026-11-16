@@ -94,6 +94,7 @@ describe('buildSections', () => {
             mail: mails,
             file: files,
             help: [],
+            recent: [],
             input: 'foo',
             scope: undefined,
         });
@@ -110,6 +111,7 @@ describe('buildSections', () => {
             mail: [],
             file: [],
             help: [],
+            recent: [],
             input: 'foo',
             scope: undefined,
         });
@@ -125,6 +127,7 @@ describe('buildSections', () => {
             mail: [],
             file: [],
             help: [],
+            recent: [],
             input: 'alice@example.com',
             scope: undefined,
         });
@@ -140,6 +143,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'something else', 0)],
             file: [],
             help: [],
+            recent: [],
             input: 'new document',
             scope: undefined,
         });
@@ -154,6 +158,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'thing', 0)],
             file: [fileResult('f1', 'thing', 0)],
             help: [],
+            recent: [],
             input: 'xyz',
             scope: undefined,
         });
@@ -168,6 +173,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             input: 'foo',
             scope: 'mail',
         });
@@ -182,6 +188,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             input: 'foo',
             scope: 'file',
         });
@@ -196,6 +203,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             input: 'foo',
             scope: 'actions',
         });
@@ -210,6 +218,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [helpResult('h1', 'H1', 0)],
+            recent: [],
             input: 'foo',
             scope: 'help',
         });
@@ -224,6 +233,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             input: 'foo',
             scope: undefined,
         });
@@ -238,6 +248,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [helpResult('h1', 'H1', 0)],
+            recent: [],
             input: 'foo',
             scope: undefined,
         });
@@ -252,6 +263,7 @@ describe('buildSections', () => {
             mail: [],
             file: [fileResult('f.q4', 'Q4 budget', 0)],
             help: [],
+            recent: [],
             input: 'Q4 budget',
             scope: undefined,
         });
@@ -266,6 +278,7 @@ describe('buildSections', () => {
             mail: [],
             file: [],
             help: [],
+            recent: [],
             doc: [docHit('d1', 'Q3 launch', 0)],
             input: 'q3',
             scope: undefined,
@@ -281,6 +294,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             doc: [docHit('d1', 'D1', 0)],
             input: 'zzz',
             scope: undefined,
@@ -298,6 +312,7 @@ describe('buildSections', () => {
             mail: [],
             file: [],
             help: [],
+            recent: [],
             doc: [docHit('d1', 'q3 launch', 10)],
             input: 'q3',
             scope: undefined,
@@ -314,6 +329,7 @@ describe('buildSections', () => {
             mail: [mailResult('m1', 'M1', 0)],
             file: [fileResult('f1', 'F1', 0)],
             help: [],
+            recent: [],
             doc: [docHit('d1', 'D1', 0)],
             input: 'zzz',
             scope: 'doc',
@@ -333,11 +349,76 @@ describe('buildSections', () => {
             mail: [],
             file: [],
             help: [],
+            recent: [],
             input: '',
             scope: undefined,
             suggestedCommandIds: ['nav.mail'],
         });
         expect(sections.groups.map((g) => g.id)).toEqual(['suggested']);
         expect(sections.groups[0].items.map((i) => i.id)).toEqual(['nav.mail']);
+    });
+    test('an empty box with no selection shows Recent files above Suggested', () => {
+        const sections = buildSections({
+            action: [action('nav.mail', 'Go to Mail', 0)],
+            contact: [],
+            smart: [],
+            mail: [],
+            file: [],
+            help: [],
+            recent: [{ ...fileResult('file.r1', 'Q4 budget', 0), group: 'recent' }],
+            input: '',
+            scope: undefined,
+            suggestedCommandIds: ['nav.mail'],
+        });
+        expect(sections.groups.map((g) => [g.id, g.heading])).toEqual([
+            ['recent', 'Recent files'],
+            ['suggested', 'Suggested'],
+        ]);
+    });
+
+    test('an empty box with a selection shows Selection, then Recent files, and no Suggested', () => {
+        const sections = buildSections({
+            action: [action('nav.mail', 'Go to Mail', 0), { ...action('sel.share', 'Share', 0), group: 'selection' }],
+            contact: [],
+            smart: [],
+            mail: [],
+            file: [],
+            help: [],
+            recent: [{ ...fileResult('file.r1', 'Q4 budget', 0), group: 'recent' }],
+            input: '',
+            scope: undefined,
+            suggestedCommandIds: ['nav.mail'],
+        });
+        expect(sections.groups.map((g) => g.id)).toEqual(['selection', 'recent']);
+    });
+
+    test('a recent file matching the typed title leads Files and is the Top hit, once', () => {
+        const sections = buildSections({
+            action: [],
+            contact: [],
+            smart: [],
+            mail: [],
+            file: [fileResult('file.other', 'Q4 budget notes', 0), fileResult('file.r1', 'Q4 budget', -1)],
+            help: [],
+            recent: [fileResult('file.r1', 'Q4 budget', 1), fileResult('file.r2', 'Q4 plan', 1)],
+            input: 'Q4',
+            scope: undefined,
+        });
+        expect(sections.topHit?.id).toBe('file.r1');
+        expect(sections.groups.find((g) => g.id === 'file')?.items.map((i) => i.id)).toEqual(['file.r2', 'file.other']);
+    });
+    test('a recent file that is also a search hit is listed once', () => {
+        const sections = buildSections({
+            action: [],
+            contact: [],
+            smart: [smart('smart.mail-to', 'Mail to q4@example.com', { deterministic: true })],
+            mail: [],
+            file: [fileResult('file.r1', 'Q4 budget', 0)],
+            help: [],
+            recent: [fileResult('file.r1', 'Q4 budget', 1)],
+            input: 'q4@example.com',
+            scope: undefined,
+        });
+        expect(sections.groups.find((g) => g.id === 'file')?.items.map((i) => i.id)).toEqual(['file.r1']);
     });
 });

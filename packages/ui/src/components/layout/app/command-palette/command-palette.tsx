@@ -52,7 +52,7 @@ function firstResultId(sections: Sections): string | undefined {
 
 export function CommandPalette({ ctx }: Props) {
     const { open, setOpen, input, setInput, scope, setScope } = useCommandPalette();
-    const sections = useCommandResults(ctx, input, scope);
+    const sections = useCommandResults(ctx, input, scope, open);
 
     // Typing the `doc:` prefix reaches that scope even with no document open, so the empty list says what to do.
     const docScopeNoDoc = (parseQuery(input).scope ?? scope) === 'doc' && !ctx.docSearch;
@@ -84,7 +84,7 @@ export function CommandPalette({ ctx }: Props) {
     };
 
     // The input and scope reset when the palette opens, not when it closes. A row that navigates to another app
-    // keeps its query on screen until the page changes, instead of flashing the Suggested list as the dialog closes.
+    // keeps its query on screen until the page changes, instead of flashing the empty box's rows as the dialog closes.
     const wasOpenRef = useRef(false);
     useEffect(() => {
         if (open && !wasOpenRef.current) {
