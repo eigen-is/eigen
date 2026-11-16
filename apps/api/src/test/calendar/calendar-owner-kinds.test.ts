@@ -122,6 +122,34 @@ describe('A calendar read for an owner without a calendar of theirs to see', () 
         expect(fs.existsSync(getUserHomePath(demoted.id))).toBe(true);
         expect(await answersFor(demoted.id)).toEqual(NO_ACCESS);
     });
+
+    // Each pair differs only in whether the folder the id would climb to exists on the server's disk.
+    test('an id that is no user or team id answers as no access, whatever exists on the disk', async () => {
+        const up = '..%2F'.repeat(30);
+        const ids = [
+            `${up}tmp`,
+            `${up}no-such-folder`,
+            `external_${up}tmp`,
+            `external_${up}no-such-folder`,
+            `${up}tmp%2Fa%40b.c%2F..`,
+            `${up}no-such-folder%2Fa%40b.c%2F..`,
+            'external_..',
+            'external_%2Ftmp',
+            '..%2f..',
+            '%2Ftmp',
+            'external_',
+            '%20',
+            teamOwnerId('a'.repeat(32)),
+        ];
+        const answers = [];
+        for (const id of ids) {
+            const token = ctx.bob.user.sessionToken;
+            const shared = await authedRequest(token, `/calendar/${id}/shared-with-me`);
+            const access = await authedRequest(token, `/calendar/${id}/calendars/some-calendar/access`);
+            answers.push([id, shared.status, await shared.text(), access.status]);
+        }
+        expect(answers).toEqual(ids.map((id) => [id, 200, '[]', 403]));
+    });
 });
 
 describe('A calendar route on a team', () => {

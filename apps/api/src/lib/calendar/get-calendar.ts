@@ -6,6 +6,7 @@
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import { requireSelf, requireTeamAdmin } from '../auth/access';
 import { homeFolderExists } from '../config/paths';
 import { ApiError } from '../core';
@@ -90,8 +91,11 @@ export async function resolveListedCalendar(user: User, ownerId: string): Promis
 }
 
 // It does not check the caller, so a route may read from it only what the calendar's own shares give them.
-// An owner with no home folder or no calendar answers null, so asking neither creates a home nor tells who exists.
+// Only a user's or a team's id reaches the disk (an address parses as a user too), and an owner with no home folder
+// or no calendar answers null: asking reads no path outside the homes, creates no home and does not tell who exists.
 export async function routedCalendar(ownerId: string): Promise<Calendar | null> {
+    const { type } = parseOwnerId(ownerId);
+    if ((type !== 'user' && type !== 'team') || validateEmailAddress(ownerId)) return null;
     if (!homeFolderExists(ownerId)) return null;
     const home = await getHome(ownerId);
     return home.hasCalendar ? home.calendar : null;
