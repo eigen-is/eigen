@@ -224,8 +224,7 @@ export function randomInputOp(random: Random, model: Model): InputOp {
             ],
         );
     const op: InputOp = { kind: 'input', sheet: sheetId(random, model), cells };
-    // The rectangles of the runs stand in columns of their own, right of the cells, so they are disjoint and an op
-    // says a place once.
+    // The rectangles of the runs stand in columns of their own, right of the cells, so they are disjoint.
     if (random() < 0.4) {
         op.runs = Array.from({ length: 1 + below(random, 2) }, (_, at) => {
             const [top, left, bottom, right] = smallRect(random, 14, 2);

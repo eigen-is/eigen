@@ -64,6 +64,10 @@ const OF_KIND: { [K in Exclude<OpKind, 'record'>]: Op } = {
 describe('opReferences', () => {
     test.each([
         ['an input', OF_KIND.input],
+        [
+            'an input whose listed cell lies in its run',
+            { kind: 'input', sheet: 's1', runs: [[[0, 0, 1, 1], { v: 'photo.png' }]], cells: [[0, 0, { v: 'c1' }]] },
+        ],
         ['a cell format', OF_KIND.format],
         ['a line format', { kind: 'format', sheet: 's1', lines: 'rows', spans: [[0, 4]], set: { hidden: 1 } }],
         ['a lines edit', OF_KIND.lines],

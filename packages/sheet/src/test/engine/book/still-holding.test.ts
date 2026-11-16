@@ -126,6 +126,26 @@ describe('engine/book/still-holding — stillHolding', () => {
     });
 
     describe('content', () => {
+        test('my listed cell inside my run: it holds what the cell said, and a peer’s typing cuts both', () => {
+            const written: Op[] = [
+                { kind: 'input', sheet: 'a', runs: [[[0, 2, 3, 3], { v: 7 }]], cells: [[1, 3, { v: 9 }]] },
+            ];
+            const whole = edited(written);
+            expect(stillHolding(whole.book, whole.apply, written)).toEqual(whole.apply);
+            applyOps(whole.book, whole.apply);
+            expect(bytes(whole.book)).toBe(whole.before);
+
+            const { book, apply } = edited(written, input([[1, 3, { v: 'peer' }]]));
+            const held = stillHolding(book, apply, written);
+            expect(JSON.stringify(held)).not.toContain('[1,3,');
+            applyOps(book, held);
+            expect([contentAt(book, 1, 3), contentAt(book, 1, 2), contentAt(book, 3, 3)]).toEqual([
+                { v: 'peer' },
+                null,
+                null,
+            ]);
+        });
+
         test('a cell a peer typed into leaves the inverse, and the others stay', () => {
             const written = [
                 input([

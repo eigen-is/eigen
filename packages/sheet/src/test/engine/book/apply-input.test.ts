@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Batch, CellContent, InputOp, Op, RecordOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
-import { inputOfBlocks } from '../../../engine/book/apply-input';
+import { entryAt, inputOfBlocks } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
 import type { Book } from './book-fixtures';
@@ -94,6 +94,21 @@ describe('engine/book/apply-input — what an input writes', () => {
         applyOps(book, [input({ cells: [[7, 0, { f: '=LEN(R[-3]C)' }]] })]);
         bytes(book);
         expect(book.engine.valueOf('a', 7, 0)).toBe(12);
+    });
+
+    test('a listed cell inside a run wins over it: runs land first, then cells, and entryAt reads it so', () => {
+        const book = new Workbook(bookOf(sheetOf('a')));
+        const op = input({ runs: [[[0, 0, 2, 1], { v: 1 }]], cells: [[1, 1, { v: 9 }]] });
+        applyOps(book, [op]);
+        expect(cellsOf(book)).toEqual([
+            [0, 0, { v: 1 }],
+            [1, 0, { v: 1 }],
+            [2, 0, { v: 1 }],
+            [0, 1, { v: 1 }],
+            [1, 1, { v: 9 }],
+            [2, 1, { v: 1 }],
+        ]);
+        expect([entryAt(op, 1, 1), entryAt(op, 2, 1), entryAt(op, 3, 1)]).toEqual([{ v: 9 }, { v: 1 }, undefined]);
     });
 
     test('a run of null empties its rectangle, links and marks included, and leaves the rest', () => {

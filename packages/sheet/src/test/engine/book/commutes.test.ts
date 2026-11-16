@@ -264,6 +264,12 @@ describe('engine/book/commutes — commutes', () => {
                 { kind: 'input', sheet: 'a', runs: [[[1, 1, 3, 4], { v: 3 }]] },
             ],
             [
+                'an input on a cell another input lists inside its own run',
+                input([[2, 2, { v: 1 }]]),
+                { kind: 'input', sheet: 'a', runs: [[[1, 1, 4, 4], { v: 3 }]], cells: [[2, 2, { v: 9 }]] },
+                input([[5, 2, { v: 1 }]]),
+            ],
+            [
                 'rich text typed into a cell a format restyles',
                 input([[2, 2, { s: RICH }]]),
                 format([[0, 0, 9, 9]], { it: 1 }),

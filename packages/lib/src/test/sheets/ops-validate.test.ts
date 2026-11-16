@@ -354,33 +354,20 @@ describe('2. places', () => {
         expect(accepts(input({ runs: [run([0, 0, 0, 0]), run([0, 0, 0, 0])] }))).toBe(false);
     });
 
-    test('in an input say a place once: a listed cell inside a run is refused, at every edge', () => {
+    test('in an input a listed cell may lie inside a run, at every edge: runs land first, then cells', () => {
         const runs = [[[2, 3, 4, 5], null]];
-        const listing = (row: number, column: number) => input({ runs, cells: [[row, column, null]] });
+        const listing = (row: number, column: number) => input({ runs, cells: [[row, column, { v: 1 }]] });
         for (const [row, column] of [
             [2, 3],
             [4, 3],
             [2, 5],
             [4, 5],
             [3, 4],
-        ]) {
-            expect(accepts(listing(row, column))).toBe(false);
-        }
-        for (const [row, column] of [
             [1, 4],
-            [5, 4],
-            [3, 2],
             [3, 6],
         ]) {
             expect(accepts(listing(row, column))).toBe(true);
         }
-        const two = [...runs, [[0, 9, 0, 9], null]];
-        const cells = (row: number) => [
-            [1, 3, null],
-            [row, 9, null],
-        ];
-        expect(accepts(input({ runs: two, cells: cells(0) }))).toBe(false);
-        expect(accepts(input({ runs: two, cells: cells(1) }))).toBe(true);
     });
 
     test('in an input of as many runs and cells as the budget holds are checked in milliseconds', () => {
@@ -394,13 +381,10 @@ describe('2. places', () => {
             const [row, column] = [at % 1_000, Math.floor(at / 1_000)];
             return [column % 2 === 0 ? row * 3 + 2 : row, column, null];
         });
-        // The run at the top of column 138 holds its row 1.
-        const inside = cells.map((cell, at) => (at === 138 * 1_000 ? [1, 138, null] : cell));
         const text = JSON.stringify(batchOf(input({ runs, cells })));
         expect(text.length).toBeLessThanOrEqual(MAX_BATCH_JSON);
         const started = performance.now();
         expect(readBatch(text)).not.toBeNull();
-        expect(readBatch(JSON.stringify(batchOf(input({ runs, cells: inside }))))).toBeNull();
         expect(performance.now() - started).toBeLessThan(1_000);
     });
 
