@@ -1,9 +1,9 @@
 // What is left of an undo when peers wrote after the edit it undoes: the part of the inverse whose targets still hold
-// what the edit left. A cell stays while it holds the content the edit wrote, a look or line key per cell or line
-// while it has the value the edit gave it, a record's field while it has the value the edit set; where a peer wrote
-// since, the peer's write stays and the inverse is cut around it. What the edit left is read off its ops, so a target
-// none of them names, such as a formula a rename bound, stays in the inverse as it is.
+// what the edit left. A cell's content, its runs and a formula a rename bound go back while the cell holds what the
+// edit left there, a look or line key per cell or line while it has the value the edit gave it, a record's field while
+// it has the value the edit set; where a peer wrote since, the peer's write stays and the inverse is cut around it.
 
+import { bindSheet, parseStored, printStored } from '@workspace/formula/text';
 import type { CellContent, FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
@@ -15,30 +15,65 @@ import type { BookSheet, Workbook } from './workbook';
 
 type CellFormat = Extract<FormatOp, { ranges: unknown }>;
 type LineFormat = Extract<FormatOp, { lines: unknown }>;
+type Holds = (row: number, column: number) => boolean;
 
 // `apply` is the inverse of `written`, both as the peers' line edits shifted them. An inverse that renumbers places
 // comes back whole: the stack keeps such an entry only while no peer's batch landed.
 export function stillHolding(book: Workbook, apply: readonly Op[], written: readonly Op[]): Op[] {
     const held: Op[] = [];
+    const tests = new Map<string, Holds>();
     for (const op of apply) {
         if (op.kind === 'lines' || op.kind === 'move' || op.kind === 'sheet') return [...apply];
         const part = book.sheets.get(op.sheet);
         // An op on a sheet that is gone would be skipped.
         if (!part) continue;
+        let holds = tests.get(op.sheet);
+        if (!holds) {
+            holds = asLeft(book, part, op.sheet, apply, written);
+            tests.set(op.sheet, holds);
+        }
         if (op.kind === 'input') {
-            const next = inputHolding(book, part, op, written);
+            const next = inputHolding(op, holds);
             if (next) held.push(next);
         } else if (op.kind === 'record') {
             const next = recordHolding(part, op, written);
             if (next) held.push(next);
         } else if ('lines' in op) held.push(...linesHolding(part, op, written));
-        else held.push(...cellsHolding(book, part, op, written));
+        else held.push(...cellsHolding(book, part, op, written, holds));
     }
     return held;
 }
 
-// What the edit left in a cell that held `before`, or undefined when no op of it wrote the cell's content or link.
-// Every op is folded in: an input replaces the cell and a format sets keys, so an earlier one gives `before` again.
+// The one test before the inverse writes a cell's content, restyles its runs or puts back a formula a rename bound:
+// the cell holds what the edit left in it. The inverse's last word on a cell is what it held before the edit, and
+// what no op of the inverse says is read as the cell holds it now. A value beside a formula counts only where the
+// workbook keeps one, and a kept formula with no value reads #REF!.
+function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly Op[], written: readonly Op[]): Holds {
+    const inputs = apply.filter((op): op is InputOp => op.kind === 'input' && op.sheet === sheet).toReversed();
+    return (row, column) => {
+        const now = cellAt(book, sheet, part.extras, row, column);
+        let before = now;
+        for (const op of inputs) {
+            const entry = entryAt(op, row, column);
+            if (entry === undefined) continue;
+            before = entry;
+            break;
+        }
+        const left = leftIn(written, sheet, row, column, before);
+        if (left === undefined) return true;
+        const a = left ?? {};
+        const b = now ?? {};
+        if (a.f !== b.f || a.qp !== b.qp || !same(a.link, b.link) || !same(a.s, b.s)) return false;
+        if (a.f !== undefined && b.v === undefined) return true;
+        const value = ({ v, e, f }: CellContent) =>
+            v === undefined || (f !== undefined && e && v === '#REF!') ? null : [v, e];
+        return same(value(a), value(b));
+    };
+}
+
+// What the edit left in a cell that held `before`, or undefined when no op of it wrote the cell's content, its link
+// or its formula. Every op is folded in: an input replaces the cell, a format sets keys, and a new name binds a formula
+// typed with it, so an earlier op gives `before` again.
 function leftIn(
     written: readonly Op[],
     sheet: string,
@@ -49,6 +84,15 @@ function leftIn(
     let content = before;
     let wrote = false;
     for (const op of written) {
+        if (op.kind === 'record') {
+            if (op.type !== 'sheet' || !op.set.name || content?.f === undefined) continue;
+            const tree = parseStored(content.f);
+            if ('reason' in tree) continue;
+            const bound = bindSheet(tree, op.set.name, op.sheet);
+            if (bound === tree) continue;
+            content = { ...content, f: printStored(bound) };
+            wrote = true;
+        }
         if (op.kind === 'input' && op.sheet === sheet) {
             const entry = entryAt(op, row, column);
             if (entry === undefined) continue;
@@ -75,20 +119,8 @@ function same(a: unknown, b: unknown): boolean {
     return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
-// Whether a cell holds what an op said: a value beside a formula counts only where the workbook keeps one, and a
-// kept formula with no value reads #REF!.
-function sameContent(said: CellContent | null, held: CellContent | null): boolean {
-    const a = said ?? {};
-    const b = held ?? {};
-    if (a.f !== b.f || a.qp !== b.qp || !same(a.link, b.link) || !same(a.s, b.s)) return false;
-    if (a.f !== undefined && b.v === undefined) return true;
-    const value = ({ v, e, f }: CellContent) =>
-        v === undefined || (f !== undefined && e && v === '#REF!') ? null : [v, e];
-    return same(value(a), value(b));
-}
-
 // The cells of a rectangle that hold, joined into rectangles: the rectangle itself when all do.
-function holding([top, left, bottom, right]: Rect, holds: (row: number, column: number) => boolean): Rect[] {
+function holding([top, left, bottom, right]: Rect, holds: Holds): Rect[] {
     const areas = new Areas();
     for (let column = left; column <= right; column += 1) {
         let from = -1;
@@ -104,18 +136,13 @@ function holding([top, left, bottom, right]: Rect, holds: (row: number, column: 
     return areas.joined();
 }
 
-function inputHolding(book: Workbook, part: BookSheet, op: InputOp, written: readonly Op[]): InputOp | undefined {
-    const { sheet } = op;
-    const holds = (row: number, column: number, before: CellContent | null) => {
-        const left = leftIn(written, sheet, row, column, before);
-        return left === undefined || sameContent(left, cellAt(book, sheet, part.extras, row, column));
-    };
+function inputHolding(op: InputOp, holds: Holds): InputOp | undefined {
     const runs = (op.runs ?? []).flatMap(([rect, before]) =>
-        holding(rect, (row, column) => holds(row, column, before)).map((piece) => [piece, before] as const),
+        holding(rect, holds).map((piece) => [piece, before] as const),
     );
-    const cells = (op.cells ?? []).filter(([row, column, before]) => holds(row, column, before));
+    const cells = (op.cells ?? []).filter(([row, column]) => holds(row, column));
     if (runs.length + cells.length === 0) return undefined;
-    return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
+    return { kind: 'input', sheet: op.sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
 }
 
 // What still holds of the ranges of one key, undefined when all does. Of each part a write of the edit covers, newest
@@ -150,18 +177,30 @@ function heldOf<V>(
 }
 
 // A cell format is cut per key: a look key over the spans of the bands, a link cell by cell, as few cells hold one.
-function cellsHolding(book: Workbook, part: BookSheet, op: CellFormat, written: readonly Op[]): FormatOp[] {
+// A run-style key restyles every rich cell it covers, so it leaves out each one that does not hold what the edit left.
+function cellsHolding(
+    book: Workbook,
+    part: BookSheet,
+    op: CellFormat,
+    written: readonly Op[],
+    holds: Holds,
+): FormatOp[] {
     const { sheet } = op;
     const formats = written
         .filter((other): other is CellFormat => other.kind === 'format' && other.sheet === sheet && 'ranges' in other)
         .toReversed();
+    const changed = RUN_KEYS.some((key) => names(op, key))
+        ? op.ranges.flatMap((rect) =>
+              [...part.extras.cells(rect)].filter(([row, column, { s }]) => s && !holds(row, column)),
+          )
+        : [];
     const parts: FormatOp[] = [];
     let whole = true;
     for (const key of LOOK_KEYS.filter((name) => names(op, name))) {
         const writes = formats
             .filter((other) => names(other, key))
             .map((other) => ({ ranges: other.ranges, value: other.set?.[key] }));
-        const ranges = heldOf(op.ranges, writes, (rect, value) => {
+        let ranges = heldOf(op.ranges, writes, (rect, value) => {
             const areas = new Areas();
             let all = true;
             for (const { c0, c1, r0, r1, look } of part.bands.spans(rect)) {
@@ -170,18 +209,18 @@ function cellsHolding(book: Workbook, part: BookSheet, op: CellFormat, written: 
             }
             return all ? null : areas.joined();
         });
+        if (changed.length > 0 && RUN_KEYS.some((name) => name === key)) {
+            for (const [row, column] of changed) {
+                ranges = (ranges ?? op.ranges).flatMap((rect) => outsideOf(rect, [row, column, row, column]));
+            }
+        }
         if (ranges) whole = false;
         const set = op.set?.[key] === undefined ? { clear: [key] } : { set: { [key]: op.set[key] } };
         if ((ranges ?? op.ranges).length > 0)
             parts.push({ kind: 'format', sheet, ranges: ranges ?? op.ranges, ...set });
     }
     if (names(op, 'link')) {
-        const ranges = op.ranges.flatMap((rect) =>
-            holding(rect, (row, column) => {
-                const left = leftIn(written, sheet, row, column, null);
-                return left === undefined || same(left?.link, part.extras.at(row, column)?.link);
-            }),
-        );
+        const ranges = op.ranges.flatMap((rect) => holding(rect, holds));
         if (!same(ranges, op.ranges)) whole = false;
         const set = op.set?.link ? { set: { link: op.set.link } } : { clear: ['link' as const] };
         if (ranges.length > 0) parts.push({ kind: 'format', sheet, ranges, ...set });
@@ -256,8 +295,8 @@ function recordHolding(part: BookSheet, op: RecordOp, written: readonly Op[]): R
     const holds = (field: string) => !(state === 'whole' || field in known) || same(fields.get(field), known[field]);
     if (op.set && !op.whole) return live ? withFields(op, op.set, holds) : undefined;
     if (state === 'gone') return live ? undefined : op;
-    const asLeft = live && Object.keys(known).every(holds) && (state !== 'whole' || [...fields.keys()].every(holds));
-    return asLeft ? op : undefined;
+    const kept = live && Object.keys(known).every(holds) && (state !== 'whole' || [...fields.keys()].every(holds));
+    return kept ? op : undefined;
 }
 
 // The op with the fields of its `set` that hold: the op itself with all of them, none with no field.

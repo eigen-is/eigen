@@ -13,11 +13,12 @@ import type {
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
+import { names, RUN_KEYS } from '../../../engine/book/apply-format';
 import { cellAt } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { stillHolding } from '../../../engine/book/still-holding';
 import { Workbook } from '../../../engine/book/workbook';
-import { randomBookContent, randomFormatOp, randomInputOp, randomLineReaderOp, randomRecordOp } from './batches';
+import { LATER, randomBookContent, randomFormatOp, randomInputOp, randomLineReaderOp, randomRecordOp } from './batches';
 import type { Book, Random } from './book-fixtures';
 import { below, randomOf } from './book-fixtures';
 import { bytes } from './bytes';
@@ -196,26 +197,101 @@ describe('engine/book/still-holding — stillHolding', () => {
             expect(stillHolding(whole.book, whole.apply, written)).toEqual(whole.apply);
 
             const peers: [FormatOp, CellAttrs][] = [
-                [format([[5, 5, 5, 5]], { it: 1 }), { it: 1 }],
-                [format([[5, 5, 5, 5]], { link: LINK }), {}],
+                [format([[5, 5, 5, 5]], { it: 1 }), { bl: 1, it: 1 }],
+                [format([[5, 5, 5, 5]], { link: LINK }), { bl: 1 }],
             ];
             for (const [peer, look] of peers) {
                 const { book, apply } = edited(written, peer);
                 const mine = contentAt(book, 5, 5);
                 const held = stillHolding(book, apply, written);
-                expect(held).toEqual([{ kind: 'format', sheet: 'a', ranges: [[5, 5, 6, 6]], clear: ['bl'] }]);
+                // The cell holds what the peer left, not what I left: my undo leaves it, its look and its runs alone.
+                expect(held).toEqual([
+                    {
+                        kind: 'format',
+                        sheet: 'a',
+                        ranges: [
+                            [6, 5, 6, 6],
+                            [5, 6, 5, 6],
+                        ],
+                        clear: ['bl'],
+                    },
+                ]);
                 applyOps(book, held);
-                const after = contentAt(book, 5, 5);
-                // The peer's italic is on every run still, or the peer's link on the cell; my bold is off.
-                expect(after?.link).toEqual(mine?.link);
-                expect(after?.s?.map(({ it }) => it)).toEqual(mine?.s?.map(({ it }) => it));
-                expect(after?.s?.map(({ bl }) => bl)).toEqual([undefined, undefined]);
+                expect(contentAt(book, 5, 5)).toEqual(mine);
                 expect(lookAt(book, 5, 5)).toEqual(look);
+                expect(lookAt(book, 6, 6)).toEqual({});
             }
             // Without the guard the inverse's input puts the old runs back over the peer's italic.
             const { book, apply } = edited(written, format([[5, 5, 5, 5]], { it: 1 }));
             applyOps(book, apply);
             expect(contentAt(book, 5, 5)?.s?.map(({ it }) => it)).toEqual([undefined, undefined]);
+        });
+
+        test('a peer’s rich text typed into my sized range keeps its runs: my undo of the size skips that cell', () => {
+            const written = [format([[0, 0, 9, 9]], { fs: 9 })];
+            const peer: Run[] = [{ v: 'BIG', fs: 20 }, { v: ' small' }];
+            const { book, apply } = edited(written, input([[2, 2, { s: peer }]]));
+            const held = stillHolding(book, apply, written);
+            expect(held).toEqual([
+                {
+                    kind: 'format',
+                    sheet: 'a',
+                    ranges: [
+                        [0, 0, 1, 9],
+                        [3, 0, 9, 9],
+                        [2, 0, 2, 1],
+                        [2, 3, 2, 9],
+                    ],
+                    clear: ['fs'],
+                },
+            ]);
+            applyOps(book, held);
+            expect(contentAt(book, 2, 2)?.s).toEqual(peer);
+            expect([lookAt(book, 2, 2), lookAt(book, 2, 3)]).toEqual([{ fs: 9 }, {}]);
+        });
+
+        test('a formula a rename bound goes back while it holds what the rename left, and a peer’s typing stays', () => {
+            const typed = "='Later'!R1C1+1";
+            const book = (): Book => ({
+                g: 1,
+                now: 45_000,
+                seed: 3,
+                computed: false,
+                sheets: [sheetOf('a', 'a0', { cells: [[0, 0, { f: typed }]] }), sheetOf('b', 'a1')],
+            });
+            const written: Op[] = [{ kind: 'record', sheet: 'b', type: 'sheet', id: 'b', set: { name: 'Later' } }];
+            const whole = new Workbook(book());
+            const before = bytes(whole);
+            const apply = applyOps(whole, written);
+            expect(apply).toEqual([
+                { kind: 'record', sheet: 'b', type: 'sheet', id: 'b', set: { name: 'b' } },
+                input([[0, 0, { f: typed }]]),
+            ]);
+            expect(contentAt(whole, 0, 0)?.f).not.toBe(typed);
+            expect(stillHolding(whole, apply, written)).toEqual(apply);
+            applyOps(whole, apply);
+            expect(bytes(whole)).toBe(before);
+
+            const peer = new Workbook(book());
+            const inverse = applyOps(peer, written);
+            applyOps(peer, [input([[0, 0, { v: 'peer typed this' }]])]);
+            const held = stillHolding(peer, inverse, written);
+            expect(held).toEqual([inverse[0]]);
+            applyOps(peer, held);
+            expect(contentAt(peer, 0, 0)).toEqual({ v: 'peer typed this' });
+        });
+
+        test('a formula I typed with a new name, then bound by my rename: the rename’s binding is what I left', () => {
+            const typed = "='Later'!R1C1+1";
+            const written: Op[] = [
+                input([[0, 0, { f: typed }]]),
+                { kind: 'record', sheet: 'b', type: 'sheet', id: 'b', set: { name: 'Later' } },
+            ];
+            const { book, apply, before } = edited(written);
+            const held = stillHolding(book, apply, written);
+            expect(held).toEqual(apply);
+            applyOps(book, held);
+            expect(bytes(book)).toBe(before);
         });
 
         test('my format over rich text I typed in the same edit: the cell holds what both left', () => {
@@ -494,7 +570,8 @@ describe('engine/book/still-holding — stillHolding', () => {
         });
     });
     describe('the law, over random edits and peers', () => {
-        const ROWS = 40;
+        // Past row 70, where a book's formula waits for a sheet named `LATER`.
+        const ROWS = 72;
         const COLUMNS = 22;
         const LINES = 26;
         const draw = (random: Random, model: Model): Op =>
@@ -515,7 +592,12 @@ describe('engine/book/still-holding — stillHolding', () => {
                 throw error;
             }
         };
-        type Cell = { whole: string; link: string; text: string; look: string };
+        // Runs that disagree on every run-style key, so no format over them leaves them as they are.
+        const TYPED_RICH: Run[] = [
+            { v: 'BIG', bl: 1, it: 1, ff: 'Mono', fs: 20, fc: '#0000ff', cl: 1, un: 1 },
+            { v: ' small' },
+        ];
+        type Cell = { whole: string; link: string; text: string; runs: string; look: string };
         type Facets = { cells: Map<string, Cell>; lines: Map<string, string>; records: Map<string, object> };
         const json = (value: unknown) => JSON.stringify(value ?? null);
         const textOf = (content: CellContent | null) =>
@@ -530,7 +612,14 @@ describe('engine/book/still-holding — stillHolding', () => {
                         const content = cellAt(book, sheet, part.extras, row, column);
                         const look = json(book.looks.look(part.bands.look(row, column)));
                         if (!content && look === '{}') continue;
-                        const cell = { whole: json(content), link: json(content?.link), text: textOf(content), look };
+                        const runs = json(content?.s?.map(({ v: _, ...style }) => style));
+                        const cell = {
+                            whole: json(content),
+                            link: json(content?.link),
+                            text: textOf(content),
+                            runs,
+                            look,
+                        };
                         read.cells.set(`${sheet} ${row} ${column}`, cell);
                     }
                 }
@@ -556,13 +645,13 @@ describe('engine/book/still-holding — stillHolding', () => {
             }
             return read;
         };
-        const EMPTY: Cell = { whole: 'null', link: 'null', text: 'null', look: '{}' };
+        const EMPTY: Cell = { whole: 'null', link: 'null', text: 'null', runs: 'null', look: '{}' };
         const field = (record: object | undefined, name: string) =>
             json(new Map(Object.entries(record ?? {})).get(name));
         const filters = (read: Facets, sheet: string) => json(read.records.get(`${sheet} filter`));
 
         test('a place a peer wrote stays as the peer left it, a place only I wrote goes back', () => {
-            const seen = { whole: 0, cut: 0, refused: 0, skipped: 0, untouched: 0 };
+            const seen = { whole: 0, cut: 0, refused: 0, skipped: 0, untouched: 0, typedRich: 0, typedLost: 0 };
             const cuts = { cells: 0, runs: 0, ranges: 0, spans: 0, fields: 0, records: 0 };
             for (let seed = 1; seed <= 700; seed += 1) {
                 const random = randomOf(seed * 86_028_121);
@@ -570,7 +659,13 @@ describe('engine/book/still-holding — stillHolding', () => {
                 let model = modelOf(content);
                 const book = new Workbook(structuredClone(content));
                 const before = facets(book);
+                // The edit's own rename and the peers' typing draw from a stream of their own, so the others stay.
+                const extra = randomOf(seed * 7_919);
                 const written = Array.from({ length: 2 + below(random, 4) }, () => mine(random, model));
+                // Now and then the edit renames a sheet to the name a book's formula waits for, which binds it.
+                const [renamed] = model.sheets.keys();
+                if (extra() < 0.2)
+                    written.push({ kind: 'record', sheet: renamed, type: 'sheet', id: renamed, set: { name: LATER } });
                 const after = modelAfter(model, { now: 1, seed: 1, ops: written });
                 const apply = lands(book, written);
                 if (!apply || typeof after === 'string') {
@@ -584,6 +679,29 @@ describe('engine/book/still-holding — stillHolding', () => {
                     const ops = Array.from({ length: 1 + below(random, 3) }, () => draw(random, model));
                     const next = modelAfter(model, { now: 1, seed: 1, ops });
                     if (lands(book, ops) && typeof next !== 'string') model = next;
+                }
+                // A peer types rich text into a range my format gave a run-style key, or onto a formula my rename bound.
+                const typing: InputOp[] = [];
+                const format = written.find(
+                    (op) => op.kind === 'format' && 'ranges' in op && RUN_KEYS.some((key) => names(op, key)),
+                );
+                if (format?.kind === 'format' && 'ranges' in format && extra() < 0.7) {
+                    const [top, left] = format.ranges[0];
+                    if (top < ROWS && left < COLUMNS)
+                        typing.push(input([[top, left, { s: TYPED_RICH }]], format.sheet));
+                }
+                const lost = apply.find((op) => op.kind === 'input' && JSON.stringify(op).includes(`'${LATER}'`));
+                if (lost?.kind === 'input' && lost.cells && written.some((op) => op.kind === 'record')) {
+                    const [row, column] = lost.cells[0];
+                    if (row < ROWS && column < COLUMNS)
+                        typing.push(input([[row, column, { v: 'peer typed this' }]], lost.sheet));
+                }
+                for (const op of typing) {
+                    const next = modelAfter(model, { now: 1, seed: 1, ops: [op] });
+                    if (!lands(book, [op]) || typeof next === 'string') continue;
+                    model = next;
+                    if (op.cells?.[0][2]?.s) seen.typedRich += 1;
+                    else seen.typedLost += 1;
                 }
                 const peers = facets(book);
                 const held = stillHolding(book, apply, written);
@@ -618,14 +736,28 @@ describe('engine/book/still-holding — stillHolding', () => {
                     ...undone.cells.keys(),
                 ])) {
                     const [b0, b1, bp, f] = [before, left, peers, undone].map((read) => read.cells.get(key) ?? EMPTY);
+                    const [l0, l1, lp, lf] = [b0, b1, bp, f].map((cell): CellAttrs => JSON.parse(cell.look));
                     if (bp.whole === b1.whole) expect(f.whole, `${where} cell ${key}`).toBe(b0.whole);
                     else {
                         if (bp.link !== b1.link) expect(f.link, `${where} link ${key}`).toBe(bp.link);
                         if (bp.text !== b1.text) expect(f.text, `${where} text ${key}`).toBe(bp.text);
+                        // A run-style key a peer changed stays on the runs as the peer left it, unless every run wears
+                        // what my format left: a peer who wrote what I wrote changed nothing, so my undo takes it off.
+                        const styles = (cell: Cell): Run[] => JSON.parse(cell.runs) ?? [];
+                        for (const name of RUN_KEYS) {
+                            const of = (cell: Cell) => json(styles(cell).map((run) => run[name]));
+                            if (of(bp) === of(b1)) continue;
+                            const asMine = styles(bp).every((run) => json(run[name]) === json(l1[name]));
+                            const back = json(styles(bp).map(() => l0[name]));
+                            const kept = asMine && json(lf[name]) === json(l0[name]) ? back : of(bp);
+                            expect(of(f), `${where} runs ${name} ${key}`).toBe(kept);
+                        }
                     }
-                    if (b0.look === b1.look && b1.look === bp.look && bp.look === f.look) continue;
-                    const [l0, l1, lp, lf] = [b0, b1, bp, f].map((cell): CellAttrs => JSON.parse(cell.look));
+                    // A rich cell a peer changed may be left out of my run-style keys, its look with it.
+                    const richChanged = bp.whole !== b1.whole && bp.runs !== 'null';
                     for (const name of LOOK_KEYS) {
+                        const out = richChanged && RUN_KEYS.some((run) => run === name);
+                        if (out && json(lf[name]) === json(lp[name])) continue;
                         const kept = json(lp[name]) === json(l1[name]) ? l0[name] : lp[name];
                         expect(json(lf[name]), `${where} look ${name} ${key}`).toBe(json(kept));
                     }
@@ -682,6 +814,8 @@ describe('engine/book/still-holding — stillHolding', () => {
             expect(cuts.fields).toBeGreaterThan(2);
             expect(cuts.records).toBeGreaterThan(4);
             expect(seen.refused).toBeLessThan(40);
+            expect(seen.typedRich).toBeGreaterThan(150);
+            expect(seen.typedLost).toBeGreaterThan(70);
         }, 120_000);
     });
 });
