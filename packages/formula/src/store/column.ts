@@ -186,18 +186,18 @@ export class Column {
     // Takes the rows from `from` up to `to` out of the counts before they leave the column, with -1, or into them
     // once they arrived, with 1.
     private tally(from: number, to: number, by: number): void {
-        let pending = 0;
-        let loops = 0;
         for (let row = from; row < to; row += 1) {
             const kind = this.kind[row];
             if ((kind & KIND_MASK) === CellKind.Error) this.errors += by;
-            if (kind > SETTLED) pending += by;
-            if (kind & LOOP) loops += by;
+            if (kind > SETTLED) {
+                this.pending += by;
+                this.sheet.pending += by;
+            }
+            if (kind & LOOP) {
+                this.loops += by;
+                this.sheet.loops += by;
+            }
         }
-        this.pending += pending;
-        this.loops += loops;
-        this.sheet.pending += pending;
-        this.sheet.loops += loops;
     }
 
     private resize(capacity: number): void {
