@@ -524,15 +524,16 @@ describe('engine/book/commutes — commutes', () => {
                     landed(book, [op]);
                     const after = book.weight();
                     for (const key of ['slots', 'runs', 'bands', 'extras', 'records', 'sheets'] as const) {
-                        expect(after[key] - before[key], `seed ${seed} ${key}`).toBeLessThanOrEqual(bound[key]);
+                        expect(after[key], `seed ${seed} ${key}`).toBeLessThanOrEqual(bound[key]);
                     }
                 }
                 const after = book.weight();
                 const added = (key: 'slots' | 'runs' | 'bands' | 'extras') => Math.max(0, after[key] - before[key]);
+                const most = (key: 'slots' | 'runs' | 'bands' | 'extras') => bound[key] - before[key];
                 if (added('slots') + added('runs') + added('extras') > 0) grew += 1;
-                if (after.slots - before.slots === bound.slots && bound.slots > 0) exact += 1;
+                if (added('slots') === most('slots') && most('slots') > 0) exact += 1;
                 sums.added += added('runs') + added('bands') * BAND_WEIGHT + added('extras') * EXTRA_WEIGHT;
-                sums.bound += bound.runs + bound.bands * BAND_WEIGHT + bound.extras * EXTRA_WEIGHT;
+                sums.bound += most('runs') + most('bands') * BAND_WEIGHT + most('extras') * EXTRA_WEIGHT;
             }
             expect(grew).toBeGreaterThan(700);
             expect(exact).toBeGreaterThan(50);

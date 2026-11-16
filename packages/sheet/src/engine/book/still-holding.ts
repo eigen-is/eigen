@@ -38,8 +38,7 @@ export function stillHolding(book: Workbook, apply: readonly Op[], written: read
 }
 
 // What the edit left in a cell that held `before`, or undefined when no op of it wrote the cell's content or link.
-// Every op is folded in, the ones before the state `before` is of too: an input replaces the cell and a format sets
-// keys, so they give the same content again.
+// Every op is folded in: an input replaces the cell and a format sets keys, so an earlier one gives `before` again.
 function leftIn(
     written: readonly Op[],
     sheet: string,
@@ -119,9 +118,8 @@ function inputHolding(book: Workbook, part: BookSheet, op: InputOp, written: rea
     return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
 }
 
-// What still holds of the ranges of one key. The edit's writes of the key are read newest first: where one covers a
-// part of a range, `check` gives the parts of it that hold the value written there, or null when all of it does, and
-// what no write covers stays. Undefined when every part holds.
+// What still holds of the ranges of one key, undefined when all does. Of each part a write of the edit covers, newest
+// first, `check` gives what holds the value written, null for all of it; what no write covers stays.
 function heldOf<V>(
     ranges: readonly Rect[],
     writes: readonly { ranges: readonly Rect[]; value: V }[],

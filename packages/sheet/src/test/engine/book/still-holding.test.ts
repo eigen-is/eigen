@@ -291,6 +291,19 @@ describe('engine/book/still-holding — stillHolding', () => {
             ]);
         });
 
+        test('the part of a range the edit never wrote stays, beside the part a peer cut', () => {
+            const written = [format([[0, 0, 0, 3]], { bg: '#111111' })];
+            const { book } = edited(written, format([[0, 1, 0, 1]], { bg: '#222222' }));
+            const wider: Op = { kind: 'format', sheet: 'a', ranges: [[0, 0, 0, 5]], clear: ['bg'] };
+            const [held] = stillHolding(book, [wider], written);
+            const ranges = held.kind === 'format' && 'ranges' in held ? held.ranges : [];
+            expect(ranges.toSorted((a, b) => a[1] - b[1])).toEqual([
+                [0, 0, 0, 0],
+                [0, 2, 0, 3],
+                [0, 4, 0, 5],
+            ]);
+        });
+
         test('the last format of the edit on a cell says what it left there', () => {
             const written = [format([[0, 0, 0, 3]], { bg: '#111111' }), format([[0, 2, 0, 5]], { bg: '#222222' })];
             const { book, apply, before } = edited(written);

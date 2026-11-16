@@ -285,6 +285,12 @@ describe('engine/book/shift-ops — shiftOps', () => {
             for (const edit of [lines(true, true, 4, 2), lines(false, false, 5, 9), lines(true, false, 0, 4)]) {
                 expectSame(twoSheets(), [rows, columns], edit);
             }
+            // The lines a delete lets in at the grid's end hold no key, so a span to the last line does not reach them.
+            const last: Op = { ...rows, spans: [[LAST_ROW - 3, LAST_ROW]] };
+            expect(shiftOps([last], lines(true, false, 5, 2))).toEqual([
+                { ...rows, spans: [[LAST_ROW - 5, LAST_ROW - 2]] },
+            ]);
+            expectSame(twoSheets(), [last], lines(true, false, 5, 2));
         });
     });
 

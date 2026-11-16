@@ -1,10 +1,8 @@
-// Whether batches the log orders before batches this workbook already holds can land on top of them as they are. A
-// tab applies its own edits at once, so a peer's batch the server put first arrives late. When `commutes` says yes,
-// the door relies on three things: landing the late batches on the workbook as it stands gives the bytes the log's
-// order gives, once the clock is the log's last batch's; every batch is refused in one order exactly when it is in the
-// other, and none by the limits; and every batch returns the same inverse in either order, so the ring of inverses
-// holds the late ones at their place in the log. It says no for any pair of ops that write one thing, and when the
-// most the late ops and the inverses can add might pass a limit, since log order passes through those states.
+// Whether batches the log orders before batches this workbook already holds can land on top of them as they are: a
+// tab applies its own edits at once, so a peer's batch the server put first arrives late. On a yes the door relies on
+// three things: the bytes are those of the log's order once the clock is the log's last batch's, every batch is
+// refused in one order exactly when it is in the other and none by the limits, and every batch returns one inverse
+// in either order. It says no when two ops write one thing, or the late ops and the inverses might pass a limit.
 
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits } from '@workspace/lib/sheets/limits';
@@ -29,26 +27,16 @@ export function commutes(
     inverses: readonly Op[],
 ): boolean {
     const held = [...applied, ...inverses];
-    if (late.some(isStructural) || held.some(isStructural)) return false;
+    // A structural op the workbook holds clashes with every late op.
+    if (late.some(isStructural)) return false;
     for (const op of late) {
         for (const other of held) if (clash(book, op, other)) return false;
     }
-    const now = book.weight();
-    const more = weightBound(book, [...late, ...inverses]);
-    return (
-        fits({
-            slots: now.slots + more.slots,
-            runs: now.runs + more.runs,
-            bands: now.bands + more.bands,
-            extras: now.extras + more.extras,
-            records: now.records + more.records,
-            sheets: now.sheets + more.sheets,
-        }) === null
-    );
+    return fits(weightBound(book, [...late, ...inverses])) === null;
 }
 
-// The most that ops which renumber no place can add to each count of the workbook's weight, in whatever order they
-// land and when only some of them do.
+// The most the workbook can weigh once ops that renumber no place land on it, in whatever order and when only some
+// of them do: each count of its weight now, and the most the ops can add to it.
 export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight {
     // Per sheet, the rows each written column may come to hold and the columns each cell format writes.
     const written = new Map<string, { lengths: Map<number, number>; formats: Span[] }>();
@@ -60,8 +48,8 @@ export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight 
         }
         return entry;
     };
-    let extras = 0;
-    let records = 0;
+    const now = book.weight();
+    let { slots, runs, bands, extras, records } = now;
     for (const op of ops) {
         if (op.kind === 'record') records += op.whole ? 1 : 0;
         if (op.kind === 'input') {
@@ -87,9 +75,6 @@ export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight 
             }
         }
     }
-    let slots = 0;
-    let runs = 0;
-    let bands = 0;
     for (const [sheet, { lengths, formats }] of written) {
         const part = book.sheets.get(sheet);
         // An op on a sheet that is gone is skipped.
@@ -101,7 +86,7 @@ export function weightBound(book: Workbook, ops: readonly Op[]): WorkbookWeight 
         runs += growth.runs;
         bands += growth.bands;
     }
-    return { slots, runs, bands, extras, records, sheets: 0 };
+    return { slots, runs, bands, extras, records, sheets: now.sheets };
 }
 
 // Whether two ops write one thing, so that their order shows in the bytes, in a refusal or in an inverse.
@@ -168,9 +153,8 @@ function formatsMeet(book: Workbook, a: FormatOp, b: FormatOp): boolean {
     return a.ranges.some((x) => b.ranges.some((y) => meets(x, y) && (shared || richIn(extras, x, y))));
 }
 
-// Two record ops write one thing when they name one record, and beyond that where the store reads its other
-// records: a merge may not lie on another, a new filter takes the place of the live one and its columns, a name may
-// be in use, and a sheet may be hidden only while another is shown.
+// Beyond one record, the store reads its other records: a merge may not lie on another, a new filter takes the place
+// of the live one and its columns, a name may be in use, and a sheet may be hidden only while another is shown.
 function recordsMeet(a: RecordOp, b: RecordOp): boolean {
     if (a.type === 'sheet' && b.type === 'sheet') {
         if (renames(a) && renames(b)) return true;

@@ -82,10 +82,8 @@ export class Bands {
         return { runs, bands: this.bands.length };
     }
 
-    // The most runs and bands that writes over these spans of columns can add to the weight, whatever rows and looks
-    // they write, in whatever order, and when only some of them land. A write cuts a band at each end of its columns,
-    // which copies that band's runs, and adds at most three runs to each band it then writes: the bands it meets now
-    // and those the cuts of every write make inside its columns.
+    // The most that writes over these spans of columns can add, in any order and when only some land. A write copies
+    // the runs of the band it cuts at each end, then adds at most three runs to each band the cuts leave in its columns.
     public growth(writes: readonly Span[]): { runs: number; bands: number } {
         const { bands } = this;
         let runs = 0;
