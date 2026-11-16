@@ -9,11 +9,16 @@ import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import type { FormulaNode } from '../text/tree';
 import { RefFlag, RefKind, SheetKind } from '../text/tree';
 import { flag, Listing, RANGE } from './listing';
 
 // What a block reads: a sheet, by its id, or what no reference names, by the fact of its shape that says so.
 type Key = string | number;
+
+// What the listing of one sheet is made of: the sheets of the hosts, the entries, and what each entry reads of the
+// sheet: first and last row, first and last column, and where the entry starts.
+type Listed = { readonly hosts: Sheet[]; readonly entries: number[]; readonly areas: number[] };
 
 type Held = { readonly blocks: readonly number[]; readonly filed: ReadonlyMap<Key, readonly number[]> };
 
@@ -66,6 +71,8 @@ export class ReverseIndex {
         // The table is asked which shapes no block holds when it grew, or when a sheet that held formulas changed.
         let unheld = shapes.size > this.sized;
         const relist = new Set<string>();
+        // Per sheet to list again, what its listing is made of, which the changed sheets enter first.
+        const lists = new Map<string, Listed>();
         for (const [sheet, whole] of this.changed) {
             const had = this.held.get(sheet);
             const old = had?.blocks ?? [];
@@ -82,7 +89,7 @@ export class ReverseIndex {
             }
             const blocks = this.found(sheet, whole ? undefined : had?.blocks);
             for (let b = 4; b < blocks.length; b += 5) holders[blocks[b]] += 1;
-            const filed = this.filed(sheet, blocks, workbook, factsOf);
+            const filed = this.filed(sheet, blocks, workbook, factsOf, lists);
             this.held.set(sheet, { blocks, filed });
             for (const key of filed.keys()) {
                 const hosts = readers.get(key);
@@ -91,92 +98,24 @@ export class ReverseIndex {
                 if (typeof key === 'string') relist.add(key);
             }
         }
-        this.changed.clear();
         for (const id of relist) {
-            const hosts: Sheet[] = [];
-            const entries: number[] = [];
-            // What each entry reads of the sheet: first and last row, first and last column, and the entry.
-            const areas: number[] = [];
+            const list = lists.get(id) ?? { hosts: [], entries: [], areas: [] };
             for (const host of readers.get(id) ?? []) {
+                // A changed sheet entered what it reads as it was filed.
+                if (this.changed.has(host)) continue;
                 const { blocks = [], filed } = this.held.get(host) ?? {};
                 for (const b of filed?.get(id) ?? []) {
                     if (shapes.facts[blocks[b + 4]] & Fact.Kept) continue;
                     for (const ref of shapes.shape(blocks[b + 4]).refs) {
-                        if (sheetOf(ref, host.id) !== id) continue;
-                        // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
-                        let { row, row2, column, column2 } = ref;
-                        const { op, flags } = ref;
-                        let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
-                        let row2Step = flags & RefFlag.Row2Absolute ? 0 : 1;
-                        let columnStep = flags & RefFlag.ColumnAbsolute ? 0 : 1;
-                        let column2Step = flags & RefFlag.Column2Absolute ? 0 : 1;
-                        if (op === RefKind.Cell) {
-                            row2 = row;
-                            row2Step = rowStep;
-                            column2 = column;
-                            column2Step = columnStep;
-                        } else if (op === RefKind.Columns) {
-                            row = 0;
-                            row2 = GRID_ROWS - 1;
-                            rowStep = 0;
-                            row2Step = 0;
-                        } else if (op === RefKind.Rows) {
-                            column = 0;
-                            column2 = GRID_COLUMNS - 1;
-                            columnStep = 0;
-                            column2Step = 0;
-                        }
-                        // A host at which the reference leaves the grid reads nothing.
-                        const top = Math.max(blocks[b + 2], -row * rowStep, -row2 * row2Step);
-                        const bottom = Math.min(
-                            blocks[b + 3],
-                            GRID_ROWS - 1 - row * rowStep,
-                            GRID_ROWS - 1 - row2 * row2Step,
-                        );
-                        const left = Math.max(blocks[b], -column * columnStep, -column2 * column2Step);
-                        const right = Math.min(
-                            blocks[b + 1],
-                            GRID_COLUMNS - 1 - column * columnStep,
-                            GRID_COLUMNS - 1 - column2 * column2Step,
-                        );
-                        if (top > bottom || left > right) continue;
-                        const range = op === RefKind.Cell ? 0 : RANGE;
-                        const moves = rowStep | (row2Step << 1) | (columnStep << 2) | (column2Step << 3) | range;
-                        // A range whose columns move is an entry per host column: so the hosts of a range entry
-                        // read the same rows of the same columns, and one record of flagged rows holds for them all.
-                        const width = range !== 0 && (columnStep | column2Step) !== 0 ? 1 : right - left + 1;
-                        for (let first = left; first <= right; first += width) {
-                            const last = first + width - 1;
-                            areas.push(
-                                Math.min(row + top * rowStep, row2 + top * row2Step),
-                                Math.max(row + bottom * rowStep, row2 + bottom * row2Step),
-                                Math.min(column + first * columnStep, column2 + first * column2Step),
-                                Math.max(column + last * columnStep, column2 + last * column2Step),
-                                entries.length,
-                            );
-                            entries.push(
-                                hosts.length,
-                                top,
-                                bottom,
-                                first,
-                                last,
-                                row,
-                                row2,
-                                column,
-                                column2,
-                                moves,
-                                0,
-                                -1,
-                            );
-                        }
+                        if (sheetOf(ref, host.id) === id) this.enter(list, host, blocks, b, ref);
                     }
                 }
-                hosts.push(host);
             }
-            if (hosts.length === 0) readers.delete(id);
-            if (entries.length === 0) this.named.delete(id);
-            else this.named.set(id, new Listing(this.work, hosts, entries, areas));
+            if (readers.get(id)?.size === 0) readers.delete(id);
+            if (list.entries.length === 0) this.named.delete(id);
+            else this.named.set(id, new Listing(this.work, list.hosts, list.entries, list.areas));
         }
+        this.changed.clear();
         if (unheld) {
             const held = new Uint8Array(shapes.size + 1);
             for (let shape = 1; shape <= shapes.size; shape += 1) held[shape] = holders[shape] > 0 ? 1 : 0;
@@ -333,12 +272,14 @@ export class ReverseIndex {
         return blocks;
     }
 
-    // The blocks of a sheet under each thing they read, as where they start in its list.
+    // The blocks of a sheet under each thing they read, as where they start in its list. What their references read
+    // of a sheet is entered in the list of that sheet.
     private filed(
         sheet: Sheet,
         blocks: readonly number[],
         { shapes }: Workbook,
         factsOf: (shape: number) => number,
+        lists: Map<string, Listed>,
     ): Map<Key, number[]> {
         const filed = new Map<Key, number[]>();
         // Most blocks of a sheet read what the block before read, its own sheet.
@@ -360,10 +301,77 @@ export class ReverseIndex {
             if (namesSheet) file(TABS, b);
             for (const ref of refs) {
                 const read = sheetOf(ref, sheet.id);
-                if (read !== null) file(read, b);
-                else if (ref.sheetKind === SheetKind.Span) file(TABS, b);
+                if (read === null) {
+                    if (ref.sheetKind === SheetKind.Span) file(TABS, b);
+                    continue;
+                }
+                file(read, b);
+                if (facts & Fact.Kept) continue;
+                let list = lists.get(read);
+                if (list === undefined) lists.set(read, (list = { hosts: [], entries: [], areas: [] }));
+                this.enter(list, sheet, blocks, b, ref);
             }
         }
         return filed;
+    }
+
+    // Enters what one reference of a block reads into the list of the sheet it reads: about one entry.
+    private enter(
+        { hosts, entries, areas }: Listed,
+        host: Sheet,
+        blocks: readonly number[],
+        b: number,
+        ref: FormulaNode,
+    ): void {
+        if (hosts[hosts.length - 1] !== host) hosts.push(host);
+        // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
+        let { row, row2, column, column2 } = ref;
+        const { op, flags } = ref;
+        let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
+        let row2Step = flags & RefFlag.Row2Absolute ? 0 : 1;
+        let columnStep = flags & RefFlag.ColumnAbsolute ? 0 : 1;
+        let column2Step = flags & RefFlag.Column2Absolute ? 0 : 1;
+        if (op === RefKind.Cell) {
+            row2 = row;
+            row2Step = rowStep;
+            column2 = column;
+            column2Step = columnStep;
+        } else if (op === RefKind.Columns) {
+            row = 0;
+            row2 = GRID_ROWS - 1;
+            rowStep = 0;
+            row2Step = 0;
+        } else if (op === RefKind.Rows) {
+            column = 0;
+            column2 = GRID_COLUMNS - 1;
+            columnStep = 0;
+            column2Step = 0;
+        }
+        // A host at which the reference leaves the grid reads nothing.
+        const top = Math.max(blocks[b + 2], -row * rowStep, -row2 * row2Step);
+        const bottom = Math.min(blocks[b + 3], GRID_ROWS - 1 - row * rowStep, GRID_ROWS - 1 - row2 * row2Step);
+        const left = Math.max(blocks[b], -column * columnStep, -column2 * column2Step);
+        const right = Math.min(
+            blocks[b + 1],
+            GRID_COLUMNS - 1 - column * columnStep,
+            GRID_COLUMNS - 1 - column2 * column2Step,
+        );
+        if (top > bottom || left > right) return;
+        const range = op === RefKind.Cell ? 0 : RANGE;
+        const moves = rowStep | (row2Step << 1) | (columnStep << 2) | (column2Step << 3) | range;
+        // A range whose columns move is an entry per host column: so the hosts of a range entry read the same rows of
+        // the same columns, and one record of flagged rows holds for them all.
+        const width = range !== 0 && (columnStep | column2Step) !== 0 ? 1 : right - left + 1;
+        for (let first = left; first <= right; first += width) {
+            const last = first + width - 1;
+            areas.push(
+                Math.min(row + top * rowStep, row2 + top * row2Step),
+                Math.max(row + bottom * rowStep, row2 + bottom * row2Step),
+                Math.min(column + first * columnStep, column2 + first * column2Step),
+                Math.max(column + last * columnStep, column2 + last * column2Step),
+                entries.length,
+            );
+            entries.push(hosts.length - 1, top, bottom, first, last, row, row2, column, column2, moves, 0, -1);
+        }
     }
 }
