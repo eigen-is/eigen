@@ -116,6 +116,20 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
     return ops;
 }
 
+// What disjoint rectangles of a sheet hold, as the one op that writes it back onto them once they are empty: their
+// cells that hold something, read as the inverse of an input reads its runs. None when they hold nothing.
+export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rect[]): InputOp | undefined {
+    const part = book.sheets.get(sheet);
+    if (!part) return undefined;
+    const gathered: Gathered = { runs: [], cells: [] };
+    for (const rect of rects) {
+        readBlock(book, sheet, part.extras, rect, (group) => {
+            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
+        });
+    }
+    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
+}
+
 // A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
 // A delete here undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
 function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Group[] {
@@ -247,18 +261,4 @@ function literalOf({ v, e, s }: CellContent): Literal | null {
     if (s) return textOf(s);
     if (v === undefined) return null;
     return e && typeof v === 'string' ? errorOf(v) : v;
-}
-
-// What disjoint rectangles of a sheet hold, as the one op that writes it back onto them once they are empty: their
-// cells that hold something, read as the inverse of an input reads its runs. None when they hold nothing.
-export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rect[]): InputOp | undefined {
-    const part = book.sheets.get(sheet);
-    if (!part) return undefined;
-    const gathered: Gathered = { runs: [], cells: [] };
-    for (const rect of rects) {
-        readBlock(book, sheet, part.extras, rect, (group) => {
-            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
-        });
-    }
-    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
 }
