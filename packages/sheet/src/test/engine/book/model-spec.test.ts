@@ -9,8 +9,8 @@ import { contentOfModel, modelAfter, modelOf } from './model';
 import { chartData, chartOf, formulaRule, keyOfRule, LAST_COLUMN, LAST_ROW, ref } from './records-fixtures';
 
 // The parts of the model that mirror the store's own rules, held to cases worked out by hand from the words of
-// SPEC-W § 1b and § 1d alone, and run against the model and the workbook both, so an error the two share cannot pass.
-// A case the words and the code settle apart is marked a FINDING and expected to fail on both.
+// SPEC-W § 1b and § 1d alone, with its amendments over them, and run against the model and the workbook both, so an
+// error the two share cannot pass.
 
 type Read = Pick<SheetContent, 'fields' | 'records'>;
 type Part = { fields?: Partial<SheetFields>; records?: SheetContent['records'] };
@@ -20,7 +20,6 @@ type Case = {
     ops: Op[];
     read: (sheets: ReadonlyMap<string, Read>) => unknown;
     expected: unknown;
-    finding?: string;
 };
 
 const FILTER = { rect: [2, 0, 20, 4] } as const;
@@ -127,14 +126,13 @@ const CASES: Case[] = [
         read: filterRect,
         expected: [2, 0, 20, 3],
     },
+    // Amendment 1 § 5: a filter whose header line is deleted is removed.
     {
-        name: 'a filter whose first row is deleted is clipped',
+        name: 'a filter whose header row is deleted is removed',
         sheets: { S: { records: { filter: { f: FILTER } } } },
         ops: [rows(false, 2)],
         read: filterRect,
-        expected: [2, 0, 19, 4],
-        finding:
-            'the store and the model remove a filter whose header row is deleted; the spec maps its rectangle like any range',
+        expected: undefined,
     },
     // The merge cut to one cell.
     // § 1d: a merge, mapSpan; GONE removes the record; a delete clips a merge.
@@ -166,13 +164,13 @@ const CASES: Case[] = [
         read: mergeRect,
         expected: { refused: 'grid-end' },
     },
+    // Amendment 1 § 5: a merge a delete cuts to one cell is removed.
     {
-        name: 'a merge of two cells clipped to one stays a merge',
+        name: 'a merge of two cells a delete cuts to one is removed',
         sheets: { S: { records: { merge: { m: { rect: [5, 5, 6, 5] } } } } },
         ops: [rows(false, 6)],
         read: mergeRect,
-        expected: [5, 5, 5, 5],
-        finding: 'the store and the model remove a merge a delete cuts to one cell; the spec clips it',
+        expected: undefined,
     },
     // The host choice of a rule formula.
     // § 1d Rule formulas: hosted at the top-left of its first range; when the host line is deleted, the first surviving line of the first range, or the top-left of the first surviving range.
@@ -299,14 +297,13 @@ const CASES: Case[] = [
     // A whole axis under line edits.
     // § 1d Records under lines: the filter rectangle, mapSpan, except that an end on the last line stays there.
     // § 1b: a record range that reaches the last line is open-ended: it stays reaching the end.
+    // Amendment 1 § 5: a rule range over a whole axis stays whole under any line edit.
     {
-        name: 'a range over the whole column moves down by an insert at the first row',
+        name: 'a range over the whole column stays whole under an insert at the first row',
         sheets: { S: { records: { validation: { v: { ranges: [[0, 0, LAST_ROW, 0]], order: 'a0', rule: RULE } } } } },
         ops: [rows(true, 0)],
         read: validationRanges,
-        expected: [[1, 0, LAST_ROW, 0]],
-        finding:
-            'the store and the model keep a range over the whole axis whole, as Excel keeps A:A; the spec moves its start',
+        expected: [[0, 0, LAST_ROW, 0]],
     },
     {
         name: 'a range over the whole column stays whole under a delete at the first row',
@@ -459,9 +456,7 @@ const CASES: Case[] = [
 
 describe('engine/book — the model and the workbook against the words of the spec', () => {
     for (const row of CASES) {
-        const named = row.finding ? `FINDING (${row.finding}): ${row.name}` : row.name;
-        const run = row.finding ? test.failing : test;
-        run(`the workbook: ${named}`, () => expect(product(row)).toEqual(row.expected));
-        run(`the model: ${named}`, () => expect(model(row)).toEqual(row.expected));
+        test(`the workbook: ${row.name}`, () => expect(product(row)).toEqual(row.expected));
+        test(`the model: ${row.name}`, () => expect(model(row)).toEqual(row.expected));
     }
 });
