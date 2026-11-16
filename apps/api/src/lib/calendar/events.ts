@@ -136,13 +136,7 @@ export async function deleteEvent(
             const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
             sendMail(mail).catch(console.error);
         } else if (invitation.organizerEventId) {
-            propagateRsvp(
-                orgUserId,
-                invitation.organizerEventId,
-                user.email,
-                'declined',
-                answeredOccurrence(existing),
-            ).catch(console.error);
+            propagateRsvp(orgUserId, invitation.organizerEventId, user.email, 'declined', answeredOccurrence(existing));
         }
     } else if (!invitation) {
         // An event nobody else organizes is this calendar's own, and its organizer's delete cancels it.
