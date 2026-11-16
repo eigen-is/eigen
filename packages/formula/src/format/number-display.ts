@@ -1,11 +1,13 @@
 // A value as an Excel number format shows it, such as 25% for 0.25 under 0%. Whatever shows a number goes through
 // it, such as a cell's display string, a chart's value ticks and the TEXT function. A number is shown as the 15 digit
-// decimal Excel holds and not as the double under it. It is the package's one use of numfmt, behind an entry of its
-// own that holds no engine, so a document or a slide formats a tick as the sheet does.
+// decimal Excel holds and not as the double under it; a text, a boolean and an error take the text section, as in
+// Excel. It is the package's one use of numfmt, behind an entry of its own that holds no engine, so a document or a
+// slide formats a tick as the sheet does.
 
 import { format } from 'numfmt';
+import type { FormulaError } from '../values/errors';
 
-type Shown = number | string | boolean | null | undefined;
+type Shown = number | string | boolean | FormulaError | null | undefined;
 
 // The day line is Google's: day 0 is 30 December 1899, a negative number is a day before it, and 1900 has no
 // 29 February as it has in Excel.
@@ -44,7 +46,7 @@ export function numberFormatError(value: Shown, fa: string): string | null {
 }
 
 function shown(fa: string, value: Shown): string {
-    return format(fa, value, DAYS);
+    return format(fa, typeof value === 'object' && value !== null ? value.text : value, DAYS);
 }
 
 export { isDateFormat } from 'numfmt';
