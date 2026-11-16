@@ -10,6 +10,10 @@ import type { Span } from '@workspace/lib/sheets/ops';
 // The array of every list with no run: a plain band costs no array of its own.
 const NO_PAIRS = new Int32Array(0);
 
+// Runs a format lays anew, from `first` up to `after`, as the pairs `from` up to `to` of what it laid; the runs after
+// them move by `shift`.
+type Stretch = { first: number; after: number; from: number; to: number; shift: number };
+
 export class RunList {
     private pairs = NO_PAIRS;
     private size = 0;
@@ -77,9 +81,7 @@ export class RunList {
     // them move whole, once.
     public format(rows: readonly Span[], to: (look: number, span: number) => number): void {
         const { size } = this;
-        // Per stretch of runs laid anew: its first run, the run after it, where its pairs start and end in `laid`,
-        // and how far the runs after it move.
-        const stretches: number[] = [];
+        const stretches: Stretch[] = [];
         const laid: number[] = [];
         let shift = 0;
         let span = 0;
@@ -107,7 +109,7 @@ export class RunList {
             let after = Math.min(run, size);
             if (after < size && this.lookOf(after) === worn) after += 1;
             shift += (laid.length - from) / 2 - (after - first);
-            stretches.push(first, after, from, laid.length, shift);
+            stretches.push({ first, after, from, to: laid.length, shift });
             from = laid.length;
             run = next;
             first = next;
@@ -122,15 +124,17 @@ export class RunList {
         // The runs after a stretch, up to the next one, move by its shift: those that move back first, in order,
         // then those that move on, from the last, so none is written over before it moved.
         const slide = (at: number) => {
-            const by = stretches[at + 4];
-            const start = stretches[at + 1];
-            pairs.copyWithin(2 * (start + by), 2 * start, 2 * (stretches[at + 5] ?? size));
+            const { after, shift } = stretches[at];
+            pairs.copyWithin(2 * (after + shift), 2 * after, 2 * (stretches[at + 1]?.first ?? size));
         };
-        for (let at = 0; at < stretches.length; at += 5) if (stretches[at + 4] < 0) slide(at);
-        for (let at = stretches.length - 5; at >= 0; at -= 5) if (stretches[at + 4] > 0) slide(at);
-        for (let at = 0; at < stretches.length; at += 5) {
-            const into = 2 * (stretches[at] + (stretches[at - 1] ?? 0)) - stretches[at + 2];
-            for (let k = stretches[at + 2]; k < stretches[at + 3]; k += 1) pairs[into + k] = laid[k];
+        for (let at = 0; at < stretches.length; at += 1) if (stretches[at].shift < 0) slide(at);
+        for (let at = stretches.length - 1; at >= 0; at -= 1) if (stretches[at].shift > 0) slide(at);
+        // A stretch's pairs land where its first run went, moved by the stretches before it.
+        let moved = 0;
+        for (const stretch of stretches) {
+            const into = 2 * (stretch.first + moved) - stretch.from;
+            for (let k = stretch.from; k < stretch.to; k += 1) pairs[into + k] = laid[k];
+            moved = stretch.shift;
         }
         this.size = size + shift;
         if (this.size === 1 && pairs[1] === 0) {
