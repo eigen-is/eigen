@@ -13,7 +13,18 @@ import { addRegistryEntry } from '../../lib/share/registry';
 import type { User } from '../../lib/user';
 import { getUserByEmail, getUserById } from '../../lib/user';
 import { vcal } from '../ics-test-helpers';
-import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
+import {
+    addMember,
+    addTeamMount,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestUser,
+    driveGet,
+    findOrFail,
+    firstMountId,
+    getTestContext,
+} from '../setup';
 
 describe('share reconciliation', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -393,6 +404,56 @@ describe('share reconciliation', () => {
         expect(received.sort()).toEqual(files.map((file) => file.id).sort());
         const logged = errors.mock.calls.map((call) => String(call[0]));
         expect(logged.some((line) => line.includes(`drive:acl-change to ${user.id}`))).toBe(true);
+    });
+
+    test('a shared path arrives from the user who shared it, or from a team by its name', async () => {
+        const orgId = getServerConfig()?.orgId;
+        if (!orgId) throw new Error('the test server has no org');
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamName = `Recon actor ${crypto.randomUUID()}`;
+        const teamId = await createTeam(ctx, orgId, teamName);
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addTeamMount(ctx, teamId, 'Actor drive');
+        const team = teamOwnerId(teamId);
+        const { user } = await newcomer('actor');
+        const { folder } = await aliceFolderAndRoot();
+        const fromAlice = await aliceShares(folder.id, user.email);
+        const alice = await getHome(ctx.alice.user.id);
+        const teamDrive = (await getHome(team)).drive;
+        const mountId = await firstMountId(ctx.alice.user.sessionToken, team);
+        const root = await driveGet(ctx.alice.user.sessionToken, team, mountId, 'root');
+        const fromTeam = await teamDrive.createFileFromData(
+            mountId,
+            root.id,
+            `${crypto.randomUUID()}.txt`,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        await teamDrive.updateACLDelta(
+            mountId,
+            fromTeam.id,
+            { add: [{ id: user.email, read: true, write: false }] },
+            undefined,
+            undefined,
+            alice.user,
+        );
+        await relay.drainHomeDeliveries();
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        await addRegistryEntry(team, user.email);
+        const receive = spyOn((await getHome(user.id)).drive, 'receiveSharedPathChange');
+        receive.mockClear();
+        spies.push(receive);
+
+        await reconcileShares(user);
+
+        const actors = new Map(receive.mock.calls.map(([path, , email, name]) => [path.id, [email, name]]));
+        expect(actors.get(fromAlice.id)).toEqual([ctx.alice.user.email, ctx.alice.user.name]);
+        expect(actors.get(fromTeam.id)).toEqual([undefined, teamName]);
     });
 
     // A sign-in waits for its pull, so the pull must not wait for a fan-out that can take as long as a team is large.

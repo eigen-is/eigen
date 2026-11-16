@@ -7,7 +7,6 @@ import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { broadcastToHomes } from '../home/home-relay';
-import type { User } from '../user';
 import { getUsersByEmails } from '../user';
 
 // Callers pass a whole DrivePath, so the ids are picked here rather than spread.
@@ -34,20 +33,15 @@ export async function broadcastFileHistoryUpdated(
 }
 
 // Tells the open tabs of the owner and of each member who can read the path: a member without read cannot list it, so
-// the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
+// the event would name a path they may not see. The owner's copy goes first, so a failed read costs only the members'.
 export async function broadcastToOwnerAndMembers(
     ownerId: string,
     members: readonly EffectiveMember[] | Promise<readonly EffectiveMember[]>,
     event: SSEvent,
 ): Promise<void> {
     broadcastToHomes([ownerId], event);
-    let readers: User[];
-    try {
-        const emails = (await members).filter((member) => member.read).map((member) => member.email);
-        readers = await getUsersByEmails([...new Set(emails)]);
-    } catch {
-        return;
-    }
+    const emails = (await members).filter((member) => member.read).map((member) => member.email);
+    const readers = await getUsersByEmails([...new Set(emails)]);
     broadcastToHomes(
         readers.filter((user) => user.id !== ownerId).map((user) => user.id),
         event,

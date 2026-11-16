@@ -6,15 +6,15 @@
 
 import { Glob } from 'bun';
 
-// A `get-*.ts` resolver is the one place a route turns an ownerId into its domain object behind the access check.
-// Add no other file: pass the Home from the route, or go through the domain's resolver.
+// Paths under lib/. A domain's `get-*.ts` resolver turns a route's ownerId into its domain object behind the access
+// check; the others are older files pending a refactor. Add no other: pass the Home from the route, or use a resolver.
 const ALLOWED = new Set([
-    'get-calendar.ts',
-    'enforcement.ts',
-    'mail.ts',
-    'get-contacts.ts',
-    'get-drive.ts',
-    'caldav-router.ts',
+    'calendar/get-calendar.ts',
+    'contacts/get-contacts.ts',
+    'drive/get-drive.ts',
+    'config/enforcement.ts',
+    'mail/mail.ts',
+    'caldav/caldav-router.ts',
 ]);
 
 // getSharedDrive opens another owner's drive under the signed-in user's permission, outside the relay.
@@ -54,7 +54,7 @@ for await (const path of new Glob('**/*.ts').scan('apps/api/src/lib')) {
     const normalized = path.replaceAll('\\', '/');
     const filename = normalized.slice(normalized.lastIndexOf('/') + 1);
     const isTable = filename === 'home-calls.ts';
-    const mayNameHome = normalized.startsWith('home/') || ALLOWED.has(filename);
+    const mayNameHome = normalized.startsWith('home/') || ALLOWED.has(normalized);
     const content = await Bun.file(`apps/api/src/lib/${path}`).text();
 
     // Each of these hands out another owner's Home.

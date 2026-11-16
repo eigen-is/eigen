@@ -60,22 +60,22 @@ type HomeMessage =
 // opens its recipient's home, so a shutdown drains them first.
 const deliveries = new Set<Promise<void>>();
 
-// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
-// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
-export function pushToHomes(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    return trackDelivery(deliverToEach(targetIds, message));
+// Delivers to one home at a time. A failed delivery is logged and the other homes still get the message, so this
+// never rejects.
+export function pushToHomes(ownerIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    return trackDelivery(deliverToEach(ownerIds, message));
 }
 
-async function deliverToEach(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    for (const id of targetIds) {
-        await deliver(id, message).catch((err) =>
-            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
+async function deliverToEach(ownerIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    for (const ownerId of ownerIds) {
+        await deliver(ownerId, message).catch((err) =>
+            console.error(`home-relay: delivering ${message.type} to ${ownerId} failed:`, err),
         );
     }
 }
 
-async function deliver(targetId: string, message: HomeMessage): Promise<void> {
-    const home = await getHome(targetId);
+async function deliver(ownerId: string, message: HomeMessage): Promise<void> {
+    const home = await getHome(ownerId);
     // A home without a calendar, such as a guest's, ignores every calendar message.
     if (message.type.startsWith('calendar:') && !home.hasCalendar) return;
 
@@ -147,13 +147,6 @@ export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {
         await Promise.allSettled([...deliveries]);
     }
-}
-
-// A delivery can hang on a home that is slow to close, such as during a bucket outage. It must not hang a shutdown, or
-// use up the time the mounts need to upload. What is left when the bound is over is lost, as in a crash.
-export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
-    if (await settlesWithin(drainHomeDeliveries(), boundMs)) return;
-    console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home deliveries left`);
 }
 
 // --- Broadcasts ---

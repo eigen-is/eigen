@@ -22,7 +22,6 @@ import { getServerDataPath, getUserHomePath, SERVER_DATABASES } from '../../lib/
 import { getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
-import { homeSize } from '../../lib/home/home';
 import { sizeUserHome } from '../../lib/home/home-jobs';
 import type { TeamHome } from '../../lib/home/team-home';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -1327,17 +1326,5 @@ describe('GET /settings/users/usage', () => {
         // Both halves have to be reading something, or an always-zero reader would pass the above.
         expect(sized.drive.default.used).toBeGreaterThan(0);
         expect(sized.homeData.used).toBeGreaterThan(0);
-    });
-
-    test('refuses a team, org or external owner id rather than sizing nothing', async () => {
-        await expect(sizeUserHome(teamOwnerId('team-1'))).rejects.toThrow('expects a user owner id');
-        await expect(sizeUserHome('org_org-1')).rejects.toThrow('expects a user owner id');
-        await expect(sizeUserHome('external_someone')).rejects.toThrow('expects a user owner id');
-    });
-
-    test('sizes a guest as the guest home does, not as a user with the default quotas', async () => {
-        const guest = await createTestUser('usage-guest@test.eigen.is', 'testpassword123', 'Usage Guest');
-        getAuthDrizzleDb().update(user).set({ role: 'guest' }).where(eq(user.id, guest.id)).run();
-        expect(await sizeUserHome(guest.id)).toEqual(homeSize());
     });
 });

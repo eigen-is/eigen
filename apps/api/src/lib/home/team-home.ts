@@ -56,8 +56,7 @@ export class TeamHome extends Home {
         return this.settings.get().memberOverrides ?? {};
     }
 
-    // Who hears about something sent to the team, since it has no notification center: an access request to a
-    // team-owned path resolves its recipients with it. The actor is left out.
+    // A team has no notification center, so its members are told instead.
     public async membersToNotify(actorEmail?: string | null): Promise<User[]> {
         if (this.settings.get().notifyMembers === false) return [];
         const members = await getTeamMembers(this.teamId);

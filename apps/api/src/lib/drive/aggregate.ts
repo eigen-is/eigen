@@ -1,7 +1,7 @@
 // The drive lists that span homes, such as a file search, the documents of one type, Watched or Recent. Most start
 // from the caller's own drive and add every team they belong to, Watched also asks everyone who shared with them, and
 // Recent asks the owner of each path in the caller's own rows. The owners come from the caller's own memberships,
-// shares and rows, so a request can never point a list at another home. A list that pulls from a team checks
+// shares and rows, so a request can never point a list at another home. A list that asks a team checks
 // membership only, as a member may read all of its drive; Watched and Recent check each path.
 
 import { teamOwnerId } from '@workspace/lib/types';
