@@ -48,7 +48,7 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         const { set = {}, clear = [] } = op;
         const replaced = (op.lines === 'rows' ? part.rows : part.columns).write(op.spans, set, clear);
         const inverse: FormatOp[] = [];
-        for (const key of LINE_KEYS.filter((name) => set[name] !== undefined || clear.includes(name))) {
+        for (const key of LINE_KEYS.filter((name) => names(op, name))) {
             // The lines of each old value, under that value as text, with the keys of one of them.
             const held = new Map<string, { attrs: Readonly<LineAttrs>; spans: Span[] }>();
             for (const [[first, last], attrs] of replaced) {
@@ -71,12 +71,11 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         return inverse;
     }
 
-    const { set = {}, clear = [] } = op;
-    const { link, ...looks } = set;
+    const { link, ...looks } = op.set ?? {};
     const { bands, extras } = part;
-    const lookKeys = LOOK_KEYS.filter((key) => looks[key] !== undefined || clear.includes(key));
+    const lookKeys = LOOK_KEYS.filter((key) => names(op, key));
     const runKeys = RUN_KEYS.filter((key) => lookKeys.includes(key));
-    const linked = link !== undefined || clear.includes('link');
+    const linked = names(op, 'link');
 
     // Read before any write, each cell once however many rectangles hold it: the rich cells a run-style key restyles,
     // with the look they wore, and the links a link write replaces.
@@ -164,6 +163,14 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
         inverse.push({ kind: 'input', sheet, cells: restored });
     }
     return inverse;
+}
+
+// Whether a format sets or clears a key.
+export function names<K extends string>(
+    op: { set?: { [P in K]?: unknown }; clear?: readonly string[] },
+    key: K,
+): boolean {
+    return op.set?.[key] !== undefined || (op.clear?.includes(key) ?? false);
 }
 
 // The runs of a rich cell as a format leaves them: each run-style key the format names set on every run, or cleared.

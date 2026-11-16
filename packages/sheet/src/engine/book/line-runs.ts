@@ -80,6 +80,17 @@ export class LineRuns {
         return removed;
     }
 
+    // The lines `first` to `last`, cut where their keys change, the stretches with no key included.
+    public *tiles(first: number, last: number): Generator<LineRun> {
+        let line = first;
+        for (let run = this.search(first); line <= last; run += 1) {
+            const { first: start, last: end, attrs } = this.runs[run] ?? { first: last + 1, last, attrs: NO_KEYS };
+            if (line < start) yield [[line, Math.min(start - 1, last)], NO_KEYS];
+            if (start <= last) yield [[Math.max(start, line), Math.min(end, last)], attrs];
+            line = end + 1;
+        }
+    }
+
     // The first run that ends at or after a line; the run count when none does.
     private search(line: number): number {
         let low = 0;
@@ -90,17 +101,6 @@ export class LineRuns {
             else high = middle;
         }
         return low;
-    }
-
-    // The lines `first` to `last`, cut where their keys change, the stretches with no key included.
-    private *tiles(first: number, last: number): Generator<LineRun> {
-        let line = first;
-        for (let run = this.search(first); line <= last; run += 1) {
-            const { first: start, last: end, attrs } = this.runs[run] ?? { first: last + 1, last, attrs: NO_KEYS };
-            if (line < start) yield [[line, Math.min(start - 1, last)], NO_KEYS];
-            if (start <= last) yield [[Math.max(start, line), Math.min(end, last)], attrs];
-            line = end + 1;
-        }
     }
 }
 

@@ -31,12 +31,8 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
     }
-    for (const [row, column] of op.cells ?? []) {
-        const formula = engine.formulaOf(sheet, row, column);
-        const given = formula !== null && engine.isGiven(sheet, row, column);
-        const content = contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
-        gathered.cells.push([row, column, content]);
-    }
+    for (const [row, column] of op.cells ?? [])
+        gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
 
     for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;
@@ -64,6 +60,14 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
         extras.write(row, column, content ?? {});
     }
     return [inputOf(sheet, gathered)];
+}
+
+// What a cell holds now, as an op would say it, null for an empty cell.
+export function cellAt(book: Workbook, sheet: string, extras: Extras, row: number, column: number): CellContent | null {
+    const { engine } = book;
+    const formula = engine.formulaOf(sheet, row, column);
+    const given = formula !== null && engine.isGiven(sheet, row, column);
+    return contentOf(engine.valueOf(sheet, row, column), formula, given, extras.at(row, column));
 }
 
 // What an input writes into a cell: content, null for a cell it empties, or undefined when it does not write the

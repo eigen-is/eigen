@@ -11,10 +11,11 @@ import { fits } from '@workspace/lib/sheets/limits';
 import type { FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, meets } from '@workspace/lib/sheets/rect';
-import { RUN_KEYS } from './apply-format';
+import { names, RUN_KEYS } from './apply-format';
 import { entryAt } from './apply-input';
 import type { Extras } from './extras';
 import { unitsOf } from './extras';
+import { LINE_KEYS } from './line-runs';
 import type { Workbook } from './workbook';
 
 type CellFormat = Extract<FormatOp, { ranges: unknown }>;
@@ -154,7 +155,7 @@ function formatsMeet(book: Workbook, a: FormatOp, b: FormatOp): boolean {
     if (a.sheet !== b.sheet) return false;
     if ('lines' in a || 'lines' in b) {
         if (!('lines' in a && 'lines' in b) || a.lines !== b.lines) return false;
-        const shared = (['size', 'custom', 'hidden'] as const).some((key) => names(a, key) && names(b, key));
+        const shared = LINE_KEYS.some((key) => names(a, key) && names(b, key));
         return shared && a.spans.some((x) => b.spans.some((y) => x[0] <= y[1] && y[0] <= x[1]));
     }
     const extras = book.sheets.get(a.sheet)?.extras;
@@ -186,10 +187,6 @@ function recordsMeet(a: RecordOp, b: RecordOp): boolean {
 // A new name binds the formulas typed with it, which an input may be writing.
 function renames(op: RecordOp): boolean {
     return op.type === 'sheet' && op.set.name !== undefined;
-}
-
-function names<K extends string>(op: { set?: { [P in K]?: unknown }; clear?: readonly string[] }, key: K): boolean {
-    return op.set?.[key] !== undefined || (op.clear?.includes(key) ?? false);
 }
 
 // Whether a cell that both rectangles hold is rich.
