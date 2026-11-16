@@ -93,7 +93,7 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
     for (const [[top, left, bottom, right], content] of op.runs ?? []) {
         if (!content) continue;
         units += unitsOf(content) * (bottom - top + 1) * (right - left + 1);
-        if (literalOf(content) === null && content.f === undefined) continue;
+        if (content.v === undefined && content.f === undefined && content.s === undefined) continue;
         for (let at = left; at <= right; at += 1) column(at, bottom + 1);
     }
     // The cells come in column order, so the last one of a column that reaches the engine says its reach.
@@ -102,7 +102,7 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
     for (const [row, at, content] of op.cells ?? []) {
         if (!content) continue;
         units += unitsOf(content);
-        if (literalOf(content) === null && content.f === undefined) continue;
+        if (content.v === undefined && content.f === undefined && content.s === undefined) continue;
         if (at !== last && length > 0) column(last, length);
         last = at;
         length = row + 1;

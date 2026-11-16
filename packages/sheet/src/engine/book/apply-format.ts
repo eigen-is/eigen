@@ -91,7 +91,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
             if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
             cells += (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1);
         }
-        const over = book.over(0, link ? unitsOf({ link }) * EXTRA_WEIGHT * cells : 0);
+        const over = link ? book.over(0, unitsOf({ link }) * EXTRA_WEIGHT * cells) : null;
         if (over) throw new Refusal(over);
     }
 
