@@ -67,6 +67,8 @@ function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly 
                 if ('reason' in tree) continue;
                 const bound = bindSheet(tree, op.set.name, op.sheet);
                 if (bound === tree) continue;
+                // A formula a rename bound goes back only while the sheet has that name, or it would bind elsewhere.
+                if (book.sheets.get(op.sheet)?.records.fields.name !== op.set.name) return false;
                 left = { ...left, f: printStored(bound) };
                 wrote = true;
             }

@@ -301,6 +301,38 @@ describe('engine/book/still-holding — stillHolding', () => {
             expect(contentAt(peer, 0, 0)).toEqual({ v: 'peer typed this' });
         });
 
+        test('a formula my rename bound goes back only while the sheet still has the name my rename gave it', () => {
+            const typed = "='Later'!R1C1+1";
+            const rename = (sheet: string, name: string): Op => ({
+                kind: 'record',
+                sheet,
+                type: 'sheet',
+                id: sheet,
+                set: { name },
+            });
+            for (const peers of [[rename('b', 'Away'), rename('c', 'Later')], [rename('b', 'LATER')]]) {
+                const book = new Workbook({
+                    g: 1,
+                    now: 45_000,
+                    seed: 3,
+                    computed: false,
+                    sheets: [
+                        sheetOf('a', 'a0', { cells: [[0, 0, { f: typed }]] }),
+                        sheetOf('b', 'a1'),
+                        sheetOf('c', 'a2'),
+                    ],
+                });
+                const written = [rename('b', 'Later')];
+                const apply = applyOps(book, written);
+                for (const op of peers) applyOps(book, [op]);
+                const left = contentAt(book, 0, 0);
+                const held = stillHolding(book, apply, written);
+                expect(held, JSON.stringify(peers)).toEqual([]);
+                applyOps(book, held);
+                expect(contentAt(book, 0, 0)).toEqual(left);
+            }
+        });
+
         test('a formula I typed with a new name, then bound by my rename: the rename’s binding is what I left', () => {
             const typed = "='Later'!R1C1+1";
             const written: Op[] = [
@@ -671,7 +703,17 @@ describe('engine/book/still-holding — stillHolding', () => {
         const filters = (read: Facets, sheet: string) => json(read.records.get(`${sheet} filter`));
 
         test('a place a peer wrote stays as the peer left it, a place only I wrote goes back', () => {
-            const seen = { whole: 0, cut: 0, refused: 0, skipped: 0, untouched: 0, typedRich: 0, typedLost: 0 };
+            const seen = {
+                whole: 0,
+                cut: 0,
+                refused: 0,
+                skipped: 0,
+                untouched: 0,
+                typedRich: 0,
+                typedLost: 0,
+                back: 0,
+                kept: 0,
+            };
             const cuts = { cells: 0, runs: 0, ranges: 0, spans: 0, fields: 0, records: 0 };
             for (let seed = 1; seed <= 700; seed += 1) {
                 const random = randomOf(seed * 86_028_121);
@@ -748,9 +790,11 @@ describe('engine/book/still-holding — stillHolding', () => {
                     continue;
                 }
                 const undone = facets(book);
-                // A peer who renamed my sheet to my new name in another case keeps it, so my typed text, written back,
-                // binds to that sheet again, as typing it would.
-                const waits = book.content().sheets.every(({ fields }) => fields.name.toLowerCase() !== 'later');
+                // A formula my rename bound goes back only while the sheet has the name my rename gave it.
+                const renamedNow = field(peers.records.get(`${renamed} sheet`), 'name') === json(LATER);
+                const bound = written.some(
+                    (op) => op.kind === 'record' && op.type === 'sheet' && op.set.name === LATER,
+                );
 
                 for (const key of new Set([
                     ...before.cells.keys(),
@@ -761,8 +805,9 @@ describe('engine/book/still-holding — stillHolding', () => {
                     const [b0, b1, bp, f] = [before, left, peers, undone].map((read) => read.cells.get(key) ?? EMPTY);
                     const [l0, l1, lp, lf] = [b0, b1, bp, f].map((cell): CellAttrs => JSON.parse(cell.look));
                     if (bp.whole === b1.whole) {
-                        if (waits || !b0.whole.includes(`'${LATER}'!`))
-                            expect(f.whole, `${where} cell ${key}`).toBe(b0.whole);
+                        const lost = bound && b0.whole.includes(`'${LATER}'!`) && b1.whole !== b0.whole;
+                        expect(f.whole, `${where} cell ${key}`).toBe(lost && !renamedNow ? bp.whole : b0.whole);
+                        if (lost) seen[renamedNow ? 'back' : 'kept'] += 1;
                     } else {
                         if (bp.link !== b1.link) expect(f.link, `${where} link ${key}`).toBe(bp.link);
                         if (bp.text !== b1.text) expect(f.text, `${where} text ${key}`).toBe(bp.text);
@@ -841,6 +886,7 @@ describe('engine/book/still-holding — stillHolding', () => {
             expect(seen.refused).toBeLessThan(40);
             expect(seen.typedRich).toBeGreaterThan(150);
             expect(seen.typedLost).toBeGreaterThan(70);
+            expect(Math.min(seen.back, seen.kept)).toBeGreaterThan(0);
         }, 120_000);
     });
 });
