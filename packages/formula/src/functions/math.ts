@@ -2,7 +2,7 @@
 // two, SUM and PRODUCT on every number of their arguments, SUMPRODUCT on its arguments multiplied place by place,
 // SUMIF on the numbers beside the cells its criteria accept. The rounding functions go by the 15 digits Excel
 // shows, and a body answers an error only where Excel's own function has no answer, such as MOD of a quotient too
-// large to hold. SUBTOTAL is all data: a code that picks one of the others.
+// large to hold. SUBTOTAL is all data: a code that picks one of the others and says which rows it leaves out.
 
 import { cosine, sine, tangent } from '../values/angle';
 import { DIV0, NUM } from '../values/errors';
@@ -14,7 +14,9 @@ import {
     chosen,
     ERRORS,
     FACTORS,
+    FILTERED,
     fn,
+    HIDDEN,
     INTEGER,
     MATCHED,
     NEARLY,
@@ -36,8 +38,8 @@ const MOST_THINGS = 2 ** 31 - 1;
 // MOD has no answer from this many times the divisor on.
 const MOST_DIVIDED = 1125900000000;
 
-// The functions the codes 1 to 11 of SUBTOTAL pick. 101 to 111 pick the same and leave out rows hidden by hand,
-// and this build knows of no hidden row.
+// The functions the codes 1 to 11 of SUBTOTAL pick, which leave out the rows a filter left out. 101 to 111 pick the
+// same and leave out the rows hidden by hand too.
 const SUBTOTALS = [
     'AVERAGE',
     'COUNT',
@@ -181,13 +183,16 @@ export const MATH = [
     fn('SUMIFS', [MATCHED, rest(WHERE)], (numbers) => numbers.sum()),
     chosen(
         'SUBTOTAL',
-        SUBTOTALS.flatMap((target, at) => [[at + 1, target, NESTED] as const, [at + 101, target, NESTED] as const]),
+        SUBTOTALS.flatMap((target, at) => [
+            [at + 1, target, NESTED | FILTERED] as const,
+            [at + 101, target, NESTED | HIDDEN] as const,
+        ]),
     ),
     fn('GCD', [rest(WHOLES)], greatestDivisor),
     fn('LCM', [rest(WHOLES)], leastMultiple),
     fn('MULTINOMIAL', [rest(WHOLES)], multinomial),
     // The codes 1 to 19, and per option 0 to 7 what is passed over: a nested SUBTOTAL or AGGREGATE up to 3,
-    // errors for 2, 3, 6 and 7. The options that leave out hidden rows answer as the ones that keep them.
+    // errors for 2, 3, 6 and 7, hidden rows and with them filtered ones for the odd. An even option leaves out none.
     chosen(
         'AGGREGATE',
         [
@@ -195,6 +200,6 @@ export const MATH = [
             ...['MEDIAN', 'MODE.SNGL', 'LARGE', 'SMALL', 'PERCENTILE.INC', 'QUARTILE.INC'],
             ...['PERCENTILE.EXC', 'QUARTILE.EXC'],
         ].map((target, at) => [at + 1, target, 0] as const),
-        [NESTED, NESTED, NESTED | ERRORS, NESTED | ERRORS, 0, 0, ERRORS, ERRORS],
+        [NESTED, NESTED | HIDDEN, NESTED | ERRORS, NESTED | HIDDEN | ERRORS, 0, HIDDEN, ERRORS, HIDDEN | ERRORS],
     ),
 ];

@@ -17,7 +17,7 @@ import { REF, VALUE } from '../values/errors';
 import type { ArrayValue, Plain, Reference, Scalar } from '../values/value';
 
 export type { Numbers, Pairs, Table } from '../eval/readers';
-export { ANYWHERE, ERRORS, Find, NESTED, NEXT, PART } from '../eval/signature';
+export { ANYWHERE, ERRORS, FILTERED, Find, HIDDEN, NESTED, NEXT, PART } from '../eval/signature';
 
 export type Registry = ReadonlyMap<string, Entry>;
 

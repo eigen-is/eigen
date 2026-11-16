@@ -523,6 +523,67 @@ export function randomLineReaderOp(random: Random, model: Model): InputOp {
     return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 4), left + below(random, 2)], { f }]] };
 }
 
+// Formulas that leave out the rows a sheet hides or filters, over the rows the random line formats hide and the
+// random filter columns leave out, on their sheet and from another, as named ranges, whole columns and ranges they
+// work out: typed right of what they read, one cell at a time or filled over a block.
+const ROW_READERS = [
+    '=SUBTOTAL(109,R1C1:R20C3)',
+    '=SUBTOTAL(9,R1C1:R20C3)',
+    '=SUBTOTAL(103,R[-3]C1:R[3]C2)',
+    '=SUBTOTAL(2,C1:C2)',
+    '=SUBTOTAL(104,C1:C1,R3C2:R9C2)',
+    '=AGGREGATE(9,5,R1C1:R20C3)',
+    '=AGGREGATE(2,3,R1C1:R20C3)',
+    '=AGGREGATE(3,7,[s0]!R1C1:R20C2)',
+    '=AGGREGATE(9,6,R1C1:R20C3)',
+    '=SUBTOTAL(109,[s0]!R1C1:R20C2)',
+    '=SUBTOTAL(3,[s1]!R1C1:R20C2)',
+    '=SUBTOTAL(109,OFFSET(R1C1,0,0,20,2))',
+    '=SUBTOTAL(102,INDIRECT("R1C1:R20C2",FALSE))',
+];
+
+export function randomRowReaderOp(random: Random, model: Model): InputOp {
+    const sheet = someSheet(random, model).id;
+    const top = 3 + below(random, 12);
+    const left = 4 + below(random, 6);
+    const f = pick(random, ROW_READERS);
+    if (random() < 0.7) return { kind: 'input', sheet, cells: [[top, left, { f }]] };
+    return { kind: 'input', sheet, runs: [[[top, left, top + 1 + below(random, 3), left], { f }]] };
+}
+
+// An op that changes which rows a sheet hides or filters, among the rows the row readers read: rows hidden or
+// shown, a filter made where the sheet has none and else the rows one of its columns leaves out, the filter
+// deleted, or rows inserted or deleted there.
+export function randomRowsOutOp(random: Random, model: Model): FormatOp | RecordOp | LinesOp {
+    const held = someSheet(random, model);
+    const sheet = held.id;
+    const first = below(random, 16);
+    const span: Span = [first, first + below(random, 4)];
+    const [filter] = held.records.filter.keys();
+    return pick<() => FormatOp | RecordOp | LinesOp>(random, [
+        () => ({ kind: 'format', sheet, lines: 'rows', spans: [span], set: { hidden: 1 } }),
+        () => ({ kind: 'format', sheet, lines: 'rows', spans: [span, [first + 6, first + 9]], clear: ['hidden'] }),
+        () => {
+            if (filter === undefined) {
+                return {
+                    kind: 'record',
+                    sheet,
+                    type: 'filter',
+                    id: `${sheet}fr`,
+                    set: { rect: [0, 0, 20, 4] },
+                    whole: 1,
+                };
+            }
+            const id = `${sheet}kr${below(random, 2)}`;
+            const set = { filter, column: below(random, 3), rows: [span] };
+            return { kind: 'record', sheet, type: 'filterColumn', id, set, whole: 1 };
+        },
+        () => ({ kind: 'record', sheet, type: 'filter', id: filter ?? `${sheet}fr` }),
+        () => ({ kind: 'lines', sheet, rows: true, insert: true, index: first, count: 1 + below(random, 2) }),
+        () => ({ kind: 'lines', sheet, rows: true, insert: false, index: first, count: 1 + below(random, 2) }),
+    ])();
+}
+
 // A block of a sheet moved on it or to another: a single cell, a small block, the rectangle of a merge, a rule range,
 // a comment or a chart's series, one a little larger, or a whole column or row. Half the moves land near where they
 // start, so the block overlaps itself in every direction; now and then either sheet is one the book does not hold.

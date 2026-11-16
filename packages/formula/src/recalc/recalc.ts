@@ -1,8 +1,9 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and after a new
-// clock or a structural edit the clock formulas and their readers, and computes them: reading a cell still to be
-// computed computes it first, so no order is worked out ahead, and a cell met while it is computed is on a loop.
-// The areas a formula works out as it runs are told to the `Records`, which a marking follows too.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, after a new
+// clock or a structural edit the clock formulas, after a change of a sheet's hidden or filtered rows the formulas
+// that leave rows out, and the readers of each, and computes them: reading a cell still to be computed computes it
+// first, so no order is worked out ahead, and a cell met while it is computed is on a loop. The areas a formula
+// works out as it runs are told to the `Records`, which a marking follows too.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -95,6 +96,9 @@ export class Recalc {
     private seed: number;
     // Whether the clock formulas were flagged since the clock was last set or a structural edit moved cells.
     private stamped = true;
+    // The sheets whose hidden or filtered rows changed, or whose cells an edit moved across them, since a pass
+    // flagged the formulas that leave rows out.
+    private readonly rowed = new Set<Sheet>();
     private readonly records: Records;
 
     // `computed` says whether the values of the workbook are those a full pass computed, as its load was told.
@@ -109,9 +113,9 @@ export class Recalc {
         for (const sheet of workbook.sheets) this.hold(sheet, computed);
     }
 
-    // No seed waits, the clock is stamped, and no formula is flagged.
+    // No seed waits, the clock is stamped, no sheet's rows changed, and no formula is flagged.
     public settled(): boolean {
-        if (this.seeds.length > 0 || !this.stamped) return false;
+        if (this.seeds.length > 0 || !this.stamped || this.rowed.size > 0) return false;
         for (const { columns } of this.workbook.sheets) {
             for (const { pending } of columns) if (pending > 0) return false;
         }
@@ -123,6 +127,12 @@ export class Recalc {
         this.now = now;
         this.seed = seed;
         this.stamped = false;
+    }
+
+    // The rows a sheet hides and filters, whole. Other rows than it held are a change the next pass follows: it
+    // computes again every formula that leaves rows out and can read the sheet.
+    public setRowsOut(sheet: Sheet, hidden: readonly number[], filtered: readonly number[]): void {
+        if (sheet.leaveOut(hidden, filtered)) this.rowed.add(sheet);
     }
 
     public setValue(sheet: Sheet, row: number, c: number, value: Literal): void {
@@ -175,6 +185,15 @@ export class Recalc {
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;
+        // And a cell it moves to another row is left out or not by that row: the rows a sheet leaves out are not
+        // moved with its cells, so they count as changed on every sheet the cells left or came to.
+        const moved =
+            change.kind === ChangeKind.Move
+                ? [workbook.known(change.move.fromSheet), workbook.known(change.move.toSheet)]
+                : change.kind === ChangeKind.Lines && change.edit.rows
+                  ? [workbook.known(change.edit.sheet)]
+                  : [];
+        if (moved.some((sheet) => sheet.out.length > 0)) for (const sheet of moved) this.rowed.add(sheet);
         // The plan makes shapes no cell holds yet, or ever when it refuses the edit by a throw: the next rebuild
         // forgets those.
         this.stale = true;
@@ -199,14 +218,17 @@ export class Recalc {
             // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
             this.reach();
             const { clocks } = this.index;
-            for (let i = 0; i < clocks.length; i += 5) {
-                const { columns } = workbook.sheets[clocks[i]];
-                for (let c = clocks[i + 1]; c <= clocks[i + 2]; c += 1) {
-                    for (let row = clocks[i + 3]; row <= clocks[i + 4]; row += 1) columns[c].markDirty(row);
-                    this.seeds.push(clocks[i], c, clocks[i + 3], clocks[i + 4]);
-                }
-            }
+            for (let i = 0; i < clocks.length; i += 5) this.flagBlock(clocks, i);
             this.stamped = true;
+        }
+        if (this.rowed.size > 0) {
+            // So is a formula that leaves rows out, when it names a sheet whose rows changed or may read any.
+            this.reach();
+            const { choosers } = this.index;
+            for (let i = 0; i < choosers.length; i += 6) {
+                if (choosers[i] < 0 || this.rowed.has(workbook.sheets[choosers[i]])) this.flagBlock(choosers, i + 1);
+            }
+            this.rowed.clear();
         }
         // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
         if (this.seeds.length > 0) {
@@ -372,6 +394,16 @@ export class Recalc {
                     extend(this.seeds, sheet.place, c, row);
                 }
             }
+        }
+    }
+
+    // Flags the formulas of a rectangle the index lists, from `at` in a list: sheet, first and last column, first
+    // and last row. Each of its columns is a seed.
+    private flagBlock(rectangles: readonly number[], at: number): void {
+        const { columns } = this.workbook.sheets[rectangles[at]];
+        for (let c = rectangles[at + 1]; c <= rectangles[at + 2]; c += 1) {
+            for (let row = rectangles[at + 3]; row <= rectangles[at + 4]; row += 1) columns[c].markDirty(row);
+            this.seeds.push(rectangles[at], c, rectangles[at + 3], rectangles[at + 4]);
         }
     }
 

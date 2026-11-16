@@ -38,13 +38,19 @@ export function applyOps(book: Workbook, ops: readonly Op[]): Op[] {
         const refusal = error instanceof EditRefusal ? new Refusal(REFUSAL_OF[error.reason]) : error;
         if (refusal instanceof Refusal) {
             for (const op of landed.reverse().flat()) applyOne(book, op);
-            book.sweepLooks();
+            close(book, ops);
         }
         throw refusal;
     }
-    // The sweep renumbers the looks, so it runs between batches, when no applier holds a look id.
-    book.sweepLooks();
+    close(book, ops);
     return landed.reverse().flat();
+}
+
+// What ends a batch, landed or taken back, when no applier holds a look id: the sweep renumbers the looks, and the
+// engine is told the rows the sheets hide and filter, which only an input and a format of cells cannot change.
+function close(book: Workbook, ops: readonly Op[]): void {
+    book.sweepLooks();
+    if (ops.some((op) => op.kind !== 'input' && !(op.kind === 'format' && 'ranges' in op))) book.setRowsOut();
 }
 
 // An applier checks what its op can be refused for and reads what the inverse needs, throwing before its first

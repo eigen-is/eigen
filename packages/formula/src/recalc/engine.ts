@@ -1,8 +1,9 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, the clock of each batch of them, a recalc of what they reach, and the reads, such as the value
-// of a cell and a walk of a sheet. A sheet is named by its id and a cell by its row and column from 0. It reads the
-// store and changes it only through the recalc. What a host can get wrong, such as a cell off the grid, is checked
-// here, once, before anything is noted or changed: so a call that throws left the workbook as it was.
+// structural edits, the clock of each batch of them, the rows a sheet hides or filters, a recalc of what they reach,
+// and the reads, such as the value of a cell and a walk of a sheet. A sheet is named by its id and a cell by its row
+// and column from 0. It reads the store and changes it only through the recalc. What a host can get wrong, such as a
+// cell off the grid, is checked here, once, before anything is noted or changed: so a call that throws left the
+// workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -11,7 +12,7 @@ import { FUNCTIONS } from '../functions/library';
 import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { CellSink, Literal, SheetSource } from '../store/workbook';
-import { admit, ChangeKind, isLine, Workbook } from '../store/workbook';
+import { admit, admitRows, ChangeKind, isLine, Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import type { Scalar } from '../values/value';
 import { EditRefusal } from './edit-plan';
@@ -40,6 +41,15 @@ export class Engine {
     public setClock(now: number, seed: number): void {
         clocked(now, seed);
         this.calc.setClock(now, seed);
+    }
+
+    // The rows SUBTOTAL and AGGREGATE leave out: those hidden by hand and those a filter left out, each list whole,
+    // as sorted pairs of a first and a last row. No edit moves one, so a host says them again before the next recalc.
+    public setRowsOut(sheet: string, hidden: readonly number[], filtered: readonly number[]): void {
+        const found = this.workbook.known(sheet);
+        admitRows(hidden);
+        admitRows(filtered);
+        this.calc.setRowsOut(found, hidden, filtered);
     }
 
     public setValue(sheet: string, row: number, column: number, value: Literal): void {
@@ -127,8 +137,8 @@ export class Engine {
         return this.calc.pass(cap);
     }
 
-    // Whether every value is what a full pass computed: nothing written, edited or clocked since the last pass, and
-    // nothing it left. Only then may a walk be loaded as computed.
+    // Whether every value is what a full pass computed: nothing written, edited, clocked or hidden since the last
+    // pass, and nothing it left. Only then may a walk be loaded as computed, with the rows the sheets then left out.
     public settled(): boolean {
         return this.calc.settled();
     }

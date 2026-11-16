@@ -27,11 +27,11 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
-import { batchOf, randomAnyOp, randomBookContent } from './batches';
+import { batchOf, randomAnyOp, randomBookContent, randomRowReaderOp, randomRowsOutOp } from './batches';
 import type { Book } from './book-fixtures';
 import { randomOf } from './book-fixtures';
-import { bytes } from './bytes';
-import type { Model } from './model';
+import { bytes, decoded } from './bytes';
+import type { Model, ModelSheet } from './model';
 import { expectReads, modelAfter, modelOf } from './model';
 import { formulaRule } from './records-fixtures';
 
@@ -455,6 +455,159 @@ describe('engine/book/apply-ops — the look sweep', () => {
     });
 });
 
+// The mix of the general law with, two ops in five, a formula that leaves rows out or a change of the rows a sheet
+// hides or filters.
+function randomRowsOrAnyOp(random: () => number, model: Model): Op {
+    const draw = random();
+    if (draw < 0.15) return randomRowReaderOp(random, model);
+    return draw < 0.4 ? randomRowsOutOp(random, model) : randomAnyOp(random, model);
+}
+
+// Whether a formula of the book leaves rows out.
+function readsRows(model: Model): boolean {
+    return [...model.sheets.values()].some(({ cells }) =>
+        [...cells.values()].some(({ f }) => /SUBTOTAL|AGGREGATE/.test(f ?? '')),
+    );
+}
+
+// The last row a sheet hides or filters, or -1.
+function lastRowOut({ rows, records }: ModelSheet): number {
+    const hidden = [...rows].filter(([, attrs]) => attrs.hidden).map(([row]) => row);
+    const filtered = [...records.filterColumn.values()].flatMap((column) => column.rows.map(([, last]) => last));
+    return Math.max(-1, ...hidden, ...filtered);
+}
+
+// What an op that lands does to the rows the sheets of the model hide or filter.
+type RowStep =
+    | 'hide'
+    | 'show'
+    | 'filterOn'
+    | 'filterOff'
+    | 'filterRows'
+    | 'insertAround'
+    | 'deleteAround'
+    | 'move'
+    | 'sheetDelete'
+    | 'sheetAdd';
+
+function rowStepsOf(model: Model, op: Op): RowStep[] {
+    if (op.kind === 'sheet') return ['add' in op ? 'sheetAdd' : 'sheetDelete'];
+    const sheet = model.sheets.get(op.sheet);
+    if (!sheet) return [];
+    const last = lastRowOut(sheet);
+    if (op.kind === 'format' && 'lines' in op && op.lines === 'rows') {
+        const shows = op.clear?.includes('hidden') && last >= 0;
+        return op.set?.hidden ? ['hide'] : shows ? ['show'] : [];
+    }
+    if (op.kind === 'record' && op.type === 'filter') {
+        return op.set ? ['filterOn'] : sheet.records.filterColumn.size > 0 ? ['filterOff'] : [];
+    }
+    if (op.kind === 'record' && op.type === 'filterColumn') return ['filterRows'];
+    if (op.kind === 'lines' && op.rows && op.index <= last) return [op.insert ? 'insertAround' : 'deleteAround'];
+    const landing = op.kind === 'move' ? model.sheets.get(op.toSheet) : undefined;
+    return landing && Math.max(last, lastRowOut(landing)) >= 0 ? ['move'] : [];
+}
+
+// Random books under random batches drawn by `make`: LAW 1 on each refused batch, LAW 2 and the model's reads on each
+// that lands, its inverse and the inverse of that. With `rows` the bytes after every batch that lands are also those
+// of a book loaded fresh from its content, which computes every formula with the rows the content hides and filters.
+function lawRun(seeds: number, make: (random: () => number, model: Model) => Op, rows: boolean) {
+    const refusedAt = new Map<string, number>();
+    const kinds = new Map<string, number>();
+    let landed = 0;
+    let undone = 0;
+    // The sheet ops that landed, by what their inverse is: an add lands as its delete, a delete as its add.
+    const sheets = { add: 0, delete: 0 };
+    // The format ops in the inverses: over cells, over lines, and of a link.
+    const formats = { cells: 0, lines: 0, links: 0 };
+    // The loads trusted whole, and those that compute every formula.
+    const loads = { computed: 0, computing: 0 };
+    // The inputs that landed with a listed cell inside one of their runs.
+    let cellInRun = 0;
+    // What landed, and what was refused after an op landed, in a book that held a formula that leaves rows out:
+    // by what the op does to the rows its sheet hides or filters.
+    const rowSteps = {
+        hide: 0,
+        show: 0,
+        filterOn: 0,
+        filterOff: 0,
+        filterRows: 0,
+        insertAround: 0,
+        deleteAround: 0,
+        move: 0,
+        sheetDelete: 0,
+        sheetAdd: 0,
+        refused: 0,
+    };
+    const fresh = (text: string) => bytes(new Workbook({ ...decoded(text), computed: false }));
+    for (let seed = 1; seed <= seeds; seed += 1) {
+        const random = randomOf(seed);
+        const content = randomBookContent(random);
+        loads[content.computed ? 'computed' : 'computing'] += 1;
+        const book = new Workbook(content);
+        let model: Model = modelOf(content);
+        if (rows) expect(fresh(bytes(book))).toBe(bytes(book));
+        for (let round = 0; round < 8; round += 1) {
+            const drawn = batchOf(random, model, make, 6);
+            const before = bytes(book);
+            const rowsRead = readsRows(model);
+            const clock = model;
+            const next = modelAfter(model, drawn);
+            // Now and then a batch that lands ends past the limit on cells, which only the weigh after it refuses.
+            const held = typeof next === 'string' ? [] : [...next.sheets.keys()];
+            const past = held.length > 0 && random() < 0.03;
+            const sheet = held[Math.floor(random() * held.length)];
+            const ops: Batch = past
+                ? { ...drawn, ops: [...drawn.ops, { kind: 'input', sheet, cells: [...PAST_SLOTS] }] }
+                : drawn;
+            const expected = past ? 'too-many-cells' : next;
+            if (typeof expected === 'string') {
+                // The first op the model refuses, with every op before it landed.
+                const at = past
+                    ? drawn.ops.length
+                    : ops.ops.findIndex(
+                          (_, k) => typeof modelAfter(model, { ...ops, ops: ops.ops.slice(0, k + 1) }) === 'string',
+                      );
+                refusedAt.set(`${expected} ${at}`, (refusedAt.get(`${expected} ${at}`) ?? 0) + 1);
+                expect(refusalOf(() => land(book, ops))).toBe(expected);
+                expect(bytes(book)).toBe(before);
+                expectReads(book, model);
+                if (rowsRead && at > 0) rowSteps.refused += 1;
+                continue;
+            }
+            const inverse = land(book, ops);
+            landed += 1;
+            for (const op of ops.ops) {
+                kinds.set(op.kind, (kinds.get(op.kind) ?? 0) + 1);
+                if (op.kind !== 'input') continue;
+                if (op.cells?.some(([row, column]) => op.runs?.some(([rect]) => covers(rect, row, column))))
+                    cellInRun += 1;
+            }
+            if (rowsRead) for (const op of ops.ops) for (const step of rowStepsOf(model, op)) rowSteps[step] += 1;
+            expectReads(book, expected);
+            model = expected;
+            const after = bytes(book);
+            if (rows) expect([seed, round, fresh(after)]).toEqual([seed, round, after]);
+            const text = JSON.stringify({ ...ops, ops: inverse });
+            expect(readBatch(text)).toEqual(JSON.parse(text));
+            const again = applyOps(book, inverse);
+            book.setClock(clock.now, clock.seed);
+            expect(bytes(book)).toBe(before);
+            expectReads(book, clock);
+            land(book, { ...ops, ops: again });
+            expect(bytes(book)).toBe(after);
+            undone += 1;
+            for (const op of inverse) {
+                if (op.kind === 'sheet') sheets['add' in op ? 'delete' : 'add'] += 1;
+                if (op.kind !== 'format') continue;
+                formats['lines' in op ? 'lines' : 'cells'] += 1;
+                if ('ranges' in op && (op.set?.link || op.clear?.includes('link'))) formats.links += 1;
+            }
+        }
+    }
+    return { refusedAt, kinds, landed, undone, sheets, formats, loads, cellInRun, rowSteps };
+}
+
 describe('engine/book/apply-ops — the laws over random books and random batches of every kind built', () => {
     test('a rename of a sheet a formula names but does not read keeps LAW 1, LAW 2 and LAW 7', () => {
         const content: Book = {
@@ -489,78 +642,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
     });
 
     test('LAW 1, LAW 2, law 6 and law 8', () => {
-        const refusedAt = new Map<string, number>();
-        const kinds = new Map<string, number>();
-        let landed = 0;
-        let undone = 0;
-        // The sheet ops that landed, by what their inverse is: an add lands as its delete, a delete as its add.
-        const sheets = { add: 0, delete: 0 };
-        // The format ops in the inverses: over cells, over lines, and of a link.
-        const formats = { cells: 0, lines: 0, links: 0 };
-        // The loads trusted whole, and those that compute every formula.
-        const loads = { computed: 0, computing: 0 };
-        // The inputs that landed with a listed cell inside one of their runs.
-        let cellInRun = 0;
-        for (let seed = 1; seed <= 600; seed += 1) {
-            const random = randomOf(seed);
-            const content = randomBookContent(random);
-            loads[content.computed ? 'computed' : 'computing'] += 1;
-            const book = new Workbook(content);
-            let model: Model = modelOf(content);
-            for (let round = 0; round < 8; round += 1) {
-                const drawn = batchOf(random, model, randomAnyOp, 6);
-                const before = bytes(book);
-                const clock = model;
-                const next = modelAfter(model, drawn);
-                // Now and then a batch that lands ends past the limit on cells, which only the weigh after it refuses.
-                const held = typeof next === 'string' ? [] : [...next.sheets.keys()];
-                const past = held.length > 0 && random() < 0.03;
-                const sheet = held[Math.floor(random() * held.length)];
-                const ops: Batch = past
-                    ? { ...drawn, ops: [...drawn.ops, { kind: 'input', sheet, cells: [...PAST_SLOTS] }] }
-                    : drawn;
-                const expected = past ? 'too-many-cells' : next;
-                if (typeof expected === 'string') {
-                    // The first op the model refuses, with every op before it landed.
-                    const at = past
-                        ? drawn.ops.length
-                        : ops.ops.findIndex(
-                              (_, k) => typeof modelAfter(model, { ...ops, ops: ops.ops.slice(0, k + 1) }) === 'string',
-                          );
-                    refusedAt.set(`${expected} ${at}`, (refusedAt.get(`${expected} ${at}`) ?? 0) + 1);
-                    expect(refusalOf(() => land(book, ops))).toBe(expected);
-                    expect(bytes(book)).toBe(before);
-                    expectReads(book, model);
-                    continue;
-                }
-                const inverse = land(book, ops);
-                landed += 1;
-                for (const op of ops.ops) {
-                    kinds.set(op.kind, (kinds.get(op.kind) ?? 0) + 1);
-                    if (op.kind !== 'input') continue;
-                    if (op.cells?.some(([row, column]) => op.runs?.some(([rect]) => covers(rect, row, column))))
-                        cellInRun += 1;
-                }
-                expectReads(book, expected);
-                model = expected;
-                const after = bytes(book);
-                const text = JSON.stringify({ ...ops, ops: inverse });
-                expect(readBatch(text)).toEqual(JSON.parse(text));
-                const again = applyOps(book, inverse);
-                book.setClock(clock.now, clock.seed);
-                expect(bytes(book)).toBe(before);
-                expectReads(book, clock);
-                land(book, { ...ops, ops: again });
-                expect(bytes(book)).toBe(after);
-                undone += 1;
-                for (const op of inverse) {
-                    if (op.kind === 'sheet') sheets['add' in op ? 'delete' : 'add'] += 1;
-                    if (op.kind !== 'format') continue;
-                    formats['lines' in op ? 'lines' : 'cells'] += 1;
-                    if ('ranges' in op && (op.set?.link || op.clear?.includes('link'))) formats.links += 1;
-                }
-            }
-        }
+        const { refusedAt, kinds, landed, undone, sheets, formats, loads, cellInRun } = lawRun(600, randomAnyOp, false);
         expect(loads.computed).toBeGreaterThan(250);
         expect(loads.computing).toBeGreaterThan(250);
         expect(landed).toBeGreaterThan(3500);
@@ -581,5 +663,20 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         }
         for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`merge-overlap ${k}`) ?? 0).toBeGreaterThan(30);
         for (let k = 1; k < 5; k += 1) expect(refusedAt.get(`too-many-cells ${k}`) ?? 0).toBeGreaterThan(5);
+    }, 120_000);
+
+    // The same laws under a mix with formulas that leave rows out and changes of the rows a sheet hides or filters,
+    // and the law of those rows: after every batch the bytes are those of a fresh load.
+    test('the rows a sheet hides and filters: an edited book holds the bytes of one loaded fresh from its content', () => {
+        const { kinds, landed, undone, loads, rowSteps } = lawRun(300, randomRowsOrAnyOp, true);
+        if (process.env['LAW_COUNTS'] !== undefined) console.log(JSON.stringify({ landed, loads, rowSteps }));
+        expect(loads.computed).toBeGreaterThan(100);
+        expect(loads.computing).toBeGreaterThan(100);
+        expect(landed).toBeGreaterThan(1500);
+        expect(undone).toBe(landed);
+        for (const kind of ['input', 'format', 'record', 'lines', 'move', 'sheet']) {
+            expect(kinds.get(kind) ?? 0).toBeGreaterThan(300);
+        }
+        for (const count of Object.values(rowSteps)) expect(count).toBeGreaterThan(50);
     }, 120_000);
 });

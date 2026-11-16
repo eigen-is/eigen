@@ -1,7 +1,8 @@
 // One sheet of the store: its id, its name, its place among the sheets and its columns. A column that was never
 // written does not exist past the last one that was, so a sheet costs what it holds. Inserting and deleting rows
 // and columns and moving a block moves the cells only: what a formula's text becomes is the transform's work, not
-// the store's. The place is the workbook's to write, whenever the list of sheets changes.
+// the store's. The place is the workbook's to write, whenever the list of sheets changes, and the rows the sheet
+// hides and filters are the host's to say: no edit here moves one.
 
 import { firstPushed } from '../edit/map';
 import type { Move } from '../edit/move';
@@ -17,6 +18,11 @@ export class Sheet {
     // The id hashed to a number, for the draws of the sheet's cells: the same wherever the tab sits, whatever its name.
     public readonly salt: number;
     private readonly held: Column[];
+    // The rows hidden by hand, the rows a filter left out, and both together: each list is sorted pairs of a first
+    // and a last row that share no row. SUBTOTAL and AGGREGATE pass over them.
+    private hidden: readonly number[] = [];
+    public filtered: readonly number[] = [];
+    public out: readonly number[] = [];
 
     // One column per length, as a load measured them.
     public constructor(id: string, name: string, lengths: readonly number[]) {
@@ -30,6 +36,28 @@ export class Sheet {
 
     public get columns(): readonly Column[] {
         return this.held;
+    }
+
+    // Takes the rows the sheet hides and filters as its own lists. False when it held the same two.
+    public leaveOut(hidden: readonly number[], filtered: readonly number[]): boolean {
+        if (sameRows(this.hidden, hidden) && sameRows(this.filtered, filtered)) return false;
+        this.hidden = hidden.slice();
+        this.filtered = filtered.slice();
+        const out: number[] = [];
+        let h = 0;
+        let f = 0;
+        while (h < hidden.length || f < filtered.length) {
+            const fromHidden = f === filtered.length || (h < hidden.length && hidden[h] <= filtered[f]);
+            const first = fromHidden ? hidden[h] : filtered[f];
+            const last = fromHidden ? hidden[h + 1] : filtered[f + 1];
+            if (fromHidden) h += 2;
+            else f += 2;
+            const end = out.length - 1;
+            if (end > 0 && out[end] >= first - 1) out[end] = Math.max(out[end], last);
+            else out.push(first, last);
+        }
+        this.out = out;
+        return true;
     }
 
     // The column to write into, made with the empty ones before it when the sheet did not reach that far.
@@ -88,4 +116,10 @@ export class Sheet {
             else source.held[c].clearRows(Math.max(row, toRow + rows), row + rows);
         }
     }
+}
+
+function sameRows(held: readonly number[], rows: readonly number[]): boolean {
+    if (held.length !== rows.length) return false;
+    for (let at = 0; at < rows.length; at += 1) if (held[at] !== rows[at]) return false;
+    return true;
 }
