@@ -60,27 +60,13 @@ type HomeMessage =
 // opens its recipient's home, so a shutdown drains them first.
 const deliveries = new Set<Promise<void>>();
 
-// The last fan-out queued for each order key. The next one waits for it: an add and a revoke delivered out of order
-// would bring a removed share back.
-const lastInOrder = new Map<string, Promise<void>>();
-
 // One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
 // whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
-export async function pushToHomes(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
-    const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
-    const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
-    const fanOut = tracked(deliverToEach(targetIds, message, previous));
-    if (orderKey) lastInOrder.set(orderKey, fanOut);
-    await fanOut;
-    if (orderKey && lastInOrder.get(orderKey) === fanOut) lastInOrder.delete(orderKey);
+export function pushToHomes(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    return trackDelivery(deliverToEach(targetIds, message));
 }
 
-async function deliverToEach(
-    targetIds: Iterable<string>,
-    message: HomeMessage,
-    previous: Promise<void> | undefined,
-): Promise<void> {
-    await previous;
+async function deliverToEach(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
     for (const id of targetIds) {
         await deliver(id, message).catch((err) =>
             console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
@@ -148,7 +134,9 @@ async function deliver(targetId: string, message: HomeMessage): Promise<void> {
     }
 }
 
-function tracked(delivery: Promise<void>): Promise<void> {
+// A caller that holds a push back until something else is done hands that wait in here, so a shutdown also waits for a
+// push that has not started yet.
+export function trackDelivery(delivery: Promise<void>): Promise<void> {
     deliveries.add(delivery);
     return delivery.finally(() => deliveries.delete(delivery));
 }

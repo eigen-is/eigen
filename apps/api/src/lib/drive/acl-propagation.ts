@@ -1,12 +1,12 @@
 // Tells the homes of the people a path is shared with that its sharing changed. It resolves who the
 // ACL names, hands the push to the relay, and sends the share emails. Drive calls it after an ACL
-// change.
+// change, and the changes of one path reach those homes in the order Drive made them.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getServerSettings } from '../config/server-settings';
-import { pushToHomes } from '../home/home-relay';
+import { pushToHomes, trackDelivery } from '../home/home-relay';
 import { composeShareEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
@@ -89,6 +89,10 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
     return members;
 }
 
+// The last fan-out of each path that has not finished. The next one of that path waits for it: an add and a revoke
+// delivered out of order would bring a removed share back.
+const lastFanOut = new Map<string, Promise<void>>();
+
 export async function propagateSharedPathChange(
     path: DrivePath,
     oldACL: DriveACL[] | null,
@@ -100,12 +104,21 @@ export async function propagateSharedPathChange(
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL ?? []), ...(newACL ?? [])]);
 
     // Delivery is derived state, since the owner's side enforces access, so the request doesn't wait for it.
-    pushToHomes(ids, {
-        type: 'drive:acl-change',
-        path,
-        acl: newACL,
-        actorEmail: actor?.email,
-        actorName: actor?.name,
+    const previous = lastFanOut.get(path.id) ?? Promise.resolve();
+    const fanOut = trackDelivery(
+        previous.then(() =>
+            pushToHomes(ids, {
+                type: 'drive:acl-change',
+                path,
+                acl: newACL,
+                actorEmail: actor?.email,
+                actorName: actor?.name,
+            }),
+        ),
+    );
+    lastFanOut.set(path.id, fanOut);
+    fanOut.then(() => {
+        if (lastFanOut.get(path.id) === fanOut) lastFanOut.delete(path.id);
     });
 
     const suppress = options?.suppressShareEmail;

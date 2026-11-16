@@ -395,9 +395,9 @@ describe('share reconciliation', () => {
         expect(logged.some((line) => line.includes(`drive:acl-change to ${user.id}`))).toBe(true);
     });
 
-    // A pull that overtook a change still on its way would be undone by it: the older state would land last.
-    test('the pull of a path waits for a change to that path that is still being delivered', async () => {
-        const { user, sessionToken } = await newcomer('ordered');
+    // A sign-in waits for its pull, so the pull must not wait for a fan-out that can take as long as a team is large.
+    test('the pull of a path does not wait for a change to that path that is still being delivered', async () => {
+        const { user, sessionToken } = await newcomer('unordered');
         const slow = await newcomer('slow');
         const alice = await getHome(ctx.alice.user.id);
         const { folder } = await aliceFolderAndRoot();
@@ -412,7 +412,6 @@ describe('share reconciliation', () => {
             }),
         );
 
-        let pulling: Promise<void>;
         let pulledFirst: boolean;
         try {
             await alice.drive.updateACLDelta(
@@ -423,14 +422,13 @@ describe('share reconciliation', () => {
                 undefined,
                 alice.user,
             );
-            pulling = reconcileShares(user);
+            const pulling = reconcileShares(user);
             pulledFirst = await Promise.race([pulling.then(() => true), Bun.sleep(2_000).then(() => false)]);
         } finally {
             gate.resolve();
         }
-        expect(pulledFirst).toBe(false);
+        expect(pulledFirst).toBe(true);
 
-        await pulling;
         await relay.drainHomeDeliveries();
         expect(await sharedWithMe(sessionToken, user.id)).toContain(file.id);
     });
