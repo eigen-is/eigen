@@ -4,22 +4,11 @@
 // record ops that undo puts after the inverse edit. The workbook's applier calls it: it checks and plans first and
 // writes only once nothing can refuse.
 
-import type { Edit, FormulaNode, LineEdit, Move } from '@workspace/formula/text';
-import {
-    GONE,
-    GRID_COLUMNS,
-    GRID_ROWS,
-    mapIndex,
-    mapSpan,
-    parseStored,
-    storedKey,
-    transformLines,
-    transformMove,
-} from '@workspace/formula/text';
+import type { Move } from '@workspace/formula/text';
+import { GRID_COLUMNS, GRID_ROWS, transformMove } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import { compareRules } from '@workspace/lib/sheets';
 import type {
-    ConditionalFormatRecord,
     FieldsOf,
     LinesOp,
     MoveOp,
@@ -29,20 +18,28 @@ import type {
     Rect,
     SheetContent,
     SheetFields,
-    Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
-import { covers, sameRect, within } from '@workspace/lib/sheets/rect';
-import { mapChartRefs } from '../chart-data';
+import { covers, within } from '@workspace/lib/sheets/rect';
+import {
+    chartAfter,
+    commentAfter,
+    filterAfter,
+    filterColumnAfter,
+    formulaOf,
+    LineMap,
+    lineSpan,
+    mergeAfter,
+    ruleAfter,
+    sheetAfter,
+    validationAfter,
+    withFormula,
+} from './record-lines';
 import { RectIndex } from './rect-index';
 
 type Kind = Exclude<RecordType, 'sheet'>;
 type ChangedKind = Exclude<Kind, 'conditionalFormat'>;
 type RuleKind = 'conditionalFormat' | 'validation';
-// How a span meets the grid's end under a line edit: a merge's end moves as a line does, a filter's end on the last
-// line stays there, and a rule's or a chart's range over the whole axis, Excel's `A:A`, also stays whole.
-type Reach = 'closed' | 'open' | 'whole';
-
 // A line edit or a move worked out on one sheet: the record ops that undo applies after the inverse edit, in an order
 // that applies, and the writes, which cannot fail.
 export type Planned = { readonly restore: readonly RecordOp[]; readonly commit: () => void };
@@ -260,146 +257,55 @@ export class SheetRecords {
     // on any, a rule's formula and a chart's refs follow the lines they name.
     public planLines(edit: LinesOp): Planned | 'key-too-long' {
         const here = edit.sheet === this.sheet;
-        const { rows } = edit;
-        const axis: Edit = {
-            insert: edit.insert,
-            index: edit.index,
-            count: edit.count,
-            lines: rows ? GRID_ROWS : GRID_COLUMNS,
-        };
-        const inverse: Edit = { ...axis, insert: !edit.insert };
-        const inverseEdit: LineEdit = { ...edit, insert: !edit.insert };
+        const map = new LineMap(edit);
         const writes: (() => void)[] = [];
         const restore: RecordOp[] = [];
         // Undo puts back a record the inverse edit does not give back as it was.
-        let kept = true;
-        const span = (start: number, end: number, reach: Reach): Span | null => {
-            const after = spanAfter(axis, start, end, reach);
-            const back = after && spanAfter(inverse, after[0], after[1], reach);
-            if (!back || back[0] !== start || back[1] !== end) kept = false;
-            return after;
-        };
-        const line = (index: number): number => {
-            const after = mapIndex(axis, index);
-            if (after === GONE || mapIndex(inverse, after) !== index) kept = false;
-            return after;
-        };
-        const rectAfter = (rect: Rect, reach: Reach): Rect | null => {
-            const [top, left, bottom, right] = rect;
-            const after = span(...lineSpan(rect, rows), reach);
-            return after && (rows ? [after[0], left, after[1], right] : [top, after[0], bottom, after[1]]);
-        };
-        // The list itself when no range moves.
-        const ranges = (list: Rect[]): Rect[] => {
-            const next = list.flatMap((range) => {
-                const after = rectAfter(range, 'whole');
-                return after ? [sameRect(after, range) ? range : after] : [];
-            });
-            return next.length === list.length && next.every((range, i) => range === list[i]) ? list : next;
-        };
         const settle = <T extends ChangedKind>(type: T, id: string, old: Records[T], next: Records[T] | undefined) => {
             if (next !== old) writes.push(() => this.replace(type, id, next));
-            if (!kept || next === undefined) restore.push(this.restoreOp(type, id, old, next === undefined));
-            kept = true;
-        };
-        // A rule changes only whole, so it comes back whole.
-        const settleRule = (id: string, old: ConditionalFormatRecord, next: ConditionalFormatRecord | undefined) => {
-            if (next !== old) writes.push(() => this.replace('conditionalFormat', id, next));
-            if (!kept || next === undefined) restore.push(this.wholeOp('conditionalFormat', id, old));
-            kept = true;
+            if (!map.kept || next === undefined) restore.push(this.restoreOp(type, id, old, next === undefined));
+            map.kept = true;
         };
 
         if (here) {
-            const key = rows ? 'frozenRows' : 'frozenColumns';
-            const frozen = this.sheetFields[key] ?? 0;
-            const after = frozenAfter(axis, frozen);
-            if (after !== frozen) {
-                const set = rows ? { frozenRows: after || null } : { frozenColumns: after || null };
+            const fields = sheetAfter(this.sheetFields, map);
+            if (fields !== this.sheetFields) {
                 writes.push(() => {
-                    this.sheetFields = Object.freeze(withFields(this.sheetFields, set));
+                    this.sheetFields = Object.freeze(withFields(this.sheetFields, fields));
                 });
             }
-            if (frozenAfter(inverse, after) !== frozen) {
-                const set = rows ? { frozenRows: frozen } : { frozenColumns: frozen };
+            if (!map.kept) {
+                const { frozenRows, frozenColumns } = this.sheetFields;
+                const set = map.rows ? { frozenRows } : { frozenColumns };
                 restore.push({ kind: 'record', sheet: this.sheet, type: 'sheet', id: this.sheet, set });
             }
-            for (const [id, merge] of this.stored.merge) {
-                const [top, left, bottom, right] = merge.rect;
-                const rect = rectAfter(merge.rect, 'closed');
-                // A merge the edit cuts to one cell is a merge no more, as in Excel.
-                const single = rect && rect[0] === rect[2] && rect[1] === rect[3] && (top !== bottom || left !== right);
-                settle('merge', id, merge, !rect || single ? undefined : sameRect(rect, merge.rect) ? merge : { rect });
-            }
+            map.kept = true;
+            for (const [id, merge] of this.stored.merge) settle('merge', id, merge, mergeAfter(merge, map));
             const removed = new Set<string>();
             for (const [id, filter] of this.stored.filter) {
-                // The header row holds the filter's buttons, so a delete of it removes the filter.
-                const header = rows && !edit.insert && mapIndex(axis, filter.rect[0]) === GONE;
-                const rect = header ? null : rectAfter(filter.rect, 'open');
-                if (!rect) removed.add(id);
-                settle('filter', id, filter, !rect ? undefined : sameRect(rect, filter.rect) ? filter : { rect });
+                const next = filterAfter(filter, map);
+                if (!next) removed.add(id);
+                settle('filter', id, filter, next);
             }
             for (const [id, column] of this.stored.filterColumn) {
-                if (removed.has(column.filter)) {
-                    settle('filterColumn', id, column, undefined);
-                    continue;
-                }
-                if (!rows) {
-                    const after = line(column.column);
-                    const next = after === column.column ? column : { ...column, column: after };
-                    settle('filterColumn', id, column, after === GONE ? undefined : next);
-                    continue;
-                }
-                const spans = column.rows.flatMap(([start, end]) => {
-                    const after = span(start, end, 'open');
-                    return after ? [after] : [];
-                });
-                const same =
-                    spans.length === column.rows.length &&
-                    spans.every((s, i) => s[0] === column.rows[i][0] && s[1] === column.rows[i][1]);
-                settle('filterColumn', id, column, same ? column : { ...column, rows: spans });
+                const next = removed.has(column.filter) ? undefined : filterColumnAfter(column, map);
+                settle('filterColumn', id, column, next);
             }
-            for (const [id, comment] of this.stored.comment) {
-                const place = rows ? comment.row : comment.column;
-                const after = line(place);
-                const next =
-                    after === place ? comment : rows ? { ...comment, row: after } : { ...comment, column: after };
-                settle('comment', id, comment, after === GONE ? undefined : next);
-            }
+            for (const [id, comment] of this.stored.comment) settle('comment', id, comment, commentAfter(comment, map));
             for (const [id, validation] of this.stored.validation) {
-                const next = ranges(validation.ranges);
-                const moved = next === validation.ranges ? validation : { ...validation, ranges: next };
-                settle('validation', id, validation, next.length === 0 ? undefined : moved);
+                settle('validation', id, validation, validationAfter(validation, map));
             }
         }
         for (const [id, rule] of this.stored.conditionalFormat) {
-            const next = here ? ranges(rule.ranges) : rule.ranges;
-            if (next.length === 0) {
-                settleRule(id, rule, undefined);
-                continue;
-            }
-            const ruled = next === rule.ranges ? rule : { ...rule, ranges: next };
-            // The formula is read at the top-left of the first range the edit leaves, on its first line that stays.
-            const first = here
-                ? rule.ranges.findIndex((range) => spanAfter(axis, ...lineSpan(range, rows), 'whole'))
-                : 0;
-            const [start] = lineSpan(rule.ranges[first], rows);
-            const host = here && mapIndex(axis, start) === GONE ? edit.index + edit.count : start;
-            const formula = withFormula(ruled, (tree) => transformLines(tree, edit, this.sheet, host));
-            if (formula === 'key-too-long') return formula;
-            const backHost = lineSpan(formula.ranges[0], rows)[0];
-            const back = withFormula(formula, (tree) => transformLines(tree, inverseEdit, this.sheet, backHost));
-            if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) kept = false;
-            settleRule(id, rule, formula);
+            const next = ruleAfter(rule, map, this.sheet);
+            if (next === 'key-too-long') return next;
+            if (next !== rule) writes.push(() => this.replace('conditionalFormat', id, next));
+            // A rule changes only whole, so it comes back whole.
+            if (!map.kept || next === undefined) restore.push(this.wholeOp('conditionalFormat', id, rule));
+            map.kept = true;
         }
         for (const [id, chart] of this.stored.chart) {
-            const next = mapChartRefs(chart, (ref) => {
-                if (ref.sheetId !== edit.sheet) return ref;
-                const [start, end] = rows ? ref.row : ref.column;
-                const after = span(start, end, 'whole');
-                if (!after) return null;
-                if (after[0] === start && after[1] === end) return ref;
-                return rows ? { ...ref, row: [...after] } : { ...ref, column: [...after] };
-            });
+            const next = chartAfter(chart, map);
             if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
             settle('chart', id, chart, next);
         }
@@ -505,11 +411,13 @@ export class SheetRecords {
             const ranges = moved(rule.ranges);
             const ruled = ranges === rule.ranges ? rule : { ...rule, ranges };
             const host = moveHost(rule.ranges, block, fromHere, ranges[0] !== rule.ranges[0]);
-            const formula = host ? withFormula(ruled, (tree) => transformMove(tree, move, this.sheet, ...host)) : ruled;
+            const formula = host
+                ? withFormula(ruled, (tree) => transformMove(tree, move, this.sheet, ...host).tree)
+                : ruled;
             if (formula === 'key-too-long') return formula;
             const backHost = moveHost(formula.ranges, target, toHere, carries && within(formula.ranges[0], target));
             const back = backHost
-                ? withFormula(formula, (tree) => transformMove(tree, reverse, this.sheet, ...backHost))
+                ? withFormula(formula, (tree) => transformMove(tree, reverse, this.sheet, ...backHost).tree)
                 : formula;
             if (formula !== rule) writes.push(() => this.replace('conditionalFormat', id, formula));
             if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule) || returns(rule.ranges)) {
@@ -584,43 +492,6 @@ function inOrder(ops: RecordOp[]): RecordOp[] {
     return ops.sort((a, b) => rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-// The lines `start` to `end` after the edit, or null when none is left.
-function spanAfter(edit: Edit, start: number, end: number, reach: Reach): Span | null {
-    const toEnd = reach !== 'closed' && end === edit.lines - 1;
-    if (toEnd && reach === 'whole' && start === 0) return [start, end];
-    const into = { start: 0, end: 0 };
-    if (!mapSpan(edit, start, end, into)) return null;
-    return [into.start, toEnd ? end : into.end];
-}
-
-// An insert before the last frozen line freezes the new lines too, up to the grid's end; a delete takes the frozen
-// lines it deletes.
-function frozenAfter({ insert, index, count, lines }: Edit, frozen: number): number {
-    if (index >= frozen) return frozen;
-    return insert ? Math.min(frozen + count, lines) : frozen - Math.min(count, frozen - index);
-}
-
-// A formula rule with its stored key transformed: the rule as it came when its key stays, or when its text does not
-// parse, which reads as an error on every reader.
-function withFormula(
-    rule: ConditionalFormatRecord,
-    transform: (tree: FormulaNode) => { tree: FormulaNode },
-): ConditionalFormatRecord | 'key-too-long' {
-    const text = formulaOf(rule);
-    const tree = text === undefined ? null : parseStored(text);
-    if (!tree || 'reason' in tree || rule.type !== 'default') return rule;
-    const next = transform(tree).tree;
-    if (next === tree) return rule;
-    const key = storedKey(next);
-    return typeof key === 'string' ? { ...rule, conditionValue: rule.conditionValue.with(0, key) } : 'key-too-long';
-}
-
-function formulaOf(rule: ConditionalFormatRecord): string | undefined {
-    if (rule.type !== 'default' || rule.conditionName !== 'formula') return undefined;
-    const [text] = rule.conditionValue;
-    return typeof text === 'string' ? text : undefined;
-}
-
 // Where a rule is read during a move: the top-left of its first range, or, when the block leaves its sheet with cells
 // of the rule but not that range, the first cell it leaves behind. None when the block holds every range.
 function moveHost(
@@ -637,10 +508,6 @@ function moveHost(
         if (bottom > block[2]) return [block[2] + 1, left];
     }
     return undefined;
-}
-
-function lineSpan([top, left, bottom, right]: Rect, rows: boolean): Span {
-    return rows ? [top, bottom] : [left, right];
 }
 
 function withFields<R extends object>(record: R, set: FieldsOf<R>): R {
