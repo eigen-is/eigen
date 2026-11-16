@@ -17,7 +17,6 @@ import type {
     Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
-import { booleanDisplay } from '../format';
 import { contentOf } from './extras';
 import type { BookSheet, Workbook } from './workbook';
 
@@ -72,13 +71,8 @@ export class Sheet {
         return this.book.engine.formulaOf(this.id, row, column) !== null;
     }
 
-    // Text shows as it is, also under a format with a text section, as a typed cell does today.
     public display(row: number, column: number): string {
-        const value = this.value(row, column);
-        if (value === null) return '';
-        if (typeof value === 'number') return numberDisplay(value, this.look(row, column).fa);
-        if (typeof value === 'boolean') return booleanDisplay(value);
-        return typeof value === 'string' ? value : value.text;
+        return numberDisplay(this.value(row, column), this.look(row, column).fa);
     }
 
     public look(row: number, column: number): Readonly<CellAttrs> {
