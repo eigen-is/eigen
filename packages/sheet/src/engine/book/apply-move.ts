@@ -49,6 +49,7 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         // The block lands band by band: the first row's spans are its bands.
         const writes = [...source.bands.spans([top, left, top, right])];
         const growth = landing.bands.growth(writes.map(({ c0, c1 }): Span => [c0 + columnShift, c1 + columnShift]));
+        // An upper bound: a move with the book at a limit at both ends can be refused though it would fit.
         const formats = growth.runs + growth.bands * BAND_WEIGHT + source.bands.tiles(op.from);
         const over = book.over(slots, formats);
         if (over) throw new Refusal(over);
