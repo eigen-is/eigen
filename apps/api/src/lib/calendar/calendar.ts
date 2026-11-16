@@ -85,15 +85,15 @@ export class Calendar {
         this.meteredIngest = atHome(this.home.user.id);
     }
 
-    // Never locks: a quota check reaches it from inside the write lock.
-    public async size(): Promise<number> {
-        return this.eventsBytes;
-    }
-
     public async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }
+    }
+
+    // Never locks: a quota check reaches it from inside the write lock.
+    public async size(): Promise<number> {
+        return this.eventsBytes;
     }
 
     // --- Seams for the calendar's own modules ---
@@ -226,7 +226,7 @@ export class Calendar {
 
         // Inside the lock, so two creates of one id cannot both read the name as free.
         const created = await this.writeLock.run(async () => {
-            if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
+            if (this.calendarRow(id)) throw new ApiError(409, 'Calendar already exists');
 
             const row = this.db
                 .insert(schema.calendars)
@@ -249,14 +249,6 @@ export class Calendar {
         return created;
     }
 
-    private calendarIdTaken(id: string): boolean {
-        return !!this.db
-            .select({ id: schema.calendars.id })
-            .from(schema.calendars)
-            .where(eq(schema.calendars.id, id))
-            .get();
-    }
-
     public async updateCalendar(
         id: string,
         input: {
@@ -270,13 +262,11 @@ export class Calendar {
         const existing = this.calendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
 
-        const oldShares = existing.shares;
-
         const updated = dbCalendarToCalendarItem(
             this.db
                 .update(schema.calendars)
                 .set({
-                    name: input.name !== undefined ? input.name.trim() : existing.name,
+                    name: input.name?.trim() ?? existing.name,
                     color: input.color ?? existing.color,
                     visible: input.visible ?? existing.visible,
                     shares: input.shares !== undefined ? input.shares : existing.shares,
@@ -287,7 +277,7 @@ export class Calendar {
                 .get(),
         );
 
-        if (input.shares !== undefined) await propagateCalendarShare(this.home, updated, oldShares);
+        if (input.shares !== undefined) await propagateCalendarShare(this.home, updated, existing.shares);
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
         return updated;
@@ -514,7 +504,7 @@ export class Calendar {
     public async checkPermission(
         calendarId: string,
         userEmail: string,
-        teamIds: string[],
+        teamIds: readonly string[],
     ): Promise<CalendarShare['permission'] | null> {
         return shares.checkPermission(this, calendarId, userEmail, teamIds);
     }

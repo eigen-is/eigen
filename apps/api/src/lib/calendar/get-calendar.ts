@@ -106,8 +106,8 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     const { teamIds } = await getMemberships(user.id);
     const ownTeams = teamIds.map(teamOwnerId);
     const teamOwners = ownTeams.filter(homeFolderExists);
-    // Joining or leaving a team runs no share propagation, so every entry of an owner outside the user's teams is
-    // resolved again here, from the shares that owner still has for them.
+    // Joining or leaving a team runs no share propagation, and a push can be lost, so every entry of an owner outside
+    // the user's teams is resolved again here, from the shares that owner still has for them.
     const entries = await calendar.getSharedCalendars();
     const otherOwners = [...new Set(entries.map((entry) => entry.ownerUserId))].filter(
         (ownerId) => !ownTeams.includes(ownerId),
