@@ -7,9 +7,8 @@ import type { ChartLook, ChartSpecPartKey } from '../types/chart';
 import type { BorderSide, CellLink, ConditionalFormatConditionName, DataValidationRule } from './types';
 
 export type Scalar = number | string | boolean;
-// What an op says a cell holds. `v` with `e: 1` is an error literal, and `f` is the stored key with its `=`. `v`
-// stands beside `f` only for a formula this build cannot evaluate, such as a reference into another workbook, whose
-// value an import or a paste gives; beside any other it is ignored. `s` stands with neither.
+// What an op says a cell holds: `v` with `e: 1` is an error literal, `f` the stored key with its `=`, `s` with neither.
+// `v` beside `f` counts only for a formula this build cannot evaluate, whose value an import or a paste gives.
 export type CellContent = { v?: Scalar; e?: 1; f?: string; s?: Run[]; link?: CellLink; qp?: 1 };
 export type RunStyle = { bl?: 1; it?: 1; ff?: number | string; fs?: number; fc?: string; cl?: 1; un?: 1 };
 export type Run = RunStyle & { v: string };
@@ -27,9 +26,8 @@ export type CellAttrs = RunStyle & {
     bdd?: BorderSide;
 };
 export type CellAttrKey = keyof CellAttrs;
-// Every key of a look once, held whole by the mapped type, in the order a canonical look lists them. A writer that
-// clears a whole look names every key, since a word for "the rest" would mean more keys on a build that knows one more.
-const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
+// The keys of a look that style the runs of a rich cell too, held whole by the mapped type.
+const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
     bl: 'bl',
     it: 'it',
     ff: 'ff',
@@ -37,6 +35,12 @@ const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
     fc: 'fc',
     cl: 'cl',
     un: 'un',
+};
+export const RUN_KEYS: readonly (keyof RunStyle)[] = Object.values(RUN_KEY);
+// Every key of a look once, in the order a canonical look lists them. A writer that clears a whole look names every
+// key, since a word for "the rest" would mean more keys on a build that knows one more.
+const LOOK_KEY: { readonly [K in CellAttrKey]-?: K } = {
+    ...RUN_KEY,
     fa: 'fa',
     ht: 'ht',
     vt: 'vt',
@@ -171,7 +175,6 @@ export type LinesOp = {
 export type MoveOp = { kind: 'move'; sheet: string; from: Rect; toSheet: string; toRow: number; toColumn: number };
 export type SheetOp = { kind: 'sheet'; add: SheetContent } | { kind: 'sheet'; delete: string };
 export type Op = InputOp | FormatOp | RecordOp | LinesOp | MoveOp | SheetOp;
-export type OpKind = Op['kind'];
 // `now` is the author's clock as a serial of the engine's day line, days with the time of day as the fraction, and
 // `seed` a 32-bit integer the author drew: every reader recomputes the clock and random cells with them.
 export type Batch = { g: number; now: number; seed: number; ops: Op[] };
@@ -201,7 +204,7 @@ export function opReferences(op: Op): OpReferences {
 }
 
 // Whether an op renumbers places or sheets, so that nothing commutes with it.
-export function isStructural(op: Op): boolean {
+export function isStructural(op: Op): op is LinesOp | MoveOp | SheetOp {
     switch (op.kind) {
         case 'lines':
         case 'move':

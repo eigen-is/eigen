@@ -160,6 +160,29 @@ describe('engine/book/shift-ops — shiftOps', () => {
             }
         });
 
+        test('a listed cell inside a run goes where its line goes and still wins over the run', () => {
+            const op: InputOp = {
+                kind: 'input',
+                sheet: 'a',
+                runs: [[[2, 1, 6, 2], { v: 7 }]],
+                cells: [[4, 2, { v: 9 }]],
+            };
+            expect(shiftOps([op], lines(true, true, 3, 2))).toEqual([
+                {
+                    kind: 'input',
+                    sheet: 'a',
+                    runs: [
+                        [[2, 1, 2, 2], { v: 7 }],
+                        [[5, 1, 8, 2], { v: 7 }],
+                    ],
+                    cells: [[6, 2, { v: 9 }]],
+                },
+            ]);
+            for (const edit of [lines(true, true, 3, 2), lines(true, false, 3, 1), lines(false, true, 2, 1)]) {
+                expectSame(twoSheets(), [op], edit);
+            }
+        });
+
         test('a rectangle to the last line does not reach the lines a delete lets in', () => {
             const op = fill([[[LAST_ROW - 3, 1, LAST_ROW, 1], { v: 7 }]]);
             expect(shiftOps([op], lines(true, false, 5, 2))).toEqual([

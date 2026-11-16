@@ -11,9 +11,8 @@ import { isGeneration, isNow, isSeed, isSheetContent } from './ops-validate';
 
 const FORMAT = 'eigensheets/3';
 
-// `g`, `now` and `seed` are the book's generation and the clock of its last batch. `computed` says every value is
-// what a finished pass computed, so a formula with no value is a blank result; false says no formula's value is
-// trusted. A writer writes what the workbook's `content` gives, never the flag by hand.
+// `now` and `seed` are the clock of the last batch. `computed` says every value is what a finished pass computed, so
+// a formula with no value is a blank result; false trusts no formula's value.
 export type BookContent = { g: number; now: number; seed: number; computed: boolean; sheets: SheetContent[] };
 
 // A column's cells on consecutive rows from `row`: a value alone stands bare, a formula is `[index]`, `[index, value]`
@@ -56,9 +55,7 @@ export function encodeBook(book: BookContent): string {
     return JSON.stringify({ f: FORMAT, g, now, seed, computed, formulas, sheets });
 }
 
-// The book a text holds, or null when the text is not a whole `eigensheets/3` book: another format, no sheet or too
-// many, two sheets with one id or two records of one type with one id, a formula index past the list, or a sheet the
-// guard refuses. It never throws.
+// The book a text holds, or null when the text is not a whole, valid `eigensheets/3` book. It never throws.
 export function decodeBook(text: string): BookContent | null {
     let value: unknown;
     try {

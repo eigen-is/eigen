@@ -19,7 +19,7 @@ export function numberDisplay(value: Shown, fa = 'General'): string {
     try {
         return shown(fa, value);
     } catch {
-        // numfmt throws on a malformed format, which an xlsx numFmt can carry into ct.fa.
+        // numfmt throws on a malformed format, such as a number format read from a file.
         return shown('General', value);
     }
 }

@@ -13,7 +13,7 @@ import { isSheetContent } from '@workspace/lib/sheets/ops-validate';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Workbook } from '../../../engine/book/workbook';
 import type { Book } from './book-fixtures';
-import { canonical, FORMULAS, randomBook, randomOf, reversed } from './book-fixtures';
+import { canonical, engineTabs, FORMULAS, randomBook, randomOf, reversed, TAB_PLACE } from './book-fixtures';
 
 const LAST_ROW = GRID_ROWS - 1;
 
@@ -116,10 +116,11 @@ describe('engine/book/workbook — a load and the walk back', () => {
     });
 
     test('sheets walk back in tab order, ties by id, and the engine holds them in that order', () => {
-        const at = (id: string, order: string) => sheetOf(id, { fields: { name: id, order } });
+        const at = (id: string, order: string) =>
+            sheetOf(id, { fields: { name: id, order }, cells: [[0, 0, { f: TAB_PLACE }]] });
         const book = new Workbook(bookOf(at('z', 'a1'), at('b', 'a2'), at('a', 'a2'), at('m', 'a0')));
         expect(book.content().sheets.map((sheet) => sheet.id)).toEqual(['m', 'z', 'a', 'b']);
-        expect([0, 1, 2, 3].map((place) => book.engine.sheetAt(place))).toEqual(['m', 'z', 'a', 'b']);
+        expect(engineTabs(book)).toEqual(['m', 'z', 'a', 'b']);
         expect([...book.sheets.keys()]).toEqual(['m', 'z', 'a', 'b']);
     });
 
@@ -163,7 +164,7 @@ describe('engine/book/workbook — a load and the walk back', () => {
                 expect(JSON.stringify(new Workbook(reversed(raw)).content())).toBe(JSON.stringify(content));
 
                 seen.sheets += raw.sheets.length;
-                for (const [at, sheet] of expected.sheets.entries()) {
+                for (const sheet of expected.sheets) {
                     const said = raw.sheets.find(({ id }) => id === sheet.id) ?? sheet;
                     seen.cells += sheet.cells.length;
                     seen.rich += sheet.cells.filter(([, , cell]) => cell.s).length;
@@ -171,7 +172,6 @@ describe('engine/book/workbook — a load and the walk back', () => {
                     seen.joinedBands += sheet.bands.length < said.bands.length ? 1 : 0;
                     seen.joinedLines += sheet.rows.length < said.rows.length ? 1 : 0;
                     seen.records += Object.keys(sheet.records).length;
-                    expect(book.engine.sheetAt(at)).toBe(sheet.id);
                 }
             }
             expect(seen.sheets).toBeGreaterThan(600);

@@ -4,6 +4,7 @@ import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
+import { engineTabs, TAB_PLACE } from './book-fixtures';
 import { bytes } from './bytes';
 
 function sheetOf(id: string, fields: Partial<SheetFields> = {}, part: Partial<SheetContent> = {}): SheetContent {
@@ -44,25 +45,26 @@ function tabs(book: Workbook): string[] {
 
 describe('engine/book/apply-record — a sheet’s fields', () => {
     test('content() lists the sheets in tab order after an op changes a sheet’s order', () => {
+        const cells: SheetContent['cells'] = [[0, 0, { f: TAB_PLACE }]];
         const book = bookOf(
-            sheetOf('a', { order: 'a0' }),
-            sheetOf('b', { order: 'a1' }),
-            sheetOf('c', { order: 'a2' }),
+            sheetOf('a', { order: 'a0' }, { cells }),
+            sheetOf('b', { order: 'a1' }, { cells }),
+            sheetOf('c', { order: 'a2' }, { cells }),
         );
         expect(tabs(book)).toEqual(['a', 'b', 'c']);
         const inverse = applyOps(book, [fields('a', { order: 'a3' })]);
         expect(tabs(book)).toEqual(['b', 'c', 'a']);
-        expect([0, 1, 2].map((place) => book.engine.sheetAt(place))).toEqual(['b', 'c', 'a']);
+        expect(engineTabs(book)).toEqual(['b', 'c', 'a']);
         applyOps(book, [fields('c', { order: 'a0' })]);
         expect(tabs(book)).toEqual(['c', 'b', 'a']);
-        expect([0, 1, 2].map((place) => book.engine.sheetAt(place))).toEqual(['c', 'b', 'a']);
+        expect(engineTabs(book)).toEqual(['c', 'b', 'a']);
         // Two sheets of one order stand by id.
         applyOps(book, [fields('a', { order: 'a1' })]);
         expect(tabs(book)).toEqual(['c', 'a', 'b']);
-        expect([0, 1, 2].map((place) => book.engine.sheetAt(place))).toEqual(['c', 'a', 'b']);
+        expect(engineTabs(book)).toEqual(['c', 'a', 'b']);
         applyOps(book, [fields('c', { order: 'a1' })]);
         expect(tabs(book)).toEqual(['a', 'b', 'c']);
-        expect([0, 1, 2].map((place) => book.engine.sheetAt(place))).toEqual(['a', 'b', 'c']);
+        expect(engineTabs(book)).toEqual(['a', 'b', 'c']);
         expect(inverse).toEqual([fields('a', { order: 'a0' })]);
     });
 
@@ -126,14 +128,20 @@ describe('engine/book/apply-record — a sheet’s fields', () => {
 
     test('a rename that would make a formula too long to store is refused before anything is written', () => {
         const id = 'b'.repeat(60);
-        const cells: SheetContent['cells'] = [[0, 0, { f: `="${'a'.repeat(131_010)}"&'N'!R1C1` }]];
-        const book = bookOf(sheetOf('a', {}, { cells }), sheetOf(id, { name: 'Second', order: 'a1' }));
+        const cells: SheetContent['cells'] = [
+            [0, 0, { f: TAB_PLACE }],
+            [1, 0, { f: `="${'a'.repeat(131_010)}"&'N'!R1C1` }],
+        ];
+        const book = bookOf(
+            sheetOf('a', {}, { cells }),
+            sheetOf(id, { name: 'Second', order: 'a1' }, { cells: [[0, 0, { f: TAB_PLACE }]] }),
+        );
         const before = bytes(book);
         expect(refusalOf(() => applyOps(book, [fields(id, { name: 'N', order: 'Zz', color: '#ff0000' })]))).toBe(
             'key-too-long',
         );
         expect(bytes(book)).toBe(before);
-        expect(book.engine.sheetAt(0)).toBe('a');
+        expect(engineTabs(book)).toEqual(['a', id]);
     });
 
     test('an op on a sheet the book does not hold is skipped alone', () => {

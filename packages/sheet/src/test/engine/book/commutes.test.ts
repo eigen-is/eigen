@@ -8,10 +8,26 @@ import {
     MAX_STYLE_RUNS,
     MAX_VALUE_SLOTS,
 } from '@workspace/lib/sheets/limits';
-import type { Batch, FormatOp, InputOp, Op, RecordOp, Rect, Run, SheetContent } from '@workspace/lib/sheets/ops';
+import type {
+    Batch,
+    CellContent,
+    FormatOp,
+    InputOp,
+    Op,
+    Placed,
+    RecordOp,
+    Rect,
+    Run,
+    SheetContent,
+} from '@workspace/lib/sheets/ops';
+import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { covers, meets } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
+import { names, RUN_KEYS } from '../../../engine/book/apply-format';
+import { entryAt } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { commutes } from '../../../engine/book/commutes';
+import { LINE_KEYS } from '../../../engine/book/line-runs';
 import { Workbook } from '../../../engine/book/workbook';
 import {
     batchOf,
@@ -19,6 +35,7 @@ import {
     randomFormatOp,
     randomInputOp,
     randomLineReaderOp,
+    randomLinesOp,
     randomRecordOp,
 } from './batches';
 import type { Book, Random } from './book-fixtures';
@@ -137,6 +154,98 @@ const fields = (sheet: string, set: Extract<RecordOp, { type: 'sheet' }>['set'])
     set,
 });
 
+// The clash test as it was first built, op against op: the reference the one sweep per call must answer as.
+function clashes(book: Workbook, late: readonly Op[], held: readonly Op[]): boolean {
+    if (late.some(isStructural)) return true;
+    return late.some((op) => held.some((other) => clash(book, op, other)));
+}
+
+function clash(book: Workbook, a: Op, b: Op): boolean {
+    const renames = (op: RecordOp) => op.type === 'sheet' && op.set.name !== undefined;
+    if (a.kind === 'input') {
+        if (b.kind === 'input') {
+            return (
+                a.sheet === b.sheet &&
+                ((a.cells ?? []).some(([row, column]) => entryAt(b, row, column) !== undefined) ||
+                    (b.cells ?? []).some(([row, column]) => a.runs?.some(([rect]) => covers(rect, row, column))) ||
+                    (a.runs ?? []).some(([rect]) => b.runs?.some(([other]) => meets(rect, other))))
+            );
+        }
+        if (b.kind === 'format') return inputMeetsFormat(book, a, b);
+        return b.kind !== 'record' || renames(b);
+    }
+    if (a.kind === 'format') {
+        if (b.kind === 'input') return inputMeetsFormat(book, b, a);
+        if (b.kind === 'format') return formatsMeet(book, a, b);
+        return b.kind !== 'record';
+    }
+    if (a.kind === 'record') {
+        if (b.kind === 'input') return renames(a);
+        if (b.kind !== 'record') return b.kind !== 'format';
+        if (a.type === 'sheet' && b.type === 'sheet') {
+            if (renames(a) && renames(b)) return true;
+            if ((a.set.hide === 1 && b.set.hide !== undefined) || (b.set.hide === 1 && a.set.hide !== undefined)) {
+                return true;
+            }
+        }
+        if (a.type === b.type && a.id === b.id) return true;
+        if (a.sheet !== b.sheet) return false;
+        if (a.type === 'merge' && b.type === 'merge') return true;
+        const filters = (op: RecordOp) => op.type === 'filter' || op.type === 'filterColumn';
+        return filters(a) && filters(b) && (a.type === 'filter' || b.type === 'filter');
+    }
+    return true;
+}
+
+function inputMeetsFormat(book: Workbook, input: InputOp, format: FormatOp): boolean {
+    const extras = book.sheets.get(input.sheet)?.extras;
+    if (input.sheet !== format.sheet || !('ranges' in format) || !extras) return false;
+    const linked = names(format, 'link');
+    if (!linked && !RUN_KEYS.some((key) => names(format, key))) return false;
+    return format.ranges.some(
+        (range) =>
+            (input.cells ?? []).some(
+                ([row, column, content]) =>
+                    covers(range, row, column) && (linked || content?.s || extras.at(row, column)?.s),
+            ) ||
+            (input.runs ?? []).some(
+                ([rect, content]) =>
+                    meets(range, rect) && (linked || content?.s || richIn(book, input.sheet, range, rect)),
+            ),
+    );
+}
+
+function formatsMeet(book: Workbook, a: FormatOp, b: FormatOp): boolean {
+    if (a.sheet !== b.sheet) return false;
+    if ('lines' in a || 'lines' in b) {
+        if (!('lines' in a && 'lines' in b) || a.lines !== b.lines) return false;
+        const shared = LINE_KEYS.some((key) => names(a, key) && names(b, key));
+        return shared && a.spans.some((x) => b.spans.some((y) => x[0] <= y[1] && y[0] <= x[1]));
+    }
+    if (!book.sheets.has(a.sheet)) return false;
+    const shared = [...LOOK_KEYS, 'link' as const].some((key) => names(a, key) && names(b, key));
+    const restyles = (op: Extract<FormatOp, { ranges: unknown }>) => RUN_KEYS.some((key) => names(op, key));
+    const rich = restyles(a) ? restyles(b) || names(b, 'link') : restyles(b) && names(a, 'link');
+    if (!shared && !rich) return false;
+    return a.ranges.some((x) => b.ranges.some((y) => meets(x, y) && (shared || richIn(book, a.sheet, x, y))));
+}
+
+function richIn(book: Workbook, sheet: string, a: Rect, b: Rect): boolean {
+    const both: Rect = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+    for (const [, , extra] of book.sheets.get(sheet)?.extras.cells(both) ?? []) if (extra.s) return true;
+    return false;
+}
+
+// A list that counts each read of its items, so a test can say how often an op or a rectangle is looked at.
+function counted<T extends object>(items: T, reads: { n: number }): T {
+    return new Proxy(items, {
+        get(target, key, receiver) {
+            if (typeof key === 'string' && /^\d+$/.test(key)) reads.n += 1;
+            return Reflect.get(target, key, receiver);
+        },
+    });
+}
+
 describe('engine/book/commutes — commutes', () => {
     describe('the pairs that do not commute, each beside one that does', () => {
         // [name, late, applied, a late op beside it that does commute]
@@ -153,6 +262,12 @@ describe('engine/book/commutes — commutes', () => {
                 { kind: 'input', sheet: 'a', runs: [[[1, 1, 4, 4], { v: 3 }]] },
                 { kind: 'input', sheet: 'a', runs: [[[4, 4, 6, 6], { v: 4 }]] },
                 { kind: 'input', sheet: 'a', runs: [[[1, 1, 3, 4], { v: 3 }]] },
+            ],
+            [
+                'an input on a cell another input lists inside its own run',
+                input([[2, 2, { v: 1 }]]),
+                { kind: 'input', sheet: 'a', runs: [[[1, 1, 4, 4], { v: 3 }]], cells: [[2, 2, { v: 9 }]] },
+                input([[5, 2, { v: 1 }]]),
             ],
             [
                 'rich text typed into a cell a format restyles',
@@ -580,5 +695,73 @@ describe('engine/book/commutes — commutes', () => {
             expect(seen.slots).toBeGreaterThan(200);
             expect(seen.formats).toBeGreaterThan(180);
         }, 60_000);
+
+        test('it answers as op against op does, over random books, rings and late batches', () => {
+            const drawAny = (random: Random, model: Model): Op =>
+                random() < 0.05 ? randomLinesOp(random, model) : draw(random, model);
+            const seen = { yes: 0, no: 0, cases: 0 };
+            for (let seed = 1; seed <= 2200; seed += 1) {
+                const random = randomOf(seed * 15_485_863);
+                const content = randomBookContent(random);
+                let model = modelOf(content);
+                const tab = new Workbook(structuredClone(content));
+                const applied: Op[] = [];
+                const inverses: Op[][] = [];
+                for (let n = 1 + below(random, 3); n > 0; n -= 1) {
+                    const batch = batchOf(random, model, drawAny, 3);
+                    const inverse = land(tab, batch);
+                    const after = modelAfter(model, batch);
+                    if (typeof inverse === 'string' || typeof after === 'string') continue;
+                    model = after;
+                    applied.push(...batch.ops);
+                    inverses.push(inverse);
+                }
+                const ring = inverses.toReversed().flat();
+                for (let n = 0; n < 10; n += 1) {
+                    const late = batchOf(random, model, drawAny, 3).ops;
+                    const clear = !clashes(tab, late, [...applied, ...ring]);
+                    // The bound alone: with no late op, nothing clashes, and the bound counts the late ops beside the ring's.
+                    const fits = commutes(tab, [], [], [...late, ...ring]);
+                    expect(commutes(tab, late, applied, ring), `seed ${seed} late ${n}`).toBe(clear && fits);
+                    seen[clear && fits ? 'yes' : 'no'] += 1;
+                    seen.cases += 1;
+                }
+            }
+            expect(seen.cases).toBeGreaterThan(20_000);
+            expect(seen.yes).toBeGreaterThan(6000);
+            expect(seen.no).toBeGreaterThan(6000);
+        }, 120_000);
+
+        test('it reads each op a few times, however many the late batch and the ring hold', () => {
+            const book = new Workbook(twoSheets());
+            const reads = { n: 0 };
+            const ring: Op[] = [];
+            for (let at = 0; at < 3000; at += 1) {
+                const [row, column] = [at % 1000, 20 + Math.floor(at / 1000)];
+                const cell: Rect = counted([row, column, row, column], reads);
+                ring.push(
+                    at % 3 === 0
+                        ? input(counted<Placed<CellContent>[]>([[row, column, { v: at }]], reads))
+                        : format(counted([cell], reads), at % 3 === 1 ? { bl: 1 } : { bg: '#ff0000' }),
+                );
+            }
+            const cells = Array.from({ length: 3000 }, (_, at): [number, number, { v: number }] => [
+                at % 1000,
+                Math.floor(at / 1000),
+                { v: at },
+            ]);
+            const paste = input(counted(cells, reads));
+            // A bold on each pasted cell, as many rectangles as the ring's bold ones: a sweep sets them against each other.
+            const bold = format(
+                counted(
+                    cells.map(([row, column]): Rect => counted([row, column, row, column], reads)),
+                    reads,
+                ),
+                { bl: 1 },
+            );
+            expect(commutes(book, [paste, bold], ring, [])).toBe(true);
+            // Pair by pair, op by op or rectangle by rectangle, this is millions of reads.
+            expect(reads.n).toBeLessThan(20 * (3000 + 3000));
+        });
     });
 });

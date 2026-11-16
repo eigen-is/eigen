@@ -1,6 +1,6 @@
 // Where the fields of a sheet's records go when rows or columns are inserted or deleted: a merge moves as its lines
 // do, a filter that reaches the last line keeps reaching it, a rule's formula follows the lines it names. The record
-// store plans a line edit with it, and the undo stack shifts the record ops it keeps with it, so a record and an op
+// store plans a line edit with it, and `shiftOps` shifts an undo entry's record ops with it, so a record and an op
 // that names it land in one place. A rule is given the fields an op sets, which may be all of a record or a few.
 
 import type { Edit, FormulaNode, LineEdit } from '@workspace/formula/text';
@@ -38,11 +38,12 @@ export type Reach = 'closed' | 'open' | 'whole';
 export class LineMap {
     public readonly rows: boolean;
     // The edit that undoes this one, as a formula's transform takes it.
-    public readonly back: LineEdit;
-    // Whether the inverse edit gives back every line, span and formula mapped since the caller last set it.
-    public kept = true;
-    private readonly axis: Edit;
+    private readonly back: LineEdit;
+    // The edit as an index on its axis maps through it.
+    public readonly axis: Edit;
     private readonly inverse: Edit;
+    // Whether the inverse edit gives back every line, span and formula mapped in the current `through`.
+    private kept = true;
 
     public constructor(public readonly edit: LinesOp) {
         const { rows, insert, index, count } = edit;
@@ -50,6 +51,14 @@ export class LineMap {
         this.back = { ...edit, insert: !insert };
         this.axis = { insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS };
         this.inverse = { ...this.axis, insert: !insert };
+    }
+
+    // What a rule makes of a record, and whether the inverse edit gives back all it mapped: a record that only
+    // shifted needs no op to put it back.
+    public through<R>(rule: () => R): readonly [after: R, kept: boolean] {
+        this.kept = true;
+        const after = rule();
+        return [after, this.kept];
     }
 
     // Whether the edit takes a line away.
@@ -91,6 +100,22 @@ export class LineMap {
         const after = frozenAfter(this.axis, count);
         if (frozenAfter(this.inverse, after) !== count) this.kept = false;
         return after;
+    }
+
+    // A rule's formula through the edit, read at `host`; `rule` is the record before the edit, which the inverse edit
+    // read at the formula's new host must give back.
+    public formula(
+        rule: ConditionalFormatRecord,
+        ruled: ConditionalFormatRecord,
+        sheet: string,
+        host: number,
+    ): ConditionalFormatRecord | 'key-too-long' {
+        const formula = withFormula(ruled, (tree) => transformLines(tree, this.edit, sheet, host).tree);
+        if (formula === 'key-too-long') return formula;
+        const backHost = lineSpan(formula.ranges[0], this.rows)[0];
+        const back = withFormula(formula, (tree) => transformLines(tree, this.back, sheet, backHost).tree);
+        if (back === 'key-too-long' || ruleFormula(back) !== ruleFormula(rule)) this.kept = false;
+        return formula;
     }
 }
 
@@ -137,8 +162,8 @@ export function filterColumnAfter<R extends FieldsOf<FilterColumnRecord>>(fields
         const after = map.span(start, end, 'open');
         return after ? [after] : [];
     });
-    const same = spans.length === rows.length && spans.every((s, i) => s[0] === rows[i][0] && s[1] === rows[i][1]);
-    return same ? fields : { ...fields, rows: spans };
+    const unmoved = spans.length === rows.length && spans.every((s, i) => s[0] === rows[i][0] && s[1] === rows[i][1]);
+    return unmoved ? fields : { ...fields, rows: spans };
 }
 
 export function commentAfter<R extends FieldsOf<CommentRecord>>(fields: R, map: LineMap): R | undefined {
@@ -173,12 +198,7 @@ export function ruleAfter(
     const first = here ? rule.ranges.findIndex((range) => map.rect(range, 'whole')) : 0;
     const [start] = lineSpan(rule.ranges[first], rows);
     const host = here && map.gone(start) ? edit.index + edit.count : start;
-    const formula = withFormula(ruled, (tree) => transformLines(tree, edit, sheet, host).tree);
-    if (formula === 'key-too-long') return formula;
-    const backHost = lineSpan(formula.ranges[0], rows)[0];
-    const back = withFormula(formula, (tree) => transformLines(tree, map.back, sheet, backHost).tree);
-    if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) map.kept = false;
-    return formula;
+    return map.formula(rule, ruled, sheet, host);
 }
 
 // A chart on any sheet, whose refs follow the lines they name on the edited sheet.
@@ -212,14 +232,14 @@ export function withFormula(
     rule: ConditionalFormatRecord,
     transform: (tree: FormulaNode) => FormulaNode,
 ): ConditionalFormatRecord | 'key-too-long' {
-    const text = formulaOf(rule);
+    const text = ruleFormula(rule);
     if (text === undefined || rule.type !== 'default') return rule;
     const key = keyThrough(text, transform);
     if (key === null) return 'key-too-long';
     return key === text ? rule : { ...rule, conditionValue: rule.conditionValue.with(0, key) };
 }
 
-export function formulaOf(rule: ConditionalFormatRecord): string | undefined {
+export function ruleFormula(rule: ConditionalFormatRecord): string | undefined {
     if (rule.type !== 'default' || rule.conditionName !== 'formula') return undefined;
     const [text] = rule.conditionValue;
     return typeof text === 'string' ? text : undefined;

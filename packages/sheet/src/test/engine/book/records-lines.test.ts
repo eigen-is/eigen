@@ -8,6 +8,7 @@ import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '@workspace/lib/charts';
 import type { DataValidationRule } from '@workspace/lib/sheets';
 import type { LinesOp, Rect, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
+import { LineMap, mergeAfter } from '../../../engine/book/record-lines';
 import {
     applyRecordOps,
     chartData,
@@ -585,6 +586,13 @@ describe('what an insert would push off the grid', () => {
             expect(sheetOf(records).wouldPush(rows ? rowsAt(true, 0, count) : columnsAt(true, 0, count))).toBe(blocks);
         });
     }
+});
+
+test('each record mapped through an edit says alone whether the inverse edit gives it back', () => {
+    const map = new LineMap(rowsAt(false, 2, 2));
+    // The delete takes the merge's first row, so the insert that undoes it gives back a merge one row lower.
+    expect(map.through(() => mergeAfter({ rect: [3, 0, 6, 1] }, map))).toEqual([{ rect: [2, 0, 4, 1] }, false]);
+    expect(map.through(() => mergeAfter({ rect: [10, 0, 11, 1] }, map))).toEqual([{ rect: [8, 0, 9, 1] }, true]);
 });
 
 test('an edit of lines on another sheet moves no range, place or freeze', () => {

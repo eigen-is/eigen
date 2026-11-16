@@ -10,8 +10,17 @@ const NO_CAP = Number.POSITIVE_INFINITY;
 // formula typed with the name of a sheet that is not there.
 function workbook(): Engine {
     const engine = engineOf({
-        s1: { A1: 5, A2: '=Later!A1+1', A3: '=$A$1*2', B1: '=SUM(A:A)', C1: '=A3+1', C4: '=C1+A1', D2: 'text' },
-        s2: { A1: 9, B2: '=Sheet1!A1', B3: '=B2+B3' },
+        s1: {
+            A1: 5,
+            A2: '=Later!A1+1',
+            A3: '=$A$1*2',
+            B1: '=SUM(A:A)',
+            C1: '=A3+1',
+            C4: '=C1+A1',
+            D2: 'text',
+            E1: '=SHEET()',
+        },
+        s2: { A1: 9, B2: '=Sheet1!A1', B3: '=B2+B3', E1: '=SHEET()' },
     });
     engine.recalc(NO_CAP);
     engine.setValue('s1', 0, 0, 6);
@@ -25,9 +34,10 @@ function show(value: unknown): string {
     return `${typeof value}:${String(value)}`;
 }
 
-// Everything a host can read of the workbook: the tabs, and per cell its text, its value and whether it waits.
+// Everything a host can read of the workbook: per cell its text, its value and whether it waits. A cell of each sheet
+// reads its place among the tabs once computed.
 function read(engine: Engine): string[] {
-    const cells = [engine.sheetAt(0), engine.sheetAt(1)];
+    const cells: string[] = [];
     for (const sheet of ['s1', 's2']) {
         for (let row = 0; row < 8; row += 1) {
             for (let column = 0; column < 8; column += 1) {
@@ -257,10 +267,10 @@ describe('a write or an edit the engine refuses changes nothing', () => {
     });
 });
 
-// Everything the engine holds: the tabs, every cell with its text, its value and whether it waits, and how far
-// each column reaches.
+// Everything the engine holds: every cell with its text, its value and whether it waits, and how far each column
+// reaches.
 function held(engine: Engine, sheets: readonly string[]): string[] {
-    const all = sheets.map((_, place) => engine.sheetAt(place));
+    const all: string[] = [];
     for (const sheet of sheets) {
         engine.cells(sheet, (row, column, value, formula) => {
             const waits = engine.isPending(sheet, row, column);

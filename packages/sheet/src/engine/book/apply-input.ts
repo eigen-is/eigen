@@ -10,6 +10,7 @@ import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib
 import { covers } from '@workspace/lib/sheets/rect';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf } from './extras';
+import { RectIndex } from './rect-index';
 import type { Workbook } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
@@ -28,11 +29,16 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
     const { sheet } = op;
     const { extras } = part;
     const gathered: Gathered = { runs: [], cells: [] };
+    const read = new RectIndex();
     for (const [rect] of op.runs ?? []) {
         readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
+        read.set('', undefined, [rect]);
     }
-    for (const [row, column] of op.cells ?? [])
-        gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+    // A listed cell inside a run was read with the run.
+    for (const [row, column] of op.cells ?? []) {
+        if (read.meeting([row, column, row, column]).length === 0)
+            gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+    }
 
     for (const [rect, content] of op.runs ?? []) {
         const [top, left, bottom, right] = rect;
@@ -108,6 +114,20 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
         if (gathered.runs.length + gathered.cells.length > 0) ops.push(inputOf(sheet, gathered));
     }
     return ops;
+}
+
+// What disjoint rectangles of a sheet hold, as the one op that writes it back onto them once they are empty: their
+// cells that hold something, read as the inverse of an input reads its runs. None when they hold nothing.
+export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rect[]): InputOp | undefined {
+    const part = book.sheets.get(sheet);
+    if (!part) return undefined;
+    const gathered: Gathered = { runs: [], cells: [] };
+    for (const rect of rects) {
+        readBlock(book, sheet, part.extras, rect, (group) => {
+            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
+        });
+    }
+    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
 }
 
 // A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
@@ -241,18 +261,4 @@ function literalOf({ v, e, s }: CellContent): Literal | null {
     if (s) return textOf(s);
     if (v === undefined) return null;
     return e && typeof v === 'string' ? errorOf(v) : v;
-}
-
-// What disjoint rectangles of a sheet hold, as the one op that writes it back onto them once they are empty: their
-// cells that hold something, read as the inverse of an input reads its runs. None when they hold nothing.
-export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rect[]): InputOp | undefined {
-    const part = book.sheets.get(sheet);
-    if (!part) return undefined;
-    const gathered: Gathered = { runs: [], cells: [] };
-    for (const rect of rects) {
-        readBlock(book, sheet, part.extras, rect, (group) => {
-            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
-        });
-    }
-    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
 }

@@ -11,7 +11,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { CellSink, LineEdit, SheetSource } from '../src/index';
 import { Engine } from '../src/index';
-import { sheetFinder, storedText } from '../src/text';
+import { GRID_COLUMNS, GRID_ROWS, sheetFinder, storedText } from '../src/text';
 import type { Book, BookCell } from './xlsx';
 import { readBook, sourcesOf } from './xlsx';
 
@@ -568,7 +568,7 @@ const ROWS: Row[] = [
         name: 'two far cells SUMPRODUCT(T!A:P,T!A:P)',
         reps: 3,
         run: far('=SUMPRODUCT(T!A:P,T!A:P)', (sink) => {
-            sink(1_048_575, 0, 3, null);
+            sink(GRID_ROWS - 1, 0, 3, null);
             sink(0, 702, 4, null);
         }),
     },
@@ -580,8 +580,8 @@ const ROWS: Row[] = [
             sink(2, 2, 1, null);
             sink(3, 2, 2, null);
             sink(2, 3, 'x', null);
-            sink(1_048_575, 2, 0.3, null);
-            sink(2, 16_383, 0.7, null);
+            sink(GRID_ROWS - 1, 2, 0.3, null);
+            sink(2, GRID_COLUMNS - 1, 0.7, null);
         }),
     },
     {

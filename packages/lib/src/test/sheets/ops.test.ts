@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Op, OpKind, Records, RecordType, SheetContent } from '../../sheets/ops';
-import { isStructural, LOOK_KEYS, opReferences } from '../../sheets/ops';
+import type { Op, Records, RecordType, SheetContent } from '../../sheets/ops';
+import { isStructural, LOOK_KEYS, opReferences, RUN_KEYS } from '../../sheets/ops';
 import { Refusal } from '../../sheets/refusal';
 
 const NONE = { media: [], comments: [] };
@@ -53,7 +53,7 @@ const ADDED: SheetContent = {
 };
 
 // One op of each kind but `record`, which has its own table below.
-const OF_KIND: { [K in Exclude<OpKind, 'record'>]: Op } = {
+const OF_KIND: { [K in Exclude<Op['kind'], 'record'>]: Op } = {
     input: { kind: 'input', sheet: 's1', cells: [[0, 0, { v: 'photo.png' }]] },
     format: { kind: 'format', sheet: 's1', ranges: [[0, 0, 0, 0]], set: { bl: 1 } },
     lines: { kind: 'lines', sheet: 's1', rows: true, insert: true, index: 5, count: 2, like: 4 },
@@ -64,6 +64,10 @@ const OF_KIND: { [K in Exclude<OpKind, 'record'>]: Op } = {
 describe('opReferences', () => {
     test.each([
         ['an input', OF_KIND.input],
+        [
+            'an input whose listed cell lies in its run',
+            { kind: 'input', sheet: 's1', runs: [[[0, 0, 1, 1], { v: 'photo.png' }]], cells: [[0, 0, { v: 'c1' }]] },
+        ],
         ['a cell format', OF_KIND.format],
         ['a line format', { kind: 'format', sheet: 's1', lines: 'rows', spans: [[0, 4]], set: { hidden: 1 } }],
         ['a lines edit', OF_KIND.lines],
@@ -189,5 +193,7 @@ describe('the shapes an op may take', () => {
     test('LOOK_KEYS lists every look key in the order of a canonical look, which every reader keeps', () => {
         const order = 'bl it ff fs fc cl un fa ht vt tb bg rt bdt bdb bdl bdr bdd';
         expect(LOOK_KEYS.join(' ')).toBe(order);
+        // The run-style keys lead it, as a rich cell's runs carry them.
+        expect(RUN_KEYS.join(' ')).toBe('bl it ff fs fc cl un');
     });
 });

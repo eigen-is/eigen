@@ -18,10 +18,27 @@ import type {
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
+import type { Workbook } from '../../../engine/book/workbook';
 import { chartOf, formulaRule, ref } from './records-fixtures';
 
 export type Random = () => number;
 export type Book = BookContent;
+
+// A cell that reads its sheet's place among the tabs: through it a test sees the tab order the engine holds.
+export const TAB_PLACE = '=SHEET()';
+
+// The sheets in the engine's tab order, each placed by its `TAB_PLACE` cell once computed.
+export function engineTabs(book: Workbook): string[] {
+    while (book.engine.recalc(Number.MAX_SAFE_INTEGER).stopped);
+    const place = (sheet: string) => {
+        let at = 0;
+        book.engine.cells(sheet, (_row, _column, value, formula) => {
+            if (formula === TAB_PLACE) at = Number(value);
+        });
+        return at;
+    };
+    return [...book.sheets.keys()].toSorted((a, b) => place(a) - place(b));
+}
 
 export function randomOf(seed: number): Random {
     let state = seed;

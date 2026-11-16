@@ -9,11 +9,11 @@ import type { Column } from '../store/column';
 import type { Reference } from '../values/value';
 
 export class Records {
-    // Per cell by its column and row, a box for each sheet its formula resolved into, five numbers each: sheet,
-    // top, left, bottom, right.
-    public readonly held = new Map<Column, Map<number, number[]>>();
     // Whether a record changed since the index listed them.
     public changed = false;
+    // Per cell by its column and row, a box for each sheet its formula resolved into, five numbers each: sheet,
+    // top, left, bottom, right.
+    private readonly boxes = new Map<Column, Map<number, number[]>>();
     // Whether formulas that resolve a reference may be neither flagged nor recorded.
     private unrecorded: boolean;
     // Per cell in progress, the boxes its formula has resolved since it last started, in the same five numbers.
@@ -24,10 +24,14 @@ export class Records {
         this.unrecorded = computed;
     }
 
+    public get held(): ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>> {
+        return this.boxes;
+    }
+
     // An edit moves cells and areas, so no record holds.
     public drop(): void {
-        if (this.held.size > 0) this.changed = true;
-        this.held.clear();
+        if (this.boxes.size > 0) this.changed = true;
+        this.boxes.clear();
         this.unrecorded = true;
     }
 
@@ -41,7 +45,7 @@ export class Records {
     // Forgets the record of every cell that holds no formula that resolves a reference any more, by the facts of
     // each shape, or one this build cannot evaluate.
     public prune(facts: readonly number[]): void {
-        for (const [column, rows] of this.held) {
+        for (const [column, rows] of this.boxes) {
             for (const row of rows.keys()) {
                 const shape = row < column.length ? column.shape[row] : 0;
                 if ((facts[shape] & (Fact.Resolves | Fact.Kept)) === Fact.Resolves) continue;
@@ -77,13 +81,13 @@ export class Records {
     // The formula of a cell in progress ended: its boxes are the record of the cell, unless they are already.
     public end(at: number, column: Column, row: number): void {
         const run = this.runs[at];
-        let rows = this.held.get(column);
+        let rows = this.boxes.get(column);
         const record = rows?.get(row);
         let same = (record?.length ?? 0) === run.length;
         for (let i = 0; same && record !== undefined && i < run.length; i += 1) same = record[i] === run[i];
         if (same) return;
         this.changed = true;
-        if (rows === undefined) this.held.set(column, (rows = new Map()));
+        if (rows === undefined) this.boxes.set(column, (rows = new Map()));
         if (run.length === 0) rows.delete(row);
         else rows.set(row, run.slice());
     }

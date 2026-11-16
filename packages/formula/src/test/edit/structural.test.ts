@@ -10,7 +10,6 @@ import {
     printA1,
     printStored,
     rangeToA1,
-    remapSheets,
     sheetFinder,
     toA1,
     transformLines,
@@ -45,6 +44,7 @@ const NOT_RUN: Record<string, string> = {
     cellShift: 'insert or delete cells with a shift: not an edit this unit builds',
     lineMove: 'a move of whole rows or columns between others: not an edit this unit builds',
     described: 'the research describes it without a formula to run',
+    copySheet: 'a copy of a sheet: the engine copies none, and a writer that copies one mints its ids',
 };
 
 type Sheet = { id: string; name: string };
@@ -184,20 +184,6 @@ function apply(subject: Subject, step: Step, read: string | null): [Subject, boo
             return [{ ...subject, sheets: sheets.filter((s) => s.name !== step.name) }, true];
         case 'addSheet':
             return [{ ...subject, sheets: [...sheets, { id: `new-${step.name}`, name: step.name }] }, false];
-        // The cells of the copy keep their stored text, and what named the source sheet by id now names the copy.
-        case 'copySheet': {
-            const source = sheetId(sheets, step.name);
-            if (!tree || sheet !== source) throw new Error('a copy of a sheet the formula is not on');
-            return [
-                {
-                    ...subject,
-                    sheets: [...sheets, { id: 'copy', name: step.newName }],
-                    tree: remapSheets(tree, new Map([[source, 'copy']])),
-                    sheet: 'copy',
-                },
-                false,
-            ];
-        }
         case 'nothing':
             return [subject, false];
         default:
@@ -233,17 +219,16 @@ function shown(subject: Subject, holder: Holder | undefined): string {
 
 function notRun({ steps }: StructuralCase): string | undefined {
     if (steps.length === 0) return NOT_RUN.described;
-    return steps.some((step) => step.kind === 'cellShift')
-        ? NOT_RUN.cellShift
-        : steps.some((step) => step.kind === 'lineMove')
-          ? NOT_RUN.lineMove
-          : undefined;
+    const kinds = new Set(steps.map((step) => step.kind));
+    if (kinds.has('cellShift')) return NOT_RUN.cellShift;
+    if (kinds.has('lineMove')) return NOT_RUN.lineMove;
+    return kinds.has('copySheet') ? NOT_RUN.copySheet : undefined;
 }
 
-test('the fixture holds the 219 cases, and 26 of them are not run', () => {
+test('the fixture holds the 219 cases, and 27 of them are not run', () => {
     expect(CASES.length).toBe(219);
     const skipped = CASES.filter((one) => notRun(one) !== undefined).map((one) => one.id);
-    expect(skipped.length).toBe(26);
+    expect(skipped.length).toBe(27);
     expect(Object.keys(OURS).filter((id) => skipped.includes(id))).toEqual([]);
 });
 

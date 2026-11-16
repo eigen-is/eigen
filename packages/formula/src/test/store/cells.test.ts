@@ -85,16 +85,9 @@ describe('load', () => {
         expect(read()).toEqual([null, null, false, -1, []]);
     });
 
-    test.each([
-        ['past the last sheet', 2],
-        ['before the first', -1],
-        ['a fraction', 0.5],
-        ['not a number', Number.NaN],
-    ])('a place among the tabs that is %s holds no sheet, as an id no sheet has', (_, place) => {
+    test('a read of a sheet no sheet has throws', () => {
         const engine = new Engine([source('s1', []), source('s2', [])], 0, 0, false);
-        expect(() => engine.sheetAt(place)).toThrow(`No sheet ${place}`);
         expect(() => engine.valueOf('s3', 0, 0)).toThrow('No sheet s3');
-        expect([engine.sheetAt(0), engine.sheetAt(1)]).toEqual(['s1', 's2']);
     });
 
     test('an error only a file knows is one object, from whichever sheet it came', () => {

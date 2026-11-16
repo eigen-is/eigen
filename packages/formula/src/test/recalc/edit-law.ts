@@ -276,9 +276,6 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
                 const expected = show(cell === undefined ? null : cell.value);
                 if (shown !== expected) fail(`${sheet.id} ${row},${column} holds ${shown}, the model ${expected}`);
             });
-            model.forEach((sheet, place) => {
-                if (engine.sheetAt(place) !== sheet.id) fail(`place ${place} is ${engine.sheetAt(place)}`);
-            });
         };
         // Right after an edit: a formula that is not flagged already holds what a fresh load computes.
         const unflagged = () => {
@@ -319,7 +316,8 @@ export function runLaw(seed: number, count: number, steps: number, edge: number,
             const result = engine.recalc(cap);
             const listed = new Set<string>();
             for (let at = 0; at < result.changed.length; at += 4) {
-                const id = engine.sheetAt(result.changed[at]);
+                // A pass names a sheet by its place among the tabs, which the host gave it.
+                const { id } = model[result.changed[at]];
                 for (let row = result.changed[at + 2]; row <= result.changed[at + 3]; row += 1) {
                     listed.add(`${id}!${row},${result.changed[at + 1]}`);
                 }

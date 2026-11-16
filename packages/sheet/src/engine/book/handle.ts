@@ -1,7 +1,7 @@
 // The one way to read a workbook: what a cell holds and shows, the look it wears, its lines, merges and records,
-// sheet by sheet in tab order. A reader such as the painter, the formula bar, the export or the server takes a book
-// from `cellsOf` and reads through it, never through the workbook's parts. A read hands out what the parts hold,
-// such as the interned look or a stored record, and builds only what it returns, so a screen of reads stays cheap.
+// sheet by sheet in tab order. A reader takes a book from `cellsOf` and reads through it, never through the workbook's
+// parts. A read hands out what the parts hold, such as the interned look or a stored record, and builds only what it
+// returns, so a screen of reads stays cheap.
 
 import type { Literal } from '@workspace/formula';
 import { numberDisplay } from '@workspace/formula/format';
@@ -17,7 +17,7 @@ import type {
     Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
-import { contentOf } from './extras';
+import { cellAt } from './apply-input';
 import type { BookSheet, Workbook } from './workbook';
 
 export type Book = {
@@ -37,9 +37,9 @@ type LookArea = {
 const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 
 // The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
-// workbook held when it was made.
+// workbook held when it was made: one deleted since throws at a read, as the engine does, and reads again once added.
 export function cellsOf(book: Workbook): Book {
-    const sheets = [...book.sheets].map(([id, parts]) => new Sheet(id, parts, book));
+    const sheets = [...book.sheets.keys()].map((id) => new Sheet(id, book));
     const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
     return { sheets: () => sheets, sheet: (id) => byId.get(id) };
 }
@@ -47,12 +47,18 @@ export function cellsOf(book: Workbook): Book {
 export class Sheet {
     public constructor(
         public readonly id: string,
-        private readonly parts: BookSheet,
         private readonly book: Workbook,
     ) {}
 
     public get fields(): Readonly<SheetFields> {
         return this.parts.records.fields;
+    }
+
+    // Read by id at each read, since a batch that deletes a sheet and adds it back gives it new parts.
+    private get parts(): BookSheet {
+        const parts = this.book.sheets.get(this.id);
+        if (!parts) throw new Error(`No sheet ${this.id}`);
+        return parts;
     }
 
     public value(row: number, column: number): Literal | null {
@@ -61,10 +67,7 @@ export class Sheet {
 
     // What an input op would say to put the cell back.
     public content(row: number, column: number): CellContent | null {
-        const { engine } = this.book;
-        const formula = engine.formulaOf(this.id, row, column);
-        const given = formula !== null && engine.isGiven(this.id, row, column);
-        return contentOf(engine.valueOf(this.id, row, column), formula, given, this.parts.extras.at(row, column));
+        return cellAt(this.book, this.id, this.parts.extras, row, column);
     }
 
     public hasFormula(row: number, column: number): boolean {

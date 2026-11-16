@@ -8,7 +8,7 @@ import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Workbook } from '../../../engine/book/workbook';
 import type { Book } from './book-fixtures';
-import { canonical } from './book-fixtures';
+import { canonical, engineTabs, TAB_PLACE } from './book-fixtures';
 import { bytes } from './bytes';
 import { expectReads, modelAfter, modelOf } from './model';
 import { formulaRule } from './records-fixtures';
@@ -133,13 +133,15 @@ function expectModel(content: Book, book: Workbook, ops: Op[]): void {
 
 describe('engine/book/apply-sheet — an add', () => {
     test('a sheet lands as a load of it does, in its place among the tabs, and its inverse is its delete', () => {
-        const base = bookOf(sheetOf('a'), sheetOf('z', { order: 'a2' }));
-        const added = fullSheet('b', { order: 'a1', name: 'Added' });
+        const tab: SheetContent['cells'] = [[0, 0, { f: TAB_PLACE }]];
+        const base = bookOf(sheetOf('a', {}, { cells: tab }), sheetOf('z', { order: 'a2' }, { cells: tab }));
+        const full = fullSheet('b', { order: 'a1', name: 'Added' });
+        const added: SheetContent = { ...full, cells: [...full.cells, [0, 2, { f: TAB_PLACE }]] };
         const book = new Workbook(base);
         expect(applyOps(book, [addOf(added)])).toEqual([{ kind: 'sheet', delete: 'b' }]);
         const loaded = new Workbook({ ...base, sheets: [...base.sheets, added] });
         expect(bytes(book)).toBe(bytes(loaded));
-        expect([0, 1, 2].map((place) => book.engine.sheetAt(place))).toEqual(['a', 'b', 'z']);
+        expect(engineTabs(book)).toEqual(['a', 'b', 'z']);
         expectModel(base, book, [addOf(added)]);
         // The bands are the canonical ones, and the spill mark is dropped.
         const [, read] = book.content().sheets;
@@ -270,7 +272,7 @@ describe('engine/book/apply-sheet — a delete', () => {
             { kind: 'sheet', delete: 'c' },
         ]);
         expect([...book.sheets.keys()]).toEqual(['a']);
-        expect(book.engine.sheetAt(0)).toBe('a');
+        expect(() => book.engine.valueOf('b', 0, 0)).toThrow('No sheet b');
     });
 
     test('its inverse is the add of the sheet whole, as the book lists it, images and comments named', () => {

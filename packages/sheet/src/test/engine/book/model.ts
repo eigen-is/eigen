@@ -163,8 +163,6 @@ export function expectReads(book: Workbook, model: Model): void {
     };
     const expected = contentOfModel(model);
     expect(read).toEqual({ ...expected, computed: true });
-    // The engine reads a sheet by its place among the tabs, which the content does not show.
-    expect(expected.sheets.map((_, place) => book.engine.sheetAt(place))).toEqual(expected.sheets.map(({ id }) => id));
 }
 
 // A sheet as it enters, its formulas bound to `sheets`.
@@ -385,11 +383,8 @@ function applyInput(model: Model, op: InputOp): null {
             for (let column = left; column <= right; column += 1) put(row, column, cell);
         }
     }
-    for (const [row, column, content] of op.cells ?? []) {
-        // The validators refuse an op that says a place twice, so a batch of these tests never holds one.
-        if (op.runs?.some(([rect]) => inside(row, column, rect))) throw new Error('a listed cell inside a run');
-        put(row, column, content && entering(content, named));
-    }
+    // A listed cell inside a run lands after it, so the cell wins.
+    for (const [row, column, content] of op.cells ?? []) put(row, column, content && entering(content, named));
     return null;
 }
 

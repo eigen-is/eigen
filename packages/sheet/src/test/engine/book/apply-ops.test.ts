@@ -22,6 +22,7 @@ import type {
     SheetOp,
 } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
+import { covers } from '@workspace/lib/sheets/rect';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
@@ -498,6 +499,8 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         const formats = { cells: 0, lines: 0, links: 0 };
         // The loads trusted whole, and those that compute every formula.
         const loads = { computed: 0, computing: 0 };
+        // The inputs that landed with a listed cell inside one of their runs.
+        let cellInRun = 0;
         for (let seed = 1; seed <= 600; seed += 1) {
             const random = randomOf(seed);
             const content = randomBookContent(random);
@@ -532,7 +535,12 @@ describe('engine/book/apply-ops — the laws over random books and random batche
                 }
                 const inverse = land(book, ops);
                 landed += 1;
-                for (const op of ops.ops) kinds.set(op.kind, (kinds.get(op.kind) ?? 0) + 1);
+                for (const op of ops.ops) {
+                    kinds.set(op.kind, (kinds.get(op.kind) ?? 0) + 1);
+                    if (op.kind !== 'input') continue;
+                    if (op.cells?.some(([row, column]) => op.runs?.some(([rect]) => covers(rect, row, column))))
+                        cellInRun += 1;
+                }
                 expectReads(book, expected);
                 model = expected;
                 const after = bytes(book);
@@ -565,6 +573,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         expect(formats.cells).toBeGreaterThan(2000);
         expect(formats.lines).toBeGreaterThan(500);
         expect(formats.links).toBeGreaterThan(100);
+        expect(cellInRun).toBeGreaterThan(100);
         // A refusal at every place of a batch: no random op comes near the stored bound, so `key-too-long` is pinned
         // case by case above, as are the limits a random book stays far from.
         for (const key of ['grid-end', 'merge-overlap', 'merge-cut', 'id-in-use', 'last-sheet']) {
