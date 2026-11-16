@@ -6,6 +6,7 @@
 
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
+import { GRID_COLUMNS } from '@workspace/formula/text';
 import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
@@ -14,6 +15,7 @@ import type { Extra, Extras } from './extras';
 import { contentOf, textOf, unitsOf } from './extras';
 import { RectIndex } from './rect-index';
 import type { Workbook } from './workbook';
+import { reachesEngine } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
 type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
@@ -33,15 +35,10 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     const { sheet } = op;
     const { extras } = part;
     if (checked) {
-        // Two rectangles may fill one column, so with rectangles each column's reach is kept; listed cells alone
-        // name each column once.
-        const reach = op.runs ? new Map<number, number>() : undefined;
         let slots = 0;
         const units = filled(op, (column, length) => {
-            if (reach) reach.set(column, Math.max(reach.get(column) ?? 0, length));
-            else slots += Math.max(0, length - engine.columnLength(sheet, column));
+            slots += Math.max(0, length - engine.columnLength(sheet, column));
         });
-        for (const [column, length] of reach ?? []) slots += Math.max(0, length - engine.columnLength(sheet, column));
         const over = book.over(slots, units * EXTRA_WEIGHT);
         if (over) throw new Refusal(over);
     }
@@ -85,28 +82,46 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     return [inputOf(sheet, gathered)];
 }
 
-// What an input fills: `column` is told the rows a column holds once a rectangle, or the list's cells of it, hold
-// their value, formula or rich text. Returns the units of what the filled cells hold beyond a value.
+// What an input fills: `column` is told once per column the rows it holds once the op's cells that reach the engine
+// hold their value, formula or rich text. Returns the units of what the filled cells hold beyond a value.
 export function filled(op: InputOp, column: (column: number, length: number) => void): number {
     let units = 0;
-    for (const [[top, left, bottom, right], content] of op.runs ?? []) {
+    const reach = new Map<number, number>();
+    const runs: Rect[] = [];
+    for (const [rect, content] of op.runs ?? []) {
         if (!content) continue;
+        const [top, left, bottom, right] = rect;
         units += unitsOf(content) * (bottom - top + 1) * (right - left + 1);
-        if (content.v === undefined && content.f === undefined && content.s === undefined) continue;
-        for (let at = left; at <= right; at += 1) column(at, bottom + 1);
+        if (reachesEngine(content)) runs.push(rect);
     }
-    // The cells come in column order, so the last one of a column that reaches the engine says its reach.
-    let last = -1;
-    let length = 0;
+    if (runs.length > 0) {
+        // Lowest first, each run takes the columns no lower run took: `next` leads from a column towards the first
+        // one free, and each search points the columns it passed straight at what it found.
+        runs.sort((a, b) => b[2] - a[2]);
+        const next = new Int32Array(GRID_COLUMNS + 1).map((_, at) => at);
+        const free = (from: number) => {
+            let found = from;
+            while (next[found] !== found) found = next[found];
+            for (let at = from; at !== found; ) {
+                const step = next[at];
+                next[at] = found;
+                at = step;
+            }
+            return found;
+        };
+        for (const [, left, bottom, right] of runs) {
+            for (let at = free(left); at <= right; at = free(at + 1)) {
+                reach.set(at, bottom + 1);
+                next[at] = at + 1;
+            }
+        }
+    }
     for (const [row, at, content] of op.cells ?? []) {
         if (!content) continue;
         units += unitsOf(content);
-        if (content.v === undefined && content.f === undefined && content.s === undefined) continue;
-        if (at !== last && length > 0) column(last, length);
-        last = at;
-        length = row + 1;
+        if (reachesEngine(content)) reach.set(at, Math.max(reach.get(at) ?? 0, row + 1));
     }
-    if (length > 0) column(last, length);
+    for (const [at, length] of reach) column(at, length);
     return units;
 }
 

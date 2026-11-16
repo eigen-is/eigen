@@ -11,7 +11,7 @@ import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits, MIDWAY } from '@workspace/lib/sheets/limits';
-import type { CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import type { CellContent, CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
@@ -310,6 +310,6 @@ function sourceOf({ id, fields, cells }: SheetContent): SheetSource {
 }
 
 // A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.
-function reachesEngine({ v, f, s }: CellRecord): boolean {
+export function reachesEngine({ v, f, s }: CellContent): boolean {
     return v !== undefined || f !== undefined || s !== undefined;
 }

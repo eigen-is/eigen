@@ -126,8 +126,10 @@ describe('engine/book/room — a write may leave the book at twice a limit insid
 
     test('an input of listed cells', () => {
         const book = full();
+        // At twice the limit, a write over the cells already there adds nothing.
         applyOps(book, [
             input(undefined, reaching(MAX_VALUE_SLOTS, { v: 1 })),
+            input(undefined, reaching(MAX_VALUE_SLOTS, { v: 2 })),
             input(undefined, reaching(MAX_VALUE_SLOTS, null)),
         ]);
         expect(book.weight().slots).toBe(MAX_VALUE_SLOTS);

@@ -6,6 +6,7 @@ import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
+import { filled } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { Bands } from '../../../engine/book/bands';
 import { Extras } from '../../../engine/book/extras';
@@ -335,6 +336,28 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
             for (const spy of [...walks, ...records, slots]) spy.mockRestore();
         }
         expect(book.weight().slots).toBe(1000 + 51);
+    }, 60_000);
+
+    test('an input of 1,000 full-width rows is counted once per column, not once per row and column', () => {
+        const rows = Array.from({ length: 1000 }, (_, k): [Rect, CellContent] => [[k, 0, k, LAST_COLUMN], { v: k }]);
+        // A link reaches no column; a listed cell lower down reaches past the rows, and one higher up does not.
+        const linked: [Rect, CellContent] = [[2000, 3, 2000, 3], { link: LINK }];
+        const told = new Map<number, number[]>();
+        const units = filled(
+            input(
+                [...rows, linked],
+                [
+                    [5000, 7, { v: 1 }],
+                    [3, 9, { v: 1 }],
+                ],
+            ),
+            (column, length) => {
+                told.set(column, [...(told.get(column) ?? []), length]);
+            },
+        );
+        expect(units).toBe(5);
+        expect(told.size).toBe(GRID_COLUMNS);
+        for (const [column, lengths] of told) expect(lengths).toEqual([column === 7 ? 5001 : 1000]);
     }, 60_000);
 });
 
