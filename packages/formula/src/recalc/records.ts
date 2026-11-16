@@ -1,9 +1,8 @@
 // What the formulas that work a reference out as they run last resolved: per cell, one box for each sheet it
-// resolved into, around every area of that sheet. `Recalc` tells it each area a running formula resolves, and has
-// the index list the records so a marking follows them as it follows the references a formula names. The invariant:
-// at all times such a formula is flagged, or its record covers everything it last resolved. A formula that runs
-// keeps it by recording; a computed load ran none and an edit drops every record, so the marking after either
-// flags them all. Nothing here is stored.
+// resolved into, around every area of that sheet. The index lists the records, so a marking follows them as it
+// follows the references a formula names. The invariant: at all times such a formula is flagged, or its record
+// covers everything it last resolved. A formula that runs records; a computed load ran none and an edit drops
+// every record, so the marking after either flags them all. Nothing here is stored.
 
 import { Fact } from '../eval/facts';
 import type { Column } from '../store/column';
