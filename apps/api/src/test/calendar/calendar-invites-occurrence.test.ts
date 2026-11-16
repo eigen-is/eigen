@@ -404,7 +404,7 @@ describe('Occurrence edits of an invited series', () => {
         await untilBob(series.uid, (occ) => occ.length === 0);
 
         const relay = await import('../../lib/home/home-relay');
-        const relayed = spyOn(relay, 'sendToHome');
+        const relayed = spyOn(relay, 'pushToHomes');
         const mail = await catchMail();
         try {
             relayed.mockClear();
@@ -1009,7 +1009,7 @@ describe('Occurrence edits of an invited series', () => {
         const date = '2027-02-16';
         const held = findOrFail(await aliceOccurrences(series.uid), (e) => !e.parentEventId).sequence;
         const relay = await import('../../lib/home/home-relay');
-        const relayed = spyOn(relay, 'sendToHome');
+        const relayed = spyOn(relay, 'pushToHomes');
         const mail = await catchMail();
         try {
             relayed.mockClear();

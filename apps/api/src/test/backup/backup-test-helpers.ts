@@ -146,13 +146,13 @@ export async function snapshotInto(
     return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
 }
 
-// The titles of the admin alerts sendToHome was handed for `ownerId`.
+// The titles of the admin alerts pushToHomes was handed for `ownerId`.
 export function alertTitlesTo(
-    spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } },
+    spy: { mock: { calls: Parameters<typeof homeRelay.pushToHomes>[] } },
     ownerId: string,
 ): string[] {
-    return spy.mock.calls.flatMap(([target, message]) =>
-        target === ownerId && message.type === 'notification' && message.notification.type === 'admin-alert'
+    return spy.mock.calls.flatMap(([targets, message]) =>
+        [...targets].includes(ownerId) && message.type === 'notification' && message.notification.type === 'admin-alert'
             ? [message.notification.title]
             : [],
     );

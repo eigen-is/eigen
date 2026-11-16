@@ -4,11 +4,13 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { requestOtp, verifyOtpAndSignIn } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
+import * as getHomeModule from '../../lib/home/get-home';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as relay from '../../lib/home/home-relay';
 import * as mailer from '../../lib/mailer/mailer';
 import { reconcileShares } from '../../lib/share';
 import { addRegistryEntry } from '../../lib/share/registry';
+import type { User } from '../../lib/user';
 import { getUserByEmail, getUserById } from '../../lib/user';
 import { vcal } from '../ics-test-helpers';
 import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
@@ -364,6 +366,71 @@ describe('share reconciliation', () => {
         await alice.drive.restorePath('default', file.id, alice.user);
 
         expect(await sharedWithMe(member.sessionToken, member.id)).toContain(file.id);
+    });
+
+    async function newcomer(label: string): Promise<{ user: User; sessionToken: string }> {
+        const email = `recon-${label}-${crypto.randomUUID()}@test.eigen.is`;
+        const created = await createTestUser(email, 'testpassword123', label);
+        const user = await getUserById(created.id);
+        if (!user) throw new Error('newcomer missing');
+        return { user, sessionToken: created.sessionToken };
+    }
+
+    test('a path the home refuses does not stop the rest of what that owner shares', async () => {
+        const { user } = await newcomer('refused');
+        const { folder } = await aliceFolderAndRoot();
+        const files = [await aliceShares(folder.id, user.email), await aliceShares(folder.id, user.email)];
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        const receive = spyOn((await getHome(user.id)).drive, 'receiveSharedPathChange');
+        receive.mockClear();
+        receive.mockRejectedValueOnce(new Error('This home refuses the first path'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        spies.push(receive, errors);
+
+        await reconcileShares(user);
+
+        const received = receive.mock.calls.map(([path]) => path.id);
+        expect(received.sort()).toEqual(files.map((file) => file.id).sort());
+        const logged = errors.mock.calls.map((call) => String(call[0]));
+        expect(logged.some((line) => line.includes(`drive:acl-change to ${user.id}`))).toBe(true);
+    });
+
+    // A sign-in waits for its pull, so the pull must not wait for a fan-out that can take as long as a team is large.
+    test('the pull of a path does not wait for a change to that path that is still being delivered', async () => {
+        const { user, sessionToken } = await newcomer('unordered');
+        const slow = await newcomer('slow');
+        const alice = await getHome(ctx.alice.user.id);
+        const { folder } = await aliceFolderAndRoot();
+        const file = await aliceShares(folder.id, user.email);
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        const openHome = getHomeModule.getHome;
+        const gate = Promise.withResolvers<void>();
+        spies.push(
+            spyOn(getHomeModule, 'getHome').mockImplementation(async (ownerId) => {
+                if (ownerId === slow.user.id) await gate.promise;
+                return openHome(ownerId);
+            }),
+        );
+
+        let pulledFirst: boolean;
+        try {
+            await alice.drive.updateACLDelta(
+                'default',
+                file.id,
+                { add: [{ id: slow.user.email, read: true, write: false }] },
+                undefined,
+                undefined,
+                alice.user,
+            );
+            const pulling = reconcileShares(user);
+            pulledFirst = await Promise.race([pulling.then(() => true), Bun.sleep(2_000).then(() => false)]);
+        } finally {
+            gate.resolve();
+        }
+        expect(pulledFirst).toBe(true);
+
+        await relay.drainHomeDeliveries();
+        expect(await sharedWithMe(sessionToken, user.id)).toContain(file.id);
     });
 
     // Reconciliation waits on pulls from other homes, and the newcomer's home may close meanwhile.

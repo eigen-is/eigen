@@ -1,11 +1,12 @@
-// Every time one owner's Home reaches into another, it goes through this file. sendToHome pushes a message into
-// another home. getFromHomes asks many homes one question, such as which paths a user watches there, and the domain
-// that owns the question keeps its handler. It opens at most a few homes at once and leaves out a home that is too
-// slow. Today every call runs in this process. When homes live in several processes, only this file has to change.
+// Every time one owner's Home reaches into another, it goes through this file. pushToHomes hands a message, such as an
+// access change or a notification, to other homes, and a failed delivery never fails its caller. getFromHomes asks many
+// homes one question, such as which paths a user watches there: the domain that owns the question keeps its handler, few
+// homes open at once and one that is too slow is left out. broadcastToHomes tells the open tabs of the homes that are
+// loaded. Today every call runs in this process. When homes live in several processes, only this file has to change.
 
 import type { Attendee, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
-import type { DriveACL, EffectiveMember } from '@workspace/lib/types/drive-access';
+import type { DriveACL } from '@workspace/lib/types/drive-access';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
@@ -18,11 +19,8 @@ import type { DriveQueries } from '../drive/home-calls';
 import { answerDrive } from '../drive/home-calls';
 import type { TeamQueries } from '../team/home-calls';
 import { answerTeam } from '../team/home-calls';
-import type { User } from '../user';
-import { getUsersByEmails } from '../user';
 import { getHome, loadedHome } from './get-home';
 import type { Home } from './home';
-import { TeamHome } from './team-home';
 
 // --- Pushes ---
 
@@ -56,30 +54,27 @@ type HomeMessage =
           status: Attendee['status'];
           recurrenceDate?: string;
       }
-    | { type: 'broadcast'; event: SSEvent }
     | { type: 'notification'; notification: NotificationPersistInput };
-
-// A broadcast opens no home, so it never becomes a delivery.
-type DeliveredMessage = Exclude<HomeMessage, { type: 'broadcast' }>;
 
 // Every push still delivering. Most of them run after their request answered, so nobody waits for them. A delivery
 // opens its recipient's home, so a shutdown drains them first.
 const deliveries = new Set<Promise<void>>();
 
-// The last fan-out queued for each order key. The next one waits for it: an add and a revoke delivered out of order
-// would bring a removed share back.
-const lastInOrder = new Map<string, Promise<void>>();
-
-export async function sendToHome(targetId: string, message: HomeMessage): Promise<void> {
-    // A broadcast only reaches tabs that have the home open. It never opens a home or keeps one open.
-    if (message.type === 'broadcast') {
-        loadedHome(targetId)?.broadcast(message.event);
-        return;
-    }
-    await tracked(deliver(targetId, message));
+// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
+// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
+export function pushToHomes(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    return trackDelivery(deliverToEach(targetIds, message));
 }
 
-async function deliver(targetId: string, message: DeliveredMessage): Promise<void> {
+async function deliverToEach(targetIds: Iterable<string>, message: HomeMessage): Promise<void> {
+    for (const id of targetIds) {
+        await deliver(id, message).catch((err) =>
+            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
+        );
+    }
+}
+
+async function deliver(targetId: string, message: HomeMessage): Promise<void> {
     const home = await getHome(targetId);
     // A home without a calendar, such as a guest's, ignores every calendar message.
     if (message.type.startsWith('calendar:') && !home.hasCalendar) return;
@@ -134,49 +129,19 @@ async function deliver(targetId: string, message: DeliveredMessage): Promise<voi
             }
             break;
         case 'notification':
-            if (home instanceof TeamHome) {
-                const members = await home.membersToNotify(message.notification.actorEmail);
-                await sendToUserHomes(
-                    members.map((member) => member.id),
-                    message,
-                );
-            } else {
-                home.notify(message.notification);
-            }
+            home.notify(message.notification);
             break;
     }
 }
 
-// One home at a time, since opening a home blocks the event loop: opened together, they would freeze the server for the
-// whole fan-out. A failed delivery is logged, and the other homes still get the message, so this never rejects.
-export async function sendToUserHomes(userIds: Iterable<string>, message: DeliveredMessage): Promise<void> {
-    const orderKey = message.type === 'drive:acl-change' ? message.path.id : undefined;
-    const previous = orderKey ? lastInOrder.get(orderKey) : undefined;
-    const fanOut = tracked(deliverToEach(userIds, message, previous));
-    if (orderKey) lastInOrder.set(orderKey, fanOut);
-    await fanOut;
-    if (orderKey && lastInOrder.get(orderKey) === fanOut) lastInOrder.delete(orderKey);
-}
-
-async function deliverToEach(
-    userIds: Iterable<string>,
-    message: DeliveredMessage,
-    previous: Promise<void> | undefined,
-): Promise<void> {
-    await previous;
-    for (const id of userIds) {
-        await deliver(id, message).catch((err) =>
-            console.error(`home-relay: delivering ${message.type} to ${id} failed:`, err),
-        );
-    }
-}
-
-function tracked(delivery: Promise<void>): Promise<void> {
+// A caller that holds a push back until something else is done hands that wait in here, so a shutdown also waits for a
+// push that has not started yet.
+export function trackDelivery(delivery: Promise<void>): Promise<void> {
     deliveries.add(delivery);
     return delivery.finally(() => deliveries.delete(delivery));
 }
 
-// Waits for every delivery still running and for those that start meanwhile. The sends of a caller's own loop that
+// Waits for every delivery still running and for those that start meanwhile. The pushes of a caller's own loop that
 // hasn't reached them yet are not among them.
 export async function drainHomeDeliveries(): Promise<void> {
     while (deliveries.size > 0) {
@@ -191,24 +156,11 @@ export async function drainDeliveriesWithin(boundMs: number): Promise<void> {
     console.warn(`[shutdown] gave up after ${boundMs} ms with ${deliveries.size} home deliveries left`);
 }
 
-// Tells the open tabs of the owner and of each member who can read the path: a member without read cannot list it, so
-// the event would name a path they may not see. Members come in one query; a failed read costs only their copies.
-export async function broadcastToOwnerAndMembers(
-    ownerId: string,
-    members: readonly EffectiveMember[] | Promise<readonly EffectiveMember[]>,
-    event: SSEvent,
-): Promise<void> {
-    await sendToHome(ownerId, { type: 'broadcast', event });
-    let readers: User[];
-    try {
-        const emails = (await members).filter((member) => member.read).map((member) => member.email);
-        readers = await getUsersByEmails([...new Set(emails)]);
-    } catch {
-        return;
-    }
-    await Promise.all(
-        readers.filter((user) => user.id !== ownerId).map((user) => sendToHome(user.id, { type: 'broadcast', event })),
-    );
+// --- Broadcasts ---
+
+// A closed home has no tab to tell, so this opens no home and stores nothing.
+export function broadcastToHomes(ownerIds: Iterable<string>, event: SSEvent): void {
+    for (const ownerId of ownerIds) loadedHome(ownerId)?.broadcast(event);
 }
 
 // --- Reads across homes ---

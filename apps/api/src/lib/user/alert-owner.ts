@@ -1,12 +1,12 @@
 // Alerts for the people who run the server, such as a failed backup, delivered as a notification in their own
 // notification center. alertOwner reaches the org owner, alertUser any one user.
 
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { getOrgOwner } from './user';
 
 // A repeat of the tag replaces the alert before it, so a failure that keeps happening shows once.
 export function alertUser(userId: string, title: string, body: string, tag: string): Promise<void> {
-    return sendToHome(userId, {
+    return pushToHomes([userId], {
         type: 'notification',
         notification: { type: 'admin-alert', title, body, tag, coalesce: true },
     });

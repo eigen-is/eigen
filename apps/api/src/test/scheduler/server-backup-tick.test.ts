@@ -17,6 +17,7 @@ import { serverBackupTick } from '../../lib/backup/schedule';
 import * as serverJob from '../../lib/backup/server-job';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
+import { getHome } from '../../lib/home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { registerScheduledJobs } from '../../lib/scheduler/jobs';
 import { stopAllSchedules } from '../../lib/scheduler/scheduler';
@@ -112,9 +113,11 @@ describe('The nightly server backup tick', () => {
 
     test('a start that fails before its record alerts the owner once a day, and a refusal not at all', async () => {
         const { alice } = await getTestContext();
-        const send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const send = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
         const alerts = () =>
-            send.mock.calls.filter(([, message]) => message.type === 'notification').map(([userId]) => userId);
+            send.mock.calls
+                .filter(([, message]) => message.type === 'notification')
+                .flatMap(([userIds]) => [...userIds]);
         try {
             start.mockRejectedValueOnce(new ApiError(409, 'A server-backup of this home is already running'));
             await expect(tickAt('2026-10-01T02:00:00Z')).rejects.toThrow('already running');
@@ -129,6 +132,25 @@ describe('The nightly server backup tick', () => {
             expect(alerts()).toEqual([alice.user.id, alice.user.id]);
         } finally {
             send.mockRestore();
+        }
+    });
+
+    test('an alert the owner’s home refuses is logged', async () => {
+        const { alice } = await getTestContext();
+        const refusal = spyOn(await getHome(alice.user.id), 'notify').mockImplementation(() => {
+            throw new Error('This home refuses the alert');
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            start.mockRejectedValue(new Error('backups folder is not writable'));
+            await expect(tickAt('2026-10-03T02:00:00Z')).rejects.toThrow('not writable');
+            await settle();
+            await homeRelay.drainHomeDeliveries();
+            const logged = errors.mock.calls.map((call) => String(call[0]));
+            expect(logged.some((line) => line.includes(`notification to ${alice.user.id}`))).toBe(true);
+        } finally {
+            errors.mockRestore();
+            refusal.mockRestore();
         }
     });
 

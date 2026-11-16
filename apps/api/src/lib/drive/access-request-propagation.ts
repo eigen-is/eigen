@@ -1,6 +1,7 @@
-// Tells the owner of a file or folder that someone asks for access. The owner gets a notification in their Home,
-// and, if the server settings allow it, an email (to every member for a team). A person who clicks again and again
-// does not send a second email within the hour. The access-request route opens the owner's Home and passes it in.
+// Tells the owner of a file or folder that someone asks for access. The owner gets a notification in their Home and,
+// if the server settings allow it, an email. A team has no notification center, so its members get both instead,
+// except the one who asks. A person who clicks again and again does not send a second email within the hour. The
+// access-request route opens the owner's Home and passes it in.
 
 import { accessRequestTag } from '@workspace/lib/notification/tags';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -8,7 +9,7 @@ import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
 import type { Home } from '../home';
 import { TeamHome } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { composeAccessRequestEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -32,7 +33,8 @@ export async function propagateAccessRequest(
     // Detached, so the answer doesn't wait on the team's size or tell whether the path exists. It needs no hold on
     // the Home: past this point it reads only memory and the auth database.
     (async () => {
-        await sendToHome(ownerId, {
+        const members = home instanceof TeamHome ? await home.membersToNotify(requester.email) : null;
+        await pushToHomes(members?.map((member) => member.id) ?? [ownerId], {
             type: 'notification',
             notification: {
                 type: 'access-request',
@@ -46,10 +48,7 @@ export async function propagateAccessRequest(
 
         if (!getServerSettings().notifications.email.ownerOnAccessRequest) return;
         // Read again: the Home's user is the row as it was when the Home opened.
-        const recipients =
-            home instanceof TeamHome
-                ? await home.membersToNotify(requester.email)
-                : await getUserById(ownerId).then((owner) => (owner ? [owner] : []));
+        const recipients = members ?? [await getUserById(ownerId)].filter((owner) => owner !== null);
         // One after another: a team's worth of mails at once would open as many SMTP connections.
         for (const recipient of recipients) {
             const key = `${tag}:${recipient.id}`;

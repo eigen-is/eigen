@@ -75,7 +75,7 @@ describe('Upload of server archives', () => {
     let fake: FakeS3Server;
     let bucket: S3Config;
     let backing: LocalStorage;
-    let send: ReturnType<typeof spyOn<typeof homeRelay, 'sendToHome'>>;
+    let send: ReturnType<typeof spyOn<typeof homeRelay, 'pushToHomes'>>;
     // This server's own folder under the prefix, as another server sharing the bucket never sees it.
     const own = (name: string) => `nightly/${getDomain()}/${name}`;
 
@@ -83,7 +83,7 @@ describe('Upload of server archives', () => {
         ctx = await getTestContext();
         // A user who never signed in has no home folder, and the job skips a row without one.
         await getHome(ctx.alice.user.id);
-        send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        send = spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined);
     });
 
     beforeEach(async () => {

@@ -10,7 +10,7 @@ import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@wor
 import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { sendToUserHomes } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
 import { getBatchPublicInfo } from '../space/public';
@@ -224,7 +224,7 @@ export class FileHistory {
             }),
         );
         // The deliveries open each watcher's home, so they run after the change answers.
-        sendToUserHomes(
+        pushToHomes(
             recipients.filter((id) => id !== null),
             {
                 type: 'notification',

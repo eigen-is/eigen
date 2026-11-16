@@ -353,7 +353,10 @@ describe('Recent records an open', () => {
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         await openInEditor(viewer, file);
         await eventually(async () => (errors.mock.calls.length > 0 ? true : undefined), 'the logged failure');
-        expect(errors).toHaveBeenCalledWith(expect.stringContaining('recent:'), expect.anything());
+        expect(errors).toHaveBeenCalledWith(
+            expect.stringContaining(`drive:recent-open to ${viewer.id}`),
+            expect.anything(),
+        );
         expect(await storedIds(viewer)).not.toContain(file.id);
     });
 

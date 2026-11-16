@@ -600,7 +600,7 @@ describe('the server backup on the control socket', () => {
     beforeAll(async () => {
         const ctx = await getTestContext();
         await getHome(ctx.alice.user.id);
-        spies.push(spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined));
+        spies.push(spyOn(homeRelay, 'pushToHomes').mockResolvedValue(undefined));
     });
 
     afterEach(() => {

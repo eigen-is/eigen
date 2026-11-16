@@ -7,7 +7,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import { composeAssignedEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
@@ -38,7 +38,7 @@ export async function propagateAssignment(
     }
 
     if (!assigneeUser) return;
-    await sendToHome(assigneeUser.id, {
+    await pushToHomes([assigneeUser.id], {
         type: 'notification',
         notification: {
             type: 'assigned',

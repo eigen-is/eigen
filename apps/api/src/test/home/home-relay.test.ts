@@ -1,8 +1,10 @@
 import { afterEach, beforeAll, describe, expect, jest, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACLDelta } from '@workspace/lib/types/drive-access';
 import type { Notification } from '@workspace/lib/types/notification';
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { Drive } from '../../lib/drive/drive';
@@ -15,8 +17,7 @@ import {
     getFromHomes,
     HOME_OPEN_DEADLINE_MS,
     HOME_OPENS_AT_ONCE,
-    sendToHome,
-    sendToUserHomes,
+    pushToHomes,
 } from '../../lib/home/home-relay';
 import * as teamModule from '../../lib/team/team';
 import type { User } from '../../lib/user';
@@ -29,6 +30,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    collectSSE,
     createTeam,
     createTestGuest,
     createTestUser,
@@ -103,22 +105,42 @@ function holdMemberHomes(held: readonly TestUser[] = members): { peak: () => num
     return { peak: () => peak, release };
 }
 
+async function aliceFile(name: string): Promise<DrivePath> {
+    const { sessionToken, id } = ctx.alice.user;
+    const root = await driveGet<DrivePath>(sessionToken, id, 'default', 'root');
+    return driveUpload(sessionToken, id, 'default', root.id, new File(['x'], `${crypto.randomUUID()}-${name}`));
+}
+
+async function aliceChangesAccess(path: DrivePath, delta: DriveACLDelta): Promise<void> {
+    const alice = await getHomeModule.getHome(ctx.alice.user.id);
+    await alice.drive.updateACLDelta('default', path.id, delta, undefined, undefined, alice.user);
+}
+
 // Whether the request answers while every delivery is still held.
 async function answersFirst(request: Promise<unknown>): Promise<boolean> {
     return Promise.race([request.then(() => true), Bun.sleep(2_000).then(() => false)]);
 }
 
-describe('A notification to a team', () => {
-    test('reaches every member of the team', async () => {
-        const tag = 'relay:team-notification';
-        await sendToHome(teamOwner, {
-            type: 'notification',
-            notification: { type: 'admin-alert', title: 'To the whole team', tag },
-        });
-
-        for (const member of members) {
-            expect(await notificationsWithTag(member, tag)).toHaveLength(1);
+describe('A drive event for the members of a team', () => {
+    test('reaches a member whose home is loaded and opens no home that is closed', async () => {
+        const [closed, loaded] = members;
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+        const sse = await collectSSE(loaded.id);
+        await getHomeModule.evictHome(closed.id);
+        try {
+            const file = await driveUpload(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                root.id,
+                new File(['heard'], 'heard.txt'),
+            );
+            await sse.next((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === file.id);
+        } finally {
+            sse.stop();
         }
+
+        expect(getHomeModule.atHome(closed.id)).toBe(false);
     });
 });
 
@@ -213,7 +235,7 @@ describe('A fan-out to many homes', () => {
             if (ownerId === members[0].id) throw new Error('This home does not open');
             return openHome(ownerId);
         });
-        await sendToUserHomes(
+        await pushToHomes(
             members.slice(0, 3).map((member) => member.id),
             { type: 'notification', notification: { type: 'admin-alert', title: 'One fails', tag } },
         );
@@ -226,27 +248,25 @@ describe('A fan-out to many homes', () => {
     });
 
     // An add and a revoke delivered out of order would bring a removed share back.
-    test('of a path waits for the one before it, while another path goes on', async () => {
-        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
-        const change = (path: DrivePath, acl: DrivePath['acl']) => ({ type: 'drive:acl-change' as const, path, acl });
-        const recipient = [members[0].id];
+    test('of an access change waits for the one before it on that path, while another path goes on', async () => {
+        const [file, other] = [await aliceFile('ordered.txt'), await aliceFile('other.txt')];
         const held = holdMemberHomes();
         try {
-            const add = sendToUserHomes(recipient, change(root, [{ id: members[0].email, read: true, write: false }]));
-            const revoke = sendToUserHomes(recipient, change(root, null));
+            await aliceChangesAccess(file, { add: [{ id: members[0].email, read: true, write: false }] });
+            await aliceChangesAccess(file, { remove: [members[0].email] });
             await Bun.sleep(50);
             expect(held.peak()).toBe(1);
 
-            const other = sendToUserHomes(recipient, change({ ...root, id: crypto.randomUUID() }, null));
+            await aliceChangesAccess(other, { add: [{ id: members[0].email, read: true, write: false }] });
             await Bun.sleep(50);
             expect(held.peak()).toBe(2);
-            held.release();
-            await Promise.all([add, revoke, other]);
         } finally {
             held.release();
         }
+        await drainHomeDeliveries();
         const shared = await (await getHomeModule.getHome(members[0].id)).drive.getSharedPathsWithMe();
-        expect(shared.some((path) => path.id === root.id)).toBe(false);
+        expect(shared.some((path) => path.id === file.id)).toBe(false);
+        expect(shared.some((path) => path.id === other.id)).toBe(true);
     });
 });
 
@@ -646,15 +666,15 @@ describe('A graceful shutdown', () => {
         mock.restore();
     });
 
-    test('waits for a direct send still delivering', async () => {
+    test('waits for a push to one home still delivering', async () => {
         const tag = 'relay-drain:direct';
         const held = holdMemberHomes();
         let drainedFirst: boolean;
         try {
-            sendToHome(members[0].id, {
+            pushToHomes([members[0].id], {
                 type: 'notification',
                 notification: { type: 'admin-alert', title: 'Direct', tag },
-            }).catch(() => {});
+            });
             drainedFirst = await answersFirst(drainHomeDeliveries());
         } finally {
             held.release();
@@ -671,10 +691,10 @@ describe('A graceful shutdown', () => {
         const held = holdMemberHomes();
         let drainedFirst: boolean;
         try {
-            sendToUserHomes(
+            pushToHomes(
                 members.map((member) => member.id),
                 { type: 'notification', notification: { type: 'admin-alert', title: 'Detached', tag } },
-            ).catch(() => {});
+            );
             drainedFirst = await answersFirst(drainHomeDeliveries());
         } finally {
             held.release();
@@ -687,6 +707,23 @@ describe('A graceful shutdown', () => {
         }
     });
 
+    // The second change has not reached the relay yet: it starts when the first has been delivered.
+    test('waits for an access change still waiting behind the one before it on that path', async () => {
+        const file = await aliceFile('drained.txt');
+        const receive = spyOn((await getHomeModule.getHome(members[0].id)).drive, 'receiveSharedPathChange');
+        const held = holdMemberHomes();
+        try {
+            await aliceChangesAccess(file, { add: [{ id: members[0].email, read: true, write: false }] });
+            await aliceChangesAccess(file, { remove: [members[0].email] });
+            const drained = drainHomeDeliveries();
+            held.release();
+            await drained;
+        } finally {
+            held.release();
+        }
+        expect(receive.mock.calls.map(([, acl]) => acl?.length ?? 0)).toEqual([1, 0]);
+    });
+
     // A delivery stuck on a home that never opens must not hold the shutdown, or eat the time the
     // mounts need to upload. The wait gives up at its bound and logs what is left.
     test('stops waiting for a delivery that never settles once the bound is over', async () => {
@@ -696,10 +733,10 @@ describe('A graceful shutdown', () => {
         let drainedFirst: boolean;
         let logged: unknown[][];
         try {
-            sendToUserHomes([members[0].id], {
+            pushToHomes([members[0].id], {
                 type: 'notification',
                 notification: { type: 'admin-alert', title: 'Stalled', tag },
-            }).catch(() => {});
+            });
             drainedFirst = await answersFirst(drainDeliveriesWithin(100));
         } finally {
             logged = warnings.mock.calls;

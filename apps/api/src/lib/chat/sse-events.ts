@@ -6,7 +6,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { SSEventChat } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { DriveLike } from '../drive/get-drive';
-import { broadcastToOwnerAndMembers } from '../home/home-relay';
+import { broadcastToOwnerAndMembers } from '../drive/sse-events';
 
 export function buildChatEvent(type: SSEventChat['type'], chat: SSEventChat['chat']): SSEventChat {
     return { type, chat };

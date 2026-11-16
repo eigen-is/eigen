@@ -202,7 +202,7 @@ export async function rsvp(
     // An event a CalDAV client stored can name an organizer but link to no event on their Home. Nobody hears it then.
     const relayRsvp = (status: Attendee['status'], recurrenceDate?: string) => {
         if (!organizerEventId) return;
-        propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(console.error);
+        propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate);
     };
 
     if (scope === 'this' && input.recurrenceDate) {
