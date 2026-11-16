@@ -238,7 +238,7 @@ export class Evaluator {
             if (isError(right)) return right;
             if (!isReference(left) || !isReference(right)) return VALUE;
             const joined = combine(op, left, right);
-            if (op === Token.Colon && isReference(joined)) this.recalc.resolved(joined);
+            if (op === Token.Colon && isReference(joined)) this.recalc.record(joined);
             return joined;
         }
         const a = this.inPlace(left);

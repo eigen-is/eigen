@@ -16,7 +16,7 @@ export class ReverseIndex {
     private readonly work: number[] = [];
     // What the references of the shapes read, and what the formulas resolved when they were last computed.
     private readonly named = new Listing(this.work);
-    private readonly resolved = new Listing(this.work);
+    private readonly recorded = new Listing(this.work);
     // The rectangles whose shape asks the workbook itself: sheet, first and last column and row.
     private unnamed: number[] = [];
     // The rectangles whose shape works a reference out as it runs, in the same five numbers.
@@ -147,7 +147,7 @@ export class ReverseIndex {
     }
 
     // Lists the boxes of the records: per column and row of a formula, five numbers a box, the sheet first.
-    public resolve(workbook: Workbook, records: ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>>): void {
+    public listRecords(workbook: Workbook, records: ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>>): void {
         const { sheets } = workbook;
         const entries: number[] = [];
         const areas: number[][] = sheets.map(() => []);
@@ -167,7 +167,7 @@ export class ReverseIndex {
                 }
             }
         }
-        this.resolved.build(entries, areas);
+        this.recorded.build(entries, areas);
     }
 
     // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that asks
@@ -175,7 +175,7 @@ export class ReverseIndex {
     // they read. A seed is a span of rows: sheet, column, first and last row.
     public mark(workbook: Workbook, seeds: readonly number[], resolving: boolean): void {
         const { sheets } = workbook;
-        const { named, resolved, work } = this;
+        const { named, recorded, work } = this;
         for (const seed of seeds) work.push(seed);
         for (const rectangles of resolving ? [this.unnamed, this.resolving] : [this.unnamed]) {
             for (let i = 0; i < rectangles.length; i += 5) {
@@ -193,9 +193,9 @@ export class ReverseIndex {
             const to = work[span + 3];
             work.length = span;
             named.follow(sheets, sheet, column, from, to);
-            resolved.follow(sheets, sheet, column, from, to);
+            recorded.follow(sheets, sheet, column, from, to);
         }
         named.restore();
-        resolved.restore();
+        recorded.restore();
     }
 }

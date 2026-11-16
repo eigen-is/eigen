@@ -216,7 +216,7 @@ function weigh(ctx: Evaluator, entry: Entry, frame: Frame, count: number): Formu
     else if (values !== null && (values.bottom - values.top !== rows || values.right - values.left !== columns)) {
         if (!trailing) return VALUE;
         values = { ...values, bottom: values.top + rows, right: values.left + columns };
-        ctx.recalc.resolved(values);
+        ctx.recalc.record(values);
     }
     // Every cell is computed before a criterion is read: a text is known by its id only once a cell holds it.
     for (let i = 0; i < pairs; i += 1) ctx.recalc.settleArea(ranges[i]);

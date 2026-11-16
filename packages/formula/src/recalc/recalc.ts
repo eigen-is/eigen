@@ -349,7 +349,7 @@ export class Recalc {
     }
 
     // The running formula worked a reference out.
-    public resolved(reference: Reference): void {
+    public record(reference: Reference): void {
         this.records.add(this.current, reference);
     }
 
@@ -386,7 +386,7 @@ export class Recalc {
             this.stale = false;
         }
         if (records.changed) {
-            index.resolve(this.workbook, records.held);
+            index.listRecords(this.workbook, records.held);
             records.changed = false;
         }
     }

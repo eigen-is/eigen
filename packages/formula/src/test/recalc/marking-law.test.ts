@@ -195,7 +195,7 @@ function run(seed: number, books: number): Marked {
                 records.set(column, (records.get(column) ?? new Map()).set(reader.row, record));
                 counts.recorded += record.length / 5;
             }
-            index.resolve(workbook, records);
+            index.listRecords(workbook, records);
         };
         rebuild();
         for (let marking = 0; marking < 14; marking += 1) {
