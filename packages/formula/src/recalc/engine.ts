@@ -43,10 +43,8 @@ export class Engine {
         this.calc.setClock(now, seed);
     }
 
-    // The rows of a sheet that are hidden by hand and the rows its filter left out, each whole and as sorted pairs
-    // of a first and a last row that share no row. SUBTOTAL and AGGREGATE leave them out. The engine moves none
-    // with an edit: a host calls this after every edit of the sheet's rows and every change of what it hides or
-    // filters, before the next. The lists it already holds change nothing.
+    // The rows SUBTOTAL and AGGREGATE leave out: those hidden by hand and those a filter left out, each list whole,
+    // as sorted pairs of a first and a last row. No edit moves one, so a host says them again before the next recalc.
     public setRowsOut(sheet: string, hidden: readonly number[], filtered: readonly number[]): void {
         const found = this.workbook.known(sheet);
         admitRows(hidden);

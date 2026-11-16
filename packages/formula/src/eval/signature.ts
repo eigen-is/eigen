@@ -148,7 +148,7 @@ export const ANYWHERE = 2;
 export type Returns = 0 | typeof PART | typeof ANYWHERE;
 
 // What the walk passes over for a row that another row picked: a cell whose formula holds a call of such a row,
-// a cell or an element that is an error, and a cell of a row that a filter left out or that was hidden by hand.
+// a cell or an element that is an error, a row a filter left out, and with those every row hidden by hand.
 export const NESTED = 1;
 export const ERRORS = 2;
 export const FILTERED = 4;

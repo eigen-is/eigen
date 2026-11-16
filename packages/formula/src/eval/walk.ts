@@ -385,7 +385,7 @@ const NONE: readonly number[] = [];
 
 // The rows of a sheet that a walk leaves out, as `skips` says: sorted pairs of a first and a last row.
 function rowsOut(sheet: Sheet, skips: number): readonly number[] {
-    if ((skips & HIDDEN) !== 0) return (skips & FILTERED) !== 0 ? sheet.out : sheet.hidden;
+    if ((skips & HIDDEN) !== 0) return sheet.out;
     return (skips & FILTERED) !== 0 ? sheet.filtered : NONE;
 }
 

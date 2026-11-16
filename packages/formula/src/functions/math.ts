@@ -38,9 +38,6 @@ const MOST_THINGS = 2 ** 31 - 1;
 // MOD has no answer from this many times the divisor on.
 const MOST_DIVIDED = 1125900000000;
 
-// What Excel calls hidden rows in the options of AGGREGATE: hidden by hand or left out by a filter.
-const ROWS = HIDDEN | FILTERED;
-
 // The functions the codes 1 to 11 of SUBTOTAL pick, which leave out the rows a filter left out. 101 to 111 pick the
 // same and leave out the rows hidden by hand too.
 const SUBTOTALS = [
@@ -188,14 +185,14 @@ export const MATH = [
         'SUBTOTAL',
         SUBTOTALS.flatMap((target, at) => [
             [at + 1, target, NESTED | FILTERED] as const,
-            [at + 101, target, NESTED | ROWS] as const,
+            [at + 101, target, NESTED | HIDDEN] as const,
         ]),
     ),
     fn('GCD', [rest(WHOLES)], greatestDivisor),
     fn('LCM', [rest(WHOLES)], leastMultiple),
     fn('MULTINOMIAL', [rest(WHOLES)], multinomial),
     // The codes 1 to 19, and per option 0 to 7 what is passed over: a nested SUBTOTAL or AGGREGATE up to 3,
-    // errors for 2, 3, 6 and 7, hidden and filtered rows for the odd ones. An even option leaves out no row.
+    // errors for 2, 3, 6 and 7, hidden rows and with them filtered ones for the odd. An even option leaves out none.
     chosen(
         'AGGREGATE',
         [
@@ -203,6 +200,6 @@ export const MATH = [
             ...['MEDIAN', 'MODE.SNGL', 'LARGE', 'SMALL', 'PERCENTILE.INC', 'QUARTILE.INC'],
             ...['PERCENTILE.EXC', 'QUARTILE.EXC'],
         ].map((target, at) => [at + 1, target, 0] as const),
-        [NESTED, NESTED | ROWS, NESTED | ERRORS, NESTED | ROWS | ERRORS, 0, ROWS, ERRORS, ROWS | ERRORS],
+        [NESTED, NESTED | HIDDEN, NESTED | ERRORS, NESTED | HIDDEN | ERRORS, 0, HIDDEN, ERRORS, HIDDEN | ERRORS],
     ),
 ];

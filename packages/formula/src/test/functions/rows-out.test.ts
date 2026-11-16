@@ -107,6 +107,12 @@ describe('SUBTOTAL leaves out the rows a filter left out, and from 101 on the ro
         expect(valueAt(engine, 'A1')).toBe(12);
     });
 
+    test('rows that are both hidden and filtered, the filtered ones inside the hidden, are left out once', () => {
+        const formulas = ['=SUBTOTAL(109,A1:A6)', '=SUBTOTAL(9,A1:A6)', '=SUBTOTAL(109,A3)', '=AGGREGATE(9,5,A4:A6)'];
+        expect(answers(formulas, DATA, [0, 4], [1, 2])).toEqual([32, 57, 0, 32]);
+        expect(answers(formulas, DATA, [1, 2], [0, 4])).toEqual([32, 32, 0, 32]);
+    });
+
     test('a nested SUBTOTAL on a row that shows is still passed over', () => {
         const cells = { ...DATA, A7: '=SUBTOTAL(109,A1:A6)' };
         expect(answers(['=SUBTOTAL(109,A1:A7)', '=SUBTOTAL(9,A1:A7)'], cells)).toEqual([53, 55]);

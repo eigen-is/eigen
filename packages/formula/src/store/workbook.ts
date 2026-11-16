@@ -24,12 +24,12 @@ export type CellSink = (row: number, column: number, value: Literal | null, form
 
 // One sheet as a load takes it. `cells` reports every cell that holds something, in any order, and is called
 // twice with the same cells, to size the columns and then to fill them: a host walks its own and builds no list.
-// `hidden` and `filtered` are the rows it hides by hand and the rows its filter left out, as `Engine.setRowsOut`
-// takes them: the rows the values of a computed load were computed with. A sheet with none leaves them out.
 export type SheetSource = {
     readonly id: string;
     readonly name: string;
     readonly cells: (cell: CellSink) => void;
+    // The rows hidden by hand and the rows a filter left out, as `Engine.setRowsOut` takes them: the rows the
+    // values of a computed load were computed with. A sheet that hides and filters none leaves them out.
     readonly hidden?: readonly number[];
     readonly filtered?: readonly number[];
 };
@@ -65,9 +65,8 @@ export function admit(row: number, column: number, value: Literal | null): void 
 }
 
 // The store's door for the rows a host says a sheet hides or filters, in a call or in a load: throws unless they are
-// pairs of a first and a last row of the grid, in order, that share no row.
+// pairs of a first and a last row of the grid, in order, that share no row. Half a pair has no last row.
 export function admitRows(rows: readonly number[]): void {
-    if (rows.length % 2 !== 0) throw new RangeError(`No pairs of rows in ${rows.length} numbers`);
     let free = 0;
     for (let at = 0; at < rows.length; at += 2) {
         const first = rows[at];

@@ -1,8 +1,8 @@
 // One sheet of the store: its id, its name, its place among the sheets and its columns. A column that was never
 // written does not exist past the last one that was, so a sheet costs what it holds. Inserting and deleting rows
 // and columns and moving a block moves the cells only: what a formula's text becomes is the transform's work, not
-// the store's. The place is the workbook's to write, whenever the list of sheets changes. The rows the sheet hides
-// and filters are the host's to say, whole, after every change of them: no edit here moves one.
+// the store's. The place is the workbook's to write, whenever the list of sheets changes, and the rows the sheet
+// hides and filters are the host's to say: no edit here moves one.
 
 import { firstPushed } from '../edit/map';
 import type { Move } from '../edit/move';
@@ -20,7 +20,7 @@ export class Sheet {
     private readonly held: Column[];
     // The rows hidden by hand, the rows a filter left out, and both together: each list is sorted pairs of a first
     // and a last row that share no row. SUBTOTAL and AGGREGATE pass over them.
-    public hidden: readonly number[] = [];
+    private hidden: readonly number[] = [];
     public filtered: readonly number[] = [];
     public out: readonly number[] = [];
 
