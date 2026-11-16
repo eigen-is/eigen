@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { SheetSource } from '../../index';
 import { Engine } from '../../index';
+import { Recalc } from '../../recalc/recalc';
 import { ShapeTable } from '../../text/shapes';
 
 // The work law of an edit: what it costs is counted, not timed, as the blocks it visits, each a read of a shape
@@ -210,4 +211,55 @@ describe('what an edit visits and lists', () => {
         expect(counted).toEqual(blocks(1000));
         for (const done of Object.values(counted)) expect(done).toEqual([0, 0]);
     }, 60_000);
+});
+
+describe('what a load and a sheet add ask of the shapes', () => {
+    // How often the facts of a shape are asked while `step` runs.
+    const asked = (step: () => void) => {
+        const { factsOf } = Recalc.prototype;
+        let count = 0;
+        Recalc.prototype.factsOf = function counted(shape) {
+            count += 1;
+            return factsOf.call(this, shape);
+        };
+        try {
+            step();
+        } finally {
+            Recalc.prototype.factsOf = factsOf;
+        }
+        return count;
+    };
+    // A sheet of so many formulas, each of a shape of its own, from `first` on.
+    const distinct = (id: string, count: number, first: number) =>
+        source(
+            id,
+            [...Array(count).keys()].map((row): Typed => [row, 1, null, `=R1C1+${first + row}`]),
+        );
+
+    test('a sheet add asks the shapes of its own cells once a run, not the table', () => {
+        const add = (shapes: number, rows: number) => {
+            const engine = new Engine([distinct('a', shapes, 0)], 0, 0, false);
+            // A clock has the first pass build the index.
+            engine.setClock(0, 0);
+            engine.recalc(NO_CAP);
+            const cells = [...Array(rows).keys()].map((row): Typed => [row, 1, null, '=R1C1*2']);
+            return asked(() => void engine.addSheet(source('b', cells), 1));
+        };
+        expect(add(1000, 1)).toBe(add(10, 1));
+        expect(add(10, 1000)).toBe(add(10, 1));
+    });
+
+    test('a load asks each sheet the shapes of its own cells', () => {
+        const load = (sheets: number) =>
+            asked(
+                () =>
+                    new Engine(
+                        [...Array(sheets).keys()].map((at) => distinct(`t${at}`, 10, 10 * at)),
+                        0,
+                        0,
+                        false,
+                    ),
+            );
+        expect(load(100)).toBe(10 * load(10));
+    });
 });

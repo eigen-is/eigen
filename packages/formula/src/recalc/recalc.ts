@@ -387,16 +387,20 @@ export class Recalc {
     // whose #REF! the load trusted is to be computed, and is a seed too: a marking takes the readers of a flagged
     // formula for flagged.
     private hold(sheet: Sheet, computed: boolean): void {
-        const { shapes } = this.workbook;
-        let kept = false;
-        for (let id = 1; id <= shapes.size && !kept; id += 1) kept = (this.factsOf(id) & Fact.Kept) !== 0;
         for (let c = 0; c < sheet.columns.length; c += 1) {
             const column = sheet.columns[c];
             const { kind, ref, shape, length } = column;
-            for (let row = 0; (kept || column.errors > 0) && row < length; row += 1) {
+            // Whether the shape of the row before is one this build cannot evaluate: most rows share it.
+            let last = 0;
+            let kept = false;
+            for (let row = 0; row < length; row += 1) {
                 const id = shape[row];
                 if (id === 0) continue;
-                if (this.factsOf(id) & Fact.Kept) {
+                if (id !== last) {
+                    last = id;
+                    kept = (this.factsOf(id) & Fact.Kept) !== 0;
+                }
+                if (kept) {
                     const changed = this.keep(column, row, this.workbook.value(column, row));
                     if (changed && computed) extend(this.seeds, sheet.place, c, row);
                 } else if (kind[row] === CellKind.Error && ref[row] === REF.code) {
