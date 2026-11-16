@@ -7,9 +7,8 @@ import type { ChartLook, ChartSpecPartKey } from '../types/chart';
 import type { BorderSide, CellLink, ConditionalFormatConditionName, DataValidationRule } from './types';
 
 export type Scalar = number | string | boolean;
-// What an op says a cell holds. `v` with `e: 1` is an error literal, and `f` is the stored key with its `=`. `v`
-// stands beside `f` only for a formula this build cannot evaluate, such as a reference into another workbook, whose
-// value an import or a paste gives; beside any other it is ignored. `s` stands with neither.
+// What an op says a cell holds: `v` with `e: 1` is an error literal, `f` the stored key with its `=`, `s` with neither.
+// `v` beside `f` counts only for a formula this build cannot evaluate, whose value an import or a paste gives.
 export type CellContent = { v?: Scalar; e?: 1; f?: string; s?: Run[]; link?: CellLink; qp?: 1 };
 export type RunStyle = { bl?: 1; it?: 1; ff?: number | string; fs?: number; fc?: string; cl?: 1; un?: 1 };
 export type Run = RunStyle & { v: string };

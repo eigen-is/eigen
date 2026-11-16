@@ -19,9 +19,10 @@ import '@univerjs/sheets-formula/facade';
 import univerFormulaEnglish from '@univerjs/sheets-formula/locale/en-US';
 import type { ConfigParams, RawCellContent } from 'hyperformula';
 import { DetailedCellError, HyperFormula } from 'hyperformula';
+import { ORACLE_CLOCK } from '../scripts/oracle-rows';
 import type { Literal, SheetSource } from '../src/index';
 import { Engine, errorOf } from '../src/index';
-import { sheetFinder, storedText } from '../src/text';
+import { GRID_COLUMNS, GRID_ROWS, sheetFinder, storedText } from '../src/text';
 
 // One cell as a person types it: a text that starts with = is a formula, any other text stays a text.
 export type Input = number | string | boolean | null;
@@ -36,10 +37,6 @@ export type CellEngine = {
     write(sheet: number, row: number, column: number, input: Input): void;
     insertLines(sheet: number, index: number, count: number, rows: boolean): void;
 };
-
-// The clock and the draw the oracle gives our engine: the recorder's date, 12 November 2026, and seed 7.
-const NOW = 46338.5;
-const SEED = 7;
 
 export class OursEngine implements CellEngine {
     private engine = new Engine([], 0, 0, false);
@@ -73,7 +70,7 @@ export class OursEngine implements CellEngine {
     }
 
     public recalc(): void {
-        this.engine.setClock(NOW, SEED);
+        this.engine.setClock(ORACLE_CLOCK.now, ORACLE_CLOCK.seed);
         this.engine.recalc(Number.POSITIVE_INFINITY);
     }
 
@@ -123,8 +120,8 @@ export const HYPERFORMULA_CONFIG: Partial<ConfigParams> = {
     leapYear1900: true,
     nullDate: { year: 1899, month: 12, day: 31 },
     smartRounding: true,
-    maxRows: 1_048_576,
-    maxColumns: 16_384,
+    maxRows: GRID_ROWS,
+    maxColumns: GRID_COLUMNS,
 };
 // The same guide defines TRUE and FALSE as names, since Excel has them as words.
 const HYPERFORMULA_NAMES = [
@@ -240,7 +237,7 @@ function typed(input: number | string | boolean): string {
 // Its English texts, which its sheets need even without a screen, as its Node guide registers them.
 const UNIVER_LOCALES = { [LocaleType.EN_US]: mergeLocales(univerSheetsEnglish, univerFormulaEnglish) };
 // Excel's grid, as HyperFormula gets.
-const UNIVER_GRID = { rowCount: 1_048_576, columnCount: 16_384 };
+const UNIVER_GRID = { rowCount: GRID_ROWS, columnCount: GRID_COLUMNS };
 
 export class UniverEngine implements CellEngine {
     private univer: Univer | undefined;

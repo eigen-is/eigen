@@ -1,7 +1,7 @@
 // The one way to read a workbook: what a cell holds and shows, the look it wears, its lines, merges and records,
-// sheet by sheet in tab order. A reader such as the painter, the formula bar, the export or the server takes a book
-// from `cellsOf` and reads through it, never through the workbook's parts. A read hands out what the parts hold,
-// such as the interned look or a stored record, and builds only what it returns, so a screen of reads stays cheap.
+// sheet by sheet in tab order. A reader takes a book from `cellsOf` and reads through it, never through the workbook's
+// parts. A read hands out what the parts hold, such as the interned look or a stored record, and builds only what it
+// returns, so a screen of reads stays cheap.
 
 import type { Literal } from '@workspace/formula';
 import { numberDisplay } from '@workspace/formula/format';
@@ -17,7 +17,7 @@ import type {
     Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
-import { contentOf } from './extras';
+import { cellAt } from './apply-input';
 import type { BookSheet, Workbook } from './workbook';
 
 export type Book = {
@@ -67,10 +67,7 @@ export class Sheet {
 
     // What an input op would say to put the cell back.
     public content(row: number, column: number): CellContent | null {
-        const { engine } = this.book;
-        const formula = engine.formulaOf(this.id, row, column);
-        const given = formula !== null && engine.isGiven(this.id, row, column);
-        return contentOf(engine.valueOf(this.id, row, column), formula, given, this.parts.extras.at(row, column));
+        return cellAt(this.book, this.id, this.parts.extras, row, column);
     }
 
     public hasFormula(row: number, column: number): boolean {

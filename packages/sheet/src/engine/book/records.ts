@@ -27,11 +27,11 @@ import {
     commentAfter,
     filterAfter,
     filterColumnAfter,
-    formulaOf,
     LineMap,
     lineSpan,
     mergeAfter,
     ruleAfter,
+    ruleFormula,
     sheetAfter,
     validationAfter,
     withFormula,
@@ -424,7 +424,7 @@ export class SheetRecords {
                 ? withFormula(formula, (tree) => transformMove(tree, reverse, this.sheet, ...backHost).tree)
                 : formula;
             if (formula !== rule) writes.push(() => this.replace('conditionalFormat', id, formula));
-            if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule) || returns(rule.ranges)) {
+            if (back === 'key-too-long' || ruleFormula(back) !== ruleFormula(rule) || returns(rule.ranges)) {
                 restore.push(this.wholeOp('conditionalFormat', id, rule));
             }
         }

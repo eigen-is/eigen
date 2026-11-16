@@ -43,10 +43,8 @@ export function stillHolding(book: Workbook, apply: readonly Op[], written: read
     return held;
 }
 
-// The one test before the inverse writes a cell's content, restyles its runs or puts back a formula a rename bound:
-// the cell holds what the edit left in it. That is folded from what the cell held before the edit, the inverse's last
-// word on it, or what it holds now where the inverse says nothing: an input replaces the cell, a format sets keys and a
-// new name binds a formula typed with it. A value beside a formula counts only where the workbook keeps one.
+// Whether a cell holds what the edit left, folded from the inverse's last word on it, or what it holds now, through
+// each written op; the inverse writes, restyles or rebinds a cell only then.
 function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly Op[], written: readonly Op[]): Holds {
     const inputs = apply.filter((op): op is InputOp => op.kind === 'input' && op.sheet === sheet).toReversed();
     return (row, column) => {
@@ -274,14 +272,14 @@ function recordHolding(part: BookSheet, op: RecordOp, written: readonly Op[]): R
                 : undefined;
     const fields = new Map(Object.entries(live ?? {}));
     const holds = (field: string) => !(state === 'whole' || field in known) || same(fields.get(field), known[field]);
-    if (op.set && !op.whole) return live ? withFields(op, op.set, holds) : undefined;
+    if (op.set && !op.whole) return live ? heldFields(op, op.set, holds) : undefined;
     if (state === 'gone') return live ? undefined : op;
     const kept = live && Object.keys(known).every(holds) && (state !== 'whole' || [...fields.keys()].every(holds));
     return kept ? op : undefined;
 }
 
 // The op with the fields of its `set` that hold: the op itself with all of them, none with no field.
-function withFields<O extends RecordOp, S extends NonNullable<O['set']>>(
+function heldFields<O extends RecordOp, S extends NonNullable<O['set']>>(
     op: O,
     set: S,
     holds: (field: string) => boolean,

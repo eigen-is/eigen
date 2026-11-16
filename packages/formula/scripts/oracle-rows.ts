@@ -11,7 +11,7 @@ import { Engine } from '../src/index';
 import { parseA1Range, sheetFinder, storedText } from '../src/text';
 
 export type Cells = Readonly<Record<string, Literal>>;
-export type Fixture = {
+type Fixture = {
     readonly host: Cells;
     readonly hostName?: string;
     readonly others?: Readonly<Record<string, Cells>>;
@@ -26,7 +26,7 @@ export type Expected = {
     readonly exact15?: boolean;
 };
 export type Probe = { readonly rows: number; readonly columns: number; readonly elements: readonly Expected[] | null };
-export type Outcome = {
+type Outcome = {
     readonly file: string;
     readonly section: string;
     readonly formula: string;
@@ -43,8 +43,8 @@ export type Outcome = {
 };
 
 const HOST = 'U21';
-// The recorder's machine date, 12 Nov 2026, for the rows that read the clock and were not skipped.
-const NOW = 46338.5;
+// The recorder's machine date, 12 Nov 2026, and a seed, for the rows that read the clock and were not skipped.
+export const ORACLE_CLOCK = { now: 46338.5, seed: 7 } as const;
 export const VOLATILE = ['RAND', 'RANDBETWEEN', 'RANDARRAY', 'NOW', 'TODAY'];
 const CALLS_VOLATILE = new RegExp(`\\b(${VOLATILE.join('|')})\\(`);
 
@@ -386,7 +386,7 @@ function evaluateAll(formulas: readonly string[], fixture: Fixture, named: reado
             0,
             false,
         );
-        engine.setClock(NOW, 7);
+        engine.setClock(ORACLE_CLOCK.now, ORACLE_CLOCK.seed);
         engine.recalc(Number.POSITIVE_INFINITY);
         return engine.valueOf('s1', hostRow, hostColumn);
     });

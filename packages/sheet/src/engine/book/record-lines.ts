@@ -1,6 +1,6 @@
 // Where the fields of a sheet's records go when rows or columns are inserted or deleted: a merge moves as its lines
 // do, a filter that reaches the last line keeps reaching it, a rule's formula follows the lines it names. The record
-// store plans a line edit with it, and the undo stack shifts the record ops it keeps with it, so a record and an op
+// store plans a line edit with it, and `shiftOps` shifts an undo entry's record ops with it, so a record and an op
 // that names it land in one place. A rule is given the fields an op sets, which may be all of a record or a few.
 
 import type { Edit, FormulaNode, LineEdit } from '@workspace/formula/text';
@@ -114,7 +114,7 @@ export class LineMap {
         if (formula === 'key-too-long') return formula;
         const backHost = lineSpan(formula.ranges[0], this.rows)[0];
         const back = withFormula(formula, (tree) => transformLines(tree, this.back, sheet, backHost).tree);
-        if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) this.kept = false;
+        if (back === 'key-too-long' || ruleFormula(back) !== ruleFormula(rule)) this.kept = false;
         return formula;
     }
 }
@@ -232,14 +232,14 @@ export function withFormula(
     rule: ConditionalFormatRecord,
     transform: (tree: FormulaNode) => FormulaNode,
 ): ConditionalFormatRecord | 'key-too-long' {
-    const text = formulaOf(rule);
+    const text = ruleFormula(rule);
     if (text === undefined || rule.type !== 'default') return rule;
     const key = keyThrough(text, transform);
     if (key === null) return 'key-too-long';
     return key === text ? rule : { ...rule, conditionValue: rule.conditionValue.with(0, key) };
 }
 
-export function formulaOf(rule: ConditionalFormatRecord): string | undefined {
+export function ruleFormula(rule: ConditionalFormatRecord): string | undefined {
     if (rule.type !== 'default' || rule.conditionName !== 'formula') return undefined;
     const [text] = rule.conditionValue;
     return typeof text === 'string' ? text : undefined;

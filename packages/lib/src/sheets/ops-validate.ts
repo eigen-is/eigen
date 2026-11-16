@@ -246,7 +246,7 @@ function isAscending(value: unknown, count: number, spanOf: (item: unknown) => u
 }
 
 // A line run's span, when the run is a span beside the attributes of its lines.
-function lineSpan(run: unknown): unknown {
+function lineRunSpan(run: unknown): unknown {
     return Array.isArray(run) && run.length === 2 && isOf(run[1], LINE) ? run[0] : undefined;
 }
 
@@ -531,8 +531,8 @@ const SHEET_CONTENT = table<SheetContent>({
     ],
     // Its look indexes are read against the looks once the rest holds.
     bands: [Array.isArray, true],
-    rows: [(value) => isAscending(value, GRID_ROWS, lineSpan), true],
-    columns: [(value) => isAscending(value, GRID_COLUMNS, lineSpan), true],
+    rows: [(value) => isAscending(value, GRID_ROWS, lineRunSpan), true],
+    columns: [(value) => isAscending(value, GRID_COLUMNS, lineRunSpan), true],
     records: [isSheetRecords, true],
 });
 
