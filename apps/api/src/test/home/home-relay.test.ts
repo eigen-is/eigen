@@ -744,7 +744,7 @@ describe('A graceful shutdown', () => {
             held.release();
         }
         expect(drainedFirst).toBe(true);
-        expect(logged.some((call) => String(call[0]).includes('1 home deliveries'))).toBe(true);
+        expect(logged.some((call) => String(call[0]).includes('1 home pushes'))).toBe(true);
 
         await drainHomeDeliveries();
         expect(await notificationsWithTag(members[0], tag)).toHaveLength(1);
