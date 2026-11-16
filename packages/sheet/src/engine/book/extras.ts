@@ -1,8 +1,8 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
 // lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
-// fill, link and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text
-// is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
+// fill, link and shift the entries as cells, lines and blocks change, and each write adds to the workbook's count. A
+// rich cell's text is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
 import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
@@ -50,11 +50,15 @@ export function contentOf(
 export class Extras {
     private places: number[] = [];
     private held: Extra[] = [];
-    private units = 0;
 
-    // What the limits count of the entries, in units of `EXTRA_WEIGHT`.
+    // `total` counts the units of the entries of every sheet of the workbook: each write here adds what it changed.
+    public constructor(private readonly total: { extras: number }) {}
+
+    // What the limits count of this sheet's entries, in units of `EXTRA_WEIGHT`, walked.
     public weight(): number {
-        return this.units;
+        let units = 0;
+        for (const extra of this.held) units += unitsOf(extra);
+        return units;
     }
 
     public at(row: number, column: number): Extra | undefined {
@@ -91,7 +95,7 @@ export class Extras {
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
         const entry = entryOf(extra);
-        this.units += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
+        this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
         if (entry) {
             this.places.splice(at, replaced, place);
             this.held.splice(at, replaced, entry);
@@ -127,7 +131,7 @@ export class Extras {
         let at = 0;
         // Both lists ascend, and a block shifted whole still does, so one pass merges them.
         for (const [row, column, extra] of block) {
-            this.units += unitsOf(extra);
+            this.total.extras += unitsOf(extra);
             const place = placeOf(row, column) + shift;
             for (; at < this.places.length && this.places[at] < place; at += 1) {
                 places.push(this.places[at]);
@@ -206,14 +210,14 @@ export class Extras {
             }
             if (blank) step();
             const entry = to(old);
-            this.units += (entry ? unitsOf(entry) : 0) - unitsOf(old);
+            this.total.extras += (entry ? unitsOf(entry) : 0) - unitsOf(old);
             if (entry) {
                 places.push(place);
                 held.push(entry);
             }
         }
         lay(Number.POSITIVE_INFINITY);
-        if (blank) this.units += unitsOf(blank) * laid;
+        if (blank) this.total.extras += unitsOf(blank) * laid;
         // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
         for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
             const removed = at === 0 ? end - start : 0;
@@ -231,7 +235,7 @@ export class Extras {
             const row = places[at] % GRID_ROWS;
             const column = (places[at] - row) / GRID_ROWS;
             if (row >= top && row <= bottom && column >= left && column <= right) {
-                this.units -= unitsOf(held[at]);
+                this.total.extras -= unitsOf(held[at]);
                 taken.push([row, column, held[at]]);
                 continue;
             }

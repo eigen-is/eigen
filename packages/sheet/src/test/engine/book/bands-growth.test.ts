@@ -27,13 +27,13 @@ function randomRect(random: Random): Rect {
 
 describe('engine/book/bands — growth', () => {
     test('a plain sheet: one cell may add three runs and two bands', () => {
-        expect(new Bands([], []).growth([[2, 2]])).toEqual({ runs: 3, bands: 2 });
-        expect(new Bands([], []).growth([[0, LAST_COLUMN]])).toEqual({ runs: 3, bands: 0 });
-        expect(new Bands([], []).growth([])).toEqual({ runs: 0, bands: 0 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([[2, 2]])).toEqual({ runs: 3, bands: 2 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([[0, LAST_COLUMN]])).toEqual({ runs: 3, bands: 0 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([])).toEqual({ runs: 0, bands: 0 });
     });
 
     test('a cut copies the runs of the band it cuts, once however many writes cut there', () => {
-        const bands = new Bands([], []);
+        const bands = new Bands([], [], { runs: 0, bands: 0 });
         for (let r = 0; r < 200; r += 2) bands.write(row(r), () => 1);
         expect(bands.weight()).toEqual({ runs: 200, bands: 1 });
         // A cut at column 5 and one at column 6: two copies of 200 runs, and three runs in the band between.
@@ -54,7 +54,7 @@ describe('engine/book/bands — growth', () => {
     test('a write counts the bands the other writes cut out of its columns', () => {
         // The review's case: columns formatted one by one, then a row across them. Each rectangle alone adds 3 runs,
         // yet the row adds runs to every band the columns made.
-        const bands = new Bands([], []);
+        const bands = new Bands([], [], { runs: 0, bands: 0 });
         const writes: Rect[] = [column(2), column(4), column(6), row(5)];
         const bound = bands.growth(writes.map(([, left, , right]): Span => [left, right]));
         for (const [id, rect] of writes.entries()) bands.write(rect, () => id + 1);
@@ -72,7 +72,7 @@ describe('engine/book/bands — growth', () => {
         let cases = 0;
         for (let seed = 1; seed <= 4000; seed += 1) {
             const random = randomOf(seed * 104_729);
-            const bands = new Bands([], []);
+            const bands = new Bands([], [], { runs: 0, bands: 0 });
             for (let n = below(random, 12); n > 0; n -= 1) {
                 const id = below(random, 4);
                 bands.write(randomRect(random), () => id);

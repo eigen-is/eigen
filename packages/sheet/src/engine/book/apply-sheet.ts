@@ -33,7 +33,7 @@ export function applySheet(book: Workbook, op: SheetOp): (SheetOp | InputOp)[] {
         const suffix = ` (${n})`;
         name = `${add.fields.name.slice(0, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
     }
-    const result = book.addSheet({ ...add, fields: { ...add.fields, name } });
+    const result = book.addSheet({ ...add, fields: { ...add.fields, name } }, true);
     // The delete frees the name first, so the texts it bound stay as typed when they are written back.
     return [{ kind: 'sheet', delete: add.id }, ...lostInputs(book, result)];
 }

@@ -18,7 +18,7 @@ function weightOf(cells: readonly Placed<Extra>[]): number {
 }
 
 function extrasOf(cells: readonly Placed<Extra>[]): Extras {
-    const extras = new Extras();
+    const extras = new Extras({ extras: 0 });
     for (const [row, column, extra] of cells) extras.write(row, column, extra);
     return extras;
 }
@@ -67,7 +67,7 @@ describe('engine/book/extras — Extras', () => {
     });
 
     test('a put returns the old entry, keeps only the keys given, and with none deletes', () => {
-        const extras = new Extras();
+        const extras = new Extras({ extras: 0 });
         expect(extras.write(1, 1, { s: undefined, link: LINK.link, qp: undefined })).toBeUndefined();
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
         expect(extras.write(1, 1, RICH)).toEqual(LINK);
@@ -85,7 +85,7 @@ describe('engine/book/extras — Extras', () => {
         expect(extrasOf([[0, 0, RICH]]).weight()).toBe(7);
         const thousand = Array.from({ length: 1000 }, () => ({ v: 'r' }));
         expect(extrasOf([[0, 0, { s: thousand }]]).weight()).toBe(1002);
-        expect(new Extras().weight()).toBe(0);
+        expect(new Extras({ extras: 0 }).weight()).toBe(0);
     });
 
     test('the weight follows a write that adds, replaces and clears an entry', () => {
@@ -136,7 +136,7 @@ describe('engine/book/extras — Extras', () => {
     });
 
     test('a fill of 150,000 cells over entries and among 150,000 right of it and below is one pass', () => {
-        const extras = new Extras();
+        const extras = new Extras({ extras: 0 });
         extras.fill([0, 1, 74_999, 1], QUOTED);
         extras.fill([200_000, 0, 274_999, 0], QUOTED);
         extras.fill([100_000, 0, 100_009, 0], QUOTED);
@@ -185,7 +185,7 @@ describe('engine/book/extras — Extras', () => {
     });
 
     test('a link over 150,000 cells among 1,000 rich ones and 150,000 entries beside them is one pass', () => {
-        const extras = new Extras();
+        const extras = new Extras({ extras: 0 });
         for (let row = 0; row < 150_000; row += 150) extras.write(row, 0, { s: RICH.s });
         extras.fill([0, 1, 149_999, 1], QUOTED);
         const started = performance.now();
@@ -250,7 +250,7 @@ describe('engine/book/extras — Extras', () => {
         expect(extras.wouldPush(linesOp(true, true, 0, 3))).toBe(true);
         expect(extras.wouldPush(linesOp(false, true, 0, 2))).toBe(false);
         expect(extras.wouldPush(linesOp(false, true, 0, 3))).toBe(true);
-        expect(new Extras().wouldPush(linesOp(false, true, 0, GRID_COLUMNS))).toBe(false);
+        expect(new Extras({ extras: 0 }).wouldPush(linesOp(false, true, 0, GRID_COLUMNS))).toBe(false);
     });
 
     test('a block moved over itself keeps its own entries and returns what it landed on as it was', () => {
@@ -351,7 +351,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
     for (const seed of [5, 23, 2026]) {
         test(`random writes, fills, shifts and moves with their inverses, seed ${seed}`, () => {
             const random = randomOf(seed);
-            const sheets = [0, 1].map(() => ({ extras: new Extras(), model: new CellsModel() }));
+            const sheets = [0, 1].map(() => ({ extras: new Extras({ extras: 0 }), model: new CellsModel() }));
             const counts = {
                 ...{ put: 0, fill: 0, filled: 0, cleared: 0, replaced: 0, insert: 0, remove: 0 },
                 ...{ moveOver: 0, moveAcross: 0, carried: 0, covered: 0, linked: 0, unlinked: 0 },

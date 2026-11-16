@@ -25,7 +25,12 @@ export class Bands {
 
     // A sheet from a snapshot's flat form: per band its first column, n, then n pairs of start row and look index,
     // where index i names `looks[i - 1]` and 0 is plain. Equal neighbours join; columns before the first are plain.
-    public constructor(flat: readonly number[], looks: readonly number[]) {
+    // `held` counts the runs and the bands of every sheet of the workbook: each write here adds what it changed.
+    public constructor(
+        flat: readonly number[],
+        looks: readonly number[],
+        private readonly held: { runs: number; bands: number },
+    ) {
         const ids = [0, ...looks];
         for (let at = 0; at < flat.length; at += 2 + 2 * flat[at + 1]) {
             const runs: number[] = [];
@@ -35,6 +40,9 @@ export class Bands {
             if (flat[at] === 0) last.list = list;
             else if (!last.list.equals(list)) this.bands.push({ first: flat[at], list });
         }
+        const { runs, bands } = this.weight();
+        held.runs += runs;
+        held.bands += bands;
     }
 
     public look(row: number, column: number): number {
@@ -75,7 +83,7 @@ export class Bands {
         return { lastRow, lastColumn: last.list.count === 0 ? last.first - 1 : last.first };
     }
 
-    // What the limit on formats counts.
+    // What the limit on formats counts of this sheet, walked: the workbook's count is kept as the bands are written.
     public weight(): { runs: number; bands: number } {
         let runs = 0;
         for (const { list } of this.bands) runs += list.count;
@@ -181,7 +189,7 @@ export class Bands {
         const { bands } = this;
         const last = index + count - 1;
         if (insert) {
-            if (rows) for (const { list } of bands) list.insertRows(index, count, like);
+            if (rows) for (const band of bands) this.rewrite(band.list, (list) => list.insertRows(index, count, like));
             else {
                 // Beside the column `like` the new columns only widen its band.
                 const from = like === index ? index + 1 : index;
@@ -192,14 +200,16 @@ export class Bands {
         }
         const removed = [...this.spans(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last])];
         if (rows) {
-            for (const { list } of bands) list.deleteRows(index, count);
+            for (const band of bands) this.rewrite(band.list, (list) => list.deleteRows(index, count));
             this.join(1, bands.length - 1);
         } else {
             const low = this.split(index);
             const high = this.split(index + count);
-            bands.splice(low, high - low);
+            const before = bands.length;
+            for (const { list } of bands.splice(low, high - low)) this.held.runs -= list.count;
             for (let i = low; i < bands.length; i += 1) bands[i].first -= count;
             if (bands.length === 0) bands.push({ first: 0, list: new RunList() });
+            this.held.bands += bands.length - before;
             this.join(low, low);
         }
         return removed;
@@ -217,11 +227,18 @@ export class Bands {
         return low;
     }
 
+    // Writes one list and adds the runs it gained or lost to the workbook's count.
+    private rewrite(list: RunList, write: (list: RunList) => void): void {
+        const before = list.count;
+        write(list);
+        this.held.runs += list.count - before;
+    }
+
     // Writes the list of each band of the columns c0 to c1, cut at both ends first, then joins what became equal.
     private each(c0: number, c1: number, write: (list: RunList) => void): void {
         const low = this.split(c0);
         const high = this.split(c1 + 1);
-        for (let i = low; i < high; i += 1) write(this.bands[i].list);
+        for (let i = low; i < high; i += 1) this.rewrite(this.bands[i].list, write);
         this.join(low, high);
     }
 
@@ -230,8 +247,11 @@ export class Bands {
     private split(column: number): number {
         if (column >= GRID_COLUMNS) return this.bands.length;
         const at = this.bandAt(column);
-        if (this.bands[at].first === column) return at;
-        this.bands.splice(at + 1, 0, { first: column, list: this.bands[at].list.clone() });
+        const { first, list } = this.bands[at];
+        if (first === column) return at;
+        this.bands.splice(at + 1, 0, { first: column, list: list.clone() });
+        this.held.runs += list.count;
+        this.held.bands += 1;
         return at + 1;
     }
 
@@ -241,10 +261,15 @@ export class Bands {
         const end = Math.min(high + 1, bands.length);
         let kept = Math.max(1, low);
         for (let i = kept; i < end; i += 1) {
-            if (bands[i].list.equals(bands[kept - 1].list)) continue;
+            if (bands[i].list.equals(bands[kept - 1].list)) {
+                this.held.runs -= bands[i].list.count;
+                continue;
+            }
             bands[kept] = bands[i];
             kept += 1;
         }
-        bands.splice(kept, end - kept);
+        const dropped = Math.max(0, end - kept);
+        bands.splice(kept, dropped);
+        this.held.bands -= dropped;
     }
 }

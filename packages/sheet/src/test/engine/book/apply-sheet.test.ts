@@ -229,16 +229,17 @@ describe('engine/book/apply-sheet — an add', () => {
         expectLaw2(base, [addOf(added)]);
     });
 
-    test('an add the engine refuses, as a formula it binds would be too long, writes nothing, looks included', () => {
+    test('an add the engine refuses, as a formula it binds would be too long, writes nothing and weighs nothing', () => {
         const long = `="${'a'.repeat(131_010)}"&'N'!R1C1`;
         const base = bookOf(sheetOf('a', {}, { cells: [[0, 0, { f: long }]] }));
         const book = new Workbook(base);
         const before = bytes(book);
-        const looks = book.looks.size;
+        const weight = book.weight();
         const refused = fullSheet(LONG_ID, { name: 'N', order: 'a1' });
         expect(refusalOf(() => applyOps(book, [addOf(refused)]))).toBe('key-too-long');
         expect(bytes(book)).toBe(before);
-        expect(book.looks.size).toBe(looks);
+        // The sheet's parts were built to be weighed: its looks stay in the table until a sweep, its weight does not.
+        expect(book.weight()).toEqual(weight);
         expect([...book.sheets.keys()]).toEqual(['a']);
         expectReads(book, modelOf(base));
     });
