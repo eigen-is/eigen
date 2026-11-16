@@ -1,5 +1,5 @@
 ---
-title: About
+title: About Eigen
 description: A self-hosted alternative to Google Workspace. Ten apps on your own server, open source under the MIT license.
 rows:
   mail: Email on your own domain, also in the mail app you already use.
