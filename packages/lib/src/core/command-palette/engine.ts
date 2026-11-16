@@ -2,6 +2,7 @@
 // commands, in the order the palette shows them.
 
 import type { PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
+import { uniqBy } from 'es-toolkit';
 import { structuralMatchQuality } from './rank';
 
 type BuildInput = {
@@ -10,6 +11,7 @@ type BuildInput = {
     smart: PaletteResult[];
     mail: PaletteResult[];
     file: PaletteResult[];
+    recent: PaletteResult[];
     help: PaletteResult[];
     // In-document hits from the open eigendoc — absent in the drive list / non-eigendoc apps.
     doc?: PaletteResult[];
@@ -28,47 +30,29 @@ const QUALITY_RANK: Record<NonNullable<ReturnType<typeof structuralMatchQuality>
     'all-tokens-in-title': 1,
 };
 
-// Pure merge function: given the four provider outputs for a settled query, produce
-// the rendered Sections. The caller (useCommandResults) holds the call back while a
-// search is in flight — so this never sees a partial state and never has to gate on
-// pending.
-//
-// Section order top-to-bottom:
-//   1. Top Hit            — a deterministic smart parse, else strongest structural match
-//   2. Suggestions        — non-deterministic smart results (e.g. "Send mail to <email>"
-//                           derived from a contact name match), shown alongside Top Hit
-//   3. Selection          — selection-aware actions (Share X, Preview X, …) when a
-//                           selection is present
-//   4. Files              — search results
-//   5. Mail               — search results
-//   6. Contacts           — search results
-//   7. Help               — help-center articles (client-side Pagefind)
-//   8. Actions            — catalog commands ("Go to Mail", "New doc", …)
-//
-// Catalog actions live at the bottom because they're the least time-sensitive — the
-// user reaches them via type-to-match. Search results and selection-aware actions are
-// what the user usually opens the palette for and belong above.
+// Pure merge of what the sources found for one settled query; the caller holds an async source back while it is in
+// flight, so this never sees a partial state. The empty box shows Selection, then Recent files, then Suggested when
+// nothing is selected. Typed text shows the Top hit, Suggestions, Selection, the open document's hits, Files (recent
+// matches first), Mail, Contacts, Help and last the catalog Actions, which the user reaches by typing.
 export function buildSections(input: BuildInput): Sections {
     const actionList = input.action.filter((r) => r.group === 'actions');
-    const selectionList = input.action.filter((r) => r.group === 'selection');
+    const scopedSelection = input.action
+        .filter((r) => r.group === 'selection')
+        .sort((a, b) => b.rank - a.rank)
+        .slice(0, SECTION_CAP);
 
-    // Empty input: prefer the selection actions (always shown when a selection exists);
-    // otherwise fall back to the curated Suggested set of catalog actions.
     if (input.input.trim().length === 0) {
-        if (selectionList.length > 0) {
-            const capped = [...selectionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
-            return { topHit: undefined, groups: [{ id: 'selection', heading: 'Selection', items: capped }] };
-        }
+        const groups: Sections['groups'] = [];
+        if (scopedSelection.length > 0) groups.push({ id: 'selection', heading: 'Selection', items: scopedSelection });
+        if (input.recent.length > 0) groups.push({ id: 'recent', heading: 'Recent files', items: input.recent });
         const ids = input.suggestedCommandIds ?? [];
         const suggested = actionList.flatMap<PaletteResult>((r) =>
             r.kind === 'action' && ids.includes(r.id) ? [{ ...r, group: 'suggested' }] : [],
         );
-        return {
-            topHit: undefined,
-            groups: suggested.length
-                ? [{ id: 'suggested', heading: 'Suggested', items: suggested.slice(0, SECTION_CAP) }]
-                : [],
-        };
+        if (scopedSelection.length === 0 && suggested.length > 0) {
+            groups.push({ id: 'suggested', heading: 'Suggested', items: suggested.slice(0, SECTION_CAP) });
+        }
+        return { topHit: undefined, groups };
     }
 
     // Scope filter — drop everything except the selected source. Selection-aware items
@@ -77,15 +61,14 @@ export function buildSections(input: BuildInput): Sections {
     const inActionsScope = !input.scope || input.scope === 'actions';
     let scopedActions = inActionsScope ? actionList : [];
     let mailList = input.scope && input.scope !== 'mail' ? [] : input.mail;
-    let fileList = input.scope && input.scope !== 'file' ? [] : input.file;
+    let fileList = input.scope && input.scope !== 'file' ? [] : uniqBy([...input.recent, ...input.file], (r) => r.id);
     let contactList = input.scope && input.scope !== 'contacts' ? [] : input.contact;
     let helpList = input.scope && input.scope !== 'help' ? [] : input.help;
     let docList = input.scope && input.scope !== 'doc' ? [] : (input.doc ?? []);
-    // doc: scope ONLY — comment snippets never join the global unscoped blend (spec decision #6).
+    // doc: scope ONLY — comment snippets never join the global unscoped blend.
     let docCommentList = input.scope === 'doc' ? (input.docComment ?? []) : [];
     const smartList = input.scope ? [] : input.smart;
 
-    // Engine owns final ordering: sort by descending rank, then cap.
     scopedActions = [...scopedActions].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     mailList = [...mailList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     fileList = [...fileList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
@@ -93,7 +76,6 @@ export function buildSections(input: BuildInput): Sections {
     helpList = [...helpList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     docList = [...docList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
     docCommentList = [...docCommentList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
-    const scopedSelection = [...selectionList].sort((a, b) => b.rank - a.rank).slice(0, SECTION_CAP);
 
     // Top Hit: a deterministic smart parse claims it outright; otherwise the strongest
     // structural title match across the merged candidates wins.

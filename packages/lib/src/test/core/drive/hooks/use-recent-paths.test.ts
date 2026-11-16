@@ -19,7 +19,7 @@ test('the Recent list is cached under a key that names its owner', async () => {
         return Response.json([]);
     };
     const queryClient = new QueryClient();
-    const { unmount } = await renderHook(() => useRecentPaths(), queryClient);
+    const { unmount } = await renderHook(() => useRecentPaths(true), queryClient);
     await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     await unmount();
 

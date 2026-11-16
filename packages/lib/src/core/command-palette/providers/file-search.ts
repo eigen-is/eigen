@@ -1,5 +1,9 @@
+// The palette's Drive search: a debounced query to the search route for the files that match the typed text,
+// across the caller's own and team drives. It also owns the one file row that recent files reuse.
+
 import { getDriveItemUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { useMemo } from 'react';
 import { getFilePresentation } from '../../file-presentation';
@@ -21,8 +25,8 @@ export function useFileSearchResults(
     const debouncedInput = useDebouncedValue(input, FILE_SEARCH_DEBOUNCE_MS);
     const parsed = parseQuery(debouncedInput);
 
-    // Skip the network call when the effective scope is another kind.
     const scopeBlocks = !!scope && scope !== 'file';
+    const enabled = !scopeBlocks && parsed.q.length > 0;
 
     const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,
@@ -31,38 +35,37 @@ export function useFileSearchResults(
         limit: 6,
         // Include the caller's team drives in palette file hits (server-side fan-out).
         teams: '1',
-        enabled: !scopeBlocks && parsed.q.length > 0,
+        enabled,
     });
 
-    const results = useMemo<PaletteResult[]>(() => {
-        if (!data) return [];
-        // Carry the query into the opened document so its find bar lands on the matches.
-        const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
-        return data.file.map((path, i) => {
-            const presentation = getFilePresentation(path.mimeType, path.type, path.name);
-            // Only the five collab editors consume ?q= — chat/folder/inline-edit URLs never do.
-            const carryQ = encodedQ && isCollabType(path.type) ? encodedQ : '';
-            return {
-                kind: 'file' as const,
-                id: `file.${path.id}`,
-                title: stripEigenExtension(path.name),
-                icon: presentation.icon,
-                group: 'file',
-                rank: -i,
-                payload: path,
-                run: (rctx) => {
-                    const url = getDriveItemUrl(path);
-                    if (!url) {
-                        rctx.openPreview(path);
-                        return;
-                    }
-                    rctx.navigate(carryQ ? `${url}${url.includes('?') ? '&' : '?'}q=${carryQ}` : url);
-                },
-            };
-        });
-    }, [data, parsed.q]);
+    const results = useMemo<PaletteResult[]>(
+        () => (data ? data.file.map((path, i) => fileToResult(path, parsed.q, 'file', -i)) : []),
+        [data, parsed.q],
+    );
 
-    const willSearch = !scopeBlocks && parsed.q.length > 0;
     const isDebouncing = !scopeBlocks && input.trim().length > 0 && input !== debouncedInput;
-    return { results, isPending: (willSearch && isFetching) || isDebouncing };
+    return { results, isPending: (enabled && isFetching) || isDebouncing };
+}
+
+// One file row, for a search hit and a recent file alike, so both open the file the same way. The query rides
+// along into the opened document so its find bar lands on the matches; only the collab editors read ?q=.
+export function fileToResult(path: DrivePath, q: string, group: 'file' | 'recent', rank: number): PaletteResult {
+    const carryQ = q && isCollabType(path.type) ? encodeURIComponent(q) : '';
+    return {
+        kind: 'file',
+        id: `file.${path.id}`,
+        title: stripEigenExtension(path.name),
+        icon: getFilePresentation(path.mimeType, path.type, path.name).icon,
+        group,
+        rank,
+        payload: path,
+        run: (rctx) => {
+            const url = getDriveItemUrl(path);
+            if (!url) {
+                rctx.openPreview(path);
+                return;
+            }
+            rctx.navigate(carryQ ? `${url}${url.includes('?') ? '&' : '?'}q=${carryQ}` : url);
+        },
+    };
 }
