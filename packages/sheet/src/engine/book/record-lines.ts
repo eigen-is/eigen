@@ -38,11 +38,11 @@ export type Reach = 'closed' | 'open' | 'whole';
 export class LineMap {
     public readonly rows: boolean;
     // The edit that undoes this one, as a formula's transform takes it.
-    public readonly back: LineEdit;
-    // Whether the inverse edit gives back every line, span and formula mapped since the caller last set it.
-    public kept = true;
+    private readonly back: LineEdit;
     private readonly axis: Edit;
     private readonly inverse: Edit;
+    // Whether the inverse edit gives back every line, span and formula mapped in the current `through`.
+    private kept = true;
 
     public constructor(public readonly edit: LinesOp) {
         const { rows, insert, index, count } = edit;
@@ -50,6 +50,14 @@ export class LineMap {
         this.back = { ...edit, insert: !insert };
         this.axis = { insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS };
         this.inverse = { ...this.axis, insert: !insert };
+    }
+
+    // What a rule makes of a record, and whether the inverse edit gives back all it mapped: a record that only
+    // shifted needs no op to put it back.
+    public through<R>(rule: () => R): readonly [after: R, kept: boolean] {
+        this.kept = true;
+        const after = rule();
+        return [after, this.kept];
     }
 
     // Whether the edit takes a line away.
@@ -91,6 +99,22 @@ export class LineMap {
         const after = frozenAfter(this.axis, count);
         if (frozenAfter(this.inverse, after) !== count) this.kept = false;
         return after;
+    }
+
+    // A rule's formula through the edit, read at `host`; `rule` is the record before the edit, which the inverse edit
+    // read at the formula's new host must give back.
+    public formula(
+        rule: ConditionalFormatRecord,
+        ruled: ConditionalFormatRecord,
+        sheet: string,
+        host: number,
+    ): ConditionalFormatRecord | 'key-too-long' {
+        const formula = withFormula(ruled, (tree) => transformLines(tree, this.edit, sheet, host).tree);
+        if (formula === 'key-too-long') return formula;
+        const backHost = lineSpan(formula.ranges[0], this.rows)[0];
+        const back = withFormula(formula, (tree) => transformLines(tree, this.back, sheet, backHost).tree);
+        if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) this.kept = false;
+        return formula;
     }
 }
 
@@ -173,12 +197,7 @@ export function ruleAfter(
     const first = here ? rule.ranges.findIndex((range) => map.rect(range, 'whole')) : 0;
     const [start] = lineSpan(rule.ranges[first], rows);
     const host = here && map.gone(start) ? edit.index + edit.count : start;
-    const formula = withFormula(ruled, (tree) => transformLines(tree, edit, sheet, host).tree);
-    if (formula === 'key-too-long') return formula;
-    const backHost = lineSpan(formula.ranges[0], rows)[0];
-    const back = withFormula(formula, (tree) => transformLines(tree, map.back, sheet, backHost).tree);
-    if (back === 'key-too-long' || formulaOf(back) !== formulaOf(rule)) map.kept = false;
-    return formula;
+    return map.formula(rule, ruled, sheet, host);
 }
 
 // A chart on any sheet, whose refs follow the lines they name on the edited sheet.

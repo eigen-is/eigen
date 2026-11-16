@@ -267,53 +267,60 @@ export class SheetRecords {
         const writes: (() => void)[] = [];
         const restore: RecordOp[] = [];
         // Undo puts back a record the inverse edit does not give back as it was.
-        const settle = <T extends ChangedKind>(type: T, id: string, old: Records[T], next: Records[T] | undefined) => {
+        const settle = <T extends ChangedKind>(
+            type: T,
+            id: string,
+            old: Records[T],
+            next: Records[T] | undefined,
+            kept: boolean,
+        ) => {
             if (next !== old) writes.push(() => this.replace(type, id, next));
-            if (!map.kept || next === undefined) restore.push(this.restoreOp(type, id, old, next === undefined));
-            map.kept = true;
+            if (!kept || next === undefined) restore.push(this.restoreOp(type, id, old, next === undefined));
         };
 
         if (here) {
-            const fields = sheetAfter(this.sheetFields, map);
+            const [fields, kept] = map.through(() => sheetAfter(this.sheetFields, map));
             if (fields !== this.sheetFields) {
                 writes.push(() => {
                     this.sheetFields = Object.freeze(withFields(this.sheetFields, fields));
                 });
             }
-            if (!map.kept) {
+            if (!kept) {
                 const { frozenRows, frozenColumns } = this.sheetFields;
                 const set = map.rows ? { frozenRows } : { frozenColumns };
                 restore.push({ kind: 'record', sheet: this.sheet, type: 'sheet', id: this.sheet, set });
             }
-            map.kept = true;
-            for (const [id, merge] of this.stored.merge) settle('merge', id, merge, mergeAfter(merge, map));
+            for (const [id, merge] of this.stored.merge) {
+                settle('merge', id, merge, ...map.through(() => mergeAfter(merge, map)));
+            }
             const removed = new Set<string>();
             for (const [id, filter] of this.stored.filter) {
-                const next = filterAfter(filter, map);
+                const [next, kept] = map.through(() => filterAfter(filter, map));
                 if (!next) removed.add(id);
-                settle('filter', id, filter, next);
+                settle('filter', id, filter, next, kept);
             }
             for (const [id, column] of this.stored.filterColumn) {
-                const next = removed.has(column.filter) ? undefined : filterColumnAfter(column, map);
-                settle('filterColumn', id, column, next);
+                if (removed.has(column.filter)) settle('filterColumn', id, column, undefined, true);
+                else settle('filterColumn', id, column, ...map.through(() => filterColumnAfter(column, map)));
             }
-            for (const [id, comment] of this.stored.comment) settle('comment', id, comment, commentAfter(comment, map));
+            for (const [id, comment] of this.stored.comment) {
+                settle('comment', id, comment, ...map.through(() => commentAfter(comment, map)));
+            }
             for (const [id, validation] of this.stored.validation) {
-                settle('validation', id, validation, validationAfter(validation, map));
+                settle('validation', id, validation, ...map.through(() => validationAfter(validation, map)));
             }
         }
         for (const [id, rule] of this.stored.conditionalFormat) {
-            const next = ruleAfter(rule, map, this.sheet);
+            const [next, kept] = map.through(() => ruleAfter(rule, map, this.sheet));
             if (next === 'key-too-long') return next;
             if (next !== rule) writes.push(() => this.replace('conditionalFormat', id, next));
             // A rule changes only whole, so it comes back whole.
-            if (!map.kept || next === undefined) restore.push(this.wholeOp('conditionalFormat', id, rule));
-            map.kept = true;
+            if (!kept || next === undefined) restore.push(this.wholeOp('conditionalFormat', id, rule));
         }
         for (const [id, chart] of this.stored.chart) {
-            const next = chartAfter(chart, map);
+            const [next, kept] = map.through(() => chartAfter(chart, map));
             if (next !== chart && exceedsChartSpecBytes(next)) return 'key-too-long';
-            settle('chart', id, chart, next);
+            settle('chart', id, chart, next, kept);
         }
         return {
             restore: inOrder(restore),
