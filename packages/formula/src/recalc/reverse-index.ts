@@ -1,9 +1,8 @@
-// The reverse index of a workbook: which formulas read a cell. `Recalc` says which sheets' formulas changed and has
-// it rebuilt: the blocks of cells of one shape are found again in the columns of those sheets alone, and what every
-// block reads is listed again whole, so nothing here is patched. Then it marks: it flags every formula that reads a
-// written cell or a formula flagged here. A block shares its entries, about one per reference, which a `Listing`
-// finds by the rows and the column of a span. A second listing holds the boxes around what formulas worked out as
-// they ran, an entry per box, built again whenever a record changed.
+// The reverse index of a workbook: which formulas read a cell, which a marking follows from the written cells. It
+// holds every block of cells of one shape and, per block, about one entry per reference, which a `Listing` finds by
+// the rows and the column of a span; a second listing holds the boxes of the records. Nothing here is patched: a
+// sheet's blocks are found again from its columns once it is forgotten or reshaped, and both listings are built
+// again whole, from all blocks and all records.
 
 import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';

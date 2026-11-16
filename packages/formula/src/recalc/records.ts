@@ -1,9 +1,8 @@
-// What the formulas that work a reference out as they run last resolved: per cell, one box for each sheet it
-// resolved into, around every area of that sheet. The index lists the records, so a marking follows them as it
-// follows the references a formula names. The invariant: at all times such a formula is flagged, or its record
-// covers everything it last resolved. A formula that runs records; a computed load ran none and an edit drops
-// every record, so the marking after either flags them all, and a record can name its cell by where it is.
-// Nothing here is stored.
+// What the formulas that work a reference out as they run last resolved, in memory only: per cell, one box for each
+// sheet it resolved into, around every area of that sheet. The index lists them, so a marking follows them as it
+// follows named references. The invariant: such a formula is flagged, or its record covers all it last resolved. No
+// formula ran at a computed load and every edit drops all records, so the marking after either flags them all; and a
+// record names its cell by its sheet's place and its column, as places change only inside an edit, after the drop.
 
 import { Fact } from '../eval/facts';
 import type { Sheet } from '../store/sheet';
