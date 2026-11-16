@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { fn, NUMBER } from '../../functions/registry';
 import type { SheetSource } from '../../index';
-import { Engine, REF } from '../../index';
+import { DIV0, Engine, REF } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
 import type { TestCell } from '../store/support';
@@ -129,17 +129,26 @@ describe('the open', () => {
         expect(count.ran).toBe(0);
     });
 
-    test('of a computed snapshot computes a formula that came with #REF! again, and none of its readers', () => {
+    test('of a computed snapshot computes a formula that came with #REF! again, and its readers, and no other', () => {
         const { count, recalc } = counted(
             [
                 [0, 0, REF, '=RC'],
                 [0, 1, REF, '=RC[-1]+RAN(1)'],
                 [0, 2, 'kept1', '=IFERROR(RC[-1],"kept")&RAN(1)'],
+                [0, 3, 1, '=RAN(1)'],
+                [1, 0, REF],
+                [1, 1, REF, '=RC[-1]+RAN(1)'],
+                [2, 0, DIV0, '=RAN(1)/0'],
+                [2, 1, 7, '=IFERROR(RC[-1],7)+RAN(0)'],
             ],
             true,
         );
-        expect(recalc.pass(NO_CAP).loops).toHaveLength(1);
-        expect(count.ran).toBe(1);
+        expect(recalc.pass(NO_CAP)).toEqual({
+            loops: [{ sheet: 's', row: 0, column: 0 }],
+            stopped: false,
+            changed: [],
+        });
+        expect(count.ran).toBe(3);
     });
 
     test('of one that is not computed computes every formula once', () => {
@@ -167,6 +176,40 @@ describe('the open', () => {
             changed: [],
         });
         expect(engine.settled()).toBe(true);
+    });
+
+    test('of a computed snapshot, then a write: a reader of a formula that came with #REF! is computed again', () => {
+        const cells: TestCell[] = [
+            [0, 0, REF, '=IF(RC[3],5,[gone]!R1C1)'],
+            [0, 1, 7, '=IFERROR(RC[-1],7)'],
+        ];
+        const engine = opened(cells, true);
+        engine.setValue('s', 0, 3, true);
+        expect(engine.recalc(NO_CAP).loops).toEqual([]);
+        expect(shown(engine, 2)).toEqual([5, 5]);
+    });
+
+    test('of a computed snapshot, then a write: a reader of a loop that the write puts on it is found on it', () => {
+        const cells: TestCell[] = [
+            [0, 0, REF, '=RC[1]+RC[3]'],
+            [0, 1, REF, '=RC[-1]'],
+            [0, 2, 7, '=IFERROR(RC[-2],7)'],
+        ];
+        const engine = opened(cells, true);
+        engine.setFormula('s', 0, 3, '=RC[-1]');
+        expect(engine.recalc(NO_CAP).loops).toHaveLength(4);
+        expect(shown(engine, 4)).toEqual(['#REF!', '#REF!', '#REF!', '#REF!']);
+    });
+
+    test('of a computed snapshot, then a rename: a reader of a formula that came with #REF! is computed again', () => {
+        const cells: TestCell[] = [
+            [0, 0, REF, '=IF(INDIRECT("t!A1")=1,5,[gone]!R1C1)'],
+            [0, 1, 7, '=IFERROR(RC[-1],7)'],
+        ];
+        const engine = new Engine([source('s', cells), source('u', [[0, 0, 1]])], 0, 0, true);
+        engine.renameSheet('u', 't');
+        engine.recalc(NO_CAP);
+        expect(shown(engine, 2)).toEqual([5, 5]);
     });
 
     test('of one that is not computed keeps the value a formula this build cannot evaluate came with', () => {

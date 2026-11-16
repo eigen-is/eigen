@@ -123,9 +123,10 @@ function generator(next: () => number) {
 type Counts = {
     compared: number;
     stops: number;
-    // Reloads of a settled walk, and the formulas with no value they held; reloads after a stopped pass and after
-    // writes or a clock no pass followed.
+    // Reloads of a settled walk, those of them that held a #REF! formula and got no pass of their own, and the
+    // formulas with no value they held; reloads after a stopped pass and after writes or a clock no pass followed.
     computed: number;
+    waiting: number;
     blanks: number;
     stopped: number;
     written: number;
@@ -149,7 +150,16 @@ function run(seed: number, steps: number): Counts {
             else if (input.value !== null) engine.setValue(id, row, column, input.value);
         }
     };
-    const counts: Counts = { compared: 0, stops: 0, computed: 0, blanks: 0, stopped: 0, written: 0, edits: 0 };
+    const counts: Counts = {
+        compared: 0,
+        stops: 0,
+        computed: 0,
+        waiting: 0,
+        blanks: 0,
+        stopped: 0,
+        written: 0,
+        edits: 0,
+    };
     // After a line edit or a move the inputs are the engine's walk, as the edit law holds its rewrites.
     const remodel = () => {
         for (const id of SHEETS) {
@@ -176,7 +186,7 @@ function run(seed: number, steps: number): Counts {
             return;
         }
         counts.computed += 1;
-        // A formula that holds #REF! is computed again, as it may be on a loop.
+        // A formula that holds #REF! is computed again, as it may be on a loop, and what reads it.
         let refs = 0;
         for (const id of SHEETS) {
             old.cells(id, (_row, _column, value, text) => {
@@ -184,13 +194,17 @@ function run(seed: number, steps: number): Counts {
                 if (text !== null && value === REF) refs += 1;
             });
         }
+        expect([seed, engine.settled(), ...values(engine)]).toEqual([seed, refs === 0, ...values(old)]);
+        // Half of the loads meet the next writes and edits before their first pass, its #REF! formulas still seeds.
+        if (pick(2) === 0) {
+            if (refs > 0) counts.waiting += 1;
+            return;
+        }
         const expected = fresh();
-        expect([seed, engine.settled(), engine.recalc(NO_CAP)]).toEqual([
+        expect([seed, engine.recalc(NO_CAP)]).toEqual([
             seed,
-            refs === 0,
             { loops: expected.result.loops, stopped: false, changed: [] },
         ]);
-        expect([seed, ...values(engine)]).toEqual([seed, ...values(old)]);
         expect([seed, ...values(engine)]).toEqual([seed, ...values(expected.engine)]);
     };
     for (let step = 0; step < steps; step += 1) {
@@ -292,6 +306,7 @@ describe('held against a fresh load', () => {
             expect(counts.compared).toBeGreaterThan(300);
             expect(counts.stops).toBeGreaterThan(10);
             expect(counts.computed).toBeGreaterThan(50);
+            expect(counts.waiting).toBeGreaterThan(20);
             expect(counts.blanks).toBeGreaterThan(100);
             expect(counts.stopped).toBeGreaterThan(2);
             expect(counts.written).toBeGreaterThan(10);
