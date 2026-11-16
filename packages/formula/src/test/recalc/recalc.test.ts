@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { fn } from '../../functions/registry';
-import type { CellSink, Literal } from '../../index';
+import type { CellSink, Literal, SheetSource } from '../../index';
 import { Engine, NA, REF } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
@@ -114,18 +114,23 @@ describe('recalc', () => {
     });
 });
 
-// The workbook loaded again with every value a full recalc gave it, as a host loads what it stored. `kept` is what
-// the host made of a value while it held it.
+// The workbook loaded again as computed, with every value a full recalc gave it, as a host loads what it stored.
+// `kept` is what the host made of a value while it held it.
 function reloaded(cells: Cells, kept = (value: Literal | null) => value): Engine {
     const fresh = engineOf({ s1: cells });
     fresh.recalc(NO_CAP);
-    return sheetOf((cell) => {
-        for (const [label, input] of Object.entries(cells)) {
-            const [row, column] = at(label);
-            const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
-            cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
-        }
-    });
+    const sheet: SheetSource = {
+        id: 's1',
+        name: 'Sheet1',
+        cells: (cell) => {
+            for (const [label, input] of Object.entries(cells)) {
+                const [row, column] = at(label);
+                const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
+                cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
+            }
+        },
+    };
+    return new Engine([sheet], 0, 0, true);
 }
 
 const LOOPS: [string, Cells, string[], Readonly<Record<string, Literal>>][] = [
