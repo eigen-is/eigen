@@ -243,14 +243,15 @@ function linesHolding(part: BookSheet, op: LineFormat, written: readonly Op[]): 
 // A record holds field by field where the inverse sets fields, and whole where it makes or deletes the record: then
 // the record must be as the edit left it, or the peer's record stays. A sheet has one filter, whatever its id.
 function recordHolding(part: BookSheet, op: RecordOp, written: readonly Op[]): RecordOp | undefined {
-    const slot = (other: RecordOp) => other.type === 'filter' || other.id === op.id;
+    let id = op.id;
+    // A make of any filter takes the place of the live one; a change or delete writes only the record of its id.
+    const slot = (other: RecordOp) => other.id === id || (other.type === 'filter' && other.whole === 1);
     const ofSheet = written.filter((other): other is RecordOp => other.kind === 'record' && other.sheet === op.sheet);
     // A filter's columns go and come with it, whatever the edit's own ops on them say.
     if (op.type === 'filterColumn' && ofSheet.some((other) => other.type === 'filter')) return op;
     let known: { [field: string]: unknown } = {};
     // What the edit said of the record last: that it is gone, every field of it, or only the fields in `known`.
     let state: 'gone' | 'whole' | 'fields' | undefined;
-    let id = op.id;
     for (const other of ofSheet) {
         if (other.type !== op.type || !slot(other)) continue;
         if (!other.set) state = 'gone';

@@ -123,6 +123,24 @@ describe('engine/book/still-holding — stillHolding', () => {
             const { book, apply } = edited(written, { kind: 'sheet', delete: 'b' });
             expect(stillHolding(book, apply, written)).toEqual([input([[0, 0, { v: 1 }]])]);
         });
+
+        test('a change or delete of a filter that is no longer the live one wrote nothing: the old filter comes back', () => {
+            const lates: RecordOp[] = [
+                { kind: 'record', sheet: 'a', type: 'filter', id: 'f', set: { rect: [13, 3, 20, 3] } },
+                { kind: 'record', sheet: 'a', type: 'filter', id: 'f' },
+            ];
+            for (const late of lates) {
+                const written: RecordOp[] = [
+                    { kind: 'record', sheet: 'a', type: 'filter', id: 'g', set: { rect: [0, 0, 5, 3] }, whole: 1 },
+                    late,
+                ];
+                const { book, apply, before } = edited(written);
+                const held = stillHolding(book, apply, written);
+                expect(held).toEqual(apply);
+                applyOps(book, held);
+                expect(bytes(book)).toBe(before);
+            }
+        });
     });
 
     describe('content', () => {
