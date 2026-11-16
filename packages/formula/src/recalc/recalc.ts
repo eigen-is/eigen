@@ -1,9 +1,8 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
 // is to be computed and then changes the store. A pass flags the formulas the written cells reach, and after a new
 // clock or a structural edit the clock formulas and their readers, and computes them: reading a cell still to be
-// computed computes it first, so no order is worked out ahead. A cell met while it is being computed is on a loop
-// with every cell reading towards it. Nesting has one budget: past it the calls in progress are dropped by a throw
-// and the cells computed again.
+// computed computes it first, so no order is worked out ahead, and a cell met while it is computed is on a loop.
+// The areas a formula works out as it runs are told to the `Records`, which a marking follows too.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -17,6 +16,7 @@ import { ERROR, REF } from '../values/errors';
 import type { Reference, Scalar } from '../values/value';
 import type { Rewrite } from './edit-plan';
 import { planEdit } from './edit-plan';
+import { Records } from './records';
 import { ReverseIndex } from './reverse-index';
 
 type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
@@ -95,8 +95,11 @@ export class Recalc {
     private seed: number;
     // Whether the clock formulas were flagged since the clock was last set or a structural edit moved cells.
     private stamped = true;
+    private readonly records: Records;
 
-    public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
+    // `computed` says whether the values of the workbook are those a full pass computed, as its load was told.
+    public constructor(workbook: Workbook, functions: Registry, now: number, seed: number, computed: boolean) {
+        this.records = new Records(computed);
         this.workbook = workbook;
         this.functions = functions;
         this.facts = workbook.shapes.facts;
@@ -179,6 +182,9 @@ export class Recalc {
     // the index still describes the cells as they are: so only the flags, which move with their cells, cross the edit.
     public edit(change: Change): EditResult {
         const { workbook } = this;
+        // The marking below flags every formula that resolves a reference. An edit that is refused leaves that to
+        // the next marking.
+        this.records.drop();
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;
@@ -191,14 +197,14 @@ export class Recalc {
             const column = workbook.sheets[seeds[at]].columns[seeds[at + 1]];
             for (let row = seeds[at + 2]; row <= seeds[at + 3]; row += 1) column.markDirty(row);
         }
-        this.index.mark(workbook, merged(this.seeds.concat(seeds)));
+        this.index.mark(workbook, merged(this.seeds.concat(seeds)), this.records.takeUnrecorded());
         this.seeds.length = 0;
         workbook.apply(change, plan.fills);
         return { rewrites: plan.rewrites };
     }
 
-    // Computes the formulas that the cells written since the last pass reach, those that read cells they do not name
-    // or a clock that was set, and what an earlier pass left, in sheet, column, row order where no read asks another.
+    // Computes the formulas that the cells written since the last pass reach, those that ask the workbook itself or
+    // read a clock that was set, and what an earlier pass left, in sheet, column, row order where no read asks another.
     public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
@@ -218,7 +224,7 @@ export class Recalc {
         // With nothing written, what an edit or a pass that stopped left flagged is all there is to compute.
         if (this.seeds.length > 0) {
             this.reach();
-            this.index.mark(workbook, merged(this.seeds));
+            this.index.mark(workbook, merged(this.seeds), this.records.takeUnrecorded());
             this.seeds.length = 0;
         }
         this.changed = [];
@@ -342,6 +348,11 @@ export class Recalc {
         return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
     }
 
+    // The running formula worked a reference out.
+    public record(reference: Reference): void {
+        this.records.add(this.current, reference);
+    }
+
     public factsOf(shape: number): number {
         let facts = this.facts[shape];
         if (facts < 0) {
@@ -359,18 +370,25 @@ export class Recalc {
         extend(this.seeds, sheet.place, c, row);
     }
 
-    // Makes the index describe the workbook as it is. The rebuild lists every shape a cell holds, so the others
-    // are forgotten here: every edit that rewrites a formula would else leave its old shape behind for good.
+    // Makes the index describe the workbook and the records as they are. The rebuild lists every shape a cell
+    // holds, so the others are forgotten here: every edit that rewrites a formula would else leave its old shape
+    // behind for good. So is the record of a cell that holds no formula that resolves a reference any more.
     private reach(): void {
-        if (!this.stale) return;
-        const { index } = this;
+        const { index, records, facts } = this;
         const { shapes } = this.workbook;
-        for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
-        index.rebuild(this.workbook);
-        const held = new Uint8Array(shapes.size + 1);
-        for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
-        shapes.keep(held);
-        this.stale = false;
+        if (this.stale) {
+            for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
+            index.rebuild(this.workbook);
+            const held = new Uint8Array(shapes.size + 1);
+            for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
+            shapes.keep(held);
+            records.prune(facts);
+            this.stale = false;
+        }
+        if (records.changed) {
+            index.listRecords(this.workbook, records.held);
+            records.changed = false;
+        }
     }
 
     // Computes a cell that a formula in progress reads.
@@ -447,19 +465,23 @@ export class Recalc {
         const column = this.columns[at];
         const row = this.rows[at];
         const shape = column.shape[row];
-        const kept = (this.factsOf(shape) & Fact.Kept) !== 0;
+        const facts = this.factsOf(shape);
+        const kept = (facts & Fact.Kept) !== 0;
         // The cap is met before a formula runs, so a pass that stops throws no finished formula away, and never
         // before the first store of the pass: a formula that costs more than the cap alone would hold every pass up.
         if (this.cost >= this.cap && this.stored) throw STOP;
         // A formula that runs again after a throw for depth makes its arrays again, and its draws.
         this.made[at] = 0;
         this.drew[at] = 0;
+        const resolves = (facts & Fact.Resolves) !== 0;
+        if (resolves) this.records.start(at);
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
             ? (this.workbook.value(column, row) ?? REF)
             : tree === null
               ? ERROR
               : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
+        if (resolves) this.records.end(at, column, row);
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
         if (this.lows[at] < at) return;

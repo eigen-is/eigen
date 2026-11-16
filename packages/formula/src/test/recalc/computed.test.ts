@@ -112,7 +112,7 @@ function counted(cells: readonly TestCell[], computed: boolean) {
         return number;
     });
     const workbook = new Workbook([source('s', cells)], computed);
-    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 0);
+    const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 0, computed);
     return { count, recalc };
 }
 

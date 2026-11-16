@@ -236,7 +236,10 @@ export class Evaluator {
             if (isError(left)) return left;
             const right = this.evaluate(node.children[1], sheet, row, column);
             if (isError(right)) return right;
-            return isReference(left) && isReference(right) ? combine(op, left, right) : VALUE;
+            if (!isReference(left) || !isReference(right)) return VALUE;
+            const joined = combine(op, left, right);
+            if (op === Token.Colon && isReference(joined)) this.recalc.record(joined);
+            return joined;
         }
         const a = this.inPlace(left);
         const b = this.term(node.children[1], sheet, row, column);

@@ -298,6 +298,8 @@ describe('held against a fresh load', () => {
         for (let i = 0; i < 500; i += 1) expect(parseStored(formula())).not.toHaveProperty('reason');
     });
 
+    // A workbook can go a whole run with few formulas that hold no value, so their floor is of the seeds together.
+    const blanks: number[] = [];
     test.each(Array.from({ length: Number(process.env['LAW_SEEDS'] ?? 12) }, (_, seed) => [seed + 1]))(
         'after random writes, line edits, moves, clocks, recalcs and reloads every cell equals a fresh full recalc: seed %i',
         (seed) => {
@@ -307,10 +309,14 @@ describe('held against a fresh load', () => {
             expect(counts.stops).toBeGreaterThan(10);
             expect(counts.computed).toBeGreaterThan(50);
             expect(counts.waiting).toBeGreaterThan(20);
-            expect(counts.blanks).toBeGreaterThan(100);
             expect(counts.stopped).toBeGreaterThan(2);
             expect(counts.written).toBeGreaterThan(10);
             expect(counts.edits).toBeGreaterThan(50);
+            blanks.push(counts.blanks);
         },
     );
+
+    test('the computed loads of the seeds together held formulas with no value, over 100 a seed', () => {
+        expect(blanks.reduce((sum, held) => sum + held, 0)).toBeGreaterThanOrEqual(100 * blanks.length);
+    });
 });

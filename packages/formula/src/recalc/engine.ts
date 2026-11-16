@@ -32,7 +32,7 @@ export class Engine {
         clocked(now, seed);
         const workbook = new Workbook(sheets, computed);
         this.workbook = workbook;
-        this.calc = new Recalc(workbook, FUNCTIONS, now, seed);
+        this.calc = new Recalc(workbook, FUNCTIONS, now, seed, computed);
     }
 
     // The clock of a batch of edits, once per batch: its author's time as a serial and a whole number its draws are
