@@ -77,7 +77,7 @@ export type TeamSettings = {
     };
     mounts?: Record<string, MountSettings>;
     memberOverrides?: TeamQuotaOverrides;
-    // Missing = on: a notification relayed to the team reaches its members.
+    // Missing = on: an access request to the team notifies its members.
     notifyMembers?: boolean;
 };
 

@@ -1,5 +1,5 @@
 // A team home holds what a team shares, such as its drives and its calendar. Nobody signs in as a
-// team: members reach it through their own access, and a notification to the team goes to them.
+// team: members reach it through their own access, and it has no notification center of its own.
 // The team's admins add and change its drives here. A drive's new storage or on/off switch closes the
 // whole home, which opens again on the next request.
 
@@ -56,7 +56,8 @@ export class TeamHome extends Home {
         return this.settings.get().memberOverrides ?? {};
     }
 
-    // A team home has no notification center, so a notification relayed to it goes to these members instead.
+    // Who hears about something sent to the team, since it has no notification center: an access request to a
+    // team-owned path resolves its recipients with it. The actor is left out.
     public async membersToNotify(actorEmail?: string | null): Promise<User[]> {
         if (this.settings.get().notifyMembers === false) return [];
         const members = await getTeamMembers(this.teamId);
