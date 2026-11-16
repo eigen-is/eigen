@@ -90,10 +90,16 @@ describe('the clock of a batch', () => {
     test('a write alone moves no clock, and neither does a pass', () => {
         const engine = loaded({ A1: ['=NOW()', 5], A2: ['=RAND()', 7], B1: 1 }, 100, 1);
         engine.setValue('s1', 4, 4, 1);
-        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 9, count: 1 });
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
         expect(values(engine, 'A1', 'A2')).toEqual([5, 7]);
+    });
+
+    test('a structural edit computes every clock formula again with the clock it holds, as it may move a draw', () => {
+        const engine = loaded({ A1: ['=NOW()', 5], B1: 1 }, 100, 1);
+        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 9, count: 1 });
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 0, 0, 0]);
+        expect(valueAt(engine, 'A1')).toBe(100);
     });
 
     test('the same clock set again computes every clock formula again', () => {

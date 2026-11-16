@@ -1,8 +1,9 @@
 // Recalc on demand. Every write and structural edit goes through here, as one body that first notes or flags what
-// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and with a new
-// clock those that read it, and computes them: reading a cell still to be computed computes it first, so no order
-// is worked out ahead. A cell met while it is being computed is on a loop with every cell reading towards it.
-// Nesting has one budget: past it the calls in progress are dropped by a throw and the cells computed again.
+// is to be computed and then changes the store. A pass flags the formulas the written cells reach, and after a new
+// clock or a structural edit the clock formulas and their readers, and computes them: reading a cell still to be
+// computed computes it first, so no order is worked out ahead. A cell met while it is being computed is on a loop
+// with every cell reading towards it. Nesting has one budget: past it the calls in progress are dropped by a throw
+// and the cells computed again.
 
 import { Evaluator } from '../eval/evaluator';
 import { FACT_BITS, Fact, shapeFacts } from '../eval/facts';
@@ -92,7 +93,7 @@ export class Recalc {
     // of beside the cell that draws.
     public now: number;
     private seed: number;
-    // Whether the clock formulas were flagged since the clock was last set.
+    // Whether the clock formulas were flagged since the clock was last set or a structural edit moved cells.
     private stamped = true;
 
     public constructor(workbook: Workbook, functions: Registry, now: number, seed: number) {
@@ -166,6 +167,8 @@ export class Recalc {
     public edit(change: Change): EditResult {
         const { workbook } = this;
         this.reach();
+        // A draw it moves is drawn again by its new place.
+        this.stamped = false;
         // The plan makes shapes no cell holds yet, or ever when it refuses the edit by a throw: the next rebuild
         // forgets those.
         this.stale = true;

@@ -221,12 +221,13 @@ describe('settled', () => {
         expect(engine.settled()).toBe(true);
     });
 
-    test('is false after a structural edit that reaches a formula, and after an added sheet', () => {
+    test('is false after any structural edit, and after an added sheet', () => {
         const engine = opened(chain, false);
         engine.recalc(NO_CAP);
-        // An inserted row inside the sum changes no value, so nothing is to be computed.
+        // An inserted row inside the sum changes no value, yet every structural edit waits for a pass: it may move a draw.
         engine.editLines({ insert: true, index: 1, count: 1, sheet: 's', rows: true });
-        expect(engine.settled()).toBe(true);
+        expect(engine.settled()).toBe(false);
+        engine.recalc(NO_CAP);
         engine.editLines({ insert: false, index: 0, count: 1, sheet: 's', rows: false });
         expect(engine.settled()).toBe(false);
         engine.recalc(NO_CAP);
@@ -235,6 +236,23 @@ describe('settled', () => {
         expect(engine.settled()).toBe(false);
         engine.recalc(NO_CAP);
         expect([engine.settled(), engine.valueOf('t', 0, 0)]).toEqual([true, 2]);
+    });
+
+    test('after a line edit or a move of a draw that no clock followed, a computed load holds a fresh recalc', () => {
+        const engine = opened([[0, 0, null, '=RAND()']], false);
+        engine.recalc(NO_CAP);
+        const held = (row: number, column: number) => {
+            engine.recalc(NO_CAP);
+            const fresh = new Engine(walked(engine), 0, 0, false);
+            fresh.recalc(NO_CAP);
+            const trusted = new Engine(walked(engine), 0, 0, engine.settled());
+            expect(trusted.valueOf('s', row, column)).toBe(fresh.valueOf('s', row, column));
+        };
+        engine.editLines({ insert: true, index: 0, count: 1, sheet: 's', rows: true });
+        held(1, 0);
+        const move = { fromSheet: 's', row: 1, column: 0, rows: 1, columns: 1, toSheet: 's', toRow: 3, toColumn: 2 };
+        engine.moveCells(move);
+        held(3, 2);
     });
 
     test('is false once a clock is set, until a pass stamps it', () => {

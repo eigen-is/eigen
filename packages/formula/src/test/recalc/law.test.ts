@@ -4,7 +4,7 @@ import { Engine, REF } from '../../index';
 import { parseStored } from '../../text';
 import { random } from '../store/support';
 
-// The law of incremental recalc: after any sequence of writes and clocks with recalcs in between, stopped ones
+// The law of incremental recalc: after any sequence of writes, line edits, moves and clocks with recalcs in between, stopped ones
 // included, every cell holds what a fresh engine computes from the same inputs, and the same cells are on a loop.
 // And the reload law: a walk of an engine that is settled, loaded as computed, computes nothing and holds those
 // values, now and after later writes; a walk of one that is not, loaded as not computed, computes them.
@@ -69,7 +69,7 @@ function generator(next: () => number) {
             case 21:
                 return `=NOW()+${cell()}`;
             case 22:
-                return `=IF(RAND()<2,${cell()})`;
+                return `=RAND()+${cell()}`;
             case 23:
                 return `=${cell()}`;
             case 0:
@@ -129,6 +129,7 @@ type Counts = {
     blanks: number;
     stopped: number;
     written: number;
+    edits: number;
 };
 
 function run(seed: number, steps: number): Counts {
@@ -148,7 +149,19 @@ function run(seed: number, steps: number): Counts {
             else if (input.value !== null) engine.setValue(id, row, column, input.value);
         }
     };
-    const counts: Counts = { compared: 0, stops: 0, computed: 0, blanks: 0, stopped: 0, written: 0 };
+    const counts: Counts = { compared: 0, stops: 0, computed: 0, blanks: 0, stopped: 0, written: 0, edits: 0 };
+    // After a line edit or a move the inputs are the engine's walk, as the edit law holds its rewrites.
+    const remodel = () => {
+        for (const id of SHEETS) {
+            const cells = new Map<number, Input>();
+            engine.cells(id, (row, column, value, formula) => {
+                const kept = formula?.startsWith(KEPT) === true;
+                if (formula !== null || value !== null)
+                    cells.set(row * 100 + column, { value: formula === null || kept ? value : null, formula });
+            });
+            model.set(id, cells);
+        }
+    };
     const fresh = () => {
         const engine = new Engine(sources(model), now, clock, false);
         return { engine, result: engine.recalc(NO_CAP) };
@@ -192,12 +205,12 @@ function run(seed: number, steps: number): Counts {
         const id = SHEETS[pick(2)];
         const row = pick(ROWS);
         const column = pick(COLUMNS);
-        const kind = pick(20);
+        const kind = pick(22);
         if (kind < 7) write(id, row, column, { value: literal(), formula: null });
         else if (kind < 11) write(id, row, column, { value: null, formula: formula() });
         else if (kind < 12) write(id, row, column, { value: literal(), formula: `${KEPT}${pick(9)}` });
         else if (kind < 15) write(id, row, column, null);
-        else {
+        else if (kind < 20) {
             // A block of one input: a formula filled down, right or both, a pasted value, or a cleared area.
             const input =
                 kind < 18
@@ -210,6 +223,26 @@ function run(seed: number, steps: number): Counts {
             for (let r = row; r <= bottom; r += 1) {
                 for (let c = column; c <= right; c += 1) write(id, r, c, input);
             }
+        } else {
+            // A structural edit, which most often no clock follows: what it moves still computes as it would there.
+            if (kind === 20) {
+                const rows = pick(3) > 0;
+                const index = pick(rows ? ROWS : COLUMNS);
+                engine.editLines({ insert: pick(2) === 0, index, count: 1 + pick(2), sheet: id, rows });
+            } else {
+                engine.moveCells({
+                    fromSheet: id,
+                    row,
+                    column,
+                    rows: 1 + pick(3),
+                    columns: 1 + pick(2),
+                    toSheet: SHEETS[pick(2)],
+                    toRow: pick(ROWS),
+                    toColumn: pick(COLUMNS),
+                });
+            }
+            counts.edits += 1;
+            remodel();
         }
         if (pick(4) === 0) {
             now = pick(1000);
@@ -252,7 +285,7 @@ describe('held against a fresh load', () => {
     });
 
     test.each(Array.from({ length: Number(process.env['LAW_SEEDS'] ?? 12) }, (_, seed) => [seed + 1]))(
-        'after random writes, clocks, recalcs and reloads every cell equals a fresh full recalc: seed %i',
+        'after random writes, line edits, moves, clocks, recalcs and reloads every cell equals a fresh full recalc: seed %i',
         (seed) => {
             const counts = run(seed, 1500);
             if (process.env['LAW_SEEDS'] !== undefined) console.log(JSON.stringify({ seed, ...counts }));
@@ -262,6 +295,7 @@ describe('held against a fresh load', () => {
             expect(counts.blanks).toBeGreaterThan(100);
             expect(counts.stopped).toBeGreaterThan(2);
             expect(counts.written).toBeGreaterThan(10);
+            expect(counts.edits).toBeGreaterThan(50);
         },
     );
 });
