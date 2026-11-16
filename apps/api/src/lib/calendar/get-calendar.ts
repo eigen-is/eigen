@@ -141,10 +141,11 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             if (resolved !== entry.permission) {
                 await calendar.ensureSharedEntry(entry.ownerUserId, entry.calendarId, entry.calendarName, resolved);
             }
-        } else if (parseOwnerId(entry.ownerUserId).type === 'team') {
-            if (sharesOf.has(entry.ownerUserId) || !(await getOwnerExists(entry.ownerUserId))) {
-                await calendar.deleteSharedCalendar(entry.id);
-            }
+        } else if (
+            sharesOf.has(entry.ownerUserId) ||
+            (parseOwnerId(entry.ownerUserId).type === 'team' && !(await getOwnerExists(entry.ownerUserId)))
+        ) {
+            await calendar.deleteSharedCalendar(entry.id);
         }
     }
 
