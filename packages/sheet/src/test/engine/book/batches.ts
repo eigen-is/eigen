@@ -127,7 +127,23 @@ export function randomAnyOp(random: Random, model: Model): Op {
     if (draw < 0.47) return randomLinesOp(random, model);
     if (draw < 0.52) return randomEndOp(random, model);
     if (draw < 0.66) return randomMoveOp(random, model);
+    if (draw < 0.7) return randomMergeOp(random, model);
     return draw < 0.89 ? randomRecordOp(random, model) : randomSheetOp(random, model);
+}
+
+// A merge made over a cell of a merge of its sheet, which the store refuses, or made fresh where a sheet holds none.
+function randomMergeOp(random: Random, model: Model): RecordOp {
+    const merged = [...model.sheets.values()].filter(({ records }) => records.merge.size > 0);
+    const id = `m${below(random, 5)}`;
+    if (merged.length === 0) {
+        const { id: sheet } = someSheet(random, model);
+        return { kind: 'record', sheet, type: 'merge', id, set: { rect: smallRect(random) }, whole: 1 };
+    }
+    const { id: sheet, records } = pick(random, merged);
+    const [top, left, bottom, right] = pick(random, [...records.merge.values()]).rect;
+    const row = top + below(random, bottom - top + 1);
+    const column = left + below(random, right - left + 1);
+    return { kind: 'record', sheet, type: 'merge', id, set: { rect: [row, column, row + 1, column] }, whole: 1 };
 }
 
 export function someSheet(random: Random, model: Model): ModelSheet {

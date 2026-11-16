@@ -568,6 +568,7 @@ describe('engine/book/apply-ops — the laws over random books and random batche
         for (const key of ['grid-end', 'merge-overlap', 'merge-cut', 'id-in-use', 'last-sheet']) {
             for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`${key} ${k}`) ?? 0).toBeGreaterThan(0);
         }
+        for (let k = 0; k < 4; k += 1) expect(refusedAt.get(`merge-overlap ${k}`) ?? 0).toBeGreaterThan(30);
         for (let k = 1; k < 5; k += 1) expect(refusedAt.get(`too-many-cells ${k}`) ?? 0).toBeGreaterThan(5);
     }, 120_000);
 });
