@@ -62,16 +62,16 @@ function close(book: Workbook, ops: readonly Op[]): void {
 function applyOne(book: Workbook, op: Op, checked: boolean): Op[] {
     switch (op.kind) {
         case 'input':
-            return applyInput(book, op);
+            return applyInput(book, op, checked);
         case 'format':
             return applyFormat(book, op, checked);
         case 'record':
             return applyRecord(book, op);
         case 'lines':
-            return applyLines(book, op);
+            return applyLines(book, op, checked);
         case 'move':
-            return applyMove(book, op);
+            return applyMove(book, op, checked);
         case 'sheet':
-            return applySheet(book, op);
+            return applySheet(book, op, checked);
     }
 }

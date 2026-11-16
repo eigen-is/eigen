@@ -6,10 +6,12 @@
 
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
+import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
+import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
-import { contentOf, textOf } from './extras';
+import { contentOf, textOf, unitsOf } from './extras';
 import { RectIndex } from './rect-index';
 import type { Workbook } from './workbook';
 
@@ -21,13 +23,28 @@ type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent 
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
 
-export function applyInput(book: Workbook, op: InputOp): InputOp[] {
+// An input that is `checked` is refused before it writes when the cells it fills would leave the workbook over a limit
+// inside a batch, counting nothing it frees.
+export function applyInput(book: Workbook, op: InputOp, checked: boolean): InputOp[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
     if (!part) return [];
     const { engine } = book;
     const { sheet } = op;
     const { extras } = part;
+    if (checked) {
+        // Two rectangles may fill one column, so with rectangles each column's reach is kept; listed cells alone
+        // name each column once.
+        const reach = op.runs ? new Map<number, number>() : undefined;
+        let slots = 0;
+        const units = filled(op, (column, length) => {
+            if (reach) reach.set(column, Math.max(reach.get(column) ?? 0, length));
+            else slots += Math.max(0, length - engine.columnLength(sheet, column));
+        });
+        for (const [column, length] of reach ?? []) slots += Math.max(0, length - engine.columnLength(sheet, column));
+        const over = book.over(slots, units * EXTRA_WEIGHT);
+        if (over) throw new Refusal(over);
+    }
     const gathered: Gathered = { runs: [], cells: [] };
     const read = new RectIndex();
     for (const [rect] of op.runs ?? []) {
@@ -66,6 +83,32 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
         extras.write(row, column, content ?? {});
     }
     return [inputOf(sheet, gathered)];
+}
+
+// What an input fills, counting nothing it empties: `column` is told how far a column reaches once a rectangle or the
+// listed cells of it are filled with a value, a formula or a rich text, once for each rectangle and once for the
+// list, and the units of what the filled cells hold beyond a value are returned.
+export function filled(op: InputOp, column: (column: number, length: number) => void): number {
+    let units = 0;
+    for (const [[top, left, bottom, right], content] of op.runs ?? []) {
+        if (!content) continue;
+        units += unitsOf(content) * (bottom - top + 1) * (right - left + 1);
+        if (literalOf(content) === null && content.f === undefined) continue;
+        for (let at = left; at <= right; at += 1) column(at, bottom + 1);
+    }
+    // The cells come in column order, so the last one of a column that reaches the engine says its reach.
+    let last = -1;
+    let length = 0;
+    for (const [row, at, content] of op.cells ?? []) {
+        if (!content) continue;
+        units += unitsOf(content);
+        if (literalOf(content) === null && content.f === undefined) continue;
+        if (at !== last && length > 0) column(last, length);
+        last = at;
+        length = row + 1;
+    }
+    if (length > 0) column(last, length);
+    return units;
 }
 
 // What a cell holds now, as an op would say it, null for an empty cell.

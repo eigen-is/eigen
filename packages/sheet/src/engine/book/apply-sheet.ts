@@ -11,7 +11,7 @@ import { MAX_SHEET_NAME_LENGTH } from '@workspace/lib/sheets/sheet-name';
 import { lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
-export function applySheet(book: Workbook, op: SheetOp): (SheetOp | InputOp)[] {
+export function applySheet(book: Workbook, op: SheetOp, checked: boolean): (SheetOp | InputOp)[] {
     if ('delete' in op) {
         const sheet = book.sheets.get(op.delete);
         // A peer may have deleted the sheet first: every reader skips the op alone.
@@ -33,7 +33,7 @@ export function applySheet(book: Workbook, op: SheetOp): (SheetOp | InputOp)[] {
         const suffix = ` (${n})`;
         name = `${add.fields.name.slice(0, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
     }
-    const result = book.addSheet({ ...add, fields: { ...add.fields, name } }, true);
+    const result = book.addSheet({ ...add, fields: { ...add.fields, name } }, checked);
     // The delete frees the name first, so the texts it bound stay as typed when they are written back.
     return [{ kind: 'sheet', delete: add.id }, ...lostInputs(book, result)];
 }
