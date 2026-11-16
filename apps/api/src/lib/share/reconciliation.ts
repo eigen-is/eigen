@@ -1,6 +1,6 @@
 // Reconciliation: when an account appears or joins a team, it reads the share registry for that address or team and
-// pulls what each listed owner currently shares with the user into the user's home, such as shared paths, calendars
-// and invitations. It runs at moments such as an account's creation or a guest's sign-in. An owner's current shares
+// asks each listed owner what it currently shares with the user, such as shared paths, calendars and invitations,
+// for the user's home. It runs at moments such as an account's creation or a guest's sign-in. An owner's current shares
 // decide what arrives, so an entry left by a revoked share delivers nothing.
 
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
@@ -22,36 +22,18 @@ export async function reconcileShares(user: User, teamId?: string): Promise<void
         try {
             // A team source has no user row, and a team shares drive paths only.
             const parsed = parseOwnerId(fromUserId);
+            const team = parsed.type === 'team' ? await getTeam(parsed.id) : null;
+            const owner = parsed.type === 'team' ? null : await getUserById(fromUserId);
+            const actor = team ? { actorName: team.name } : owner && { actorEmail: owner.email, actorName: owner.name };
+            if (!actor) continue;
+
             const paths = (await getFromHomes([fromUserId], 'drive:shared-with', { user })).get(fromUserId) ?? [];
-            if (parsed.type === 'team') {
-                const team = await getTeam(parsed.id);
-                if (!team) continue;
-                for (const path of paths) {
-                    await pushToHomes([user.id], {
-                        type: 'drive:acl-change',
-                        path,
-                        acl: path.acl,
-                        actorName: team.name,
-                    });
-                }
-                continue;
-            }
-
-            const owner = await getUserById(fromUserId);
-            if (!owner) continue;
-
             for (const path of paths) {
-                await pushToHomes([user.id], {
-                    type: 'drive:acl-change',
-                    path,
-                    acl: path.acl,
-                    actorEmail: owner.email,
-                    actorName: owner.name,
-                });
+                await pushToHomes([user.id], { type: 'drive:acl-change', path, acl: path.acl, ...actor });
             }
 
-            // A guest's home has no calendar, so a pull would scan the owner's calendar for nothing.
-            if (isGuest(user)) continue;
+            // A guest's home has no calendar, so a read would scan the owner's calendar for nothing.
+            if (!owner || isGuest(user)) continue;
             const source = [fromUserId].filter(homeFolderExists);
             const shares = await getFromHomes(source, 'calendar:shared-with', { email: user.email, teamIds });
             for (const result of shares.get(fromUserId) ?? []) {
