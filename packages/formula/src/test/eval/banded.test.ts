@@ -116,18 +116,23 @@ describe('a shorter array is #N/A past its end, whatever the sheet holds', () =>
     test('an empty cell a host reports at load changes nothing', () => {
         const formula = stored('=A1:C3+D:F', 'H1');
         const load = (reported: boolean) =>
-            new Engine([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => {
-                        cell(0, 0, 1, null);
-                        cell(0, 3, 10, null);
-                        if (reported) cell(1048575, 5, null, null);
-                        cell(0, 7, null, formula);
+            new Engine(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            cell(0, 0, 1, null);
+                            cell(0, 3, 10, null);
+                            if (reported) cell(1048575, 5, null, null);
+                            cell(0, 7, null, formula);
+                        },
                     },
-                },
-            ]);
+                ],
+                0,
+                0,
+                false,
+            );
         for (const reported of [false, true]) {
             const engine = load(reported);
             engine.recalc(ALL);
@@ -448,16 +453,21 @@ describe('the bound on what one array stores', () => {
     test('five criteria down a million filled rows, multiplied', () => {
         const formula =
             '=SUMPRODUCT((Sheet2!A:A=1)*(Sheet2!B:B=1)*(Sheet2!C:C=1)*(Sheet2!D:D=1)*(Sheet2!E:E=1)*Sheet2!F:F)';
-        const engine = new Engine([
-            { id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, stored(formula, 'A1')) },
-            {
-                id: 's2',
-                name: 'Sheet2',
-                cells: (cell) => {
-                    for (let c = 0; c < 6; c += 1) for (let r = 0; r < 1048576; r += 1) cell(r, c, 1, null);
+        const engine = new Engine(
+            [
+                { id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, stored(formula, 'A1')) },
+                {
+                    id: 's2',
+                    name: 'Sheet2',
+                    cells: (cell) => {
+                        for (let c = 0; c < 6; c += 1) for (let r = 0; r < 1048576; r += 1) cell(r, c, 1, null);
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            false,
+        );
         engine.recalc(ALL);
         expect(valueAt(engine, 'A1')).toBe(1048576);
     });
@@ -534,26 +544,31 @@ describe('a value is the same on a fresh load as after any history', () => {
                 if (next() < 0.08) edited.recalc(next() < 0.5 ? 3 : ALL);
             }
             const fresh = engineOf({ s1: formulas, s2: Object.fromEntries(final) });
-            const withBlanks = new Engine([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => {
-                        FORMULAS.forEach((f, i) => {
-                            cell(i, 0, null, stored(f, `A${i + 1}`));
-                        });
+            const withBlanks = new Engine(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            FORMULAS.forEach((f, i) => {
+                                cell(i, 0, null, stored(f, `A${i + 1}`));
+                            });
+                        },
                     },
-                },
-                {
-                    id: 's2',
-                    name: 'Sheet2',
-                    cells: (cell) => {
-                        for (const [row, column] of reported)
-                            if (!final.has(label(row, column))) cell(row, column, null, null);
-                        for (const [name, value] of final) cell(...at(name), value, null);
+                    {
+                        id: 's2',
+                        name: 'Sheet2',
+                        cells: (cell) => {
+                            for (const [row, column] of reported)
+                                if (!final.has(label(row, column))) cell(row, column, null, null);
+                            for (const [name, value] of final) cell(...at(name), value, null);
+                        },
                     },
-                },
-            ]);
+                ],
+                0,
+                0,
+                false,
+            );
             const expected = answers(fresh);
             expect(answers(edited)).toEqual(expected);
             expect(answers(withBlanks)).toEqual(expected);

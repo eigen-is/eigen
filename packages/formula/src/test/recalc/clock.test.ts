@@ -13,8 +13,10 @@ const COUNT = Number(process.env['CLOCK_LAW_COUNT'] ?? 0);
 // A cell as a load reports it: a value, or a formula with the value it was last computed to, null for none.
 type Loaded = Literal | readonly [formula: string, value: Literal | null];
 
-// One sheet loaded with the clock its values were computed with.
+// One sheet loaded with the clock its values were computed with. When every formula comes with a value the load is
+// computed, as a full pass left it, and else none of its values is.
 function loaded(cells: Readonly<Record<string, Loaded>>, now = 0, seed = 0): Engine {
+    const inputs = Object.values(cells);
     return new Engine(
         [
             {
@@ -32,6 +34,7 @@ function loaded(cells: Readonly<Record<string, Loaded>>, now = 0, seed = 0): Eng
         ],
         now,
         seed,
+        inputs.every((input) => typeof input !== 'object' || !('length' in input) || input[1] !== null),
     );
 }
 
@@ -55,14 +58,14 @@ describe('the clock of a batch', () => {
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
     });
 
-    test('a load computes what was never computed with the clock it is given, and stamps nothing', () => {
+    test('a load that is not computed computes every formula with the clock it is given', () => {
         const engine = loaded(
             { A1: ['=NOW()', null], A2: ['=NOW()', 5], A3: ['=A2+1', 6], A4: ['=TODAY()', null] },
             100.5,
             1,
         );
-        expect(engine.recalc(NO_CAP).changed).toEqual([0, 0, 0, 0, 0, 0, 3, 3]);
-        expect(values(engine, 'A1', 'A2', 'A3', 'A4')).toEqual([100.5, 5, 6, 100]);
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 0, 0, 3]);
+        expect(values(engine, 'A1', 'A2', 'A3', 'A4')).toEqual([100.5, 100.5, 101.5, 100]);
     });
 
     test('the clock moves every clock formula and what reads it, and no other formula', () => {
@@ -87,10 +90,16 @@ describe('the clock of a batch', () => {
     test('a write alone moves no clock, and neither does a pass', () => {
         const engine = loaded({ A1: ['=NOW()', 5], A2: ['=RAND()', 7], B1: 1 }, 100, 1);
         engine.setValue('s1', 4, 4, 1);
-        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 9, count: 1 });
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
         expect(values(engine, 'A1', 'A2')).toEqual([5, 7]);
+    });
+
+    test('a structural edit computes every clock formula again with the clock it holds, as it may move a draw', () => {
+        const engine = loaded({ A1: ['=NOW()', 5], B1: 1 }, 100, 1);
+        engine.editLines({ sheet: 's1', rows: true, insert: true, index: 9, count: 1 });
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 0, 0, 0]);
+        expect(valueAt(engine, 'A1')).toBe(100);
     });
 
     test('the same clock set again computes every clock formula again', () => {
@@ -159,19 +168,24 @@ describe('the clock of a batch', () => {
 
     test('the stamp walks the clock formulas, not every formula', () => {
         const run = (rows: number) => {
-            const engine = new Engine([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => {
-                        for (let row = 0; row < rows; row += 1) {
-                            cell(row, 0, row, null);
-                            cell(row * 2, 1, row * 2, '=RC[-1]*2');
-                        }
-                        cell(0, 3, 1, '=NOW()');
+            const engine = new Engine(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            for (let row = 0; row < rows; row += 1) {
+                                cell(row, 0, row, null);
+                                cell(row * 2, 1, row * 2, '=RC[-1]*2');
+                            }
+                            cell(0, 3, 1, '=NOW()');
+                        },
                     },
-                },
-            ]);
+                ],
+                0,
+                0,
+                false,
+            );
             engine.setValue('s1', 0, 5, 1);
             engine.recalc(NO_CAP);
             let best = Number.POSITIVE_INFINITY;
@@ -194,10 +208,15 @@ describe('the clock of a batch', () => {
 describe('the draws of a cell', () => {
     // The value of one formula typed at a cell of a new workbook and computed with a seed.
     const drawn = (formula: string, seed: number, label = 'A1', sheet = 's1') => {
-        const engine = new Engine([
-            { id: 's1', name: 'Sheet1', cells: () => {} },
-            { id: 's2', name: 'Sheet2', cells: () => {} },
-        ]);
+        const engine = new Engine(
+            [
+                { id: 's1', name: 'Sheet1', cells: () => {} },
+                { id: 's2', name: 'Sheet2', cells: () => {} },
+            ],
+            0,
+            0,
+            false,
+        );
         engine.setFormula(sheet, ...at(label), stored(formula, label));
         engine.setClock(46000, seed);
         engine.recalc(NO_CAP);
@@ -234,10 +253,15 @@ describe('the draws of a cell', () => {
     });
 
     test('a draw is of the sheet by its id: a tab that moves or is renamed keeps it under the same clock', () => {
-        const engine = new Engine([
-            { id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, '=RAND()') },
-            { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, '=RAND()') },
-        ]);
+        const engine = new Engine(
+            [
+                { id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, '=RAND()') },
+                { id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, null, '=RAND()') },
+            ],
+            0,
+            0,
+            false,
+        );
         engine.setClock(46000, 7);
         engine.recalc(NO_CAP);
         const before = [engine.valueOf('s1', 0, 0), engine.valueOf('s2', 0, 0)];
@@ -265,9 +289,12 @@ describe('the draws of a cell', () => {
     });
 
     test('a pass that stops draws what a whole pass draws', () => {
-        // Each cell reads the one below it, so the first is computed last.
+        // Every other cell reads the one below it, so that one is computed first, and both before the cap is asked.
         const cells = Object.fromEntries(
-            Array.from({ length: 12 }, (_, row) => [`A${row + 1}`, [`=RAND()+A${row + 2}*0`, null]] as const),
+            Array.from(
+                { length: 12 },
+                (_, row) => [`A${row + 1}`, [row % 2 === 0 ? `=RAND()+A${row + 2}*0` : '=RAND()', null]] as const,
+            ),
         );
         const whole = loaded(cells);
         whole.setClock(46000, 7);
@@ -295,7 +322,7 @@ describe('the draws of a cell', () => {
     });
 
     test('ten thousand cells draw evenly, and neither down the column nor from one seed to the next alike', () => {
-        const engine = new Engine([{ id: 's1', name: 'Sheet1', cells: () => {} }]);
+        const engine = new Engine([{ id: 's1', name: 'Sheet1', cells: () => {} }], 0, 0, false);
         engine.fillFormula('s1', 0, 0, 9999, 0, '=RAND()');
         // How alike two lists of draws are: 0 for unrelated ones, 1 for the same list.
         const alike = (a: readonly number[], b: readonly number[]) =>

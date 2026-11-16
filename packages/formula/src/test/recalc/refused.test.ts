@@ -195,12 +195,12 @@ describe('a write or an edit the engine refuses changes nothing', () => {
             sheetWith(1, 1, value, null),
         ]),
     ])('a workbook is not loaded from a sheet with %s', (_, sheet) => {
-        expect(() => new Engine([sheet])).toThrow(RangeError);
+        expect(() => new Engine([sheet], 0, 0, false)).toThrow(RangeError);
     });
     test.each(DIFFERS)(
         'a workbook is not loaded from a sheet that reports %s when it is read again',
         (_, row, column, value, error) => {
-            expect(() => new Engine([sheetThatDiffers(row, column, value)])).toThrow(error);
+            expect(() => new Engine([sheetThatDiffers(row, column, value)], 0, 0, false)).toThrow(error);
         },
     );
     test.each([
@@ -209,15 +209,20 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         ['the same but for a Greek final sigma', 'όσος', 'ΌΣΟΣ'],
     ])('a workbook is not loaded from two sheets whose names are %s', (_, first, second) => {
         const sheets = [first, second].map((name, at) => ({ id: `s${at}`, name, cells: () => {} }));
-        expect(() => new Engine(sheets)).toThrow(`Sheet name ${second} is in use`);
+        expect(() => new Engine(sheets, 0, 0, false)).toThrow(`Sheet name ${second} is in use`);
     });
     test('a workbook is not loaded from two sheets with one id', () => {
         const sheets = ['Data', 'Other'].map((name) => ({ id: 's1', name, cells: () => {} }));
-        expect(() => new Engine(sheets)).toThrow('Sheet s1 exists');
+        expect(() => new Engine(sheets, 0, 0, false)).toThrow('Sheet s1 exists');
     });
     test('two names a formula tells apart are two sheets, and a sheet takes its own name in another case', () => {
         // Sheet names fold each character on its own, so ß is no ss.
-        const engine = new Engine(['Straße', 'STRASSE'].map((name) => ({ id: name, name, cells: () => {} })));
+        const engine = new Engine(
+            ['Straße', 'STRASSE'].map((name) => ({ id: name, name, cells: () => {} })),
+            0,
+            0,
+            false,
+        );
         engine.addSheet({ id: 'third', name: 'Strasse 2', cells: () => {} }, 0);
         expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
         expect(engine.renameSheet('Straße', 'STRAßE').rewrites).toEqual([]);
@@ -226,7 +231,7 @@ describe('a write or an edit the engine refuses changes nothing', () => {
         expect(engine.renameSheet('third', 'strasse').rewrites).toEqual([]);
     });
     test('a cell reported empty is no cell, wherever it is said to be', () => {
-        const engine = new Engine([sheetWith(Number.NaN, -1, null, null)]);
+        const engine = new Engine([sheetWith(Number.NaN, -1, null, null)], 0, 0, false);
         expect([engine.valueOf('s9', 0, 0), engine.valueOf('s9', 2, 2)]).toEqual(['kept', 'more']);
     });
     test('the last cell of the grid, and lines that reach past it, are not refused', () => {
@@ -292,20 +297,25 @@ function reaching(): Engine {
 // A workbook with formulas a digit away from the longest a cell stores, in a workbook that waits for a recalc.
 function long(): Engine {
     const later = "'Later'!R1C1";
-    const engine = new Engine([
-        {
-            id: 'first',
-            name: 'Sheet1',
-            cells: (cell) => {
-                cell(0, 0, 5, null);
-                cell(0, 1, 1, longest('R[9]C[9]'));
-                cell(1, 1, 2, longest(later));
-                cell(2, 1, 3, '=R1C1+1');
-                cell(9, 10, 4, null);
+    const engine = new Engine(
+        [
+            {
+                id: 'first',
+                name: 'Sheet1',
+                cells: (cell) => {
+                    cell(0, 0, 5, null);
+                    cell(0, 1, 1, longest('R[9]C[9]'));
+                    cell(1, 1, 2, longest(later));
+                    cell(2, 1, 3, '=R1C1+1');
+                    cell(9, 10, 4, null);
+                },
             },
-        },
-        { id: 'second-sheet', name: 'Sheet2', cells: (cell) => cell(0, 0, 1, '=[first]!R1C1+1') },
-    ]);
+            { id: 'second-sheet', name: 'Sheet2', cells: (cell) => cell(0, 0, 1, '=[first]!R1C1+1') },
+        ],
+        0,
+        0,
+        false,
+    );
     engine.recalc(NO_CAP);
     engine.setValue('first', 0, 0, 6);
     engine.setFormula('second-sheet', 4, 4, '=R1C1*3');
@@ -412,7 +422,9 @@ describe('an edit that would lose a cell or a formula is refused, and changes no
         expect(engine.recalc(NO_CAP)).toEqual(untouched.recalc(NO_CAP));
         expect(held(engine, sheets)).toEqual(held(untouched, sheets));
         for (const text of [engine.formulaOf('first', 0, 1), engine.formulaOf('first', 1, 1)]) {
-            expect(new Engine([{ ...named('s', text ?? ''), name: 'Other' }]).formulaOf('s', 1, 0)).toBe(text);
+            expect(new Engine([{ ...named('s', text ?? ''), name: 'Other' }], 0, 0, false).formulaOf('s', 1, 0)).toBe(
+                text,
+            );
         }
     });
     test.each([
@@ -422,7 +434,7 @@ describe('an edit that would lose a cell or a formula is refused, and changes no
         // The row inserted between the formula and the cell it reads makes R[9]C one character longer.
         const head = length % 2 === 0 ? '=R[9]C' : '=R[9]C+11';
         const text = head + '+1'.repeat((length - head.length) / 2);
-        const engine = new Engine([{ id: 's', name: 'S', cells: (cell) => cell(0, 0, null, text) }]);
+        const engine = new Engine([{ id: 's', name: 'S', cells: (cell) => cell(0, 0, null, text) }], 0, 0, false);
         expect(engine.formulaOf('s', 0, 0)).toHaveLength(length);
         const edit = () => engine.editLines({ insert: true, index: 5, count: 1, sheet: 's', rows: true });
         if (refused) expect(edit).toThrow(EditRefusal);

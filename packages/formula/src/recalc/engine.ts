@@ -25,10 +25,12 @@ export class Engine {
     >;
     private readonly calc: Recalc;
 
-    // A load, with the clock its values were computed with: a clock formula keeps the value it came with.
-    public constructor(sheets: readonly SheetSource[], now = 0, seed = 0) {
+    // A load, with the clock its values were computed with and whether a full pass computed them all, as `settled`
+    // says of a walk. Then every value is trusted and a formula with no value is a blank result; else every formula
+    // is to be computed, and one this build cannot evaluate keeps the value it came with.
+    public constructor(sheets: readonly SheetSource[], now: number, seed: number, computed: boolean) {
         clocked(now, seed);
-        const workbook = new Workbook(sheets);
+        const workbook = new Workbook(sheets, computed);
         this.workbook = workbook;
         this.calc = new Recalc(workbook, FUNCTIONS, now, seed);
     }
@@ -95,8 +97,9 @@ export class Engine {
     // Adds a sheet at a place among the tabs, from 0. Its formulas are computed by the next recalc whatever
     // values they came with, and the result lists the formulas of the other sheets that were typed with its name.
     public addSheet(source: SheetSource, place: number): EditResult {
-        // The source is the host's code, so what is refused is checked once it has run.
-        const draft = this.workbook.read(source);
+        // The source is the host's code, so what is refused is checked once it has run. Whatever values its formulas
+        // came with were computed against another workbook than this one.
+        const draft = this.workbook.read(source, false);
         this.workbook.checkId(source.id);
         this.workbook.checkName(source.name, null);
         return this.calc.addSheet(draft, place);
@@ -118,10 +121,16 @@ export class Engine {
         this.calc.edit({ kind: ChangeKind.MoveSheet, sheet, place });
     }
 
-    // Computes the formulas the writes and edits since the last recalc reach: one that came with a value other than
-    // #REF! and reads nothing written keeps it. After `cap` formulas the pass stops, and the next one goes on.
+    // Computes the formulas the writes and edits since the last recalc reach, and what a load left to compute. After
+    // `cap` formulas the pass stops, and the next one goes on.
     public recalc(cap: number): RecalcResult {
         return this.calc.pass(cap);
+    }
+
+    // Whether every value is what a full pass computed: nothing written, edited or clocked since the last pass, and
+    // nothing it left. Only then may a walk be loaded as computed.
+    public settled(): boolean {
+        return this.calc.settled();
     }
 
     // The value a cell holds. For a formula that is the last one a recalc computed.

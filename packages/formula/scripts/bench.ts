@@ -96,7 +96,7 @@ function recalcOf(sheets: readonly SheetSource[], reps: number): Measured {
     let errors = 0;
     let formulas = 0;
     for (let rep = 0; rep < reps; rep += 1) {
-        const engine = new Engine(sheets);
+        const engine = new Engine(sheets, 0, 0, false);
         const start = performance.now();
         engine.recalc(INF);
         best = Math.min(best, performance.now() - start);
@@ -175,7 +175,7 @@ function bookEdit(
         const result = editOf(
             reps,
             () => {
-                const engine = new Engine(sources);
+                const engine = new Engine(sources, 0, 0, false);
                 engine.recalc(INF);
                 engine.setValue(loaded.sheets[0].id, 1048000, 16000, 1);
                 engine.recalc(INF);
@@ -284,14 +284,19 @@ function readers(formula: string, insert: boolean) {
         editOf(
             reps,
             () => {
-                const engine = new Engine([
-                    sheetOf('d', (sink) => {
-                        for (let r = 0; r < 50_000; r += 1) sink(r, 0, r % 97, null);
-                    }),
-                    sheetOf('a', (sink) => {
-                        for (let r = 0; r < 4000; r += 1) sink(r, 0, r, null);
-                    }),
-                ]);
+                const engine = new Engine(
+                    [
+                        sheetOf('d', (sink) => {
+                            for (let r = 0; r < 50_000; r += 1) sink(r, 0, r % 97, null);
+                        }),
+                        sheetOf('a', (sink) => {
+                            for (let r = 0; r < 4000; r += 1) sink(r, 0, r, null);
+                        }),
+                    ],
+                    0,
+                    0,
+                    false,
+                );
                 engine.fillFormula('a', 0, 2, 3999, 2, formula);
                 return engine;
             },
@@ -390,7 +395,7 @@ const ROWS: Row[] = [
             editOf(
                 reps,
                 () => {
-                    const engine = new Engine([sheetOf('a', EMPTY), sheetOf('b', EMPTY)]);
+                    const engine = new Engine([sheetOf('a', EMPTY), sheetOf('b', EMPTY)], 0, 0, false);
                     engine.setValue('a', 0, 0, 2);
                     engine.fillFormula('a', 0, 2, 99_999, 2, '=R1C1+RC[-1]');
                     return engine;
@@ -419,11 +424,16 @@ const ROWS: Row[] = [
             editOf(
                 reps,
                 () => {
-                    const engine = new Engine([
-                        sheetOf('a', (sink) => {
-                            for (let r = 0; r < 1_000_000; r += 1) sink(r, 0, r, null);
-                        }),
-                    ]);
+                    const engine = new Engine(
+                        [
+                            sheetOf('a', (sink) => {
+                                for (let r = 0; r < 1_000_000; r += 1) sink(r, 0, r, null);
+                            }),
+                        ],
+                        0,
+                        0,
+                        false,
+                    );
                     engine.fillFormula('a', 0, 1, 999_999, 1, '=RC[-1]*2');
                     return engine;
                 },
@@ -440,7 +450,7 @@ const ROWS: Row[] = [
         run: (reps) =>
             editOf(
                 reps,
-                () => ownShapes(new Engine([sheetOf('a', EMPTY)])),
+                () => ownShapes(new Engine([sheetOf('a', EMPTY)], 0, 0, false)),
                 (engine) =>
                     `${engine.editLines({ insert: true, index: 0, count: 1, sheet: 'a', rows: true }).rewrites.length} rewrites`,
             ),
@@ -450,7 +460,7 @@ const ROWS: Row[] = [
         name: '10,000 own shapes, 100 edits (heap after)',
         reps: 1,
         run: () => {
-            const engine = ownShapes(new Engine([sheetOf('a', EMPTY)]));
+            const engine = ownShapes(new Engine([sheetOf('a', EMPTY)], 0, 0, false));
             engine.recalc(INF);
             const before = process.memoryUsage();
             const start = performance.now();
@@ -524,11 +534,16 @@ const ROWS: Row[] = [
             editOf(
                 reps,
                 () => {
-                    const engine = new Engine([
-                        sheetOf('a', (sink) => {
-                            for (let r = 0; r < 50_000; r += 1) sink(r, 0, r % 97, null);
-                        }),
-                    ]);
+                    const engine = new Engine(
+                        [
+                            sheetOf('a', (sink) => {
+                                for (let r = 0; r < 50_000; r += 1) sink(r, 0, r % 97, null);
+                            }),
+                        ],
+                        0,
+                        0,
+                        false,
+                    );
                     engine.fillFormula('a', 0, 2, 3999, 2, '=SUM(C1:C1)+MATCH(40,C1:C1,0)');
                     return engine;
                 },

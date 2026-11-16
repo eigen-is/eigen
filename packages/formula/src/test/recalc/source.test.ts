@@ -14,7 +14,7 @@ function read(engine: Engine, id: string): unknown[] {
 
 describe('a source of cells that calls the engine while it is read', () => {
     test('a write and a recalc from inside leave the new sheet the formulas it reported', () => {
-        const engine = new Engine([sheet('a', (cell) => cell(0, 0, 1, null))]);
+        const engine = new Engine([sheet('a', (cell) => cell(0, 0, 1, null))], 0, 0, false);
         engine.recalc(NO_CAP);
         engine.addSheet(
             sheet('b', (cell) => {
@@ -46,10 +46,12 @@ describe('a source of cells that calls the engine while it is read', () => {
 
     test('a pass from inside that sweeps the texts leaves the new sheet the texts it reported', () => {
         const spare = ['c', 'd', 'e'];
-        const engine = new Engine([
-            sheet('a', (cell) => cell(0, 0, 'Kept', null)),
-            ...spare.map((id) => sheet(id, () => {})),
-        ]);
+        const engine = new Engine(
+            [sheet('a', (cell) => cell(0, 0, 'Kept', null)), ...spare.map((id) => sheet(id, () => {}))],
+            0,
+            0,
+            false,
+        );
         engine.recalc(NO_CAP);
         engine.addSheet(
             sheet('b', (cell) => {
@@ -75,7 +77,7 @@ describe('a source of cells that calls the engine while it is read', () => {
     });
 
     test('a sheet of the same id added from inside is the one that stays, and the outer one is refused', () => {
-        const engine = new Engine([sheet('a', (cell) => cell(0, 0, 1, null))]);
+        const engine = new Engine([sheet('a', (cell) => cell(0, 0, 1, null))], 0, 0, false);
         let added = false;
         const outer = sheet('b', (cell) => {
             if (!added) {

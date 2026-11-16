@@ -110,13 +110,15 @@ export function modelAfter(model: Model, batch: Pick<Batch, 'now' | 'seed' | 'op
     return next;
 }
 
-// The model as a snapshot holds it, in the one form a workbook walks back to.
+// The model as a snapshot holds it, in the one form a workbook walks back to: computed when it holds no formula,
+// as the model computes none.
 export function contentOfModel(model: Model): Book {
     const sheets = [...model.sheets.values()].sort((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
     return {
         g: model.g,
         now: model.now,
         seed: model.seed,
+        computed: !sheets.some(({ cells }) => [...cells.values()].some((cell) => cell.f !== undefined)),
         sheets: sheets.map((sheet) => {
             const cells = [...sheet.cells].map(([place, cell]): Placed<CellRecord> => [...placeOf(place), cell]);
             cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
@@ -160,7 +162,7 @@ export function expectReads(book: Workbook, model: Model): void {
         })),
     };
     const expected = contentOfModel(model);
-    expect(read).toEqual(expected);
+    expect(read).toEqual({ ...expected, computed: true });
     // The engine reads a sheet by its place among the tabs, which the content does not show.
     expect(expected.sheets.map((_, place) => book.engine.sheetAt(place))).toEqual(expected.sheets.map(({ id }) => id));
 }

@@ -22,7 +22,7 @@ function sheetOf(id: string, fields: Partial<SheetFields> = {}, part: Partial<Sh
 
 // The book after the ops as the model applies them, or the key of the refusal.
 function after(sheets: SheetContent[], ...ops: Op[]): Book | RefusalKey {
-    const model = modelAfter(modelOf({ g: 1, now: 1, seed: 1, sheets }), { now: 1, seed: 1, ops });
+    const model = modelAfter(modelOf({ g: 1, now: 1, seed: 1, computed: false, sheets }), { now: 1, seed: 1, ops });
     return typeof model === 'string' ? model : contentOfModel(model);
 }
 
@@ -167,7 +167,13 @@ describe('engine/book — the model, rule by rule', () => {
             [3, 0, { f: "='Later'!R1C1" }],
         ];
         // On load, as the engine binds it.
-        const content = { g: 1, now: 1, seed: 1, sheets: [sheetOf('a', {}, { cells: typed }), ...held] };
+        const content = {
+            g: 1,
+            now: 1,
+            seed: 1,
+            computed: false,
+            sheets: [sheetOf('a', {}, { cells: typed }), ...held],
+        };
         expect(contentOfModel(modelOf(content)).sheets[0].cells).toEqual(expected);
         expectReads(new Workbook(content), modelOf(content));
         // On input.
@@ -194,7 +200,7 @@ describe('engine/book — the model, rule by rule', () => {
             [3, 0, { f: "='[1]N'!R1C1" }],
             [4, 0, { f: '=R1C1+1', v: 5 }],
         ];
-        const content = { g: 1, now: 1, seed: 1, sheets: [sheetOf('a', {}, { cells })] };
+        const content = { g: 1, now: 1, seed: 1, computed: false, sheets: [sheetOf('a', {}, { cells })] };
         expect(contentOfModel(modelOf(content)).sheets[0].cells).toEqual([
             ...cells.slice(0, 2),
             [2, 0, { f: "='[1]N'!R1C1" }],

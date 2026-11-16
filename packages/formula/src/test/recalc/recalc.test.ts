@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { FUNCTIONS } from '../../functions/library';
 import { fn } from '../../functions/registry';
-import type { CellSink, Literal } from '../../index';
+import type { CellSink, Literal, SheetSource } from '../../index';
 import { Engine, NA, REF } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { Workbook } from '../../store/workbook';
@@ -13,7 +13,7 @@ const NO_CAP = Number.POSITIVE_INFINITY;
 
 // One sheet whose cells are reported by `cells`, for workbooks too large to write out.
 function sheetOf(cells: (cell: CellSink) => void): Engine {
-    return new Engine([{ id: 's1', name: 'Sheet1', cells }]);
+    return new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, false);
 }
 
 function loopsOf(engine: Engine): string[] {
@@ -24,11 +24,12 @@ function loopsOf(engine: Engine): string[] {
 }
 
 describe('recalc', () => {
-    test('a loaded formula keeps its stored value until a write reaches it', () => {
-        const engine = sheetOf((cell) => {
+    test('a formula of a computed load keeps its stored value until a write reaches it', () => {
+        const cells = (cell: CellSink) => {
             cell(0, 0, 5, null);
             cell(0, 1, 99, '=RC[-1]*2');
-        });
+        };
+        const engine = new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, true);
         expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'B1')).toBe(99);
         engine.setValue('s1', 0, 0, 6);
@@ -113,18 +114,23 @@ describe('recalc', () => {
     });
 });
 
-// The workbook loaded again with every value a full recalc gave it, as a host loads what it stored. `kept` is what
-// the host made of a value while it held it.
+// The workbook loaded again as computed, with every value a full recalc gave it, as a host loads what it stored.
+// `kept` is what the host made of a value while it held it.
 function reloaded(cells: Cells, kept = (value: Literal | null) => value): Engine {
     const fresh = engineOf({ s1: cells });
     fresh.recalc(NO_CAP);
-    return sheetOf((cell) => {
-        for (const [label, input] of Object.entries(cells)) {
-            const [row, column] = at(label);
-            const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
-            cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
-        }
-    });
+    const sheet: SheetSource = {
+        id: 's1',
+        name: 'Sheet1',
+        cells: (cell) => {
+            for (const [label, input] of Object.entries(cells)) {
+                const [row, column] = at(label);
+                const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
+                cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
+            }
+        },
+    };
+    return new Engine([sheet], 0, 0, true);
 }
 
 const LOOPS: [string, Cells, string[], Readonly<Record<string, Literal>>][] = [
@@ -295,18 +301,21 @@ describe('depth', () => {
                 return 0;
             });
             const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
-            const workbook = new Workbook([
-                {
-                    id: 's1',
-                    name: 'Sheet1',
-                    cells: (cell) => {
-                        cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
-                        cell(1, 0, null, `=${deep}`);
-                        cell(0, 2, 1, null);
-                        for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+            const workbook = new Workbook(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
+                            cell(1, 0, null, `=${deep}`);
+                            cell(0, 2, 1, null);
+                            for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+                        },
                     },
-                },
-            ]);
+                ],
+                false,
+            );
             const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5);
             expect(recalc.pass(NO_CAP)).toMatchObject({ loops: [], stopped: false });
             const [column] = workbook.sheets[0].columns;
@@ -371,19 +380,19 @@ describe('the cap', () => {
         expect(done()).toEqual([101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
     });
 
-    test('a cap smaller than a chain is deep computes the far end first, pass by pass', () => {
+    test('a cap smaller than a chain is deep stores the chain that is running, and starts no formula after it', () => {
         const engine = sheetOf((cell) => {
             for (let row = 0; row < 9; row += 1) cell(row, 0, null, '=R[1]C+1');
             cell(9, 0, 1, null);
+            for (let row = 0; row < 4; row += 1) cell(row, 1, null, '=RC[-1]*2');
         });
         expect(engine.recalc(3).stopped).toBe(true);
-        expect([5, 6, 7, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([null, 4, 3, 2]);
-        expect([engine.recalc(3).stopped, engine.recalc(3).stopped, engine.recalc(3).stopped]).toEqual([
-            true,
-            false,
-            false,
-        ]);
-        expect(engine.valueOf('s1', 0, 0)).toBe(10);
+        expect([0, 5, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([10, 5, 2]);
+        expect(engine.valueOf('s1', 0, 1)).toBe(null);
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([0, 1, 2, 3].map((row) => engine.valueOf('s1', row, 1))).toEqual([20, 18, 16, null]);
+        expect(engine.recalc(3).stopped).toBe(false);
+        expect(engine.valueOf('s1', 3, 1)).toBe(14);
     });
 
     test('a cap that is exactly the formulas to compute does not stop', () => {
@@ -423,8 +432,12 @@ describe('the cap', () => {
     });
 
     test('a pass that stops inside a loop leaves no cell in progress and no loop half found', () => {
-        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1', D1: '=1+1', E1: '=IFERROR(A1,"loop")' } });
+        const engine = engineOf({
+            s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1+F1', D1: '=1+1', E1: '=IFERROR(A1,"loop")', F1: '=2+2' },
+        });
+        // D1 is the first store, so the pass stops when C1, on the loop by then, asks for F1.
         expect(engine.recalc(0)).toMatchObject({ loops: [], stopped: true });
+        expect(valueAt(engine, 'F1')).toBe(null);
         expect(loopsOf(engine)).toEqual(['A1', 'B1', 'C1']);
         expect(valueAt(engine, 'E1')).toBe('loop');
         engine.setValue('s1', 0, 1, 5);

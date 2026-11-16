@@ -37,6 +37,9 @@ function opened(sheets: Readonly<Record<string, Cells>>) {
                 }
             },
         })),
+        0,
+        0,
+        true,
     );
     for (const [id, cells] of Object.entries(sheets)) {
         for (const [key, input] of Object.entries(cells)) {
@@ -70,21 +73,26 @@ describe('what a recalc computes', () => {
         expect(computed()).toEqual([]);
     });
 
-    test('a formula that was never computed, and the formulas that read it', () => {
-        const engine = new Engine([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    cell(0, 0, 5, null);
-                    cell(0, 1, null, '=RC[-1]*2');
-                    cell(0, 2, KEPT, '=RC[-1]+1');
-                    cell(0, 3, KEPT, '=RC[-3]+1');
+    test('every formula of a load that was not computed, whatever value it came with', () => {
+        const engine = new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        cell(0, 0, 5, null);
+                        cell(0, 1, null, '=RC[-1]*2');
+                        cell(0, 2, KEPT, '=RC[-1]+1');
+                        cell(0, 3, KEPT, '=RC[-3]+1');
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            false,
+        );
         engine.recalc(NO_CAP);
-        expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([10, 11, KEPT]);
+        expect(['B1', 'C1', 'D1'].map((cell) => valueAt(engine, cell))).toEqual([10, 11, 6]);
     });
 
     test('the formulas a written cell reaches, through other formulas and other sheets', () => {
@@ -332,19 +340,24 @@ describe('circular references between recalcs', () => {
 describe('the cap of an edit', () => {
     const ROWS = 10000;
     const filled = () =>
-        new Engine([
-            {
-                id: 's1',
-                name: 'Sheet1',
-                cells: (cell) => {
-                    for (let row = 0; row < ROWS; row += 1) {
-                        cell(row, 1, row, null);
-                        cell(row, 2, 2, null);
-                        cell(row, 3, row * 2, '=RC[-2]*RC[-1]');
-                    }
+        new Engine(
+            [
+                {
+                    id: 's1',
+                    name: 'Sheet1',
+                    cells: (cell) => {
+                        for (let row = 0; row < ROWS; row += 1) {
+                            cell(row, 1, row, null);
+                            cell(row, 2, 2, null);
+                            cell(row, 3, row * 2, '=RC[-2]*RC[-1]');
+                        }
+                    },
                 },
-            },
-        ]);
+            ],
+            0,
+            0,
+            true,
+        );
 
     test('an edit computes the formulas of its cone, not of the workbook', () => {
         const engine = filled();
