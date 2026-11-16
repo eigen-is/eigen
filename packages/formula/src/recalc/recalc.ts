@@ -18,7 +18,7 @@ import type { Reference, Scalar } from '../values/value';
 import type { Rewrite } from './edit-plan';
 import { planEdit } from './edit-plan';
 import { Records } from './records';
-import { ReverseIndex } from './reverse-index';
+import { ReverseIndex, TABS } from './reverse-index';
 
 type CellAddress = { readonly sheet: string; readonly row: number; readonly column: number };
 
@@ -108,7 +108,10 @@ export class Recalc {
         this.evaluator = new Evaluator(workbook, functions, this);
         this.now = now;
         this.seed = seed;
-        for (const sheet of workbook.sheets) this.hold(sheet, computed);
+        for (const sheet of workbook.sheets) {
+            this.index.forget(sheet);
+            this.hold(sheet, computed);
+        }
     }
 
     // No seed waits, the clock is stamped, no sheet's rows changed, and no formula is flagged.
@@ -180,20 +183,27 @@ export class Recalc {
         this.reach();
         // A draw it moves is drawn again by its new place.
         this.stamped = false;
+        // The sheets whose cells come, go or move. One that only moves among the tabs or gets another name keeps
+        // its formulas where they are.
         const named =
             change.kind === ChangeKind.Move
                 ? [workbook.known(change.move.fromSheet), workbook.known(change.move.toSheet)]
                 : change.kind === ChangeKind.Lines
                   ? [workbook.known(change.edit.sheet)]
-                  : [change.kind === ChangeKind.AddSheet ? change.sheet : workbook.known(change.sheet)];
+                  : change.kind === ChangeKind.AddSheet
+                    ? [change.sheet]
+                    : change.kind === ChangeKind.RemoveSheet
+                      ? [workbook.known(change.sheet)]
+                      : [];
         // And a cell it moves to another row is left out or not by that row: the rows a sheet leaves out are not
         // moved with its cells, so they count as changed on every sheet the cells left or came to.
         const moves = change.kind === ChangeKind.Move || (change.kind === ChangeKind.Lines && change.edit.rows);
         if (moves && named.some((sheet) => sheet.out.length > 0)) for (const sheet of named) this.rowed.add(sheet);
-        // A sheet it names comes, goes or has its cells moved, and a formula it rewrites changes on its own sheet.
-        // The plan makes shapes no cell holds, for good when it throws to refuse the edit: the rebuild forgets those.
         for (const sheet of named) this.index.forget(sheet);
-        const plan = planEdit(workbook, this.index.rectangles, change);
+        // Only a block on those sheets or one that names them can change, and with the tabs one that reads them.
+        const ids = named.map((sheet) => sheet.id);
+        const cells = change.kind === ChangeKind.Move || change.kind === ChangeKind.Lines;
+        const plan = planEdit(workbook, this.index.reading(named, cells ? ids : [...ids, TABS]), change);
         const { seeds, fills } = plan;
         for (let f = 0; f < fills.length; f += 6) this.index.reshape(workbook.sheets[fills[f]]);
         for (let at = 0; at < seeds.length; at += 4) {
@@ -214,16 +224,18 @@ export class Recalc {
         if (!this.stamped) {
             // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
             this.reach();
-            const { clocks } = this.index;
-            for (let i = 0; i < clocks.length; i += 5) this.flagBlock(clocks, i);
+            const clocks = this.index.reading([], [Fact.Clock]);
+            for (let i = 0; i < clocks.length; i += 6) this.flagBlock(clocks, i);
             this.stamped = true;
         }
         if (this.rowed.size > 0) {
             // So is a formula that leaves rows out, when it names a sheet whose rows changed or may read any.
             this.reach();
-            const { choosers } = this.index;
+            const ids = Array.from(this.rowed, (sheet) => sheet.id);
+            const choosers = this.index.reading([], [Fact.Resolves, ...ids]);
             for (let i = 0; i < choosers.length; i += 6) {
-                if (choosers[i] < 0 || this.rowed.has(workbook.sheets[choosers[i]])) this.flagBlock(choosers, i + 1);
+                if ((this.facts[choosers[i + 5]] & (Fact.Chosen | Fact.Kept)) === Fact.Chosen)
+                    this.flagBlock(choosers, i);
             }
             this.rowed.clear();
         }
@@ -397,8 +409,8 @@ export class Recalc {
         }
     }
 
-    // Flags the formulas of a rectangle the index lists, from `at` in a list: sheet, first and last column, first
-    // and last row. Each of its columns is a seed.
+    // Flags the formulas of a block the index gave, from `at` in a list: sheet, first and last column, first and
+    // last row. Each of its columns is a seed.
     private flagBlock(rectangles: readonly number[], at: number): void {
         const { columns } = this.workbook.sheets[rectangles[at]];
         for (let c = rectangles[at + 1]; c <= rectangles[at + 2]; c += 1) {
@@ -421,22 +433,16 @@ export class Recalc {
         extend(this.seeds, sheet.place, c, row);
     }
 
-    // Makes the index describe the workbook and the records as they are. The rebuild lists every shape a cell
-    // holds, so the others are forgotten here: every edit that rewrites a formula would else leave its old shape
-    // behind for good. So is the record of a cell that holds no formula that resolves a reference any more.
+    // Makes the index describe the workbook and the records as they are. The record of a cell that holds no
+    // formula that resolves a reference any more is forgotten.
     private reach(): void {
         const { index, records, facts } = this;
-        const { shapes } = this.workbook;
         if (index.stale) {
-            for (let shape = 1; shape <= shapes.size; shape += 1) this.factsOf(shape);
-            index.rebuild(this.workbook);
-            const held = new Uint8Array(shapes.size + 1);
-            for (let r = 5; r < index.rectangles.length; r += 6) held[index.rectangles[r]] = 1;
-            shapes.keep(held);
+            index.rebuild(this.workbook, (shape) => this.factsOf(shape));
             records.prune(this.workbook.sheets, facts);
         }
         if (records.changed) {
-            index.listRecords(this.workbook.sheets.length, records.held);
+            index.listRecords(this.workbook.sheets, records.held);
             records.changed = false;
         }
     }
