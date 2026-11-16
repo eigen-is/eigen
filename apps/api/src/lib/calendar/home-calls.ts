@@ -10,7 +10,7 @@ export type CalendarQueries = {
     // Null when the home has no calendar, such as a guest's, or a team's while it is off.
     'calendar:calendars': { ask: null; answer: CalendarItem[] | null };
     'calendar:shared-with': {
-        ask: { email: string; teamIds: string[] };
+        ask: { email: string; teamIds: readonly string[] };
         answer: SharedWithMeCalendar[];
     };
     'calendar:pending-invitations': { ask: { attendeeEmail: string }; answer: InvitationRequest[] };

@@ -507,7 +507,7 @@ export class Calendar {
         shares.removeSharedEntriesForOwner(this, ownerUserId);
     }
 
-    public async getSharedWith(userEmail: string, teamIds: string[]): Promise<SharedWithMeCalendar[]> {
+    public async getSharedWith(userEmail: string, teamIds: readonly string[]): Promise<SharedWithMeCalendar[]> {
         return shares.getSharedWith(this, userEmail, teamIds);
     }
 
