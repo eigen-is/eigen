@@ -6,7 +6,7 @@ category: Basics
 tags: [search, command-palette, navigation, getting-started]
 related: [getting-started/your-first-steps, account/light-and-dark-theme, drive/get-started]
 order: 3
-updated: 2026-11-02
+updated: 2026-11-16
 ---
 
 Eigen has one box that searches your files and email, jumps to any app, and runs quick actions. It's called the command palette, and you reach it from anywhere with a single keystroke. This page shows you how to open it and what it can do.
@@ -24,7 +24,7 @@ When the palette opens, type into the **Search and jump anywhere…** box. Resul
 
 ## Find a file
 
-Start typing part of a file or folder name. Matches show up under a **Files** heading, each with the icon for its type.
+Start typing part of a file or folder name. Matches show up under a **Files** heading, each with the icon for its type. Files you worked on lately that match show up first, right away.
 
 Press **Enter** on a file to open it. Documents, spreadsheets, and presentations open in their editor; other files, such as images and PDFs, open in a preview. Search looks at file and folder names, and at the text inside your documents, spreadsheets, presentations, drawings, boards, and chats. It covers your own files and the drives of every team you belong to, so you don't have to remember where something lives.
 
@@ -66,7 +66,7 @@ The palette is also the fast way to move around and start things. Type the name 
 - **New doc**, **New sheet**, **New slide**, and **New folder**, which create the item in Drive.
 - **Toggle theme**, to switch between the light and dark look. See [Switch between light and dark theme](/support/account/light-and-dark-theme) for more.
 
-Open the palette without typing anything and you get a short **Suggested** list of common actions to get you going.
+Open the palette without typing anything and you see your five newest **Recent files**, the same files as Drive's [Recent files](/support/drive/recent-files) page. Below them is a short **Suggested** list of common actions to get you going. With an item selected, its actions come first and the **Suggested** list is left out.
 
 ## Type an email address or a link
 

@@ -7,6 +7,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
+- **Recent files in the command palette** — ⌘K with nothing typed lists your five newest recent files. Typing a recent file's name puts it on top at once
 - **Pictures and films on the site** — in help articles and blog posts, a click opens a picture or film bigger, and each has a thin border. A page can show a looping film or a carousel of pictures and films
 
 ### Changed

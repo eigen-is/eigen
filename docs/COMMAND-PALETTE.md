@@ -1,8 +1,8 @@
 # Command Palette
 
-> **TLDR:** The command palette is the ⌘K dialog every signed-in Eigen app shares: one text box to jump to an app, create a document, act on what is selected, or find a file, a mail, a contact, a help article or a match in the open document. It stores nothing and has no backend of its own. The engine lives in `packages/lib/src/core/command-palette/`, the dialog in `packages/ui/src/components/layout/app/command-palette/`.
+> **TLDR:** The command palette is the ⌘K dialog every signed-in Eigen app shares: one text box to jump to an app, create a document, act on what is selected, or find a file, a mail, a contact, a help article or a match in the open document. It has no backend of its own: it reads what other domains already serve, such as the search route and Drive's recent files. The engine lives in `packages/lib/src/core/command-palette/`, the dialog in `packages/ui/src/components/layout/app/command-palette/`.
 
-Each keystroke runs a set of sources over the typed text. A source is one kind of result and the code that produces it: the command catalog, contacts, smart suggestions, files, mail, help, the open document's matches and its comment threads. The catalog and contacts answer at once from data the browser holds. The others are async: files and mail go to the search route ([SEARCH.md](SEARCH.md)), help to the help center's Pagefind index ([HELP-CENTER.md](HELP-CENTER.md#the-landing-and-the-palette-share-one-loader)), comment threads to their own server index. So the palette grows whenever a source does: a file type the search index learns to read shows up with no palette change.
+Each keystroke runs a set of sources over the typed text. A source is one kind of result and the code that produces it: the command catalog, contacts, smart suggestions, recent files, files, mail, help, the open document's matches and its comment threads. The catalog, contacts and recent files answer at once from data the browser holds. The others are async: files and mail go to the search route ([SEARCH.md](SEARCH.md)), help to the help center's Pagefind index ([HELP-CENTER.md](HELP-CENTER.md#the-landing-and-the-palette-share-one-loader)), comment threads to their own server index. So the palette grows whenever a source does: a file type the search index learns to read shows up with no palette change.
 
 A result is a row with a `run` function. Running it gets a `CommandContext` built in `PaletteRunner` (`app-shell.tsx`): the signed-in owner, whether the server has mail, the selection and a few helpers (navigate, open a create dialog, compose mail, preview). So a command never imports app code. The palette never finds the selection itself: a page publishes it, with the rows it can run on it.
 
@@ -14,7 +14,11 @@ Three things surprise people: a document match never becomes the Top hit, a slow
 
 `useCommandResults` holds each async source at its last results until its own query settles (`useStableWhilePending`). So the merge never sees a half-finished state, sections never flicker, and a slow source, such as Pagefind loading its index the first time, can't freeze the others. `packages/lib/src/test/core/command-palette/engine.test.ts` pins the merge.
 
-With an empty box the palette shows the published selection, or else a short Suggested list (`SUGGESTED_COMMAND_IDS`). Nothing is searched until there is text.
+## Recent files share Drive's query and read only while the palette is open
+
+With an empty box the palette shows the published selection, then Recent files, the five newest from `useRecentPaths`, the same cached query as Drive's Recent page ([STORAGE.md](STORAGE.md#the-recent-files-page-reads-at-most-once-a-minute)). The short Suggested list (`SUGGESTED_COMMAND_IDS`) follows only when nothing is selected. The dialog's results hook runs on every signed-in page, open or not, so the query is enabled only while the palette is open, and never for a guest, whom the route refuses. The open document publishes itself as the selection, so it is left out of the list.
+
+With text, recent files whose title matches join Files ahead of the search hits, deduped by row id. They answer from the cache, so a file opened lately is the Top hit before the search responds. Search hits and recent rows come from one row builder, `fileToResult`, so both open a file the same way.
 
 ## A prefix or the Tab chip narrows the palette to one source
 
