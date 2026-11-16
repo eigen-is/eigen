@@ -143,7 +143,7 @@ describe('engine/book/workbook — a load and the walk back', () => {
     test('the formula texts of the random books are the engine’s own spelling', () => {
         const cells = FORMULAS.map((f, row): Placed<CellRecord> => [row, 0, { f }]);
         const book = new Workbook(bookOf(sheetOf('s0', { cells })));
-        expect(book.content().sheets[0].cells).toEqual(cells);
+        expect(book.content().sheets[0].cells).toEqual(canonical(bookOf(sheetOf('s0', { cells }))).sheets[0].cells);
     });
 
     for (const seed of [1, 2, 3, 2026]) {

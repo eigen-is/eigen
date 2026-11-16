@@ -78,6 +78,8 @@ const LINE_KEYS: readonly LineAttrs[] = [
 ];
 // Stored texts the engine keeps as they are: its own spelling, a text that does not parse, and a formula it cannot
 // evaluate, which keeps the value it came with.
+// A formula this build cannot evaluate.
+const KEPT = "='[b.xlsx]S'!R1C1";
 export const FORMULAS: readonly string[] = [
     '=R[1]C+1',
     '=SUM(R1C1:R5C1)',
@@ -85,7 +87,7 @@ export const FORMULAS: readonly string[] = [
     '=NOW()',
     '=RC[1]&"x"',
     '=1+',
-    "='[b.xlsx]S'!R1C1",
+    KEPT,
 ];
 const LINKS: readonly CellLink[] = [
     { type: 'webpage', address: 'https://eigen.is' },
@@ -252,17 +254,23 @@ function canonicalLines(runs: SheetContent['rows']): [Span, LineAttrs][] {
 
 // What a workbook loaded from the snapshot walks back to, when every formula text is the engine's own spelling. It
 // is computed while no formula waits: a load that is not computed computes every formula, and one that is computes a
-// formula that holds #REF!.
+// formula that holds #REF!. The kept formula holds #REF! from the load when it came with no value, and waits only
+// then in a computed load, for its readers.
 export function canonical(book: Book): Book {
     const sheets = book.sheets.toSorted((a, b) =>
         a.fields.order !== b.fields.order ? (a.fields.order < b.fields.order ? -1 : 1) : a.id < b.id ? -1 : 1,
     );
-    const waits = ({ f, v, e }: CellRecord) => f !== undefined && (!book.computed || (e === 1 && v === '#REF!'));
+    const waits = ({ f, v, e }: CellRecord) =>
+        f !== undefined &&
+        (f === KEPT ? book.computed && v === undefined : !book.computed || (e === 1 && v === '#REF!'));
     return {
         ...book,
         computed: !sheets.some(({ cells }) => cells.some(([, , cell]) => waits(cell))),
         sheets: sheets.map((sheet) => ({
             ...sheet,
+            cells: sheet.cells.map(([row, column, cell]): Placed<CellRecord> => {
+                return [row, column, cell.f === KEPT && cell.v === undefined ? { ...cell, v: '#REF!', e: 1 } : cell];
+            }),
             ...canonicalBands(sheet),
             rows: canonicalLines(sheet.rows),
             columns: canonicalLines(sheet.columns),

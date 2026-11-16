@@ -223,11 +223,11 @@ describe('engine/book/apply-input — a value given beside a formula', () => {
         ]);
     });
 
-    test('a formula given no value, not yet computed, has no value to give back', () => {
+    test('a formula given no value holds #REF! at once, which its inverse gives back', () => {
         const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { v: 5 }]] })));
         applyOps(book, [input({ cells: [[0, 0, { f: KEPT }]] })]);
         const inverse = applyOps(book, [input({ cells: [[0, 0, { v: 1 }]] })]);
-        expect(inverse).toEqual([input({ cells: [[0, 0, { f: KEPT }]] })]);
+        expect(inverse).toEqual([input({ cells: [[0, 0, { f: KEPT, v: '#REF!', e: 1 }]] })]);
         applyOps(book, inverse);
         bytes(book);
         expect(book.engine.valueOf('a', 0, 0)).toMatchObject({ text: '#REF!' });

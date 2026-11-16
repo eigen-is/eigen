@@ -193,7 +193,7 @@ describe('engine/book — the model, rule by rule', () => {
         ]);
     });
 
-    test('a value beside a formula is held only for one this build cannot evaluate, and not when it is #REF!', () => {
+    test('a value beside a formula is held only for one this build cannot evaluate, which holds #REF! given none', () => {
         const cells: SheetContent['cells'] = [
             [0, 0, { f: "='[1]N'!R1C1", v: 4 }],
             [1, 0, { f: "=SUM('N:M'!R1C1)", v: '#N/A', e: 1 }],
@@ -203,9 +203,8 @@ describe('engine/book — the model, rule by rule', () => {
         ];
         const content = { g: 1, now: 1, seed: 1, computed: false, sheets: [sheetOf('a', {}, { cells })] };
         expect(contentOfModel(modelOf(content)).sheets[0].cells).toEqual([
-            ...cells.slice(0, 2),
-            [2, 0, { f: "='[1]N'!R1C1" }],
-            [3, 0, { f: "='[1]N'!R1C1" }],
+            ...cells.slice(0, 3),
+            [3, 0, { f: "='[1]N'!R1C1", v: '#REF!', e: 1 }],
             [4, 0, { f: '=R1C1+1' }],
         ]);
         expectReads(new Workbook(content), modelOf(content));

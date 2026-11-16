@@ -84,7 +84,7 @@ describe('recalc', () => {
     test.each([
         ['a reference across sheets', '=SUM(Sheet1:Sheet3!A1)'],
         ['a reference into another workbook', '=[1]Sheet1!A1+1'],
-    ])('a formula this build cannot evaluate that has no value is #REF!: %s', (_, typed) => {
+    ])('a formula this build cannot evaluate that has no value is #REF! at once: %s', (_, typed) => {
         const text = stored(typed, 'A1');
         const loaded = sheetOf((cell) => {
             cell(0, 0, null, text);
@@ -95,19 +95,19 @@ describe('recalc', () => {
         written.setFormula('s1', 0, 0, text);
         for (const engine of [loaded, written]) {
             expect(engine.formulaOf('s1', 0, 0)).toBe(text);
-            expect(engine.isPending('s1', 0, 0)).toBe(true);
-            expect(engine.recalc(NO_CAP)).toEqual({ loops: [], stopped: false, changed: [0, 0, 0, 0, 0, 1, 0, 0] });
+            expect([valueAt(engine, 'A1'), engine.isPending('s1', 0, 0)]).toEqual([REF, false]);
+            expect(engine.recalc(NO_CAP)).toEqual({ loops: [], stopped: false, changed: [0, 1, 0, 0] });
             expect([valueAt(engine, 'A1'), valueAt(engine, 'B1')]).toEqual([REF, REF]);
             expect([engine.isPending('s1', 0, 0), engine.isPending('s1', 0, 1)]).toEqual([false, false]);
             expect(engine.recalc(NO_CAP).changed).toEqual([]);
         }
     });
 
-    test('a formula this build cannot evaluate keeps its value when it is computed again', () => {
+    test('a formula this build cannot evaluate keeps its value on an added sheet, and waits for no pass', () => {
         const text = stored('=SUM(Sheet1:Sheet3!A1)', 'A1');
         const engine = sheetOf((cell) => cell(0, 0, 42, text));
         engine.addSheet({ id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, 43, text) }, 1);
-        expect(engine.isPending('s2', 0, 0)).toBe(true);
+        expect(engine.isPending('s2', 0, 0)).toBe(false);
         expect(engine.recalc(NO_CAP).changed).toEqual([]);
         expect([valueAt(engine, 'A1'), valueAt(engine, 'A1', 's2')]).toEqual([42, 43]);
         expect(engine.isPending('s2', 0, 0)).toBe(false);

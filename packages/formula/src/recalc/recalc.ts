@@ -106,19 +106,7 @@ export class Recalc {
         this.evaluator = new Evaluator(workbook, functions, this);
         this.now = now;
         this.seed = seed;
-        // A load carries no loops and every cell on one holds #REF!, so a formula whose #REF! the load trusted is to
-        // be computed. It is a seed too: a marking takes the readers of a flagged formula for flagged.
-        for (const sheet of workbook.sheets) {
-            for (let c = 0; c < sheet.columns.length; c += 1) {
-                const column = sheet.columns[c];
-                const { kind, ref, shape, length } = column;
-                for (let row = 0; column.errors > 0 && row < length; row += 1) {
-                    if (kind[row] !== CellKind.Error || ref[row] !== REF.code || shape[row] === 0) continue;
-                    column.markDirty(row);
-                    extend(this.seeds, sheet.place, c, row);
-                }
-            }
-        }
+        for (const sheet of workbook.sheets) this.hold(sheet, computed);
     }
 
     // No seed waits, the clock is stamped, and no formula is flagged.
@@ -148,7 +136,7 @@ export class Recalc {
     }
 
     // One formula in its stored text in every cell of a block. It holds no value until a pass computes it, unless
-    // this build cannot evaluate it and it comes with one: then every cell holds that value and waits for no pass.
+    // this build cannot evaluate it: then every cell holds the value it was given and waits for no pass.
     public fillFormula(
         sheet: Sheet,
         top: number,
@@ -161,13 +149,9 @@ export class Recalc {
         this.stale = true;
         for (let c = left; c <= right; c += 1) this.seeds.push(sheet.place, c, top, bottom);
         this.workbook.fillFormula(sheet, top, left, bottom, right, text);
-        if (given === null || (this.factsOf(sheet.columns[left].shape[top]) & Fact.Kept) === 0) return;
+        if ((this.factsOf(sheet.columns[left].shape[top]) & Fact.Kept) === 0) return;
         for (let c = left; c <= right; c += 1) {
-            const column = sheet.columns[c];
-            for (let row = top; row <= bottom; row += 1) {
-                this.workbook.put(column, row, given);
-                column.settle(row);
-            }
+            for (let row = top; row <= bottom; row += 1) this.keep(sheet.columns[c], row, given);
         }
     }
 
@@ -175,7 +159,10 @@ export class Recalc {
     // sheet's texts and shapes, as that forgets the shapes no cell of the workbook holds, and these are not yet.
     public addSheet(draft: Draft, place: number): EditResult {
         this.reach();
-        return this.edit({ kind: ChangeKind.AddSheet, sheet: this.workbook.adopt(draft), place });
+        const sheet = this.workbook.adopt(draft);
+        const result = this.edit({ kind: ChangeKind.AddSheet, sheet, place });
+        this.hold(sheet, false);
+        return result;
     }
 
     // Performs a structural edit. What it can change is flagged, with the cells written since the last pass, while
@@ -363,6 +350,38 @@ export class Recalc {
         return facts;
     }
 
+    // The cells of a sheet that came by a load or an add. One this build cannot evaluate is held, a seed when that
+    // changed it in a computed load. A load carries no loops and every cell on one holds #REF!, so any other formula
+    // whose #REF! the load trusted is to be computed, and is a seed too: a marking takes the readers of a flagged
+    // formula for flagged.
+    private hold(sheet: Sheet, computed: boolean): void {
+        const { shapes } = this.workbook;
+        let kept = false;
+        for (let id = 1; id <= shapes.size && !kept; id += 1) kept = (this.factsOf(id) & Fact.Kept) !== 0;
+        for (let c = 0; c < sheet.columns.length; c += 1) {
+            const column = sheet.columns[c];
+            const { kind, ref, shape, length } = column;
+            for (let row = 0; (kept || column.errors > 0) && row < length; row += 1) {
+                const id = shape[row];
+                if (id === 0) continue;
+                if (this.factsOf(id) & Fact.Kept) {
+                    const changed = this.keep(column, row, this.workbook.value(column, row));
+                    if (changed && computed) extend(this.seeds, sheet.place, c, row);
+                } else if (kind[row] === CellKind.Error && ref[row] === REF.code) {
+                    column.markDirty(row);
+                    extend(this.seeds, sheet.place, c, row);
+                }
+            }
+        }
+    }
+
+    // A formula this build cannot evaluate holds the value it enters with, and #REF! with none, from that moment on:
+    // no pass computes it. True when that changed the cell.
+    private keep(column: Column, row: number, value: Scalar): boolean {
+        column.settle(row);
+        return this.workbook.put(column, row, value ?? REF);
+    }
+
     // A cell is about to be written: it is a seed of the next pass or edit.
     private touch(sheet: Sheet, row: number, c: number): void {
         const column = sheet.columns[c];
@@ -477,7 +496,7 @@ export class Recalc {
         if (resolves) this.records.start(at);
         const { tree } = this.workbook.shapes.shape(shape);
         const value = kept
-            ? (this.workbook.value(column, row) ?? REF)
+            ? this.workbook.value(column, row)
             : tree === null
               ? ERROR
               : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);

@@ -223,6 +223,33 @@ describe('the open', () => {
         engine.recalc(NO_CAP);
         expect(shown(engine, 2)).toEqual([4, 8]);
     });
+
+    test('of a computed snapshot computes no formula this build cannot evaluate that holds #REF!', () => {
+        const { count, recalc } = counted(
+            [
+                [0, 0, REF, "='[b.xlsx]S'!R1C1"],
+                [0, 1, 7, '=IFERROR(RC[-1],7)+RAN(0)'],
+            ],
+            true,
+        );
+        expect(recalc.settled()).toBe(true);
+        expect(recalc.pass(NO_CAP)).toEqual({ loops: [], stopped: false, changed: [] });
+        expect(count.ran).toBe(0);
+    });
+
+    test('of a computed snapshot gives such a formula with no value #REF!, and computes its readers', () => {
+        const engine = opened(
+            [
+                [0, 0, null, "='[b.xlsx]S'!R1C1"],
+                [0, 1, 0, '=ISREF(RC[-1])+ISERROR(RC[-1])'],
+            ],
+            true,
+        );
+        expect([engine.valueOf('s', 0, 0), engine.isPending('s', 0, 0), engine.settled()]).toEqual([REF, false, false]);
+        expect(engine.recalc(NO_CAP).changed).toEqual([0, 1, 0, 0]);
+        expect(shown(engine, 2)).toEqual(['#REF!', 2]);
+        expect(engine.settled()).toBe(true);
+    });
 });
 
 describe('settled', () => {
