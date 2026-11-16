@@ -44,8 +44,14 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     }
     const gathered: Gathered = { runs: [], cells: [] };
     const read = new RectIndex();
-    for (const [rect] of op.runs ?? []) {
-        readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
+    // A run that does not reach the engine empties the cells its read finds there.
+    const emptied: Group[] = [];
+    for (const [rect, content] of op.runs ?? []) {
+        const empties = content === null || !reachesEngine(content);
+        readBlock(book, sheet, extras, rect, (group) => {
+            gather(gathered, group, contentOfGroup(group));
+            if (empties && (group.held.value !== null || group.held.formula !== null)) emptied.push(group);
+        });
         read.set('', undefined, [rect]);
     }
     // A listed cell inside a run was read with the run.
@@ -58,20 +64,18 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
         const [top, left, bottom, right] = rect;
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.fillFormula(sheet, top, left, bottom, right, content.f, value);
-        else if (value === null) {
-            for (let column = left; column <= right; column += 1) {
-                for (let row = engine.nextCell(sheet, column, top, bottom); row >= 0; ) {
-                    engine.clear(sheet, row, column);
-                    row = engine.nextCell(sheet, column, row + 1, bottom);
-                }
-            }
-        } else {
+        else if (value !== null) {
             for (let column = left; column <= right; column += 1) {
                 for (let row = top; row <= bottom; row += 1) engine.setValue(sheet, row, column, value);
             }
         }
-        extras.fill(rect, content ?? {});
     }
+    for (const { top, left, bottom, right } of emptied) {
+        for (let column = left; column <= right; column += 1) {
+            for (let row = top; row <= bottom; row += 1) engine.clear(sheet, row, column);
+        }
+    }
+    if (op.runs) extras.fill(op.runs.map(([rect, content]) => [rect, content ?? {}]));
     for (const [row, column, content] of op.cells ?? []) {
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.setFormula(sheet, row, column, content.f, value);
@@ -236,8 +240,17 @@ function readBlock(book: Workbook, sheet: string, extras: Extras, rect: Rect, cl
         column += 1;
         next = top;
     };
+    // Ends the columns before `at`. From the second empty one on, each joins the one empty rectangle the first left
+    // open, so they end at once.
+    const reach = (at: number) => {
+        for (let ended = 0; ended < 2 && column < at; ended += 1) endColumn();
+        if (column < at) {
+            open[0].right = at - 1;
+            column = at;
+        }
+    };
     const cell = (row: number, at: number, value: Literal | null, formula: string | null, extra?: Extra) => {
-        while (column < at) endColumn();
+        reach(at);
         gap(row - 1);
         next = row + 1;
         const given = formula !== null && engine.isGiven(sheet, row, at);
@@ -266,7 +279,7 @@ function readBlock(book: Workbook, sheet: string, extras: Extras, rect: Rect, cl
         right,
     );
     for (; !mark.done; mark = marked.next()) cell(mark.value[0], mark.value[1], null, null, mark.value[2]);
-    while (column <= right) endColumn();
+    reach(right + 1);
     for (const group of open) close(group);
 }
 

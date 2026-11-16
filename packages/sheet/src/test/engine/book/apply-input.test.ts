@@ -157,6 +157,32 @@ describe('engine/book/apply-input — what an input writes', () => {
         ]);
     });
 
+    test('a run of only a link or only a mark empties the values under it, and each run lays its own entry', () => {
+        const cells: SheetContent['cells'] = [
+            [0, 0, { v: 1, qp: 1 }],
+            [1, 0, { f: '=R[-1]C+1' }],
+            [0, 1, { v: 'x', link: LINK }],
+            [1, 1, { v: 2 }],
+        ];
+        const ops = [
+            input({
+                runs: [
+                    [[0, 0, 1, 0], { link: LINK }],
+                    [[0, 1, 1, 1], { qp: 1 }],
+                ],
+            }),
+        ];
+        const book = new Workbook(bookOf(sheetOf('a', { cells })));
+        applyOps(book, ops);
+        expect(cellsOf(book)).toEqual([
+            [0, 0, { link: LINK }],
+            [1, 0, { link: LINK }],
+            [0, 1, { qp: 1 }],
+            [1, 1, { qp: 1 }],
+        ]);
+        expectLaw2(bookOf(sheetOf('a', { cells })), ops);
+    });
+
     test('a formula run is one stored key in every cell, and a value run that value in every cell', () => {
         const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { v: 3 }]] })));
         applyOps(book, [

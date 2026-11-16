@@ -110,7 +110,7 @@ describe('engine/book/extras — Extras', () => {
             [1, 2, LINK],
             [0, 3, QUOTED],
         ]);
-        extras.fill([1, 1, 2, 2], { s: undefined, link: LINK.link, qp: undefined });
+        extras.fill([[[1, 1, 2, 2], { s: undefined, link: LINK.link, qp: undefined }]]);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, RICH],
@@ -123,7 +123,7 @@ describe('engine/book/extras — Extras', () => {
         ]);
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
         expect(extras.weight()).toBe(2 + 7 + 4 * 5 + 5 + 2);
-        extras.fill([0, 1, 5, 1], {});
+        extras.fill([[[0, 1, 5, 1], {}]]);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [1, 2, LINK],
@@ -131,18 +131,18 @@ describe('engine/book/extras — Extras', () => {
             [0, 3, QUOTED],
         ]);
         expect(extras.weight()).toBe(2 + 2 * 5 + 2);
-        extras.fill([0, 0, LAST_ROW, LAST_COLUMN], {});
+        extras.fill([[[0, 0, LAST_ROW, LAST_COLUMN], {}]]);
         expect(extras.content()).toEqual([]);
         expect(extras.weight()).toBe(0);
     });
 
     test('a fill of 150,000 cells over entries and among 150,000 right of it and below is one pass', () => {
         const extras = new Extras({ extras: 0 });
-        extras.fill([0, 1, 74_999, 1], QUOTED);
-        extras.fill([200_000, 0, 274_999, 0], QUOTED);
-        extras.fill([100_000, 0, 100_009, 0], QUOTED);
+        extras.fill([[[0, 1, 74_999, 1], QUOTED]]);
+        extras.fill([[[200_000, 0, 274_999, 0], QUOTED]]);
+        extras.fill([[[100_000, 0, 100_009, 0], QUOTED]]);
         const started = performance.now();
-        extras.fill([0, 0, 149_999, 0], LINK);
+        extras.fill([[[0, 0, 149_999, 0], LINK]]);
         expect(performance.now() - started).toBeLessThan(500);
         expect(extras.weight()).toBe(150_000 * 5 + 150_000 * 2);
         expect([extras.at(74_999, 1), extras.at(75_000, 1)]).toEqual([QUOTED, undefined]);
@@ -188,7 +188,7 @@ describe('engine/book/extras — Extras', () => {
     test('a link over 150,000 cells among 1,000 rich ones and 150,000 entries beside them is one pass', () => {
         const extras = new Extras({ extras: 0 });
         for (let row = 0; row < 150_000; row += 150) extras.write(row, 0, { s: RICH.s });
-        extras.fill([0, 1, 149_999, 1], QUOTED);
+        extras.fill([[[0, 1, 149_999, 1], QUOTED]]);
         const started = performance.now();
         extras.link([[0, 0, 149_999, 0]], LINK.link);
         expect(performance.now() - started).toBeLessThan(500);
@@ -426,7 +426,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     }
                     undo = () => {
                         for (const [at, block] of blocks.entries()) {
-                            extras.fill(block, {});
+                            extras.fill([[block, {}]]);
                             for (const [row, column, old] of covered[at]) extras.write(row, column, old);
                         }
                     };
@@ -437,12 +437,12 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     const covered = model.within(block);
                     counts[extra ? 'filled' : 'cleared'] += 1;
                     counts.replaced += covered.length;
-                    extras.fill(block, extra ?? {});
+                    extras.fill([[block, extra ?? {}]]);
                     for (let row = block[0]; row <= block[2]; row += 1) {
                         for (let column = block[1]; column <= block[3]; column += 1) model.put(row, column, extra);
                     }
                     undo = () => {
-                        extras.fill(block, {});
+                        extras.fill([[block, {}]]);
                         for (const [row, column, old] of covered) extras.write(row, column, old);
                     };
                 } else {

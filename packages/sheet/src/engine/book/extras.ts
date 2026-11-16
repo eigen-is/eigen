@@ -106,10 +106,13 @@ export class Extras {
         return old;
     }
 
-    // Puts one entry in every cell of a block, or with none of the three empties it.
-    public fill(rect: Rect, extra: Extra): void {
-        const entry = entryOf(extra);
-        this.merge([rect], () => entry);
+    // Puts in every cell of each block, which share no cell, its one entry, or with none of the three empties it.
+    public fill(blocks: readonly (readonly [Rect, Extra])[]): void {
+        const entries = blocks.map(([, extra]) => entryOf(extra));
+        this.merge(
+            blocks.map(([rect]) => rect),
+            (_, at) => entries[at],
+        );
     }
 
     // Sets the link of every cell of the rectangles, which share no cell, or with none clears it, each cell keeping its
@@ -174,19 +177,19 @@ export class Extras {
         return removed;
     }
 
-    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds: the cells with
-    // none all take `to` of none. The cells the rectangles change are found first, then one pass over the entries
-    // between the first and the last puts them all in.
-    private merge(rects: readonly Rect[], to: (old: Extra | undefined) => Extra | undefined): void {
-        const blank = to(undefined);
+    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds and of the
+    // rectangle's place in the list: the cells with none all take `to` of none. The cells the rectangles change are
+    // found first, then one pass over the entries between the first and the last puts them all in.
+    private merge(rects: readonly Rect[], to: (old: Extra | undefined, at: number) => Extra | undefined): void {
         const changed: number[] = [];
         const entries: (Extra | undefined)[] = [];
-        for (const rect of rects) {
+        for (const [at, rect] of rects.entries()) {
+            const blank = to(undefined, at);
             const cells = this.cells(rect);
             if (!blank) {
                 for (const [row, column, old] of cells) {
                     changed.push(placeOf(row, column));
-                    entries.push(to(old));
+                    entries.push(to(old, at));
                 }
                 continue;
             }
@@ -196,7 +199,7 @@ export class Extras {
                 for (let row = top; row <= bottom; row += 1) {
                     const here = !next.done && next.value[0] === row && next.value[1] === column;
                     changed.push(placeOf(row, column));
-                    entries.push(here ? to(next.value[2]) : blank);
+                    entries.push(here ? to(next.value[2], at) : blank);
                     if (here) next = cells.next();
                 }
             }
