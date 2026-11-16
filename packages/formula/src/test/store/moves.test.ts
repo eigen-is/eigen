@@ -58,7 +58,7 @@ describe('a block moved in the store', () => {
                     const what = pick(5);
                     if (what === 0) workbook.fillFormula(sheet, row, c, row, c, `=R1C1+${pick(3)}`);
                     else workbook.setValue(sheet, row, c, what === 1 ? DIV0 : what === 2 ? 'text' : pick(50));
-                    const column = sheet.column(c);
+                    const column = sheet.columns[c];
                     if (what === 0 && pick(2) === 0) column.computed(row);
                     if (what === 0 && pick(3) === 0) column.setLoop(row, true);
                 }

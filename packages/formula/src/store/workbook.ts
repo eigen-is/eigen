@@ -41,8 +41,8 @@ export type Draft = {
     readonly texts: ReadonlyMap<string, number>;
     readonly formulas: ReadonlyMap<string, number>;
     readonly errors: ReadonlyMap<string, number>;
-    // Per column, the rows of the cells that may hold such a number, as the source reported them.
-    readonly numbered: readonly (readonly number[])[];
+    // The column and the row of each cell that may hold such a number, as the source reported them.
+    readonly numbered: readonly number[];
 };
 
 // A structural edit. A sheet is added as `adopt` made it, at a place among the tabs, and moved to one; both count
@@ -99,6 +99,9 @@ export class Workbook {
     // The errors only a file knows, by their text.
     private readonly carried: FormulaError[] = [];
     private readonly carriedCodes = new Map<string, number>();
+    // The rows the columns of every sheet hold, together: each sheet's count as it comes and goes, and what each
+    // write and edit adds to it.
+    private total = 0;
     // The weight of the string table past which the next pass sweeps it: twice what it was after the last sweep or
     // load and the floor at least, and 0 once a sheet was removed.
     private limit: number;
@@ -112,6 +115,7 @@ export class Workbook {
             this.checkName(source.name, null);
             const draft = this.read(source, computed);
             this.insert(draft.sheet, this.held.length);
+            this.total += draft.sheet.slots;
             return draft;
         });
         for (const draft of drafts) this.adopt(draft);
@@ -121,6 +125,11 @@ export class Workbook {
     // The sheets in tab order: each one's `place` is where it sits here.
     public get sheets(): readonly Sheet[] {
         return this.held;
+    }
+
+    // What the cells cost, whatever room a column has.
+    public get slots(): number {
+        return this.total;
     }
 
     public sheet(id: string): Sheet | undefined {
@@ -168,7 +177,7 @@ export class Workbook {
         const texts = new Map<string, number>();
         const formulas = new Map<string, number>();
         const errors = new Map<string, number>();
-        const numbered = lengths.map((): number[] => []);
+        const numbered: number[] = [];
         walk(source, (row, column, value, formula) => {
             const held = sheet.columns[column];
             if (held === undefined || row >= held.length) {
@@ -181,12 +190,12 @@ export class Workbook {
             } else if (value !== null) this.put(held, row, value);
             // A number or a boolean with no formula is stored as it stays.
             if (formula !== null || (typeof value !== 'number' && typeof value !== 'boolean')) {
-                numbered[column].push(row);
+                numbered.push(column, row);
             }
             if (formula !== null && !computed) held.markDirty(row);
         });
         // The first walk sized the columns, and a source may not report its last cells again.
-        for (const column of sheet.columns) column.trim();
+        for (let c = 0; c < lengths.length; c += 1) sheet.trim(c);
         return { sheet, texts, formulas, errors, numbered };
     }
 
@@ -202,15 +211,14 @@ export class Workbook {
         const errorCodes = Array.from(errors.keys(), (text) => this.carry(errorOf(text)));
         // Only the listed cells are read, so a column costs its cells here, however far apart they lie. A cell
         // reported twice is listed twice, and holds an id once it was met.
-        for (let c = 0; c < numbered.length; c += 1) {
-            const { kind, ref, shape } = sheet.columns[c];
-            for (const row of numbered[c]) {
-                const number = ~ref[row];
-                if (number >= 0) {
-                    ref[row] = (kind[row] & KIND_MASK) === CellKind.Text ? textIds[number] : errorCodes[number];
-                }
-                if (shape[row] < 0) shape[row] = shapeIds[~shape[row]];
+        for (let at = 0; at < numbered.length; at += 2) {
+            const { kind, ref, shape } = sheet.columns[numbered[at]];
+            const row = numbered[at + 1];
+            const number = ~ref[row];
+            if (number >= 0) {
+                ref[row] = (kind[row] & KIND_MASK) === CellKind.Text ? textIds[number] : errorCodes[number];
             }
+            if (shape[row] < 0) shape[row] = shapeIds[~shape[row]];
         }
         return sheet;
     }
@@ -228,20 +236,22 @@ export class Workbook {
             case ChangeKind.Lines: {
                 const { insert, index, count, rows } = change.edit;
                 const sheet = this.known(change.edit.sheet);
-                if (insert && rows) sheet.insertRows(index, count);
+                if (insert && rows) this.total += sheet.insertRows(index, count);
                 else if (insert) sheet.insertColumns(index, count);
-                else if (rows) sheet.deleteRows(index, count);
-                else sheet.deleteColumns(index, count);
+                else if (rows) this.total += sheet.deleteRows(index, count);
+                else this.total += sheet.deleteColumns(index, count);
                 return;
             }
             case ChangeKind.Move:
-                this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
+                this.total += this.known(change.move.toSheet).moveFrom(this.known(change.move.fromSheet), change.move);
                 return;
             case ChangeKind.AddSheet:
                 this.insert(change.sheet, change.place);
+                this.total += change.sheet.slots;
                 return;
             case ChangeKind.RemoveSheet: {
                 const sheet = this.known(change.sheet);
+                this.total -= sheet.slots;
                 this.held.splice(sheet.place, 1);
                 this.byId.delete(sheet.id);
                 this.byName.delete(sheetNameKey(sheet.name));
@@ -317,8 +327,8 @@ export class Workbook {
     }
 
     public setValue(sheet: Sheet, row: number, column: number, value: Literal): void {
-        const held = sheet.column(column);
-        held.reach(row);
+        this.total += sheet.reach(column, row);
+        const held = sheet.columns[column];
         held.settle(row);
         held.setShape(row, 0);
         this.put(held, row, value);
@@ -328,8 +338,8 @@ export class Workbook {
     public fillFormula(sheet: Sheet, top: number, left: number, bottom: number, right: number, text: string): void {
         const shape = this.shapes.intern(text, (name) => this.named(name)?.id);
         for (let c = left; c <= right; c += 1) {
-            const held = sheet.column(c);
-            held.reach(bottom);
+            this.total += sheet.reach(c, bottom);
+            const held = sheet.columns[c];
             for (let row = top; row <= bottom; row += 1) {
                 held.setShape(row, shape);
                 this.put(held, row, null);
@@ -344,7 +354,7 @@ export class Workbook {
         held.settle(row);
         held.setShape(row, 0);
         this.put(held, row, null);
-        held.trim();
+        this.total += sheet.trim(column);
     }
 
     // Puts a sheet at a place among the tabs, the last one when the place is past it.

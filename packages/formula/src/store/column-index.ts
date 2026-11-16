@@ -31,6 +31,8 @@ export class ColumnIndex {
         num: number,
         ref: number,
     ): readonly number[] | null {
+        // An empty column holds no key, and may be the sheet's shared one, which takes no index.
+        if (column.length === 0) return NO_ROWS;
         const index = column.index;
         if (index === null || index.version !== column.version) {
             column.index = new ColumnIndex(column.version);
