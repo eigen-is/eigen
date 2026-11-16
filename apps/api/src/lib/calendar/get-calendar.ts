@@ -85,7 +85,8 @@ export async function resolveListedCalendar(user: User, ownerId: string): Promis
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
     const { teamIds } = await getMemberships(user.id);
-    return teamIds.includes(parsed.id) ? resolveCalendar(user, ownerId) : resolveAdministeredCalendar(user, ownerId);
+    if (!teamIds.includes(parsed.id)) await requireTeamAdmin(user.id, parsed.id);
+    return (await getHome(ownerId)).calendar;
 }
 
 // It does not check the caller, so a route may read from it only what the calendar's own shares give them.
