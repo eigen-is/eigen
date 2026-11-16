@@ -49,8 +49,9 @@ export class Column {
 
     // Makes `row` a row of the column.
     public reach(row: number): void {
+        if (row < this.length) return;
         if (row >= this.kind.length) this.resize(capacityFor(row + 1));
-        if (row >= this.length) this.length = row + 1;
+        this.length = row + 1;
     }
 
     // Writes a value and keeps the flags. False when the cell already held it.
@@ -159,8 +160,8 @@ export class Column {
         if (from >= end) return;
         this.tally(from, end, -1);
         for (const plane of [this.kind, this.num, this.ref, this.shape]) plane.fill(0, from, end);
-        this.trim();
         this.version += 1;
+        this.trim();
     }
 
     // Ends the column at its last cell that holds a value or a formula. Whoever empties a cell calls it, so what a

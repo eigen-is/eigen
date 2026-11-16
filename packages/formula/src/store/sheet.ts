@@ -1,14 +1,18 @@
-// One sheet of the store: its id, its name, its place among the sheets and its columns. A column that was never
-// written does not exist past the last one that was, so a sheet costs what it holds. Inserting and deleting rows
-// and columns and moving a block moves the cells only: what a formula's text becomes is the transform's work, not
-// the store's. The place is the workbook's to write, whenever the list of sheets changes, and the rows the sheet
-// hides and filters are the host's to say: no edit here moves one.
+// One sheet of the store: its id, its name, its place among the sheets, its columns and the count of their rows. No
+// column exists past the last one written, and every one before it that holds nothing is one shared empty column,
+// so a sheet costs its cells and a pointer per column before the last. Inserting and deleting rows and columns and
+// moving a block moves the cells only: what a formula's text becomes is the transform's work, not the store's. The
+// place is the workbook's to write, and the rows hidden and filtered the host's to say: no edit here moves one.
 
 import { firstPushed } from '../edit/map';
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
 import { Column } from './column';
+
+// Frozen, so a write into it throws: a column is made by `reach` before a write. Its planes hold no row.
+const EMPTY = new Column(0);
+Object.freeze(EMPTY);
 
 export class Sheet {
     public readonly id: string;
@@ -18,6 +22,8 @@ export class Sheet {
     // The id hashed to a number, for the draws of the sheet's cells: the same wherever the tab sits, whatever its name.
     public readonly salt: number;
     private readonly held: Column[];
+    // The rows the columns hold, together, measured around every change of a column.
+    private total = 0;
     // The rows hidden by hand, the rows a filter left out, and both together: each list is sorted pairs of a first
     // and a last row that share no row. SUBTOTAL and AGGREGATE pass over them.
     private hidden: readonly number[] = [];
@@ -31,11 +37,16 @@ export class Sheet {
         let salt = 0x811c9dc5;
         for (let i = 0; i < id.length; i += 1) salt = Math.imul(salt ^ id.charCodeAt(i), 0x01000193);
         this.salt = salt;
-        this.held = lengths.map((length) => new Column(length));
+        this.held = lengths.map((length) => (length === 0 ? EMPTY : new Column(length)));
+        for (const length of lengths) this.total += length;
     }
 
     public get columns(): readonly Column[] {
         return this.held;
+    }
+
+    public get slots(): number {
+        return this.total;
     }
 
     // Takes the rows the sheet hides and filters as its own lists. False when it held the same two.
@@ -60,10 +71,20 @@ export class Sheet {
         return true;
     }
 
-    // The column to write into, made with the empty ones before it when the sheet did not reach that far.
-    public column(index: number): Column {
-        while (this.held.length <= index) this.held.push(new Column(0));
-        return this.held[index];
+    // Makes `row` a row of the column, which is made when it held nothing.
+    public reach(index: number, row: number): void {
+        const column = this.column(index);
+        this.total -= column.length;
+        column.reach(row);
+        this.total += column.length;
+    }
+
+    // Ends the column at its last cell, as whoever empties a cell of it does.
+    public trim(index: number): void {
+        const column = this.held[index];
+        this.total -= column.length;
+        column.trim();
+        this.total += column.length;
     }
 
     // Whether an insert would push a cell that holds a value or a formula past the last line of the grid. The
@@ -76,25 +97,34 @@ export class Sheet {
         return false;
     }
 
+    // Both line edits on rows visit every column, so they count the rows afresh.
     public insertRows(index: number, count: number): void {
-        for (const column of this.held) column.insertRows(index, count);
+        this.total = 0;
+        for (const column of this.held) {
+            column.insertRows(index, count);
+            this.total += column.length;
+        }
     }
 
     public deleteRows(index: number, count: number): void {
-        for (const column of this.held) column.deleteRows(index, count);
+        this.total = 0;
+        for (const column of this.held) {
+            column.deleteRows(index, count);
+            this.total += column.length;
+        }
     }
 
+    // Adds no row: the columns pushed past the last one hold nothing, as `pushesOff` refuses the insert otherwise,
+    // and with none left to push along, the new ones are columns that were never written.
     public insertColumns(index: number, count: number): void {
         if (index >= this.held.length) return;
-        // The columns pushed past the last one hold nothing, and with none left to push along, the new ones are
-        // columns that were never written.
         const kept = Math.min(this.held.length, firstPushed(index, count, GRID_COLUMNS));
         this.held.length = kept;
-        if (kept > index) this.held.splice(index, 0, ...Array.from({ length: count }, () => new Column(0)));
+        if (kept > index) this.held.splice(index, 0, ...Array.from({ length: count }, () => EMPTY));
     }
 
     public deleteColumns(index: number, count: number): void {
-        this.held.splice(index, count);
+        for (const column of this.held.splice(index, count)) this.total -= column.length;
     }
 
     // Takes a move's block from `source`, which may be this sheet, over whatever it lands on.
@@ -106,15 +136,30 @@ export class Sheet {
         for (let i = 0; i < columns; i += 1) {
             const c = backwards ? columns - 1 - i : i;
             const from = source.held[column + c];
-            const supplies = from !== undefined && from.length > row;
-            if (supplies || toColumn + c < this.held.length) this.column(toColumn + c).take(from, row, toRow, rows);
+            const to = toColumn + c;
+            const lands = from !== undefined && from.length > row;
+            if (!lands && to >= this.held.length) continue;
+            const target = lands ? this.column(to) : this.held[to];
+            this.total -= target.length;
+            target.take(from, row, toRow, rows);
+            this.total += target.length;
         }
         for (let c = column; c <= last; c += 1) {
-            const landed = source === this && c >= toColumn && c < toColumn + columns;
-            if (!landed) source.held[c].clearRows(row, row + rows);
-            else if (toRow > row) source.held[c].clearRows(row, Math.min(row + rows, toRow));
-            else source.held[c].clearRows(Math.max(row, toRow + rows), row + rows);
+            const held = source.held[c];
+            const under = source === this && c >= toColumn && c < toColumn + columns;
+            source.total -= held.length;
+            if (!under) held.clearRows(row, row + rows);
+            else if (toRow > row) held.clearRows(row, Math.min(row + rows, toRow));
+            else held.clearRows(Math.max(row, toRow + rows), row + rows);
+            source.total += held.length;
         }
+    }
+
+    // The column to write into, made with the empty ones before it when the sheet did not reach that far.
+    private column(index: number): Column {
+        while (this.held.length <= index) this.held.push(EMPTY);
+        if (this.held[index] === EMPTY) this.held[index] = new Column(0);
+        return this.held[index];
     }
 }
 
