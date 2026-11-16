@@ -1,8 +1,8 @@
 // The reverse index of a workbook: which formulas read a cell. `Recalc` rebuilds it whole from the shape planes when
 // a formula came or went, and has it mark: flag every formula that reads a written cell or a formula flagged here.
 // Cells of one shape in a block share their entries, about one per reference, which a `Listing` finds by the rows
-// and the column of a span. A second listing holds the areas that formulas worked out as they ran, an entry per
-// area, built again whenever `Recalc` recorded another.
+// and the column of a span. A second listing holds the boxes around what formulas worked out as they ran, an entry
+// per box, built again whenever a record changed.
 
 import { Fact } from '../eval/facts';
 import type { Column } from '../store/column';
@@ -146,7 +146,7 @@ export class ReverseIndex {
         this.named.build(entries, areas);
     }
 
-    // Lists the areas of the records: per column and row of a formula, five numbers an area, the sheet first.
+    // Lists the boxes of the records: per column and row of a formula, five numbers a box, the sheet first.
     public resolve(workbook: Workbook, records: ReadonlyMap<Column, ReadonlyMap<number, readonly number[]>>): void {
         const { sheets } = workbook;
         const entries: number[] = [];

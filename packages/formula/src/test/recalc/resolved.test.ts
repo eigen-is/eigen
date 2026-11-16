@@ -357,8 +357,37 @@ describe('each place a reference is worked out records it', () => {
     test('an element at a time, when the call is lifted over an array', () => {
         const book = new Book({ S: { A1: 1, A2: 2, A3: 3, C1: '=SUM(OFFSET(A1,{0,2},0))' } });
         expect(book.flagged('s', ['C1'], () => book.set('s', 'A3', 30))).toEqual(['C1']);
-        expect(book.flagged('s', ['C1'], () => book.set('s', 'A2', 20))).toEqual([]);
         expect(book.value('s', 'C1')).toBe(31);
+    });
+});
+
+describe('a record is one box per sheet the formula resolved into', () => {
+    test('two areas far apart on a sheet: a write to either flags it, and so does one between them', () => {
+        const book = new Book({ S: { A1: 1, A900: 2, C1: '=OFFSET(A1,0,0)+OFFSET(A1,899,0)' } });
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A900', 20))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A1', 10))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A400', 5))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'B400', 5))).toEqual([]);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A901', 5))).toEqual([]);
+        expect(book.value('s', 'C1')).toBe(30);
+    });
+
+    test('the elements of a call lifted over an array: the cells between them too', () => {
+        const book = new Book({ S: { A1: 1, A2: 2, A3: 3, C1: '=SUM(OFFSET(A1,{0,2},0))' } });
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A2', 20))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'A4', 20))).toEqual([]);
+    });
+
+    test('areas on two sheets are a box each: neither holds the cells of the other', () => {
+        const book = new Book({
+            S: { A1: 1, C1: '=OFFSET(A1,0,0)+INDIRECT("T!F6")+INDIRECT("T!G7")' },
+            T: { A1: 0, F6: 2, G7: 3 },
+        });
+        expect(book.flagged('s', ['C1'], () => book.set('t', 'F6', 20))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('t', 'G7', 30))).toEqual(['C1']);
+        expect(book.flagged('s', ['C1'], () => book.set('t', 'A1', 9))).toEqual([]);
+        expect(book.flagged('s', ['C1'], () => book.set('s', 'F6', 9))).toEqual([]);
+        expect(book.value('s', 'C1')).toBe(51);
     });
 });
 
@@ -407,7 +436,7 @@ describe('a write to a cell that no area holds leaves the formula alone', () => 
         expect(book.flagged('s', ['C1', 'C2'], () => book.set('s', 'F9', 9))).toEqual([]);
     });
 
-    test('an area the formula resolves no more: the record is changed in place', () => {
+    test('an area the formula resolves no more: the record is replaced', () => {
         const book = new Book({ S: HOSTS });
         expect(book.flagged('s', ['C1'], () => book.set('s', 'B1', 2))).toEqual(['C1']);
         expect(book.flagged('s', ['C1'], () => book.set('s', 'A2', 9))).toEqual([]);
@@ -415,7 +444,7 @@ describe('a write to a cell that no area holds leaves the formula alone', () => 
         expect(book.value('s', 'C1')).toBe(9);
     });
 
-    test('an area past the last the formula resolved this time: the record is cut', () => {
+    test('an area the formula resolved last time and not this time: its box shrinks', () => {
         const book = new Book({
             S: {
                 B1: true,

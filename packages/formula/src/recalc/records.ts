@@ -1,23 +1,24 @@
-// What the formulas that work a reference out as they run last resolved, a record per cell. `Recalc` tells it
-// each area a running formula resolves, and has the index list the records so a marking follows them as it follows
-// the references a formula names. The invariant: at all times such a formula is flagged, or its record is what it
-// last resolved. A formula that runs keeps it by recording; a computed load ran none and an edit drops every
-// record, so the marking after either flags them all. Nothing here is stored.
+// What the formulas that work a reference out as they run last resolved: per cell, one box for each sheet it
+// resolved into, around every area of that sheet. `Recalc` tells it each area a running formula resolves, and has
+// the index list the records so a marking follows them as it follows the references a formula names. The invariant:
+// at all times such a formula is flagged, or its record covers everything it last resolved. A formula that runs
+// keeps it by recording; a computed load ran none and an edit drops every record, so the marking after either
+// flags them all. Nothing here is stored.
 
 import { Fact } from '../eval/facts';
 import type { Column } from '../store/column';
 import type { Reference } from '../values/value';
 
 export class Records {
-    // Per cell by its column and row, the areas in the order its formula met them, five numbers each: sheet, top,
-    // left, bottom, right.
+    // Per cell by its column and row, a box for each sheet its formula resolved into, five numbers each: sheet,
+    // top, left, bottom, right.
     public readonly held = new Map<Column, Map<number, number[]>>();
     // Whether a record changed since the index listed them.
     public changed = false;
     // Whether formulas that resolve a reference may be neither flagged nor recorded.
     private unrecorded: boolean;
-    // How much of its record each cell in progress has gone through since its formula last started.
-    private readonly found: number[] = [];
+    // Per cell in progress, the boxes its formula has resolved since it last started, in the same five numbers.
+    private readonly runs: number[][] = [];
 
     // `computed` says whether the workbook came with the values of a full pass, which ran no formula here.
     public constructor(computed: boolean) {
@@ -53,44 +54,38 @@ export class Records {
 
     // The formula of a cell in progress starts, at `at` in the list of them.
     public start(at: number): void {
-        this.found[at] = 0;
+        const run = this.runs[at];
+        if (run === undefined) this.runs[at] = [];
+        else run.length = 0;
     }
 
-    // The formula of a cell in progress worked a reference out. Its areas go into the record of the cell where the
-    // formula has come to, and an area the record holds there already changes nothing.
-    public add(at: number, column: Column, row: number, reference: Reference): void {
-        let rows = this.held.get(column);
-        if (rows === undefined) this.held.set(column, (rows = new Map()));
-        let record = rows.get(row);
-        if (record === undefined) rows.set(row, (record = []));
-        let from = this.found[at];
+    // The formula of a cell in progress worked a reference out: the box of each area's sheet widens to hold it.
+    public add(at: number, reference: Reference): void {
+        const run = this.runs[at];
         for (let area: Reference | null = reference; area !== null; area = area.next) {
-            const { sheet, top, left, bottom, right } = area;
-            const same =
-                record[from] === sheet &&
-                record[from + 1] === top &&
-                record[from + 2] === left &&
-                record[from + 3] === bottom &&
-                record[from + 4] === right;
-            if (!same) {
-                record[from] = sheet;
-                record[from + 1] = top;
-                record[from + 2] = left;
-                record[from + 3] = bottom;
-                record[from + 4] = right;
-                this.changed = true;
+            let box = 0;
+            while (box < run.length && run[box] !== area.sheet) box += 5;
+            if (box === run.length) run.push(area.sheet, area.top, area.left, area.bottom, area.right);
+            else {
+                if (area.top < run[box + 1]) run[box + 1] = area.top;
+                if (area.left < run[box + 2]) run[box + 2] = area.left;
+                if (area.bottom > run[box + 3]) run[box + 3] = area.bottom;
+                if (area.right > run[box + 4]) run[box + 4] = area.right;
             }
-            from += 5;
         }
-        this.found[at] = from;
     }
 
-    // The formula of a cell in progress ended: what its record holds past the areas it resolved this time, it
-    // resolves no more.
+    // The formula of a cell in progress ended: its boxes are the record of the cell, unless they are already.
     public end(at: number, column: Column, row: number): void {
-        const record = this.held.get(column)?.get(row);
-        if (record === undefined || record.length <= this.found[at]) return;
-        record.length = this.found[at];
+        const run = this.runs[at];
+        let rows = this.held.get(column);
+        const record = rows?.get(row);
+        let same = (record?.length ?? 0) === run.length;
+        for (let i = 0; same && record !== undefined && i < run.length; i += 1) same = record[i] === run[i];
+        if (same) return;
         this.changed = true;
+        if (rows === undefined) this.held.set(column, (rows = new Map()));
+        if (run.length === 0) rows.delete(row);
+        else rows.set(row, run.slice());
     }
 }

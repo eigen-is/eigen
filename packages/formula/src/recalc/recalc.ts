@@ -350,8 +350,7 @@ export class Recalc {
 
     // The running formula worked a reference out.
     public resolved(reference: Reference): void {
-        const at = this.current;
-        this.records.add(at, this.columns[at], this.rows[at], reference);
+        this.records.add(this.current, reference);
     }
 
     public factsOf(shape: number): number {
