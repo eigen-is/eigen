@@ -23,9 +23,6 @@ import { LookTable } from './look-table';
 import { BookRecords } from './records';
 import { ColumnSweep } from './rect-index';
 
-// What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
-export type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
-
 // The parts of one sheet; its cells are the engine's, its fields and records the record store's. Each part takes an
 // op itself, `lines(op)`, `wouldPush(op)` and `move(op, source)`, the last called on the part a block lands on.
 export type BookSheet = {
@@ -95,7 +92,7 @@ export class Workbook {
     // One sheet whole, as the snapshot lists it and a `sheet` op adds it.
     public sheetContent(id: string, { bands, rows, columns, extras }: BookSheet): SheetContent {
         const cells: Placed<CellRecord>[] = [];
-        this.cellsIn(id, extras, new ColumnSweep([WHOLE_GRID]), (row, column, { value, formula, extra }) => {
+        this.cellsIn(id, extras, new ColumnSweep([WHOLE_GRID]), (row, column, value, formula, extra) => {
             const cell = contentOf(value, formula, true, extra);
             if (cell) cells.push([row, column, cell]);
         });
@@ -118,7 +115,14 @@ export class Workbook {
         sheet: string,
         extras: Extras,
         sweep: ColumnSweep,
-        visit: (...cell: [...Placed<Held>, number]) => void,
+        visit: (
+            row: number,
+            column: number,
+            value: Literal | null,
+            formula: string | null,
+            extra: Extra | undefined,
+            at: number,
+        ) => void,
     ): void {
         const { rects, live } = sweep;
         if (rects.length === 0) return;
@@ -132,14 +136,13 @@ export class Workbook {
             for (; mark < marks.length; mark += 1) {
                 const [r, c, extra, at] = marks[mark];
                 if (c > column || (c === column && r >= row)) break;
-                visit(r, c, { value: null, formula: null, given: false, extra }, at);
+                visit(r, c, null, null, extra, at);
             }
         };
         const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
             before(row, column);
             const here = marks[mark]?.[0] === row && marks[mark][1] === column;
-            const given = formula !== null && engine.isGiven(sheet, row, column);
-            visit(row, column, { value, formula, given, extra: here ? marks[mark][2] : undefined }, block);
+            visit(row, column, value, formula, here ? marks[mark][2] : undefined, block);
             if (here) mark += 1;
         };
         const lastColumn = engine.lastColumn(sheet);

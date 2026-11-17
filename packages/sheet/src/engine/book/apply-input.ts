@@ -12,9 +12,11 @@ import type { Extra, Extras } from './extras';
 import { contentOf, literalOf, unitsOf } from './extras';
 import { axisOf, spansAfter } from './record-lines';
 import { ColumnSweep } from './rect-index';
-import type { Held, Workbook } from './workbook';
+import type { Workbook } from './workbook';
 import { reachesEngine } from './workbook';
 
+// What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
+type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
 // A rectangle of cells that hold equal content, or none, as it grows down a column and then across.
 type Group = { top: number; left: number; bottom: number; right: number; held: Held };
 // The runs and cells of an input op, as an applier gathers them.
@@ -223,7 +225,11 @@ function readBlocks(
     close: (group: Group, at: number) => void,
 ): void {
     const found: Placed<Held>[][] = sweep.rects.map(() => []);
-    book.cellsIn(sheet, extras, sweep, (row, column, held, at) => found[at].push([row, column, held]));
+    const { engine } = book;
+    book.cellsIn(sheet, extras, sweep, (row, column, value, formula, extra, at) => {
+        const given = formula !== null && engine.isGiven(sheet, row, column);
+        found[at].push([row, column, { value, formula, given, extra }]);
+    });
     for (const [at, rect] of sweep.rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
 }
 
