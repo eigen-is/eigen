@@ -111,6 +111,23 @@ describe('engine/book/apply-input — what an input writes', () => {
         expect([entryAt(op, 1, 1), entryAt(op, 2, 1), entryAt(op, 3, 1)]).toEqual([{ v: 9 }, { v: 1 }, undefined]);
     });
 
+    test('listed cells on the top and the bottom row of a run are read once each, with the run', () => {
+        const content = bookOf(sheetOf('a', { cells: [[3, 4, { v: 5 }]] }));
+        const op = input({
+            runs: [[[3, 4, 5, 4], { v: 1 }]],
+            cells: [
+                [3, 4, { v: 9 }],
+                [5, 4, { v: 8 }],
+            ],
+        });
+        expect(expectLaw2(content, [op])).toEqual([
+            input({
+                runs: [[[4, 4, 5, 4], null]],
+                cells: [[3, 4, { v: 5 }]],
+            }),
+        ]);
+    });
+
     test('a listed cell inside a run is read once, with the run, for the inverse', () => {
         const content = bookOf(sheetOf('a', { cells: [[1, 1, { v: 5 }]] }));
         const op = input({
@@ -155,6 +172,32 @@ describe('engine/book/apply-input — what an input writes', () => {
         expect(expectLaw2(bookOf(sheetOf('a', { cells })), [input({ runs: [[[1, 0, 3, 0], null]] })])).toEqual([
             input({ cells: cells.slice(1, 4) }),
         ]);
+    });
+
+    test('a run of only a link or only a mark empties the values under it, and each run lays its own entry', () => {
+        const cells: SheetContent['cells'] = [
+            [0, 0, { v: 1, qp: 1 }],
+            [1, 0, { f: '=R[-1]C+1' }],
+            [0, 1, { v: 'x', link: LINK }],
+            [1, 1, { v: 2 }],
+        ];
+        const ops = [
+            input({
+                runs: [
+                    [[0, 0, 1, 0], { link: LINK }],
+                    [[0, 1, 1, 1], { qp: 1 }],
+                ],
+            }),
+        ];
+        const book = new Workbook(bookOf(sheetOf('a', { cells })));
+        applyOps(book, ops);
+        expect(cellsOf(book)).toEqual([
+            [0, 0, { link: LINK }],
+            [1, 0, { link: LINK }],
+            [0, 1, { qp: 1 }],
+            [1, 1, { qp: 1 }],
+        ]);
+        expectLaw2(bookOf(sheetOf('a', { cells })), ops);
     });
 
     test('a formula run is one stored key in every cell, and a value run that value in every cell', () => {

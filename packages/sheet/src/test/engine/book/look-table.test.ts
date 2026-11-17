@@ -130,20 +130,20 @@ describe('engine/book/look-table — LookTable', () => {
             const content = bands.content();
             return JSON.stringify({ looks: content.looks.map((id) => looks.look(id)), bands: content.bands });
         };
-        const sheets = [new Bands([], []), new Bands([], [])];
+        const sheets = [new Bands([], [], { runs: 0, bands: 0 }), new Bands([], [], { runs: 0, bands: 0 })];
         for (let i = 0; i < 40; i += 1) {
             const id = looks.intern({ fs: i });
             // Every third look stays worn; a later write takes the others off again.
-            sheets[i % 2].write([i, i, i + 3, i + 3], () => id);
-            if (i % 3 !== 0) sheets[i % 2].write([i, i, i + 3, i + 3], () => 0);
+            sheets[i % 2].write([[i, i, i + 3, i + 3]], () => id);
+            if (i % 3 !== 0) sheets[i % 2].write([[i, i, i + 3, i + 3]], () => 0);
         }
-        sheets[0].write([5, 0, 5, 16_383], () => looks.intern({ bl: 1 }));
+        sheets[0].write([[5, 0, 5, 16_383]], () => looks.intern({ bl: 1 }));
         const before = sheets.map(snapshot);
         const sizeBefore = looks.size;
 
         const worn = new Set(sheets.flatMap((bands) => bands.content().looks));
         const moved = looks.sweep(worn);
-        for (const bands of sheets) bands.write([0, 0, 1_048_575, 16_383], (id) => moved[id]);
+        for (const bands of sheets) bands.write([[0, 0, 1_048_575, 16_383]], (id) => moved[id]);
 
         expect(looks.size).toBe(worn.size + 1);
         expect(looks.size).toBeLessThan(sizeBefore);

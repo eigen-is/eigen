@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { Placed, Rect } from '@workspace/lib/sheets/ops';
+import { meets } from '@workspace/lib/sheets/rect';
 import type { Extra } from '../../../engine/book/extras';
 import { Extras, textOf } from '../../../engine/book/extras';
+import { ColumnSweep } from '../../../engine/book/rect-index';
 import type { Random } from './book-fixtures';
 import { below, linesOp, moveOp, randomOf } from './book-fixtures';
 
@@ -18,7 +20,7 @@ function weightOf(cells: readonly Placed<Extra>[]): number {
 }
 
 function extrasOf(cells: readonly Placed<Extra>[]): Extras {
-    const extras = new Extras();
+    const extras = new Extras({ extras: 0 });
     for (const [row, column, extra] of cells) extras.write(row, column, extra);
     return extras;
 }
@@ -67,7 +69,7 @@ describe('engine/book/extras — Extras', () => {
     });
 
     test('a put returns the old entry, keeps only the keys given, and with none deletes', () => {
-        const extras = new Extras();
+        const extras = new Extras({ extras: 0 });
         expect(extras.write(1, 1, { s: undefined, link: LINK.link, qp: undefined })).toBeUndefined();
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
         expect(extras.write(1, 1, RICH)).toEqual(LINK);
@@ -85,7 +87,7 @@ describe('engine/book/extras — Extras', () => {
         expect(extrasOf([[0, 0, RICH]]).weight()).toBe(7);
         const thousand = Array.from({ length: 1000 }, () => ({ v: 'r' }));
         expect(extrasOf([[0, 0, { s: thousand }]]).weight()).toBe(1002);
-        expect(new Extras().weight()).toBe(0);
+        expect(new Extras({ extras: 0 }).weight()).toBe(0);
     });
 
     test('the weight follows a write that adds, replaces and clears an entry', () => {
@@ -109,7 +111,7 @@ describe('engine/book/extras — Extras', () => {
             [1, 2, LINK],
             [0, 3, QUOTED],
         ]);
-        extras.fill([1, 1, 2, 2], { s: undefined, link: LINK.link, qp: undefined });
+        extras.fill(new ColumnSweep([[1, 1, 2, 2]]), [{ s: undefined, link: LINK.link, qp: undefined }]);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, RICH],
@@ -122,7 +124,7 @@ describe('engine/book/extras — Extras', () => {
         ]);
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
         expect(extras.weight()).toBe(2 + 7 + 4 * 5 + 5 + 2);
-        extras.fill([0, 1, 5, 1], {});
+        extras.fill(new ColumnSweep([[0, 1, 5, 1]]), [{}]);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [1, 2, LINK],
@@ -130,18 +132,18 @@ describe('engine/book/extras — Extras', () => {
             [0, 3, QUOTED],
         ]);
         expect(extras.weight()).toBe(2 + 2 * 5 + 2);
-        extras.fill([0, 0, LAST_ROW, LAST_COLUMN], {});
+        extras.fill(new ColumnSweep([[0, 0, LAST_ROW, LAST_COLUMN]]), [{}]);
         expect(extras.content()).toEqual([]);
         expect(extras.weight()).toBe(0);
     });
 
     test('a fill of 150,000 cells over entries and among 150,000 right of it and below is one pass', () => {
-        const extras = new Extras();
-        extras.fill([0, 1, 74_999, 1], QUOTED);
-        extras.fill([200_000, 0, 274_999, 0], QUOTED);
-        extras.fill([100_000, 0, 100_009, 0], QUOTED);
+        const extras = new Extras({ extras: 0 });
+        extras.fill(new ColumnSweep([[0, 1, 74_999, 1]]), [QUOTED]);
+        extras.fill(new ColumnSweep([[200_000, 0, 274_999, 0]]), [QUOTED]);
+        extras.fill(new ColumnSweep([[100_000, 0, 100_009, 0]]), [QUOTED]);
         const started = performance.now();
-        extras.fill([0, 0, 149_999, 0], LINK);
+        extras.fill(new ColumnSweep([[0, 0, 149_999, 0]]), [LINK]);
         expect(performance.now() - started).toBeLessThan(500);
         expect(extras.weight()).toBe(150_000 * 5 + 150_000 * 2);
         expect([extras.at(74_999, 1), extras.at(75_000, 1)]).toEqual([QUOTED, undefined]);
@@ -163,7 +165,7 @@ describe('engine/book/extras — Extras', () => {
             [5, 1, LINK],
             [0, 2, QUOTED],
         ]);
-        extras.link([0, 1, 2, 1], other);
+        extras.link(new ColumnSweep([[0, 1, 2, 1]]), other);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s, link: other }],
@@ -173,7 +175,7 @@ describe('engine/book/extras — Extras', () => {
             [0, 2, QUOTED],
         ]);
         expect(extras.weight()).toBe(2 + 7 + 5 + 5 + 5 + 2);
-        extras.link([0, 0, 5, 2], undefined);
+        extras.link(new ColumnSweep([[0, 0, 5, 2]]), undefined);
         expect(extras.content()).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s }],
@@ -185,11 +187,11 @@ describe('engine/book/extras — Extras', () => {
     });
 
     test('a link over 150,000 cells among 1,000 rich ones and 150,000 entries beside them is one pass', () => {
-        const extras = new Extras();
+        const extras = new Extras({ extras: 0 });
         for (let row = 0; row < 150_000; row += 150) extras.write(row, 0, { s: RICH.s });
-        extras.fill([0, 1, 149_999, 1], QUOTED);
+        extras.fill(new ColumnSweep([[0, 1, 149_999, 1]]), [QUOTED]);
         const started = performance.now();
-        extras.link([0, 0, 149_999, 0], LINK.link);
+        extras.link(new ColumnSweep([[0, 0, 149_999, 0]]), LINK.link);
         expect(performance.now() - started).toBeLessThan(500);
         expect(extras.weight()).toBe(1_000 * 7 + 149_000 * 5 + 150_000 * 2);
         expect(extras.at(150, 0)).toEqual({ s: RICH.s, link: LINK.link });
@@ -250,7 +252,7 @@ describe('engine/book/extras — Extras', () => {
         expect(extras.wouldPush(linesOp(true, true, 0, 3))).toBe(true);
         expect(extras.wouldPush(linesOp(false, true, 0, 2))).toBe(false);
         expect(extras.wouldPush(linesOp(false, true, 0, 3))).toBe(true);
-        expect(new Extras().wouldPush(linesOp(false, true, 0, GRID_COLUMNS))).toBe(false);
+        expect(new Extras({ extras: 0 }).wouldPush(linesOp(false, true, 0, GRID_COLUMNS))).toBe(false);
     });
 
     test('a block moved over itself keeps its own entries and returns what it landed on as it was', () => {
@@ -351,7 +353,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
     for (const seed of [5, 23, 2026]) {
         test(`random writes, fills, shifts and moves with their inverses, seed ${seed}`, () => {
             const random = randomOf(seed);
-            const sheets = [0, 1].map(() => ({ extras: new Extras(), model: new CellsModel() }));
+            const sheets = [0, 1].map(() => ({ extras: new Extras({ extras: 0 }), model: new CellsModel() }));
             const counts = {
                 ...{ put: 0, fill: 0, filled: 0, cleared: 0, replaced: 0, insert: 0, remove: 0 },
                 ...{ moveOver: 0, moveAcross: 0, carried: 0, covered: 0, linked: 0, unlinked: 0 },
@@ -403,22 +405,31 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                         for (const [row, column, extra] of removed) extras.write(row, column, extra);
                     };
                 } else if (kind >= 12) {
-                    const block = randomBlock(random);
+                    // Up to three blocks that share no cell, in any order, linked in one call.
+                    const blocks: Rect[] = [];
+                    for (let at = 0; at < 3; at += 1) {
+                        const block = randomBlock(random);
+                        if (!blocks.some((other) => meets(other, block))) blocks.push(block);
+                    }
                     const link = random() < 0.5 ? undefined : ENTRIES[below(random, 2) * 4].link;
-                    const covered = model.within(block);
+                    const covered = blocks.map((block) => model.within(block));
                     counts[link ? 'linked' : 'unlinked'] += 1;
-                    extras.link(block, link);
-                    for (let row = block[0]; row <= block[2]; row += 1) {
-                        for (let column = block[1]; column <= block[3]; column += 1) {
-                            const old = model.cells.get(`${row},${column}`)?.[2];
-                            const { s, qp } = old ?? {};
-                            const kept = { ...(s && { s }), ...(link && { link }), ...(qp && { qp }) };
-                            model.put(row, column, Object.keys(kept).length > 0 ? kept : undefined);
+                    extras.link(new ColumnSweep(blocks), link);
+                    for (const block of blocks) {
+                        for (let row = block[0]; row <= block[2]; row += 1) {
+                            for (let column = block[1]; column <= block[3]; column += 1) {
+                                const old = model.cells.get(`${row},${column}`)?.[2];
+                                const { s, qp } = old ?? {};
+                                const kept = { ...(s && { s }), ...(link && { link }), ...(qp && { qp }) };
+                                model.put(row, column, Object.keys(kept).length > 0 ? kept : undefined);
+                            }
                         }
                     }
                     undo = () => {
-                        extras.fill(block, {});
-                        for (const [row, column, old] of covered) extras.write(row, column, old);
+                        for (const [at, block] of blocks.entries()) {
+                            extras.fill(new ColumnSweep([block]), [{}]);
+                            for (const [row, column, old] of covered[at]) extras.write(row, column, old);
+                        }
                     };
                 } else if (kind >= 10) {
                     counts.fill += 1;
@@ -427,12 +438,12 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     const covered = model.within(block);
                     counts[extra ? 'filled' : 'cleared'] += 1;
                     counts.replaced += covered.length;
-                    extras.fill(block, extra ?? {});
+                    extras.fill(new ColumnSweep([block]), [extra ?? {}]);
                     for (let row = block[0]; row <= block[2]; row += 1) {
                         for (let column = block[1]; column <= block[3]; column += 1) model.put(row, column, extra);
                     }
                     undo = () => {
-                        extras.fill(block, {});
+                        extras.fill(new ColumnSweep([block]), [{}]);
                         for (const [row, column, old] of covered) extras.write(row, column, old);
                     };
                 } else {

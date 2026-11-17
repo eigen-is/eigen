@@ -5,7 +5,8 @@
 // on outside it held, the records the move removed or changed, and the formulas it made lossy.
 
 import type { Move } from '@workspace/formula';
-import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect } from '@workspace/lib/sheets/ops';
+import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
+import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -14,7 +15,9 @@ import { inputOfBlocks, lostInputs } from './apply-input';
 import type { Planned } from './records';
 import type { Workbook } from './workbook';
 
-export function applyMove(book: Workbook, op: MoveOp): (MoveOp | FormatOp | InputOp | RecordOp)[] {
+// `checked`, it throws before a write when the block could leave the workbook over a limit inside a batch where it
+// lands: each column grows to the block's last cell, the looks by what a write of each of its bands can add at most.
+export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp | FormatOp | InputOp | RecordOp)[] {
     const source = book.sheets.get(op.sheet);
     const landing = book.sheets.get(op.toSheet);
     // A peer may have deleted either sheet after the op was written: every reader skips the op alone.
@@ -34,6 +37,22 @@ export function applyMove(book: Workbook, op: MoveOp): (MoveOp | FormatOp | Inpu
         const plan = records.planMove(op, source.records);
         if (typeof plan === 'string') throw new Refusal(plan);
         plans.push(plan);
+    }
+    if (checked) {
+        const { engine } = book;
+        let slots = 0;
+        for (let column = Math.min(right, engine.lastColumn(op.sheet)); column >= left; column -= 1) {
+            const last = engine.lastCell(op.sheet, column, bottom, top);
+            if (last < 0) continue;
+            slots += Math.max(0, last + rowShift + 1 - engine.columnLength(op.toSheet, column + columnShift));
+        }
+        // The block lands band by band: the first row's spans are its bands.
+        const writes = [...source.bands.spans([top, left, top, right])];
+        const growth = landing.bands.growth(writes.map(({ c0, c1 }): Span => [c0 + columnShift, c1 + columnShift]));
+        // An upper bound: a move with the book at a limit at both ends can be refused though it would fit.
+        const formats = growth.runs + growth.bands * BAND_WEIGHT + source.bands.tiles(op.from);
+        const over = book.over(slots, formats);
+        if (over) throw new Refusal(over);
     }
     // The move back leaves the landed-on cells outside the block plain and empty, so only those are written back.
     const outside = oneSheet ? outsideOf(target, op.from) : [target];

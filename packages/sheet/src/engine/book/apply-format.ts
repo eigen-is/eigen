@@ -1,9 +1,11 @@
 // The applier of a `format` op, which the frame calls for each op of a batch: look keys and links set or cleared over
-// rectangles of cells, such as bold on a selection or a fill on a whole column, or line keys over spans of rows or
-// columns, such as a height or a hidden row. Looks are written in the sheet's bands and links in its extras, never cell
-// by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that held
-// it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
+// rectangles of cells that share no cell, such as bold on a selection or a fill on a whole column, or line keys over
+// spans of rows or columns, such as a height. Looks are written in the sheet's bands and links in its extras, never
+// cell by cell. Its inverse restores only the keys the op named: per key, one op for each old value over the cells that
+// held it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
+import { GRID_COLUMNS } from '@workspace/formula/text';
+import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     CellAttrKey,
     CellAttrs,
@@ -18,11 +20,13 @@ import type {
     Span,
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { pick } from 'es-toolkit';
 import type { Extra } from './extras';
-import { placeOf } from './extras';
+import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
+import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
 
 // Every run-style key once: the mapped type fails the build on a key left out.
@@ -39,7 +43,9 @@ export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
-export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[] {
+// `checked`, it throws before a write for rectangles that reach more runs than the limit on formats, or links past it,
+// and stops writing looks once they pass it: it then returns what undoes the part it wrote, and the frame refuses.
+export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (FormatOp | InputOp)[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
     if (!part) return [];
@@ -76,29 +82,38 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
     const lookKeys = LOOK_KEYS.filter((key) => names(op, key));
     const runKeys = RUN_KEYS.filter((key) => lookKeys.includes(key));
     const linked = names(op, 'link');
-
-    // Read before any write, each cell once however many rectangles hold it: the rich cells a run-style key restyles,
-    // with the look they wore, and the links a link write replaces.
-    const rich = new Map<
-        number,
-        readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look]
-    >();
-    const links = new Map<number, Placed<CellLink>>();
-    if (runKeys.length > 0 || linked) {
-        for (const rect of op.ranges) {
-            for (const [row, column, extra] of extras.cells(rect)) {
-                const place = placeOf(row, column);
-                if (extra.s && runKeys.length > 0 && !rich.has(place)) {
-                    rich.set(place, [row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
-                }
-                if (extra.link && linked) links.set(place, [row, column, extra.link]);
+    if (checked) {
+        let cells = 0;
+        for (const [top, left, bottom, right] of op.ranges) cells += (bottom - top + 1) * (right - left + 1);
+        // A span tiles one cell at least, so rectangles of no more cells than the limit reach no more runs.
+        if (lookKeys.length > 0 && cells > MAX_STYLE_RUNS) {
+            let tiles = 0;
+            for (const rect of op.ranges) {
+                tiles += bands.tiles(rect);
+                if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
             }
         }
+        const over = link ? book.over(0, unitsOf({ link }) * EXTRA_WEIGHT * cells) : null;
+        if (over) throw new Refusal(over);
+    }
+
+    // Read before any write: the rich cells a run-style key restyles, with the look they wore, and the links a link
+    // write replaces.
+    const rich: (readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look])[] = [];
+    const links: Placed<CellLink>[] = [];
+    const sweep = new ColumnSweep(op.ranges);
+    if (runKeys.length > 0 || linked) {
+        extras.within(sweep, (row, column, extra) => {
+            if (extra.s && runKeys.length > 0) {
+                rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
+            }
+            if (extra.link && linked) links.push([row, column, extra.link]);
+        });
     }
 
     // Per named key, the cells of each old value it changed, under that value as text, with the look of one of them.
-    // A rectangle reads what the rectangles before it wrote, so the cells it shares with them read as unchanged.
     const changed = new Map(lookKeys.map((key) => [key, new Map<string, { look: Look; areas: Areas }>()]));
+    let stopped = false;
     if (lookKeys.length > 0) {
         const worn = new Map<number, number>();
         const to = (id: number) => {
@@ -111,8 +126,19 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
             }
             return next;
         };
+        // The rectangles share no cell, so their order does not show: those over one span of columns are written as
+        // one, rows down, the spans in the order the list first names them.
+        const groups = new Map<number, Rect[]>();
         for (const rect of op.ranges) {
-            for (const { c0, c1, r0, r1, look } of bands.write(rect, to)) {
+            const span = rect[1] * GRID_COLUMNS + rect[3];
+            const group = groups.get(span);
+            if (group) group.push(rect);
+            else groups.set(span, [rect]);
+        }
+        for (const group of groups.values()) {
+            if (stopped) break;
+            group.sort((a, b) => a[0] - b[0]);
+            for (const { c0, c1, r0, r1, look } of bands.write(group, to)) {
                 const old = book.looks.look(look);
                 for (const [key, held] of changed) {
                     const was = keyOf(old[key]);
@@ -125,27 +151,30 @@ export function applyFormat(book: Workbook, op: FormatOp): (FormatOp | InputOp)[
                     group.areas.add(r0, c0, r1, c1);
                 }
             }
+            stopped = checked && book.over() !== null;
         }
     }
-    const restored: Placed<CellContent>[] = [];
-    for (const [row, column, extra, runs, look] of rich.values()) {
-        // Runs that all wear the look's value of every named key take it back with the look; others are put back whole.
-        if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
-        extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
-    }
-    if (linked) for (const rect of op.ranges) extras.link(rect, link);
-
+    // The rectangles a key's inverse restores go in the reverse of the order they were written, so it cuts and joins
+    // the bands as the write did, backwards.
     const inverse: (FormatOp | InputOp)[] = [];
     for (const [key, held] of changed) {
         for (const { look, areas } of held.values()) {
             const named = look[key] === undefined ? { clear: [key] } : { set: pick(look, [key]) };
-            inverse.push({ kind: 'format', sheet, ranges: areas.joined(), ...named });
+            inverse.push({ kind: 'format', sheet, ranges: areas.joined().reverse(), ...named });
         }
     }
-    if (linked) {
+    const restored: Placed<CellContent>[] = [];
+    for (const [row, column, extra, runs, look] of rich) {
+        // Runs that all wear the look's value of every named key take it back with the look; others are put back whole,
+        // also by a format that stopped before it restyled them: the looks it takes back restyle the cells they cross.
+        if (runKeys.some((key) => runs.some((run) => run[key] !== look[key]))) restored.push([row, column, extra]);
+        if (!stopped) extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
+    }
+    if (linked && !stopped) {
+        extras.link(sweep, link);
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();
-        for (const [row, column, value] of [...links.values()].sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
+        for (const [row, column, value] of links.sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
             const was = keyOf(value);
             let group = held.get(was);
             if (!group) {

@@ -2,7 +2,7 @@
 // keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
 // the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
 // snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. It
-// tells the engine which rows a sheet hides and filters. Only the appliers in this folder reach the parts through it.
+// keeps what the limits weigh as a count, and tells the engine which rows a sheet hides and filters.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
@@ -10,8 +10,9 @@ import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
-import { fits } from '@workspace/lib/sheets/limits';
-import type { CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import { fits, MIDWAY } from '@workspace/lib/sheets/limits';
+import type { CellContent, CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
 import type { Extra } from './extras';
@@ -48,6 +49,8 @@ export class Workbook {
     private seed: number;
     // How many looks the table held after its last sweep. The load ends with one, so it counts the looks in use.
     private swept = 0;
+    // What the limit on formats counts over every sheet: the bands and the extras add to it wherever they write.
+    private readonly held = { runs: 0, bands: 0, extras: 0 };
 
     // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
     // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
@@ -56,19 +59,9 @@ export class Workbook {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map((sheet) => this.partsOf(sheet));
         let slots = 0;
-        for (const { cells } of ordered) {
-            // The cells come in column order, so a column's last cell says how many slots the engine gives it.
-            let column = -1;
-            let length = 0;
-            for (const [row, at, cell] of cells) {
-                if (!reachesEngine(cell)) continue;
-                if (at !== column) slots += length;
-                column = at;
-                length = row + 1;
-            }
-            slots += length;
-        }
-        const refusal = fits(weightOf(slots, parts));
+        for (const sheet of ordered) slots += slotsOf(sheet);
+        const records = parts.map((part) => part.records.weight().records);
+        const refusal = fits({ slots, ...this.held, records: Math.max(0, ...records), sheets: parts.length });
         if (refusal) throw new Refusal(refusal);
 
         // The rows a sheet hides and filters come with its cells, as the values of a computed load were computed
@@ -143,16 +136,24 @@ export class Workbook {
         };
     }
 
-    // Adds a sheet as the load builds one, in its place among the tabs. The engine takes it first, and refuses it
-    // with nothing written; it hands back the formulas of the other sheets that the sheet's name bound.
-    public addSheet(sheet: SheetContent): EditResult {
+    // Adds a sheet as the load builds one, in its place among the tabs, and hands back the formulas its name bound.
+    // `checked`, its parts and cells are weighed before the engine takes it; a refusal, the engine's too, leaves none.
+    public addSheet(sheet: SheetContent, checked: boolean): EditResult {
         let place = 0;
         for (const [id, { records }] of this.parts) {
             if (compareRules(records.fields.order, id, sheet.fields.order, sheet.id) < 0) place += 1;
         }
-        const result = this.engine.addSheet(sourceOf(sheet), place);
-        this.place(sheet.id, this.partsOf(sheet), place);
-        return result;
+        const part = this.partsOf(sheet);
+        try {
+            const over = checked ? this.over(slotsOf(sheet)) : null;
+            if (over) throw new Refusal(over);
+            const result = this.engine.addSheet(sourceOf(sheet), place);
+            this.place(sheet.id, part, place);
+            return result;
+        } catch (error) {
+            this.forget(part);
+            throw error;
+        }
     }
 
     // A sheet's new place among the tabs, from 0, once its order says so: the engine reads a sheet by its place.
@@ -165,6 +166,8 @@ export class Workbook {
     // Its looks stay in the table until the next sweep.
     public removeSheet(id: string): void {
         this.engine.removeSheet(id);
+        const part = this.parts.get(id);
+        if (part) this.forget(part);
         this.parts.delete(id);
     }
 
@@ -187,7 +190,18 @@ export class Workbook {
 
     // What the limits count: the engine's slots, the runs, bands and extras of every sheet, its records, the sheets.
     public weight(): WorkbookWeight {
-        return weightOf(this.engine.slots(), [...this.parts.values()]);
+        let records = 0;
+        for (const part of this.parts.values()) records = Math.max(records, part.records.weight().records);
+        return { slots: this.engine.slots(), ...this.held, records, sheets: this.parts.size };
+    }
+
+    // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this many slots
+    // and this much weight of formats more, or null. Records are weighed at the end of a batch only.
+    public over(slots = 0, formats = 0): RefusalKey | null {
+        const { runs, bands, extras } = this.held;
+        const sheets = this.parts.size;
+        const weight = { slots: this.engine.slots() + slots, runs: runs + formats, bands, extras, records: 0, sheets };
+        return fits(weight, MIDWAY);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
@@ -198,7 +212,7 @@ export class Workbook {
 
     // A sheet's parts, its looks interned into the table and its bands rebuilt in the one form whatever it said.
     private partsOf({ id, fields, cells, looks, bands, rows, columns, records }: SheetContent): BookSheet {
-        const extras = new Extras();
+        const extras = new Extras(this.held);
         for (const [row, column, { s, link, qp }] of cells) {
             if (s || link || qp) extras.write(row, column, { s, link, qp });
         }
@@ -206,12 +220,21 @@ export class Workbook {
             bands: new Bands(
                 bands,
                 looks.map((look) => this.looks.intern(look)),
+                this.held,
             ),
             rows: new LineRuns(rows),
             columns: new LineRuns(columns),
             extras,
             records: new SheetRecords(id, fields, records),
         };
+    }
+
+    // Takes what a sheet's parts weigh out of the count: the sheet leaves the workbook, or never entered it.
+    private forget({ bands, extras }: BookSheet): void {
+        const looks = bands.weight();
+        this.held.runs -= looks.runs;
+        this.held.bands -= looks.bands;
+        this.held.extras -= extras.weight();
     }
 
     private place(id: string, part: BookSheet, place: number): void {
@@ -226,25 +249,24 @@ export class Workbook {
         }
         const moved = this.looks.sweep(worn);
         for (const { bands } of this.parts.values()) {
-            bands.write([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1], (id) => moved[id]);
+            bands.write([[0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]], (id) => moved[id]);
         }
         this.swept = this.looks.size;
     }
 }
 
-function weightOf(slots: number, sheets: readonly BookSheet[]): WorkbookWeight {
-    let runs = 0;
-    let bands = 0;
-    let extras = 0;
-    let records = 0;
-    for (const sheet of sheets) {
-        const looks = sheet.bands.weight();
-        runs += looks.runs;
-        bands += looks.bands;
-        extras += sheet.extras.weight();
-        records = Math.max(records, sheet.records.weight().records);
+// The slots the engine gives a sheet's cells: they come in column order, so a column's last cell says its length.
+function slotsOf({ cells }: SheetContent): number {
+    let slots = 0;
+    let column = -1;
+    let length = 0;
+    for (const [row, at, cell] of cells) {
+        if (!reachesEngine(cell)) continue;
+        if (at !== column) slots += length;
+        column = at;
+        length = row + 1;
     }
-    return { slots, runs, bands, extras, records, sheets: sheets.length };
+    return slots + length;
 }
 
 // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
@@ -289,6 +311,6 @@ function sourceOf({ id, fields, cells }: SheetContent): SheetSource {
 }
 
 // A cell with a value, a formula or a rich text is the engine's; one with only a link or a mark is not.
-function reachesEngine({ v, f, s }: CellRecord): boolean {
+export function reachesEngine({ v, f, s }: CellContent): boolean {
     return v !== undefined || f !== undefined || s !== undefined;
 }

@@ -28,6 +28,7 @@ import type {
     Span,
 } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { meets } from '@workspace/lib/sheets/rect';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import type { Book, Random } from './book-fixtures';
 import { below, FORMULAS, randomBook, randomSheet } from './book-fixtures';
@@ -249,7 +250,7 @@ export function randomInputOp(random: Random, model: Model): InputOp {
     return op;
 }
 
-// A line format over spans that may overlap, or a cell format over one to five rectangles that may overlap: single
+// A line format over spans that may overlap, or a cell format over one to five rectangles that share no cell: single
 // cells, small blocks, whole columns, whole rows or the whole sheet. Now and then it sets or clears a link, over
 // blocks that hold rich, marked and plain cells, or clears every look key it does not set, as a paste does.
 export function randomFormatOp(random: Random, model: Model): FormatOp {
@@ -280,7 +281,11 @@ export function randomFormatOp(random: Random, model: Model): FormatOp {
             () => [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1],
         ])();
     };
-    const ranges = Array.from({ length: 1 + below(random, random() < 0.2 ? 5 : 2) }, shape);
+    // The rectangles of one op share no cell: a shape that meets one already drawn is left out.
+    const ranges: Rect[] = [];
+    for (const rect of Array.from({ length: 1 + below(random, random() < 0.2 ? 5 : 2) }, shape)) {
+        if (!ranges.some((other) => meets(rect, other))) ranges.push(rect);
+    }
     const set: CellAttrs & { link?: CellLink } = random() < 0.15 ? {} : { ...pick(random, LOOK_PARTS) };
     const clear: NonNullable<Extract<FormatOp, { ranges: unknown }>['clear']> = [];
     const rest = random() < 0.1;

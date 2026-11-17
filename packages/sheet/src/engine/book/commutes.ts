@@ -9,6 +9,7 @@ import type { Op, Rect, Span } from '@workspace/lib/sheets/ops';
 import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { apart } from '@workspace/lib/sheets/rect';
 import { names } from './apply-format';
+import { filled } from './apply-input';
 import type { Extras } from './extras';
 import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
@@ -43,18 +44,7 @@ export function commutes(
         if (op.kind === 'record') records += op.whole ? 1 : 0;
         if (op.kind === 'input') {
             const { lengths } = of(op.sheet);
-            for (const [[top, left, bottom, right], content] of op.runs ?? []) {
-                if (!content) continue;
-                for (let column = left; column <= right; column += 1) {
-                    lengths.set(column, Math.max(lengths.get(column) ?? 0, bottom + 1));
-                }
-                extras += unitsOf(content) * (bottom - top + 1) * (right - left + 1);
-            }
-            for (const [row, column, content] of op.cells ?? []) {
-                if (!content) continue;
-                lengths.set(column, Math.max(lengths.get(column) ?? 0, row + 1));
-                extras += unitsOf(content);
-            }
+            extras += filled(op, (column, length) => lengths.set(column, Math.max(lengths.get(column) ?? 0, length)));
         }
         if (op.kind === 'format' && 'ranges' in op) {
             const { link } = op.set ?? {};
@@ -190,7 +180,7 @@ function writesMeet(extras: Extras | undefined, a: Writes, b: Writes): boolean {
     // The inverse of a format writes back the runs of a rich cell whole, with what the other format made of them.
     const richNow = (ranges: readonly Rect[]) =>
         ranges.flatMap((range) =>
-            [...extras.cells(range)].flatMap(([row, column, { s }]): Rect[] => (s ? [[row, column, row, column]] : [])),
+            extras.cells(range).flatMap(([row, column, { s }]): Rect[] => (s ? [[row, column, row, column]] : [])),
         );
     const meetsRich = (restyles: readonly Rect[], others: readonly Rect[]) =>
         restyles.length > 0 && others.length > 0 && !apart(richNow(restyles), others);

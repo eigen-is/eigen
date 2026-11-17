@@ -249,16 +249,16 @@ describe('engine/book/apply-lines — an insert', () => {
 });
 
 describe('engine/book/apply-lines — a delete', () => {
-    test('(1) its inverse opens with the insert of plain lines, with no `like`', () => {
+    test('(1) its inverse opens with the insert of lines like the line before them, or the first like itself', () => {
         const book = bookOf(sheetOf('a', { cells: [[9, 0, { v: 1 }]] }));
-        expect(landed(book, lines(true, false, 2, 3))[0]).toEqual(lines(true, true, 2, 3));
-        expect(landed(book, lines(false, false, 2, 3))[0]).toEqual(lines(false, true, 2, 3));
+        expect(landed(book, lines(true, false, 2, 3))[0]).toEqual(lines(true, true, 2, 3, 1));
+        expect(landed(book, lines(false, false, 2, 3))[0]).toEqual(lines(false, true, 2, 3, 1));
     });
 
     test('(4) lines that hold nothing give no content op: the insert leaves them empty', () => {
         const book = bookOf(sheetOf('a', { cells: [[9, 0, { v: 1 }]] }));
-        expect(landed(book, lines(true, false, 2, 3))).toEqual([lines(true, true, 2, 3)]);
-        expect(landed(book, lines(false, false, 1, 1))).toEqual([lines(false, true, 1, 1)]);
+        expect(landed(book, lines(true, false, 2, 3))).toEqual([lines(true, true, 2, 3, 1)]);
+        expect(landed(book, lines(false, false, 1, 1))).toEqual([lines(false, true, 1, 1, 0)]);
     });
 
     test('(2) the looks of deleted rows come back whole, one op per look over joined rectangles', () => {
@@ -271,7 +271,7 @@ describe('engine/book/apply-lines — a delete', () => {
         );
         const inverse = landed(book, lines(true, false, 4, 3));
         expect(inverse).toEqual([
-            lines(true, true, 4, 3),
+            lines(true, true, 4, 3, 3),
             wholeLook('a', [[4, 0, 4, LAST_COLUMN]], BOLD),
             wholeLook('a', [[5, 0, 6, 3]], ITALIC),
         ]);
@@ -280,7 +280,7 @@ describe('engine/book/apply-lines — a delete', () => {
     test('(2) the looks of deleted columns come back whole', () => {
         const book = bookOf(sheetOf('a', { looks: [BOLD, ITALIC], bands: [1, 2, 0, 1, 3, 2, 2, 2, 0, 1, 3, 0, 3, 0] }));
         expect(landed(book, lines(false, false, 1, 2)).slice(0, 3)).toEqual([
-            lines(false, true, 1, 2),
+            lines(false, true, 1, 2, 0),
             wholeLook('a', [[0, 1, 2, 2]], BOLD),
             wholeLook('a', [[3, 1, LAST_ROW, 1]], ITALIC),
         ]);
@@ -317,7 +317,7 @@ describe('engine/book/apply-lines — a delete', () => {
             }),
         );
         expect(landed(book, lines(true, false, 4, 5))).toEqual([
-            lines(true, true, 4, 5),
+            lines(true, true, 4, 5, 3),
             {
                 kind: 'format',
                 sheet: 'a',
@@ -331,7 +331,7 @@ describe('engine/book/apply-lines — a delete', () => {
             { kind: 'format', sheet: 'a', lines: 'rows', spans: [[6, 6]], set: { hidden: 1 } },
         ]);
         expect(landed(book, lines(false, false, 0, 2)).slice(0, 2)).toEqual([
-            lines(false, true, 0, 2),
+            lines(false, true, 0, 2, 0),
             { kind: 'format', sheet: 'a', lines: 'columns', spans: [[0, 0]], set: { size: 80, custom: 1 } },
         ]);
     });
@@ -352,7 +352,7 @@ describe('engine/book/apply-lines — a delete', () => {
             }),
         );
         expect(landed(book, lines(true, false, 2, 2))).toEqual([
-            lines(true, true, 2, 2),
+            lines(true, true, 2, 2, 1),
             {
                 kind: 'input',
                 sheet: 'a',
@@ -369,7 +369,7 @@ describe('engine/book/apply-lines — a delete', () => {
         ]);
         const columns = landed(book, lines(false, false, 1, 1));
         expect(columns).toEqual([
-            lines(false, true, 1, 1),
+            lines(false, true, 1, 1, 0),
             {
                 kind: 'input',
                 sheet: 'a',
@@ -554,7 +554,7 @@ describe('engine/book/apply-lines — a filter’s first line moves as a line, i
 
     test('a filter from row 2 to the last row: a delete above it, its undo and the undo of that', () => {
         const book = bookOf(sheetOf('a', { records: { filter: { f: { rect: [2, 0, LAST_ROW, 4] } } } }));
-        expect(landed(book, lines(true, false, 0, 2))).toEqual([lines(true, true, 0, 2)]);
+        expect(landed(book, lines(true, false, 0, 2))).toEqual([lines(true, true, 0, 2, 0)]);
         const after = new Workbook(book);
         applyOps(after, [lines(true, false, 0, 2)]);
         expect(after.sheets.get('a')?.records.records('filter').get('f')).toEqual({ rect: [0, 0, LAST_ROW, 4] });
@@ -1032,6 +1032,7 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
                         insert: !op.insert,
                         index: op.index,
                         count: op.count,
+                        ...(!op.insert && { like: Math.max(0, op.index - 1) }),
                     });
                     const names = kinds(rest);
                     // The parts stand in their one order.

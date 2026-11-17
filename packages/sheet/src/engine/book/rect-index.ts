@@ -1,8 +1,8 @@
-// Where the rectangles of one record type lie on a sheet, such as its merges or the ranges of its rules, so a read
-// finds the ones at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size,
-// the smallest power of two rows and of two columns that hold its height and its width, so it lies in four tiles at
-// most whatever its area, and a read looks, per tile size in use, at the tiles it covers only. The sheet's records
-// keep it in step with every record they write, by id.
+// Where rectangles lie on a sheet, such as the merges of a record type or the runs of one op, so a read finds the ones
+// at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest
+// power of two rows and of two columns that hold its height and its width, so it lies in four tiles at most, and a
+// read looks, per tile size in use, at the tiles it covers only. The records keep one by id. An op's read sweeps its
+// rectangles instead, a stretch of columns at a time, down which it goes from one to the next.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
 import type { Rect } from '@workspace/lib/sheets/ops';
@@ -81,5 +81,59 @@ export class RectIndex {
                 else tiles.set(key, new Map([[id, [rect]]]));
             }
         }
+    }
+}
+
+// One sweep left to right over the columns that rectangles sharing no cell cover. At each stretch of columns the same
+// ones cover, `live` holds their places in the list sorted by top, so down a column they come in turn. It changes in
+// place as rectangles start and end, so it serves one pass at a time.
+export class ColumnSweep {
+    public readonly live: number[] = [];
+    // The columns where a rectangle starts or one ends, and the places by the column each starts at and ends past.
+    private readonly edges: number[] = [];
+    private readonly starts: number[] = [];
+    private readonly ends: number[] = [];
+
+    public constructor(public readonly rects: readonly Rect[]) {
+        if (rects.length === 0) return;
+        const edges = rects.flatMap(([, left, , right]) => [left, right + 1]).sort((a, b) => a - b);
+        this.edges = edges.filter((edge, at) => edge !== edges[at + 1]);
+        // Ties go by top, so the rectangles that start or end at one column join and leave `live` at its end.
+        const places = [...rects.keys()];
+        this.starts = places.toSorted((a, b) => rects[a][1] - rects[b][1] || rects[a][0] - rects[b][0]);
+        this.ends = places.sort((a, b) => rects[a][3] - rects[b][3] || rects[b][0] - rects[a][0]);
+    }
+
+    // Tells `visit` the first and last column of each stretch, in column order, while `live` holds its rectangles.
+    public pass(visit: (left: number, right: number) => void): void {
+        const { rects, live, edges, starts, ends } = this;
+        // A pass before this one left the rectangles of its last stretch, which all end at the last edge.
+        if (live.length > 0) live.length = 0;
+        let started = 0;
+        let ended = 0;
+        for (let at = 0; at < edges.length - 1; at += 1) {
+            const left = edges[at];
+            for (; ended < ends.length && rects[ends[ended]][3] < left; ended += 1) {
+                live.splice(this.after(rects[ends[ended]][0]) - 1, 1);
+            }
+            for (; started < starts.length && rects[starts[started]][1] === left; started += 1) {
+                live.splice(this.after(rects[starts[started]][0]), 0, starts[started]);
+            }
+            if (live.length > 0) visit(left, edges[at + 1] - 1);
+        }
+    }
+
+    // The place in `live` of the first rectangle whose top is below the row, or their count. The one before it holds
+    // the row if its bottom reaches it.
+    public after(row: number): number {
+        const { rects, live } = this;
+        let low = 0;
+        let high = live.length;
+        while (low < high) {
+            const middle = (low + high) >> 1;
+            if (rects[live[middle]][0] <= row) low = middle + 1;
+            else high = middle;
+        }
+        return low;
     }
 }

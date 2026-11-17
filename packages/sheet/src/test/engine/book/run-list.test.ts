@@ -29,7 +29,7 @@ describe('engine/book/run-list — RunList', () => {
 
     test('a format inside a run cuts it in three', () => {
         const list = new RunList();
-        list.format(5, 7, () => 4);
+        list.format([[5, 7]], () => 4);
         expect(runs(list)).toEqual([
             [0, 0],
             [5, 4],
@@ -39,18 +39,18 @@ describe('engine/book/run-list — RunList', () => {
 
     test('a format that reaches the last row adds no run after it', () => {
         const list = new RunList();
-        list.format(5, LAST, () => 4);
+        list.format([[5, LAST]], () => 4);
         expect(runs(list)).toEqual([
             [0, 0],
             [5, 4],
         ]);
-        list.format(0, LAST, () => 4);
+        list.format([[0, LAST]], () => 4);
         expect(runs(list)).toEqual([[0, 4]]);
     });
 
     test('a format maps each run it meets by its own look', () => {
         const list = listOf([0, 1], [10, 2], [20, 3]);
-        list.format(5, 24, (look) => look + 10);
+        list.format([[5, 24]], (look) => look + 10);
         expect(runs(list)).toEqual([
             [0, 1],
             [5, 11],
@@ -62,42 +62,42 @@ describe('engine/book/run-list — RunList', () => {
 
     test('runs that come to wear one look join, above, below and inside', () => {
         const above = listOf([0, 1], [10, 2], [20, 3]);
-        above.format(10, 19, () => 1);
+        above.format([[10, 19]], () => 1);
         expect(runs(above)).toEqual([
             [0, 1],
             [20, 3],
         ]);
         const below = listOf([0, 1], [10, 2], [20, 3]);
-        below.format(10, 19, () => 3);
+        below.format([[10, 19]], () => 3);
         expect(runs(below)).toEqual([
             [0, 1],
             [10, 3],
         ]);
         const inside = listOf([0, 1], [10, 2], [20, 3], [30, 4], [40, 5]);
-        inside.format(10, 39, () => 9);
+        inside.format([[10, 39]], () => 9);
         expect(runs(inside)).toEqual([
             [0, 1],
             [10, 9],
             [40, 5],
         ]);
         const both = listOf([0, 1], [10, 2], [20, 1]);
-        both.format(10, 19, () => 1);
+        both.format([[10, 19]], () => 1);
         expect(runs(both)).toEqual([[0, 1]]);
     });
 
     test('a list whose every row is plain again holds no run', () => {
         const list = new RunList();
-        list.format(5, 7, () => 4);
-        list.format(0, 100, () => 0);
+        list.format([[5, 7]], () => 4);
+        list.format([[0, 100]], () => 0);
         expect(list.count).toBe(0);
         expect(list.equals(new RunList())).toBe(true);
-        list.format(3, 3, () => 0);
+        list.format([[3, 3]], () => 0);
         expect(list.count).toBe(0);
     });
 
     test('a list grows past its first four pairs and keeps every run', () => {
         const list = new RunList();
-        for (let row = 0; row < 200; row += 2) list.format(row, row, () => 1 + (row % 3));
+        for (let row = 0; row < 200; row += 2) list.format([[row, row]], () => 1 + (row % 3));
         expect(list.count).toBe(200);
         for (let row = 0; row < 200; row += 1) expect(list.lookAt(row)).toBe(row % 2 === 0 ? 1 + (row % 3) : 0);
         expect(list.lookAt(200)).toBe(0);
@@ -105,15 +105,15 @@ describe('engine/book/run-list — RunList', () => {
 
     test('equal rows are equal lists, whatever the writes that made them', () => {
         const one = new RunList();
-        one.format(0, 9, () => 1);
-        one.format(10, 19, () => 2);
+        one.format([[0, 9]], () => 1);
+        one.format([[10, 19]], () => 2);
         const other = new RunList();
-        other.format(0, 19, () => 2);
-        other.format(0, 9, () => 1);
-        other.format(30, 40, () => 7);
-        other.format(30, 40, () => 0);
+        other.format([[0, 19]], () => 2);
+        other.format([[0, 9]], () => 1);
+        other.format([[30, 40]], () => 7);
+        other.format([[30, 40]], () => 0);
         expect(one.equals(other)).toBe(true);
-        other.format(19, 19, () => 3);
+        other.format([[19, 19]], () => 3);
         expect(one.equals(other)).toBe(false);
         expect(listOf([0, 1]).equals(listOf([0, 2]))).toBe(false);
         expect(listOf([0, 1], [5, 2]).equals(listOf([0, 1], [6, 2]))).toBe(false);
@@ -123,7 +123,7 @@ describe('engine/book/run-list — RunList', () => {
         const list = listOf([0, 1], [10, 2]);
         const copy = list.clone();
         expect(copy.equals(list)).toBe(true);
-        copy.format(0, LAST, () => 0);
+        copy.format([[0, LAST]], () => 0);
         expect(runs(list)).toEqual([
             [0, 1],
             [10, 2],
@@ -294,6 +294,111 @@ describe('engine/book/run-list — RunList', () => {
             const empty = new RunList();
             empty.deleteRows(4, 4);
             expect(empty.count).toBe(0);
+        });
+    });
+
+    describe('a format of many spans is one pass', () => {
+        // The same spans written one by one, as the list wrote them before.
+        const oneByOne = (pairs: number[][], rows: [number, number][], to: (look: number, span: number) => number) => {
+            const list = listOf(...pairs);
+            for (const [at, span] of rows.entries()) list.format([span], (look) => to(look, at));
+            return runs(list);
+        };
+
+        test('spans in one run, in many runs and in a plain list are written as one by one', () => {
+            const pairs = [
+                [0, 1],
+                [10, 2],
+                [20, 0],
+                [30, 3],
+            ];
+            const cases: [number, number][][] = [
+                [
+                    [2, 3],
+                    [5, 5],
+                    [7, 8],
+                ],
+                [
+                    [0, 0],
+                    [9, 10],
+                    [19, 30],
+                    [LAST, LAST],
+                ],
+                [
+                    [5, 25],
+                    [26, 26],
+                    [27, LAST],
+                ],
+                [[0, LAST]],
+            ];
+            for (const rows of cases) {
+                for (const to of [(look: number) => look + 10, () => 0, () => 2, (look: number) => look]) {
+                    const list = listOf(...pairs);
+                    list.format(rows, to);
+                    expect(runs(list)).toEqual(oneByOne(pairs, rows, to));
+                    const plain = new RunList();
+                    plain.format(rows, to);
+                    expect(runs(plain)).toEqual(oneByOne([], rows, to));
+                }
+            }
+        });
+
+        test('each span is told its place, so spans side by side take looks of their own', () => {
+            const list = listOf([0, 1], [10, 2]);
+            list.format(
+                [
+                    [4, 5],
+                    [6, 11],
+                    [12, 12],
+                ],
+                (_, span) => [7, 8, 2][span],
+            );
+            expect(runs(list)).toEqual([
+                [0, 1],
+                [4, 7],
+                [6, 8],
+                [12, 2],
+            ]);
+        });
+
+        test('random spans on random lists are written as one by one, and the list stays in its one form', () => {
+            let state = 7;
+            const below = (n: number) => {
+                state = (Math.imul(state, 1103515245) + 12345) & 0x7fffffff;
+                return state % n;
+            };
+            for (let round = 0; round < 2000; round += 1) {
+                const pairs: number[][] = [];
+                for (let row = 0; row < 60; row += 1 + below(9)) pairs.push([row, below(4)]);
+                const rows: [number, number][] = [];
+                for (let row = below(8); row < 70 && rows.length < 6; ) {
+                    const last = row + below(7);
+                    rows.push([row, last]);
+                    row = last + 1 + below(9);
+                }
+                if (below(9) === 0) rows.push([Math.max(80, LAST - below(3)), LAST]);
+                const looks = Array.from({ length: rows.length }, () => below(4));
+                const to = below(2) === 0 ? (look: number) => (look + 1) % 4 : (_: number, span: number) => looks[span];
+                const list = listOf(...pairs);
+                list.format(rows, to);
+                const got = runs(list);
+                expect(got).toEqual(oneByOne(pairs, rows, to));
+                expect(got.every(([, look], at) => at === 0 || look !== got[at - 1][1])).toBe(true);
+                expect(got.length === 1 && got[0][1] === 0).toBe(false);
+            }
+        });
+
+        test('a list grows as it needs and the runs after the spans keep their rows', () => {
+            const list = new RunList();
+            const rows = Array.from({ length: 500 }, (_, at): [number, number] => [4 * at, 4 * at + 1]);
+            list.format(rows, () => 5);
+            expect(list.count).toBe(1000);
+            expect([list.lookAt(0), list.lookAt(2), list.lookAt(1996), list.lookAt(1998), list.lookAt(LAST)]).toEqual([
+                5, 0, 5, 0, 0,
+            ]);
+            list.format([[0, 1]], () => 0);
+            expect(list.count).toBe(999);
+            expect([list.startOf(0), list.startOf(1), list.lookOf(1)]).toEqual([0, 4, 5]);
         });
     });
 });

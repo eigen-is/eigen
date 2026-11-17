@@ -460,7 +460,8 @@ const INPUT = table<InputOp>({
 const CELL_FORMAT = table<CellFormatOp>({
     kind: [(value) => value === 'format', true],
     sheet: [isSheetId, true],
-    ranges: [(value) => Array.isArray(value) && value.length > 0 && value.every(isRect), true],
+    // The rectangles share no cell, so the looks under them are written in one pass and each cell once.
+    ranges: [(value) => Array.isArray(value) && value.length > 0 && value.every(isRect) && disjoint(value), true],
     set: [(value) => isOf(value, FORMAT), false],
     clear: [(value) => isKeyList(value, FORMAT), false],
 });

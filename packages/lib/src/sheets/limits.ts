@@ -29,6 +29,9 @@ export const MAX_RECORDS_PER_TYPE = 100_000;
 // Rich-text runs in one cell.
 export const MAX_RUNS_PER_CELL = 1_000;
 export const MAX_SHEETS = 1_000;
+// Inside a batch a workbook may pass each limit up to this many times it: a workbook that fits and a result that fits
+// are together at most twice a limit, so a write is weighed without what its op frees.
+export const MIDWAY = 2;
 
 // `extras` is the units of what cells hold beyond a value; `records` is the most records of one type on one sheet.
 export type WorkbookWeight = {
@@ -40,12 +43,14 @@ export type WorkbookWeight = {
     readonly sheets: number;
 };
 
-export function fits(weight: WorkbookWeight): RefusalKey | null {
-    if (weight.slots > MAX_VALUE_SLOTS) return 'too-many-cells';
-    if (weight.runs + weight.bands * BAND_WEIGHT + weight.extras * EXTRA_WEIGHT > MAX_STYLE_RUNS) {
+// The first limit a workbook of this weight is over, or null: the limits as they are for a workbook a batch leaves,
+// `times` each for one inside a batch.
+export function fits(weight: WorkbookWeight, times = 1): RefusalKey | null {
+    if (weight.slots > times * MAX_VALUE_SLOTS) return 'too-many-cells';
+    if (weight.runs + weight.bands * BAND_WEIGHT + weight.extras * EXTRA_WEIGHT > times * MAX_STYLE_RUNS) {
         return 'too-many-formats';
     }
-    if (weight.records > MAX_RECORDS_PER_TYPE) return 'too-many-records';
-    if (weight.sheets > MAX_SHEETS) return 'too-many-sheets';
+    if (weight.records > times * MAX_RECORDS_PER_TYPE) return 'too-many-records';
+    if (weight.sheets > times * MAX_SHEETS) return 'too-many-sheets';
     return null;
 }
