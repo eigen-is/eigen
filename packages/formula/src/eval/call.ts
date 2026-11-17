@@ -21,7 +21,7 @@ import { look } from './look';
 import { real } from './operators';
 import { Frame, Table } from './readers';
 import type { Choice, Entry, Held, Lazy, Param, Result } from './signature';
-import { Prepare, Read, slotOf, TOKENS } from './signature';
+import { ANYWHERE, Prepare, Read, slotOf, TOKENS } from './signature';
 import { cellsOf } from './views';
 
 // How far under a whole number a number is still read as that whole one, where a reading says so.
@@ -266,6 +266,7 @@ export function run(ctx: Evaluator, entry: Entry, held: Held[], count: number, s
             result = entry.run(...args);
     }
     if (frame !== null && frame.failed !== null) return frame.failed;
+    if (entry.returns === ANYWHERE && isReference(result)) ctx.recalc.record(result);
     if (typeof result === 'number') return real(result);
     if (typeof result === 'string') return result.length > LONGEST_TEXT ? VALUE : result;
     return result instanceof Table ? Table.held(result) : result;

@@ -3,6 +3,7 @@ import type { Move } from '../../edit/move';
 import { moveClasses } from '../../edit/move';
 import { GRID_COLUMNS, GRID_ROWS, printStored, transformMove } from '../../text';
 import { ShapeTable } from '../../text/shapes';
+import { NO_SHEET } from '../text/support';
 import { random } from './support';
 
 // Hosts, corners and blocks sit on the first and the last ten lines of both axes, where a class is cut by the grid.
@@ -32,25 +33,27 @@ describe('the classes of a move', () => {
         let carried = 0;
         let seeds = 0;
         let lossy = 0;
-        let cut = 0;
+        let atEnd = 0;
         for (let run = 0; run < 4000; run += 1) {
-            const shape = table.shape(table.intern(`=SUM(${reference()},${reference()})+@${reference()}`));
+            const shape = table.shape(table.intern(`=SUM(${reference()},${reference()})+@${reference()}`, NO_SHEET));
             if (shape.tree === null) throw new Error(shape.text);
             const sheets = ['s1', 's2'];
+            const row = near(pick, GRID_ROWS);
+            const column = near(pick, GRID_COLUMNS);
+            const toRow = near(pick, GRID_ROWS);
+            const toColumn = near(pick, GRID_COLUMNS);
+            // The block lies on the grid before and after.
             const move: Move = {
                 fromSheet: sheets[pick(2)],
-                row: near(pick, GRID_ROWS),
-                column: near(pick, GRID_COLUMNS),
-                rows: 1 + pick(4),
-                columns: 1 + pick(4),
+                row,
+                column,
+                rows: Math.min(1 + pick(4), GRID_ROWS - row, GRID_ROWS - toRow),
+                columns: Math.min(1 + pick(4), GRID_COLUMNS - column, GRID_COLUMNS - toColumn),
                 toSheet: sheets[pick(2)],
-                toRow: near(pick, GRID_ROWS),
-                toColumn: near(pick, GRID_COLUMNS),
+                toRow,
+                toColumn,
             };
-            // What of the block is on the grid before and after is what moves.
-            const fitRows = Math.min(move.rows, GRID_ROWS - move.row, GRID_ROWS - move.toRow);
-            const fitColumns = Math.min(move.columns, GRID_COLUMNS - move.column, GRID_COLUMNS - move.toColumn);
-            if (fitRows < move.rows || fitColumns < move.columns) cut += 1;
+            if (row + move.rows === GRID_ROWS || toColumn + move.columns === GRID_COLUMNS) atEnd += 1;
             const hostSheet = sheets[pick(2)];
             const top = pick(2) === 0 ? pick(6) : GRID_ROWS - 12 + pick(6);
             const left = pick(2) === 0 ? pick(6) : GRID_COLUMNS - 12 + pick(6);
@@ -75,13 +78,10 @@ describe('the classes of a move', () => {
                         row < first + rows &&
                         column >= firstColumn &&
                         column < firstColumn + columns;
-                    const moves = inBlock(move.fromSheet, move.row, move.column, fitRows, fitColumns);
+                    const moves = inBlock(move.fromSheet, move.row, move.column, move.rows, move.columns);
                     const where = `${run} ${shape.text} ${JSON.stringify(move)} ${hostSheet} ${row},${column}`;
-                    // A host the block lands on is gone, and so is one of the block that does not fit on the grid.
-                    const gone =
-                        inBlock(move.toSheet, move.toRow, move.toColumn, fitRows, fitColumns) ||
-                        inBlock(move.fromSheet, move.row, move.column, move.rows, move.columns);
-                    if (!moves && gone) {
+                    // A host the block lands on is gone.
+                    if (!moves && inBlock(move.toSheet, move.toRow, move.toColumn, move.rows, move.columns)) {
                         expect([where, own.length]).toEqual([where, 0]);
                         continue;
                     }
@@ -114,49 +114,12 @@ describe('the classes of a move', () => {
         expect(carried).toBeGreaterThan(300);
         expect(seeds).toBeGreaterThan(3000);
         expect(lossy).toBeGreaterThan(300);
-        expect(cut).toBeGreaterThan(300);
+        expect(atEnd).toBeGreaterThan(300);
         expect(classes).toBeLessThan(hosts / 2);
-    });
-    test('a block that does not fit on the grid moves the part that does, and what read the rest is a seed', () => {
-        const table = new ShapeTable();
-        const move: Move = {
-            fromSheet: 's1',
-            row: 0,
-            column: 0,
-            rows: 4,
-            columns: 2,
-            toSheet: 's1',
-            toRow: GRID_ROWS - 2,
-            toColumn: 5,
-        };
-        const outcome = (text: string, row: number, column: number) => {
-            const shape = table.shape(table.intern(text));
-            if (shape.tree === null) throw new Error(text);
-            const moved = transformMove(shape.tree, move, 's1', row, column);
-            return [printStored(moved.tree), moved.recompute, moved.lossy];
-        };
-        // A1:B2 goes, A3:B4 is gone: a reference into the part that went follows it, one into the rest stays.
-        expect(outcome('=R2C2', 9, 9)).toEqual([`=R${GRID_ROWS}C7`, false, false]);
-        expect(outcome('=R3C1', 9, 9)).toEqual(['=R3C1', true, false]);
-        expect(outcome('=SUM(R1C1:R4C2)', 9, 9)).toEqual(['=SUM(R1C1:R4C2)', true, false]);
-        expect(outcome('=SUM(R1C1:R2C2)', 9, 9)).toEqual([`=SUM(R${GRID_ROWS - 1}C6:R${GRID_ROWS}C7)`, false, false]);
-        expect(outcome('=R5C1', 9, 9)).toEqual(['=R5C1', false, false]);
-        // A formula that went keeps reading the cell that stayed behind and is gone.
-        expect(outcome('=R[2]C', 1, 0)).toEqual([`=R[${4 - GRID_ROWS}]C[-5]`, true, false]);
-        const shape = table.shape(table.intern('=R[9]C[9]'));
-        if (shape.tree === null) throw new Error(shape.text);
-        const classes = moveClasses(shape.tree, shape.refs, move, 's1', 0, 5, 0, 2);
-        expect(classes.map((c) => [c.top, c.bottom, c.left, c.right, c.carried])).toEqual([
-            [0, 1, 0, 1, true],
-            [0, 1, 2, 2, false],
-            [2, 3, 2, 2, false],
-            [4, 5, 0, 1, false],
-            [4, 5, 2, 2, false],
-        ]);
     });
     test('a cell read by a filled column is a few classes, however long the column', () => {
         const table = new ShapeTable();
-        const shape = table.shape(table.intern('=R1C1+RC[-1]'));
+        const shape = table.shape(table.intern('=R1C1+RC[-1]', NO_SHEET));
         if (shape.tree === null) throw new Error(shape.text);
         const move: Move = {
             fromSheet: 's1',
@@ -177,7 +140,7 @@ describe('the classes of a move', () => {
     test('a reference that neither follows nor breaks is a seed when it reads a cell the block left or landed on', () => {
         const table = new ShapeTable();
         const seed = (text: string, move: Move) => {
-            const { tree } = table.shape(table.intern(text));
+            const { tree } = table.shape(table.intern(text, NO_SHEET));
             if (tree === null) throw new Error(text);
             const moved = transformMove(tree, move, 's1', 0, 5);
             return [moved.tree === tree, moved.recompute];

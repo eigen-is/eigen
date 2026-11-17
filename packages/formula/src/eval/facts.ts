@@ -1,6 +1,7 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
-// without evaluating: whether this build can evaluate it at all, whether it reads cells it does not name,
-// whether a structural edit can change its answer through a place or a size, and how much of the stack its
+// without evaluating: whether this build can evaluate it at all, whether it reads the clock, what the workbook
+// itself says or a reference it works out as it runs, whether a structural edit can change its answer through a
+// place or a size, whether a sum or count of it can go on from the cell above, and how much of the stack its
 // evaluation can take. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
@@ -12,11 +13,12 @@ import type { Param } from './signature';
 import { ANYWHERE, Read, slotOf } from './signature';
 
 export const Fact = {
-    // A reference into another workbook or across sheets: the cell keeps the value it came with.
+    // A reference into another workbook or across sheets: the cell keeps the value it has, and is #REF! with none.
     Kept: 1,
     // A call of a row that picks another row, such as SUBTOTAL: an outer such call passes the cell over.
     Chosen: 2,
-    // Cells that the tree does not name may be read, so a write anywhere can change the answer.
+    // A call of a row that asks the workbook itself, such as whether a cell holds a formula: the answer can change
+    // with no value the tree names changing, so every marking flags the cell.
     ReadsUnnamed: 4,
     // The answer depends on where the cell or a cell it names sits: a call of a row that reads a place, as ROW
     // does, or the @ in front of a range. Moving the cell or rewriting its references can change it.
@@ -24,6 +26,14 @@ export const Fact = {
     // The answer can depend on how many lines a range spans: a range stands somewhere else than as the argument
     // of a parameter that passes over empty cells.
     Sized: 16,
+    // A call of a row that reads the clock or draws: the clock of every batch of edits computes the cell again.
+    Clock: 32,
+    // A reference is worked out from values as the formula runs: by a row that answers one anywhere, by a colon
+    // between two operands, or by a range that takes its size from another. The recalc records what it was.
+    Resolves: 64,
+    // A function that takes every value reads a range whose top row stays put, as each formula of a running total
+    // does: the calls below it go on from what it found (`Carries`).
+    Anchored: 128,
 } as const;
 
 export const FACT_BITS = 8;
@@ -50,7 +60,7 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         depth = Math.max(depth, right >> FACT_BITS);
         flags |= right & FLAGS;
         // The box around two references holds cells that neither of them names.
-        if (link.op === Token.Colon) flags |= Fact.ReadsUnnamed;
+        if (link.op === Token.Colon) flags |= Fact.Resolves;
     }
     if (link !== node) {
         const first = shapeFacts(link, functions);
@@ -66,18 +76,22 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
             entry !== undefined && children[i].kind === NodeKind.Ref ? slotOf(entry, i, children.length) : undefined;
         const family = slot?.family ?? null;
         if (family !== null && (family.kinds & (1 << CellKind.Empty)) === 0) facts &= ~Fact.Sized;
+        if ((family !== null || (entry !== undefined && entry.chosen !== null)) && anchored(children[i])) {
+            flags |= Fact.Anchored;
+        }
         depth = Math.max(depth, facts >> FACT_BITS);
         flags |= facts & FLAGS;
     }
     if (entry?.slots.some((slot) => slot.read === Read.Here)) flags |= Fact.Positional;
     if (node.kind === NodeKind.Prefix && node.op === Token.At) flags |= Fact.Positional;
     if (entry !== undefined && entry.chosen !== null) flags |= Fact.Chosen;
-    if (entry?.returns === ANYWHERE) flags |= Fact.ReadsUnnamed;
-    // What a row asks of the workbook itself, such as the text of a formula, is the value of no cell it names.
-    if (entry?.params.some((param) => param.read === Read.Engine)) flags |= Fact.ReadsUnnamed;
+    if (entry?.volatile) flags |= Fact.Clock;
+    // A row that answers a reference anywhere asks the workbook at most where a text points, which an edit changes.
+    if (entry?.returns === ANYWHERE) flags |= Fact.Resolves;
+    else if (entry?.params.some((param) => param.read === Read.Engine)) flags |= Fact.ReadsUnnamed;
     // A range that takes its size from another names cells of its own only when the two are of one size.
     if (entry !== undefined && entry.matched > entry.where && entry.matched < node.children.length) {
-        if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.ReadsUnnamed;
+        if (!sameSize(node.children[entry.where], node.children[entry.matched])) flags |= Fact.Resolves;
     }
     if (node.kind === NodeKind.Call) depth = Math.max(READING, depth + CALL);
     else if (node.kind === NodeKind.Prefix || node.kind === NodeKind.Postfix) depth += SIGN;
@@ -87,6 +101,13 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         flags |= Fact.Sized;
     }
     return flags | (depth << FACT_BITS);
+}
+
+// Whether a range's top row is the same in every cell that holds it: a whole column, or a corner row that is absolute.
+function anchored(reference: FormulaNode): boolean {
+    const { kind, op, flags } = reference;
+    if (kind !== NodeKind.Ref || op === RefKind.Cell || op === RefKind.Rows) return false;
+    return op === RefKind.Columns || (flags & (RefFlag.RowAbsolute | RefFlag.Row2Absolute)) !== 0;
 }
 
 // Whether two arguments are references of one size in every cell that holds the formula. Anything else than two

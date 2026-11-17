@@ -7,22 +7,23 @@ import type { Recalc } from '../recalc/recalc';
 import { CALC } from '../values/errors';
 import type { Walk } from './walk';
 
-// The sum of everything the walk still hands out, with the sum before the last addition left in `walk.before`.
-export function add(walk: Walk, recalc: Recalc): number {
-    let sum = 0;
-    let before = 0;
+// `start` and everything the walk still hands out, added on to it, with the sum before the last addition left in
+// `walk.before`: `before` when the walk hands out nothing.
+export function add(walk: Walk, recalc: Recalc, start: number, before: number): number {
+    let sum = start;
+    let last = before;
     while (walk.next()) {
         if (walk.reps !== null || walk.rows !== 1) {
             sum = addRow(walk, recalc, sum);
-            before = walk.before;
+            last = walk.before;
             continue;
         }
         const { num, to } = walk;
         for (let i = walk.from; i < to - 1; i += 1) sum += num[i];
-        before = sum;
+        last = sum;
         sum += num[to - 1];
     }
-    walk.before = before;
+    walk.before = last;
     return sum;
 }
 

@@ -6,7 +6,7 @@
 
 import { isUnparsed, parseA1, parseStored } from '../text/parser';
 import { printA1 } from '../text/printer';
-import { findSheetByName, quoteSheetName } from '../text/sheet-name';
+import { quoteSheetName } from '../text/sheet-name';
 import { NodeKind, SheetKind } from '../text/tree';
 import type { FormulaError } from '../values/errors';
 import { REF } from '../values/errors';
@@ -69,17 +69,17 @@ export class Book {
     // R[1]C is the cell below. A text that is no one reference, or names no sheet of the workbook, is #REF!.
     public refer(text: string, a1: boolean): Reference | FormulaError {
         const ctx = this.#ctx;
-        const { sheets } = ctx.workbook;
+        const { workbook } = ctx;
         const host = ctx.recalc.running();
-        let sheet = sheets[host.sheet];
-        let tree = a1 ? parseA1(`=${text}`, host.top, host.left, (name) => findSheetByName(sheets, name)) : null;
+        let sheet = workbook.sheets[host.sheet];
+        let tree = a1 ? parseA1(`=${text}`, host.top, host.left, (name) => workbook.named(name)) : null;
         if (!a1) {
             // The stored form of a reference is R1C1 with no sheet, so the name before the ! is read here, by the
             // rule a typed formula's is: in quotes, or one word that may stand bare.
             const bang = text.lastIndexOf('!');
             const quoted = bang > 1 && text.startsWith("'") && text[bang - 1] === "'";
             const name = quoted ? text.slice(1, bang - 1).replaceAll("''", "'") : text.slice(0, Math.max(bang, 0));
-            const named = bang < 0 ? sheet : findSheetByName(sheets, name);
+            const named = bang < 0 ? sheet : workbook.named(name);
             if (named === undefined || (bang >= 0 && !quoted && quoteSheetName(name) !== name)) return REF;
             sheet = named;
             tree = parseStored(`=${text.slice(bang + 1).toUpperCase()}`);

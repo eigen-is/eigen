@@ -16,11 +16,13 @@ import { CALC, errorOf, NAME, NULL, REF, VALUE } from '../values/errors';
 import type { ArrayValue, Reference, Scalar, Value } from '../values/value';
 import { arrayOf, isArray, isCell, isError, isReference, ValueType } from '../values/value';
 import { call } from './call';
-import { lift } from './lift';
-import { LIFTED_BINARY, LIFTED_NEGATE, LIFTED_PERCENT, LIFTED_PLUS, negate, operate, percent } from './operators';
-import { Frame, Room } from './readers';
-import type { Entry } from './signature';
-import { toArray } from './views';
+import { Carries } from './carry';
+import type { Term } from './elementwise';
+import { elementwise, isSpread } from './elementwise';
+import { negate, operate, percent } from './operators';
+import type { Frame } from './readers';
+import { Room } from './readers';
+import { band, toArray } from './views';
 import { Walk } from './walk';
 
 // The error of each error literal, by its place in the list of literals.
@@ -35,9 +37,9 @@ export class Evaluator {
     public calls = 0;
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
-    // The date and time of the pass in progress as a serial, which its author handed over with the seed of its draws.
-    public now = 0;
-    private drawn = 0;
+    public readonly carries = new Carries();
+    // Whether the formula in progress is `Fact.Anchored`, the one kind a carry pays for.
+    public anchored = false;
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
@@ -53,12 +55,16 @@ export class Evaluator {
     }
 
     // What the cell of a formula stores: one value, or the top-left of an array. A blank stays blank, as in Google.
-    public result(tree: FormulaNode, sheet: Sheet, row: number, column: number): Scalar {
+    public result(tree: FormulaNode, sheet: Sheet, row: number, column: number, anchored: boolean): Scalar {
+        // A formula computed while this one runs has its own, so the outer one's is put back after it.
+        const outer = this.anchored;
+        this.anchored = anchored;
         // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.
         const root = tree.kind === NodeKind.Binary && (tree.op === Token.Plus || tree.op === Token.Minus);
         const value = root
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
+        this.anchored = outer;
         if (!isArray(value)) return value;
         // An array of references is no value a cell can hold, as Excel's INDIRECT({"A1","B2"}) is none.
         if (value.references) return CALC;
@@ -95,10 +101,8 @@ export class Evaluator {
             case NodeKind.Postfix: {
                 // Nothing spills in this build, so no cell is an anchor.
                 if (node.op === Token.Hash) return REF;
-                const value = this.operand(node.children[0], sheet, row, column);
-                return isArray(value)
-                    ? this.lifted(LIFTED_PERCENT, value, undefined, node, sheet, row, column)
-                    : percent(value);
+                const value = this.term(node.children[0], sheet, row, column);
+                return isSpread(value) ? elementwise(this, Token.Percent, value) : percent(value);
             }
             case NodeKind.Binary:
                 return this.binary(node, sheet, row, column, false);
@@ -129,32 +133,14 @@ export class Evaluator {
     // What a unary plus gives: nothing is changed, not even a text into a number, but it is a value and no cell,
     // so the cells of a range become a computed array.
     public valued(node: FormulaNode, sheet: Sheet, row: number, column: number): Value {
-        const value = this.operand(node, sheet, row, column);
-        return isArray(value) ? this.lifted(LIFTED_PLUS, value, undefined, node, sheet, row, column) : value;
+        const value = this.term(node, sheet, row, column);
+        return isSpread(value) ? elementwise(this, Token.Plus, value) : value;
     }
 
     public read(value: Value): Scalar | ArrayValue {
-        if (typeof value !== 'object' || value === null) return value;
-        switch (value.type) {
-            case ValueType.Reference:
-                if (isCell(value)) return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
-                return value.next === null ? toArray(this, value) : VALUE;
-            default:
-                return value;
-        }
-    }
-
-    public clock(now: number, seed: number): void {
-        this.now = now;
-        this.drawn = seed | 0;
-    }
-
-    // The next number in [0, 1) of the pass, the same on every machine for one seed.
-    public draw(): number {
-        this.drawn = (this.drawn + 0x6d2b79f5) | 0;
-        let mixed = Math.imul(this.drawn ^ (this.drawn >>> 15), 1 | this.drawn);
-        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
-        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+        if (!isReference(value)) return value;
+        if (isCell(value)) return this.recalc.valueOf(this.workbook.sheets[value.sheet], value.top, value.left);
+        return value.next === null ? toArray(this, value) : VALUE;
     }
 
     // The cell a formula is in, as a reference.
@@ -217,10 +203,8 @@ export class Evaluator {
         const child = node.children[0];
         if (node.op === Token.Plus) return this.valued(child, sheet, row, column);
         if (node.op === Token.Minus) {
-            const value = this.operand(child, sheet, row, column);
-            return isArray(value)
-                ? this.lifted(LIFTED_NEGATE, value, undefined, node, sheet, row, column)
-                : negate(value);
+            const value = this.term(child, sheet, row, column);
+            return isSpread(value) ? elementwise(this, Token.Minus, value) : negate(value);
         }
         const value = this.evaluate(child, sheet, row, column);
         if (isArray(value)) return value.items[0];
@@ -241,9 +225,9 @@ export class Evaluator {
         let first = node;
         for (; first.children[0].kind === NodeKind.Binary; first = first.children[0]) (chain ??= []).push(first);
         const start = first.children[0];
-        const left = joinsReferences(first.op)
-            ? this.evaluate(start, sheet, row, column)
-            : this.operand(start, sheet, row, column);
+        // Unread but for one cell: the operation reads it, a range where it lies.
+        const cell = start.kind === NodeKind.Ref && start.op === RefKind.Cell && !joinsReferences(first.op);
+        const left = cell ? this.operand(start, sheet, row, column) : this.evaluate(start, sheet, row, column);
         let value = this.operation(first, left, sheet, row, column, snap && chain === null);
         if (chain === null) return value;
         for (let i = chain.length - 1; i >= 0; i -= 1) {
@@ -252,41 +236,33 @@ export class Evaluator {
         return value;
     }
 
-    // One operator, with its left operand already evaluated.
+    // One operator, with its left operand already evaluated. The left operand is read before the right one is
+    // evaluated, so the cells of a range on the left are computed first.
     private operation(node: FormulaNode, left: Value, sheet: Sheet, row: number, column: number, snap: boolean): Value {
         const { op } = node;
         if (joinsReferences(op)) {
             if (isError(left)) return left;
             const right = this.evaluate(node.children[1], sheet, row, column);
             if (isError(right)) return right;
-            return isReference(left) && isReference(right) ? combine(op, left, right) : VALUE;
+            if (!isReference(left) || !isReference(right)) return VALUE;
+            const joined = combine(op, left, right);
+            if (op === Token.Colon && isReference(joined)) this.recalc.record(joined);
+            return joined;
         }
-        const a = this.read(left);
-        const b = this.operand(node.children[1], sheet, row, column);
-        if (isArray(a) || isArray(b)) return this.lifted(LIFTED_BINARY[op], a, b, node, sheet, row, column);
-        return operate(op, a, b, snap);
+        const a = this.inPlace(left);
+        const b = this.term(node.children[1], sheet, row, column);
+        return isSpread(a) || isSpread(b) ? elementwise(this, op, a, b) : operate(op, a, b, snap);
     }
 
-    // An operator over an array runs once per element, as a call does: its operands are the arguments of a level
-    // of calls of their own, since reading an element can compute a cell whose formula calls a function.
-    private lifted(
-        entry: Entry,
-        a: Value,
-        b: Value | undefined,
-        node: FormulaNode,
-        sheet: Sheet,
-        row: number,
-        column: number,
-    ): Value {
-        const level = this.calls;
-        const frame = (this.frames[level] ??= new Frame(this));
-        frame.held.length = 0;
-        frame.held.push(a);
-        if (b !== undefined) frame.held.push(b);
-        this.calls = level + 1;
-        const result = lift(this, entry, frame, frame.held.length, node, sheet, row, column);
-        this.calls = level;
-        return result;
+    // An operand of an operator: a value that is read, but a range stays on its sheet, banded as its array.
+    private term(node: FormulaNode, sheet: Sheet, row: number, column: number): Term {
+        if (node.kind === NodeKind.Ref && node.op === RefKind.Cell) return this.operand(node, sheet, row, column);
+        return this.inPlace(this.evaluate(node, sheet, row, column));
+    }
+
+    private inPlace(value: Value): Term {
+        if (!isReference(value) || isCell(value)) return this.read(value);
+        return value.next === null ? band(this, value) : VALUE;
     }
 
     private constant(node: FormulaNode): Scalar | ArrayValue {

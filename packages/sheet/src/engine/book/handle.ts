@@ -1,0 +1,159 @@
+// The one way to read a workbook: what a cell holds and shows, the look it wears, its lines, merges and records,
+// sheet by sheet in tab order. A reader takes a book from `cellsOf` and reads through it, never through the workbook's
+// parts. A read hands out what the parts hold, such as the interned look or a stored record, and builds only what it
+// returns, so a screen of reads stays cheap.
+
+import type { Literal } from '@workspace/formula';
+import { numberDisplay } from '@workspace/formula/format';
+import type {
+    CellAttrs,
+    CellContent,
+    LineAttrs,
+    Records,
+    RecordType,
+    Rect,
+    SheetFields,
+    Span,
+    ValidationRecord,
+} from '@workspace/lib/sheets/ops';
+import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
+import { cellAt } from './apply-input';
+import type { LookSpan } from './bands';
+import type { BookSheet, Workbook } from './workbook';
+
+export type Book = {
+    readonly sheets: () => readonly Sheet[];
+    readonly sheet: (id: string) => Sheet | undefined;
+};
+
+// The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
+// workbook held when it was made: one deleted since throws at a read, as the engine does, and reads again once added.
+export function cellsOf(book: Workbook): Book {
+    const sheets = [...book.sheets.keys()].map((id) => new Sheet(id, book));
+    const byId = new Map(sheets.map((sheet) => [sheet.id, sheet]));
+    return { sheets: () => sheets, sheet: (id) => byId.get(id) };
+}
+
+export class Sheet {
+    public constructor(
+        public readonly id: string,
+        private readonly book: Workbook,
+    ) {}
+
+    public get fields(): Readonly<SheetFields> {
+        return this.book.records.fields(this.id);
+    }
+
+    // Read by id at each read, since a batch that deletes a sheet and adds it back gives it new parts.
+    private get parts(): BookSheet {
+        const parts = this.book.sheets.get(this.id);
+        if (!parts) throw new Error(`No sheet ${this.id}`);
+        return parts;
+    }
+
+    public value(row: number, column: number): Literal | null {
+        return this.book.engine.valueOf(this.id, row, column);
+    }
+
+    // What an input op would say to put the cell back.
+    public content(row: number, column: number): CellContent | null {
+        return cellAt(this.book, this.id, this.parts.extras, row, column);
+    }
+
+    public hasFormula(row: number, column: number): boolean {
+        return this.book.engine.formulaOf(this.id, row, column) !== null;
+    }
+
+    public display(row: number, column: number): string {
+        return numberDisplay(this.value(row, column), this.look(row, column).fa);
+    }
+
+    public look(row: number, column: number): Readonly<CellAttrs> {
+        return this.book.looks.look(this.parts.bands.look(row, column));
+    }
+
+    // The spans that tile a rectangle, plain ones included, in column order then row order.
+    public *lookSpans(rect: Rect): Generator<LookSpan<Readonly<CellAttrs>>> {
+        const { looks } = this.book;
+        for (const { c0, c1, r0, r1, look } of this.parts.bands.spans(rect)) {
+            yield { c0, c1, r0, r1, look: looks.look(look) };
+        }
+    }
+
+    // The cells that hold a value or a formula, in column order then row order.
+    public *values([top, left, bottom, right]: Rect = WHOLE_GRID): Generator<{ r: number; c: number }> {
+        const { engine } = this.book;
+        const last = Math.min(right, engine.lastColumn(this.id));
+        for (let c = left; c <= last; c += 1) {
+            for (
+                let r = engine.nextCell(this.id, c, top, bottom);
+                r >= 0;
+                r = engine.nextCell(this.id, c, r + 1, bottom)
+            ) {
+                yield { r, c };
+            }
+        }
+    }
+
+    // The used range: the styled part joined with the last row and column that hold a value or a formula, -1 for
+    // none. A cell that holds only a link or a mark shows nothing, so it is not counted.
+    public extent(): { lastRow: number; lastColumn: number } {
+        const { engine } = this.book;
+        const styled = this.parts.bands.extent();
+        return {
+            lastRow: Math.max(styled.lastRow, engine.lastRow(this.id)),
+            lastColumn: Math.max(styled.lastColumn, engine.lastColumn(this.id)),
+        };
+    }
+
+    // A row's keys, with `filtered` while the sheet's filter leaves it out.
+    public row(row: number): Readonly<LineAttrs & { filtered?: 1 }> {
+        const attrs = this.parts.rows.at(row);
+        for (const { rows: spans } of this.book.records.records(this.id, 'filterColumn').values()) {
+            // The first span that ends at the row or past it holds the row when it starts there or before.
+            let low = 0;
+            let high = spans.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (spans[middle][1] < row) low = middle + 1;
+                else high = middle;
+            }
+            if (low < spans.length && spans[low][0] <= row) return { ...attrs, filtered: 1 };
+        }
+        return attrs;
+    }
+
+    public column(column: number): Readonly<LineAttrs> {
+        return this.parts.columns.at(column);
+    }
+
+    // The runs of lines that hold a key, ascending.
+    public lines(axis: 'rows' | 'columns'): readonly (readonly [Span, Readonly<LineAttrs>])[] {
+        return this.parts[axis].content();
+    }
+
+    public merge(row: number, column: number): Rect | undefined {
+        return this.book.records.merge(this.id, row, column);
+    }
+
+    public touchesMerge(rect: Rect): boolean {
+        return this.book.records.touchesMerge(this.id, rect);
+    }
+
+    public mergesIn(rect: Rect): readonly Rect[] {
+        return this.book.records.mergesIn(this.id, rect);
+    }
+
+    public records<T extends Exclude<RecordType, 'sheet'>>(type: T): ReadonlyMap<string, Readonly<Records[T]>> {
+        return this.book.records.records(this.id, type);
+    }
+
+    public validation(row: number, column: number): Readonly<ValidationRecord> | undefined {
+        return this.book.records.validation(this.id, row, column);
+    }
+
+    // The ids of the cell's comments, in order.
+    public comments(row: number, column: number): readonly string[] {
+        return this.book.records.comments(this.id, row, column);
+    }
+}

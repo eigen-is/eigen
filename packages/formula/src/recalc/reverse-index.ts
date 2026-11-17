@@ -1,259 +1,208 @@
-// The reverse index of a workbook: which formulas read a cell. `Recalc` rebuilds it whole from the shape planes when
-// a formula came or went, and has it mark: flag every formula that reads a written cell or a formula flagged here.
-// Cells of one shape in a block share their entries, about one per reference, each listed under the aligned blocks
-// of columns that tile the columns it reads, sorted by row, so a lookup tests rows only. A marking writes scratch
-// into `entries` and `lists`, the rows a range flagged and the listings it is done with, and puts it back at its end.
+// The reverse index of a workbook: which formulas read a cell, which a marking follows from the written cells, and
+// which blocks of formulas read a sheet, which the plan of an edit visits. It holds every sheet's blocks of cells of
+// one shape, each filed under what it reads, and per sheet that is read a `Listing` of about one entry per reference.
+// Nothing here is patched or holds the place of a sheet: once a sheet is forgotten or reshaped its blocks are found
+// again in its columns and filed again, and the listing of every sheet they read or did read is built again whole.
 
+import { sheetOf } from '../edit/leaves';
 import { Fact } from '../eval/facts';
-import type { Column } from '../store/column';
-import { SETTLED } from '../store/column';
 import type { Sheet } from '../store/sheet';
 import type { Workbook } from '../store/workbook';
 import { GRID_COLUMNS, GRID_ROWS } from '../text/a1';
+import type { FormulaNode } from '../text/tree';
 import { RefFlag, RefKind, SheetKind } from '../text/tree';
+import { flag, Listing, RANGE } from './listing';
 
-// An entry is twelve numbers: its hosts, the two ends of the reference along the rows and along the columns,
-// which of the four move with a host, and for a range the host rows it flagged in the marking that is running.
-const HOST_SHEET = 0;
-const HOST_TOP = 1;
-const HOST_BOTTOM = 2;
-const HOST_LEFT = 3;
-const HOST_RIGHT = 4;
-const ROW_ENDS = 5;
-const COLUMN_ENDS = 7;
-const MOVES = 9;
-const FLAGGED = 10;
-// One past the last of those rows, and -1 while the entry flagged none.
-const FLAGGED_END = 11;
-// Beside the four bits of `MOVES`: the reference is a range.
-const RANGE = 16;
+// What a block reads: a sheet, by its id, or what no reference names, by the fact of its shape that says so.
+type Key = string | number;
 
-// The widest block is the whole grid.
-const LEVELS = Math.log2(GRID_COLUMNS) + 1;
+// What the listing of one sheet is made of: the sheets of the hosts, the entries, and what each entry reads of the
+// sheet: first and last row, first and last column, and where the entry starts.
+type Listed = { readonly hosts: Sheet[]; readonly entries: number[]; readonly areas: number[] };
 
-// A listing is four numbers: the rows its entry reads, and the largest last row among the listings of the stretch
-// it is the middle of whose entry may still have a host to flag.
-const TOP = 0;
-const BOTTOM = 1;
-const REACH = 2;
-const ENTRY = 3;
+// One sheet's blocks, and per thing they read where the blocks that read it start.
+type Held = { readonly blocks: readonly number[]; readonly filed: ReadonlyMap<Key, readonly number[]> };
+
+// What a block reads whose shape names a sheet by a name no sheet has, or a span of sheets: the tabs themselves, as
+// a sheet that comes, goes, moves or gets another name can change what it reads.
+export const TABS = 0;
+
+// The facts of a shape that say it reads what no reference names.
+const FACTS = [Fact.ReadsUnnamed, Fact.Resolves, Fact.Clock];
 
 export class ReverseIndex {
-    private entries = new Int32Array(0);
-    // Per sheet that is read, its listings: block by block, the narrowest blocks first, sorted by first row in each.
-    private lists: Int32Array[] = [];
-    // Per sheet, where the listings of each block start, with one more at the end, and per width of block in use
-    // four numbers: the power of two, its first and last block in use, and where its first block sits in `starts`.
-    private starts: Int32Array[] = [];
-    private levels: number[][] = [];
-    // The rectangles whose shape reads cells its references do not name: sheet, first and last column and row.
-    private unnamed: number[] = [];
-    // Every block of cells of one shape, as the last rebuild found them: sheet, first and last column, first and
-    // last row, and shape.
-    public rectangles: readonly number[] = [];
     // The spans a marking has still to follow: sheet, column, first and last row.
-    private work: number[] = [];
-    // What a marking wrote here and puts back before it returns: the sheet, place and old value of each `REACH`
-    // it lowered, and the entries that hold flagged rows.
-    private readonly lowered: number[] = [];
-    private readonly recorded: number[] = [];
+    private readonly work: number[] = [];
+    // Per sheet that is read, by its id, whether a sheet has it or not: what the references of the shapes read of
+    // it, and what the formulas resolved into it when they were last computed.
+    private readonly named = new Map<string, Listing>();
+    private recorded = new Map<string, Listing>();
+    // Per sheet, its blocks as they were last found in its columns, in the order of their first column: first and
+    // last column, first and last row, and shape. And per thing they read, where the blocks that read it start.
+    private readonly held = new WeakMap<Sheet, Held>();
+    // Per thing read, the sheets with a block that reads it.
+    private readonly readers = new Map<Key, Set<Sheet>>();
+    // The sheets whose formulas changed since the last rebuild, and whether they came, went or moved: else they
+    // only got another shape where they are.
+    private readonly changed = new Map<Sheet, boolean>();
+    // Per shape, how many blocks hold it.
+    private readonly holders: number[] = [];
 
-    // The facts of every shape a cell holds are to be worked out.
-    public rebuild(workbook: Workbook): void {
-        const { sheets, shapes } = workbook;
+    public get stale(): boolean {
+        return this.changed.size > 0;
+    }
+
+    // Formulas of a sheet came, went or moved, or the sheet did: the next rebuild reads all its columns.
+    public forget(sheet: Sheet): void {
+        this.changed.set(sheet, true);
+    }
+
+    // Formulas of a sheet got another shape where they are: the next rebuild reads the columns of its blocks.
+    public reshape(sheet: Sheet): void {
+        this.changed.set(sheet, this.changed.get(sheet) === true);
+    }
+
+    // Finds the blocks of the changed sheets in their columns, files them, and lists again who reads each sheet
+    // they read or did read. Then the shape table forgets the shapes no block holds, as a rewritten formula leaves.
+    public rebuild(workbook: Workbook, factsOf: (shape: number) => number): void {
+        const { shapes } = workbook;
+        const { holders, readers } = this;
+        while (holders.length <= shapes.size) holders.push(0);
+        // The table is asked which shapes no block holds when it gave out an id, or a sheet that held formulas changed.
+        let unheld = shapes.added;
+        const relist = new Set<string>();
+        // Per sheet to list again, what its listing is made of, which the changed sheets enter first.
+        const lists = new Map<string, Listed>();
+        for (const [sheet, whole] of this.changed) {
+            const had = this.held.get(sheet);
+            const old = had?.blocks ?? [];
+            if (old.length > 0) unheld = true;
+            for (let b = 4; b < old.length; b += 5) holders[old[b]] -= 1;
+            for (const key of had?.filed.keys() ?? []) {
+                readers.get(key)?.delete(sheet);
+                if (typeof key === 'string') relist.add(key);
+            }
+            // A sheet that is gone, or that an edit refused to add, holds no block.
+            if (workbook.sheet(sheet.id) !== sheet) {
+                this.held.delete(sheet);
+                continue;
+            }
+            const blocks = this.found(sheet, whole ? undefined : had?.blocks);
+            for (let b = 4; b < blocks.length; b += 5) holders[blocks[b]] += 1;
+            const filed = this.filed(sheet, blocks, workbook, factsOf, lists);
+            this.held.set(sheet, { blocks, filed });
+            for (const key of filed.keys()) {
+                const hosts = readers.get(key);
+                if (hosts === undefined) readers.set(key, new Set([sheet]));
+                else hosts.add(sheet);
+                if (typeof key === 'string') relist.add(key);
+            }
+        }
+        for (const id of relist) {
+            const list = lists.get(id) ?? { hosts: [], entries: [], areas: [] };
+            for (const host of readers.get(id) ?? []) {
+                // A changed sheet entered what it reads as it was filed: here, a million blocks took 1.27× as long.
+                if (this.changed.has(host)) continue;
+                const { blocks = [], filed } = this.held.get(host) ?? {};
+                for (const b of filed?.get(id) ?? []) {
+                    if (shapes.facts[blocks[b + 4]] & Fact.Kept) continue;
+                    for (const ref of shapes.shape(blocks[b + 4]).refs) {
+                        if (sheetOf(ref, host.id) === id) this.enter(list, host, blocks, b, ref);
+                    }
+                }
+            }
+            if (readers.get(id)?.size === 0) readers.delete(id);
+            if (list.entries.length === 0) this.named.delete(id);
+            else this.named.set(id, new Listing(this.work, list.hosts, list.entries, list.areas));
+        }
+        this.changed.clear();
+        if (unheld) {
+            const held = new Uint8Array(shapes.size + 1);
+            for (let shape = 1; shape <= shapes.size; shape += 1) held[shape] = holders[shape] > 0 ? 1 : 0;
+            shapes.keep(held);
+        }
+    }
+
+    // The blocks of `sheets` and the blocks of any sheet that read one of `keys`, each once, in the order of the
+    // sheets and of their first column: the place of the sheet, first and last column, first and last row, and shape.
+    public reading(sheets: readonly Sheet[], keys: readonly Key[]): number[] {
+        // Per sheet, where the blocks start in its list, and for one of `sheets` nothing: all of them.
+        const found = new Map<Sheet, readonly number[] | undefined>();
+        for (const key of new Set(keys)) {
+            for (const host of this.readers.get(key) ?? []) {
+                const starts = this.held.get(host)?.filed.get(key) ?? [];
+                const before = found.get(host);
+                found.set(host, before === undefined ? starts : [...before, ...starts].sort((a, b) => a - b));
+            }
+        }
+        for (const sheet of sheets) found.set(sheet, undefined);
         const rectangles: number[] = [];
-        for (let s = 0; s < sheets.length; s += 1) {
-            // The runs of the column before, from the top down: first row, last row, shape, and where in the list
-            // its rectangle starts. The two lists swap from column to column.
-            let open: number[] = [];
-            let runs: number[] = [];
-            let opened = 0;
-            for (let c = 0; c < sheets[s].columns.length; c += 1) {
-                const { shape, length } = sheets[s].columns[c];
-                let ran = 0;
-                let o = 0;
-                let row = 0;
-                while (row < length) {
-                    const id = shape[row];
-                    const first = row;
-                    row += 1;
-                    if (id === 0) continue;
-                    while (row < length && shape[row] === id) row += 1;
-                    while (o < opened && open[o] < first) o += 4;
-                    const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
-                    runs[ran] = first;
-                    runs[ran + 1] = row - 1;
-                    runs[ran + 2] = id;
-                    runs[ran + 3] = joins ? open[o + 3] : rectangles.length;
-                    ran += 4;
-                    if (joins) rectangles[open[o + 3] + 2] = c;
-                    else rectangles.push(s, c, c, first, row - 1, id);
-                }
-                const before = open;
-                open = runs;
-                runs = before;
-                opened = ran;
+        for (const host of [...found.keys()].sort((a, b) => a.place - b.place)) {
+            const blocks = this.held.get(host)?.blocks ?? [];
+            const starts = found.get(host);
+            const count = starts?.length ?? blocks.length / 5;
+            for (let i = 0, last = -1; i < count; i += 1) {
+                const b = starts === undefined ? i * 5 : starts[i];
+                if (b === last) continue;
+                last = b;
+                rectangles.push(host.place, blocks[b], blocks[b + 1], blocks[b + 2], blocks[b + 3], blocks[b + 4]);
             }
         }
-        this.rectangles = rectangles;
-        const entries: number[] = [];
-        // Per sheet, what each entry reads of it: first and last row, first and last column, and the entry.
-        const areas: number[][] = sheets.map(() => []);
-        this.unnamed = [];
-        for (let r = 0; r < rectangles.length; r += 6) {
-            const s = rectangles[r];
-            const id = rectangles[r + 5];
-            const facts = shapes.facts[id];
-            if (facts & Fact.Kept) continue;
-            if (facts & Fact.ReadsUnnamed) this.unnamed.push(...rectangles.slice(r, r + 5));
-            for (const ref of shapes.shape(id).refs) {
-                const { op, sheetKind, flags } = ref;
-                const target =
-                    sheetKind === SheetKind.Host
-                        ? s
-                        : sheetKind === SheetKind.Id
-                          ? workbook.sheet(ref.sheet)?.place
-                          : undefined;
-                if (target === undefined) continue;
-                // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
-                let { row, row2, column, column2 } = ref;
-                let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
-                let row2Step = flags & RefFlag.Row2Absolute ? 0 : 1;
-                let columnStep = flags & RefFlag.ColumnAbsolute ? 0 : 1;
-                let column2Step = flags & RefFlag.Column2Absolute ? 0 : 1;
-                if (op === RefKind.Cell) {
-                    row2 = row;
-                    row2Step = rowStep;
-                    column2 = column;
-                    column2Step = columnStep;
-                } else if (op === RefKind.Columns) {
-                    row = 0;
-                    row2 = GRID_ROWS - 1;
-                    rowStep = 0;
-                    row2Step = 0;
-                } else if (op === RefKind.Rows) {
-                    column = 0;
-                    column2 = GRID_COLUMNS - 1;
-                    columnStep = 0;
-                    column2Step = 0;
-                }
-                // A host at which the reference leaves the grid reads nothing.
-                const top = Math.max(rectangles[r + 3], -row * rowStep, -row2 * row2Step);
-                const bottom = Math.min(
-                    rectangles[r + 4],
-                    GRID_ROWS - 1 - row * rowStep,
-                    GRID_ROWS - 1 - row2 * row2Step,
-                );
-                const left = Math.max(rectangles[r + 1], -column * columnStep, -column2 * column2Step);
-                const right = Math.min(
-                    rectangles[r + 2],
-                    GRID_COLUMNS - 1 - column * columnStep,
-                    GRID_COLUMNS - 1 - column2 * column2Step,
-                );
-                if (top > bottom || left > right) continue;
-                const range = op === RefKind.Cell ? 0 : RANGE;
-                const moves = rowStep | (row2Step << 1) | (columnStep << 2) | (column2Step << 3) | range;
-                // A range whose columns move is an entry per host column, so that the hosts of every range entry
-                // read the same rows of the same columns, and one record of flagged rows holds for all of them.
-                const width = range !== 0 && (columnStep | column2Step) !== 0 ? 1 : right - left + 1;
-                for (let first = left; first <= right; first += width) {
-                    const last = first + width - 1;
-                    areas[target].push(
-                        Math.min(row + top * rowStep, row2 + top * row2Step),
-                        Math.max(row + bottom * rowStep, row2 + bottom * row2Step),
-                        Math.min(column + first * columnStep, column2 + first * column2Step),
-                        Math.max(column + last * columnStep, column2 + last * column2Step),
-                        entries.length,
-                    );
-                    entries.push(s, top, bottom, first, last, row, row2, column, column2, moves, 0, -1);
-                }
-            }
-        }
-        this.entries = new Int32Array(entries);
-        this.lists = [];
-        this.starts = [];
-        this.levels = [];
-        for (const read of areas) this.list(read);
+        return rectangles;
     }
 
-    // Lists what the entries read of one sheet.
-    private list(read: readonly number[]): void {
-        const count = read.length / 5;
-        // The first row and the place of each area in one number, so that a plain sort orders them by row.
-        const order = new Float64Array(count);
-        for (let i = 0; i < count; i += 1) order[i] = read[i * 5] * count + i;
-        order.sort();
-        // The blocks that tile the columns of each area, in that order: power of two, block and area.
-        const tiles: number[] = [];
-        // Per power of two, its first and last block in use.
-        const firsts = new Int32Array(LEVELS).fill(GRID_COLUMNS);
-        const lasts = new Int32Array(LEVELS).fill(-1);
-        for (let i = 0; i < count; i += 1) {
-            const area = (order[i] - Math.floor(order[i] / count) * count) * 5;
-            let low = read[area + 2];
-            let high = read[area + 3] + 1;
-            for (let level = 0; low < high; level += 1) {
-                // An odd end is a block of its own: its neighbor pairs with a column outside the area.
-                if (low & 1) {
-                    tiles.push(level, low, area);
-                    low += 1;
+    // Lists the boxes of the records: per column of a formula, as the place of its sheet times the columns of the
+    // grid plus its own, and per row, five numbers a box, the place of its sheet first.
+    public listRecords(
+        sheets: readonly Sheet[],
+        records: ReadonlyMap<number, ReadonlyMap<number, readonly number[]>>,
+    ): void {
+        // Per sheet that is read, by its place: the entries, and what each reads of it.
+        const read = new Map<number, [entries: number[], areas: number[]]>();
+        for (const [at, rows] of records) {
+            const s = Math.floor(at / GRID_COLUMNS);
+            const c = at % GRID_COLUMNS;
+            for (const [row, record] of rows) {
+                for (let a = 0; a < record.length; a += 5) {
+                    const top = record[a + 1];
+                    const left = record[a + 2];
+                    const bottom = record[a + 3];
+                    const right = record[a + 4];
+                    let lists = read.get(record[a]);
+                    if (lists === undefined) read.set(record[a], (lists = [[], []]));
+                    lists[1].push(top, bottom, left, right, lists[0].length);
+                    // As a range, so that a marking is done with the entry once its cell is flagged.
+                    lists[0].push(s, row, row, c, c, top, bottom, left, right, RANGE, 0, -1);
                 }
-                if (high & 1) {
-                    high -= 1;
-                    tiles.push(level, high, area);
-                }
-                low >>= 1;
-                high >>= 1;
             }
         }
-        for (let t = 0; t < tiles.length; t += 3) {
-            const level = tiles[t];
-            if (tiles[t + 1] < firsts[level]) firsts[level] = tiles[t + 1];
-            if (tiles[t + 1] > lasts[level]) lasts[level] = tiles[t + 1];
+        this.recorded = new Map();
+        for (const [place, [entries, areas]] of read) {
+            this.recorded.set(sheets[place].id, new Listing(this.work, sheets, entries, areas));
         }
-        const levels: number[] = [];
-        // Per power of two, where its block 0 would sit in `starts`.
-        const bases = new Int32Array(LEVELS);
-        let slots = 0;
-        for (let level = 0; level < LEVELS; level += 1) {
-            if (lasts[level] < 0) continue;
-            levels.push(level, firsts[level], lasts[level], slots);
-            bases[level] = slots - firsts[level];
-            slots += lasts[level] - firsts[level] + 1;
-        }
-        const starts = new Int32Array(slots + 1);
-        for (let t = 0; t < tiles.length; t += 3) starts[bases[tiles[t]] + tiles[t + 1] + 1] += 1;
-        for (let slot = 0; slot < slots; slot += 1) starts[slot + 1] += starts[slot];
-        const list = new Int32Array((tiles.length / 3) * 4);
-        const next = starts.slice();
-        // The tiles come in row order, so every block is filled in row order.
-        for (let t = 0; t < tiles.length; t += 3) {
-            const slot = bases[tiles[t]] + tiles[t + 1];
-            const at = next[slot] * 4;
-            next[slot] += 1;
-            list[at + TOP] = read[tiles[t + 2]];
-            list[at + BOTTOM] = read[tiles[t + 2] + 1];
-            list[at + ENTRY] = read[tiles[t + 2] + 4];
-        }
-        for (let slot = 0; slot < slots; slot += 1) reachOf(list, starts[slot], starts[slot + 1]);
-        this.lists.push(list);
-        this.starts.push(starts);
-        this.levels.push(levels);
     }
 
-    // Flags every formula that reads a seed or a formula flagged here, each once, and every formula that reads
-    // cells it does not name. A seed is a span of rows: sheet, column, first and last row.
-    public mark(workbook: Workbook, seeds: readonly number[]): void {
+    // Flags each once every formula that reads a seed, a span of rows (sheet, column, first and last row), or one it
+    // flagged, and every one that asks the workbook itself; with `resolving`, every one that works a reference out.
+    public mark(workbook: Workbook, seeds: readonly number[], resolving: boolean): void {
         const { sheets } = workbook;
-        const { unnamed, entries, lowered, recorded } = this;
-        this.work = seeds.slice();
         const { work } = this;
-        for (let i = 0; i < unnamed.length; i += 5) {
-            const { columns } = sheets[unnamed[i]];
-            for (let c = unnamed[i + 1]; c <= unnamed[i + 2]; c += 1) {
-                this.flag(unnamed[i], c, columns[c], unnamed[i + 3], unnamed[i + 4]);
+        for (const seed of seeds) work.push(seed);
+        for (const fact of resolving ? [Fact.ReadsUnnamed, Fact.Resolves] : [Fact.ReadsUnnamed]) {
+            for (const host of this.readers.get(fact) ?? []) {
+                const { blocks = [], filed } = this.held.get(host) ?? {};
+                for (const b of filed?.get(fact) ?? []) {
+                    for (let c = blocks[b]; c <= blocks[b + 1]; c += 1) {
+                        flag(work, host.place, c, host.columns[c], blocks[b + 2], blocks[b + 3]);
+                    }
+                }
             }
         }
+        // The listings of the sheet the last span lay on, which most spans share with the one before.
+        let on = -1;
+        let named: Listing | undefined;
+        let recorded: Listing | undefined;
+        const followed = new Set<Listing>();
         while (work.length > 0) {
             const span = work.length - 4;
             const sheet = work[span];
@@ -261,133 +210,169 @@ export class ReverseIndex {
             const from = work[span + 2];
             const to = work[span + 3];
             work.length = span;
-            const starts = this.starts[sheet];
-            const levels = this.levels[sheet];
-            for (let l = 0; l < levels.length; l += 4) {
-                const block = column >> levels[l];
-                if (block < levels[l + 1] || block > levels[l + 2]) continue;
-                const slot = levels[l + 3] + block - levels[l + 1];
-                if (starts[slot] < starts[slot + 1]) {
-                    this.search(sheets, sheet, starts[slot], starts[slot + 1], column, from, to);
+            if (sheet !== on) {
+                on = sheet;
+                named = this.named.get(sheets[sheet].id);
+                recorded = this.recorded.get(sheets[sheet].id);
+                if (named !== undefined) followed.add(named);
+                if (recorded !== undefined) followed.add(recorded);
+            }
+            named?.follow(column, from, to);
+            recorded?.follow(column, from, to);
+        }
+        for (const listing of followed) listing.restore();
+    }
+
+    // The blocks of a sheet as its columns hold them, only in the columns of `kept` when its formulas only got another
+    // shape. A method though called once: inline, the million-row pair insert took 6.7 ms against 4.4.
+    private found(sheet: Sheet, kept: readonly number[] | undefined): number[] {
+        const blocks: number[] = [];
+        const { columns } = sheet;
+        // Of the blocks whose columns are read, the first one that reaches the column or lies past it.
+        let h = 0;
+        // The runs of the column before, from the top down: first row, last row, shape, and where in the
+        // list its block starts. The two lists swap from column to column.
+        let open: number[] = [];
+        let runs: number[] = [];
+        let opened = 0;
+        for (let c = 0; c < columns.length; c += 1) {
+            if (kept !== undefined) {
+                while (h < kept.length && kept[h + 1] < c) h += 5;
+                if (h === kept.length) break;
+                // The columns up to that block hold no formula, so no run of them goes on.
+                if (kept[h] > c) {
+                    c = kept[h];
+                    opened = 0;
                 }
             }
+            const { shape, length } = columns[c];
+            let ran = 0;
+            let o = 0;
+            let row = 0;
+            while (row < length) {
+                const id = shape[row];
+                const first = row;
+                row += 1;
+                if (id === 0) continue;
+                while (row < length && shape[row] === id) row += 1;
+                while (o < opened && open[o] < first) o += 4;
+                const joins = o < opened && open[o] === first && open[o + 1] === row - 1 && open[o + 2] === id;
+                runs[ran] = first;
+                runs[ran + 1] = row - 1;
+                runs[ran + 2] = id;
+                runs[ran + 3] = joins ? open[o + 3] : blocks.length;
+                ran += 4;
+                if (joins) blocks[open[o + 3] + 1] = c;
+                else blocks.push(c, c, first, row - 1, id);
+            }
+            const before = open;
+            open = runs;
+            runs = before;
+            opened = ran;
         }
-        for (let i = lowered.length - 3; i >= 0; i -= 3) this.lists[lowered[i]][lowered[i + 1]] = lowered[i + 2];
-        for (const entry of recorded) entries[entry + FLAGGED_END] = -1;
-        lowered.length = 0;
-        recorded.length = 0;
+        return blocks;
     }
 
-    // Flags the hosts of the listings from `low` up to `high` of one sheet that read a span, and gives the largest
-    // last row among those whose entry may still have a host to flag.
-    private search(
-        sheets: readonly Sheet[],
-        sheet: number,
-        low: number,
-        high: number,
-        column: number,
-        from: number,
-        to: number,
-    ): number {
-        const list = this.lists[sheet];
-        const middle = (low + high) >> 1;
-        const at = middle * 4;
-        const reach = list[at + REACH];
-        if (reach < from) return reach;
-        const before = low < middle ? this.search(sheets, sheet, low, middle, column, from, to) : -1;
-        // The listings after this one start lower still.
-        if (list[at + TOP] > to) return reach;
-        let own = list[at + BOTTOM];
-        if (own >= from) {
-            const { entries } = this;
-            const entry = list[at + ENTRY];
-            const moves = entries[entry + MOVES];
-            const host = entries[entry + HOST_SHEET];
-            const top = Math.max(entries[entry + HOST_TOP], firstHost(from, entries, entry + ROW_ENDS, moves));
-            const bottom = Math.min(entries[entry + HOST_BOTTOM], lastHost(to, entries, entry + ROW_ENDS, moves));
-            const left = Math.max(
-                entries[entry + HOST_LEFT],
-                firstHost(column, entries, entry + COLUMN_ENDS, moves >> 2),
-            );
-            const right = Math.min(
-                entries[entry + HOST_RIGHT],
-                lastHost(column, entries, entry + COLUMN_ENDS, moves >> 2),
-            );
-            const flagged = entries[entry + FLAGGED];
-            const end = entries[entry + FLAGGED_END];
-            // Rows the entry flagged in this marking are flagged in every host column, so only the rows on
-            // either side of them are scanned. Rows apart from them start the record again.
-            const apart = (moves & RANGE) === 0 || top > end || bottom + 1 < flagged;
-            for (let c = left; c <= right; c += 1) {
-                const held = sheets[host].columns[c];
-                if (apart) this.flag(host, c, held, top, bottom);
-                else {
-                    this.flag(host, c, held, top, flagged - 1);
-                    this.flag(host, c, held, end, bottom);
+    // The blocks of a sheet under each thing they read, as where they start in its list, and what each reference reads
+    // entered in the list of the sheet it reads. A method though called once, as `found` is and for the same speed.
+    private filed(
+        sheet: Sheet,
+        blocks: readonly number[],
+        { shapes }: Workbook,
+        factsOf: (shape: number) => number,
+        lists: Map<string, Listed>,
+    ): Map<Key, number[]> {
+        const filed = new Map<Key, number[]>();
+        // Most blocks of a sheet read what the block before read, its own sheet.
+        let last: Key = TABS;
+        let starts: number[] = [];
+        const file = (key: Key, b: number) => {
+            if (key !== last || starts.length === 0) {
+                last = key;
+                starts = filed.get(key) ?? [];
+                filed.set(key, starts);
+            }
+            if (starts[starts.length - 1] !== b) starts.push(b);
+        };
+        for (let b = 0; b < blocks.length; b += 5) {
+            const facts = factsOf(blocks[b + 4]);
+            const { refs, namesSheet } = shapes.shape(blocks[b + 4]);
+            // A formula this build cannot evaluate is computed by no pass, but an edit rewrites it like any.
+            for (const fact of FACTS) if ((facts & (fact | Fact.Kept)) === fact) file(fact, b);
+            if (namesSheet) file(TABS, b);
+            for (const ref of refs) {
+                const read = sheetOf(ref, sheet.id);
+                if (read === null) {
+                    if (ref.sheetKind === SheetKind.Span) file(TABS, b);
+                    continue;
                 }
-            }
-            if (moves & RANGE && top <= bottom) {
-                if (end < 0) this.recorded.push(entry);
-                entries[entry + FLAGGED] = apart ? top : Math.min(top, flagged);
-                entries[entry + FLAGGED_END] = apart ? bottom + 1 : Math.max(bottom + 1, end);
-                const all =
-                    entries[entry + FLAGGED] <= entries[entry + HOST_TOP] &&
-                    entries[entry + FLAGGED_END] > entries[entry + HOST_BOTTOM];
-                if (all) own = -1;
+                file(read, b);
+                if (facts & Fact.Kept) continue;
+                let list = lists.get(read);
+                if (list === undefined) lists.set(read, (list = { hosts: [], entries: [], areas: [] }));
+                this.enter(list, sheet, blocks, b, ref);
             }
         }
-        const after = middle + 1 < high ? this.search(sheets, sheet, middle + 1, high, column, from, to) : -1;
-        const live = Math.max(before, own, after);
-        if (live < reach) {
-            this.lowered.push(sheet, at + REACH, reach);
-            list[at + REACH] = live;
-        }
-        return live;
+        return filed;
     }
 
-    // Flags the formulas of some rows of one column that are not flagged yet, and adds each run of them to the work.
-    private flag(sheet: number, column: number, held: Column, top: number, bottom: number): void {
-        const { work } = this;
-        const { kind } = held;
-        let first = -1;
-        // One row past the last closes a run that goes on to the end.
-        for (let row = top; row <= bottom + 1; row += 1) {
-            if (row <= bottom && kind[row] <= SETTLED) {
-                held.markDirty(row);
-                if (first < 0) first = row;
-            } else if (first >= 0) {
-                const last = work.length - 4;
-                // A run that goes on where the span on top ends is one span with it.
-                if (last >= 0 && work[last] === sheet && work[last + 1] === column && work[last + 3] === first - 1) {
-                    work[last + 3] = row - 1;
-                } else work.push(sheet, column, first, row - 1);
-                first = -1;
-            }
+    // Enters what one reference of a block reads into the list of the sheet it reads: about one entry.
+    private enter(
+        { hosts, entries, areas }: Listed,
+        host: Sheet,
+        blocks: readonly number[],
+        b: number,
+        ref: FormulaNode,
+    ): void {
+        if (hosts[hosts.length - 1] !== host) hosts.push(host);
+        // Each end as where it sits for a host at 0 and how far it moves with the host, 0 or 1.
+        let { row, row2, column, column2 } = ref;
+        const { op, flags } = ref;
+        let rowStep = flags & RefFlag.RowAbsolute ? 0 : 1;
+        let row2Step = flags & RefFlag.Row2Absolute ? 0 : 1;
+        let columnStep = flags & RefFlag.ColumnAbsolute ? 0 : 1;
+        let column2Step = flags & RefFlag.Column2Absolute ? 0 : 1;
+        if (op === RefKind.Cell) {
+            row2 = row;
+            row2Step = rowStep;
+            column2 = column;
+            column2Step = columnStep;
+        } else if (op === RefKind.Columns) {
+            row = 0;
+            row2 = GRID_ROWS - 1;
+            rowStep = 0;
+            row2Step = 0;
+        } else if (op === RefKind.Rows) {
+            column = 0;
+            column2 = GRID_COLUMNS - 1;
+            columnStep = 0;
+            column2Step = 0;
+        }
+        // A host at which the reference leaves the grid reads nothing.
+        const top = Math.max(blocks[b + 2], -row * rowStep, -row2 * row2Step);
+        const bottom = Math.min(blocks[b + 3], GRID_ROWS - 1 - row * rowStep, GRID_ROWS - 1 - row2 * row2Step);
+        const left = Math.max(blocks[b], -column * columnStep, -column2 * column2Step);
+        const right = Math.min(
+            blocks[b + 1],
+            GRID_COLUMNS - 1 - column * columnStep,
+            GRID_COLUMNS - 1 - column2 * column2Step,
+        );
+        if (top > bottom || left > right) return;
+        const range = op === RefKind.Cell ? 0 : RANGE;
+        const moves = rowStep | (row2Step << 1) | (columnStep << 2) | (column2Step << 3) | range;
+        // A range whose columns move is an entry per host column: so the hosts of a range entry read the same rows of
+        // the same columns, and one record of flagged rows holds for them all.
+        const width = range !== 0 && (columnStep | column2Step) !== 0 ? 1 : right - left + 1;
+        for (let first = left; first <= right; first += width) {
+            const last = first + width - 1;
+            areas.push(
+                Math.min(row + top * rowStep, row2 + top * row2Step),
+                Math.max(row + bottom * rowStep, row2 + bottom * row2Step),
+                Math.min(column + first * columnStep, column2 + first * column2Step),
+                Math.max(column + last * columnStep, column2 + last * column2Step),
+                entries.length,
+            );
+            entries.push(hosts.length - 1, top, bottom, first, last, row, row2, column, column2, moves, 0, -1);
         }
     }
-}
-
-// Stores at the middle listing of every stretch from `low` up to `high` the largest last row in the stretch.
-function reachOf(list: Int32Array, low: number, high: number): number {
-    if (low >= high) return -1;
-    const middle = (low + high) >> 1;
-    const reach = Math.max(reachOf(list, low, middle), list[middle * 4 + BOTTOM], reachOf(list, middle + 1, high));
-    list[middle * 4 + REACH] = reach;
-    return reach;
-}
-
-// Along one axis, the first host whose reference reaches `from` or past it, which it does as soon as one of its
-// two ends does. The ends sit at `ends` in the entries, and the two low bits of `moves` say which move with the host.
-function firstHost(from: number, entries: Int32Array, ends: number, moves: number): number {
-    // An end that stays reaches it at every host, from 0 on, or at none: a place past the grid.
-    const first = moves & 1 ? from - entries[ends] : entries[ends] >= from ? 0 : GRID_ROWS;
-    const first2 = moves & 2 ? from - entries[ends + 1] : entries[ends + 1] >= from ? 0 : GRID_ROWS;
-    return Math.min(first, first2);
-}
-
-// The last host whose reference starts at `to` or before it.
-function lastHost(to: number, entries: Int32Array, ends: number, moves: number): number {
-    const last = moves & 1 ? to - entries[ends] : entries[ends] <= to ? GRID_ROWS : -1;
-    const last2 = moves & 2 ? to - entries[ends + 1] : entries[ends + 1] <= to ? GRID_ROWS : -1;
-    return Math.max(last, last2);
 }

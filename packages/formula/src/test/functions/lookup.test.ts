@@ -99,6 +99,13 @@ describe('MATCH', () => {
         expect(['A', 'B', 'C', 'D', 'G', 'H', 'I'].map((key) => of(`"${key}"`))).toEqual([NA, 6, 6, 7, 7, 8, 8]);
     });
 
+    test('the formulas of a row are computed before it is searched, and its last blanks take no part', () => {
+        const row = { F5: 2, G5: '=F5*2', H5: '="b"', I5: '=1/0', J5: '=""&""', K5: '=IF(F5>9,1,)' };
+        const of = (formula: string) => evaluate(formula, row, 'A1');
+        expect([of('=MATCH(4,F5:Z5,0)'), of('=MATCH("B",F5:Z5,0)'), of('=MATCH(9,F5:Z5,1)')]).toEqual([2, 3, 2]);
+        expect([of('=XMATCH(,F5:Z5)'), of('=XMATCH(,F5:Z5,0,-1)'), of('=XMATCH("",F5:J5,0,-1)')]).toEqual([6, 21, 5]);
+    });
+
     test('a descending search takes the first of equal keys and the last larger one', () => {
         const cells = { I1: 10, I2: 8, I3: 6, I4: 4, I5: 2 };
         expect([10, 9, 8, 7].map((key) => evaluate(`=MATCH(${key},I1:I5,-1)`, cells))).toEqual([1, 1, 2, 2]);

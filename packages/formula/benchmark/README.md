@@ -1,6 +1,6 @@
 # eigen|formula⟩ compared with HyperFormula, IronCalc and Univer
 
-This folder compares eigen|formula⟩, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's 524 functions. The numbers below come from one run on 2026-11-14. A script wrote them into `results.json`, a second drew the chart from that file, and a third wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
+This folder compares eigen|formula⟩, Eigen's formula engine (`@workspace/formula`), with three other formula engines that run in JavaScript: [HyperFormula](https://hyperformula.handsontable.com/), [IronCalc](https://www.ironcalc.com/) and [Univer](https://univer.ai/). IronCalc is written in Rust and runs as WebAssembly. Univer is a toolkit for office documents, and its formula engine is one of its parts. It measures three things, in this order of importance: speed, correctness and coverage. [formulajs](https://formulajs.info) is not compared: it is a library of functions, not an engine, so it reads no formula text, holds no cells and recalculates nothing; it implements 406 of Excel's 524 functions. The numbers below come from a run on 2026-11-17, apart from the speed and correctness figures it kept from earlier runs: those of HyperFormula, IronCalc and Univer from the run on 2026-11-14. A script wrote them into `results.json`, a second drew the chart from that file, and a third wrote this README from that file and from `notes.md`. Apart from that one count, no number here is typed by hand.
 
 ```sh
 cd packages/formula/benchmark
@@ -24,7 +24,7 @@ A run with `--engines ours` measures speed on both runtimes and correctness for 
 
 ## The results in three lines
 
-- Speed on Bun: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.40× to 1,060× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than IronCalc in 17 of the 17 workloads both ran, where IronCalc took from 3.0× to 4,865× of our time. eigen|formula⟩ was faster than Univer in 17 of the 17 workloads both ran, where Univer took from 15× to 14,320× of our time.
+- Speed on Bun: eigen|formula⟩ was faster than HyperFormula in 16 of the 17 workloads both ran, where HyperFormula took from 0.72× to 899× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents. eigen|formula⟩ was faster than IronCalc in 17 of the 17 workloads both ran, where IronCalc took from 2.8× to 3,459× of our time. eigen|formula⟩ was faster than Univer in 17 of the 17 workloads both ran, where Univer took from 13× to 11,108× of our time.
 - Correctness: of 17,584 answers recorded in Excel, eigen|formula⟩ gave Excel's answer on 92.0%, HyperFormula on 55.4%, IronCalc on 74.3% and Univer on 82.6%.
 - Coverage: of Excel's 524 functions, eigen|formula⟩ has 219, HyperFormula 384, IronCalc 492 and Univer 495.
 
@@ -36,22 +36,22 @@ Each bar is an engine's median time on one workload divided by ours, on a log sc
 
 | | workload | eigen\|formula⟩ | HyperFormula | IronCalc | Univer |
 |---|---|---:|---:|---:|---:|
-| T1 | load and compute 300,000 formulas | 1.0× | 5.7× | 8.9× | 34× |
-| T2 | edit a cell with 3 dependents | 1.0× | 0.90× | 913× | 13,788× |
-| T3 | edit a cell read by 100,000 formulas | 1.0× | 14× | 4.7× | 1,077× at 1/10 size |
-| T4 | load a chain of 100,000 formulas | 1.0× | 5.8× | 8.1× | 64× |
-| T5 | edit the start of a chain of 100,000 | 1.0× | 13× | 3.0× | 284× |
-| T6 | 200 sums of 90,000 cells each | 1.0× | 82× | 20× | 138× |
-| T7 | running total down 20,000 rows | 1.0× | 0.40× | 12× | 105× at 1/10 size |
-| T8 | exact VLOOKUP, 2,000 over 100,000 rows | 1.0× | 690× | 3,274× | 382× at 1/10 size |
-| T9 | approximate VLOOKUP, 2,000 over 100,000 rows | 1.0× | 714× | 635× | 15× |
-| T10 | exact MATCH, 2,000 over 100,000 rows | 1.0× | 390× | 495× | 69× |
-| T11 | approximate MATCH, 2,000 over 100,000 rows | 1.0× | 392× | 477× | 689× at 1/10 size |
-| T12 | exact XLOOKUP, 2,000 over 100,000 rows | 1.0× | 1,060× | 3,078× | 4,071× |
-| T13 | SUMIFS, 200 over 100,000 rows | 1.0× | 113× | 43× | 77× |
-| T14 | COUNTIFS, 200 over 100,000 rows | 1.0× | 108× | 84× | 89× |
-| T15 | text functions on 100,000 rows | 1.0× | 3.1× | 4.9× | 16× |
-| T16 | insert a row near the top | 1.0× | 10× | 4,865× | 14,320× |
+| T1 | load and compute 300,000 formulas | 1.0× | 5.3× | 8.3× | 32× |
+| T2 | edit a cell with 3 dependents | 1.0× | 0.72× | 736× | 11,108× |
+| T3 | edit a cell read by 100,000 formulas | 1.0× | 12× | 4.2× | 1,082× at 1/10 size |
+| T4 | load a chain of 100,000 formulas | 1.0× | 5.5× | 7.6× | 60× |
+| T5 | edit the start of a chain of 100,000 | 1.0× | 12× | 2.8× | 260× |
+| T6 | 200 sums of 90,000 cells each | 1.0× | 76× | 18× | 128× |
+| T7 | running total down 20,000 rows | 1.0× | 6.8× | 211× | 226× at 1/10 size |
+| T8 | exact VLOOKUP, 2,000 over 100,000 rows | 1.0× | 611× | 2,896× | 346× at 1/10 size |
+| T9 | approximate VLOOKUP, 2,000 over 100,000 rows | 1.0× | 610× | 543× | 13× |
+| T10 | exact MATCH, 2,000 over 100,000 rows | 1.0× | 333× | 423× | 59× |
+| T11 | approximate MATCH, 2,000 over 100,000 rows | 1.0× | 332× | 404× | 644× at 1/10 size |
+| T12 | exact XLOOKUP, 2,000 over 100,000 rows | 1.0× | 899× | 2,611× | 3,453× |
+| T13 | SUMIFS, 200 over 100,000 rows | 1.0× | 108× | 41× | 74× |
+| T14 | COUNTIFS, 200 over 100,000 rows | 1.0× | 110× | 85× | 91× |
+| T15 | text functions on 100,000 rows | 1.0× | 2.8× | 4.5× | 15× |
+| T16 | insert a row near the top | 1.0× | 7.5× | 3,459× | 10,182× |
 | T17 | memory after loading 300,000 formulas | 1.0× | 16× | 24× | 51× |
 
 ## Words used in this README
@@ -107,116 +107,114 @@ The workloads:
 
 ### On Bun
 
-Bun 1.4.4: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 4.90 5.40 4.15 when the run started, before it waited for a quiet machine, and 3.51 2.80 2.88 at its end; the highest 1-minute load seen after a kept run was 8.69, and 3 runs were taken again because the machine got busy during them. The run took 5,218 seconds.
+Bun 1.4.4: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 2.97 10.49 9.70 when the run started, before it waited for a quiet machine, and 3.52 8.32 8.95 at its end; the highest 1-minute load seen after a kept run was 3.94, and 3 runs were taken again because the machine got busy during them. The run took 121 seconds.
 
 | workload | eigen\|formula⟩ | HyperFormula | ratio | IronCalc | ratio | Univer | ratio |
 |---|---|---|---|---|---|---|---|
-| load and compute 300,000 formulas | 282.2 / 287.6 | 1,625 / 1,651 | 5.7× | 2,559 / 2,573 | 8.9× | 9,787 / 9,893 | 34× |
-| edit a cell with 3 dependents | 0.27 / 0.28 | 0.24 / 0.25 | 0.90× | 251.7 / 253.6 | 913× | 3,781 / 3,830 | 13,788× |
-| edit a cell read by 100,000 formulas | 10.3 / 10.9 | 149.8 / 151.9 | 14× | 48.7 / 51.5 | 4.7× | too slow: one run took 274 s; see the row at a tenth of the size |  |
-| load a chain of 100,000 formulas | 48.9 / 49.3 | 280.5 / 287.0 | 5.8× | 394.8 / 397.6 | 8.1× | 3,133 / 3,147 | 64× |
-| edit the start of a chain of 100,000 | 10.8 / 10.8 | 139.6 / 140.6 | 13× | 31.9 / 32.7 | 3.0× | 3,026 / 3,061 | 284× |
-| 200 sums of 90,000 cells each | 34.3 / 36.1 | 2,933 / 2,946 | 82× | 703.6 / 705.5 | 20× | 4,951 / 4,972 | 138× |
-| running total down 20,000 rows | 295.4 / 295.6 | 114.4 / 117.7 | 0.40× | 3,670 / 3,674 | 12× | too slow: one run took 150 s; see the row at a tenth of the size |  |
-| exact VLOOKUP, 2,000 over 100,000 rows | 19.9 / 20.3 | 13,842 / 13,981 | 690× | 65,905 / 66,313 | 3,274× | too slow: one run took 172 s; see the row at a tenth of the size |  |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 19.3 / 19.5 | 13,834 / 13,946 | 714× | 12,250 / 12,412 | 635× | 286.0 / 287.8 | 15× |
-| exact MATCH, 2,000 over 100,000 rows | 18.7 / 19.4 | 7,508 / 7,567 | 390× | 9,575 / 9,613 | 495× | 1,332 / 1,340 | 69× |
-| approximate MATCH, 2,000 over 100,000 rows | 18.9 / 19.2 | 7,447 / 7,548 | 392× | 9,099 / 9,184 | 477× | too slow: one run took 276 s; see the row at a tenth of the size |  |
-| exact XLOOKUP, 2,000 over 100,000 rows | 19.6 / 20.1 | 21,200 / 21,290 | 1,060× | 61,606 / 61,837 | 3,078× | 81,633 / 81,779 | 4,071× |
-| SUMIFS, 200 over 100,000 rows | 61.5 / 61.6 | 6,944 / 6,967 | 113× | 2,619 / 2,650 | 43× | 4,725 / 4,764 | 77× |
-| COUNTIFS, 200 over 100,000 rows | 50.6 / 53.0 | 5,681 / 5,721 | 108× | 4,437 / 4,464 | 84× | 4,481 / 4,729 | 89× |
-| text functions on 100,000 rows | 391.4 / 392.3 | 1,190 / 1,212 | 3.1× | 1,879 / 1,906 | 4.9× | 6,248 / 6,337 | 16× |
-| insert a row near the top | 0.79 / 0.99 | 9.92 / 10.4 | 10× | 4,827 / 4,841 | 4,865× | 14,042 / 14,248 | 14,320× |
+| load and compute 300,000 formulas | 306.7 / 311.3 | 1,625 / 1,651 | 5.3× | 2,559 / 2,573 | 8.3× | 9,787 / 9,893 | 32× |
+| edit a cell with 3 dependents | 0.34 / 0.34 | 0.24 / 0.25 | 0.72× | 251.7 / 253.6 | 736× | 3,781 / 3,830 | 11,108× |
+| edit a cell read by 100,000 formulas | 12.0 / 12.3 | 149.8 / 151.9 | 12× | 48.7 / 51.5 | 4.2× | too slow: one run took 274 s; see the row at a tenth of the size |  |
+| load a chain of 100,000 formulas | 52.2 / 52.6 | 280.5 / 287.0 | 5.5× | 394.8 / 397.6 | 7.6× | 3,133 / 3,147 | 60× |
+| edit the start of a chain of 100,000 | 11.6 / 11.8 | 139.6 / 140.6 | 12× | 31.9 / 32.7 | 2.8× | 3,026 / 3,061 | 260× |
+| 200 sums of 90,000 cells each | 37.7 / 39.0 | 2,933 / 2,946 | 76× | 703.6 / 705.5 | 18× | 4,951 / 4,972 | 128× |
+| running total down 20,000 rows | 16.9 / 17.4 | 114.4 / 117.7 | 6.8× | 3,670 / 3,674 | 211× | too slow: one run took 150 s; see the row at a tenth of the size |  |
+| exact VLOOKUP, 2,000 over 100,000 rows | 22.4 / 22.9 | 13,842 / 13,981 | 611× | 65,905 / 66,313 | 2,896× | too slow: one run took 172 s; see the row at a tenth of the size |  |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 22.2 / 22.9 | 13,834 / 13,946 | 610× | 12,250 / 12,412 | 543× | 286.0 / 287.8 | 13× |
+| exact MATCH, 2,000 over 100,000 rows | 21.8 / 22.7 | 7,508 / 7,567 | 333× | 9,575 / 9,613 | 423× | 1,332 / 1,340 | 59× |
+| approximate MATCH, 2,000 over 100,000 rows | 22.3 / 22.7 | 7,447 / 7,548 | 332× | 9,099 / 9,184 | 404× | too slow: one run took 276 s; see the row at a tenth of the size |  |
+| exact XLOOKUP, 2,000 over 100,000 rows | 22.6 / 23.7 | 21,200 / 21,290 | 899× | 61,606 / 61,837 | 2,611× | 81,633 / 81,779 | 3,453× |
+| SUMIFS, 200 over 100,000 rows | 64.5 / 64.7 | 6,944 / 6,967 | 108× | 2,619 / 2,650 | 41× | 4,725 / 4,764 | 74× |
+| COUNTIFS, 200 over 100,000 rows | 51.8 / 52.2 | 5,681 / 5,721 | 110× | 4,437 / 4,464 | 85× | 4,481 / 4,729 | 91× |
+| text functions on 100,000 rows | 413.7 / 425.9 | 1,190 / 1,212 | 2.8× | 1,879 / 1,906 | 4.5× | 6,248 / 6,337 | 15× |
+| insert a row near the top | 1.33 / 1.40 | 9.92 / 10.4 | 7.5× | 4,827 / 4,841 | 3,459× | 14,042 / 14,248 | 10,182× |
 | memory after loading 300,000 formulas | 9.7 MB | 152.6 MB | 16× | 229.0 MB | 24× | 491.6 MB | 51× |
-| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 1.16 / 1.26 | not run at this size |  | not run at this size |  | 1,348 / 1,354 | 1,077× |
-| running total down 2,000 rows, a tenth of the size for Univer | 5.04 / 5.05 | not run at this size |  | not run at this size |  | 526.9 / 531.6 | 105× |
-| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 4.47 / 4.57 | not run at this size |  | not run at this size |  | 1,734 / 1,742 | 382× |
-| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 2.42 / 4.23 | not run at this size |  | not run at this size |  | 2,914 / 2,915 | 689× |
+| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 1.24 / 1.25 | not run at this size |  | not run at this size |  | 1,348 / 1,354 | 1,082× |
+| running total down 2,000 rows, a tenth of the size for Univer | 2.33 / 2.35 | not run at this size |  | not run at this size |  | 526.9 / 531.6 | 226× |
+| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 4.75 / 5.04 | not run at this size |  | not run at this size |  | 1,734 / 1,742 | 346× |
+| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 4.30 / 4.53 | not run at this size |  | not run at this size |  | 2,914 / 2,915 | 644× |
 
 Where the time goes on Bun:
 
 | workload | eigen\|formula⟩ | HyperFormula | IronCalc | Univer |
 |---|---|---|---|---|
-| load and compute 300,000 formulas | 249.8 of 287.6 | 1,651 of 1,651 | 2,311 of 2,573 | 243.0 of 9,893 |
-| edit a cell with 3 dependents | 0.02 of 0.28 | 0.25 of 0.25 | 0.09 of 253.6 | 2.15 of 3,830 |
-| edit a cell read by 100,000 formulas | 0.01 of 10.9 | 151.9 of 151.9 | 0.03 of 51.5 | too slow |
-| load a chain of 100,000 formulas | 42.2 of 49.3 | 287.0 of 287.0 | 360.1 of 397.6 | 156.0 of 3,147 |
-| edit the start of a chain of 100,000 | 0.01 of 10.8 | 140.6 of 140.6 | 0.04 of 32.7 | 0.39 of 3,061 |
-| 200 sums of 90,000 cells each | 10.4 of 36.1 | 2,946 of 2,946 | 140.7 of 705.5 | 105.6 of 4,972 |
-| running total down 20,000 rows | 12.2 of 295.6 | 117.7 of 117.7 | 99.1 of 3,674 | too slow |
-| exact VLOOKUP, 2,000 over 100,000 rows | 14.1 of 20.3 | 13,981 of 13,981 | 311.7 of 66,313 | too slow |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 17.3 of 19.5 | 13,946 of 13,946 | 312.2 of 12,412 | 102.4 of 287.8 |
-| exact MATCH, 2,000 over 100,000 rows | 14.1 of 19.4 | 7,567 of 7,567 | 290.0 of 9,613 | 117.9 of 1,340 |
-| approximate MATCH, 2,000 over 100,000 rows | 17.0 of 19.2 | 7,548 of 7,548 | 287.5 of 9,184 | too slow |
-| exact XLOOKUP, 2,000 over 100,000 rows | 14.1 of 20.1 | 21,290 of 21,290 | 313.3 of 61,837 | 123.0 of 81,779 |
-| SUMIFS, 200 over 100,000 rows | 29.5 of 61.6 | 6,967 of 6,967 | 429.4 of 2,650 | 127.2 of 4,764 |
-| COUNTIFS, 200 over 100,000 rows | 29.4 of 53.0 | 5,721 of 5,721 | 425.5 of 4,464 | 119.6 of 4,729 |
-| text functions on 100,000 rows | 262.8 of 392.3 | 1,212 of 1,212 | 1,697 of 1,906 | 186.6 of 6,337 |
-| insert a row near the top | 0.98 of 0.99 | 10.4 of 10.4 | 4,586 of 4,841 | 3,848 of 14,248 |
-| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 0.01 of 1.26 | not run | not run | 0.31 of 1,354 |
-| running total down 2,000 rows, a tenth of the size for Univer | 1.35 of 5.05 | not run | not run | 28.4 of 531.6 |
-| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 3.84 of 4.57 | not run | not run | 34.3 of 1,742 |
-| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 3.63 of 4.23 | not run | not run | 33.6 of 2,915 |
+| load and compute 300,000 formulas | 270.2 of 311.3 | 1,651 of 1,651 | 2,311 of 2,573 | 243.0 of 9,893 |
+| edit a cell with 3 dependents | 0.02 of 0.34 | 0.25 of 0.25 | 0.09 of 253.6 | 2.15 of 3,830 |
+| edit a cell read by 100,000 formulas | 0.02 of 12.3 | 151.9 of 151.9 | 0.03 of 51.5 | too slow |
+| load a chain of 100,000 formulas | 45.4 of 52.6 | 287.0 of 287.0 | 360.1 of 397.6 | 156.0 of 3,147 |
+| edit the start of a chain of 100,000 | 0.02 of 11.8 | 140.6 of 140.6 | 0.04 of 32.7 | 0.39 of 3,061 |
+| 200 sums of 90,000 cells each | 12.7 of 39.0 | 2,946 of 2,946 | 140.7 of 705.5 | 105.6 of 4,972 |
+| running total down 20,000 rows | 12.8 of 17.4 | 117.7 of 117.7 | 99.1 of 3,674 | too slow |
+| exact VLOOKUP, 2,000 over 100,000 rows | 17.3 of 22.9 | 13,981 of 13,981 | 311.7 of 66,313 | too slow |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 20.6 of 22.9 | 13,946 of 13,946 | 312.2 of 12,412 | 102.4 of 287.8 |
+| exact MATCH, 2,000 over 100,000 rows | 17.3 of 22.7 | 7,567 of 7,567 | 290.0 of 9,613 | 117.9 of 1,340 |
+| approximate MATCH, 2,000 over 100,000 rows | 20.4 of 22.7 | 7,548 of 7,548 | 287.5 of 9,184 | too slow |
+| exact XLOOKUP, 2,000 over 100,000 rows | 17.2 of 23.7 | 21,290 of 21,290 | 313.3 of 61,837 | 123.0 of 81,779 |
+| SUMIFS, 200 over 100,000 rows | 31.9 of 64.7 | 6,967 of 6,967 | 429.4 of 2,650 | 127.2 of 4,764 |
+| COUNTIFS, 200 over 100,000 rows | 29.0 of 52.2 | 5,721 of 5,721 | 425.5 of 4,464 | 119.6 of 4,729 |
+| text functions on 100,000 rows | 270.2 of 425.9 | 1,212 of 1,212 | 1,697 of 1,906 | 186.6 of 6,337 |
+| insert a row near the top | 0.70 of 1.40 | 10.4 of 10.4 | 4,586 of 4,841 | 3,848 of 14,248 |
+| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 0.00 of 1.25 | not run | not run | 0.31 of 1,354 |
+| running total down 2,000 rows, a tenth of the size for Univer | 1.41 of 2.35 | not run | not run | 28.4 of 531.6 |
+| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 4.26 of 5.04 | not run | not run | 34.3 of 1,742 |
+| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 3.95 of 4.53 | not run | not run | 33.6 of 2,915 |
 
 ### On Node
 
-Node v24.15.0: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 3.51 2.80 2.88 when the run started, before it waited for a quiet machine, and 2.49 2.68 2.69 at its end; the highest 1-minute load seen after a kept run was 5.40, and 0 runs were taken again because the machine got busy during them. The run took 6,743 seconds.
+Node v24.15.0: 5 rounds, at most 3 runs in each process. The load averages over 1, 5 and 15 minutes were 3.52 8.32 8.95 when the run started, before it waited for a quiet machine, and 2.89 6.13 7.92 at its end; the highest 1-minute load seen after a kept run was 3.85, and 4 runs were taken again because the machine got busy during them. The run took 179 seconds.
 
 | workload | eigen\|formula⟩ | HyperFormula | ratio | IronCalc | ratio | Univer | ratio |
 |---|---|---|---|---|---|---|---|
-| load and compute 300,000 formulas | 425.3 / 430.7 | 2,403 / 2,424 | 5.6× | 8,460 / 8,706 | 20× | 16,905 / 17,009 | 39× |
-| edit a cell with 3 dependents | 0.40 / 0.40 | 0.20 / 0.21 | 0.51× | 322.7 / 323.5 | 802× | 6,766 / 6,809 | 16,876× |
-| edit a cell read by 100,000 formulas | 13.4 / 13.5 | 124.1 / 127.1 | 9.4× | 59.5 / 61.1 | 4.5× | too slow: one run took 352 s; see the row at a tenth of the size |  |
-| load a chain of 100,000 formulas | 53.0 / 57.2 | 363.0 / 365.0 | 6.4× | 456.3 / 493.2 | 8.6× | 4,872 / 4,904 | 86× |
-| edit the start of a chain of 100,000 | 15.8 / 16.4 | 88.3 / 89.5 | 5.5× | 40.9 / 41.2 | 2.5× | 4,739 / 4,765 | 291× |
-| 200 sums of 90,000 cells each | 43.4 / 49.1 | 2,823 / 2,858 | 58× | 865.8 / 876.7 | 18× | 13,822 / 13,917 | 284× |
-| running total down 20,000 rows | 363.8 / 365.1 | 178.0 / 179.3 | 0.49× | 5,744 / 5,746 | 16× | failed: 40: 0x1042eabb4 node::Start(int, char**) [/Users/reinder/.nvm/versions/node/v24.15.0/bin/node] 41: 0x1844f0d7c start [/usr/lib/dyld] |  |
-| exact VLOOKUP, 2,000 over 100,000 rows | 26.3 / 27.0 | 17,082 / 17,109 | 634× | 90,570 / 91,872 | 3,402× | too slow: one run took 175 s; see the row at a tenth of the size |  |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 19.6 / 23.7 | 17,352 / 17,694 | 746× | 15,437 / 15,579 | 657× | 379.9 / 386.3 | 16× |
-| exact MATCH, 2,000 over 100,000 rows | 23.7 / 25.7 | 8,524 / 9,807 | 382× | 15,896 / 15,929 | 621× | 1,457 / 1,468 | 57× |
-| approximate MATCH, 2,000 over 100,000 rows | 18.9 / 19.8 | 8,498 / 8,689 | 438× | 15,453 / 15,767 | 795× | too slow: one run took 285 s; see the row at a tenth of the size |  |
-| exact XLOOKUP, 2,000 over 100,000 rows | 25.3 / 26.1 | 39,953 / 40,247 | 1,544× | 91,526 / 92,232 | 3,538× | 79,849 / 79,967 | 3,067× |
-| SUMIFS, 200 over 100,000 rows | 72.4 / 73.6 | 12,227 / 12,956 | 176× | 3,035 / 3,042 | 41× | 9,364 / 9,678 | 131× |
-| COUNTIFS, 200 over 100,000 rows | 65.1 / 67.2 | 9,789 / 9,937 | 148× | 6,217 / 6,238 | 93× | 8,829 / 8,931 | 133× |
-| text functions on 100,000 rows | 535.2 / 548.8 | 2,292 / 2,313 | 4.2× | 3,760 / 3,874 | 7.1× | 12,510 / 12,593 | 23× |
-| insert a row near the top | 0.78 / 0.91 | 16.0 / 16.4 | 18× | 6,358 / 6,363 | 6,997× | 34,867 / 38,671 | 42,521× |
-| memory after loading 300,000 formulas | 9.1 MB | 219.4 MB | 24× | 225.4 MB | 25× | 514.4 MB | 56× |
-| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 1.42 / 1.43 | not run at this size |  | not run at this size |  | 2,552 / 2,573 | 1,802× |
-| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 5.90 / 6.38 | not run at this size |  | not run at this size |  | 1,772 / 1,824 | 286× |
-| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 6.44 / 6.62 | not run at this size |  | not run at this size |  | 3,055 / 3,058 | 462× |
+| load and compute 300,000 formulas | 427.4 / 434.1 | 2,403 / 2,424 | 5.6× | 8,460 / 8,706 | 20× | 16,905 / 17,009 | 39× |
+| edit a cell with 3 dependents | 0.42 / 0.44 | 0.20 / 0.21 | 0.47× | 322.7 / 323.5 | 736× | 6,766 / 6,809 | 15,488× |
+| edit a cell read by 100,000 formulas | 14.9 / 15.2 | 124.1 / 127.1 | 8.4× | 59.5 / 61.1 | 4.0× | too slow: one run took 352 s; see the row at a tenth of the size |  |
+| load a chain of 100,000 formulas | 57.7 / 62.8 | 363.0 / 365.0 | 5.8× | 456.3 / 493.2 | 7.9× | 4,872 / 4,904 | 78× |
+| edit the start of a chain of 100,000 | 15.8 / 16.2 | 88.3 / 89.5 | 5.5× | 40.9 / 41.2 | 2.5× | 4,739 / 4,765 | 295× |
+| 200 sums of 90,000 cells each | 43.7 / 49.4 | 2,823 / 2,858 | 58× | 865.8 / 876.7 | 18× | 13,822 / 13,917 | 282× |
+| running total down 20,000 rows | 25.2 / 26.6 | 178.0 / 179.3 | 6.7× | 5,744 / 5,746 | 216× | failed: 40: 0x1042eabb4 node::Start(int, char**) [/Users/reinder/.nvm/versions/node/v24.15.0/bin/node] 41: 0x1844f0d7c start [/usr/lib/dyld] |  |
+| exact VLOOKUP, 2,000 over 100,000 rows | 28.7 / 29.8 | 17,082 / 17,109 | 575× | 90,570 / 91,872 | 3,085× | too slow: one run took 175 s; see the row at a tenth of the size |  |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 23.4 / 27.9 | 17,352 / 17,694 | 635× | 15,437 / 15,579 | 559× | 379.9 / 386.3 | 14× |
+| exact MATCH, 2,000 over 100,000 rows | 28.1 / 31.1 | 8,524 / 9,807 | 316× | 15,896 / 15,929 | 513× | 1,457 / 1,468 | 47× |
+| approximate MATCH, 2,000 over 100,000 rows | 22.9 / 27.2 | 8,498 / 8,689 | 320× | 15,453 / 15,767 | 580× | too slow: one run took 285 s; see the row at a tenth of the size |  |
+| exact XLOOKUP, 2,000 over 100,000 rows | 29.1 / 31.9 | 39,953 / 40,247 | 1,260× | 91,526 / 92,232 | 2,888× | 79,849 / 79,967 | 2,504× |
+| SUMIFS, 200 over 100,000 rows | 79.3 / 81.1 | 12,227 / 12,956 | 160× | 3,035 / 3,042 | 38× | 9,364 / 9,678 | 119× |
+| COUNTIFS, 200 over 100,000 rows | 72.0 / 75.3 | 9,789 / 9,937 | 132× | 6,217 / 6,238 | 83× | 8,829 / 8,931 | 119× |
+| text functions on 100,000 rows | 611.6 / 611.8 | 2,292 / 2,313 | 3.8× | 3,760 / 3,874 | 6.3× | 12,510 / 12,593 | 21× |
+| insert a row near the top | 1.62 / 1.86 | 16.0 / 16.4 | 8.8× | 6,358 / 6,363 | 3,422× | 34,867 / 38,671 | 20,793× |
+| memory after loading 300,000 formulas | 9.2 MB | 219.4 MB | 24× | 225.4 MB | 25× | 514.4 MB | 56× |
+| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 1.55 / 1.59 | not run at this size |  | not run at this size |  | 2,552 / 2,573 | 1,618× |
+| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 5.65 / 6.42 | not run at this size |  | not run at this size |  | 1,772 / 1,824 | 284× |
+| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 6.71 / 6.97 | not run at this size |  | not run at this size |  | 3,055 / 3,058 | 439× |
 
 Where the time goes on Node:
 
 | workload | eigen\|formula⟩ | HyperFormula | IronCalc | Univer |
 |---|---|---|---|---|
-| load and compute 300,000 formulas | 369.4 of 430.7 | 2,424 of 2,424 | 8,223 of 8,706 | 253.6 of 17,009 |
-| edit a cell with 3 dependents | 0.02 of 0.40 | 0.20 of 0.21 | 0.08 of 323.5 | 2.01 of 6,809 |
-| edit a cell read by 100,000 formulas | 0.02 of 13.5 | 127.0 of 127.1 | 0.05 of 61.1 | too slow |
-| load a chain of 100,000 formulas | 44.6 of 57.2 | 365.0 of 365.0 | 407.3 of 493.2 | 153.2 of 4,904 |
-| edit the start of a chain of 100,000 | 0.01 of 16.4 | 89.5 of 89.5 | 0.05 of 41.2 | 0.34 of 4,765 |
-| 200 sums of 90,000 cells each | 17.4 of 49.1 | 2,858 of 2,858 | 171.8 of 876.7 | 112.8 of 13,917 |
-| running total down 20,000 rows | 15.9 of 365.1 | 179.3 of 179.3 | 122.5 of 5,746 | failed |
-| exact VLOOKUP, 2,000 over 100,000 rows | 18.0 of 27.0 | 17,109 of 17,109 | 303.7 of 91,872 | too slow |
-| approximate VLOOKUP, 2,000 over 100,000 rows | 21.0 of 23.7 | 17,694 of 17,694 | 304.4 of 15,579 | 115.4 of 386.3 |
-| exact MATCH, 2,000 over 100,000 rows | 17.5 of 25.7 | 9,807 of 9,807 | 298.7 of 15,929 | 110.5 of 1,468 |
-| approximate MATCH, 2,000 over 100,000 rows | 17.6 of 19.8 | 8,689 of 8,689 | 302.3 of 15,767 | too slow |
-| exact XLOOKUP, 2,000 over 100,000 rows | 17.4 of 26.1 | 40,247 of 40,247 | 302.0 of 92,232 | 130.1 of 79,967 |
-| SUMIFS, 200 over 100,000 rows | 27.4 of 73.6 | 12,956 of 12,956 | 696.9 of 3,042 | 141.5 of 9,678 |
-| COUNTIFS, 200 over 100,000 rows | 27.5 of 67.2 | 9,937 of 9,937 | 689.3 of 6,238 | 135.7 of 8,931 |
-| text functions on 100,000 rows | 338.9 of 548.8 | 2,313 of 2,313 | 3,492 of 3,874 | 186.2 of 12,593 |
-| insert a row near the top | 0.90 of 0.91 | 16.4 of 16.4 | 6,035 of 6,363 | 21,279 of 38,671 |
-| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 0.01 of 1.43 | not run | not run | 0.34 of 2,573 |
-| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 4.89 of 6.38 | not run | not run | 45.4 of 1,824 |
-| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 5.60 of 6.62 | not run | not run | 39.6 of 3,058 |
+| load and compute 300,000 formulas | 371.4 of 434.1 | 2,424 of 2,424 | 8,223 of 8,706 | 253.6 of 17,009 |
+| edit a cell with 3 dependents | 0.02 of 0.44 | 0.20 of 0.21 | 0.08 of 323.5 | 2.01 of 6,809 |
+| edit a cell read by 100,000 formulas | 0.02 of 15.2 | 127.0 of 127.1 | 0.05 of 61.1 | too slow |
+| load a chain of 100,000 formulas | 50.5 of 62.8 | 365.0 of 365.0 | 407.3 of 493.2 | 153.2 of 4,904 |
+| edit the start of a chain of 100,000 | 0.02 of 16.2 | 89.5 of 89.5 | 0.05 of 41.2 | 0.34 of 4,765 |
+| 200 sums of 90,000 cells each | 16.1 of 49.4 | 2,858 of 2,858 | 171.8 of 876.7 | 112.8 of 13,917 |
+| running total down 20,000 rows | 18.8 of 26.6 | 179.3 of 179.3 | 122.5 of 5,746 | failed |
+| exact VLOOKUP, 2,000 over 100,000 rows | 21.0 of 29.8 | 17,109 of 17,109 | 303.7 of 91,872 | too slow |
+| approximate VLOOKUP, 2,000 over 100,000 rows | 25.1 of 27.9 | 17,694 of 17,694 | 304.4 of 15,579 | 115.4 of 386.3 |
+| exact MATCH, 2,000 over 100,000 rows | 20.3 of 31.1 | 9,807 of 9,807 | 298.7 of 15,929 | 110.5 of 1,468 |
+| approximate MATCH, 2,000 over 100,000 rows | 24.7 of 27.2 | 8,689 of 8,689 | 302.3 of 15,767 | too slow |
+| exact XLOOKUP, 2,000 over 100,000 rows | 20.7 of 31.9 | 40,247 of 40,247 | 302.0 of 92,232 | 130.1 of 79,967 |
+| SUMIFS, 200 over 100,000 rows | 34.4 of 81.1 | 12,956 of 12,956 | 696.9 of 3,042 | 141.5 of 9,678 |
+| COUNTIFS, 200 over 100,000 rows | 35.9 of 75.3 | 9,937 of 9,937 | 689.3 of 6,238 | 135.7 of 8,931 |
+| text functions on 100,000 rows | 372.4 of 611.8 | 2,313 of 2,313 | 3,492 of 3,874 | 186.2 of 12,593 |
+| insert a row near the top | 1.04 of 1.86 | 16.4 of 16.4 | 6,035 of 6,363 | 21,279 of 38,671 |
+| edit a cell read by 10,000 formulas, a tenth of the size for Univer | 0.01 of 1.59 | not run | not run | 0.34 of 2,573 |
+| exact VLOOKUP, 200 over 10,000 rows, a tenth of the size for Univer | 4.50 of 6.42 | not run | not run | 45.4 of 1,824 |
+| approximate MATCH, 200 over 10,000 rows, a tenth of the size for Univer | 6.09 of 6.97 | not run | not run | 39.6 of 3,058 |
 
-Speed on Node: eigen|formula⟩ was faster than HyperFormula in 15 of the 17 workloads both ran, where HyperFormula took from 0.49× to 1,544× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents; running total down 20,000 rows. eigen|formula⟩ was faster than IronCalc in 17 of the 17 workloads both ran, where IronCalc took from 2.5× to 6,997× of our time. eigen|formula⟩ was faster than Univer in 16 of the 16 workloads both ran, where Univer took from 16× to 42,521× of our time.
+Speed on Node: eigen|formula⟩ was faster than HyperFormula in 16 of the 17 workloads both ran, where HyperFormula took from 0.47× to 1,260× of our time; HyperFormula was as fast or faster in: edit a cell with 3 dependents. eigen|formula⟩ was faster than IronCalc in 17 of the 17 workloads both ran, where IronCalc took from 2.5× to 3,422× of our time. eigen|formula⟩ was faster than Univer in 16 of the 16 workloads both ran, where Univer took from 14× to 20,793× of our time.
 
 ### Where another engine was as fast or faster
 
-- Node, edit a cell with 3 dependents: HyperFormula took 0.51× of our time.
-- Node, running total down 20,000 rows: HyperFormula took 0.49× of our time.
-- Bun, edit a cell with 3 dependents: HyperFormula took 0.90× of our time.
-- Bun, running total down 20,000 rows: HyperFormula took 0.40× of our time.
+- Node, edit a cell with 3 dependents: HyperFormula took 0.47× of our time.
+- Bun, edit a cell with 3 dependents: HyperFormula took 0.72× of our time.
 
 ## Correctness
 
@@ -230,7 +228,7 @@ Our own deliberate differences from Excel count as "differs" for us too. Example
 
 | engine | rows judged | equal | differs | not supported | crashed | equal where it answered |
 |---|---|---|---|---|---|---|
-| eigen\|formula⟩ | 17,584 | 16,171 (92.0%) | 1,350 (7.7%) | 63 (0.4%) | 0 (0.0%) | 92.3% |
+| eigen\|formula⟩ | 17,584 | 16,172 (92.0%) | 1,349 (7.7%) | 63 (0.4%) | 0 (0.0%) | 92.3% |
 | HyperFormula | 17,584 | 9,743 (55.4%) | 3,515 (20.0%) | 4,138 (23.5%) | 188 (1.1%) | 73.5% |
 | IronCalc | 17,584 | 13,068 (74.3%) | 3,215 (18.3%) | 1,285 (7.3%) | 16 (0.1%) | 80.3% |
 | Univer | 17,584 | 14,529 (82.6%) | 2,957 (16.8%) | 66 (0.4%) | 32 (0.2%) | 83.1% |
@@ -322,7 +320,7 @@ Language features, each tested by running a probe formula and reading the answer
 | LAMBDA called in place | `=LAMBDA(x,x+1)(2)` | no (#NAME?) | no (#ERROR!) | yes (3) | yes (3) |
 | Whole-column reference | `=SUM(A:A)` | yes (6) | yes (6) | yes (6) | yes (6) |
 | Reference to another sheet | `=Sheet2!A1*2` | yes (20) | yes (20) | yes (20) | yes (20) |
-| 3-D reference across sheets | `=SUM(Sheet2:Sheet3!A1)` | no (blank) | no (#NAME?) | no (#VALUE!) | yes (15) |
+| 3-D reference across sheets | `=SUM(Sheet2:Sheet3!A1)` | no (#REF!) | no (#NAME?) | no (#VALUE!) | yes (15) |
 | A circular reference is reported as an error | `=B1 in A1, =A1 in B1` | yes (#REF!) | yes (#CYCLE!) | yes (#CIRC!) | no (0) |
 | A row insert rewrites the references | `=A1*2 in B5, insert a row above row 1, read B6` | yes (2) | yes (2) | yes (2) | yes (2) |
 | A column insert rewrites the references | `=A1*3 in D1, insert a column before A, read E1` | yes (3) | yes (3) | yes (3) | yes (3) |

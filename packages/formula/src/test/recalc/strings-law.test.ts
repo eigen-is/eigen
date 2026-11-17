@@ -127,7 +127,12 @@ function runLaw(seed: number, books: number, steps: number): Counts {
                 return pick(4) === 0 ? [row, column, null, formula(row, column)] : [row, column, value(), null];
             });
 
-        const engine = new Engine(sheets.map((sheet) => source(sheet, some(40))));
+        const engine = new Engine(
+            sheets.map((sheet) => source(sheet, some(40))),
+            0,
+            0,
+            false,
+        );
         for (const { id } of sheets) engine.fillFormula(id, 0, 3, ROWS - 1, 4, formula(0, 3, FAN));
         // What every cell reads, and with `typed` only the cells that hold no formula.
         const read = (from: Engine, typed: boolean): string[] => {
@@ -238,7 +243,7 @@ function runLaw(seed: number, books: number, steps: number): Counts {
                 }
                 return source(sheet, held);
             });
-            const fresh = new Engine(cells);
+            const fresh = new Engine(cells, 0, 0, false);
             fresh.recalc(NO_CAP);
             same('not what a fresh load computes', read(engine, false), read(fresh, false));
             counts.checks += 1;

@@ -1,9 +1,9 @@
 // One column of one sheet: four parallel typed arrays over its rows, holding each cell's value and, for a formula,
-// the id of its shape. A column ends at its last cell, grows by doubling, and counts its errors, its formulas
-// still to compute and its cells on a loop, so that a loop over it can skip the per-cell checks. The high bits of
-// `kind` are the recalc's own flags, which move with the cell when rows do.
+// the id of its shape. A column ends at its last cell, is loaded at exactly its rows and grows to an eighth more
+// than it needs, and counts its errors, its formulas still to compute and its cells on a loop, so that a loop over
+// it can skip the per-cell checks. The last two it counts for its sheet as well, so that a loop over the sheets
+// can skip a sheet. The high bits of `kind` are the recalc's own flags, which move with the cell when rows do.
 
-import { firstPushed } from '../edit/map';
 import { GRID_ROWS } from '../text/a1';
 import type { ColumnIndex } from './column-index';
 
@@ -16,6 +16,13 @@ export const LOOP = 32;
 export const SETTLED = 63;
 export const RUNNING = 64;
 export const DIRTY = 128;
+
+// The fewest and the most spare rows a column gets when it grows.
+const SLACK_MIN = 64;
+const SLACK_MAX = 65_536;
+
+// What a sheet counts over all its columns: the formulas still to compute and the cells on a loop.
+type Flagged = { pending: number; loops: number };
 
 export class Column {
     public kind: Uint8Array;
@@ -34,8 +41,10 @@ export class Column {
     public version = 0;
     // What exact lookups keep of the column, true for one version of it.
     public index: ColumnIndex | null = null;
+    private readonly sheet: Flagged;
 
-    public constructor(length: number) {
+    public constructor(length: number, sheet: Flagged) {
+        this.sheet = sheet;
         this.kind = new Uint8Array(length);
         this.num = new Float64Array(length);
         this.ref = new Int32Array(length);
@@ -45,8 +54,9 @@ export class Column {
 
     // Makes `row` a row of the column.
     public reach(row: number): void {
-        if (row >= this.kind.length) this.resize(Math.max(row + 1, this.kind.length * 2));
-        if (row >= this.length) this.length = row + 1;
+        if (row < this.length) return;
+        if (row >= this.kind.length) this.resize(capacityFor(row + 1));
+        this.length = row + 1;
     }
 
     // Writes a value and keeps the flags. False when the cell already held it.
@@ -78,6 +88,7 @@ export class Column {
         if (this.kind[row] > SETTLED) return;
         this.kind[row] |= DIRTY;
         this.pending += 1;
+        this.sheet.pending += 1;
     }
 
     // Says whether the cell is on a circular reference, and keeps the count of those cells.
@@ -86,12 +97,16 @@ export class Column {
         if (((kind & LOOP) !== 0) === loop) return;
         this.kind[row] = kind ^ LOOP;
         this.loops += loop ? 1 : -1;
+        this.sheet.loops += loop ? 1 : -1;
     }
 
-    // The cell holds no formula any more.
+    // The cell holds nothing to compute: no formula any more, or one that keeps the value it was given.
     public settle(row: number): void {
         this.setLoop(row, false);
-        if (this.kind[row] > SETTLED) this.pending -= 1;
+        if (this.kind[row] > SETTLED) {
+            this.pending -= 1;
+            this.sheet.pending -= 1;
+        }
         this.kind[row] &= KIND_MASK;
     }
 
@@ -99,34 +114,21 @@ export class Column {
     public computed(row: number): void {
         this.kind[row] &= KIND_MASK | LOOP;
         this.pending -= 1;
+        this.sheet.pending -= 1;
     }
 
-    // How many cells of the rows from `from` up to `to` hold a value or a formula.
-    public cells(from: number, to: number): number {
-        let cells = 0;
-        for (let row = from; row < Math.min(to, this.length); row += 1) {
-            if (this.kind[row] !== 0 || this.shape[row] !== 0) cells += 1;
-        }
-        return cells;
-    }
-
-    // Returns how many cells the new rows pushed past the last row of the grid, which are gone.
-    public insertRows(index: number, count: number): number {
-        if (index >= this.length) return 0;
-        const kept = Math.min(this.length, firstPushed(index, count, GRID_ROWS));
-        const dropped = this.cells(kept, this.length);
-        this.tally(kept, this.length, -1);
-        const length = kept > index ? kept + count : index;
-        if (length > this.kind.length) this.resize(Math.min(GRID_ROWS, Math.max(length, this.kind.length * 2)));
+    // The rows from `index` on go `count` rows down, and stay on the grid: an insert that would push a cell off
+    // it never reaches the store.
+    public insertRows(index: number, count: number): void {
+        if (index >= this.length) return;
+        const length = this.length + count;
+        if (length > this.kind.length) this.resize(capacityFor(length));
         for (const plane of [this.kind, this.num, this.ref, this.shape]) {
-            plane.copyWithin(index + count, index, kept);
-            plane.fill(0, index, Math.min(index + count, this.length));
-            plane.fill(0, length, this.length);
+            plane.copyWithin(index + count, index, this.length);
+            plane.fill(0, index, index + count);
         }
         this.length = length;
-        this.trim();
         this.version += 1;
-        return dropped;
     }
 
     public deleteRows(index: number, count: number): void {
@@ -169,8 +171,8 @@ export class Column {
         if (from >= end) return;
         this.tally(from, end, -1);
         for (const plane of [this.kind, this.num, this.ref, this.shape]) plane.fill(0, from, end);
-        this.trim();
         this.version += 1;
+        this.trim();
     }
 
     // Ends the column at its last cell that holds a value or a formula. Whoever empties a cell calls it, so what a
@@ -187,8 +189,14 @@ export class Column {
         for (let row = from; row < to; row += 1) {
             const kind = this.kind[row];
             if ((kind & KIND_MASK) === CellKind.Error) this.errors += by;
-            if (kind > SETTLED) this.pending += by;
-            if (kind & LOOP) this.loops += by;
+            if (kind > SETTLED) {
+                this.pending += by;
+                this.sheet.pending += by;
+            }
+            if (kind & LOOP) {
+                this.loops += by;
+                this.sheet.loops += by;
+            }
         }
     }
 
@@ -203,4 +211,10 @@ export class Column {
         this.ref.set(ref);
         this.shape.set(shape);
     }
+}
+
+// The rows to make room for in a column that grows to `length` rows: an eighth more, so that rows added one by one
+// seldom move it and one added row never doubles it.
+function capacityFor(length: number): number {
+    return Math.min(GRID_ROWS, length + Math.min(SLACK_MAX, Math.max(SLACK_MIN, length >> 3)));
 }

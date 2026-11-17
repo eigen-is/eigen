@@ -12,9 +12,13 @@ export type Reader = {
     readonly sheet: number;
     readonly column: number;
     readonly row: number;
+    // It asks the workbook itself, so every marking flags it.
     readonly unnamed: boolean;
-    // Sheet, first and last row, first and last column of each area.
-    readonly areas: readonly number[];
+    // It works a reference out as it runs, so a marking flags it when no record says what that was.
+    readonly resolves: boolean;
+    // Sheet, first and last row, first and last column of each area: those its references name, and those a law
+    // adds as the ones it resolved.
+    readonly areas: number[];
 };
 
 // The facts of every shape by its id, which the shape table is given too, as the index reads them there.
@@ -31,7 +35,9 @@ export function factsOf(workbook: Workbook): number[] {
 export const cellKey = (sheet: number, column: number, row: number) =>
     (sheet * GRID_COLUMNS + column) * GRID_ROWS + row;
 
-export function readersOf(workbook: Workbook, facts: readonly number[]): Reader[] {
+// With `boxed`, a formula that resolves has run, and resolved the box around its first reference and the first
+// cell of its second on one sheet, as `=SUM(a:INDEX(b,1,1))` does where both are on the grid.
+export function readersOf(workbook: Workbook, facts: readonly number[], boxed: boolean): Reader[] {
     const readers: Reader[] = [];
     const ids = workbook.sheets.map((sheet) => sheet.id);
     workbook.sheets.forEach((sheet, s) => {
@@ -40,7 +46,9 @@ export function readersOf(workbook: Workbook, facts: readonly number[]): Reader[
                 const id = cells.shape[row];
                 if (id === 0 || facts[id] & Fact.Kept) continue;
                 const areas: number[] = [];
-                for (const ref of workbook.shapes.shape(id).refs) {
+                const resolves = (facts[id] & Fact.Resolves) !== 0;
+                const { refs } = workbook.shapes.shape(id);
+                for (const ref of refs) {
                     const target =
                         ref.sheetKind === SheetKind.Host
                             ? s
@@ -67,7 +75,19 @@ export function readersOf(workbook: Workbook, facts: readonly number[]): Reader[
                     if (top < 0 || bottom >= GRID_ROWS || left < 0 || right >= GRID_COLUMNS) continue;
                     areas.push(target, top, bottom, left, right);
                 }
-                readers.push({ sheet: s, column, row, unnamed: (facts[id] & Fact.ReadsUnnamed) !== 0, areas });
+                if (boxed && resolves && areas.length === 10 && areas[0] === areas[5]) {
+                    const [sheet, top, bottom, left, right, , top2, , left2] = areas;
+                    areas.push(sheet, Math.min(top, top2), Math.max(bottom, top2));
+                    areas.push(Math.min(left, left2), Math.max(right, left2));
+                }
+                readers.push({
+                    sheet: s,
+                    column,
+                    row,
+                    unnamed: (facts[id] & Fact.ReadsUnnamed) !== 0,
+                    resolves,
+                    areas,
+                });
             }
         });
     });
@@ -86,16 +106,22 @@ export function pendingOf(workbook: Workbook): Set<number> {
     return pending;
 }
 
-// The formulas a marking flags: those that are not pending yet and read a seed span, a formula found here, or
-// cells they do not name. To be asked before the marking, since it reads which are pending.
-export function closure(workbook: Workbook, readers: readonly Reader[], seeds: readonly number[]): Set<number> {
+// The formulas a marking flags: those that are not pending yet and read a seed span or a formula found here, or
+// ask the workbook itself, and with `resolving` those that work a reference out. To be asked before the marking,
+// since it reads which are pending.
+export function closure(
+    workbook: Workbook,
+    readers: readonly Reader[],
+    seeds: readonly number[],
+    resolving: boolean,
+): Set<number> {
     const found = new Set<number>();
     const settled = readers.filter(
         ({ sheet, column, row }) => workbook.sheets[sheet].columns[column].kind[row] <= SETTLED,
     );
     const spans = seeds.slice();
     for (const reader of settled) {
-        if (!reader.unnamed) continue;
+        if (!reader.unnamed && !(resolving && reader.resolves)) continue;
         found.add(cellKey(reader.sheet, reader.column, reader.row));
         spans.push(reader.sheet, reader.column, reader.row, reader.row);
     }

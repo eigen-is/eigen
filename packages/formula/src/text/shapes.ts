@@ -4,8 +4,10 @@
 // no cell holds any more is forgotten when the holder of the cells says which are held, and its id is given out
 // again: so an id means one shape only for as long as a cell holds it.
 
+import type { SheetNamed } from '../edit/sheets';
+import { bindSheets, breakSheets } from '../edit/sheets';
 import { parseStored } from './parser';
-import { printStored } from './printer';
+import { printStored, storedKey } from './printer';
 import type { FormulaNode } from './tree';
 import { NodeKind, SheetKind } from './tree';
 
@@ -29,10 +31,16 @@ export class ShapeTable {
     // Per id, what the recalc worked out of the shape's tree and its functions, or -1 until it has. The list is
     // kept here because it is here that an id goes to another shape, which starts with nothing.
     public readonly facts: number[] = [-1];
+    // Whether an id was given out since the last `keep`: a shape no cell holds yet may wait in it.
+    private gave = false;
 
     // The highest id given out so far.
     public get size(): number {
         return this.shapes.length;
+    }
+
+    public get added(): boolean {
+        return this.gave;
     }
 
     // Ids start at 1: in a cell, 0 means no formula.
@@ -40,22 +48,40 @@ export class ShapeTable {
         return this.shapes[id - 1];
     }
 
-    public intern(text: string): number {
-        const known = this.ids.get(text);
-        if (known !== undefined) return known;
-        const parsed = parseStored(text);
-        return this.add(text, 'reason' in parsed ? null : parsed);
+    // The id of stored text as a host hands it, keyed by what its tree prints, so two spellings are one shape. Text
+    // that does not parse or whose key would not read back stays as handed, its tree too if it names no sheet by name.
+    public intern(text: string, named: SheetNamed): number {
+        let typed = this.ids.get(text);
+        if (typed === undefined) {
+            const parsed = parseStored(text);
+            if ('reason' in parsed) return this.add(text, null);
+            const key = storedKey(parsed);
+            if (typeof key !== 'string') return this.add(text, collect(parsed, []) ? null : parsed);
+            typed = this.keyed(key, parsed);
+        }
+        const { tree, namesSheet } = this.shapes[typed - 1];
+        if (tree === null || !namesSheet) return typed;
+        // What names a held sheet is the shape bound to it, or #REF! in its place where an id makes that too long:
+        // a name in quotes and the least that follows it are never shorter than #REF!, so that fits as the key did.
+        const bound = bindSheets(tree, named);
+        if (bound === tree) return typed;
+        const id = this.internTree(bound);
+        if (id !== 0) return id;
+        const broken = breakSheets(tree, named);
+        return this.keyed(printStored(broken), broken);
     }
 
-    // The id of a tree already parsed, such as a formula typed at a cell: its stored text is the key.
+    // The id of a tree already parsed, such as a formula an edit rewrote: its stored text is the key. 0, with
+    // nothing kept, for a tree whose stored text would not read back.
     public internTree(tree: FormulaNode): number {
-        const text = printStored(tree);
-        return this.ids.get(text) ?? this.add(text, tree);
+        const key = storedKey(tree);
+        return typeof key === 'string' ? this.keyed(key, tree) : 0;
     }
 
     // Forgets every shape whose id is not set in `held`, which says for each id up to `size` whether a cell holds
     // it. The id of a shape that stays does not change.
     public keep(held: Uint8Array): void {
+        this.gave = false;
         for (let id = 1; id <= this.shapes.length; id += 1) {
             const shape = this.shapes[id - 1];
             if (held[id] !== 0 || shape === FORGOTTEN) continue;
@@ -65,6 +91,10 @@ export class ShapeTable {
         }
     }
 
+    private keyed(key: string, tree: FormulaNode): number {
+        return this.ids.get(key) ?? this.add(key, tree);
+    }
+
     private add(text: string, tree: FormulaNode | null): number {
         const refs: FormulaNode[] = [];
         const namesSheet = tree !== null && collect(tree, refs);
@@ -72,6 +102,7 @@ export class ShapeTable {
         this.shapes[id - 1] = { text, tree, refs, namesSheet };
         this.facts[id] = -1;
         this.ids.set(text, id);
+        this.gave = true;
         return id;
     }
 }

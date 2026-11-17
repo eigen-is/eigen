@@ -17,7 +17,7 @@ function label(row: number, column: number): string {
 }
 
 function opened(cells: readonly TestCell[], other: readonly TestCell[] = []) {
-    const engine = new Engine([source('s', cells), source('t', other)]);
+    const engine = new Engine([source('s', cells), source('t', other)], 0, 0, true);
     // The formulas of the first sheet that a recalc computed again, in the order they were given.
     const computed = (): string[] => {
         expect(engine.recalc(NO_CAP).stopped).toBe(false);
@@ -61,7 +61,7 @@ const every = (column: string) => Array.from({ length: LINES }, (_, line) => `${
 
 describe('small rectangles under one tall reference', () => {
     test.each(READERS)('a first recalc computes every formula: %s', (_name, reader) => {
-        const engine = new Engine([source('s', ladder(LINES, reader, null, 1))]);
+        const engine = new Engine([source('s', ladder(LINES, reader, null, 1))], 0, 0, false);
         expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
         for (const line of [0, 1, 150, LINES - 1]) {
             expect([engine.valueOf('s', line * 2, 1), engine.valueOf('s', line * 2, 2)]).toEqual([
@@ -98,7 +98,7 @@ describe('small rectangles under one tall reference', () => {
     );
 
     test.each(READERS)('after writes every cell equals a fresh load: %s', (_name, reader) => {
-        const engine = new Engine([source('s', ladder(LINES, reader, null, 1))]);
+        const engine = new Engine([source('s', ladder(LINES, reader, null, 1))], 0, 0, false);
         engine.recalc(NO_CAP);
         engine.setValue('s', 0, 5, 9);
         for (let line = 0; line < LINES; line += 3) engine.setValue('s', line * 2, 0, line + 1000);
@@ -107,7 +107,7 @@ describe('small rectangles under one tall reference', () => {
             ([row, column, value, formula]): TestCell =>
                 column === 0 && (row / 2) % 3 === 0 ? [row, column, row / 2 + 1000] : [row, column, value, formula],
         );
-        const fresh = new Engine([source('s', cells)]);
+        const fresh = new Engine([source('s', cells)], 0, 0, false);
         fresh.recalc(NO_CAP);
         expect(shown(engine, LINES * 2, 6)).toEqual(shown(fresh, LINES * 2, 6));
     });
@@ -221,17 +221,22 @@ describe('formulas flagged one after another', () => {
 
 describe('formulas that came without a value', () => {
     test('a workbook that was never computed computes every formula, loops and unnamed cells included', () => {
-        const engine = new Engine([
-            source('s', [
-                [0, 0, 1],
-                [0, 1, null, '=RC[-1]+1'],
-                [1, 1, null, '=R[-1]C+[t]!R1C1'],
-                [2, 1, null, '=SUM(R1C1:INDEX(R1C1:R2C2,2,2))'],
-                [3, 1, null, '=R[1]C'],
-                [4, 1, null, '=R[-1]C'],
-            ]),
-            source('t', [[0, 0, null, '=[s]!R1C1*10']]),
-        ]);
+        const engine = new Engine(
+            [
+                source('s', [
+                    [0, 0, 1],
+                    [0, 1, null, '=RC[-1]+1'],
+                    [1, 1, null, '=R[-1]C+[t]!R1C1'],
+                    [2, 1, null, '=SUM(R1C1:INDEX(R1C1:R2C2,2,2))'],
+                    [3, 1, null, '=R[1]C'],
+                    [4, 1, null, '=R[-1]C'],
+                ]),
+                source('t', [[0, 0, null, '=[s]!R1C1*10']]),
+            ],
+            0,
+            0,
+            false,
+        );
         const result = engine.recalc(NO_CAP);
         expect(result.stopped).toBe(false);
         expect(result.loops.map(({ row }) => row)).toEqual([3, 4]);

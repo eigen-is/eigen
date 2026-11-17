@@ -51,6 +51,14 @@ describe('eigen-media codec', () => {
         expect(parseEigenMediaHref('eigen-media:a%7Fb')).toBeNull(); // DEL
     });
 
+    test('rejects the names of a folder and its parent, as a file name refuses them', () => {
+        expect(parseEigenMediaHref('eigen-media:.')).toBeNull();
+        expect(parseEigenMediaHref('eigen-media:..')).toBeNull();
+        expect(parseEigenMediaHref('eigen-media:%2E%2E')).toBeNull();
+        expect(parseEigenMediaHref('eigen-media:...')).toBe('...');
+        expect(parseEigenMediaHref('eigen-media:..png')).toBe('..png');
+    });
+
     test('parse returns null for non-refs, empty, and malformed encoding', () => {
         expect(parseEigenMediaHref('data:image/png;base64,AAA')).toBeNull();
         expect(parseEigenMediaHref('https://example.com/x.png')).toBeNull();

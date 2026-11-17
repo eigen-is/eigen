@@ -5,9 +5,9 @@ import { ColumnIndex } from '../../store/column-index';
 import type { Sheet } from '../../store/sheet';
 import { ChangeKind, Workbook } from '../../store/workbook';
 import type { Move } from '../../text';
-import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { DIV0 } from '../../values/errors';
 import { random } from '../edit/support';
+import { NO_SHEET } from '../text/support';
 
 type Held = { kind: number; num: number; ref: number; shape: number };
 
@@ -50,7 +50,7 @@ describe('a block moved in the store', () => {
         const pick = random(11);
         let zeroed = 0;
         for (let run = 0; run < 3000; run += 1) {
-            const workbook = new Workbook([source('a'), source('b')]);
+            const workbook = new Workbook([source('a'), source('b')], false);
             for (const sheet of workbook.sheets) {
                 for (let i = pick(14); i > 0; i -= 1) {
                     const row = pick(9);
@@ -58,7 +58,7 @@ describe('a block moved in the store', () => {
                     const what = pick(5);
                     if (what === 0) workbook.fillFormula(sheet, row, c, row, c, `=R1C1+${pick(3)}`);
                     else workbook.setValue(sheet, row, c, what === 1 ? DIV0 : what === 2 ? 'text' : pick(50));
-                    const column = sheet.column(c);
+                    const column = sheet.columns[c];
                     if (what === 0 && pick(2) === 0) column.computed(row);
                     if (what === 0 && pick(3) === 0) column.setLoop(row, true);
                 }
@@ -116,55 +116,19 @@ describe('a block moved in the store', () => {
         }
         expect(zeroed).toBeGreaterThan(500);
     });
-    test('a block that does not fit on the grid moves the part that does, and the rest is gone and counted', () => {
-        const workbook = new Workbook([source('a')]);
-        const [sheet] = workbook.sheets;
-        for (let row = 0; row < 4; row += 1) {
-            workbook.setValue(sheet, row, 0, row + 1);
-            workbook.setValue(sheet, row, 1, 10 * (row + 1));
-        }
-        workbook.fillFormula(sheet, 3, 2, 3, 2, '=R1C1');
-        workbook.setValue(sheet, 4, 0, 99);
-        const move = { fromSheet: 'a', row: 0, column: 0, rows: 4, columns: 3, toSheet: 'a' };
-        const last = GRID_ROWS - 1;
-        const far = GRID_COLUMNS - 1;
-        const dropped = workbook.apply(
-            { kind: ChangeKind.Move, move: { ...move, toRow: last - 1, toColumn: far - 1 } },
-            [],
-        );
-        // Rows 3 and 4 of the first two columns, and the one cell of the third.
-        expect(dropped).toBe(5);
-        expect(sheet.columns.slice(0, 3).map((column) => `${column.length} ${column.pending}`)).toEqual([
-            '5 0',
-            '0 0',
-            '0 0',
-        ]);
-        expect([workbook.value(sheet.columns[0], 4), workbook.value(sheet.columns[far - 1], last - 1)]).toEqual([
-            99, 1,
-        ]);
-        expect([workbook.value(sheet.columns[far], last - 1), workbook.value(sheet.columns[far], last)]).toEqual([
-            10, 20,
-        ]);
-        // Back over its own cells: the two rows that fit above the cells the block leaves, which are gone.
-        const back = { fromSheet: 'a', row: last - 1, column: far - 1, rows: 2, columns: 2, toSheet: 'a' };
-        expect(workbook.apply({ kind: ChangeKind.Move, move: { ...back, toRow: last, toColumn: far - 1 } }, [])).toBe(
-            2,
-        );
-        expect([workbook.value(sheet.columns[far - 1], last), workbook.value(sheet.columns[far], last)]).toEqual([
-            1, 10,
-        ]);
-        expect(workbook.value(sheet.columns[far], last - 1)).toBeNull();
-    });
     test('shapes are written where the cells are before they move, so they travel with them', () => {
-        const workbook = new Workbook([source('a')]);
+        const workbook = new Workbook([source('a')], false);
         const [sheet] = workbook.sheets;
         workbook.fillFormula(sheet, 2, 1, 4, 2, '=R1C1');
-        const other = workbook.shapes.intern('=R1C1+1');
-        const dropped = workbook.apply(
-            { kind: ChangeKind.Lines, edit: { insert: true, index: 3, count: 2, sheet: 'a', rows: true } },
-            [0, 1, 2, 3, 4, other],
-        );
-        expect(dropped).toBe(0);
+        const other = workbook.shapes.intern('=R1C1+1', NO_SHEET);
+        workbook.apply({ kind: ChangeKind.Lines, edit: { insert: true, index: 3, count: 2, sheet: 'a', rows: true } }, [
+            0,
+            1,
+            2,
+            3,
+            4,
+            other,
+        ]);
         expect([...sheet.columns[1].shape.slice(2, 7)]).toEqual([1, 0, 0, other, other]);
         expect([...sheet.columns[2].shape.slice(2, 7)]).toEqual([1, 0, 0, other, other]);
         expect(sheet.columns[1].pending).toBe(3);
@@ -173,7 +137,7 @@ describe('a block moved in the store', () => {
 
 describe('what lookups keep of a column across an edit', () => {
     test('columns that slide keep it, and a column whose rows moved or that a block left or landed on starts over', () => {
-        const workbook = new Workbook([source('a')]);
+        const workbook = new Workbook([source('a')], false);
         const [sheet] = workbook.sheets;
         for (let row = 0; row < 6; row += 1) workbook.setValue(sheet, row, 3, row % 3);
         workbook.setValue(sheet, 0, 5, 1);
@@ -226,13 +190,16 @@ describe('what lookups keep of a column across an edit', () => {
 
 describe('the sheets of a workbook', () => {
     test('come, go and change place, each knowing its place', () => {
-        const workbook = new Workbook([source('a'), source('b'), source('c')]);
+        const workbook = new Workbook([source('a'), source('b'), source('c')], false);
         const places = () => workbook.sheets.map((sheet) => `${sheet.id}${sheet.place}`).join(' ');
         workbook.apply({ kind: ChangeKind.MoveSheet, sheet: 'a', place: 2 }, []);
         expect(places()).toBe('b0 c1 a2');
         workbook.apply({ kind: ChangeKind.RemoveSheet, sheet: 'b' }, []);
         expect([places(), workbook.sheet('b')]).toEqual(['c0 a1', undefined]);
-        workbook.apply({ kind: ChangeKind.AddSheet, sheet: workbook.load(source('d')), place: 1 }, []);
+        workbook.apply(
+            { kind: ChangeKind.AddSheet, sheet: workbook.adopt(workbook.read(source('d'), false)), place: 1 },
+            [],
+        );
         workbook.apply({ kind: ChangeKind.RenameSheet, sheet: 'd', name: 'Dee' }, []);
         expect([places(), workbook.known('d').name]).toEqual(['c0 d1 a2', 'Dee']);
         expect(() => workbook.known('b')).toThrow('No sheet b');

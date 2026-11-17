@@ -1,15 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-import type { CellSink, Literal } from '../../index';
+import { FUNCTIONS } from '../../functions/library';
+import { fn } from '../../functions/registry';
+import type { CellSink, Literal, SheetSource } from '../../index';
 import { Engine, NA, REF } from '../../index';
+import { Recalc } from '../../recalc/recalc';
+import { Workbook } from '../../store/workbook';
 import { random } from '../store/support';
 import type { Cells } from './support';
-import { engineOf, stored, valueAt } from './support';
+import { at, engineOf, stored, valueAt } from './support';
 
 const NO_CAP = Number.POSITIVE_INFINITY;
 
 // One sheet whose cells are reported by `cells`, for workbooks too large to write out.
 function sheetOf(cells: (cell: CellSink) => void): Engine {
-    return new Engine([{ id: 's1', name: 'Sheet1', cells }]);
+    return new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, false);
 }
 
 function loopsOf(engine: Engine): string[] {
@@ -20,11 +24,12 @@ function loopsOf(engine: Engine): string[] {
 }
 
 describe('recalc', () => {
-    test('a loaded formula keeps its stored value until a write reaches it', () => {
-        const engine = sheetOf((cell) => {
+    test('a formula of a computed load keeps its stored value until a write reaches it', () => {
+        const cells = (cell: CellSink) => {
             cell(0, 0, 5, null);
             cell(0, 1, 99, '=RC[-1]*2');
-        });
+        };
+        const engine = new Engine([{ id: 's1', name: 'Sheet1', cells }], 0, 0, true);
         expect(engine.recalc(NO_CAP)).toMatchObject({ loops: [], stopped: false });
         expect(valueAt(engine, 'B1')).toBe(99);
         engine.setValue('s1', 0, 0, 6);
@@ -69,38 +74,120 @@ describe('recalc', () => {
             cell(1, 0, 43, stored('=SUM(Sheet1:Sheet2!A1)', 'A2'));
             cell(2, 0, null, stored('=[1]Sheet1!A1+1', 'A3'));
             cell(3, 0, 0, stored('=A1+A2+A3', 'A4'));
+            cell(4, 0, null, stored('=IFERROR(A3,"caught")', 'A5'));
         });
         engine.recalc(NO_CAP);
-        expect(['A1', 'A2', 'A3', 'A4'].map((label) => valueAt(engine, label))).toEqual([42, 43, null, 85]);
+        const values = ['A1', 'A2', 'A3', 'A4', 'A5'].map((label) => valueAt(engine, label));
+        expect(values).toEqual([42, 43, REF, REF, 'caught']);
+    });
+
+    test.each([
+        ['a reference across sheets', '=SUM(Sheet1:Sheet3!A1)'],
+        ['a reference into another workbook', '=[1]Sheet1!A1+1'],
+    ])('a formula this build cannot evaluate that has no value is #REF! at once: %s', (_, typed) => {
+        const text = stored(typed, 'A1');
+        const loaded = sheetOf((cell) => {
+            cell(0, 0, null, text);
+            cell(0, 1, null, '=RC[-1]+1');
+        });
+        const written = engineOf({ s1: { A1: 1, B1: '=A1+1', C1: 7 } });
+        written.recalc(NO_CAP);
+        written.setFormula('s1', 0, 0, text);
+        for (const engine of [loaded, written]) {
+            expect(engine.formulaOf('s1', 0, 0)).toBe(text);
+            expect([valueAt(engine, 'A1'), engine.isPending('s1', 0, 0)]).toEqual([REF, false]);
+            expect(engine.recalc(NO_CAP)).toEqual({ loops: [], stopped: false, changed: [0, 1, 0, 0] });
+            expect([valueAt(engine, 'A1'), valueAt(engine, 'B1')]).toEqual([REF, REF]);
+            expect([engine.isPending('s1', 0, 0), engine.isPending('s1', 0, 1)]).toEqual([false, false]);
+            expect(engine.recalc(NO_CAP).changed).toEqual([]);
+        }
+    });
+
+    test('a formula this build cannot evaluate keeps its value on an added sheet, and waits for no pass', () => {
+        const text = stored('=SUM(Sheet1:Sheet3!A1)', 'A1');
+        const engine = sheetOf((cell) => cell(0, 0, 42, text));
+        engine.addSheet({ id: 's2', name: 'Sheet2', cells: (cell) => cell(0, 0, 43, text) }, 1);
+        expect(engine.isPending('s2', 0, 0)).toBe(false);
+        expect(engine.recalc(NO_CAP).changed).toEqual([]);
+        expect([valueAt(engine, 'A1'), valueAt(engine, 'A1', 's2')]).toEqual([42, 43]);
+        expect(engine.isPending('s2', 0, 0)).toBe(false);
     });
 });
 
+// The workbook loaded again as computed, with every value a full recalc gave it, as a host loads what it stored.
+// `kept` is what the host made of a value while it held it.
+function reloaded(cells: Cells, kept = (value: Literal | null) => value): Engine {
+    const fresh = engineOf({ s1: cells });
+    fresh.recalc(NO_CAP);
+    const sheet: SheetSource = {
+        id: 's1',
+        name: 'Sheet1',
+        cells: (cell) => {
+            for (const [label, input] of Object.entries(cells)) {
+                const [row, column] = at(label);
+                const formula = typeof input === 'string' && input.startsWith('=') ? stored(input, label) : null;
+                cell(row, column, formula === null ? input : kept(fresh.valueOf('s1', row, column)), formula);
+            }
+        },
+    };
+    return new Engine([sheet], 0, 0, true);
+}
+
+const LOOPS: [string, Cells, string[], Readonly<Record<string, Literal>>][] = [
+    ['a cell that reads itself', { A1: '=A1' }, ['A1'], { A1: REF }],
+    ['two cells', { A1: '=B1', B1: '=A1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
+    ['a reader off the loop', { A1: '=B1', B1: '=A1', C1: '=A1+1' }, ['A1', 'B1'], { C1: REF }],
+    ['a range that holds the formula', { A1: '=SUM(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
+    ['a branch that is not taken', { A1: '=IF(TRUE,1,A1)' }, [], { A1: 1 }],
+    ['a branch that is taken', { A1: '=IF(B1,A1,2)', B1: true }, ['A1'], { A1: REF }],
+    ['a loop a formula would catch', { A1: '=IFERROR(B1,1)', B1: '=A1+1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
+    [
+        'two loops through one cell',
+        { A1: '=B1+C1', B1: '=A1', C1: '=A1', D1: '=IFERROR(A1,"off")' },
+        ['A1', 'B1', 'C1'],
+        { A1: REF, B1: REF, C1: REF, D1: 'off' },
+    ],
+    [
+        'a loop met through a cell that is not on it',
+        { A1: '=B1', B1: '=C1+1', C1: '=D1', D1: '=C1', E1: 5 },
+        ['C1', 'D1'],
+        { A1: REF, B1: REF, C1: REF, D1: REF },
+    ],
+    ['an array formula over itself', { A1: '=SUM(A1:A2*2)', A2: 1 }, ['A1'], { A1: REF }],
+    ['a range of three that holds the formula', { A1: '=SUMPRODUCT(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
+];
+
 describe('circular references', () => {
-    test.each<[string, Cells, string[], Readonly<Record<string, Literal>>]>([
-        ['a cell that reads itself', { A1: '=A1' }, ['A1'], { A1: REF }],
-        ['two cells', { A1: '=B1', B1: '=A1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
-        ['a reader off the loop', { A1: '=B1', B1: '=A1', C1: '=A1+1' }, ['A1', 'B1'], { C1: REF }],
-        ['a range that holds the formula', { A1: '=SUM(A1:A3)', A2: 1 }, ['A1'], { A1: REF }],
-        ['a branch that is not taken', { A1: '=IF(TRUE,1,A1)' }, [], { A1: 1 }],
-        ['a branch that is taken', { A1: '=IF(B1,A1,2)', B1: true }, ['A1'], { A1: REF }],
-        ['a loop a formula would catch', { A1: '=IFERROR(B1,1)', B1: '=A1+1' }, ['A1', 'B1'], { A1: REF, B1: REF }],
-        [
-            'two loops through one cell',
-            { A1: '=B1+C1', B1: '=A1', C1: '=A1', D1: '=IFERROR(A1,"off")' },
-            ['A1', 'B1', 'C1'],
-            { A1: REF, B1: REF, C1: REF, D1: 'off' },
-        ],
-        [
-            'a loop met through a cell that is not on it',
-            { A1: '=B1', B1: '=C1+1', C1: '=D1', D1: '=C1', E1: 5 },
-            ['C1', 'D1'],
-            { A1: REF, B1: REF, C1: REF, D1: REF },
-        ],
-        ['an array formula over itself', { A1: '=SUM(A1:A2*2)', A2: 1 }, ['A1'], { A1: REF }],
-    ])('%s', (_name, cells, loops, values) => {
+    test.each(LOOPS)('%s', (_name, cells, loops, values) => {
         const engine = engineOf({ s1: cells });
         expect(loopsOf(engine)).toEqual(loops);
         for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test.each(LOOPS)('%s, loaded with the values it had', (_name, cells, loops, values) => {
+        const engine = reloaded(cells);
+        const { changed, loops: listed } = engine.recalc(NO_CAP);
+        expect(listed.map(({ row, column }) => `${String.fromCharCode(65 + column)}${row + 1}`).sort()).toEqual(loops);
+        expect(changed).toEqual([]);
+        for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test.each(LOOPS)('%s, loaded with copies of the values it had', (_name, cells, loops, values) => {
+        // A value that crossed to another thread and back is a copy: its #REF! is not the engine's own object.
+        const engine = reloaded(cells, structuredClone);
+        expect(loopsOf(engine)).toEqual(loops);
+        for (const [label, value] of Object.entries(values)) expect(valueAt(engine, label)).toBe(value);
+    });
+
+    test('a workbook loaded with its values lists the loops a load without them lists', () => {
+        let loops = 0;
+        for (let seed = 1; seed <= 40; seed += 1) {
+            const cells = randomCells(seed, false, false);
+            const fresh = engineOf({ s1: cells }).recalc(NO_CAP);
+            expect(reloaded(cells).recalc(NO_CAP)).toEqual({ ...fresh, changed: [] });
+            loops += fresh.loops.length;
+        }
+        expect(loops).toBeGreaterThan(40);
     });
 
     test('a loop that is broken computes again', () => {
@@ -202,24 +289,39 @@ describe('depth', () => {
         expect(engine.valueOf('s1', 0, 0)).toBe(5000);
     });
 
-    // A formula that draws before it reads tells how often it ran: its value is that draw of the pass.
-    test('a formula too deep to read a range still to be computed starts again once, however long the range', () => {
-        const draws = sheetOf((cell) => {
-            for (let row = 0; row < 10; row += 1) cell(row, 0, null, '=RAND()');
-        });
-        draws.recalc(NO_CAP, 0, 5);
-        const drawn = Array.from({ length: 10 }, (_, row) => draws.valueOf('s1', row, 0));
+    // A row of this test's own counts how often the formula ran.
+    test('a formula too deep to read a range still to be computed starts again once, however long the range, and draws again what it drew', () => {
+        const first = sheetOf((cell) => cell(0, 0, null, '=RAND()'));
+        first.setClock(0, 5);
+        first.recalc(NO_CAP);
         for (const length of [1000, 4000]) {
-            const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
-            const engine = sheetOf((cell) => {
-                cell(0, 0, null, `=RAND()+0*${deep}`);
-                cell(1, 0, null, `=${deep}`);
-                cell(0, 2, 1, null);
-                for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+            let runs = 0;
+            const ran = fn('RAN', [], () => {
+                runs += 1;
+                return 0;
             });
-            expect(engine.recalc(NO_CAP, 0, 5)).toMatchObject({ loops: [], stopped: false });
-            expect(drawn.indexOf(engine.valueOf('s1', 0, 0))).toBe(1);
-            expect(engine.valueOf('s1', 1, 0)).toBe(2 * length);
+            const deep = `${'IF(1,0+'.repeat(50)}SUM(R1C2:R${length}C2)${')'.repeat(50)}`;
+            const workbook = new Workbook(
+                [
+                    {
+                        id: 's1',
+                        name: 'Sheet1',
+                        cells: (cell) => {
+                            cell(0, 0, null, `=RAN()+RAND()+0*${deep}`);
+                            cell(1, 0, null, `=${deep}`);
+                            cell(0, 2, 1, null);
+                            for (let row = 0; row < length; row += 1) cell(row, 1, null, '=R1C3+1');
+                        },
+                    },
+                ],
+                false,
+            );
+            const recalc = new Recalc(workbook, new Map([...FUNCTIONS, [ran.name, ran]]), 0, 5, false);
+            expect(recalc.pass(NO_CAP)).toMatchObject({ loops: [], stopped: false });
+            const [column] = workbook.sheets[0].columns;
+            expect(runs).toBe(2);
+            expect(workbook.value(column, 0)).toBe(first.valueOf('s1', 0, 0));
+            expect(workbook.value(column, 1)).toBe(2 * length);
         }
     });
 
@@ -278,19 +380,19 @@ describe('the cap', () => {
         expect(done()).toEqual([101, 102, 103, 104, 105, 106, 107, 108, 109, 110]);
     });
 
-    test('a cap smaller than a chain is deep computes the far end first, pass by pass', () => {
+    test('a cap smaller than a chain is deep stores the chain that is running, and starts no formula after it', () => {
         const engine = sheetOf((cell) => {
             for (let row = 0; row < 9; row += 1) cell(row, 0, null, '=R[1]C+1');
             cell(9, 0, 1, null);
+            for (let row = 0; row < 4; row += 1) cell(row, 1, null, '=RC[-1]*2');
         });
         expect(engine.recalc(3).stopped).toBe(true);
-        expect([5, 6, 7, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([null, 4, 3, 2]);
-        expect([engine.recalc(3).stopped, engine.recalc(3).stopped, engine.recalc(3).stopped]).toEqual([
-            true,
-            false,
-            false,
-        ]);
-        expect(engine.valueOf('s1', 0, 0)).toBe(10);
+        expect([0, 5, 8].map((row) => engine.valueOf('s1', row, 0))).toEqual([10, 5, 2]);
+        expect(engine.valueOf('s1', 0, 1)).toBe(null);
+        expect(engine.recalc(3).stopped).toBe(true);
+        expect([0, 1, 2, 3].map((row) => engine.valueOf('s1', row, 1))).toEqual([20, 18, 16, null]);
+        expect(engine.recalc(3).stopped).toBe(false);
+        expect(engine.valueOf('s1', 3, 1)).toBe(14);
     });
 
     test('a cap that is exactly the formulas to compute does not stop', () => {
@@ -330,8 +432,12 @@ describe('the cap', () => {
     });
 
     test('a pass that stops inside a loop leaves no cell in progress and no loop half found', () => {
-        const engine = engineOf({ s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1', D1: '=1+1', E1: '=IFERROR(A1,"loop")' } });
+        const engine = engineOf({
+            s1: { A1: '=B1', B1: '=C1', C1: '=A1+D1+F1', D1: '=1+1', E1: '=IFERROR(A1,"loop")', F1: '=2+2' },
+        });
+        // D1 is the first store, so the pass stops when C1, on the loop by then, asks for F1.
         expect(engine.recalc(0)).toMatchObject({ loops: [], stopped: true });
+        expect(valueAt(engine, 'F1')).toBe(null);
         expect(loopsOf(engine)).toEqual(['A1', 'B1', 'C1']);
         expect(valueAt(engine, 'E1')).toBe('loop');
         engine.setValue('s1', 0, 1, 5);

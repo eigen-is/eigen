@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Engine } from '../../index';
+import { EditRefusal } from '../../index';
 import { GRID_COLUMNS, GRID_ROWS } from '../../text';
 import { engineOf } from './support';
 
@@ -63,11 +64,17 @@ const EDITS = [true, false].flatMap((rows) =>
     ),
 );
 
-describe('a count of lines past the end of the grid is the count that reaches its end', () => {
+describe('a count of lines past the end of the grid is the count that reaches its end, or pushes a cell off it', () => {
     test.each(EDITS)('%s %s, %d of them', (_, __, count, insert, rows) => {
         const fits = Math.min(count, (rows ? GRID_ROWS : GRID_COLUMNS) - INDEX);
         const engine = workbook();
         const twin = workbook();
+        // The last cell of the sheet is on its sixth row and in its sixth column.
+        if (insert && count >= (rows ? GRID_ROWS : GRID_COLUMNS) - 5) {
+            expect(() => engine.editLines({ insert, index: INDEX, count, sheet: 's1', rows })).toThrow(EditRefusal);
+            expect(read(engine)).toEqual(read(twin));
+            return;
+        }
         const edited = engine.editLines({ insert, index: INDEX, count, sheet: 's1', rows });
         expect(edited).toEqual(twin.editLines({ insert, index: INDEX, count: fits, sheet: 's1', rows }));
         expect(read(engine)).toEqual(read(twin));

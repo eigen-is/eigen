@@ -6,6 +6,7 @@
 
 import type { Column } from '../store/column';
 import { CellKind, KIND_MASK } from '../store/column';
+import type { Sheet } from '../store/sheet';
 import type { FormulaError } from '../values/errors';
 import type { ArrayValue, Reference } from '../values/value';
 import { isArray, isCell, isError, isReference } from '../values/value';
@@ -15,7 +16,7 @@ import type { Family } from './families';
 import { Element, Families, OnError } from './families';
 import { Products } from './products';
 import type { Held } from './signature';
-import { ERRORS, NESTED } from './signature';
+import { ERRORS, FILTERED, HIDDEN, NESTED } from './signature';
 
 export class Walk {
     // The span: `num` from `from` up to `to`. Of a cell or an element that is no number only the count means something.
@@ -46,6 +47,10 @@ export class Walk {
     private right = 0;
     private row = 0;
     private end = 0;
+    // The rows of its sheet the walk leaves out, as pairs, and the first pair that ends at the row to go on from
+    // or after it.
+    private out: readonly number[] = NONE;
+    private pair = 0;
     // The columns of that reference, or of the arguments that are multiplied, that reach the row in hand.
     private readonly reach = new Reach();
     private array: ArrayValue | null = null;
@@ -79,6 +84,13 @@ export class Walk {
         this.error = null;
         this.handed = false;
         this.multiplied = false;
+    }
+
+    // The cells of `area` with no argument, walked as a range even when it is one cell: the rows of a longer range
+    // below those a carry knows.
+    public below(area: Reference, family: Family, skips: number): void {
+        this.start(NO_ARGS, 0, 0, family, skips);
+        this.enter(area);
     }
 
     // The arguments of the walk, which are of one size, as their products place by place: every place counts.
@@ -145,20 +157,25 @@ export class Walk {
 
     // What the first cell of a reference counts as, or NaN when it does not count.
     private counted(at: Reference, family: Family, skips: number): number {
-        const held = this.ctx.workbook.sheets[at.sheet].columns[at.left];
+        const sheet = this.ctx.workbook.sheets[at.sheet];
+        const held = sheet.columns[at.left];
         if (held === undefined || at.top >= held.length) return Number.NaN;
         const kind = held.kind[at.top] & KIND_MASK;
         if (((family.kinds >> kind) & 1) === 0 || skipped(this.ctx, skips, held, at.top)) return Number.NaN;
+        if (leftOut(sheet, skips, at.top)) return Number.NaN;
         return kind === CellKind.Boolean ? held.ref[at.top] : held.num[at.top];
     }
 
     private enter(area: Reference | null): boolean {
         this.area = area;
         if (area === null) return false;
-        const { columns } = this.ctx.workbook.sheets[area.sheet];
+        const sheet = this.ctx.workbook.sheets[area.sheet];
+        const { columns } = sheet;
         this.right = Math.min(area.right, columns.length - 1);
         this.row = area.top;
         this.end = 0;
+        this.out = rowsOut(sheet, this.skips);
+        this.pair = pairFrom(this.out, area.top);
         const width = Math.max(0, this.right - area.left + 1);
         this.reach.clear(width);
         if (this.span.length < width) this.span = new Float64Array(width);
@@ -177,7 +194,9 @@ export class Walk {
         const tall = reach.columns;
         const { columns } = this.ctx.workbook.sheets[area.sheet];
         const { kinds } = this.family;
-        if (this.row < end && area.left === right && this.skips === 0) {
+        // No cell is passed over when no row is out and the walk skips neither errors nor nested totals.
+        const whole = this.out.length === 0 && (this.skips & (ERRORS | NESTED)) === 0;
+        if (this.row < end && area.left === right && whole) {
             const held = columns[right];
             const { kind } = held;
             let row = this.row;
@@ -198,21 +217,34 @@ export class Walk {
                 return true;
             }
         }
-        // Cell by cell for several columns, and for one column when cells may be passed over.
+        // Cell by cell for several columns, and for one column when cells may be passed over: stretch by stretch
+        // of rows between the pairs that are left out, so a row costs nothing for them.
         let found = 0;
         let row = this.row;
         let live = reach.count;
-        for (; row < end && (area.left < right || this.skips !== 0); row += 1) {
-            if (row >= reach.shortest) live = reach.cut(row);
-            if (found + live > span.length) break;
-            for (let i = 0; i < live; i += 1) {
-                const held = columns[tall[i]];
-                if (skipped(this.ctx, this.skips, held, row)) continue;
-                const at = held.kind[row] & KIND_MASK;
-                if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
+        const { out } = this;
+        let { pair } = this;
+        let full = false;
+        while (!full && row < end && (area.left < right || !whole)) {
+            const stop = pair < out.length ? Math.min(end, out[pair]) : end;
+            for (; row < stop; row += 1) {
+                if (row >= reach.shortest) live = reach.cut(row);
+                full = found + live > span.length;
+                if (full) break;
+                for (let i = 0; i < live; i += 1) {
+                    const held = columns[tall[i]];
+                    if (skipped(this.ctx, this.skips, held, row)) continue;
+                    const at = held.kind[row] & KIND_MASK;
+                    if ((kinds >> at) & 1) span[found++] = at === CellKind.Boolean ? held.ref[row] : held.num[row];
+                }
+            }
+            if (!full && row < end) {
+                row = out[pair + 1] + 1;
+                pair += 2;
             }
         }
         this.row = row;
+        this.pair = pair;
         if (found === 0) return this.enter(area.next);
         this.num = span;
         this.from = 0;
@@ -356,4 +388,32 @@ export function skipped(ctx: Evaluator, skips: number, held: Column, row: number
     if (skips !== NESTED && (skips & ERRORS) !== 0 && (held.kind[row] & KIND_MASK) === CellKind.Error) return true;
     if (held.shape[row] === 0) return false;
     return (skips & NESTED) !== 0 && (ctx.recalc.factsOf(held.shape[row]) & Fact.Chosen) !== 0;
+}
+
+const NONE: readonly number[] = [];
+const NO_ARGS: readonly Held[] = [];
+
+// The rows of a sheet that a walk leaves out, as `skips` says: sorted pairs of a first and a last row.
+function rowsOut(sheet: Sheet, skips: number): readonly number[] {
+    if ((skips & HIDDEN) !== 0) return sheet.out;
+    return (skips & FILTERED) !== 0 ? sheet.filtered : NONE;
+}
+
+// Where in such pairs the first one that ends at `row` or after it starts: their length when none does.
+function pairFrom(pairs: readonly number[], row: number): number {
+    let low = 0;
+    let high = pairs.length >> 1;
+    while (low < high) {
+        const middle = (low + high) >> 1;
+        if (pairs[2 * middle + 1] < row) low = middle + 1;
+        else high = middle;
+    }
+    return 2 * low;
+}
+
+// Whether a cell is passed over for the row it is on, whatever it holds.
+export function leftOut(sheet: Sheet, skips: number, row: number): boolean {
+    const out = rowsOut(sheet, skips);
+    const pair = pairFrom(out, row);
+    return pair < out.length && out[pair] <= row;
 }

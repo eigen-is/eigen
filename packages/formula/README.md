@@ -4,28 +4,30 @@
 
 Excel is the reference: every function it computes is listed in [FUNCTIONS.md](FUNCTIONS.md) with how its answers compare to Excel's.
 
-[benchmark/](benchmark/README.md) compares the engine with HyperFormula and formulajs on speed, correctness against Excel's recorded answers, and coverage.
+[benchmark/](benchmark/README.md) compares the engine with HyperFormula, IronCalc and Univer on speed, correctness against Excel's recorded answers, and coverage.
 
 ## Status
 
 The engine is built and proven on its own: its tests, Excel's recorded answers and timing gates against today's engine. The product does not run it yet. Three parts are in use: number display through `@workspace/formula/format` (cells, charts, the xlsx importer and exporter), Excel's function inventory through `@workspace/formula/names`, and the row and column index maps of `@workspace/formula/text` (`mapIndex`, `mapSpan`, `GONE`), which today's sheet engine shifts its ranges with.
 
-It computes 219 of Excel's 524 functions. Not built yet: spilled results and the dynamic-array functions (`FILTER`, `SORT`, `SEQUENCE` and their kin), evaluating `LET` and `LAMBDA`, defined names, tables as a live feature (a file's table references are read as the plain ranges they name), 3-D references such as `Sheet1:Sheet3!A1`, hidden rows, and iterative calculation of circular references.
+It computes 219 of Excel's 524 functions. Not built yet: spilled results and the dynamic-array functions (`FILTER`, `SORT`, `SEQUENCE` and their kin), evaluating `LET` and `LAMBDA`, defined names, tables as a live feature (a file's table references are read as the plain ranges they name), 3-D references such as `Sheet1:Sheet3!A1`, and iterative calculation of circular references.
 
 ## Entries
 
 | Import | What it exports |
 | --- | --- |
-| `@workspace/formula` | `Engine`; the function registry `FUNCTIONS`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
-| `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedKey`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `remapSheets`, `offGrid`, and the types `Edit`, `Span`, `LineEdit`, `Move`. Tables: the types `Table` and `TableFinder` that `resolveTables` takes. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS` |
+| `@workspace/formula` | `Engine`; `EditRefusal`, the error an edit that would lose something throws; the function registry `FUNCTIONS`; the error values `NULL`, `DIV0`, `VALUE`, `REF`, `NAME`, `NUM`, `NA`, `SPILL`, `CALC`, `ERROR` and `errorOf`; the types `SheetSource`, `CellSink`, `Literal`, `FormulaError`, `EditResult`, `RecalcResult`, `Rewrite`, `LineEdit`, `Move` |
+| `@workspace/formula/text` | Formula text without an engine. Reading: `parseA1`, `parseA1Range`, `parseStored`, `parseXlsx`, `tokens`, `resolveTables`, `intersect`, `isLegacy`, `xlsxTree`. Printing: `printA1`, `printStored`, `printXlsx`, `storedKey`, `storedText`, `typedText`. Edits: `mapIndex`, `mapSpan`, `GONE`, `transformLines`, `hostClasses`, `transformMove`, `bindSheet`, `offGrid`, and the types `Edit`, `Span`, `LineEdit`, `Move`. Tables: the types `Table` and `TableFinder` that `resolveTables` takes. Labels and sheet names: `toA1`, `rangeToA1`, `columnIndex`, `columnLabel`, `GRID_ROWS`, `GRID_COLUMNS`, `quoteSheetName`, `sheetNameKey`, `sheetFinder`, `findSheetByName`. The tree: `FormulaNode`, `NodeKind`, `RefKind`, `RefFlag`, `SheetKind`, `Token`, `ERROR_LITERALS`. Limits: `MAX_STORED_LENGTH`, `MAX_NESTING`, `MAX_ARGUMENTS`, and `LAST_SERIAL`, the last day the date line holds |
 | `@workspace/formula/format` | `numberDisplay`, `isDateFormat`, `numberFormatError` |
 | `@workspace/formula/names` | `isExcelFunction`, `EXCEL_FUTURE_FUNCTIONS` |
+
+In the product only `packages/sheet/src/engine/book/`, where the sheet workbook holds the engine, imports the root entry; a Biome rule refuses it in the rest of `packages/sheet`, so a page loads the engine only through that folder.
 
 The package is a workspace package and is not published. A workspace that needs it lists `"@workspace/formula": "workspace:*"` in its `package.json`.
 
 ## Using it
 
-A host gives the engine its sheets, writes cells, runs a recalc and reads values back. A sheet is named by its id, and a cell by its row and column from 0. A formula is handed over in its stored text, which `@workspace/formula/text` makes from what a person types. This example ran with Bun, and the output under it is that run's:
+A host gives the engine its sheets, writes cells, runs a recalc and reads values back. A sheet is named by its id, and a cell by its row and column from 0. A cell off the grid, or a number that is NaN or infinite, is refused by a throw, in a write and in a load alike. So is a sheet whose name another sheet has, in any letter case. A read of a cell that is not there answers null, and only a sheet that is not there makes a read throw. A formula is handed over in its stored text, which `@workspace/formula/text` makes from what a person types. `formulaOf` gives it back in the one spelling the engine keeps, so `=sum(RC,1.0)` reads back as `=SUM(RC,1)`, and a reference typed with the name of a sheet the workbook holds reads back bound to its id: `='Sales'!R1C1` as `=[s1]!R1C1`, or as `#REF!` where the bound text would be too long to store. A formula typed with a sheet's name whose stored text would be too long even as typed is kept as handed and reads `#ERROR!`, as text that does not parse. So a host keeps what it reads back, and `Rewrite.lost` is only for a rename or an added sheet that takes a name no sheet had, which binds the formulas of the other sheets typed with it. This example ran with Bun, and the output under it is that run's:
 
 ```ts
 import { Engine } from '@workspace/formula';
@@ -49,7 +51,7 @@ const engine = new Engine([
             cell(2, 0, null, stored('=SUM(A1:A2)*1.21', 2, 0));
         },
     },
-]);
+], 0, 0, false);
 
 engine.recalc(Number.POSITIVE_INFINITY);
 console.log(engine.formulaOf('s1', 2, 0), engine.valueOf('s1', 2, 0));
@@ -73,7 +75,15 @@ if (typeof total === 'number') console.log(numberDisplay(total, '#,##0.00'));
 217.80
 ```
 
-The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The first argument of `recalc` caps how many formulas one pass computes; a later pass goes on where a capped one stopped. The clock and the random draw come in as its other two arguments, so a recalc never reads the machine.
+The stored text holds offsets from the formula's own cell, so inserting a row above moved the formula to row 3 without changing its text. `changed` lists the cells the pass changed as runs down a column: the sheet's place, the column, the first and the last row. The argument of `recalc` caps how many formulas one pass computes: it starts no formula once it has stored that many, the ones running then finish, and a later pass goes on where a capped one stopped. The clock comes in through `setClock(now, seed)`, which a host calls once for every batch of edits it applies: the next recalc computes every formula that reads the clock or draws again with it, so a recalc never reads the machine. A load takes the clock its values were computed with and says whether a full pass computed them, `new Engine(sheets, now, seed, computed)`: a computed load is trusted whole, a formula with no value being its blank result, and computes nothing at the open; in one that is not, every formula is computed. `settled()` says which a walk is: no write, edit, clock or change of the rows a sheet leaves out waits for a pass, and nothing is left flagged.
+
+`setFormula` and `fillFormula` take a value as their last argument, for the one kind of formula this build cannot evaluate, a 3-D reference or one into another workbook: the cell holds that value at once and keeps it, as an import or a paste brings it, and with none it holds `#REF!` at once, at a load and an added sheet too. For any other formula the value is ignored, and `isGiven` says which kind a cell holds.
+
+`setRowsOut(sheet, hidden, filtered)` says the rows a sheet hides by hand and the rows its filter left out, each list whole and as sorted pairs of a first and a last row that share no row: `SUBTOTAL` and `AGGREGATE` leave them out. The lists are row numbers and the engine moves none with an edit, so a host says them again before the next recalc whenever they changed or an edit moved the sheet's lines; the lists a sheet already holds change nothing, so it may say them after every batch. A `SheetSource` carries the same two lists as `hidden` and `filtered`, which a load and `addSheet` take with the cells: a computed load must come with the rows its values were computed with.
+
+A structural edit answers the formulas it rewrote. A block to move must lie on the grid where it is and where it goes, and an edit that would lose a cell or a formula is refused ([§ Where it differs from Excel](#where-it-differs-from-excel)).
+
+`cells(sheet, sink)` walks the cells of a sheet, or of a block of it, that hold a value or a formula, in column order and in the shape a load takes, so a snapshot is a walk and a load is a walk of a snapshot. A formula still to be computed is reported with the value it last held, which a sink cannot tell from a fresh one, so a host writes `settled()` beside a snapshot and loads it with that flag, never one set by hand: a `true` that is not so is never healed. A build that computes differently makes stored values stale whatever the flag says. The sink must not write to the engine. `nextCell(sheet, column, row, last)` is the same walk as a cursor, the first content row from `row` to `last` or -1, `lastCell(sheet, column, row, first)` is the last content row from `first` up to `row` or -1, and `columnLength`, `lastRow`, `lastColumn` and `slots()` say how far the content reaches and how many rows the columns hold together.
 
 ## The design in ten lines
 
@@ -81,12 +91,12 @@ The stored text holds offsets from the formula's own cell, so inserting a row ab
 - A sheet's cells are typed column planes: parallel typed arrays of values and shape ids, and texts as ids into one string table per workbook (`store/`).
 - One recursive evaluator walks a shape's tree with the formula's cell as an argument (`eval/evaluator.ts`).
 - Recalc is on demand: reading a cell that is still to be computed computes it first, so the order and the loops come from the reads (`recalc/recalc.ts`).
-- Arrays are always on: an operator or a scalar parameter given an array runs once per element, and an array stores one element for a run of equal ones, so a whole column costs its cells (`eval/lift.ts`, `values/value.ts`).
-- The reverse index, which formulas read a cell, has entries per block of cells of one shape, not per cell, and is rebuilt whole when a formula comes or goes (`recalc/reverse-index.ts`).
+- Arrays are always on: an operator or a scalar parameter given an array runs once per element, and an array stores one element for a run of equal ones, so a whole column costs its cells (`eval/elementwise.ts` for an operator, which reads a range from its columns, `eval/lift.ts` for a call, `values/value.ts`).
+- The reverse index, which formulas read a cell, has entries per block of cells of one shape, not per cell, and is derived, never patched: a sheet's blocks are found again from its columns once its formulas change, each is filed under the sheets it reads, by id, and only the sheets a changed sheet reads are listed again, so an edit visits the blocks on its sheets and the blocks that name them (`recalc/reverse-index.ts`). A reference a formula works out as it runs, as `OFFSET` does, is recorded when it runs and listed beside them, so such a formula is computed again only when a cell it read changed (`Recalc.record`).
 - A structural edit is one transform of stored text, worked out once per stretch of hosts with one outcome, on top of `mapIndex` and `mapSpan`, the one rule for where an index goes (`edit/`).
 - A function is one row: a name, a list of parameter words and a body. The call wrapper reads, coerces and checks every argument, so the body only computes (`functions/registry.ts`, `eval/call.ts`).
 - Numbers compare and round on the 15 digits Excel holds, and text orders by the engine's own rule, so neither depends on the machine (`values/precision.ts`, `values/text-order.ts`). The trigonometric, logarithmic and hyperbolic functions use the runtime's `Math` and can differ in the last digit between runtimes.
-- No clock, no locale, no module-level state: the time and the draw of a pass are arguments of `recalc`.
+- No clock, no locale, no module-level state: the time and the seed of the draws come in with every batch of edits (`setClock`), and a draw is a function of that seed and its cell, so every reader of the same edits computes the same values.
 
 ## Tests and type check
 
@@ -113,7 +123,7 @@ Tests live in `src/test/`, one folder per source folder. `src/test/functions/fun
 - A parameter is a word from `functions/registry.ts`, and that file is the whole vocabulary. Scalar words say how one value is read: `NUMBER`, `INTEGER`, `SERIAL` for a date, `TEXT`, `BOOLEAN`, `ANY`, `LAZY` for an argument evaluated only when picked. Range words say what a body gets of a range: a family that counts every value (`NUMBERS`, `COUNTED`, `FILLED`, `TRUTHS`, `FACTORS`, `NUMBERS_A`, `MODES`), `TEXTS`, `PAIRS`, `TABLE`, `WHERE` and `MATCHED` for criteria, `REFERENCE`. Modifiers such as `optional`, `skippable`, `defaulted`, `rest`, `strict` and `addin` say how an argument may be left out, repeat or refuse a boolean.
 - Before the body runs, the wrapper has checked the count, read every argument left to right, run the call once per element of an array, computed every cell of every range and found the first error. So a body never coerces, tests for an error or reads a cell: it returns a number, a text, a boolean, `null` for a blank, or an error constant for an input outside its domain.
 - A NaN or an infinity becomes `#NUM!`, a negative zero 0, and a text past 32,767 characters `#VALUE!`, without the body's help.
-- `NOW` and `RANDOM` hand a body the time and the draw of the pass. `ENGINE` hands it the few facts of the workbook no argument carries; its list is closed by a test (`src/test/functions/gates.test.ts`).
+- `NOW` and `RANDOM` hand a body the time of the last batch of edits and a draw. `ENGINE` hands it the few facts of the workbook no argument carries; its list is closed by a test (`src/test/functions/gates.test.ts`).
 - A family file imports only the registry, the error values and the kernels of `src/values/` and `src/format/`; a Biome rule refuses `eval/`, `store/` and `recalc/`. A row that breaks a rule of its own, such as a required parameter after an optional one, throws when the module loads.
 - First type the function in Excel with the inputs that tell the words apart: an empty argument, a boolean, a range, an error, an array. Its tests in `src/test/functions/` carry Excel's answers.
 - Then add the name to FUNCTIONS.md with its status, or `functions-list.test.ts` fails.
@@ -131,5 +141,7 @@ These choices are decided and apply to many functions. FUNCTIONS.md gives an exa
 - A one-cell array is a single value.
 - No 255-character limit on texts that Excel refuses past 255.
 - Approximate searches assume sorted data, as Excel's documentation requires.
-- Volatile functions are computed when the document is, not after every unrelated edit.
+- A 3-D reference is not computed: a formula loaded or written with a value keeps it and a typed one is `#REF!`.
+- Hidden and filtered rows are what the host last said (`setRowsOut`): `SUBTOTAL` and `AGGREGATE` follow Excel's rule for each code and option, and `AGGREGATE`'s even options keep filtered rows, which Excel documents and no recording settles.
+- An insert of rows or columns that would push a cell with content past the last line throws `EditRefusal` with the reason `grid-end`, as Excel refuses it. An edit that would rewrite a formula to more than 131,072 stored characters throws it with `too-long`, where Excel has no such case. A host must expect `grid-end` from `editLines` only and `too-long` from `editLines`, `moveCells`, `addSheet` and `renameSheet`, and finds the workbook as it was.
 - Number display is numfmt's, with a few known gaps in `TEXT`.

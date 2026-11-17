@@ -89,8 +89,8 @@ test('a group that no element reaches is never evaluated, and a picked argument 
     const run = (formula: string) => {
         calls = 0;
         const text = stored(formula, 'A1');
-        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, text) }]);
-        new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
+        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, text) }], false);
+        new Recalc(workbook, functions, 0, 0, false).pass(Number.POSITIVE_INFINITY);
         return calls;
     };
     expect(run('=IFS(TRUE,1,CALLED()>0,2)')).toBe(0);

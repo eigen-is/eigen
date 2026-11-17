@@ -193,6 +193,28 @@ describe('a reference read from a text: INDIRECT', () => {
         expect(elements('=ROW(INDIRECT({"A1","B2"}))', 1, 2)).toEqual([1, 2]);
         expect(elements('=INDIRECT({"A1","zzz"})', 1, 2)).toEqual([1.5, REF]);
     });
+
+    test('a sheet name reads its sheet in any case, under its name of now, while it is there', () => {
+        const engine = engineOf({
+            s1: {
+                N1: '=INDIRECT("data!A1")',
+                N2: '=INDIRECT("DATA!R1C1",FALSE)',
+                N3: '=INDIRECT("\'Data\'!A1")',
+                N4: '=INDIRECT("Later!A1")',
+                N5: '=INDIRECT("later!R1C1",FALSE)',
+            },
+            data: { A1: 7 },
+        });
+        const read = () => ['N1', 'N2', 'N3', 'N4', 'N5'].map((host) => valueAt(engine, host));
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(read()).toEqual([7, 7, 7, REF, REF]);
+        engine.renameSheet('data', 'Later');
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(read()).toEqual([REF, REF, REF, 7, 7]);
+        engine.removeSheet('data');
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(read()).toEqual([REF, REF, REF, REF, REF]);
+    });
 });
 
 describe('what a cell is: CELL, SHEET, SHEETS, INFO', () => {

@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { Fact, shapeFacts } from '../../eval/facts';
+import { FUNCTIONS } from '../../functions/library';
 import { ReverseIndex } from '../../recalc/reverse-index';
 import { SETTLED } from '../../store/column';
 import type { CellSink } from '../../store/workbook';
 import { Workbook } from '../../store/workbook';
+import { parseA1, sheetFinder, storedText } from '../../text';
 import { random } from '../store/support';
 import { factsOf } from './closure';
 
@@ -20,15 +23,16 @@ type Shape = {
 
 // The fastest of a few markings of one workbook, in milliseconds, each from the state the load left.
 function marked(shape: Shape, n: number): number {
-    const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }]);
+    const workbook = new Workbook([{ id: 's', name: 's', cells: (cell) => shape.cells(n, cell) }], false);
     const index = new ReverseIndex();
-    factsOf(workbook);
-    index.rebuild(workbook);
+    for (const sheet of workbook.sheets) index.forget(sheet);
+    const facts = factsOf(workbook);
+    index.rebuild(workbook, (shape) => facts[shape]);
     const seeds = shape.seeds(n);
     let best = Number.POSITIVE_INFINITY;
     for (let run = 0; run < 7; run += 1) {
         const start = performance.now();
-        index.mark(workbook, seeds);
+        index.mark(workbook, seeds, false);
         best = Math.min(best, performance.now() - start);
         let pending = 0;
         for (const column of workbook.sheets[0].columns) {
@@ -206,24 +210,28 @@ describe('the work of a marking grows with the workbook, not with its square', (
     test('writes in no order under a window that moves with its host flag every host once', () => {
         const n = 3000;
         const next = random(7);
-        const workbook = new Workbook([
-            {
-                id: 's',
-                name: 's',
-                cells: (cell) => {
-                    for (let row = 0; row < n; row += 1) cell(row, 1, 0, '=SUM(R[-20]C[-1]:RC[-1])');
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        for (let row = 0; row < n; row += 1) cell(row, 1, 0, '=SUM(R[-20]C[-1]:RC[-1])');
+                    },
                 },
-            },
-        ]);
+            ],
+            true,
+        );
         const index = new ReverseIndex();
-        factsOf(workbook);
-        index.rebuild(workbook);
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
         const seeds: number[] = [];
         for (let i = 0; i < 400; i += 1) {
             const row = 100 + Math.floor(next() * (n - 200));
             seeds.push(0, 0, row, row);
         }
-        index.mark(workbook, seeds);
+        index.mark(workbook, seeds, false);
         const rows = new Set<number>();
         for (let i = 2; i < seeds.length; i += 4)
             for (let row = seeds[i]; row <= seeds[i] + 20; row += 1) rows.add(row);
@@ -231,25 +239,99 @@ describe('the work of a marking grows with the workbook, not with its square', (
     });
 
     test('a marking flags what reads cells it does not name, and never a formula for drawing or reading the clock', () => {
-        const workbook = new Workbook([
-            {
-                id: 's',
-                name: 's',
-                cells: (cell) => {
-                    cell(0, 0, 5, null);
-                    cell(0, 1, 6, '=RC[-1]+1');
-                    cell(0, 2, 5, '=OFFSET(RC[-2],0,0)');
-                    cell(0, 3, 0.5, '=RAND()');
-                    cell(0, 4, 1, '=NOW()');
-                    cell(0, 5, 0.5, '=RC[-2]+0');
-                    cell(0, 6, 0.5, '=RAND()+RC[-6]');
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        cell(0, 0, 5, null);
+                        cell(0, 1, 6, '=RC[-1]+1');
+                        cell(0, 2, 5, '=OFFSET(RC[-2],0,0)');
+                        cell(0, 3, 0.5, '=RAND()');
+                        cell(0, 4, 1, '=NOW()');
+                        cell(0, 5, 0.5, '=RC[-2]+0');
+                        cell(0, 6, 0.5, '=RAND()+RC[-6]');
+                    },
                 },
-            },
-        ]);
+            ],
+            true,
+        );
         const index = new ReverseIndex();
-        factsOf(workbook);
-        index.rebuild(workbook);
-        index.mark(workbook, [0, 0, 0, 0]);
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
+        index.mark(workbook, [0, 0, 0, 0], false);
         expect(workbook.sheets[0].columns.map((column) => column.pending)).toEqual([0, 1, 1, 0, 0, 0, 1]);
+    });
+});
+
+describe('the shapes that take the clock', () => {
+    const find = sheetFinder([{ id: 's', name: 's' }]);
+    const facts = (formula: string): number => {
+        const tree = parseA1(formula, 20, 20, find);
+        if ('reason' in tree) throw new Error(`${formula}: ${tree.reason}`);
+        return shapeFacts(tree, FUNCTIONS);
+    };
+
+    test.each([
+        ['=NOW()', true],
+        ['=TODAY()-A1', true],
+        ['=RAND()', true],
+        ['=A1+A2+RANDBETWEEN(1,6)', true],
+        ['=IF(A1,NOW(),1)', true],
+        ['=IF(FALSE,RAND(),5)', true],
+        ['=N(NOW())*0', true],
+        ['=SUM(A1:A3*RAND())', true],
+        ['=-(1+ROUND(RAND(),2))%', true],
+        ['=DATEVALUE("1/2")', true],
+        ['=TIMEVALUE(A1)', true],
+        ['=A1', false],
+        ['="NOW()"', false],
+        ['=T("RAND()")&A1', false],
+        ['=SUM(A1:A3)+ROW()', false],
+        ['=NOSUCH(1)', false],
+    ])('%s calls a function that reads the clock or draws: %p', (formula, clock) => {
+        expect((facts(formula) & Fact.Clock) !== 0).toBe(clock);
+    });
+
+    test('a formula this build cannot evaluate keeps that fact beside the clock', () => {
+        expect(facts('=[1]Sheet1!A1+NOW()') & (Fact.Kept | Fact.Clock)).toBe(Fact.Kept | Fact.Clock);
+    });
+
+    test('the index lists the blocks of clock formulas, and none this build cannot evaluate', () => {
+        const kept = storedText('=[1]Sheet1!A1+NOW()', 0, 4, find);
+        const workbook = new Workbook(
+            [
+                {
+                    id: 's',
+                    name: 's',
+                    cells: (cell) => {
+                        cell(0, 0, 5, null);
+                        cell(0, 1, 6, '=RC[-1]+1');
+                        for (let row = 2; row <= 4; row += 1) {
+                            cell(row, 2, 0.5, '=RAND()+R1C1');
+                            cell(row, 3, 0.5, '=RAND()+R1C1');
+                        }
+                        cell(0, 4, 7, kept);
+                        cell(6, 4, '', '="NOW()"');
+                        cell(7, 4, 1, '=R[-5]C[-2]');
+                    },
+                },
+                { id: 't', name: 't', cells: (cell) => cell(9, 1, 1, '=IF(R1C1,NOW(),1)') },
+            ],
+            false,
+        );
+        const index = new ReverseIndex();
+        for (const sheet of workbook.sheets) index.forget(sheet);
+        const facts = factsOf(workbook);
+        index.rebuild(workbook, (shape) => facts[shape]);
+        // The blocks that take the clock, each without its shape.
+        const clocks = () => index.reading([], [Fact.Clock]).filter((_, at) => at % 6 < 5);
+        expect(clocks()).toEqual([0, 2, 3, 2, 4, 1, 1, 1, 9, 9]);
+        workbook.setValue(workbook.sheets[1], 9, 1, 3);
+        index.forget(workbook.sheets[1]);
+        index.rebuild(workbook, (shape) => workbook.shapes.facts[shape]);
+        expect(clocks()).toEqual([0, 2, 3, 2, 4]);
     });
 });

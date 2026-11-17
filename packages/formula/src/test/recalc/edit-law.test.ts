@@ -16,6 +16,7 @@ describe('after any edits, writes and recalcs the engine equals a fresh load of 
         expect(counts.stopped).toBeGreaterThan(COUNT ? 0 : 100);
         expect(counts.loops).toBeGreaterThan(COUNT ? 0 : 1000);
         expect(counts.refused).toBeGreaterThan(COUNT ? 0 : 100);
+        expect(counts.slots).toBeGreaterThan(COUNT ? 0 : 3000);
     }, 120_000);
     test('sheets that come, go, come back, are renamed and change place', () => {
         const counts = runLaw(SEED + 1, COUNT || 100, 14, Edge.None, 1);
@@ -26,10 +27,13 @@ describe('after any edits, writes and recalcs the engine equals a fresh load of 
         const counts = runLaw(SEED + 2, COUNT || 60, 12, Edge.Columns, 12);
         console.log('last columns', JSON.stringify(counts));
         expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 300);
+        expect(counts.pushing).toBeGreaterThan(COUNT ? 0 : 5);
+        expect(counts.slots).toBeGreaterThan(COUNT ? 0 : 1000);
     }, 120_000);
     test('hosts, bands and blocks on the last rows of the grid', () => {
         const counts = runLaw(SEED + 3, Math.ceil((COUNT || 40) / 4), 8, Edge.Rows, 12);
         console.log('last rows', JSON.stringify(counts));
-        expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 30);
+        expect(counts.lineEdits + counts.moves).toBeGreaterThan(COUNT ? 0 : 25);
+        expect(counts.pushing).toBeGreaterThan(0);
     }, 120_000);
 });

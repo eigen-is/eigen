@@ -710,8 +710,8 @@ function typed(item: Item): string {
     return typeof item === 'string' ? `"${item}"` : shown(item);
 }
 
-// What the engine shows for the eleven forms over a list, as an array constant and as the cells of a column,
-// beside what the model says.
+// What the engine shows for the eleven forms over a list, as an array constant, as the cells of a column and as
+// the cells of a row, beside what the model says.
 function bothOn(list: readonly Item[], key: Key) {
     const model = SEARCHES.map((search, form) => {
         const at = search(list, key);
@@ -725,7 +725,12 @@ function bothOn(list: readonly Item[], key: Key) {
     const constant = list.includes(null)
         ? model
         : engineOn(FORMS.map((form) => form(typed(key), `{${list.map(typed).join(';')}}`)));
-    return { list, key, model, cells, constant };
+    const line = `A30:${String.fromCharCode(64 + list.length)}30`;
+    const across = engineOn(
+        FORMS.map((form, at) => (at < 10 ? form(typed(key), line) : `=HLOOKUP(${typed(key)},${line},1,TRUE)`)),
+        list.length > 1 ? { [line]: list } : { A30: list },
+    );
+    return { list, key, model, cells, constant, across };
 }
 
 describe("Excel's search order, the engine against the model", () => {
@@ -738,14 +743,14 @@ describe("Excel's search order, the engine against the model", () => {
     };
 
     // Half the lists draw from three values only, so that runs of equals are common.
-    test('on 1,500 lists of any kinds in any order, each as an array and as cells', () => {
+    test('on 1,500 lists of any kinds in any order, each as an array, down a column and along a row', () => {
         const differing = [];
         for (let round = 0; round < 1500; round += 1) {
             const few = round % 2 === 0 ? [POOL[next(18)], POOL[next(18)], POOL[next(18)]] : POOL;
             const list = Array.from({ length: 1 + next(12) }, () => few[next(few.length)]);
             const seen = bothOn(list, KEYS[next(KEYS.length)]);
-            if (seen.cells.join() !== seen.model.join() || seen.constant.join() !== seen.model.join())
-                differing.push(seen);
+            const shows = [seen.cells, seen.constant, seen.across].map((shown) => shown.join());
+            if (shows.some((shown) => shown !== seen.model.join())) differing.push(seen);
         }
         expect(differing).toEqual([]);
     });
@@ -860,7 +865,7 @@ function readsOf(rows: number, fill: (row: number) => Literal, formulas: readonl
             });
         },
     };
-    const engine = new Engine([sheet]);
+    const engine = new Engine([sheet], 0, 0, false);
     const { value } = Workbook.prototype;
     let reads = 0;
     Workbook.prototype.value = function counted(column, row) {
@@ -956,6 +961,54 @@ describe('what a search of sorted values costs', () => {
         expect(other.values).toEqual([NA, NA]);
         expect(other.reads).toBeLessThanOrEqual(WHOLE + 2 * 22);
         expect(readsOf(WHOLE, () => 'x', ['=MATCH(2,A:A,-1)'])).toEqual({ reads: WHOLE, values: [NA] });
+    });
+
+    // A row of a sheet is searched where its cells lie, as a column is: the key is met by its kind and its number
+    // or the id of its text, with no value read, and a sorted row is halved.
+    test('a row of 2,000 cells: a search for the key itself reads one value, a halving at most 13', () => {
+        const width = 2000;
+        const keys = [1, 700, width, width + 1];
+        const formulas = keys.flatMap((key) => [
+            `=MATCH("k${key}",R3C1:R3C${width},0)`,
+            `=XMATCH("K${key}",R3C1:R3C${width},0,-1)`,
+            `=MATCH(${2 * key},R4C1:R4C${width},0)`,
+            `=HLOOKUP(${2 * key},R4C1:R5C${width},2,FALSE)`,
+            `=MATCH(${2 * key + 1},R4C1:R4C${width},1)`,
+            `=HLOOKUP(${2 * key + 1},R4C1:R5C${width},2,TRUE)`,
+        ]);
+        const sheet: SheetSource = {
+            id: 's1',
+            name: 'Sheet1',
+            cells: (cell) => {
+                for (let column = 0; column < width; column += 1) {
+                    cell(2, column, `k${column + 1}`, null);
+                    cell(3, column, 2 * column + 2, null);
+                    cell(4, column, column % 2 === 0, null);
+                }
+                formulas.forEach((formula, column) => {
+                    cell(0, column, null, formula);
+                });
+            },
+        };
+        const engine = new Engine([sheet], 0, 0, false);
+        const { value } = Workbook.prototype;
+        let reads = 0;
+        Workbook.prototype.value = function counted(column, row) {
+            reads += 1;
+            return value.call(this, column, row);
+        };
+        try {
+            engine.recalc(Number.POSITIVE_INFINITY);
+        } finally {
+            Workbook.prototype.value = value;
+        }
+        const shown = formulas.map((_, column) => engine.valueOf('s1', 0, column));
+        expect(shown.slice(0, 6)).toEqual([1, 1, 1, true, 1, true]);
+        expect(shown.slice(6, 12)).toEqual([700, 700, 700, false, 700, false]);
+        expect(shown.slice(12, 18)).toEqual([width, width, width, false, width, false]);
+        expect(shown.slice(18)).toEqual([NA, NA, NA, NA, width, false]);
+        // An answer of HLOOKUP is one more value read, and each formula's own value is read once to store it.
+        expect(reads).toBeLessThanOrEqual(keys.length * (4 * 3 + 2 * 15));
     });
 
     // Values of the key's kind in any order among values of another kind: a search reads no cell a fourth time.

@@ -2,7 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import type { FormulaNode } from '../../text';
 import { NodeKind, parseA1, parseStored, printA1, printStored, RefFlag } from '../../text';
 import { ShapeTable } from '../../text/shapes';
-import { failure, findSheet, formulas, keepsLaws, sheetName, soup, treeStored, typedFormulas } from './support';
+import {
+    failure,
+    findSheet,
+    formulas,
+    keepsLaws,
+    NO_SHEET,
+    sheetName,
+    soup,
+    treeStored,
+    typedFormulas,
+} from './support';
 
 const RUNS = 3000;
 const SOUP_RUNS = 100000;
@@ -86,7 +96,7 @@ describe('round trip', () => {
         const idOf = new Map<string, number>();
         for (let run = 0; run < RUNS; run += 1) {
             const text = next();
-            const id = run % 2 === 0 ? table.intern(text) : table.internTree(treeStored(text));
+            const id = run % 2 === 0 ? table.intern(text, NO_SHEET) : table.internTree(treeStored(text));
             expect(idOf.get(text) ?? id).toBe(id);
             idOf.set(text, id);
         }

@@ -98,14 +98,15 @@ test('an operator over references keeps its operands while an element computes i
     expect(evaluate('=SUM(-OFFSET(P1,{0,1},0))', cells, 'A1')).toBe(-18);
 });
 
-describe('the clock and the draw come from the pass', () => {
+describe('the clock and the draw come from the batch', () => {
     const drawn = (formulas: Cells, seed: number) => {
         const engine = engineOf({ s1: formulas });
-        engine.recalc(Number.POSITIVE_INFINITY, 46000.5, seed);
+        engine.setClock(46000.5, seed);
+        engine.recalc(Number.POSITIVE_INFINITY);
         return Object.keys(formulas).map((label) => valueAt(engine, label));
     };
 
-    test('NOW is the time the pass was given, and RAND a draw of its seed', () => {
+    test('NOW is the time the batch was given, and RAND a draw of its seed', () => {
         const [now, first, second] = drawn({ A1: '=NOW()', A2: '=RAND()', A3: '=RAND()' }, 7);
         expect(now).toBe(46000.5);
         expect(typeof first === 'number' && first >= 0 && first < 1).toBe(true);
@@ -124,34 +125,33 @@ describe('the clock and the draw come from the pass', () => {
         expect(sum('=MAX(IF({1;1;1},NOW()))')).toBe(46000.5);
     });
 
-    test('a formula that draws or reads the clock is computed on a load that never computed it, and keeps its value when a cell it does not read is written', () => {
+    test('a formula that draws or reads the clock is computed on a load that never computed it, and again with the clock of every batch, whatever the batch wrote', () => {
         const engine = engineOf({ s1: { A1: '=RAND()', A2: '=OFFSET(B1,1,0)', A3: '=NOW()', B2: 5 } });
-        engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
+        engine.setClock(100, 1);
+        engine.recalc(Number.POSITIVE_INFINITY);
         const first = valueAt(engine, 'A1');
         expect(first).toBe(drawn({ A1: '=RAND()' }, 1)[0]);
         expect(valueAt(engine, 'A3')).toBe(100);
         engine.setValue('s1', 1, 1, 6);
-        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
-        expect(valueAt(engine, 'A1')).toBe(first);
-        expect(valueAt(engine, 'A3')).toBe(100);
+        engine.setClock(200, 2);
+        engine.recalc(Number.POSITIVE_INFINITY);
+        expect(valueAt(engine, 'A1')).toBe(drawn({ A1: '=RAND()' }, 2)[0]);
+        expect(valueAt(engine, 'A3')).toBe(200);
         expect(valueAt(engine, 'A2')).toBe(6);
     });
 
-    test('a formula that draws is computed again when a cell it reads or its own cell is written, and so is what reads it', () => {
+    test('what reads a formula that draws is computed again with it', () => {
         const engine = engineOf({ s1: { A1: '=RAND()+C1*0', A2: '=A1+1', A3: '=A2*2', A4: '=NOW()', C1: 1 } });
-        engine.recalc(Number.POSITIVE_INFINITY, 100, 1);
+        engine.setClock(100, 1);
+        engine.recalc(Number.POSITIVE_INFINITY);
         const first = Number(valueAt(engine, 'A1'));
         expect(valueAt(engine, 'A3')).toBe((first + 1) * 2);
-        engine.setValue('s1', 0, 2, 2);
-        engine.recalc(Number.POSITIVE_INFINITY, 200, 2);
+        engine.setClock(200, 2);
+        engine.recalc(Number.POSITIVE_INFINITY);
         const second = Number(valueAt(engine, 'A1'));
         expect(second).not.toBe(first);
         expect(valueAt(engine, 'A3')).toBe((second + 1) * 2);
-        expect(valueAt(engine, 'A4')).toBe(100);
-        engine.setFormula('s1', 3, 0, '=NOW()');
-        engine.recalc(Number.POSITIVE_INFINITY, 300, 3);
-        expect(valueAt(engine, 'A4')).toBe(300);
-        expect(valueAt(engine, 'A1')).toBe(second);
+        expect(valueAt(engine, 'A4')).toBe(200);
     });
 
     // The calls are counted by a row of this test's own.
@@ -166,8 +166,11 @@ describe('the clock and the draw come from the pass', () => {
             }),
         );
         const formula = stored('=SUM(DRAW((B1:B1000="")*1))', 'A1');
-        const workbook = new Workbook([{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, formula) }]);
-        new Recalc(workbook, functions).pass(Number.POSITIVE_INFINITY);
+        const workbook = new Workbook(
+            [{ id: 's1', name: 'Sheet1', cells: (cell) => cell(0, 0, null, formula) }],
+            false,
+        );
+        new Recalc(workbook, functions, 0, 0, false).pass(Number.POSITIVE_INFINITY);
         expect(calls).toBe(1000);
         expect(workbook.value(workbook.sheets[0].columns[0], 0)).toBe(500500);
     });
