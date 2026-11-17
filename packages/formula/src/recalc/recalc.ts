@@ -87,6 +87,9 @@ export class Recalc {
     private readonly drew: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
+    // Moves with every pass and every loop that closes: what a pass carried from one formula to the next holds
+    // only within one era.
+    public era = 0;
     // The clock of the last batch of edits: its author's date and time as a serial, and what its draws are made
     // of beside the cell that draws.
     public now: number;
@@ -97,9 +100,6 @@ export class Recalc {
     // flagged the formulas that leave rows out.
     private readonly rowed = new Set<Sheet>();
     private readonly records: Records;
-    // Moves with every pass and every loop that closes: what a pass carried from one formula to the next holds
-    // only within one era.
-    public era = 0;
 
     // `computed` says whether the values of the workbook are those a full pass computed, as its load was told.
     public constructor(workbook: Workbook, functions: Registry, now: number, seed: number, computed: boolean) {
