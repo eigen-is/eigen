@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
-import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import {
     BAND_WEIGHT,
     EXTRA_WEIGHT,
+    formatsOf,
     MAX_RECORDS_PER_TYPE,
     MAX_STYLE_RUNS,
     MAX_VALUE_SLOTS,
@@ -20,10 +20,10 @@ import type {
     Run,
     SheetContent,
 } from '@workspace/lib/sheets/ops';
-import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, meets } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { names, RUN_KEYS } from '../../../engine/book/apply-format';
+import { names } from '../../../engine/book/apply-format';
 import { entryAt } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { commutes } from '../../../engine/book/commutes';
@@ -642,8 +642,6 @@ describe('engine/book/commutes — commutes', () => {
         }, 60_000);
 
         test('the bound never counts less than the ops add, in any part of them: one unit less room is a no', () => {
-            const formatsOf = ({ runs, bands, extras }: WorkbookWeight) =>
-                runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
             // A sheet no op names, of `slots` value slots and `formats` format weight with its own band: full columns,
             // links of five units a cell from column 100 on, and stripes of one run each for the rest.
             const pad = (slots: number, formats: number): SheetContent => {

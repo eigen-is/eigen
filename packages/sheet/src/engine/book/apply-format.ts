@@ -5,7 +5,7 @@
 // held it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
-import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
+import { MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     CellAttrKey,
     CellAttrs,
@@ -19,7 +19,7 @@ import type {
     RunStyle,
     Span,
 } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { pick } from 'es-toolkit';
@@ -28,18 +28,6 @@ import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
 import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
-
-// Every run-style key once: the mapped type fails the build on a key left out.
-const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
-    bl: 'bl',
-    it: 'it',
-    ff: 'ff',
-    fs: 'fs',
-    fc: 'fc',
-    cl: 'cl',
-    un: 'un',
-};
-export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 
@@ -93,7 +81,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
                 if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
             }
         }
-        const over = link ? book.over(0, unitsOf({ link }) * EXTRA_WEIGHT * cells) : null;
+        const over = link ? book.over({ extras: unitsOf({ link }) * cells }) : null;
         if (over) throw new Refusal(over);
     }
 
@@ -211,6 +199,23 @@ export function restyled(runs: readonly Run[], keys: readonly (keyof RunStyle)[]
             else Object.assign(next, { [key]: set[key] });
         }
         return next;
+    });
+}
+
+// The formats that put each look back over the cells that wore it, given look by look: the look's keys set and the
+// keys it lacks cleared, so a look is put back whole whatever the cells wear then.
+export function wornLooks(
+    book: Workbook,
+    sheet: string,
+    worn: readonly (readonly [look: number, rect: Rect])[],
+): FormatOp[] {
+    return [...Map.groupBy(worn, ([look]) => look)].map(([id, rects]) => {
+        const areas = new Areas();
+        for (const [, rect] of rects) areas.add(...rect);
+        const look = book.looks.look(id);
+        const clear = LOOK_KEYS.filter((key) => look[key] === undefined);
+        const format: FormatOp = { kind: 'format', sheet, ranges: areas.joined(), set: { ...look } };
+        return clear.length > 0 ? { ...format, clear } : format;
     });
 }
 

@@ -1,7 +1,8 @@
 // Where the fields of a sheet's records go when rows or columns are inserted or deleted: a merge moves as its lines
 // do, a filter that reaches the last line keeps reaching it, a rule's formula follows the lines it names. The record
-// store plans a line edit with it, and `shiftOps` shifts an undo entry's record ops with it, so a record and an op
-// that names it land in one place. A rule is given the fields an op sets, which may be all of a record or a few.
+// store plans a line edit with it, and `shiftOps` shifts an undo entry's ops with it, so a record and an op that names
+// it land in one place; the input applier splits lost formulas around inserted lines with it. A rule is given the
+// fields an op sets, which may be all of a record or a few.
 
 import type { Edit, FormulaNode, LineEdit } from '@workspace/formula/text';
 import {
@@ -39,17 +40,16 @@ export class LineMap {
     public readonly rows: boolean;
     // The edit that undoes this one, as a formula's transform takes it.
     private readonly back: LineEdit;
-    // The edit as an index on its axis maps through it.
     public readonly axis: Edit;
     private readonly inverse: Edit;
     // Whether the inverse edit gives back every line, span and formula mapped in the current `through`.
     private kept = true;
 
     public constructor(public readonly edit: LinesOp) {
-        const { rows, insert, index, count } = edit;
+        const { rows, insert } = edit;
         this.rows = rows;
         this.back = { ...edit, insert: !insert };
-        this.axis = { insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS };
+        this.axis = axisOf(edit);
         this.inverse = { ...this.axis, insert: !insert };
     }
 
@@ -220,6 +220,26 @@ export function spanAfter(edit: Edit, start: number, end: number, reach: Reach):
     const into = { start: 0, end: 0 };
     if (!mapSpan(edit, start, end, into)) return null;
     return [into.start, toEnd ? end : into.end];
+}
+
+// The edit as an index on its axis maps through it.
+export function axisOf({ rows, insert, index, count }: LinesOp): Edit {
+    return { insert, index, count, lines: rows ? GRID_ROWS : GRID_COLUMNS };
+}
+
+// The lines `first` to `last` where they stand after the edit: two spans around inserted lines, none when all are
+// deleted. On a delete, `reach` says how the span meets the grid's end.
+export function spansAfter(axis: Edit, first: number, last: number, reach: Reach): Span[] {
+    if (!axis.insert) {
+        const after = spanAfter(axis, first, last, reach);
+        return after ? [after] : [];
+    }
+    const { index, count, lines } = axis;
+    const parts: Span[] = [
+        [first, Math.min(last, index - 1)],
+        [Math.max(first, index) + count, Math.min(last + count, lines - 1)],
+    ];
+    return parts.filter(([start, end]) => start <= end);
 }
 
 function frozenAfter({ insert, index, count, lines }: Edit, frozen: number): number {

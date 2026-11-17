@@ -5,14 +5,12 @@
 // held, for an edit that takes them, and turns formulas an edit could not keep, such as a rename, back into their text.
 
 import type { EditResult, Literal } from '@workspace/formula';
-import { errorOf } from '@workspace/formula';
-import { GRID_COLUMNS } from '@workspace/formula/text';
-import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
-import { contentOf, textOf, unitsOf } from './extras';
+import { contentOf, literalOf, unitsOf } from './extras';
+import { axisOf, spansAfter } from './record-lines';
 import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
 import { reachesEngine } from './workbook';
@@ -21,7 +19,8 @@ import { reachesEngine } from './workbook';
 type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
 // A rectangle of cells that hold equal content, or none, as it grows down a column and then across.
 type Group = { top: number; left: number; bottom: number; right: number; held: Held };
-type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent | null>[] };
+// The runs and cells of an input op, as an applier gathers them.
+export type Gathered = Required<Omit<InputOp, 'kind' | 'sheet'>>;
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
 
@@ -39,7 +38,7 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
         const units = filled(op, (column, length) => {
             slots += Math.max(0, length - engine.columnLength(sheet, column));
         });
-        const over = book.over(slots, units * EXTRA_WEIGHT);
+        const over = book.over({ slots, extras: units });
         if (over) throw new Refusal(over);
     }
     const gathered: Gathered = { runs: [], cells: [] };
@@ -97,7 +96,8 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
         else engine.setValue(sheet, row, column, value);
         extras.write(row, column, content ?? {});
     }
-    return [inputOf(sheet, gathered)];
+    const back = inputOf(sheet, gathered);
+    return back ? [back] : [];
 }
 
 // What an input fills: `column` is told once per column the rows it holds once the op's cells that reach the engine
@@ -129,6 +129,13 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
     return units;
 }
 
+// The input that writes these runs and cells, the cells sorted in column order, or none when there are neither.
+export function inputOf(sheet: string, { runs, cells }: Gathered): InputOp | undefined {
+    if (runs.length + cells.length === 0) return undefined;
+    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
+}
+
 // What a cell holds now, as an op would say it, null for an empty cell.
 export function cellAt(book: Workbook, sheet: string, extras: Extras, row: number, column: number): CellContent | null {
     const { engine } = book;
@@ -153,9 +160,8 @@ export function entryAt(op: InputOp, row: number, column: number): CellContent |
     return op.runs?.find(([rect]) => covers(rect, row, column))?.[1];
 }
 
-// The ops that put back the text of every formula an edit could not keep, such as a rename that bound it or rows
-// deleted under what it read, one per sheet, each cell with the link, the mark and the given value it holds. They
-// apply after the edit's own inverse: where that is a line edit, `after`, each cell is said where it stands then.
+// One op per sheet that puts back, with all else the cell holds, the text of each formula an edit could not keep.
+// They apply after the edit's own inverse, so with a line edit `after` each cell is said where it stands then.
 export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
     const bySheet = Map.groupBy(rewrites, ({ sheet }) => sheet);
     const ops: InputOp[] = [];
@@ -176,7 +182,8 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
             const content = { ...contentOfGroup(group), f: texts[at] };
             for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
         });
-        if (gathered.runs.length + gathered.cells.length > 0) ops.push(inputOf(sheet, gathered));
+        const back = inputOf(sheet, gathered);
+        if (back) ops.push(back);
     }
     return ops;
 }
@@ -190,26 +197,26 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     readBlocks(book, sheet, part.extras, new ColumnSweep(rects), (group) => {
         if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
     });
-    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
+    return inputOf(sheet, gathered);
 }
 
-// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
-// A delete here undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
-function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Group[] {
+// Whether two values write the same JSON, a missing one as null.
+export function sameJson(a: unknown, b: unknown): boolean {
+    return a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it. A delete here
+// undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
+function afterLines(edit: LinesOp, group: Group): Group[] {
+    const { rows } = edit;
     const [first, last] = rows ? [group.top, group.bottom] : [group.left, group.right];
-    const shift = insert ? count : -count;
-    const parts = [
-        [first, Math.min(last, index - 1)],
-        [Math.max(first, index) + shift, last + shift],
-    ];
-    return parts
-        .filter(([start, end]) => start <= end)
-        .map(([start, end]) => (rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end }));
+    return spansAfter(axisOf(edit), first, last, 'closed').map(([start, end]) =>
+        rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end },
+    );
 }
 
 // Reads the blocks a sweep covers and hands over each rectangle of equal content, or of empty cells, of each block with
-// its place in the list, once it can grow no further. The extras inside the blocks are read first; then down each
-// column the engine is read over the rows of the blocks it holds, which come in turn, and the two are joined.
+// its place in the list, once it can grow no further.
 function readBlocks(
     book: Workbook,
     sheet: string,
@@ -217,43 +224,13 @@ function readBlocks(
     sweep: ColumnSweep,
     close: (group: Group, at: number) => void,
 ): void {
-    const { rects, live } = sweep;
-    if (rects.length === 0) return;
+    const found: Placed<Held>[][] = sweep.rects.map(() => []);
     const { engine } = book;
-    const found: Placed<Held>[][] = rects.map(() => []);
-    const marks: [row: number, column: number, extra: Extra, at: number][] = [];
-    extras.within(sweep, (...mark) => marks.push(mark));
-    let mark = 0;
-    // The block the engine reads now, whose cells it hands out.
-    let block = 0;
-    // A cell that holds only a link or a mark is no cell of the engine's: it is read in its place among them.
-    const before = (row: number, column: number) => {
-        for (; mark < marks.length; mark += 1) {
-            const [r, c, extra, at] = marks[mark];
-            if (c > column || (c === column && r >= row)) break;
-            found[at].push([r, c, { ...EMPTY, extra }]);
-        }
-    };
-    const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
-        before(row, column);
-        const here = marks[mark]?.[0] === row && marks[mark][1] === column;
+    book.cellsIn(sheet, extras, sweep, (row, column, value, formula, extra, at) => {
         const given = formula !== null && engine.isGiven(sheet, row, column);
-        found[block].push([row, column, { value, formula, given, extra: here ? marks[mark][2] : undefined }]);
-        if (here) mark += 1;
-    };
-    sweep.pass((left, right) => {
-        for (let column = left; column <= right; column += 1) {
-            // The blocks that start past the column's last cell hold nothing of the engine's.
-            const end = sweep.after(engine.columnLength(sheet, column) - 1);
-            for (let at = 0; at < end; at += 1) {
-                block = live[at];
-                const [top, , bottom] = rects[block];
-                engine.cells(sheet, cell, top, column, bottom, column);
-            }
-        }
+        found[at].push([row, column, { value, formula, given, extra }]);
     });
-    before(0, GRID_COLUMNS);
-    for (const [at, rect] of rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
+    for (const [at, rect] of sweep.rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
 }
 
 // Groups the cells a block holds, in column order, a column at a time. A run of equal content down a column joins the
@@ -329,10 +306,6 @@ function sameExtra(a: Extra | undefined, b: Extra | undefined): boolean {
     return a.qp === b.qp && sameJson(a.s, b.s) && sameJson(a.link, b.link);
 }
 
-function sameJson(a: unknown, b: unknown): boolean {
-    return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
-}
-
 function contentOfGroup({ held }: Group): CellContent | null {
     return contentOf(held.value, held.formula, held.given, held.extra);
 }
@@ -341,17 +314,4 @@ function contentOfGroup({ held }: Group): CellContent | null {
 function gather({ runs, cells }: Gathered, { top, left, bottom, right }: Group, content: CellContent | null): void {
     if (top === bottom && left === right) cells.push([top, left, content]);
     else runs.push([[top, left, bottom, right], content]);
-}
-
-function inputOf(sheet: string, { runs, cells }: Gathered): InputOp {
-    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-    return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-}
-
-// The value a cell of this content holds, or null for none: the joined text of rich runs, an error literal, or the
-// value as it is. Beside a formula it is the value given with it.
-function literalOf({ v, e, s }: CellContent): Literal | null {
-    if (s) return textOf(s);
-    if (v === undefined) return null;
-    return e && typeof v === 'string' ? errorOf(v) : v;
 }

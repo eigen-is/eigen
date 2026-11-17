@@ -11,9 +11,9 @@ import type {
     Run,
     SheetContent,
 } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { names, RUN_KEYS } from '../../../engine/book/apply-format';
+import { names } from '../../../engine/book/apply-format';
 import { cellAt } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { stillHolding } from '../../../engine/book/still-holding';

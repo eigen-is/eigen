@@ -5,7 +5,6 @@
 
 import type { Literal } from '@workspace/formula';
 import { numberDisplay } from '@workspace/formula/format';
-import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type {
     CellAttrs,
     CellContent,
@@ -17,24 +16,15 @@ import type {
     Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
+import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import { cellAt } from './apply-input';
+import type { LookSpan } from './bands';
 import type { BookSheet, Workbook } from './workbook';
 
 export type Book = {
     readonly sheets: () => readonly Sheet[];
     readonly sheet: (id: string) => Sheet | undefined;
 };
-
-// A rectangle of cells that wear one look, every bound inclusive.
-type LookArea = {
-    readonly c0: number;
-    readonly c1: number;
-    readonly r0: number;
-    readonly r1: number;
-    readonly look: Readonly<CellAttrs>;
-};
-
-const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 
 // The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
 // workbook held when it was made: one deleted since throws at a read, as the engine does, and reads again once added.
@@ -82,8 +72,8 @@ export class Sheet {
         return this.book.looks.look(this.parts.bands.look(row, column));
     }
 
-    // The areas that tile a rectangle, plain ones included, in column order then row order.
-    public *lookSpans(rect: Rect): Generator<LookArea> {
+    // The spans that tile a rectangle, plain ones included, in column order then row order.
+    public *lookSpans(rect: Rect): Generator<LookSpan<Readonly<CellAttrs>>> {
         const { looks } = this.book;
         for (const { c0, c1, r0, r1, look } of this.parts.bands.spans(rect)) {
             yield { c0, c1, r0, r1, look: looks.look(look) };
@@ -116,8 +106,21 @@ export class Sheet {
         };
     }
 
-    public row(row: number): Readonly<LineAttrs> {
-        return this.parts.rows.at(row);
+    // A row's keys, with `filtered` while the sheet's filter leaves it out.
+    public row(row: number): Readonly<LineAttrs & { filtered?: 1 }> {
+        const attrs = this.parts.rows.at(row);
+        for (const { rows: spans } of this.book.records.records(this.id, 'filterColumn').values()) {
+            // The first span that ends at the row or past it holds the row when it starts there or before.
+            let low = 0;
+            let high = spans.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (spans[middle][1] < row) low = middle + 1;
+                else high = middle;
+            }
+            if (low < spans.length && spans[low][0] <= row) return { ...attrs, filtered: 1 };
+        }
+        return attrs;
     }
 
     public column(column: number): Readonly<LineAttrs> {

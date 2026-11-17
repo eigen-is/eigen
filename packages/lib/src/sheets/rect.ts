@@ -1,11 +1,14 @@
-// The tests a sheet asks of its rectangles, such as whether two meet, whether one lies inside another and whether two
-// of a list, or of two lists, share a cell. The workbook asks them of merges, rule ranges and the blocks an op names,
-// and the op validators of a batch's runs and a sheet's merges, so both read one rule.
+// The whole grid, and the tests a sheet asks of its rectangles, such as whether two meet, whether one lies inside
+// another and whether two of a list, or of two lists, share a cell. The workbook asks them of merges, rule ranges and
+// the blocks an op names, and the op validators of a batch's runs and a sheet's merges, so both read one rule.
 
+import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { Rect } from './ops';
 
 // Up to this many rectangles on one side, testing pair by pair is cheaper than a sweep.
 const PAIRWISE_MOST = 32;
+
+export const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 
 export function meets(a: Rect, b: Rect): boolean {
     return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];

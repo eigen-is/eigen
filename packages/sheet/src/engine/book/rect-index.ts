@@ -1,8 +1,8 @@
-// Where rectangles lie on a sheet, such as the merges of a record type or the runs of one op, so a read finds the ones
-// at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest
-// power of two rows and of two columns that hold its height and its width, so it lies in four tiles at most, and a
-// read looks, per tile size in use, at the tiles it covers only. The records keep one by id. An op's read sweeps its
-// rectangles instead, a stretch of columns at a time, down which it goes from one to the next.
+// Where rectangles lie on a sheet, such as the merges of a record type, so a read finds the ones at a cell or on a
+// screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest power of two rows
+// and of two columns that hold its height and its width, so it lies in four tiles at most, and a read looks, per tile
+// size in use, at the tiles it covers only. The records keep one by id. An op's read and a sheet's walk sweep their
+// rectangles instead, a stretch of columns at a time, down which they go from one to the next.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
 import type { Rect } from '@workspace/lib/sheets/ops';
@@ -84,9 +84,8 @@ export class RectIndex {
     }
 }
 
-// One sweep left to right over the columns that rectangles sharing no cell cover. At each stretch of columns the same
-// ones cover, `live` holds their places in the list sorted by top, so down a column they come in turn. It changes in
-// place as rectangles start and end, so it serves one pass at a time.
+// One sweep left to right over the columns that rectangles sharing no cell cover. At each stretch of columns `live`
+// holds the places of the rectangles over it sorted by top, changed in place, so it serves one pass at a time.
 export class ColumnSweep {
     public readonly live: number[] = [];
     // The columns where a rectangle starts or one ends, and the places by the column each starts at and ends past.

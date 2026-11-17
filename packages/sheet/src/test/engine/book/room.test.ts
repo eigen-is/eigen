@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { GRID_ROWS } from '@workspace/formula/text';
 import { encodeBook } from '@workspace/lib/sheets/book-codec';
-import { fits, MAX_STYLE_RUNS, MAX_VALUE_SLOTS, MIDWAY } from '@workspace/lib/sheets/limits';
+import { BAND_WEIGHT, fits, formatsOf, MAX_STYLE_RUNS, MAX_VALUE_SLOTS, MIDWAY } from '@workspace/lib/sheets/limits';
 import type { CellRecord, InputOp, Op, Placed, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -21,7 +21,6 @@ import {
     ballast,
     bookOf,
     format,
-    formatsOf,
     LAST_COLUMN,
     LAST_ROW,
     refusalOf,
@@ -84,10 +83,10 @@ describe('engine/book/room — the counts the workbook keeps are what a walk of 
                     adding = false;
                 }
             });
-            spyOn(book, 'over').mockImplementation((slots, formats) => {
+            spyOn(book, 'over').mockImplementation((more) => {
                 asked += 1;
                 if (!adding) expect(book.weight()).toMatchObject(walked(book));
-                return over(slots, formats);
+                return over(more);
             });
             let model: Model = modelOf(book.content());
             for (let round = 0; round < 6; round += 1) {
@@ -255,6 +254,41 @@ describe('engine/book/room — a write may leave the book at twice a limit insid
         expect(refusalOf(() => applyOps(book, [...adds, block]))).toBe('too-many-formats');
         expect(moves).not.toHaveBeenCalled();
         expect(formatsOf(book.weight())).toBe(MAX_STYLE_RUNS);
+    }, 120_000);
+
+    test('a move weighs the bands its landing cuts: at twice the limit midway it lands, one run past it is refused', () => {
+        // A look on column 5 lands on column 10 of plain columns, cutting their band at 10 and 11: weighed as two bands,
+        // the three runs a write adds to the band between the cuts and the one span it reads.
+        const source = sheetOf('S', { looks: [{ bl: 1 }], bands: [5, 1, 0, 1, 6, 0] });
+        const op = move([0, 5, 0, 5], 0, 10);
+        const weighed = 2 * BAND_WEIGHT + 3 + 1;
+        const twin = new Workbook(bookOf(source));
+        const start = formatsOf(twin.weight());
+        applyOps(twin, [op]);
+        const grown = formatsOf(twin.weight()) - start;
+        // The book ends the batch at the limit. The sheets the batch adds before the move, and deletes after it, bring
+        // it to twice the limit with the move weighed and `past` runs more.
+        const batch = (past: number): Op[] => {
+            const added = ballast(0, MAX_STYLE_RUNS + grown - weighed + past).map((sheet, at) => ({
+                ...sheet,
+                id: `added${at}`,
+                fields: { ...sheet.fields, name: `Added ${at}` },
+            }));
+            return [
+                ...added.map((add): Op => ({ kind: 'sheet', add })),
+                op,
+                ...added.map(({ id }): Op => ({ kind: 'sheet', delete: id })),
+            ];
+        };
+        const near = () => new Workbook(bookOf(source, ...ballast(0, MAX_STYLE_RUNS - grown - start)));
+        const landed = near();
+        applyOps(landed, batch(0));
+        expect(formatsOf(landed.weight())).toBe(MAX_STYLE_RUNS);
+        const book = near();
+        const moves = spyOn(book.engine, 'moveCells');
+        expect(refusalOf(() => applyOps(book, batch(1)))).toBe('too-many-formats');
+        expect(moves).not.toHaveBeenCalled();
+        expect(formatsOf(book.weight())).toBe(MAX_STYLE_RUNS - grown);
     }, 120_000);
 
     test('a sheet added is weighed with its cells and its parts before the engine takes it', () => {

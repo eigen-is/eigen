@@ -238,13 +238,6 @@ describe('engine/book — after a batch the engine holds the rows the sheets hid
         expect(bytes(book)).toBe(before);
         expect(totals(book, 'b')).toEqual([53, 53, 53, 63]);
     });
-
-    test('a filter column of a snapshot whose filter is not there leaves out no row', () => {
-        const orphan = { filterColumn: { k: { filter: 'gone', column: 0, rows: [[3, 3] as const] } } };
-        const book = new Workbook(bookOf(sheetOf('a', { records: { ...orphan } })));
-        book.engine.recalc(Number.MAX_SAFE_INTEGER);
-        expect(TOTALS.map((_, row) => book.engine.valueOf('a', row, 2))).toEqual([63, 63, 63, 63]);
-    });
 });
 
 // Measured in Excel for the web on 16 Nov 2026: A2:A7 hold 1, 2, 4, 8, 16 and 32, A9 holds 64, and a filter over

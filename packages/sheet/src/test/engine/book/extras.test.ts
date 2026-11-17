@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { Placed, Rect } from '@workspace/lib/sheets/ops';
-import { meets } from '@workspace/lib/sheets/rect';
+import { meets, WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import type { Extra } from '../../../engine/book/extras';
 import { Extras, textOf } from '../../../engine/book/extras';
 import { ColumnSweep } from '../../../engine/book/rect-index';
@@ -41,7 +41,7 @@ describe('engine/book/extras — Extras', () => {
         expect(extras.at(5, 1)).toEqual(LINK);
         expect(extras.at(5, 2)).toBeUndefined();
         expect(extras.at(LAST_ROW, LAST_COLUMN)).toEqual(QUOTED);
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [7, 0, QUOTED],
             [LAST_ROW, 0, LINK],
             [0, 1, RICH],
@@ -68,15 +68,17 @@ describe('engine/book/extras — Extras', () => {
         expect([...extras.cells([10, 3, 20, 4])]).toEqual([]);
     });
 
-    test('a put returns the old entry, keeps only the keys given, and with none deletes', () => {
+    test('a put keeps only the keys given, and with none deletes', () => {
         const extras = new Extras({ extras: 0 });
-        expect(extras.write(1, 1, { s: undefined, link: LINK.link, qp: undefined })).toBeUndefined();
+        extras.write(1, 1, { s: undefined, link: LINK.link, qp: undefined });
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
-        expect(extras.write(1, 1, RICH)).toEqual(LINK);
+        extras.write(1, 1, RICH);
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['s', 'link']);
-        expect(extras.write(1, 1, {})).toEqual(RICH);
-        expect(extras.write(1, 1, {})).toBeUndefined();
-        expect(extras.content()).toEqual([]);
+        expect(extras.at(1, 1)).toEqual(RICH);
+        extras.write(1, 1, {});
+        expect(extras.at(1, 1)).toBeUndefined();
+        extras.write(1, 1, {});
+        expect(extras.cells(WHOLE_GRID)).toEqual([]);
     });
 
     test('an entry weighs two units, its link three more and each run of its text one', () => {
@@ -112,7 +114,7 @@ describe('engine/book/extras — Extras', () => {
             [0, 3, QUOTED],
         ]);
         extras.fill(new ColumnSweep([[1, 1, 2, 2]]), [{ s: undefined, link: LINK.link, qp: undefined }]);
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [1, 0, QUOTED],
             [0, 1, RICH],
             [1, 1, LINK],
@@ -125,7 +127,7 @@ describe('engine/book/extras — Extras', () => {
         expect(Object.keys(extras.at(1, 1) ?? {})).toEqual(['link']);
         expect(extras.weight()).toBe(2 + 7 + 4 * 5 + 5 + 2);
         extras.fill(new ColumnSweep([[0, 1, 5, 1]]), [{}]);
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [1, 0, QUOTED],
             [1, 2, LINK],
             [2, 2, LINK],
@@ -133,7 +135,7 @@ describe('engine/book/extras — Extras', () => {
         ]);
         expect(extras.weight()).toBe(2 + 2 * 5 + 2);
         extras.fill(new ColumnSweep([[0, 0, LAST_ROW, LAST_COLUMN]]), [{}]);
-        expect(extras.content()).toEqual([]);
+        expect(extras.cells(WHOLE_GRID)).toEqual([]);
         expect(extras.weight()).toBe(0);
     });
 
@@ -166,7 +168,7 @@ describe('engine/book/extras — Extras', () => {
             [0, 2, QUOTED],
         ]);
         extras.link(new ColumnSweep([[0, 1, 2, 1]]), other);
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s, link: other }],
             [1, 1, { qp: 1, link: other }],
@@ -176,7 +178,7 @@ describe('engine/book/extras — Extras', () => {
         ]);
         expect(extras.weight()).toBe(2 + 7 + 5 + 5 + 5 + 2);
         extras.link(new ColumnSweep([[0, 0, 5, 2]]), undefined);
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [1, 0, QUOTED],
             [0, 1, { s: RICH.s }],
             [1, 1, QUOTED],
@@ -207,21 +209,21 @@ describe('engine/book/extras — Extras', () => {
             [3, 4, RICH],
         ]);
         extras.lines(linesOp(true, true, 3, 2));
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [2, 0, LINK],
             [5, 0, QUOTED],
             [5, 4, RICH],
         ]);
         extras.lines(linesOp(false, true, 0, 1));
         extras.lines(linesOp(false, true, 5, 3));
-        expect(extras.content()).toEqual([
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [2, 1, LINK],
             [5, 1, QUOTED],
             [5, 8, RICH],
         ]);
     });
 
-    test('a delete returns the entries of its lines where they were', () => {
+    test('a delete takes the entries of its lines out', () => {
         const extras = extrasOf([
             [2, 0, LINK],
             [3, 0, QUOTED],
@@ -229,18 +231,13 @@ describe('engine/book/extras — Extras', () => {
             [3, 4, RICH],
             [9, 4, QUOTED],
         ]);
-        expect(extras.lines(linesOp(true, false, 3, 2))).toEqual([
-            [3, 0, QUOTED],
-            [4, 0, LINK],
-            [3, 4, RICH],
-        ]);
-        expect(extras.content()).toEqual([
+        extras.lines(linesOp(true, false, 3, 2));
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [2, 0, LINK],
             [7, 4, QUOTED],
         ]);
-        expect(extras.lines(linesOp(false, false, 0, 4))).toEqual([[2, 0, LINK]]);
-        expect(extras.content()).toEqual([[7, 0, QUOTED]]);
-        expect(extras.lines(linesOp(false, true, 0, 4))).toEqual([]);
+        extras.lines(linesOp(false, false, 0, 4));
+        expect(extras.cells(WHOLE_GRID)).toEqual([[7, 0, QUOTED]]);
     });
 
     test('an insert would push a cell off the grid only when an entry is on a pushed line', () => {
@@ -255,7 +252,7 @@ describe('engine/book/extras — Extras', () => {
         expect(new Extras({ extras: 0 }).wouldPush(linesOp(false, true, 0, GRID_COLUMNS))).toBe(false);
     });
 
-    test('a block moved over itself keeps its own entries and returns what it landed on as it was', () => {
+    test('a block moved over itself keeps its own entries', () => {
         const extras = extrasOf([
             [0, 0, LINK],
             [1, 0, QUOTED],
@@ -263,12 +260,8 @@ describe('engine/book/extras — Extras', () => {
             [3, 0, LINK],
             [5, 0, QUOTED],
         ]);
-        expect(extras.move(moveOp([0, 0, 2, 0], 1, 0), extras)).toEqual([
-            [1, 0, QUOTED],
-            [2, 0, RICH],
-            [3, 0, LINK],
-        ]);
-        expect(extras.content()).toEqual([
+        extras.move(moveOp([0, 0, 2, 0], 1, 0), extras);
+        expect(extras.cells(WHOLE_GRID)).toEqual([
             [1, 0, LINK],
             [2, 0, QUOTED],
             [3, 0, RICH],
@@ -288,12 +281,9 @@ describe('engine/book/extras — Extras', () => {
             [10, 4, LINK],
             [0, 9, QUOTED],
         ]);
-        expect(to.move(moveOp([0, 0, 1, 1], 10, 3, 'T'), from)).toEqual([
-            [11, 3, LINK],
-            [10, 4, LINK],
-        ]);
-        expect(from.content()).toEqual([[5, 5, QUOTED]]);
-        expect(to.content()).toEqual([
+        to.move(moveOp([0, 0, 1, 1], 10, 3, 'T'), from);
+        expect(from.cells(WHOLE_GRID)).toEqual([[5, 5, QUOTED]]);
+        expect(to.cells(WHOLE_GRID)).toEqual([
             [0, 2, QUOTED],
             [10, 3, LINK],
             [11, 4, RICH],
@@ -360,7 +350,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
             };
             for (let step = 0; step < 6000; step += 1) {
                 const { extras, model } = sheets[below(random, 2)];
-                const before = sheets.map((sheet) => [...sheet.extras.content()]);
+                const before = sheets.map((sheet) => [...sheet.extras.cells(WHOLE_GRID)]);
                 const kind = below(random, 14);
                 const rows = random() < 0.5;
                 // Index 0, inside, on the last line that holds an entry and past it.
@@ -374,8 +364,9 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     const row = random() < 0.05 ? LAST_ROW : below(random, ROWS);
                     const column = random() < 0.05 ? LAST_COLUMN : below(random, COLUMNS);
                     const extra = random() < 0.25 ? undefined : ENTRIES[below(random, ENTRIES.length)];
-                    const old = extras.write(row, column, extra ?? {});
+                    const old = extras.at(row, column);
                     expect(old).toEqual(model.cells.get(`${row},${column}`)?.[2]);
+                    extras.write(row, column, extra ?? {});
                     model.put(row, column, extra);
                     undo = () => extras.write(row, column, old ?? {});
                 } else if (kind === 5) {
@@ -387,18 +378,19 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                             model.put(row, column, undefined);
                         }
                     }
-                    before.splice(0, 2, ...sheets.map((sheet) => [...sheet.extras.content()]));
+                    before.splice(0, 2, ...sheets.map((sheet) => [...sheet.extras.cells(WHOLE_GRID)]));
                     extras.lines(linesOp(rows, true, index, count));
                     model.shift(rows, index, count);
-                    undo = () => expect(extras.lines(linesOp(rows, false, index, count))).toEqual([]);
+                    undo = () => extras.lines(linesOp(rows, false, index, count));
                 } else if (kind === 6) {
                     counts.remove += 1;
                     const band: Rect = rows
                         ? [index, 0, index + count - 1, LAST_COLUMN]
                         : [0, index, LAST_ROW, index + count - 1];
                     const expected = model.within(band);
-                    const removed = extras.lines(linesOp(rows, false, index, count));
+                    const removed = extras.cells(band);
                     expect(removed).toEqual(expected);
+                    extras.lines(linesOp(rows, false, index, count));
                     model.shift(rows, index, -count);
                     undo = () => {
                         extras.lines(linesOp(rows, true, index, count));
@@ -456,18 +448,19 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                     const toColumn = near ? Math.max(0, from[1] + below(random, 3) - 1) : below(random, COLUMNS);
                     const target: Rect = [toRow, toColumn, toRow + from[2] - from[0], toColumn + from[3] - from[1]];
                     counts.carried += model.within(from).length;
-                    const covered = to.extras.move(moveOp(from, toRow, toColumn), extras);
+                    const covered = to.extras.cells(target);
                     expect(covered).toEqual(to.model.within(target));
+                    to.extras.move(moveOp(from, toRow, toColumn), extras);
                     model.move(from, to.model, toRow, toColumn);
                     counts[across ? 'moveAcross' : 'moveOver'] += 1;
                     counts.covered += covered.length;
                     undo = () => {
-                        expect(extras.move(moveOp(target, from[0], from[1]), to.extras)).toEqual(model.within(from));
+                        extras.move(moveOp(target, from[0], from[1]), to.extras);
                         for (const [row, column, extra] of covered) to.extras.write(row, column, extra);
                     };
                 }
                 for (const sheet of sheets) {
-                    expect([...sheet.extras.content()]).toEqual(sheet.model.within(WHOLE));
+                    expect([...sheet.extras.cells(WHOLE_GRID)]).toEqual(sheet.model.within(WHOLE));
                     expect(sheet.extras.weight()).toBe(weightOf(sheet.model.within(WHOLE)));
                     const block = randomBlock(random);
                     expect([...sheet.extras.cells(block)]).toEqual(sheet.model.within(block));
@@ -478,7 +471,7 @@ describe('engine/book/extras — the entries are the per-cell model’s entries'
                 if (step % 3 === 0) {
                     undo();
                     for (const [at, sheet] of sheets.entries()) {
-                        expect([...sheet.extras.content()]).toEqual(before[at]);
+                        expect([...sheet.extras.cells(WHOLE_GRID)]).toEqual(before[at]);
                         expect(sheet.extras.weight()).toBe(weightOf(before[at]));
                         sheet.model.cells = new Map(before[at].map((cell) => [`${cell[0]},${cell[1]}`, cell]));
                     }

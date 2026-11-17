@@ -5,26 +5,26 @@
 // their history. It keeps what the limits weigh as a count, and tells the engine which rows a sheet hides and filters.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
-import { Engine, errorOf } from '@workspace/formula';
-import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { Engine } from '@workspace/formula';
+import { GRID_COLUMNS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits, MIDWAY } from '@workspace/lib/sheets/limits';
 import type { CellContent, CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
 import type { Extra } from './extras';
-import { Extras, textOf } from './extras';
+import { contentOf, Extras, literalOf } from './extras';
 import { LineRuns } from './line-runs';
 import { LookTable } from './look-table';
 import { BookRecords } from './records';
+import { ColumnSweep } from './rect-index';
 
-// The parts of one sheet. Its cells are the engine's and its fields and records the record store's, under the sheet's
-// id. A part takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an
-// insert pushes something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines`
-// and `move` return what they replaced, removed or covered, as the part's reads list it.
+// The parts of one sheet; its cells are the engine's, its fields and records the record store's. Each part takes an
+// op itself, `lines(op)`, `wouldPush(op)` and `move(op, source)`, the last called on the part a block lands on.
 export type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;
@@ -33,7 +33,7 @@ export type BookSheet = {
 };
 
 // A look table that holds fewer looks is not swept: the looks no cell wears then cost next to nothing.
-const SWEEP_FLOOR = 64;
+const LOOK_SWEEP_FLOOR = 64;
 
 export class Workbook {
     public readonly engine: Engine;
@@ -52,9 +52,8 @@ export class Workbook {
     // What the limit on formats counts over every sheet: the bands and the extras add to it wherever they write.
     private readonly held = { runs: 0, bands: 0, extras: 0 };
 
-    // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
-    // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
-    // band said twice is.
+    // Loads a snapshot, weighing the bands as rebuilt, the extras as held and the cells as listed before the engine
+    // allocates: a document over a limit throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
     public constructor({ g, now, seed, computed, sheets }: Readonly<BookContent>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map((sheet) => this.partsOf(sheet));
@@ -93,35 +92,10 @@ export class Workbook {
     // One sheet whole, as the snapshot lists it and a `sheet` op adds it.
     public sheetContent(id: string, { bands, rows, columns, extras }: BookSheet): SheetContent {
         const cells: Placed<CellRecord>[] = [];
-        const list = (row: number, column: number, value: Literal | null, formula: string | null, extra?: Extra) => {
-            const cell: CellRecord = {};
-            if (extra?.s) cell.s = extra.s;
-            else if (value !== null && typeof value === 'object') {
-                cell.v = value.text;
-                cell.e = 1;
-            } else if (value !== null) cell.v = value;
-            if (formula !== null) cell.f = formula;
-            if (extra?.link) cell.link = extra.link;
-            if (extra?.qp) cell.qp = extra.qp;
-            cells.push([row, column, cell]);
-        };
-        // A cell that holds only a link or a mark is no cell of the engine's: it is listed in its place among them.
-        const marked = extras.content();
-        let next = 0;
-        const listMarkedBefore = (row: number, column: number) => {
-            for (; next < marked.length; next += 1) {
-                const [r, c, extra] = marked[next];
-                if (c > column || (c === column && r >= row)) return;
-                list(r, c, null, null, extra);
-            }
-        };
-        this.engine.cells(id, (row, column, value, formula) => {
-            listMarkedBefore(row, column);
-            const here = next < marked.length && marked[next][0] === row && marked[next][1] === column;
-            list(row, column, value, formula, here ? marked[next][2] : undefined);
-            if (here) next += 1;
+        this.cellsIn(id, extras, new ColumnSweep([WHOLE_GRID]), (row, column, value, formula, extra) => {
+            const cell = contentOf(value, formula, true, extra);
+            if (cell) cells.push([row, column, cell]);
         });
-        listMarkedBefore(GRID_ROWS, GRID_COLUMNS);
         const look = bands.content();
         return {
             id,
@@ -135,6 +109,57 @@ export class Workbook {
         };
     }
 
+    // Tells `visit` what each cell the sweep's rectangles cover holds, in column order, with its rectangle's place in
+    // the list: the engine's cells joined with the extras, a cell with only a link or a mark among them.
+    public cellsIn(
+        sheet: string,
+        extras: Extras,
+        sweep: ColumnSweep,
+        visit: (
+            row: number,
+            column: number,
+            value: Literal | null,
+            formula: string | null,
+            extra: Extra | undefined,
+            at: number,
+        ) => void,
+    ): void {
+        const { rects, live } = sweep;
+        if (rects.length === 0) return;
+        const { engine } = this;
+        const marks: [row: number, column: number, extra: Extra, at: number][] = [];
+        extras.within(sweep, (...mark) => marks.push(mark));
+        let mark = 0;
+        // The rectangle the engine reads now.
+        let block = 0;
+        const before = (row: number, column: number) => {
+            for (; mark < marks.length; mark += 1) {
+                const [r, c, extra, at] = marks[mark];
+                if (c > column || (c === column && r >= row)) break;
+                visit(r, c, null, null, extra, at);
+            }
+        };
+        const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
+            before(row, column);
+            const here = marks[mark]?.[0] === row && marks[mark][1] === column;
+            visit(row, column, value, formula, here ? marks[mark][2] : undefined, block);
+            if (here) mark += 1;
+        };
+        const lastColumn = engine.lastColumn(sheet);
+        sweep.pass((left, right) => {
+            for (let column = left; column <= Math.min(right, lastColumn); column += 1) {
+                // The rectangles that start past the column's last cell hold nothing of the engine's.
+                const end = sweep.after(engine.columnLength(sheet, column) - 1);
+                for (let at = 0; at < end; at += 1) {
+                    block = live[at];
+                    const [top, , bottom] = rects[block];
+                    engine.cells(sheet, cell, top, column, bottom, column);
+                }
+            }
+        });
+        before(0, GRID_COLUMNS);
+    }
+
     // Adds a sheet as the load builds one, in its place among the tabs, and hands back the formulas its name bound.
     // `checked`, its parts and cells are weighed before the engine takes it; a refusal, the engine's too, leaves none.
     public addSheet(sheet: SheetContent, checked: boolean): EditResult {
@@ -144,7 +169,7 @@ export class Workbook {
         }
         const part = this.partsOf(sheet);
         try {
-            const over = checked ? this.over(slotsOf(sheet)) : null;
+            const over = checked ? this.over({ slots: slotsOf(sheet) }) : null;
             if (over) throw new Refusal(over);
             const result = this.engine.addSheet(sourceOf(sheet), place);
             this.place(sheet.id, part, place);
@@ -192,19 +217,18 @@ export class Workbook {
         return { slots: this.engine.slots(), ...this.held, records: this.records.weight(), sheets: this.parts.size };
     }
 
-    // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this many slots
-    // and this much weight of formats more, or null. Records are weighed at the end of a batch only.
-    public over(slots = 0, formats = 0): RefusalKey | null {
-        const { runs, bands, extras } = this.held;
-        const sheets = this.parts.size;
-        const weight = { slots: this.engine.slots() + slots, runs: runs + formats, bands, extras, records: 0, sheets };
-        return fits(weight, MIDWAY);
+    // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this much more, or
+    // null. Records are weighed at the end of a batch only.
+    public over({ slots = 0, runs = 0, bands = 0, extras = 0 }: Partial<WorkbookWeight> = {}): RefusalKey | null {
+        const { held } = this;
+        const more = { runs: held.runs + runs, bands: held.bands + bands, extras: held.extras + extras };
+        return fits({ slots: this.engine.slots() + slots, ...more, records: 0, sheets: this.parts.size }, MIDWAY);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
     // every sheet's bands: an applier calls it once a batch is done, with no look id in hand.
     public sweepLooks(): void {
-        if (this.looks.size > Math.max(SWEEP_FLOOR, 2 * this.swept)) this.sweep();
+        if (this.looks.size > Math.max(LOOK_SWEEP_FLOOR, 2 * this.swept)) this.sweep();
     }
 
     // A sheet's parts, its looks interned into the table and its bands rebuilt in the one form whatever it said.
@@ -235,15 +259,11 @@ export class Workbook {
         this.held.extras -= extras.weight();
     }
 
-    // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
-    // the sheet's filter left out. While the filter leaves a row out, Excel counts every hidden row of the sheet as
-    // filtered, inside its range or not. A hidden column matters to neither function.
+    // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those hidden and those the filter leaves
+    // out. While the filter leaves one out, Excel counts every hidden row as filtered too; no hidden column matters.
     private rowsOut(sheet: string, { rows }: BookSheet): { hidden: number[]; filtered: number[] } {
         const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
-        const filters = this.records.records(sheet, 'filter');
-        const filtered = [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) =>
-            filters.has(column.filter) ? column.rows : [],
-        );
+        const filtered = [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) => column.rows);
         if (filtered.length > 0) filtered.push(...hidden);
         return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
     }
@@ -260,7 +280,7 @@ export class Workbook {
         }
         const moved = this.looks.sweep(worn);
         for (const { bands } of this.parts.values()) {
-            bands.write([[0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]], (id) => moved[id]);
+            bands.write([WHOLE_GRID], (id) => moved[id]);
         }
         this.swept = this.looks.size;
     }
@@ -291,18 +311,14 @@ function pairsOf(spans: readonly Span[]): number[] {
     return pairs;
 }
 
-// A sheet's cells as the engine reads them: a rich text is the text of its runs, and only a value, a formula or a
-// rich text reaches it.
+// A sheet's cells as the engine reads them: only a value, a formula or a rich text reaches it.
 function sourceOf({ id, fields, cells }: SheetContent): SheetSource {
     return {
         id,
         name: fields.name,
         cells: (cell) => {
             for (const [row, column, record] of cells) {
-                if (!reachesEngine(record)) continue;
-                const { v, e, f, s } = record;
-                const value = s ? textOf(s) : e && typeof v === 'string' ? errorOf(v) : (v ?? null);
-                cell(row, column, value, f ?? null);
+                if (reachesEngine(record)) cell(row, column, literalOf(record), record.f ?? null);
             }
         },
     };

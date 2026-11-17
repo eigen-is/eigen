@@ -134,9 +134,9 @@ export class Workbook {
         return this.byId.get(id);
     }
 
-    // The sheet a host names, by its id or by its place among the tabs, which must exist.
-    public known(sheet: string | number): Sheet {
-        const found = typeof sheet === 'string' ? this.byId.get(sheet) : this.held[sheet];
+    // The sheet a host names by its id, which must exist.
+    public known(sheet: string): Sheet {
+        const found = this.byId.get(sheet);
         if (found === undefined) throw new Error(`No sheet ${sheet}`);
         return found;
     }
@@ -158,9 +158,8 @@ export class Workbook {
         if (named !== undefined && named !== holder) throw new Error(`Sheet name ${name} is in use`);
     }
 
-    // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
-    // does while it is read, such as a call of the engine, meets the workbook as it was. Its formulas are to be
-    // computed unless a full pass computed their values.
+    // Reads one sheet from its description to the end, the tables untouched, so what the source does meanwhile, such
+    // as a call of the engine, meets the workbook as it was. Unless `computed`, its formulas are to be computed.
     public read(source: SheetSource, computed: boolean): Draft {
         const lengths: number[] = [];
         walk(source, (row, column) => {

@@ -5,13 +5,12 @@
 // on outside it held, the records the move removed or changed, and the formulas it made lossy.
 
 import type { Move } from '@workspace/formula';
-import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
-import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { covers, outsideOf, within } from '@workspace/lib/sheets/rect';
+import type { FormatOp, InputOp, MoveOp, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
+import { covers, intersect, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { Areas } from './apply-format';
-import { inputOfBlocks, lostInputs } from './apply-input';
+import { wornLooks } from './apply-format';
+import type { Gathered } from './apply-input';
+import { inputOf, inputOfBlocks, lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
 // `checked`, it throws before a write when the block could leave the workbook over a limit inside a batch where it
@@ -43,8 +42,7 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         const writes = [...source.bands.spans([top, left, top, right])];
         const growth = landing.bands.growth(writes.map(({ c0, c1 }): Span => [c0 + columnShift, c1 + columnShift]));
         // An upper bound: a move with the book at a limit at both ends can be refused though it would fit.
-        const formats = growth.runs + growth.bands * BAND_WEIGHT + source.bands.tiles(op.from);
-        const over = book.over(slots, formats);
+        const over = book.over({ slots, runs: growth.runs + source.bands.tiles(op.from), bands: growth.bands });
         if (over) throw new Refusal(over);
     }
     // The move back leaves the landed-on cells outside the block plain and empty, so only those are written back.
@@ -60,26 +58,15 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         { kind: 'move', sheet: op.toSheet, from: target, toSheet: op.sheet, toRow: top, toColumn: left },
     ];
     // Each look the landed-on cells wore, put back whole over the cells that wore it.
-    const looks = new Map<number, Areas>();
+    const worn: [look: number, rect: Rect][] = [];
     for (const { c0, c1, r0, r1, look } of covered) {
         if (look === 0) continue;
-        for (const [t, l, b, r] of outside) {
-            const span: Rect = [Math.max(r0, t), Math.max(c0, l), Math.min(r1, b), Math.min(c1, r)];
-            if (span[0] > span[2] || span[1] > span[3]) continue;
-            let areas = looks.get(look);
-            if (!areas) {
-                areas = new Areas();
-                looks.set(look, areas);
-            }
-            areas.add(...span);
+        for (const rect of outside) {
+            const both = intersect([r0, c0, r1, c1], rect);
+            if (both) worn.push([look, both]);
         }
     }
-    for (const [id, areas] of looks) {
-        const look = book.looks.look(id);
-        const clear = LOOK_KEYS.filter((key) => look[key] === undefined);
-        const format: FormatOp = { kind: 'format', sheet: op.toSheet, ranges: areas.joined(), set: { ...look } };
-        inverse.push(clear.length > 0 ? { ...format, clear } : format);
-    }
+    inverse.push(...wornLooks(book, op.toSheet, worn));
     if (held) inverse.push(held);
     inverse.push(...plan.restore);
     inverse.push(...movedBack(lostInputs(book, result), op, target));
@@ -97,7 +84,7 @@ export function moveOf({ sheet, from: [top, left, bottom, right], toSheet, toRow
 function movedBack(ops: readonly InputOp[], op: MoveOp, target: Rect): InputOp[] {
     const rowShift = op.toRow - op.from[0];
     const columnShift = op.toColumn - op.from[1];
-    const bySheet = new Map<string, { runs: [Rect, CellContent | null][]; cells: Placed<CellContent | null>[] }>();
+    const bySheet = new Map<string, Gathered>();
     const of = (sheet: string) => {
         let gathered = bySheet.get(sheet);
         if (!gathered) {
@@ -117,8 +104,5 @@ function movedBack(ops: readonly InputOp[], op: MoveOp, target: Rect): InputOp[]
             else of(op.sheet).cells.push([row - rowShift, column - columnShift, content]);
         }
     }
-    return [...bySheet].map(([sheet, { runs, cells }]) => {
-        cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-        return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-    });
+    return [...bySheet].flatMap(([sheet, gathered]) => inputOf(sheet, gathered) ?? []);
 }

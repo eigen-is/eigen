@@ -11,21 +11,20 @@ import { RunList } from './run-list';
 // The columns from `first` up to the next band's first, or to the grid's last column.
 type Band = { first: number; list: RunList };
 
-// A rectangle of cells that wear one look id, every bound inclusive.
-export type LookSpan = {
+// A rectangle of cells that wear one look, by its id or as it is, every bound inclusive.
+export type LookSpan<L = number> = {
     readonly c0: number;
     readonly c1: number;
     readonly r0: number;
     readonly r1: number;
-    readonly look: number;
+    readonly look: L;
 };
 
 export class Bands {
     private readonly bands: Band[] = [{ first: 0, list: new RunList() }];
 
-    // A sheet from a snapshot's flat form: per band its first column, n, then n pairs of start row and look index,
-    // where index i names `looks[i - 1]` and 0 is plain. Equal neighbours join; columns before the first are plain.
-    // `held` counts the runs and the bands of every sheet of the workbook: each write here adds what it changed.
+    // From a snapshot's flat bands (first column, n, n pairs of start row and look index i: `looks[i - 1]`, 0 plain),
+    // equal neighbours joined. `held` counts every sheet's runs and bands, and each write here adds what it changed.
     public constructor(
         flat: readonly number[],
         looks: readonly number[],
