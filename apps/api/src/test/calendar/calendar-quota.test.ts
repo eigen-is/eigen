@@ -7,7 +7,8 @@ import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { getMailDomain, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getHome } from '../../lib/home/get-home';
-import { pullHomeSize, sendToHome } from '../../lib/home/home-relay';
+import { sizeUserHome } from '../../lib/home/home-jobs';
+import { pushToHomes } from '../../lib/home/home-relay';
 import { makeCalendar } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import type { TestUser } from '../setup';
@@ -76,7 +77,7 @@ const aliceLink = (organizerEventId: string) => ({
 
 // A series somebody else organizes, landed the way the relay lands one: the RSVP routes take no other kind.
 async function inviteFromAlice(user: TestUser, uid: string): Promise<CalendarEvent> {
-    await sendToHome(user.id, {
+    await pushToHomes([user.id], {
         type: 'calendar:request',
         events: [
             {
@@ -572,7 +573,7 @@ describe('Calendar storage quota', () => {
             await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));
             await fillBudget(user);
 
-            await sendToHome(user.id, {
+            await pushToHomes([user.id], {
                 type: 'calendar:request',
                 events: [
                     {
@@ -621,7 +622,7 @@ describe('Calendar storage quota', () => {
             const parts = (await home.mail.size()) + (await home.contacts.size()) + calendarBytes;
             const booted = await home.size();
             expect(booted.homeData.used).toBe(parts);
-            expect((await pullHomeSize(user.id)).homeData.used).toBe(parts);
+            expect((await sizeUserHome(user.id)).homeData.used).toBe(parts);
             return calendarBytes;
         };
 

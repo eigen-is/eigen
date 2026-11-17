@@ -7,10 +7,15 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
-Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
+Docs is where you write in Eigen. You create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time.
+
+An open document has the toolbar across the top and the page in the middle. Comments open in a panel on the right.
+
+::: video src="/data/about/media/docs-hero" caption="A line added to a document, and undo takes it back."
+:::
 
 ## Create a document
 

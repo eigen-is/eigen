@@ -15,7 +15,8 @@ import { getDomain } from '../../lib/config/server-config';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
-import * as homeRelay from '../../lib/home/home-relay';
+import * as homeJobs from '../../lib/home/home-jobs';
+import type * as homeRelay from '../../lib/home/home-relay';
 import type { TestUser } from '../setup';
 import { assertJson, authedRequest, createTestUserOnStorage, drivePost, driveUpload, TEST_DATA_DIR } from '../setup';
 
@@ -80,8 +81,8 @@ export async function readServerManifest(archivePath: string) {
 // Holds every home capture until released, so a job stays running while a test looks at it.
 export function holdCaptures(): { release(): void; restore(): void } {
     const gate = Promise.withResolvers<void>();
-    const pull = homeRelay.pullHomeSnapshot;
-    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+    const pull = homeJobs.snapshotHomeHeld;
+    const spy = spyOn(homeJobs, 'snapshotHomeHeld').mockImplementation(async (...args) => {
         await gate.promise;
         return pull(...args);
     });
@@ -145,13 +146,13 @@ export async function snapshotInto(
     return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
 }
 
-// The titles of the admin alerts sendToHome was handed for `ownerId`.
+// The titles of the admin alerts pushToHomes was handed for `ownerId`.
 export function alertTitlesTo(
-    spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } },
+    spy: { mock: { calls: Parameters<typeof homeRelay.pushToHomes>[] } },
     ownerId: string,
 ): string[] {
-    return spy.mock.calls.flatMap(([target, message]) =>
-        target === ownerId && message.type === 'notification' && message.notification.type === 'admin-alert'
+    return spy.mock.calls.flatMap(([targets, message]) =>
+        [...targets].includes(ownerId) && message.type === 'notification' && message.notification.type === 'admin-alert'
             ? [message.notification.title]
             : [],
     );

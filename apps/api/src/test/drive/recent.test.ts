@@ -353,7 +353,10 @@ describe('Recent records an open', () => {
         const errors = spyOn(console, 'error').mockImplementation(() => {});
         await openInEditor(viewer, file);
         await eventually(async () => (errors.mock.calls.length > 0 ? true : undefined), 'the logged failure');
-        expect(errors).toHaveBeenCalledWith(expect.stringContaining('recent:'), expect.anything());
+        expect(errors).toHaveBeenCalledWith(
+            expect.stringContaining(`drive:recent-open to ${viewer.id}`),
+            expect.anything(),
+        );
         expect(await storedIds(viewer)).not.toContain(file.id);
     });
 
@@ -699,6 +702,30 @@ describe('Recent lists', () => {
         expect(ids).toEqual(folders.map((folder) => folder.id).reverse());
         const askedIds = asked.mock.calls.flatMap(([, , rows]) => rows.map((row) => row.pathId));
         expect(askedIds).not.toContain(older.id);
+    });
+
+    test('newest first across owners, cutting the oldest of the older rows', async () => {
+        const viewer = await newViewer();
+        const team = await newTeamOf(viewer);
+        const { user } = await getHome(viewer.id);
+        const ownRoot = await rootOf(viewer);
+        const teamRoot = await rootOf(viewer, team);
+        // 2 missing rows and 98 visible ones make the newest 100, then 3 older visible ones, the owners taking turns.
+        const paths: DrivePath[] = [];
+        for (let i = 0; i < 101; i++) {
+            const root = i % 2 === 0 ? teamRoot : ownRoot;
+            const home = await getHome(root.ownerId);
+            paths.push(await home.drive.createFolder(root.mountId, root.id, crypto.randomUUID(), user));
+        }
+        const missing = [1, 2].map(() => ({ ...ownRoot, id: crypto.randomUUID() }));
+        setSystemTime(new Date());
+        const rows = [...missing, ...paths];
+        for (const [i, row] of rows.entries()) await insertRow(viewer, row, i + 1);
+
+        const expected = paths.slice(0, 100).map((path) => path.id);
+        const ids = await listedIds(viewer);
+        expect(ids.toSorted()).toEqual(expected.toSorted());
+        expect(ids).toEqual(expected);
     });
 
     test('older rows when too few of the newest 100 are visible', async () => {

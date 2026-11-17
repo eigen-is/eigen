@@ -15,19 +15,19 @@ import { ApiError } from '../../lib/core/errors';
 import * as homeRelay from '../../lib/home/home-relay';
 import { collectSSE, getTestContext } from '../setup';
 
-// A poke resolves the admin list before it sends, so one that was just emitted reaches sendToHome a
-// query later rather than in the same tick.
+// A poke resolves the admin list before it sends, so one that was just emitted reaches broadcastToHomes
+// a query later rather than in the same tick.
 const POKE_SETTLE_MS = 50;
 
 type Poke = { jobId: string; ownerId: string };
 
 // Per recipient: the poke fans out to every admin.
-function pokesOf(calls: Parameters<typeof homeRelay.sendToHome>[], recipient: string): Poke[] {
+function pokesOf(calls: Parameters<typeof homeRelay.broadcastToHomes>[], recipient: string): Poke[] {
     const pokes: Poke[] = [];
-    for (const [target, message] of calls) {
-        if (target !== recipient) continue;
-        if (message.type !== 'broadcast' || message.event.type !== SSEventType.BACKUP_JOB_UPDATED) continue;
-        pokes.push({ jobId: message.event.jobId, ownerId: message.event.ownerId });
+    for (const [ownerIds, event] of calls) {
+        if (![...ownerIds].includes(recipient)) continue;
+        if (event.type !== SSEventType.BACKUP_JOB_UPDATED) continue;
+        pokes.push({ jobId: event.jobId, ownerId: event.ownerId });
     }
     return pokes;
 }
@@ -36,7 +36,7 @@ describe('Backup job pokes', () => {
     test('pokes when a job starts and when it ends, never on progress, which the panes poll for', async () => {
         const ctx = await getTestContext();
         const ownerId = `poke-owner-${Date.now()}`;
-        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const spy = spyOn(homeRelay, 'broadcastToHomes').mockImplementation(() => {});
 
         let jobId = '';
         try {
@@ -102,7 +102,7 @@ describe('Backup job pokes', () => {
 describe('Backup job slot', () => {
     test("a per-home start refused by a running server backup is not told the server archive's name", async () => {
         const ownerId = `slot-owner-${crypto.randomUUID()}`;
-        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const spy = spyOn(homeRelay, 'broadcastToHomes').mockImplementation(() => {});
         const gate = Promise.withResolvers<void>();
         try {
             startBackupJob('server-backup', ownerId, undefined, async (started) => {
@@ -134,7 +134,7 @@ describe('Backup job slot', () => {
 
     test('a job that has finished its work holds the slot for a route until it settles, as for a waiter', async () => {
         const ownerId = `slot-settle-${crypto.randomUUID()}`;
-        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const spy = spyOn(homeRelay, 'broadcastToHomes').mockImplementation(() => {});
         try {
             const job = startBackupJob('backup', ownerId, undefined, async () => 'settle.tar');
             // The job reads done a few microtasks before it has settled and let go of the slot.

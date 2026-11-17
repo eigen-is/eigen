@@ -5,10 +5,13 @@ type: how-to
 tags: [admin, members, users, roles, password]
 related: [admin/teams, admin/guests]
 order: 20
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 Members are the people with full accounts on your Eigen server. You manage them from the [**Users**](/admin/users) page in Admin. You need an admin or owner role to do any of this.
+
+::: video src="/data/about/media/admin-hero" caption="The list of users, one member's details, then a team with its drive and its members."
+:::
 
 ## Add a member
 

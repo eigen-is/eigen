@@ -16,13 +16,20 @@ import type {
 } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION, SERVER_ARCHIVE_EXTENSION } from '@workspace/lib/validation';
-import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
+import {
+    getDataRoot,
+    getServerDataPath,
+    homeDirUnder,
+    ORG_HOMES_DIR,
+    SERVER_DATABASES,
+    SERVER_FILES,
+} from '../config/paths';
 import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { isHomeDeleting } from '../home/get-home';
-import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
+import { snapshotHomeHeld } from '../home/home-jobs';
 import { getOwnerExists } from '../user';
 import { alertOwner } from '../user/alert-owner';
 import type { ServerArchiveWriter } from './archive';
@@ -48,6 +55,7 @@ import {
     wipeBackupStagingDir,
 } from './paths';
 import { pruneLocalArchives, writeServerSidecar } from './server-archives';
+import { captureBytes } from './snapshot-home';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { startUploadJob } from './upload-job';
 import { requireVerified, verifyFolder } from './verify';
@@ -249,7 +257,7 @@ async function appendHome(
         // Held for the capture only: meanwhile a per-home backup or restore of this home gets the
         // 409, as the server job waited out theirs.
         const release = await waitForHomeSlot(home.ownerId, 'server backup');
-        const manifest = await pullHomeSnapshot(home.ownerId, staging, { level, onProgress }).finally(release);
+        const manifest = await snapshotHomeHeld(home.ownerId, staging, { level, onProgress }).finally(release);
         requireVerified(await verifyFolder(folder, onProgress), member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
@@ -278,7 +286,7 @@ async function appendPacked(writer: ServerArchiveWriter, member: string, packed:
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
     const sizes = [await serverMemberBytes()];
     for (const home of homes) {
-        const bytes = await pullHomeBackupBytes(home.ownerId, level).catch((error) => {
+        const bytes = await captureBytes(homeDirUnder(getDataRoot(), home.ownerId), level).catch((error) => {
             console.warn(`[backup] ${home.ownerId} could not be sized for the room check: ${describeError(error)}`);
             return 0;
         });

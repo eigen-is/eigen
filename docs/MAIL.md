@@ -55,6 +55,7 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 
 - `MailDB.listMessages` pages on a `(date, id)` cursor over the `(mailbox, date DESC, id DESC)` index.
 - Move, read, flag and delete patch the cached pages by message id (`patchEmailInLists`) and roll back on error, instead of invalidating.
+- The patch is applied twice: before the request and again when the server answers (`confirmMailMutation`). A page the server read before it stored the change can land after the first patch and undo it, and the echo that would correct it is skipped. A mail opened from the bell hits this, since its list is still loading. So the answer cancels every list fetch still running, patches again and restarts the cancelled ones. The cancel comes first, because TanStack lets a refetch of a list with no data join the fetch already running.
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
 - `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 

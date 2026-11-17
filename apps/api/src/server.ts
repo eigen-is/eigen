@@ -11,12 +11,13 @@ import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { shutdownAllHomes } from './lib/home';
-import { drainDeliveriesWithin } from './lib/home/home-relay';
+import { drainHomeDeliveries } from './lib/home/home-relay';
 import { setShutdownDrainDeadline } from './lib/mount/upload-limits';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupLink } from './lib/setup/setup-token';
 import { startControlSocket } from './routes/control';
+import { settlesWithin } from './utils/timing';
 
 // How long a shutdown may spend uploading pending S3 writes. With the waits before it, it stays below docker-compose's
 // stop_grace_period, and an upload that doesn't make it runs again at the next boot.
@@ -63,7 +64,9 @@ async function gracefulShutdown(signal: string) {
     // with no home folder. So the backup jobs settle before the S3 drain time starts counting.
     await drainBackupJobs();
     // A delivery reopens its recipient's home, so every delivery still running finishes before the homes close.
-    await drainDeliveriesWithin(SHUTDOWN_DELIVERY_BOUND_MS);
+    if (!(await settlesWithin(drainHomeDeliveries(), SHUTDOWN_DELIVERY_BOUND_MS))) {
+        console.warn(`[shutdown] gave up waiting for home pushes after ${SHUTDOWN_DELIVERY_BOUND_MS} ms`);
+    }
     // Each mount uploads its queue during its close, until this deadline. That runs after the last writes
     // of the close are queued and before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);

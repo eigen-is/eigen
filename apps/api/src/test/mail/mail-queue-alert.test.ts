@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getHome } from '../../lib/home';
 import { getOrgOwner } from '../../lib/user';
@@ -39,6 +39,27 @@ describe('Mail queue alert', () => {
         expect(alert).toBeTruthy();
         expect(alert?.title).toBe('Mail queue backlog');
         expect(alert?.body).toBe('731 messages queued');
+    });
+
+    // The monitor only learns that the owner was found: a home that refuses the alert is the relay's to log.
+    test('answers notified and logs it when the owner’s home refuses the alert', async () => {
+        const refusal = spyOn(await getHome(ownerId), 'notify').mockImplementation(() => {
+            throw new Error('This home refuses the alert');
+        });
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        let res: Response;
+        let logged: string[];
+        try {
+            res = await queueAlert(12);
+            logged = errors.mock.calls.map((call) => String(call[0]));
+        } finally {
+            errors.mockRestore();
+            refusal.mockRestore();
+        }
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({ notified: true });
+        expect(logged.some((line) => line.includes(`notification to ${ownerId}`))).toBe(true);
     });
 
     test('rejects a body without a queued count', async () => {

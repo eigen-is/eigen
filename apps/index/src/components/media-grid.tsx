@@ -1,9 +1,10 @@
 // A grid of images and videos inside a blog post or Support article, which the article's Markdown declares as a
-// `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, and its caption. A click hands
-// the page around it the item to open in its lightbox, with the grid as the group.
+// `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, the full-screen mark the site's
+// other pictures show, and its caption, which names the button, so the thumbnail itself has empty alt text. A click hands the page around it the item to open in its lightbox, with the
+// grid as the group.
 
 import { cn } from '@workspace/ui/lib/utils';
-import { Play } from 'lucide-react';
+import { Maximize, Play } from 'lucide-react';
 import type { MediaGridData, MediaItem } from '../../scripts/lib/content-types';
 import type { OpenLightbox } from './media-lightbox';
 import { Caption } from './media-lightbox';
@@ -29,21 +30,27 @@ export function MediaGrid({ columns, items, onOpen }: MediaGridData & { onOpen: 
 
 function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: MediaItem & { onClick: () => void }) {
     return (
-        <button type="button" className="group block w-full text-left" onClick={onClick}>
-            <div className="relative overflow-hidden rounded-lg bg-muted">
+        <button type="button" className="group block w-full cursor-pointer text-left" onClick={onClick}>
+            <div className="media-frame overflow-hidden rounded-lg bg-muted">
                 {type === 'image' && (
                     <img
                         src={thumbnail ?? src}
-                        alt={caption ?? ''}
+                        alt=""
                         className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                     />
                 )}
                 {type === 'video' && (
                     <div className="relative w-full h-full">
                         {poster ? (
-                            <img src={poster} alt={caption ?? ''} className="w-full h-full object-cover" />
+                            <img src={poster} alt="" className="w-full h-full object-cover" />
                         ) : (
-                            <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
+                            <video
+                                src={src}
+                                className="w-full h-full object-cover"
+                                muted
+                                preload="metadata"
+                                aria-hidden="true"
+                            />
                         )}
                         {/* Black and white, not theme tokens, on purpose: the mark sits on any photo, in either theme. */}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
@@ -51,12 +58,14 @@ function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: Medi
                         </div>
                     </div>
                 )}
+                {/* The whole thumbnail is the button, so the mark only shows what a click does. */}
+                <span className="media-expand" aria-hidden="true">
+                    <Maximize />
+                </span>
             </div>
-            {caption && (
-                <p className="mt-2 text-[11px] text-muted-foreground text-center">
-                    <Caption text={caption} />
-                </p>
-            )}
+            <p className="mt-2 text-[11px] text-muted-foreground text-center">
+                <Caption text={caption} />
+            </p>
         </button>
     );
 }

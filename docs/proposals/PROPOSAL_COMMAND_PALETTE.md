@@ -2,13 +2,13 @@
 
 The command palette is the ⌘K dialog of Eigen's apps: one keyboard entry point to jump somewhere, create something, or search mail, files and help. This page lists what is left to build on it.
 
-**Status:** the palette is built, and [COMMAND-PALETTE.md](../COMMAND-PALETTE.md) describes it. This page designs the six items below, none of them built.
+**Status:** the palette is built, and [COMMAND-PALETTE.md](../COMMAND-PALETTE.md) describes it. This page designs the six items below; only item 3 is built.
 
 | # | Item                                        | Effort | Blocked on                                    |
 |---|---------------------------------------------|--------|-----------------------------------------------|
 | 1 | Sub-action sheet (`→`)                      | S      | — buildable now                               |
 | 2 | `event:` / `chat:` result kinds + prefixes  | S      | ROADMAP.md search rows (no backend yet)       |
-| 3 | Per-user recents                            | S      | PROPOSAL_HOME_RECENTS (still a proposal)      |
+| 3 | Per-user recents                            | S      | — built (recent files in the empty state)     |
 | 4 | Content-aware input (paste / drop / image URLs) | M  | — global-helper half buildable now            |
 | 5 | Smart-parser growth (datetime, math, units) | M      | telemetry showing demand                      |
 | 6 | Pinned commands, per-command hotkeys, aliases | L    | 5 (telemetry)                                 |
@@ -51,10 +51,9 @@ Each is additive and small — richer results per the "arrives for free" design;
 
 ## 3. Per-user recents
 
-Waits for [PROPOSAL_HOME_RECENTS.md](PROPOSAL_HOME_RECENTS.md), which is still a proposal with no code behind it, and which builds the Drive Recent page first. No frontend-local placeholder gets built in the meantime (decided — don't ship what we'll replace). Once that page's data exists:
+Built: the empty state shows Recent files from the Drive **Recent files** page's query, and typed text matches them at once ([COMMAND-PALETTE.md](../COMMAND-PALETTE.md#recent-files-share-drives-query-and-read-only-while-the-palette-is-open)).
 
-- A Recent files section joins the empty state beside the curated Suggested list. That proposal's palette section has the details.
-- Action ranking's recency boost is not covered: it needs per-command usage, which the recent files table doesn't hold (open question 4 below).
+Action ranking's recency boost is not covered: it needs per-command usage, which the recent files table doesn't hold (open question 4 below).
 
 ## 4. Content-aware input
 

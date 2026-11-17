@@ -3,7 +3,7 @@ title: Sheets
 description: Spreadsheets with formulas, charts and Excel files, edited together on your own server.
 ---
 
-eigen|sheets⟩ is the spreadsheet app in Eigen. You type a formula, the totals update, and everyone with the sheet open sees it happen. It saves as you work, so there is no Save button.
+eigen|sheets⟩ is the [spreadsheet app](/support/sheets/get-started) in Eigen. You type a formula, the totals update, and everyone with the sheet open sees it happen. It saves as you work, so there is no Save button.
 
 ::: video src="/data/about/media/sheets-hero" caption="A formula typed, the totals update, and undo takes it back."
 :::

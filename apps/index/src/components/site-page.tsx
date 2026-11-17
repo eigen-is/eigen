@@ -7,6 +7,10 @@ import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import type { ReactNode } from 'react';
 import { SiteFooter } from './site-footer';
 
+// The page's scrolling element. The router resets only the window on a new page, and carries every other scroller's
+// position over unless it is named here.
+export const SITE_SCROLL_ID = 'site-scroll';
+
 type SitePageProps = {
     // A CSS color such as `var(--app-sheets-color)`.
     color?: string;
@@ -37,8 +41,9 @@ export function SitePage({ color, toolbar, children }: SitePageProps) {
                     )
                 }
             >
-                {/* A size container, so a carousel in the content can run to the page's right edge. */}
-                <div className="@container h-full overflow-y-auto scroll-smooth">
+                {/* A size container, so a carousel in the content can run to the page's right edge. Its id is the
+                    router's scroll-to-top selector, so a new page opens at its top. */}
+                <div id={SITE_SCROLL_ID} className="@container h-full overflow-y-auto scroll-smooth">
                     <div className="flex min-h-full flex-col">
                         <div className="flex flex-1 flex-col" style={style}>
                             {children}

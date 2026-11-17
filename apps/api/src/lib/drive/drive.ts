@@ -5,7 +5,13 @@
 // public methods serve server code, such as chat, collab and the home relay.
 
 import { SWEEP_GRACE_MS } from '@workspace/lib/constants/sweep';
-import type { DrivePath, DrivePathDetails, DrivePathType, EigenDocType } from '@workspace/lib/types/drive';
+import type {
+    DrivePath,
+    DrivePathDetails,
+    DrivePathRef,
+    DrivePathType,
+    EigenDocType,
+} from '@workspace/lib/types/drive';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
@@ -40,7 +46,6 @@ import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
-import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import type { CopyTree } from '../mount/copy';
@@ -81,7 +86,7 @@ import type { SharedDb } from './shared';
 import { getSharedDatabase } from './shared';
 import { listSharedOwnerIds, listSharedWithMe, receiveSharedPathChange } from './shared-with-me';
 import { checkAccessForEmails, emailCollaborators, inviteToChat, membersFromCrumbs } from './sharing';
-import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
+import { broadcastFileHistoryUpdated, broadcastToOwnerAndMembers, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 import { sweepCopy, sweepDocument } from './sweep';
 import { deleteFailedCopy, deleteForGood, deletePath, permanentlyDelete, restorePath } from './trash';
@@ -97,9 +102,6 @@ export type ContentWriteResult = { path: DrivePath; etag: string };
 
 // The folder a copy lands in, reached as the copying user reaches it.
 export type CopyTarget = { drive: DriveLike; mountId: string; parentId: string };
-
-// A path another home's row names, such as a Recent or Shared with me row, with the row that named it.
-export type VisiblePath<Row> = { readonly row: Row; readonly path: DrivePath };
 
 const UNKNOWN_TYPE = 'application/octet-stream';
 
@@ -1011,25 +1013,25 @@ export class Drive {
         return listRecent(this.sharedDb);
     }
 
-    // The paths of this owner that another home's rows name and the user may still read, each with its row. It
-    // deletes no row, as a failed read looks like a deleted file.
-    public async getVisiblePaths<Row extends { mountId: string; pathId: string }>(
+    // The paths of this owner that another home's rows name and the user may still read. It deletes no row, as a failed
+    // read looks like a deleted file.
+    public async getVisiblePaths(
         user: User,
         memberships: Memberships,
-        rows: readonly Row[],
-        mimeTypePrefix = '',
-    ): Promise<VisiblePath<Row>[]> {
-        const found: VisiblePath<Row>[] = [];
+        rows: readonly DrivePathRef[],
+        mimeTypePrefix: string,
+    ): Promise<DrivePath[]> {
+        const found: DrivePath[] = [];
         for (const [mountId, mountRows] of Map.groupBy(rows, (row) => row.mountId)) {
             const mount = this.mounts.get(mountId);
             if (!mount) continue;
             const chains = await mount.getBreadcrumbs(mountRows.map((row) => row.pathId));
-            for (const [i, chain] of chains.entries()) {
+            for (const chain of chains) {
                 const path = chain.at(-1);
                 if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
                 if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
                 if (!canReadFromAncestors(chain, user, memberships)) continue;
-                found.push({ row: mountRows[i], path });
+                found.push(path);
             }
         }
         return found;
@@ -1196,18 +1198,17 @@ export class Drive {
         return this.getMount(mountId).history.getWatchStatus(pathId, user.id);
     }
 
+    // A revoked share keeps its watch rows, so the paths the user can no longer read drop out here.
     public async getWatches(user: User): Promise<DrivePath[]> {
-        return (await this.getWatchedBreadcrumbs(user)).flatMap((crumbs) => crumbs.slice(-1));
-    }
-
-    // The breadcrumb of every path the user watches, with the path itself last, so read access can be checked on it.
-    // A path that no longer exists has an empty breadcrumb.
-    public async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
-        const crumbs: DrivePath[][] = [];
+        const memberships = await getMemberships(user.id);
+        const watched: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            crumbs.push(...(await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))));
+            // Each breadcrumb ends in the watched path. A path that no longer exists has an empty one.
+            for (const ancestors of await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))) {
+                if (canReadFromAncestors(ancestors, user, memberships)) watched.push(...ancestors.slice(-1));
+            }
         }
-        return crumbs;
+        return watched;
     }
 
     // ---- Document databases ----

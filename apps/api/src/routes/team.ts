@@ -1,5 +1,6 @@
 // The routes to manage one team: its members, its settings, the drives it mounts, and its avatar. Members can read
-// them, and only an admin or the owner of the server can change them. The team data lives in the Home of the team.
+// the members and settings. Only an admin or the owner of the server can change them or read the mounts, which carry
+// the storage secret. The team data lives in the Home of the team.
 
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { MOUNT_STORAGE_TYPES } from '@workspace/lib/types/mount';
@@ -10,9 +11,9 @@ import { requireTeamAccess, requireTeamAdmin } from '../lib/auth/access';
 import { enforceMaxUploadSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core/errors';
 import { getTeamHome } from '../lib/home';
-import { pushTeamAvatar } from '../lib/home/home-relay';
 import { generateImagePreview } from '../lib/shared/thumbnails';
 import { getTeamExists, getTeamMembers } from '../lib/team';
+import { writeTeamAvatar } from '../lib/user/profile';
 import { betterAuth } from './auth';
 import { optionalEnum, s3ConfigBody, toS3Config } from './shared-schemas';
 
@@ -140,7 +141,7 @@ export const teamRouter = new Elysia({ name: 'team' })
                 fit: 'cover',
             });
             if (!result) throw new ApiError(400, 'Failed to generate avatar thumbnail');
-            await pushTeamAvatar(id, result.data);
+            await writeTeamAvatar(id, result.data);
         },
         {
             body: t.Object({ file: t.File({ format: 'image/*' }) }),
@@ -154,7 +155,7 @@ export const teamRouter = new Elysia({ name: 'team' })
             const id = teamId(params.ownerId);
             await requireTeamAdmin(user.id, id);
             if (!(await getTeamExists(id))) throw new ApiError(404, 'Team not found');
-            await pushTeamAvatar(id, null);
+            await writeTeamAvatar(id, null);
         },
         { auth: true },
     );

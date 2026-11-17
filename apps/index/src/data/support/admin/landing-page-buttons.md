@@ -33,8 +33,6 @@ A few things happen when you save:
 
 The buttons sit on the landing page next to **Log in**, in the order you listed them. If the waitlist is turned on, they come after the **Join waitlist** button. See [Manage the waitlist](/support/admin/waitlist) for that form.
 
-The same buttons also show under the title of the About pages, which the **About** link at the bottom of the landing page opens.
-
 Clicking one opens the address in the same tab, so the visitor leaves the landing page.
 
 <div class="eigen-callout">

@@ -1,8 +1,8 @@
-// An app's About page: the headline your own|sheets⟩ with the page's description and the admin's links, then the
-// body, which ends with a panel for the reader's technical person, and a pager to the previous and the next app. It
-// reads like a blog post, in the reading column with the table of contents in the gutter, and under it a small box for
-// each of Eigen's principles the app holds to, such as CalDAV for Calendar, and a line to the app's whole help section.
-// Narrow screens have no gutter, so there the boxes and the line follow the body and its technical panel.
+// An app's About page: the headline your own|sheets⟩ with the page's description, then the body, which ends with a
+// panel for the reader's technical person, and a pager to the previous and the next app. It reads like a blog post, in
+// the reading column with the table of contents in the gutter, and under it a small box for each of Eigen's principles
+// the app holds to, such as CalDAV for Calendar, and a line to the app's whole help section. Narrow screens have no
+// gutter, so there the boxes and the line follow the body and its technical panel.
 
 import type { AboutApp } from '../content/about-apps';
 import { principleLabels } from '../content/about-apps';
@@ -11,7 +11,6 @@ import { AppWordmark } from './app-wordmark';
 import { ArticleBreadcrumb } from './article-breadcrumb';
 import { ArticleContent } from './article-content';
 import { ArticleToc } from './article-toc';
-import { LandingLinks } from './landing-links';
 import { PagerLink } from './pager-link';
 import { ReadingLayout } from './reading-layout';
 import { SitePage } from './site-page';
@@ -41,9 +40,6 @@ export function AboutPage({ app, page, body, previous, next }: AboutPageProps) {
                         <AppWordmark prefix="your own" app={app} />
                     </h1>
                     <p className="mt-2 text-muted-foreground">{page.description}</p>
-                    <div className="mt-6 flex flex-wrap gap-4 empty:hidden">
-                        <LandingLinks />
-                    </div>
                     <ArticleContent body={body} className="mt-8" />
                     <div className="mt-10 grid gap-4 min-[76rem]:hidden">
                         <PrincipleBoxes

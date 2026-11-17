@@ -19,8 +19,8 @@ import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '
 import { ApiError, computeResourceEtag, LocalFilesystem, newSyncGen, payloadTooLarge } from '../core';
 import type { Home } from '../home';
 import { atHome } from '../home';
-import { pushUserProfile } from '../home/home-relay';
 import { getOrgOwner } from '../user';
+import { writeUserProfile } from '../user/profile';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
@@ -364,7 +364,7 @@ export class Contacts {
                 throw new ApiError(412, 'Contact was changed elsewhere');
             }
 
-            // A self-card edit renames the user org-wide, so its inputs are read before the write swaps the staged URL and pushed after the commit.
+            // A self-card edit renames the user org-wide; its photo is read before the write swaps the staged URL, and the profile written after the commit.
             const isSelf = row.eigenId === this.home.user.id;
             const selfName = contactFullName(contact);
             let selfAvatarBuffer: Buffer | null = null;
@@ -430,7 +430,7 @@ export class Contacts {
             // Propagation is downstream of a settled mutation: reporting its failure hands back a stale etag, so the client's retry 412s on an edit that succeeded.
             if (isSelf) {
                 try {
-                    await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
+                    await writeUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
                 } catch (e) {
                     console.error(`contacts: failed to propagate the profile of ${this.home.user.id}:`, e);
                 }

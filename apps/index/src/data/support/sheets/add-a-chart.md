@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -22,6 +22,9 @@ A column chart appears below the cells, selected, and its panel opens on the rig
 - The series names make the chart title.
 
 A chart holds up to 32 series and 2,000 values. Hidden rows and columns are included in the chart.
+
+::: video src="/data/about/media/sheets-chart" caption="A cost changes, and its bar in the chart grows."
+:::
 
 ## Change the data and the look
 

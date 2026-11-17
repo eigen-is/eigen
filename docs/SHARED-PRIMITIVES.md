@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2372 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2379 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (323)
+## Components (324)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -261,6 +261,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverTrigger` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
+| `PreviewLightbox` | `@workspace/ui/components/preview-lightbox` | packages/ui/src/components/preview-lightbox.tsx |
 | `Progress` | `@workspace/ui/components/progress` | packages/ui/src/components/progress.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
 | `AlignSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/align-section.tsx |
@@ -339,13 +340,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FrameThumbnail` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 | `FrameView` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/frame-view.tsx |
 
-## Providers (7)
+## Providers (8)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AuthProvider` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `MediaResolverProvider` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `CommandPaletteProvider` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/command-palette/command-palette-provider.tsx |
+| `ThemeProvider` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/theme-provider.tsx |
 | `PreviewProvider` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
 | `DocSearchProvider` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
@@ -690,7 +692,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (467)
+## Types (470)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -837,6 +839,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DrivePath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathDetails` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathPermissions` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
+| `DrivePathRef` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DrivePathType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveSearchParams` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
 | `DriveSort` | `@workspace/lib/types` | packages/lib/src/types/drive-view.ts |
@@ -923,6 +926,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SetupResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SetupStatus` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `SharedWithMeCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -937,6 +941,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventTypeName` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `TeamQuotaOverrides` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UpdateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
@@ -1162,7 +1167,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1246)
+## Utilities & constants (1248)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2363,6 +2368,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readImageSizeFromUrl` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
 | `focusLeftToEditor` | `@workspace/ui/components/menubar` | packages/ui/src/components/menubar.tsx |
 | `pressClosesMenu` | `@workspace/ui/components/menubar` | packages/ui/src/components/menubar.tsx |
+| `PREVIEW_BODY_MAX_HEIGHT` | `@workspace/ui/components/preview-lightbox` | packages/ui/src/components/preview-lightbox.tsx |
+| `previewFitStyle` | `@workspace/ui/components/preview-lightbox` | packages/ui/src/components/preview-lightbox.tsx |
 | `getMergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `holdCapture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `isMixed` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |

@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, search, find, email]
 related: [mail/get-started]
 order: 30
-updated: 2026-09-13
+updated: 2026-11-17
 ---
 
 When you need a particular message, you don't have to scroll for it. Mail gives you two ways to search: a box at the top of the email list that filters the folder you're in, and a search that looks across all your mail at once.
@@ -30,6 +30,9 @@ This box searches only the folder you're looking at. To search every folder at o
 </div>
 
 If nothing matches, the list shows **No emails found**. Check your spelling, or try a shorter piece of the word.
+
+::: video src="/data/about/media/mail-search" caption="A search in the Inbox narrows the list, and a message opens from it."
+:::
 
 ## Search across all your mail
 

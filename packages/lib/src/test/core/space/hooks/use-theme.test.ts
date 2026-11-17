@@ -1,5 +1,6 @@
-// The theme: Light until the user picks one, what they picked read from their settings or, before those load, from
-// this browser's copy. A pick draws at once and saves in the background, without a toast.
+// The theme: the computer's own setting for a browser with no copy, such as a guest's, Light for a user who never
+// picked one, and what they picked read from their settings or, before those load, from this browser's copy. A pick
+// draws at once and saves in the background, without a toast.
 import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { THEME_COPY_KEY } from '@workspace/lib/constants/theme';
@@ -12,10 +13,11 @@ import { renderHook } from '../../../render-hook';
 installHappyDom();
 
 const OWNER = 'u'.repeat(32);
+let role = 'user';
 
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
 mock.module('../../../../core/auth/auth-context', () => ({
-    useAuth: () => ({ user: { id: OWNER, role: 'user' } }),
+    useAuth: () => ({ user: { id: OWNER, role } }),
 }));
 
 // The server's settings. A save waits until the test lets it land, so the test sees what the page draws meanwhile.
@@ -70,16 +72,26 @@ beforeEach(() => {
     saved.length = 0;
     toasts.length = 0;
     stored = {};
+    role = 'user';
 });
 
-test('is Light with nothing stored or copied, and the saved theme once the settings hold one', async () => {
-    const empty = await renderHook(() => useTheme(), client());
-    expect(empty.latest.theme).toBe('light');
-    await empty.unmount();
+test('follows the computer for a guest, who has no settings, and the saved theme once they hold one', async () => {
+    role = 'guest';
+    const guest = await renderHook(() => useTheme(), client());
+    expect(guest.latest.theme).toBe('system');
+    await guest.unmount();
 
-    const loaded = await renderHook(() => useTheme(), client({ theme: 'system' }));
-    expect(loaded.latest.theme).toBe('system');
+    role = 'user';
+    const loaded = await renderHook(() => useTheme(), client({ theme: 'dark' }));
+    expect(loaded.latest.theme).toBe('dark');
     await loaded.unmount();
+});
+
+test('a user who never picked one is Light, and this browser keeps Light for next time', async () => {
+    const { latest, unmount } = await renderHook(() => useTheme(), client({}));
+    expect(latest.theme).toBe('light');
+    expect(window.localStorage.getItem(THEME_COPY_KEY)).toBe('light');
+    await unmount();
 });
 
 test('a pick draws before the save lands, and the save shows no toast', async () => {

@@ -1,12 +1,12 @@
 // A team home holds what a team shares, such as its drives and its calendar. Nobody signs in as a
-// team: members reach it through their own access, and a notification to the team goes to them.
+// team: members reach it through their own access, and it has no notification center of its own.
 // The team's admins add and change its drives here. A drive's new storage or on/off switch closes the
 // whole home, which opens again on the next request.
 
 import type { S3Config } from '@workspace/lib/types/mount';
 import { mountStorageIdentity } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
+import type { MountSettings, TeamQuotaOverrides, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
 import { getTeamHomePath } from '../config/paths';
 import { ApiError } from '../core';
@@ -42,14 +42,19 @@ export class TeamHome extends Home {
     }
 
     public override get calendar(): Calendar {
-        const calendar = super.calendar;
-        if (this.settings.get().calendar?.enabled === false) {
-            throw new ApiError(404, 'Team calendar is disabled');
-        }
-        return calendar;
+        if (!this.hasCalendar) throw new ApiError(404, 'Team calendar is disabled');
+        return super.calendar;
     }
 
-    // A team home has no notification center, so a notification relayed to it goes to these members instead.
+    public override get hasCalendar(): boolean {
+        return this.settings.get().calendar?.enabled !== false;
+    }
+
+    public override get memberOverrides(): TeamQuotaOverrides {
+        return this.settings.get().memberOverrides ?? {};
+    }
+
+    // A team has no notification center, so its members are told instead.
     public async membersToNotify(actorEmail?: string | null): Promise<User[]> {
         if (this.settings.get().notifyMembers === false) return [];
         const members = await getTeamMembers(this.teamId);

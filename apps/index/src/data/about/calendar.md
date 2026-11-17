@@ -3,7 +3,7 @@ title: Calendar
 description: Your calendars, your team's and the invitations between them, on your own server and synced to your phone.
 ---
 
-eigen|calendar⟩ is the [calendar app](/support/calendar/get-started) in Eigen. It opens on the month, with a week view one click away, and your own calendars sit beside your team's in the sidebar.
+eigen|calendar⟩ is [where you keep your schedule](/support/calendar/get-started) in Eigen. It opens on the month, with a week view one click away, and your own calendars sit beside your team's in the sidebar.
 
 ::: video src="/data/about/media/calendar-hero" caption="Saar opens the go/no-go meeting and its guests, then hides and shows the crew's calendar."
 :::

@@ -8,7 +8,7 @@ import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import { getServerSettings } from '../config/server-settings';
 import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { pushToHomes } from '../home/home-relay';
 import type { ParsedEvent, RecurrenceId } from '../ical/ical-parse';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
 import type { OutboundICalEvent } from '../mailer/mailer';
@@ -50,12 +50,12 @@ export async function propagateInvitation(
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
-            await sendToHome(targetUser.id, {
+            await pushToHomes([targetUser.id], {
                 type: 'calendar:request',
                 ...invitationRequest(organizer, user.id, attendee.email, event, series, exceptions),
             });
             if (!updated && getServerSettings().notifications.email.userOnCalendarInvite) {
-                // A local recipient has the event from sendToHome, so an iMIP attachment would update it twice.
+                // A local recipient has the event from pushToHomes, so an iMIP attachment would update it twice.
                 const mail = composeInviteEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
             }
@@ -72,7 +72,7 @@ export async function propagateInvitation(
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
-            await sendToHome(targetUser.id, {
+            await pushToHomes([targetUser.id], {
                 type: 'calendar:invitation-removal',
                 orgEventId: series?.id ?? event.id,
                 orgUserId: organizerHome.user.id,
@@ -91,7 +91,7 @@ export async function propagateRsvp(
     newStatus: Attendee['status'],
     recurrenceDate?: string,
 ): Promise<void> {
-    await sendToHome(organizerUserId, {
+    await pushToHomes([organizerUserId], {
         type: 'calendar:rsvp',
         eventId: organizerEventId,
         attendeeEmail,
@@ -121,7 +121,7 @@ export async function propagateCancellation(
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
                 continue;
             }
-            await sendToHome(targetUser.id, {
+            await pushToHomes([targetUser.id], {
                 type: 'calendar:invitation-removal',
                 orgEventId: series?.id ?? cancelled.id,
                 orgUserId: organizerHome.user.id,

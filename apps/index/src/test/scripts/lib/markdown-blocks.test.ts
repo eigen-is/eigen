@@ -33,7 +33,7 @@ describe('grid', () => {
     test('a grid leaves a marker for its place among the media, with one item per image line', () => {
         const { html, media } = build(
             [
-                '::: grid columns="3"\n![The *inbox*](/mail.webp "/mail-small.webp")\n\n![](/plain.webp)\n:::',
+                '::: grid columns="3"\n![The *inbox*](/mail.webp "/mail-small.webp")\n\n![Plain](/plain.webp)\n:::',
                 'Between',
                 '::: grid columns="1"\n![A film](/film.mp4 "/film.webp")\n:::',
             ].join('\n\n'),
@@ -45,7 +45,7 @@ describe('grid', () => {
                 columns: '3',
                 items: [
                     { src: '/mail.webp', type: 'image', caption: 'The inbox', thumbnail: '/mail-small.webp' },
-                    { src: '/plain.webp', type: 'image', caption: undefined, thumbnail: undefined },
+                    { src: '/plain.webp', type: 'image', caption: 'Plain', thumbnail: undefined },
                 ],
             },
             {
@@ -61,6 +61,7 @@ describe('grid', () => {
         expect(() => render('::: grid columns="7"\n![a](/a.webp)\n:::')).toThrow('columns from 1 to 6');
         expect(() => render('::: grid columns="2"\n:::')).toThrow('needs an image');
         expect(() => render('::: grid columns="2"\ntext\n:::')).toThrow('one image per line');
+        expect(() => render('::: grid columns="2"\n![ ](/a.webp)\n:::')).toThrow('needs alt text');
     });
 
     test('a grid item whose file, thumbnail or poster is missing fails the build', () => {
@@ -96,8 +97,9 @@ describe('video', () => {
         );
     });
 
-    test('a video without src fails the build', () => {
+    test('a video without a src or a caption fails the build', () => {
         expect(() => render('::: video\n:::')).toThrow('src');
+        expect(() => render('::: video src="/data/about/media/a"\n:::')).toThrow('needs a caption');
     });
 
     test('a video with a relative src fails the build with its line', () => {
@@ -108,7 +110,7 @@ describe('video', () => {
 describe('carousel', () => {
     test('a carousel leaves a marker and a slide per image line, captioned with its alt text', () => {
         const { html, media } = build(
-            '::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n\n![](/c.webp)\n:::',
+            '::: carousel caption="The budget"\n![a](/a.webp)\n![b *bold*](/b.webp)\n\n![c](/c.webp)\n:::',
         );
         expect(html).toBe('<p>[BLOCK:0]</p>\n');
         expect(media).toEqual([
@@ -117,7 +119,7 @@ describe('carousel', () => {
                 slides: [
                     { type: 'image', src: '/a.webp', caption: { html: 'a', text: 'a' } },
                     { type: 'image', src: '/b.webp', caption: { html: 'b <em>bold</em>', text: 'b bold' } },
-                    { type: 'image', src: '/c.webp', caption: undefined },
+                    { type: 'image', src: '/c.webp', caption: { html: 'c', text: 'c' } },
                 ],
                 autoplay: false,
                 caption: { html: 'The budget', text: 'The budget' },
@@ -159,6 +161,7 @@ describe('carousel', () => {
     test('a carousel line that is not one image, or a carousel with none, fails the build', () => {
         expect(() => render('::: carousel\n![a](/a.webp) and text\n:::')).toThrow('one image per line');
         expect(() => render('::: carousel\n:::')).toThrow('needs an image');
+        expect(() => render('::: carousel\n![](/a.webp)\n:::')).toThrow('needs alt text');
     });
 
     test('an app name in a caption is set as a ket, and stays plain in its text', () => {

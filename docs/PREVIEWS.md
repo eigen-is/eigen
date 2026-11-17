@@ -8,7 +8,7 @@ The same file shows up in many places: a Drive listing, the mail reader, a chat 
 
 Two more terms come back. A format tag names the shape of a renderer's output and is part of the cache key. A slice is the part of an Eigen document a preview renders: its first blocks, slides or rows.
 
-The sections run from the server to the screen: what each kind of file previews as, the cache and how a browser revalidates it, text and Eigen-document bodies, images, mail parts, the `.vcf`, `.eml` and `.ics` quick looks and how the client draws a body. Then file subjects, the action registry and its runner, Save to Drive, and the overlay and its keys. Five things in them surprise people:
+The sections run from the server to the screen: what each kind of file previews as, the cache and how a browser revalidates it, text and Eigen-document bodies, images, mail parts, the `.vcf`, `.eml` and `.ics` quick looks and how the client draws a body. Then file subjects, the action registry and its runner, Save to Drive, and the overlay, the lightbox it shares with the public site, and its keys. Five things in them surprise people:
 
 - A cached preview is keyed by the file's version and a format tag, and the tag is bumped on every change to the output's shape ([§ The cache key](#the-cache-key-is-the-file-version-and-the-format-tag)).
 - A new version serves the old body while it regenerates ([§ A new version serves the old body](#a-new-version-serves-the-old-body-while-it-regenerates)).
@@ -188,15 +188,19 @@ Siblings come from one surface, so a batch is all Drive items or all mail parts,
 
 ## The overlay picks its mode from the subject
 
-`PreviewProvider` stores the subject and its siblings and renders `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`), which portals itself to `<body>`. `openPreview(subject, siblings?)` takes the siblings the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
+`PreviewProvider` stores the subject and its siblings and renders `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`), the body for the subject's mode and a footer of Open and the file's actions, inside the quick preview lightbox. `openPreview(subject, siblings?)` takes the siblings the side buttons and the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
 
 `getPreviewMode(subject)` runs the text gate of [§ Loose bytes preview as what their name says](#loose-bytes-preview-as-what-their-name-says) on the client. An image needs a mount to be resized, so only a Drive image uses `/preview`. A mail image shows its original bytes, which makes it an image only for a mime in `BROWSER_IMAGE_MIMES`. A HEIC part gets the file card rather than a broken box.
 
 `ProgressiveImage` stacks the 512 px thumbnail under the screen preview so the image shows at once. The box takes its ratio from the Drive row. A mail part has no stored size, so the box measures the image once it loads and then hugs it, and a click beside it reaches the backdrop that closes the overlay. The component is keyed on the preview URL, so a sibling never inherits the previous image's size.
 
+## Quick look and the public site share one lightbox
+
+`PreviewLightbox` (`packages/ui/src/components/preview-lightbox.tsx`) is the overlay itself: the dark backdrop, a title bar with the close button, a round previous and next button at either side, the item in the middle and an optional footer. It knows nothing of files. `FilePreview` fills it with a file and its actions, and the public site's `MediaLightbox` with a picture or film from a page, its caption as the title and no footer ([HELP-CENTER.md](HELP-CENTER.md)). So a fix to the overlay's look, keys or focus lands in every app and on the site at once. The side buttons show only for a group: a lone item has nothing to page to. A picture or film grows to the largest box of its shape that fits 90% of the width and the room between the bars (`previewFitStyle`), so a small screenshot fills the lightbox and every item of a group takes the same space. Where no size is stored, as for a mail part or a picture on the site, the item measures itself once it loads, and the box hugs it, so a click beside it still reaches the backdrop.
+
 ## The overlay is a Radix dialog, so Radix decides which layer a key or a click is for
 
-The overlay opens over other modals, such as a Stickies card whose attachment it shows, and other layers open over it, such as Save to Drive, a menu or the `.eml` reader header's details popover. `FilePreview` is a Radix `Dialog` (Root, Portal, Overlay and Content), so it joins Radix's stacks like any dialog. The top layer alone gets Escape and a click outside it, and it holds the focus trap, the scroll lock and the `aria-hidden` on the rest of the page. Every layer portals to `<body>` as it opens, at the same z-50, so a later one paints above with no z-index of its own.
+The overlay opens over other modals, such as a Stickies card whose attachment it shows, and other layers open over it, such as Save to Drive, a menu or the `.eml` reader header's details popover. `PreviewLightbox` is a Radix `Dialog` (Root, Portal, Overlay and Content), so it joins Radix's stacks like any dialog. The top layer alone gets Escape and a click outside it, and it holds the focus trap, the scroll lock and the `aria-hidden` on the rest of the page. Every layer portals to `<body>` as it opens, at the same z-50, so a later one paints above with no z-index of its own.
 
 A hand-rolled overlay over a Radix modal breaks all of that. The card under it keeps the focus, so Space presses a hidden button in the card. Its scroll lock cancels the wheel in the overlay, so a long text preview can't scroll. And the card takes a click on the overlay's backdrop for a click outside it, and closes too. `useFocusTrap` is only for an overlay that never opens over a Radix modal.
 
@@ -206,7 +210,7 @@ The content fills the screen, so a click on the dark backdrop lands inside the d
 
 Escape is Radix's. All four arrow keys page, and Space closes the way it opened, like Finder's Quick Look. These listen on the document, and they act only when the key's target is inside the overlay. A layer open above the overlay holds the focus, so a key pressed in it is that layer's. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so whether a layer is open says nothing about the key in hand: where it was pressed does.
 
-Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs. A focused Chrome `<audio controls>` swallows every keydown, so while it has focus the X button is the only way out.
+Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs. A focused film or sound keeps every key: an arrow seeks it and Space plays it. A focused Chrome `<audio controls>` swallows every keydown, so while it has focus the X button is the only way out.
 
 ## One hook wires every attachment chip to the menu
 

@@ -15,7 +15,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getPublicConfig } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { evictHome, getHome, getTeamHome } from '../../lib/home/get-home';
-import { pullHomeSnapshot } from '../../lib/home/home-relay';
+import { snapshotHomeHeld } from '../../lib/home/home-jobs';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
@@ -417,7 +417,7 @@ describe('Backup of a disabled team drive switched on while it is captured', () 
         });
         try {
             const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-switched-'));
-            await expect(pullHomeSnapshot(ownerId, target, { level: 'full' })).rejects.toThrow('closed');
+            await expect(snapshotHomeHeld(ownerId, target, { level: 'full' })).rejects.toThrow('closed');
             expect(spy.mock.calls.some(([, , relPath]) => relPath === archived)).toBe(true);
         } finally {
             spy.mockRestore();

@@ -115,6 +115,11 @@ export function homeDirUnder(dataRoot: string, ownerId: string): string {
     return path.join(dataRoot, owner.type === 'team' ? TEAM_HOMES_DIR : USER_HOMES_DIR, owner.id);
 }
 
+// Opening a home creates its folder, so a read that must not create a home asks this first.
+export function homeFolderExists(ownerId: string): boolean {
+    return fs.existsSync(homeDirUnder(getDataRoot(), ownerId));
+}
+
 export function getUserHomePath(userId: string): string {
     return path.join(getDataRoot(), USER_HOMES_DIR, userId);
 }

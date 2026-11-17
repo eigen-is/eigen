@@ -301,8 +301,8 @@ private assertWritableCalendar(calendarId: string) {
 }
 ```
 
-Called at the top of `createEvent`, `updateEvent`, and `deleteEvent`. Because web routes reach
-these through the home-relay (`createEventAt`/`updateEventAt`/`deleteEventAt`) and CalDAV writes
+Called at the top of `createEvent`, `updateEvent`, and `deleteEvent`. Because web routes call
+these on the `Calendar` that `checkCalendarAccess` hands them and CalDAV writes
 reach the same domain methods, one guard covers every write surface. `updateCalendar` is **not**
 guarded — `name`, `color`, `visible`, and `shares` are local metadata and stay editable on a
 subscribed calendar.
@@ -330,10 +330,10 @@ mechanism. One clamp in `Calendar.checkPermission`: return at most `'read'` when
 everywhere by construction, verified against current code:
 
 - `checkCalendarAccess` (`get-calendar.ts`) resolves cross-user and team permissions through
-  `pullCalendarPermission` → `checkPermission`, so route-level write checks
-  (`permission !== 'write'` → 403) reject before the relay is even called.
+  `checkPermission` on the owner's calendar, so route-level write checks
+  (`permission !== 'write'` → 403) reject before any write.
 - `propagateCalendarShare` (`share-propagation.ts`) resolves each recipient's permission through
-  `checkPermission` before `sendToHome`, so recipients' `shared_calendars` rows store `read` and
+  `checkPermission` before `pushToHomes`, so recipients' `shared_calendars` rows store `read` and
   their UI shows no write affordances.
 - `syncTeamCalendars`'s repair loop re-resolves through the same function.
 

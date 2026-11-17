@@ -4,14 +4,27 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { requestOtp, verifyOtpAndSignIn } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
+import * as getHomeModule from '../../lib/home/get-home';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import * as relay from '../../lib/home/home-relay';
 import * as mailer from '../../lib/mailer/mailer';
 import { reconcileShares } from '../../lib/share';
 import { addRegistryEntry } from '../../lib/share/registry';
+import type { User } from '../../lib/user';
 import { getUserByEmail, getUserById } from '../../lib/user';
 import { vcal } from '../ics-test-helpers';
-import { addMember, assertJson, authedRequest, createTeam, createTestUser, findOrFail, getTestContext } from '../setup';
+import {
+    addMember,
+    addTeamMount,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestUser,
+    driveGet,
+    findOrFail,
+    firstMountId,
+    getTestContext,
+} from '../setup';
 
 describe('share reconciliation', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -231,7 +244,7 @@ describe('share reconciliation', () => {
         const calendar = await aliceCalendar('Shared with a team', [
             { targetId: teamOwnerId(teamId), permission: 'read' },
         ]);
-        const invitations = spyOn(relay, 'pullPendingInvitations');
+        const invitations = spyOn((await getHome(ctx.alice.user.id)).calendar, 'pendingInvitations');
         spies.push(invitations);
 
         await addMember(ctx, teamId, ctx.bob.user.id);
@@ -266,8 +279,9 @@ describe('share reconciliation', () => {
         );
         expect(acl.status).toBe(200);
         const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
-        const calendarShares = spyOn(relay, 'pullCalendarShares');
-        const invitations = spyOn(relay, 'pullPendingInvitations');
+        const aliceCalendars = (await getHome(ctx.alice.user.id)).calendar;
+        const calendarShares = spyOn(aliceCalendars, 'getSharedWith');
+        const invitations = spyOn(aliceCalendars, 'pendingInvitations');
         spies.push(sent, calendarShares, invitations);
 
         await requestOtp(email, '192.0.2.71');
@@ -365,6 +379,121 @@ describe('share reconciliation', () => {
         expect(await sharedWithMe(member.sessionToken, member.id)).toContain(file.id);
     });
 
+    async function newcomer(label: string): Promise<{ user: User; sessionToken: string }> {
+        const email = `recon-${label}-${crypto.randomUUID()}@test.eigen.is`;
+        const created = await createTestUser(email, 'testpassword123', label);
+        const user = await getUserById(created.id);
+        if (!user) throw new Error('newcomer missing');
+        return { user, sessionToken: created.sessionToken };
+    }
+
+    test('a path the home refuses does not stop the rest of what that owner shares', async () => {
+        const { user } = await newcomer('refused');
+        const { folder } = await aliceFolderAndRoot();
+        const files = [await aliceShares(folder.id, user.email), await aliceShares(folder.id, user.email)];
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        const receive = spyOn((await getHome(user.id)).drive, 'receiveSharedPathChange');
+        receive.mockClear();
+        receive.mockRejectedValueOnce(new Error('This home refuses the first path'));
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        spies.push(receive, errors);
+
+        await reconcileShares(user);
+
+        const received = receive.mock.calls.map(([path]) => path.id);
+        expect(received.sort()).toEqual(files.map((file) => file.id).sort());
+        const logged = errors.mock.calls.map((call) => String(call[0]));
+        expect(logged.some((line) => line.includes(`drive:acl-change to ${user.id}`))).toBe(true);
+    });
+
+    test('a shared path arrives from the user who shared it, or from a team by its name', async () => {
+        const orgId = getServerConfig()?.orgId;
+        if (!orgId) throw new Error('the test server has no org');
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamName = `Recon actor ${crypto.randomUUID()}`;
+        const teamId = await createTeam(ctx, orgId, teamName);
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addTeamMount(ctx, teamId, 'Actor drive');
+        const team = teamOwnerId(teamId);
+        const { user } = await newcomer('actor');
+        const { folder } = await aliceFolderAndRoot();
+        const fromAlice = await aliceShares(folder.id, user.email);
+        const alice = await getHome(ctx.alice.user.id);
+        const teamDrive = (await getHome(team)).drive;
+        const mountId = await firstMountId(ctx.alice.user.sessionToken, team);
+        const root = await driveGet(ctx.alice.user.sessionToken, team, mountId, 'root');
+        const fromTeam = await teamDrive.createFileFromData(
+            mountId,
+            root.id,
+            `${crypto.randomUUID()}.txt`,
+            'text/plain',
+            Buffer.from('x'),
+            alice.user,
+        );
+        await teamDrive.updateACLDelta(
+            mountId,
+            fromTeam.id,
+            { add: [{ id: user.email, read: true, write: false }] },
+            undefined,
+            undefined,
+            alice.user,
+        );
+        await relay.drainHomeDeliveries();
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        await addRegistryEntry(team, user.email);
+        const receive = spyOn((await getHome(user.id)).drive, 'receiveSharedPathChange');
+        receive.mockClear();
+        spies.push(receive);
+
+        await reconcileShares(user);
+
+        const actors = new Map(receive.mock.calls.map(([path, , email, name]) => [path.id, [email, name]]));
+        expect(actors.get(fromAlice.id)).toEqual([ctx.alice.user.email, ctx.alice.user.name]);
+        expect(actors.get(fromTeam.id)).toEqual([undefined, teamName]);
+    });
+
+    // A sign-in waits for its pull, so the pull must not wait for a fan-out that can take as long as a team is large.
+    test('the pull of a path does not wait for a change to that path that is still being delivered', async () => {
+        const { user, sessionToken } = await newcomer('unordered');
+        const slow = await newcomer('slow');
+        const alice = await getHome(ctx.alice.user.id);
+        const { folder } = await aliceFolderAndRoot();
+        const file = await aliceShares(folder.id, user.email);
+        await addRegistryEntry(ctx.alice.user.id, user.email);
+        const openHome = getHomeModule.getHome;
+        const gate = Promise.withResolvers<void>();
+        spies.push(
+            spyOn(getHomeModule, 'getHome').mockImplementation(async (ownerId) => {
+                if (ownerId === slow.user.id) await gate.promise;
+                return openHome(ownerId);
+            }),
+        );
+
+        let pulledFirst: boolean;
+        try {
+            await alice.drive.updateACLDelta(
+                'default',
+                file.id,
+                { add: [{ id: slow.user.email, read: true, write: false }] },
+                undefined,
+                undefined,
+                alice.user,
+            );
+            const pulling = reconcileShares(user);
+            pulledFirst = await Promise.race([pulling.then(() => true), Bun.sleep(2_000).then(() => false)]);
+        } finally {
+            gate.resolve();
+        }
+        expect(pulledFirst).toBe(true);
+
+        await relay.drainHomeDeliveries();
+        expect(await sharedWithMe(sessionToken, user.id)).toContain(file.id);
+    });
+
     // Reconciliation waits on pulls from other homes, and the newcomer's home may close meanwhile.
     test('a delivery reopens a home that closed during a slow pull', async () => {
         const stamp = Date.now();
@@ -385,13 +514,11 @@ describe('share reconciliation', () => {
         });
         const share = { calendarId: `gated-${stamp}`, name: 'Gated', color: '#000000', permission: 'read' as const };
         spies.push(
-            spyOn(relay, 'pullCalendarShares').mockImplementation(async () => {
+            spyOn((await getHome(owner.id)).calendar, 'getSharedWith').mockImplementation(async () => {
                 reached();
                 await gate;
                 return [share];
             }),
-            spyOn(relay, 'pullPendingInvitations').mockResolvedValue([]),
-            spyOn(relay, 'pullSharedPaths').mockResolvedValue([]),
         );
 
         const running = reconcileShares(user);

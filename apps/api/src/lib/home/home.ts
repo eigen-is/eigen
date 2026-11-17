@@ -7,7 +7,7 @@
 import * as path from 'node:path';
 import { parseNotificationPath } from '@workspace/lib/notification/tags';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, TeamQuotaOverrides, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
@@ -91,6 +91,11 @@ export abstract class Home {
 
     public get hasCalendar(): boolean {
         return !!this._calendar;
+    }
+
+    // Only a team raises its members' quotas, so every other kind of home answers none.
+    public get memberOverrides(): TeamQuotaOverrides {
+        return {};
     }
 
     public get closing(): boolean {
