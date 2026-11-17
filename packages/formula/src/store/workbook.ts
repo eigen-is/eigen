@@ -134,9 +134,9 @@ export class Workbook {
         return this.byId.get(id);
     }
 
-    // The sheet a host names, by its id or by its place among the tabs, which must exist.
-    public known(sheet: string | number): Sheet {
-        const found = typeof sheet === 'string' ? this.byId.get(sheet) : this.held[sheet];
+    // The sheet a host names by its id, which must exist.
+    public known(sheet: string): Sheet {
+        const found = this.byId.get(sheet);
         if (found === undefined) throw new Error(`No sheet ${sheet}`);
         return found;
     }
