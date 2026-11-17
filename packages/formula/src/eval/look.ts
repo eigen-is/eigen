@@ -6,7 +6,7 @@ import { toText } from '../values/coerce';
 import type { FormulaError } from '../values/errors';
 import { CALC, VALUE } from '../values/errors';
 import { parseNumber } from '../values/parse-number';
-import type { Value } from '../values/value';
+import type { Reference, Value } from '../values/value';
 import { elementAt, heightOf, isArray, isError, isReference, widthOf } from '../values/value';
 import { Book } from './book';
 import { isLazy } from './call';
@@ -46,15 +46,21 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         else if (family !== null) {
             // Most often the one argument is one range: its cells are computed and looked at in one go.
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
-            if (one !== null) ctx.recalc.settleArea(one);
-            else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
-            const found = one !== null && family.errors === OnError.Result ? firstError(ctx, one, frame.skips) : null;
-            if (found !== null) return found;
-            for (let i = at; one === null && family.errors === OnError.Result && i < to; i += 1) {
-                const error = errorIn(ctx, held[i], family, frame.skips);
+            if (one !== null && ctx.anchored) {
+                const error = lookPastCarry(ctx, frame, p, at, one, family);
                 if (error !== null) return error;
+            } else {
+                if (one !== null) ctx.recalc.settleArea(one);
+                else for (let i = at; i < to; i += 1) settle(ctx, held[i]);
+                const checks = family.errors === OnError.Result;
+                const found = one !== null && checks ? firstError(ctx, one, frame.skips) : null;
+                if (found !== null) return found;
+                for (let i = at; one === null && checks && i < to; i += 1) {
+                    const error = errorIn(ctx, held[i], family, frame.skips);
+                    if (error !== null) return error;
+                }
+                args[p] = Numbers.bind(frame.numbers(p), at, to, family, true);
             }
-            args[p] = Numbers.bind(frame.numbers(p), at, to, family, true);
         } else if (param.read === Read.Matched) args[p] = Numbers.beside(frame.numbers(p));
         else if (param.read === Read.Products) {
             const error = sized(ctx, held, at, to);
@@ -80,6 +86,38 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
         at = to;
     }
     if (args.length !== params.length) args.length = params.length;
+    return null;
+}
+
+// The one range `one`, argument `at`, of parameter `p` in a formula whose ranges keep their top down a block: its
+// cells are computed and looked at but for the rows the pass carries from a call that read it down to a row above.
+// The error that ends the call, or null with the parameter bound to numbers that go on from the carry.
+function lookPastCarry(
+    ctx: Evaluator,
+    frame: Frame,
+    p: number,
+    at: number,
+    one: Reference,
+    family: Family,
+): FormulaError | null {
+    const { recalc } = ctx;
+    const carry = ctx.carries.of(one, family, frame.skips, recalc.era);
+    // Read before the rows below are computed, which may take the carry for another range.
+    const { settled, mark, error } = carry;
+    const below = settled > one.bottom ? null : settled === one.top ? one : { ...one, top: settled };
+    if (below !== null) recalc.settleArea(below);
+    const checks = family.errors === OnError.Result;
+    const found = checks && below !== null ? (error ?? firstError(ctx, below, frame.skips)) : error;
+    // Nothing is carried on when a formula computed meanwhile took the carry for another range, or carried it
+    // past this one's last row, as a loop through this range can.
+    const live = carry.mark === mark && carry.settled <= one.bottom + 1;
+    if (live) {
+        carry.settled = one.bottom + 1;
+        carry.error = found;
+    }
+    if (found !== null) return found;
+    const numbers = Numbers.bind(frame.numbers(p), at, at + 1, family, true);
+    frame.args[p] = live ? Numbers.fromCarry(numbers, one, carry) : numbers;
     return null;
 }
 

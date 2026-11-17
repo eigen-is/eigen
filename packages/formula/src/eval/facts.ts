@@ -1,8 +1,8 @@
 // What a shape's tree says about every cell that holds it, worked out from the tree and the function list alone,
 // without evaluating: whether this build can evaluate it at all, whether it reads the clock, what the workbook
 // itself says or a reference it works out as it runs, whether a structural edit can change its answer through a
-// place or a size, and how much of the stack its evaluation can take. They are packed into one number, the depth
-// above the flags.
+// place or a size, whether a sum or count of it can go on from the cell above, and how much of the stack its
+// evaluation can take. They are packed into one number, the depth above the flags.
 
 import type { Registry } from '../functions/registry';
 import { CellKind } from '../store/column';
@@ -31,6 +31,9 @@ export const Fact = {
     // A reference is worked out from values as the formula runs: by a row that answers one anywhere, by a colon
     // between two operands, or by a range that takes its size from another. The recalc records what it was.
     Resolves: 64,
+    // A function that takes every value reads a range whose top row stays put, as each formula of a running total
+    // does: the calls below it go on from what it found (`Carries`).
+    Anchored: 128,
 } as const;
 
 export const FACT_BITS = 8;
@@ -73,6 +76,9 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
             entry !== undefined && children[i].kind === NodeKind.Ref ? slotOf(entry, i, children.length) : undefined;
         const family = slot?.family ?? null;
         if (family !== null && (family.kinds & (1 << CellKind.Empty)) === 0) facts &= ~Fact.Sized;
+        if ((family !== null || (entry !== undefined && entry.chosen !== null)) && anchored(children[i])) {
+            flags |= Fact.Anchored;
+        }
         depth = Math.max(depth, facts >> FACT_BITS);
         flags |= facts & FLAGS;
     }
@@ -95,6 +101,13 @@ export function shapeFacts(node: FormulaNode, functions: Registry): number {
         flags |= Fact.Sized;
     }
     return flags | (depth << FACT_BITS);
+}
+
+// Whether a range's top row is the same in every cell that holds it: a whole column, or a corner row that is absolute.
+function anchored(reference: FormulaNode): boolean {
+    const { kind, op, flags } = reference;
+    if (kind !== NodeKind.Ref || op === RefKind.Cell || op === RefKind.Rows) return false;
+    return op === RefKind.Columns || (flags & (RefFlag.RowAbsolute | RefFlag.Row2Absolute)) !== 0;
 }
 
 // Whether two arguments are references of one size in every cell that holds the formula. Anything else than two

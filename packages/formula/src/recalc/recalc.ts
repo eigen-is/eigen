@@ -87,6 +87,9 @@ export class Recalc {
     private readonly drew: number[] = [];
     // The area each cell in progress is having computed, which a throw for depth leaves for the pass, or null.
     private readonly areas: (Reference | null)[] = [];
+    // Moves with every pass and every loop that closes: what a pass carried from one formula to the next holds
+    // only within one era.
+    public era = 0;
     // The clock of the last batch of edits: its author's date and time as a serial, and what its draws are made
     // of beside the cell that draws.
     public now: number;
@@ -219,6 +222,7 @@ export class Recalc {
     public pass(cap: number): RecalcResult {
         const { workbook } = this;
         workbook.sweep();
+        this.era += 1;
         if (!this.stamped) {
             // A clock formula is flagged here and is a seed, as a marking flags only what reads one.
             this.reach();
@@ -488,6 +492,7 @@ export class Recalc {
             while (this.columns[found] !== column || this.rows[found] !== row) found = this.parents[this.lows[found]];
         }
         const from = this.lows[found];
+        this.era += 1;
         let at = this.current;
         while (at >= from) {
             const low = this.lows[at];
@@ -536,7 +541,7 @@ export class Recalc {
             ? this.workbook.value(column, row)
             : tree === null
               ? ERROR
-              : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
+              : this.evaluator.result(tree, this.sheets[at], row, this.places[at], (facts & Fact.Anchored) !== 0);
         if (resolves) this.records.end(at, this.sheets[at].place, this.places[at], row);
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.
