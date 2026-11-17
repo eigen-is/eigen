@@ -180,7 +180,7 @@ function writesMeet(extras: Extras | undefined, a: Writes, b: Writes): boolean {
     // The inverse of a format writes back the runs of a rich cell whole, with what the other format made of them.
     const richNow = (ranges: readonly Rect[]) =>
         ranges.flatMap((range) =>
-            [...extras.cells(range)].flatMap(([row, column, { s }]): Rect[] => (s ? [[row, column, row, column]] : [])),
+            extras.cells(range).flatMap(([row, column, { s }]): Rect[] => (s ? [[row, column, row, column]] : [])),
         );
     const meetsRich = (restyles: readonly Rect[], others: readonly Rect[]) =>
         restyles.length > 0 && others.length > 0 && !apart(richNow(restyles), others);

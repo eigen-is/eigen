@@ -8,15 +8,12 @@ import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
-import { columnHull, RectIndex } from './rect-index';
+import { ColumnSweep } from './rect-index';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
-// The most items one spread hands a call.
-const SPREAD = 65_536;
-
 // A cell's place: its column times the grid's rows plus its row, so the places ascend in column order.
-export function placeOf(row: number, column: number): number {
+function placeOf(row: number, column: number): number {
     return column * GRID_ROWS + row;
 }
 
@@ -68,24 +65,43 @@ export class Extras {
         return this.places[at] === place ? this.held[at] : undefined;
     }
 
-    // The entries of a block in column order. It reads the lists as it goes, so nothing is written during a walk.
-    public *cells([top, left, bottom, right]: Rect): Generator<Placed<Extra>> {
-        let at = this.search(placeOf(top, left));
-        while (at < this.places.length) {
-            const row = this.places[at] % GRID_ROWS;
-            const column = (this.places[at] - row) / GRID_ROWS;
-            if (column > right) return;
-            if (row < top) at = this.search(placeOf(top, column));
-            else if (row > bottom) at = this.search(placeOf(top, column + 1));
-            else {
-                yield [row, column, this.held[at]];
-                at += 1;
+    // The entries of a block in column order.
+    public cells(rect: Rect): Placed<Extra>[] {
+        const found: Placed<Extra>[] = [];
+        this.within(new ColumnSweep([rect]), (row, column, extra) => found.push([row, column, extra]));
+        return found;
+    }
+
+    // Tells `visit`, which must not write here, the entries of the rectangles a sweep covers in column order, each with
+    // its rectangle's place in the list. Down a column an entry stays in the rectangle before while it can.
+    public within(sweep: ColumnSweep, visit: (row: number, column: number, extra: Extra, at: number) => void): void {
+        const { rects, live } = sweep;
+        sweep.pass((left, right) => {
+            const first = rects[live[0]][0];
+            let at = this.search(placeOf(first, left));
+            // The column of the last entry handed out, and the place in `live` of its rectangle.
+            let column = -1;
+            let block = 0;
+            while (at < this.places.length) {
+                const row = this.places[at] % GRID_ROWS;
+                const next = (this.places[at] - row) / GRID_ROWS;
+                if (next > right) break;
+                if (next !== column || row > rects[live[block]][2]) block = sweep.after(row) - 1;
+                if (block >= 0 && rects[live[block]][2] >= row) {
+                    column = next;
+                    visit(row, column, this.held[at], live[block]);
+                    at += 1;
+                } else {
+                    column = -1;
+                    const below = block + 1 < live.length ? rects[live[block + 1]][0] : -1;
+                    at = this.search(below < 0 ? placeOf(first, next + 1) : placeOf(below, next));
+                }
             }
-        }
+        });
     }
 
     public content(): Placed<Extra>[] {
-        return [...this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1])];
+        return this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]);
     }
 
     // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
@@ -107,19 +123,17 @@ export class Extras {
         return old;
     }
 
-    // Puts in every cell of each block, which share no cell, its one entry, or with none of the three empties it.
-    public fill(blocks: readonly (readonly [Rect, Extra])[]): void {
-        const entries = blocks.map(([, extra]) => entryOf(extra));
-        this.merge(
-            blocks.map(([rect]) => rect),
-            (_, at) => entries[at],
-        );
+    // Puts in every cell of each rectangle the sweep covers the one entry at its place in `extras`, or with none of the
+    // three empties it.
+    public fill(sweep: ColumnSweep, extras: readonly Extra[]): void {
+        const entries = extras.map(entryOf);
+        this.merge(sweep, (_, at) => entries[at]);
     }
 
-    // Sets the link of every cell of the rectangles, which share no cell, or with none clears it, each cell keeping its
-    // runs and its mark.
-    public link(rects: readonly Rect[], link: CellLink | undefined): void {
-        this.merge(rects, (old) => entryOf({ ...old, link }));
+    // Sets the link of every cell of the rectangles the sweep covers, or with none clears it, each cell keeping its runs
+    // and its mark.
+    public link(sweep: ColumnSweep, link: CellLink | undefined): void {
+        this.merge(sweep, (old) => entryOf({ ...old, link }));
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -127,7 +141,7 @@ export class Extras {
     public move({ from, toRow, toColumn }: MoveOp, source: Extras): Placed<Extra>[] {
         const [top, left, bottom, right] = from;
         const target: Rect = [toRow, toColumn, toRow + bottom - top, toColumn + right - left];
-        const covered = [...this.cells(target)];
+        const covered = this.cells(target);
         const block = source.take(from);
         this.take(target);
         const shift = placeOf(toRow, toColumn) - placeOf(top, left);
@@ -178,71 +192,79 @@ export class Extras {
         return removed;
     }
 
-    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds and of the
+    // Puts in every cell of the rectangles the sweep covers the entry `to` makes of the one it holds and of the
     // rectangle's place in the list: the cells with none all take `to` of none. The cells the rectangles change are
-    // found first, then one pass over the entries between the first and the last puts them all in.
-    private merge(rects: readonly Rect[], to: (old: Extra | undefined, at: number) => Extra | undefined): void {
+    // found first; then each stretch of them with no untouched entry between is laid anew, and the entries between
+    // stretches move whole, as a run list moves its runs.
+    private merge(sweep: ColumnSweep, to: (old: Extra | undefined, at: number) => Extra | undefined): void {
+        const { rects } = sweep;
+        // The cells changed, each with its rectangle's place: a rectangle whose empty cells stay empty changes only the
+        // cells that hold an entry, which one walk reads for all; the others change every cell.
         const changed: number[] = [];
-        const entries: (Extra | undefined)[] = [];
-        // The rectangles whose empty cells stay empty change only their entries, found a column at a time for all.
-        const kept: Rect[] = [];
-        const keptAt: number[] = [];
-        for (const [at, rect] of rects.entries()) {
-            const blank = to(undefined, at);
-            if (!blank) {
-                kept.push(rect);
-                keptAt.push(at);
-                continue;
+        const owners: number[] = [];
+        const blanks = rects.map((_, at) => to(undefined, at));
+        this.within(sweep, (row, column, _, at) => {
+            if (blanks[at] === undefined) {
+                changed.push(placeOf(row, column));
+                owners.push(at);
             }
-            const [top, left, bottom, right] = rect;
-            const cells = this.cells(rect);
-            let next = cells.next();
+        });
+        for (const [at, [top, left, bottom, right]] of rects.entries()) {
+            if (blanks[at] === undefined) continue;
             for (let column = left; column <= right; column += 1) {
                 for (let row = top; row <= bottom; row += 1) {
-                    const here = !next.done && next.value[0] === row && next.value[1] === column;
                     changed.push(placeOf(row, column));
-                    entries.push(here ? to(next.value[2], at) : blank);
-                    if (here) next = cells.next();
+                    owners.push(at);
                 }
             }
         }
-        const index = RectIndex.of(kept);
-        for (const rect of columnHull(kept)) {
-            for (const [row, column, old] of this.cells(rect)) {
-                for (const [id] of index.meeting([row, column, row, column])) {
-                    changed.push(placeOf(row, column));
-                    entries.push(to(old, keptAt[Number(id)]));
-                }
-            }
-        }
-        if (changed.length === 0) return;
         const order = changed.map((_, at) => at).sort((a, b) => changed[a] - changed[b]);
-        const start = this.search(changed[order[0]]);
-        const end = this.search(changed[order[order.length - 1]] + 1);
-        const places: number[] = [];
-        const held: Extra[] = [];
-        let at = start;
-        for (const change of order) {
-            const place = changed[change];
-            for (; this.places[at] < place; at += 1) {
-                places.push(this.places[at]);
-                held.push(this.held[at]);
+        const { places, held } = this;
+        const size = places.length;
+        const laid: number[] = [];
+        const laidHeld: Extra[] = [];
+        const stretches: { first: number; after: number; from: number; until: number; shift: number }[] = [];
+        let shift = 0;
+        for (let change = 0; change < order.length; ) {
+            const first = this.search(changed[order[change]]);
+            const from = laid.length;
+            let after = first;
+            for (; change < order.length; change += 1) {
+                const place = changed[order[change]];
+                if (after < size && places[after] < place) break;
+                const old = places[after] === place ? held[after] : undefined;
+                if (old) after += 1;
+                const entry = old ? to(old, owners[order[change]]) : blanks[owners[order[change]]];
+                this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
+                if (entry) {
+                    laid.push(place);
+                    laidHeld.push(entry);
+                }
             }
-            const old = this.places[at] === place ? this.held[at] : undefined;
-            if (old) at += 1;
-            const entry = entries[change];
-            this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
-            if (entry) {
-                places.push(place);
-                held.push(entry);
+            shift += laid.length - from - (after - first);
+            stretches.push({ first, after, from, until: laid.length, shift });
+        }
+        if (shift > 0) for (const list of [places, held]) list.length = size + shift;
+        // The entries after a stretch, up to the next one, move by its shift: those that move back first, in order,
+        // then those that move on, from the last, so none is written over before it moved.
+        const slide = (at: number) => {
+            const { after, shift } = stretches[at];
+            const end = stretches[at + 1]?.first ?? size;
+            places.copyWithin(after + shift, after, end);
+            held.copyWithin(after + shift, after, end);
+        };
+        for (let at = 0; at < stretches.length; at += 1) if (stretches[at].shift < 0) slide(at);
+        for (let at = stretches.length - 1; at >= 0; at -= 1) if (stretches[at].shift > 0) slide(at);
+        // A stretch's entries land where its first one went, moved by the stretches before it.
+        let moved = 0;
+        for (const { first, from, until, shift } of stretches) {
+            for (let k = from; k < until; k += 1) {
+                places[first + moved + k - from] = laid[k];
+                held[first + moved + k - from] = laidHeld[k];
             }
+            moved = shift;
         }
-        // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
-        for (let part = 0; part === 0 || part < places.length; part += SPREAD) {
-            const removed = part === 0 ? end - start : 0;
-            this.places.splice(start + part, removed, ...places.slice(part, part + SPREAD));
-            this.held.splice(start + part, removed, ...held.slice(part, part + SPREAD));
-        }
+        for (const list of [places, held]) list.length = size + shift;
     }
 
     // Takes the entries of a block out and returns them, in column order.

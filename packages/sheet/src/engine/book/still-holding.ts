@@ -170,7 +170,7 @@ function cellsHolding(
         .toReversed();
     const changed = RUN_KEYS.some((key) => names(op, key))
         ? op.ranges.flatMap((rect) =>
-              [...part.extras.cells(rect)].filter(([row, column, { s }]) => s && !holds(row, column)),
+              part.extras.cells(rect).filter(([row, column, { s }]) => s && !holds(row, column)),
           )
         : [];
     const parts: FormatOp[] = [];
