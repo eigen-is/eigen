@@ -109,7 +109,7 @@ export class Sheet {
     // A row's keys, with `filtered` while the sheet's filter leaves it out.
     public row(row: number): Readonly<LineAttrs & { filtered?: 1 }> {
         const attrs = this.parts.rows.at(row);
-        for (const spans of this.book.filtered(this.id)) {
+        for (const { rows: spans } of this.book.records.records(this.id, 'filterColumn').values()) {
             // The first span that ends at the row or past it holds the row when it starts there or before.
             let low = 0;
             let high = spans.length;
