@@ -36,7 +36,7 @@ export type BookSheet = {
 };
 
 // A look table that holds fewer looks is not swept: the looks no cell wears then cost next to nothing.
-const SWEEP_FLOOR = 64;
+const LOOK_SWEEP_FLOOR = 64;
 
 export class Workbook {
     public readonly engine: Engine;
@@ -227,7 +227,7 @@ export class Workbook {
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
     // every sheet's bands: an applier calls it once a batch is done, with no look id in hand.
     public sweepLooks(): void {
-        if (this.looks.size > Math.max(SWEEP_FLOOR, 2 * this.swept)) this.sweep();
+        if (this.looks.size > Math.max(LOOK_SWEEP_FLOOR, 2 * this.swept)) this.sweep();
     }
 
     // A sheet's parts, its looks interned into the table and its bands rebuilt in the one form whatever it said.

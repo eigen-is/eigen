@@ -11,13 +11,13 @@ import { RunList } from './run-list';
 // The columns from `first` up to the next band's first, or to the grid's last column.
 type Band = { first: number; list: RunList };
 
-// A rectangle of cells that wear one look id, every bound inclusive.
-export type LookSpan = {
+// A rectangle of cells that wear one look, by its id or as it is, every bound inclusive.
+export type LookSpan<L = number> = {
     readonly c0: number;
     readonly c1: number;
     readonly r0: number;
     readonly r1: number;
-    readonly look: number;
+    readonly look: L;
 };
 
 export class Bands {
