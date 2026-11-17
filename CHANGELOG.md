@@ -17,6 +17,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
 - **Quick preview** — the previous and next arrows sit as round buttons at the left and right edges instead of in the top bar. On a video you clicked, the arrow keys and Space control the video
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
+- **Theme before you sign in** — the landing page, blog, help center and every other page you open without an account follow your computer's light or dark setting. Once you sign in, your own pick applies, Light until you choose
 - **Times on a 24-hour clock** — Calendar, Mail, Drive, chat, comments, version history and the admin pages write times as 09:00 and 14:30, not 9 AM and 2:30 PM. So does an invitation email
 - **Forwarded mail** — the details above a message forwarded inside another give its date as 14 Nov 2026, 15:42 UTC instead of Sat, 14 Nov 2026 15:42:11 GMT, and no date at all when the original's can't be read
 - **Error messages** — an error that says why, such as "Folders can be nested at most 256 levels deep", no longer ends in a code like (400). The code shows only when the server gave no reason

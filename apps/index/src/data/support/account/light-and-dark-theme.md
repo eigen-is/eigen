@@ -6,7 +6,7 @@ category: Appearance
 tags: [theme, appearance, dark, light]
 related: [account/update-profile, getting-started/about-eigen]
 order: 40
-updated: 2026-10-27
+updated: 2026-11-17
 ---
 
 Eigen comes in a light theme and a dark theme. You can switch between them whenever you like, and your choice is saved to your account, so every Eigen app keeps the same look.
@@ -30,3 +30,5 @@ You can also open [**Preferences**](/space/preferences) in Space and pick one un
 ## Where your choice applies
 
 Your choice is saved to your account, so it applies across every Eigen app and follows you when you sign in from a different browser or computer.
+
+Until you pick a theme, Eigen is light. Before you sign in, Eigen follows your computer's light or dark setting, on this help center, the blog and every other page you can open without an account.
