@@ -38,6 +38,8 @@ export class Evaluator {
     public readonly walk = new Walk(this);
     public readonly room = new Room(this);
     public readonly carries = new Carries();
+    // Whether the formula in progress is `Fact.Anchored`, the one kind a carry pays for.
+    public anchored = false;
     // Where endsAt writes the rows or columns of the reference being read.
     private readonly ends: Ends = { first: 0, second: 0 };
     // Where a reference that is read as an array marks its rows and its columns that hold a cell.
@@ -53,12 +55,16 @@ export class Evaluator {
     }
 
     // What the cell of a formula stores: one value, or the top-left of an array. A blank stays blank, as in Google.
-    public result(tree: FormulaNode, sheet: Sheet, row: number, column: number): Scalar {
+    public result(tree: FormulaNode, sheet: Sheet, row: number, column: number, anchored: boolean): Scalar {
+        // A formula computed while this one runs has its own, so the outer one's is put back after it.
+        const outer = this.anchored;
+        this.anchored = anchored;
         // Only the last + or - of a formula snaps a result that is tiny against its left operand to 0.
         const root = tree.kind === NodeKind.Binary && (tree.op === Token.Plus || tree.op === Token.Minus);
         const value = root
             ? this.read(this.binary(tree, sheet, row, column, true))
             : this.operand(tree, sheet, row, column);
+        this.anchored = outer;
         if (!isArray(value)) return value;
         // An array of references is no value a cell can hold, as Excel's INDIRECT({"A1","B2"}) is none.
         if (value.references) return CALC;

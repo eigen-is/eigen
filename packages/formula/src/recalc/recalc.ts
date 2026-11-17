@@ -541,7 +541,7 @@ export class Recalc {
             ? this.workbook.value(column, row)
             : tree === null
               ? ERROR
-              : this.evaluator.result(tree, this.sheets[at], row, this.places[at]);
+              : this.evaluator.result(tree, this.sheets[at], row, this.places[at], (facts & Fact.Anchored) !== 0);
         if (resolves) this.records.end(at, this.sheets[at].place, this.places[at], row);
         this.current = this.parents[at];
         // On a loop that an earlier cell has still to close: it stays in the list for whoever reads it.

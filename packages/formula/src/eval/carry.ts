@@ -6,7 +6,6 @@
 import type { FormulaError } from '../values/errors';
 import type { Reference } from '../values/value';
 import type { Family } from './families';
-import { Families } from './families';
 
 // What a walk of the numbers answers: a count, a sum, the least and the most.
 export const Answer = { Count: 0, Sum: 1, Least: 2, Most: 3 } as const;
@@ -18,9 +17,12 @@ export const NOTHING: readonly number[] = [0, 0, Number.POSITIVE_INFINITY, Numbe
 const SLOTS = 16;
 
 export class Carry {
-    // A range of the same sheet, top, left and right, the family and skips it is walked with, and its era.
-    public area: Reference | null = null;
-    public family: Family = Families.Numbers;
+    // The range but for its bottom, what of the family a walk of a range reads, the skips, and the era.
+    public sheet = -1;
+    public top = 0;
+    public left = 0;
+    public right = 0;
+    public walks = 0;
     public skips = 0;
     public era = -1;
     // Moves when the carry starts over, so a call that took it can tell whether a formula it computed meanwhile
@@ -42,16 +44,21 @@ export class Carries {
     private marks = 0;
 
     // The carry of `area` walked by `family` past `skips` in `era`: one that knows rows down to its last at most,
-    // or one started over that knows none.
+    // or one started over that knows none. Of a range a walk reads only the kinds a family counts and whether an
+    // error is its answer.
     public of(area: Reference, family: Family, skips: number, era: number): Carry {
         const { sheet, top, left, right } = area;
-        const carry = this.slots[(sheet * 7 + top * 31 + left * 17 + family.kinds * 3 + family.text) & (SLOTS - 1)];
-        const held = carry.area;
-        const same = held?.sheet === sheet && held.top === top && held.left === left && held.right === right;
-        const walked = carry.family === family && carry.skips === skips && carry.settled <= area.bottom + 1;
+        const { kinds, errors } = family;
+        const walks = kinds | (errors << 8);
+        const carry = this.slots[(sheet * 7 + top * 31 + left * 17 + kinds * 3 + errors * 5) & (SLOTS - 1)];
+        const same = carry.top === top && carry.left === left && carry.right === right && carry.sheet === sheet;
+        const walked = carry.walks === walks && carry.skips === skips && carry.settled <= area.bottom + 1;
         if (carry.era === era && same && walked) return carry;
-        carry.area = area;
-        carry.family = family;
+        carry.sheet = sheet;
+        carry.top = top;
+        carry.left = left;
+        carry.right = right;
+        carry.walks = walks;
         carry.skips = skips;
         carry.era = era;
         this.marks += 1;

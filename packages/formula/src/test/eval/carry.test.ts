@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Carries } from '../../eval/carry';
 import { Walk } from '../../eval/walk';
 import type { Literal, SheetSource } from '../../index';
 import { Engine } from '../../index';
@@ -67,6 +68,7 @@ describe('the work of a block of a growing range follows its rows', () => {
         '=MIN(R1C1:RC1)',
         '=COUNTA(R1C1:RC1)',
         '=SUM(R1C1:RC2)',
+        '=SUM(RC1:R1C1)',
         '=SUM(R1C1:RC1)-SUM(R1C2:RC2)',
         '=SUM(R1C1:RC1)/COUNT(R1C1:RC1)',
         '=SUBTOTAL(109,R1C1:RC1)',
@@ -88,6 +90,30 @@ describe('the work of a block of a growing range follows its rows', () => {
         engine.fillFormula('s1', 0, 2, ROWS - 1, 2, '=RC1*2');
         expect(work(() => engine.recalc(ALL))).toBeLessThan(8 * ROWS);
         expect(engine.valueOf('s1', ROWS - 1, 3)).toBe(2 * (ROWS / 10) * 55);
+    });
+
+    test('a formula that a range computes, and that carries nothing, leaves the next call of the reader carrying', () => {
+        // Column F comes after D in a pass, so each formula of F is computed inside the first call of the one in D.
+        const engine = block(ROWS, '=SUM(R1C6:RC6)+SUM(R1C1:RC1)');
+        engine.fillFormula('s1', 0, 5, ROWS - 1, 5, '=SUM(RC1:RC2)');
+        expect(work(() => engine.recalc(ALL))).toBeLessThan(10 * ROWS);
+    });
+
+    test('a range whose top moves with its row takes no carry', () => {
+        const engine = block(ROWS, '=SUM(RC1:R[2]C1)+COUNT(RC1:RC2)');
+        const of = Carries.prototype.of;
+        let taken = 0;
+        Carries.prototype.of = function counting(this: Carries, ...args: Parameters<Carries['of']>) {
+            taken += 1;
+            return of.apply(this, args);
+        };
+        try {
+            engine.recalc(ALL);
+        } finally {
+            Carries.prototype.of = of;
+        }
+        expect(taken).toBe(0);
+        expect(engine.valueOf('s1', 0, 3)).toBe(1 + 2 + 3 + 2);
     });
 
     test('an error near the top answers every formula below it without a walk down to it', () => {
