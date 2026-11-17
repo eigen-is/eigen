@@ -145,6 +145,49 @@ describe('a shape no cell holds any more is forgotten, and the next new shape ta
         expect(sheet.columns[60].pending).toBe(0);
     });
 
+    test('a hundred edits refused on a sheet with no formula leave the shapes of one edit behind', () => {
+        // Twenty formulas read x, and one on z that one more digit makes too long to store.
+        const reader = (r: number) => `=[x]!R1C1+${r}`;
+        const long = `=[x]!R1C1+11${'+1'.repeat((MAX_STORED_LENGTH - 12) / 2)}`;
+        const workbook = new Workbook(
+            [
+                { id: 'x', name: 'x', cells: (cell) => cell(0, 5, 1, null) },
+                {
+                    id: 'y',
+                    name: 'y',
+                    cells: (cell) => {
+                        for (let r = 0; r < 20; r += 1) cell(r, 0, null, reader(r));
+                    },
+                },
+                { id: 'z', name: 'z', cells: (cell) => cell(0, 0, null, long) },
+            ],
+            false,
+        );
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);
+        recalc.pass(NO_CAP);
+        expect(workbook.shapes.size).toBe(21);
+        for (let count = 9; count < 109; count += 1) {
+            const edit = { insert: true, index: 0, count, sheet: 'x', rows: true };
+            expect(() => recalc.edit({ kind: ChangeKind.Lines, edit })).toThrow(EditRefusal);
+        }
+        recalc.pass(NO_CAP);
+        // The shapes in the cells and the twenty one refused edit made, in the ids the next rebuild freed.
+        expect(workbook.shapes.size).toBe(41);
+    });
+
+    test('a hundred formulas written and written over before a recalc, on a sheet with no other, leave few shapes', () => {
+        const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
+        const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);
+        const [sheet] = workbook.sheets;
+        for (let i = 1; i <= 100; i += 1) {
+            recalc.fillFormula(sheet, 0, 1, 0, 1, `=R1C1+${i}`, null);
+            recalc.setValue(sheet, 0, 1, i);
+            recalc.pass(NO_CAP);
+        }
+        // No block ever held one, and each rebuild after a new shape forgot the one before.
+        expect(workbook.shapes.size).toBe(1);
+    });
+
     test('a thousand formulas written over three cells, a recalc after each, keep the shapes of three cells', () => {
         const workbook = new Workbook([{ id: 'a', name: 'a', cells: (cell) => cell(0, 0, 1, null) }], false);
         const recalc = new Recalc(workbook, FUNCTIONS, 0, 0, false);
