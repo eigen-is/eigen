@@ -8,7 +8,7 @@ import type { CellContent, FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@
 import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, intersect, outsideOf } from '@workspace/lib/sheets/rect';
 import { Areas, keyOf, names, restyled } from './apply-format';
-import { cellAt, entryAt, inputOf } from './apply-input';
+import { cellAt, entryAt, inputOf, sameJson } from './apply-input';
 import { LINE_KEYS } from './line-runs';
 import type { BookSheet, Workbook } from './workbook';
 
@@ -91,17 +91,13 @@ function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly 
         if (!wrote) return true;
         const a = left ?? {};
         const b = now ?? {};
-        if (a.f !== b.f || a.qp !== b.qp || !same(a.link, b.link) || !same(a.s, b.s)) return false;
+        if (a.f !== b.f || a.qp !== b.qp || !sameJson(a.link, b.link) || !sameJson(a.s, b.s)) return false;
         if (a.f !== undefined && b.v === undefined) return true;
         // A kept formula with no value reads #REF!.
         const value = ({ v, e, f }: CellContent) =>
             v === undefined || (f !== undefined && e && v === '#REF!') ? null : [v, e];
-        return same(value(a), value(b));
+        return sameJson(value(a), value(b));
     };
-}
-
-function same(a: unknown, b: unknown): boolean {
-    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 // The cells of a rectangle that hold, joined into rectangles: the rectangle itself when all do.
@@ -199,7 +195,7 @@ function cellsHolding(
     }
     if (names(op, 'link')) {
         const ranges = op.ranges.flatMap((rect) => holding(rect, holds));
-        if (!same(ranges, op.ranges)) whole = false;
+        if (!sameJson(ranges, op.ranges)) whole = false;
         const set = op.set?.link ? { set: { link: op.set.link } } : { clear: ['link' as const] };
         if (ranges.length > 0) parts.push({ kind: 'format', sheet, ranges, ...set });
     }
@@ -271,7 +267,8 @@ function recordHolding(book: Workbook, op: RecordOp, written: readonly Op[]): Re
                 ? filter[1]
                 : undefined;
     const fields = new Map(Object.entries(live ?? {}));
-    const holds = (field: string) => !(state === 'whole' || field in known) || same(fields.get(field), known[field]);
+    const holds = (field: string) =>
+        !(state === 'whole' || field in known) || sameJson(fields.get(field), known[field]);
     if (op.set && !op.whole) return live ? heldFields(op, op.set, holds) : undefined;
     if (state === 'gone') return live ? undefined : op;
     const kept = live && Object.keys(known).every(holds) && (state !== 'whole' || [...fields.keys()].every(holds));

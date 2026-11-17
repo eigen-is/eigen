@@ -297,8 +297,9 @@ function sameExtra(a: Extra | undefined, b: Extra | undefined): boolean {
     return a.qp === b.qp && sameJson(a.s, b.s) && sameJson(a.link, b.link);
 }
 
-function sameJson(a: unknown, b: unknown): boolean {
-    return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
+// Whether two values write the same JSON, a missing one as null.
+export function sameJson(a: unknown, b: unknown): boolean {
+    return a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 function contentOfGroup({ held }: Group): CellContent | null {
