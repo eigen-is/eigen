@@ -24,33 +24,32 @@ import {
     LAST_ROW,
     ref,
     rowsAt,
-    sheetNamed,
-    sheetOf,
-    sheetsOf,
+    storeOf,
+    storeOfSheets,
     typedAt,
 } from './records-fixtures';
 
 type Records = SheetContent['records'];
 
 function edited(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}) {
-    const sheet = sheetOf(records, fields);
-    const restore = editLines(sheet, edit);
-    return { sheet, content: contentOf(sheet), restore };
+    const store = storeOf(records, fields);
+    const restore = editLines(store, edit);
+    return { store, content: contentOf(store), restore };
 }
 
 // The edit, the inverse edit, then the record ops, on sheets S and T: every record as it was.
 function roundTrips(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}, onT: Records = {}) {
     const build = () =>
-        sheetsOf([
+        storeOfSheets([
             ['S', records, fields],
             ['T', onT],
         ]);
-    const sheets = build();
+    const store = build();
     const before = build();
-    const restore = editLines(sheetNamed(sheets, 'S'), edit);
-    editLines(sheetNamed(sheets, 'S'), inverseOf(edit));
-    applyRecordOps(sheets, before, restore);
-    for (const id of ['S', 'T']) expect(contentOf(sheetNamed(sheets, id))).toEqual(contentOf(sheetNamed(before, id)));
+    const restore = editLines(store, edit);
+    editLines(store, inverseOf(edit));
+    applyRecordOps(store, before, restore);
+    for (const id of ['S', 'T']) expect(contentOf(store, id)).toEqual(contentOf(before, id));
 }
 
 // A case is written for rows; the column case is the same with the axes swapped.
@@ -194,10 +193,10 @@ describe('a filter and its columns', () => {
             filter: { f: { rect: [0, 0, LAST_ROW, 3] } },
             filterColumn: { c: { filter: 'f', column: 0, rows: [[5, LAST_ROW]] } },
         });
-        const sheet = sheetOf(open());
-        expect(editLines(sheet, rowsAt(true, 2, 3))).toEqual([]);
-        expect(editLines(sheet, rowsAt(false, 2, 3))).toEqual([]);
-        expect(contentOf(sheet).records).toEqual(open());
+        const store = storeOf(open());
+        expect(editLines(store, rowsAt(true, 2, 3))).toEqual([]);
+        expect(editLines(store, rowsAt(false, 2, 3))).toEqual([]);
+        expect(contentOf(store).records).toEqual(open());
         roundTrips(open(), rowsAt(false, 0, 10));
     });
 
@@ -229,9 +228,9 @@ describe('a comment', () => {
     for (const [name, edit, after] of cases) {
         test(name, () => {
             const records = { comment: { c: { row: 3, column: 4 } } };
-            const { content, sheet } = edited(records, edit);
+            const { content, store } = edited(records, edit);
             expect(content.records.comment?.c).toEqual(after);
-            if (after) expect(sheet.comments(after.row, after.column)).toEqual(['c']);
+            if (after) expect(store.comments('S', after.row, after.column)).toEqual(['c']);
             roundTrips(records, edit);
         });
     }
@@ -349,11 +348,11 @@ describe('the ranges of a rule', () => {
 
     test('0 to the last row stays 0 to the last row under an insert and then a delete', () => {
         const open = both([rowsOf([0, LAST_ROW])]);
-        const sheet = sheetOf(open);
-        const rule = sheet.records('validation').get('v');
-        expect(editLines(sheet, rowsAt(true, 4, 9))).toEqual([]);
-        expect(editLines(sheet, rowsAt(false, 4, 9))).toEqual([]);
-        expect(sheet.records('validation').get('v')).toBe(rule);
+        const store = storeOf(open);
+        const rule = store.records('S', 'validation').get('v');
+        expect(editLines(store, rowsAt(true, 4, 9))).toEqual([]);
+        expect(editLines(store, rowsAt(false, 4, 9))).toEqual([]);
+        expect(store.records('S', 'validation').get('v')).toBe(rule);
         roundTrips(open, rowsAt(false, 4, 9));
     });
 
@@ -421,40 +420,34 @@ describe('the formula of a conditional format', () => {
 
     test('a rule on another sheet follows a qualified ref to the edited sheet, and its ranges stay', () => {
         const onT = { conditionalFormat: { r: formulaRule([column([0, 3])], keyOf('=S!A5>1', 0, 0)) } };
-        const t = sheetNamed(
-            sheetsOf([
-                ['S', {}],
-                ['T', onT],
-            ]),
-            'T',
-        );
-        editLines(t, rowsAt(true, 0, 2));
-        const after = t.records('conditionalFormat').get('r');
+        const store = storeOfSheets([
+            ['S', {}],
+            ['T', onT],
+        ]);
+        editLines(store, rowsAt(true, 0, 2));
+        const after = store.records('T', 'conditionalFormat').get('r');
         expect(after?.ranges).toEqual([column([0, 3])]);
         expect(typedAt(String(keyOfRule(after)), 0, 0)).toBe('=S!A7>1');
         roundTrips({}, rowsAt(true, 0, 2), {}, onT);
     });
 
     test('an edit on another sheet leaves an unqualified formula the same record', () => {
-        const sheet = sheetNamed(
-            sheetsOf([
-                ['S', rule([column([0, 3])], '=A1>1')],
-                ['T', {}],
-            ]),
-            'S',
-        );
-        const before = sheet.records('conditionalFormat').get('r');
-        editLines(sheet, rowsAt(true, 0, 2, 'T'));
-        expect(sheet.records('conditionalFormat').get('r')).toBe(before);
+        const store = storeOfSheets([
+            ['S', rule([column([0, 3])], '=A1>1')],
+            ['T', {}],
+        ]);
+        const before = store.records('S', 'conditionalFormat').get('r');
+        editLines(store, rowsAt(true, 0, 2, 'T'));
+        expect(store.records('S', 'conditionalFormat').get('r')).toBe(before);
     });
 
     test('a key the edit would take past the stored bound refuses the edit and writes nothing', () => {
         const inner = `SUM(${Array.from({ length: 200 }, () => keyOf('=A9', 0, 0).slice(1)).join(',')})`;
         const groups = Math.floor((MAX_STORED_LENGTH - 6) / (inner.length + 1));
         const long = `=SUM(${Array.from({ length: groups }, () => inner).join(',')})`;
-        const sheet = sheetOf({ conditionalFormat: { r: formulaRule([column([0, 0])], long) } });
-        expect(sheet.planLines(rowsAt(true, 1, 1000))).toBe('key-too-long');
-        expect(keyOfRule(sheet.records('conditionalFormat').get('r'))).toBe(long);
+        const store = storeOf({ conditionalFormat: { r: formulaRule([column([0, 0])], long) } });
+        expect(store.planLines(rowsAt(true, 1, 1000))).toBe('key-too-long');
+        expect(keyOfRule(store.records('S', 'conditionalFormat').get('r'))).toBe(long);
     });
 });
 
@@ -482,31 +475,25 @@ describe('charts and images', () => {
     });
 
     test('a chart on another sheet follows its refs to the edited sheet', () => {
-        const t = sheetNamed(
-            sheetsOf([
-                ['S', {}],
-                ['T', { chart: { c: chart() } }],
-            ]),
-            'T',
-        );
-        editLines(t, columnsAt(true, 0));
-        expect(chartData(t.records('chart').get('c'))?.series[0].values?.column).toEqual([2, 2]);
+        const store = storeOfSheets([
+            ['S', {}],
+            ['T', { chart: { c: chart() } }],
+        ]);
+        editLines(store, columnsAt(true, 0));
+        expect(chartData(store.records('T', 'chart').get('c'))?.series[0].values?.column).toEqual([2, 2]);
     });
 
     test('an edit on another sheet leaves a chart and an image the same records', () => {
         const image = { index: 'a1', x: 0, y: 0, width: 10, height: 10, mediaName: 'm.png' };
-        const sheet = sheetNamed(
-            sheetsOf([
-                ['S', { chart: { c: chart() }, image: { i: image } }],
-                ['T', {}],
-            ]),
-            'S',
-        );
-        const before = sheet.records('chart').get('c');
-        editLines(sheet, rowsAt(true, 0, 3, 'T'));
-        editLines(sheet, columnsAt(false, 0, 3, 'T'));
-        expect(sheet.records('chart').get('c')).toBe(before);
-        expect(sheet.records('image').get('i')).toBe(image);
+        const store = storeOfSheets([
+            ['S', { chart: { c: chart() }, image: { i: image } }],
+            ['T', {}],
+        ]);
+        const before = store.records('S', 'chart').get('c');
+        editLines(store, rowsAt(true, 0, 3, 'T'));
+        editLines(store, columnsAt(false, 0, 3, 'T'));
+        expect(store.records('S', 'chart').get('c')).toBe(before);
+        expect(store.records('S', 'image').get('i')).toBe(image);
     });
 
     test('an edit that would take a chart past its size bound refuses and writes nothing', () => {
@@ -522,10 +509,10 @@ describe('charts and images', () => {
         let length = 1;
         while (!exceedsChartSpecBytes(padded(length + 1))) length += 1;
         const big = padded(length);
-        const sheet = sheetOf({ chart: { c: big } });
-        expect(sheet.planLines(rowsAt(true, 0, 1_000_000))).toBe('key-too-long');
-        expect(sheet.records('chart').get('c')).toBe(big);
-        expect(typeof sheet.planLines(rowsAt(true, 0, 1))).toBe('object');
+        const store = storeOf({ chart: { c: big } });
+        expect(store.planLines(rowsAt(true, 0, 1_000_000))).toBe('key-too-long');
+        expect(store.records('S', 'chart').get('c')).toBe(big);
+        expect(typeof store.planLines(rowsAt(true, 0, 1))).toBe('object');
     });
 });
 
@@ -608,7 +595,7 @@ describe('what an insert would push off the grid', () => {
     ];
     for (const [name, records, rows, count, blocks] of cases) {
         test(`${name}: ${blocks ? 'blocks' : 'passes'}`, () => {
-            expect(sheetOf(records).wouldPush(rows ? rowsAt(true, 0, count) : columnsAt(true, 0, count))).toBe(blocks);
+            expect(storeOf(records).wouldPush(rows ? rowsAt(true, 0, count) : columnsAt(true, 0, count))).toBe(blocks);
         });
     }
 });
@@ -626,14 +613,11 @@ test('an edit of lines on another sheet moves no range, place or freeze', () => 
         comment: { c: { row: 4, column: 4 } },
         filter: { f: { rect: [0, 0, 5, 5] } },
     };
-    const sheet = sheetNamed(
-        sheetsOf([
-            ['S', records, { frozenRows: 2 }],
-            ['T', {}],
-        ]),
-        'S',
-    );
-    const before = contentOf(sheet);
-    expect(editLines(sheet, rowsAt(false, 0, 4, 'T'))).toEqual([]);
-    expect(contentOf(sheet)).toEqual(before);
+    const store = storeOfSheets([
+        ['S', records, { frozenRows: 2 }],
+        ['T', {}],
+    ]);
+    const before = contentOf(store);
+    expect(editLines(store, rowsAt(false, 0, 4, 'T'))).toEqual([]);
+    expect(contentOf(store)).toEqual(before);
 });

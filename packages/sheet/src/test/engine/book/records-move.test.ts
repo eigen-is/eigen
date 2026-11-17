@@ -17,9 +17,8 @@ import {
     moveBlock,
     ref,
     reverseOf,
-    sheetNamed,
-    sheetOf,
-    sheetsOf,
+    storeOf,
+    storeOfSheets,
     typedAt,
 } from './records-fixtures';
 
@@ -38,28 +37,28 @@ const move = (toSheet = 'S', from: Rect = [1, 1, 2, 2], toRow = 4, toColumn = 4)
 });
 
 const book = (onS: Records, onT: Records = {}) =>
-    sheetsOf([
+    storeOfSheets([
         ['S', onS],
         ['T', onT],
     ]);
 
 function moved(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
-    const restore = moveBlock(sheets, op);
-    return { s: contentOf(sheetNamed(sheets, 'S')).records, t: contentOf(sheetNamed(sheets, 'T')).records, restore };
+    const store = book(onS, onT);
+    const restore = moveBlock(store, op);
+    return { s: contentOf(store).records, t: contentOf(store, 'T').records, restore };
 }
 
 function roundTrips(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
+    const store = book(onS, onT);
     const before = book(onS, onT);
-    const restore = moveBlock(sheets, op);
-    moveBlock(sheets, reverseOf(op));
-    applyRecordOps(sheets, before, restore);
-    for (const id of ['S', 'T']) expect(contentOf(sheetNamed(sheets, id))).toEqual(contentOf(sheetNamed(before, id)));
+    const restore = moveBlock(store, op);
+    moveBlock(store, reverseOf(op));
+    applyRecordOps(store, before, restore);
+    for (const id of ['S', 'T']) expect(contentOf(store, id)).toEqual(contentOf(before, id));
 }
 
 function refused(onS: Records, op: MoveOp, onT: Records = {}) {
-    const plan = sheetNamed(book(onS, onT), 'S').planMove(op);
+    const plan = book(onS, onT).planMove(op);
     return typeof plan === 'string' ? plan : null;
 }
 
@@ -174,7 +173,7 @@ describe('the ranges of rules', () => {
     });
 
     test('to another sheet, no range moves', () => {
-        const before = sheetOf(rules([inside]));
+        const before = storeOf(rules([inside]));
         const { s } = moved(rules([inside]), move('T'));
         expect(s).toEqual(contentOf(before).records);
         roundTrips(rules([inside]), move('T'));
@@ -260,10 +259,10 @@ describe('chart refs', () => {
 
     test('a ref partly in the block stays, the chart itself', () => {
         const records = reading(ref('S', [1, 3], [1, 1]));
-        const sheets = book(records);
-        const before = sheetNamed(sheets, 'S').records('chart').get('g');
-        moveBlock(sheets, move());
-        expect(sheetNamed(sheets, 'S').records('chart').get('g')).toBe(before);
+        const store = book(records);
+        const before = store.records('S', 'chart').get('g');
+        moveBlock(store, move());
+        expect(store.records('S', 'chart').get('g')).toBe(before);
         roundTrips(records, move());
     });
 
@@ -299,5 +298,5 @@ test('a move leaves the filter, the frozen panes and images as they were', () =>
         image: { i: { index: 'a', x: 1, y: 1, width: 5, height: 5, mediaName: 'm.png' } },
     };
     const { s } = moved(records, move());
-    expect(s).toEqual(contentOf(sheetOf(records)).records);
+    expect(s).toEqual(contentOf(storeOf(records)).records);
 });

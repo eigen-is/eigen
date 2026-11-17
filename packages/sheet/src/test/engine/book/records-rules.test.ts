@@ -7,8 +7,8 @@ import { describe, expect, test } from 'bun:test';
 import type { DataValidationRule } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type { ConditionalFormatRecord, LinesOp, MoveOp, Rect, ValidationRecord } from '@workspace/lib/sheets/ops';
-import type { SheetRecords } from './records-fixtures';
-import { LAST_COLUMN, LAST_ROW, planned, rowsAt, sheetOf } from './records-fixtures';
+import type { BookRecords } from '../../../engine/book/records';
+import { LAST_COLUMN, LAST_ROW, planned, rowsAt, storeOf } from './records-fixtures';
 
 const CASES = 120;
 const STEPS = 6;
@@ -69,10 +69,10 @@ const formatOn = (random: Random): ConditionalFormatRecord => ({
 });
 const commentOn = (random: Random) => ({ row: below(random, 3) * 32, column: below(random, 3) * 8 });
 
-function sheetOn(random: Random): SheetRecords {
+function storeOn(random: Random): BookRecords {
     const some = <R>(prefix: string, make: () => R) =>
         Object.fromEntries(Array.from({ length: 2 + below(random, 6) }, (_, i) => [`${prefix}${i}`, make()]));
-    return sheetOf({
+    return storeOf({
         validation: some('v', () => validationOn(random)),
         conditionalFormat: some('f', () => formatOn(random)),
         comment: some('c', () => commentOn(random)),
@@ -80,10 +80,10 @@ function sheetOn(random: Random): SheetRecords {
 }
 
 // The reads at the cells and rectangles on and around every range and comment, against the records.
-function expectReads(sheet: SheetRecords, random: Random): void {
-    const validations = [...sheet.records('validation')];
-    const formats = [...sheet.records('conditionalFormat')];
-    const comments = [...sheet.records('comment')];
+function expectReads(store: BookRecords, random: Random): void {
+    const validations = [...store.records('S', 'validation')];
+    const formats = [...store.records('S', 'conditionalFormat')];
+    const comments = [...store.records('S', 'comment')];
     const cells: [number, number][] = comments.map(([, { row, column }]) => [row, column]);
     const queries: Rect[] = [
         [0, 0, LAST_ROW, LAST_COLUMN],
@@ -114,13 +114,13 @@ function expectReads(sheet: SheetRecords, random: Random): void {
         const covering = validations
             .filter(([, { ranges }]) => ranges.some((range) => meets(range, cell)))
             .sort(([idA, a], [idB, b]) => compareRules(a.order, idA, b.order, idB));
-        expect({ row, column, rule: sheet.validation(row, column) }).toEqual({
+        expect({ row, column, rule: store.validation('S', row, column) }).toEqual({
             row,
             column,
             rule: covering.at(-1)?.[1],
         });
         const ids = comments.filter(([, at]) => at.row === row && at.column === column).map(([id]) => id);
-        expect({ row, column, ids: sheet.comments(row, column) }).toEqual({ row, column, ids: ids.sort() });
+        expect({ row, column, ids: store.comments('S', row, column) }).toEqual({ row, column, ids: ids.sort() });
     }
     const sorted = (ranges: readonly Rect[]) => ranges.map((range) => range.join(',')).sort();
     for (const query of queries) {
@@ -128,55 +128,55 @@ function expectReads(sheet: SheetRecords, random: Random): void {
             .sort(([idA, a], [idB, b]) => compareRules(a.order, idA, b.order, idB))
             .map(([id, rule]) => ({ id, rule, ranges: sorted(rule.ranges.filter((range) => meets(range, query))) }))
             .filter(({ ranges }) => ranges.length > 0);
-        const found = sheet
-            .rulesIn('conditionalFormat', query)
+        const found = store
+            .rulesIn('S', 'conditionalFormat', query)
             .map((entry) => ({ ...entry, ranges: sorted(entry.ranges) }));
         expect({ query, found }).toEqual({ query, found: expected });
-        for (const { id, rule } of found) expect(sheet.records('conditionalFormat').get(id)).toBe(rule);
+        for (const { id, rule } of found) expect(store.records('S', 'conditionalFormat').get(id)).toBe(rule);
     }
 }
 
-function writeRecord(sheet: SheetRecords, random: Random, step: number): void {
+function writeRecord(store: BookRecords, random: Random, step: number): void {
     const idOf = (type: 'validation' | 'conditionalFormat' | 'comment') => {
-        const ids = [...sheet.records(type).keys()];
+        const ids = [...store.records('S', type).keys()];
         return random() < 0.35 || ids.length === 0 ? `w${step}` : pick(random, ids);
     };
     const base = { kind: 'record', sheet: 'S' } as const;
     const writes = [
-        () => sheet.write({ ...base, type: 'validation', id: idOf('validation') }),
-        () => sheet.write({ ...base, type: 'validation', id: idOf('validation'), set: validationOn(random), whole: 1 }),
-        () => sheet.write({ ...base, type: 'validation', id: idOf('validation'), set: { ranges: rangesOn(random) } }),
+        () => store.write({ ...base, type: 'validation', id: idOf('validation') }),
+        () => store.write({ ...base, type: 'validation', id: idOf('validation'), set: validationOn(random), whole: 1 }),
+        () => store.write({ ...base, type: 'validation', id: idOf('validation'), set: { ranges: rangesOn(random) } }),
         () =>
-            sheet.write({ ...base, type: 'validation', id: idOf('validation'), set: { order: pick(random, ORDERS) } }),
-        () => sheet.write({ ...base, type: 'conditionalFormat', id: idOf('conditionalFormat') }),
+            store.write({ ...base, type: 'validation', id: idOf('validation'), set: { order: pick(random, ORDERS) } }),
+        () => store.write({ ...base, type: 'conditionalFormat', id: idOf('conditionalFormat') }),
         () =>
-            sheet.write({
+            store.write({
                 ...base,
                 type: 'conditionalFormat',
                 id: idOf('conditionalFormat'),
                 set: formatOn(random),
                 whole: 1,
             }),
-        () => sheet.write({ ...base, type: 'comment', id: idOf('comment') }),
-        () => sheet.write({ ...base, type: 'comment', id: idOf('comment'), set: commentOn(random), whole: 1 }),
-        () => sheet.write({ ...base, type: 'comment', id: idOf('comment'), set: { row: below(random, 3) * 32 } }),
+        () => store.write({ ...base, type: 'comment', id: idOf('comment') }),
+        () => store.write({ ...base, type: 'comment', id: idOf('comment'), set: commentOn(random), whole: 1 }),
+        () => store.write({ ...base, type: 'comment', id: idOf('comment'), set: { row: below(random, 3) * 32 } }),
     ];
     pick(random, writes)();
 }
 
-function editLines(sheet: SheetRecords, random: Random): void {
+function editLines(store: BookRecords, random: Random): void {
     const rows = random() < 0.6;
     const last = rows ? LAST_ROW : LAST_COLUMN;
     const count = pick(random, [1, 2, 31, 32, 100, 5000]);
     const index = clamp((rows ? rowOn(random) : columnOn(random)) - below(random, 3), last + 1 - count);
     const edit: LinesOp = { kind: 'lines', insert: random() < 0.5, index, count, sheet: 'S', rows };
-    if (edit.insert && sheet.wouldPush(edit)) return;
-    planned(sheet.planLines(edit)).commit();
+    if (edit.insert && store.wouldPush(edit)) return;
+    planned(store.planLines(edit)).commit();
 }
 
 // A move on the sheet of a block around a range or a comment, with the ranges the model expects.
-function moveBlock(sheet: SheetRecords, random: Random): void {
-    const ranges = [...sheet.records('validation').values()].flatMap((rule) => rule.ranges);
+function moveBlock(store: BookRecords, random: Random): void {
+    const ranges = [...store.records('S', 'validation').values()].flatMap((rule) => rule.ranges);
     const from: Rect = random() < 0.7 && ranges.length > 0 ? pick(random, ranges) : [0, 0, 70, 20];
     const [height, width] = [from[2] - from[0], from[3] - from[1]];
     const toRow = clamp(rowOn(random), LAST_ROW - height);
@@ -191,24 +191,24 @@ function moveBlock(sheet: SheetRecords, random: Random): void {
                   range[3] + toColumn - from[1],
               ]
             : range;
-    const after = [...sheet.records('validation')].map(([id, rule]) => [id, rule.ranges.map(shift)]);
-    planned(sheet.planMove(op)).commit();
-    expect([...sheet.records('validation')].map(([id, rule]) => [id, rule.ranges])).toEqual(after);
+    const after = [...store.records('S', 'validation')].map(([id, rule]) => [id, rule.ranges.map(shift)]);
+    planned(store.planMove(op)).commit();
+    expect([...store.records('S', 'validation')].map(([id, rule]) => [id, rule.ranges])).toEqual(after);
 }
 
 test('the reads of rules and comments are those of a walk of the records, through writes, line edits and moves', () => {
     const random = randomFrom(57);
     const steps = { write: 0, lines: 0, move: 0 };
     for (let i = 0; i < CASES; i += 1) {
-        const sheet = sheetOn(random);
-        expectReads(sheet, random);
+        const store = storeOn(random);
+        expectReads(store, random);
         for (let step = 0; step < STEPS; step += 1) {
             const roll = random();
-            if (roll < 0.4) writeRecord(sheet, random, step);
-            else if (roll < 0.75) editLines(sheet, random);
-            else moveBlock(sheet, random);
+            if (roll < 0.4) writeRecord(store, random, step);
+            else if (roll < 0.75) editLines(store, random);
+            else moveBlock(store, random);
             steps[roll < 0.4 ? 'write' : roll < 0.75 ? 'lines' : 'move'] += 1;
-            expectReads(sheet, random);
+            expectReads(store, random);
         }
     }
     for (const count of Object.values(steps)) expect(count).toBeGreaterThan(CASES);
@@ -221,8 +221,8 @@ describe('the conditional formats of a rectangle', () => {
         ranges,
         order,
     });
-    const sheet = () =>
-        sheetOf({
+    const built = () =>
+        storeOf({
             conditionalFormat: {
                 late: rule('a2', [[0, 0, 9, 0]]),
                 b: rule('a1', [[5, 0, 5, 5]]),
@@ -236,26 +236,28 @@ describe('the conditional formats of a rectangle', () => {
         });
 
     test('are the rules with a range in it, in rule order with ties by id, each with those ranges only', () => {
-        const formats = sheet();
-        expect(formats.rulesIn('conditionalFormat', [0, 0, 9, 9]).map(({ id, ranges }) => [id, ranges.length])).toEqual(
-            [
-                ['a', 2],
-                ['b', 1],
-                ['late', 1],
-            ],
-        );
-        expect(formats.rulesIn('conditionalFormat', [100, 0, 100, 0])).toEqual([
+        const store = built();
+        expect(
+            store.rulesIn('S', 'conditionalFormat', [0, 0, 9, 9]).map(({ id, ranges }) => [id, ranges.length]),
+        ).toEqual([
+            ['a', 2],
+            ['b', 1],
+            ['late', 1],
+        ]);
+        expect(store.rulesIn('S', 'conditionalFormat', [100, 0, 100, 0])).toEqual([
             { id: 'a', rule: expect.objectContaining({ order: 'a1' }), ranges: [[100, 0, 100, 0]] },
         ]);
-        expect(formats.rulesIn('conditionalFormat', [10, 0, 99, 9])).toEqual([]);
-        expect(formats.rulesIn('conditionalFormat', [LAST_ROW, 0, LAST_ROW, 0]).map(({ id }) => id)).toEqual(['far']);
+        expect(store.rulesIn('S', 'conditionalFormat', [10, 0, 99, 9])).toEqual([]);
+        expect(store.rulesIn('S', 'conditionalFormat', [LAST_ROW, 0, LAST_ROW, 0]).map(({ id }) => id)).toEqual([
+            'far',
+        ]);
     });
 
     test('follow a replace, a delete, a line edit and a move', () => {
-        const formats = sheet();
-        const ids = (rect: Rect) => formats.rulesIn('conditionalFormat', rect).map(({ id }) => id);
-        formats.write({ kind: 'record', sheet: 'S', type: 'conditionalFormat', id: 'late' });
-        formats.write({
+        const store = built();
+        const ids = (rect: Rect) => store.rulesIn('S', 'conditionalFormat', rect).map(({ id }) => id);
+        store.write({ kind: 'record', sheet: 'S', type: 'conditionalFormat', id: 'late' });
+        store.write({
             kind: 'record',
             sheet: 'S',
             type: 'conditionalFormat',
@@ -265,25 +267,33 @@ describe('the conditional formats of a rectangle', () => {
         });
         expect(ids([0, 0, 9, 9])).toEqual(['a']);
         expect(ids([20, 0, 20, 0])).toEqual(['b']);
-        planned(formats.planLines(rowsAt(true, 10, 5))).commit();
+        planned(store.planLines(rowsAt(true, 10, 5))).commit();
         expect(ids([20, 0, 24, 0])).toEqual([]);
         expect(ids([25, 0, 25, 0])).toEqual(['b']);
         expect(ids([LAST_ROW, 0, LAST_ROW, 0])).toEqual(['far']);
-        planned(formats.planLines(rowsAt(false, 0, 1))).commit();
-        expect(formats.rulesIn('conditionalFormat', [0, 0, 8, 9]).map(({ ranges }) => ranges)).toEqual([
+        planned(store.planLines(rowsAt(false, 0, 1))).commit();
+        expect(store.rulesIn('S', 'conditionalFormat', [0, 0, 8, 9]).map(({ ranges }) => ranges)).toEqual([
             [[7, 2, 8, 3]],
         ]);
         const op: MoveOp = { kind: 'move', sheet: 'S', from: [24, 0, 24, 0], toSheet: 'S', toRow: 40, toColumn: 9 };
-        planned(formats.planMove(op)).commit();
+        planned(store.planMove(op)).commit();
         expect(ids([24, 0, 24, 0])).toEqual([]);
         expect(ids([40, 9, 40, 9])).toEqual(['b']);
     });
 });
 
 test('a comment is read at its cell through a line edit, and is gone with its line', () => {
-    const sheet = sheetOf({ comment: { a: { row: 31, column: 7 }, b: { row: 32, column: 8 } } });
-    planned(sheet.planLines(rowsAt(true, 32, 1))).commit();
-    expect([sheet.comments(31, 7), sheet.comments(32, 8), sheet.comments(33, 8)]).toEqual([['a'], [], ['b']]);
-    planned(sheet.planLines(rowsAt(false, 31, 1))).commit();
-    expect([sheet.comments(31, 7), sheet.comments(32, 8), sheet.comments(33, 8)]).toEqual([[], ['b'], []]);
+    const store = storeOf({ comment: { a: { row: 31, column: 7 }, b: { row: 32, column: 8 } } });
+    planned(store.planLines(rowsAt(true, 32, 1))).commit();
+    expect([store.comments('S', 31, 7), store.comments('S', 32, 8), store.comments('S', 33, 8)]).toEqual([
+        ['a'],
+        [],
+        ['b'],
+    ]);
+    planned(store.planLines(rowsAt(false, 31, 1))).commit();
+    expect([store.comments('S', 31, 7), store.comments('S', 32, 8), store.comments('S', 33, 8)]).toEqual([
+        [],
+        ['b'],
+        [],
+    ]);
 });

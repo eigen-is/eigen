@@ -1,4 +1,4 @@
-// Builders for the record store's tests: a sheet's records from plain data, the line edits and moves as the applier
+// Builders for the record store's tests: a store of sheets from plain data, the line edits and moves as the applier
 // runs them on every sheet, the store's records as plain data to compare whole, and the record ops of an undo applied
 // through the store's own writer.
 
@@ -12,7 +12,6 @@ import type {
     RecordOp,
     Records,
     RecordType,
-    Rect,
     SheetContent,
     SheetFields,
 } from '@workspace/lib/sheets/ops';
@@ -22,86 +21,16 @@ import { BookRecords } from '../../../engine/book/records';
 export const LAST_ROW = GRID_ROWS - 1;
 export const LAST_COLUMN = GRID_COLUMNS - 1;
 
-type Kind = Exclude<RecordType, 'sheet'>;
-
-// One sheet of a book's record store, read and written as the store's tests do.
-export class SheetRecords {
-    public constructor(
-        public readonly store: BookRecords,
-        public readonly id: string,
-    ) {}
-
-    public get fields() {
-        return this.store.fields(this.id);
-    }
-
-    public records<T extends Kind>(type: T) {
-        return this.store.records(this.id, type);
-    }
-
-    public content() {
-        return this.store.content(this.id);
-    }
-
-    public weight() {
-        return this.store.weight();
-    }
-
-    public write(op: RecordOp) {
-        return this.store.write(op);
-    }
-
-    public wouldPush(op: LinesOp) {
-        return this.store.wouldPush(op);
-    }
-
-    public planLines(op: LinesOp) {
-        return this.store.planLines(op);
-    }
-
-    public planMove(op: MoveOp) {
-        return this.store.planMove(op);
-    }
-
-    public merge(row: number, column: number) {
-        return this.store.merge(this.id, row, column);
-    }
-
-    public touchesMerge(rect: Rect) {
-        return this.store.touchesMerge(this.id, rect);
-    }
-
-    public mergesIn(rect: Rect) {
-        return this.store.mergesIn(this.id, rect);
-    }
-
-    public validation(row: number, column: number) {
-        return this.store.validation(this.id, row, column);
-    }
-
-    public rulesIn<T extends 'conditionalFormat' | 'validation'>(type: T, rect: Rect) {
-        return this.store.rulesIn(this.id, type, rect);
-    }
-
-    public comments(row: number, column: number) {
-        return this.store.comments(this.id, row, column);
-    }
+// A store of the one sheet S.
+export function storeOf(records: SheetContent['records'] = {}, fields: Partial<SheetFields> = {}) {
+    return storeOfSheets([['S', records, fields]]);
 }
 
-// A store of one sheet, S unless named.
-export function sheetOf(records: SheetContent['records'] = {}, fields: Partial<SheetFields> = {}, id = 'S') {
-    const store = new BookRecords();
-    store.add(id, { name: id, order: id, ...fields }, records);
-    return new SheetRecords(store, id);
-}
-
-// The sheets of one store, by id.
-export function sheetsOf(
-    sheets: readonly [string, SheetContent['records'], Partial<SheetFields>?][],
-): Map<string, SheetRecords> {
+// A store of the sheets, each with its id as its name and order.
+export function storeOfSheets(sheets: readonly [string, SheetContent['records'], Partial<SheetFields>?][]) {
     const store = new BookRecords();
     for (const [id, records, fields] of sheets) store.add(id, { name: id, order: id, ...fields }, records);
-    return new Map(sheets.map(([id]) => [id, new SheetRecords(store, id)]));
+    return store;
 }
 
 export function rowsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LinesOp {
@@ -121,15 +50,15 @@ export function planned<P extends object>(result: P | string): P {
     return result;
 }
 
-// Plans the edit on the sheet's store, as the applier does, and returns its record ops.
-export function editLines(sheet: SheetRecords, edit: LinesOp): RecordOp[] {
-    const plan = planned(sheet.planLines(edit));
+// Plans the edit on the store, as the applier does, and returns its record ops.
+export function editLines(store: BookRecords, edit: LinesOp): RecordOp[] {
+    const plan = planned(store.planLines(edit));
     plan.commit();
     return [...plan.restore];
 }
 
-export function moveBlock(sheets: ReadonlyMap<string, SheetRecords>, op: MoveOp): RecordOp[] {
-    const plan = planned(sheetNamed(sheets, op.sheet).planMove(op));
+export function moveBlock(store: BookRecords, op: MoveOp): RecordOp[] {
+    const plan = planned(store.planMove(op));
     plan.commit();
     return [...plan.restore];
 }
@@ -141,16 +70,10 @@ export function reverseOf(op: MoveOp): MoveOp {
     return { kind: 'move', sheet: op.toSheet, from: to, toSheet: op.sheet, toRow: top, toColumn: left };
 }
 
-export function sheetNamed(sheets: ReadonlyMap<string, SheetRecords>, id: string): SheetRecords {
-    const sheet = sheets.get(id);
-    if (!sheet) throw new Error(`no sheet ${id}`);
-    return sheet;
-}
-
 // A sheet's fields and records as plain data, a type with no record left out.
-export function contentOf(sheet: SheetRecords) {
+export function contentOf(store: BookRecords, sheet = 'S') {
     const of = <T extends Exclude<RecordType, 'sheet'>>(type: T) =>
-        sheet.records(type).size > 0 ? Object.fromEntries(sheet.records(type)) : undefined;
+        store.records(sheet, type).size > 0 ? Object.fromEntries(store.records(sheet, type)) : undefined;
     const records: SheetContent['records'] = {
         merge: of('merge'),
         filter: of('filter'),
@@ -161,20 +84,16 @@ export function contentOf(sheet: SheetRecords) {
         image: of('image'),
         chart: of('chart'),
     };
-    return { fields: sheet.fields, records };
+    return { fields: store.fields(sheet), records };
 }
 
 // Applies the record ops of an undo through the store's writer and returns the inverses it hands back. A whole make
 // must carry the record the sheet held before.
-export function applyRecordOps(
-    sheets: ReadonlyMap<string, SheetRecords>,
-    before: ReadonlyMap<string, SheetRecords>,
-    ops: readonly RecordOp[],
-): RecordOp[] {
+export function applyRecordOps(store: BookRecords, before: BookRecords, ops: readonly RecordOp[]): RecordOp[] {
     const inverses: RecordOp[] = [];
     for (const op of ops) {
-        if (op.whole) expect(sheetNamed(before, op.sheet).records(op.type).get(op.id)).toEqual(op.set);
-        const written = sheetNamed(sheets, op.sheet).write(op);
+        if (op.whole) expect(before.records(op.sheet, op.type).get(op.id)).toEqual(op.set);
+        const written = store.write(op);
         if (typeof written === 'string') throw new Error(written);
         inverses.push(...written);
     }
