@@ -1083,6 +1083,17 @@ describe('the sheet content', () => {
         );
     });
 
+    test('has at most one filter, and every filter column names it', () => {
+        const records = (list: SheetContent['records']) => isSheetContent({ ...SHEET, records: list });
+        const filter = { rect: [0, 0, 20, 4] satisfies Rect };
+        const column = (name: string) => ({ filter: name, column: 2, rows: [] });
+        expect(records({ filter: { f1: filter }, filterColumn: { c1: column('f1'), c2: column('f1') } })).toBe(true);
+        expect(records({ filter: { f1: filter }, filterColumn: { c1: column('f2') } })).toBe(false);
+        expect(records({ filterColumn: { c1: column('f1') } })).toBe(false);
+        expect(records({ filter: { f1: filter, f2: filter } })).toBe(false);
+        expect(accepts(added({ records: { filterColumn: { c1: column('f1') } } }))).toBe(false);
+    });
+
     test('has records by type, each whole', () => {
         const records = (list: unknown) => isSheetContent({ ...SHEET, records: list });
         expect(records({ sheet: { s2: { name: 'a', order: 'a0' } } })).toBe(false);

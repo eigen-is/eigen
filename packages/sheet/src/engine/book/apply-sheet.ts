@@ -16,7 +16,7 @@ export function applySheet(book: Workbook, op: SheetOp, checked: boolean): (Shee
         const sheet = book.sheets.get(op.delete);
         // A peer may have deleted the sheet first: every reader skips the op alone.
         if (!sheet) return [];
-        const shown = [...book.sheets].some(([id, other]) => id !== op.delete && !other.records.fields.hide);
+        const shown = [...book.sheets.keys()].some((id) => id !== op.delete && !book.records.fields(id).hide);
         if (!shown) throw new Refusal('last-sheet');
         const add = book.sheetContent(op.delete, sheet);
         book.removeSheet(op.delete);
@@ -26,8 +26,8 @@ export function applySheet(book: Workbook, op: SheetOp, checked: boolean): (Shee
     // Two peers may add one sheet, as two undos of one delete do: the second is skipped alone.
     if (book.sheets.has(add.id)) return [];
     // An id names one record of its type in the whole book.
-    if ([...book.sheets.values()].some(({ records }) => records.sharesId(add.records))) throw new Refusal('id-in-use');
-    const taken = new Set([...book.sheets.values()].map(({ records }) => sheetNameKey(records.fields.name)));
+    if (book.records.inUse(add.records)) throw new Refusal('id-in-use');
+    const taken = new Set([...book.sheets.keys()].map((id) => sheetNameKey(book.records.fields(id).name)));
     let { name } = add.fields;
     for (let n = 2; taken.has(sheetNameKey(name)); n += 1) {
         const suffix = ` (${n})`;

@@ -51,7 +51,7 @@ export class Sheet {
     ) {}
 
     public get fields(): Readonly<SheetFields> {
-        return this.parts.records.fields;
+        return this.book.records.fields(this.id);
     }
 
     // Read by id at each read, since a batch that deletes a sheet and adds it back gives it new parts.
@@ -130,27 +130,27 @@ export class Sheet {
     }
 
     public merge(row: number, column: number): Rect | undefined {
-        return this.parts.records.merge(row, column);
+        return this.book.records.merge(this.id, row, column);
     }
 
     public touchesMerge(rect: Rect): boolean {
-        return this.parts.records.touchesMerge(rect);
+        return this.book.records.touchesMerge(this.id, rect);
     }
 
     public mergesIn(rect: Rect): readonly Rect[] {
-        return this.parts.records.mergesIn(rect);
+        return this.book.records.mergesIn(this.id, rect);
     }
 
     public records<T extends Exclude<RecordType, 'sheet'>>(type: T): ReadonlyMap<string, Readonly<Records[T]>> {
-        return this.parts.records.records(type);
+        return this.book.records.records(this.id, type);
     }
 
     public validation(row: number, column: number): Readonly<ValidationRecord> | undefined {
-        return this.parts.records.validation(row, column);
+        return this.book.records.validation(this.id, row, column);
     }
 
     // The ids of the cell's comments, in order.
     public comments(row: number, column: number): readonly string[] {
-        return this.parts.records.comments(row, column);
+        return this.book.records.comments(this.id, row, column);
     }
 }

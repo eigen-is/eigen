@@ -1,8 +1,8 @@
 // The one door where ops someone else wrote, such as a peer's batch in the log or a sheet in a stored snapshot, become
 // ops the workbook trusts. `readBatch` parses a batch's text, and each check is pure and reads one op: every place on
 // the grid, every object holding only the keys its type lists, every text, list and key within its bound. A batch with
-// one op that fails is not read at all, so every reader skips the same batches. State, such as whether a sheet or a
-// filter exists, is the applier's to check.
+// one op that fails is not read at all, so every reader skips the same batches. What an op reads from the book, such as
+// whether its sheet or a column's filter exists, is the applier's to check.
 
 import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH } from '@workspace/formula/text';
 import { exceedsChartSpecBytes } from '../charts/limits';
@@ -250,10 +250,13 @@ function lineRunSpan(run: unknown): unknown {
     return Array.isArray(run) && run.length === 2 && isOf(run[1], LINE) ? run[0] : undefined;
 }
 
-// Merges share no cell: the applier refuses a merge over another, so no edit makes a sheet where two do.
+// A sheet holds only what edits can make: merges that share no cell, as the applier refuses a merge over another, and
+// at most one filter with every column naming it, as a filter replaces the one before and a column needs its filter.
 function isSheetRecords(value: unknown): boolean {
     if (!isRecord(value)) return false;
     const merges: Rect[] = [];
+    const filters = new Set<string>();
+    const named = new Set<string>();
     for (const type in value) {
         const records = value[type];
         if (type === 'sheet' || !Object.hasOwn(RECORD_KINDS, type) || !isRecord(records)) return false;
@@ -263,9 +266,11 @@ function isSheetRecords(value: unknown): boolean {
             const record = records[id];
             if (count > MAX_RECORDS_PER_TYPE || !isId(id) || !RECORD_KINDS[type].whole(record)) return false;
             if (type === 'merge' && isRecord(record) && isRect(record.rect)) merges.push(record.rect);
+            if (type === 'filter') filters.add(id);
+            if (type === 'filterColumn' && isRecord(record) && isId(record.filter)) named.add(record.filter);
         }
     }
-    return disjoint(merges);
+    return disjoint(merges) && filters.size <= 1 && [...named].every((filter) => filters.has(filter));
 }
 
 function table<T>(fields: Fields<T>): Table<T> {

@@ -625,8 +625,8 @@ describe('engine/book/still-holding — stillHolding', () => {
             const held = stillHolding(book, apply, written);
             expect(held.map((op) => op.kind === 'record' && op.type)).toEqual(['filterColumn']);
             applyOps(book, held);
-            expect([...(book.sheets.get('a')?.records.records('filter').keys() ?? [])]).toEqual(['h']);
-            expect(book.sheets.get('a')?.records.records('filterColumn').size).toBe(0);
+            expect([...(book.records.records('a', 'filter').keys() ?? [])]).toEqual(['h']);
+            expect(book.records.records('a', 'filterColumn').size).toBe(0);
             const resized = edited(written, {
                 kind: 'record',
                 sheet: 'a',
@@ -697,9 +697,9 @@ describe('engine/book/still-holding — stillHolding', () => {
                     read.lines.set(`${sheet} rows ${line}`, json(part.rows.at(line)));
                     read.lines.set(`${sheet} columns ${line}`, json(part.columns.at(line)));
                 }
-                read.records.set(`${sheet} sheet`, part.records.fields);
+                read.records.set(`${sheet} sheet`, book.records.fields(sheet));
                 // A sheet has one filter, whatever its id: the filters read as one record by id.
-                read.records.set(`${sheet} filter`, Object.fromEntries(part.records.records('filter')));
+                read.records.set(`${sheet} filter`, Object.fromEntries(book.records.records(sheet, 'filter')));
                 for (const type of [
                     'merge',
                     'filterColumn',
@@ -709,7 +709,7 @@ describe('engine/book/still-holding — stillHolding', () => {
                     'image',
                     'chart',
                 ] as const) {
-                    for (const [id, record] of part.records.records(type))
+                    for (const [id, record] of book.records.records(sheet, type))
                         read.records.set(`${sheet} ${type} ${id}`, record);
                 }
             }

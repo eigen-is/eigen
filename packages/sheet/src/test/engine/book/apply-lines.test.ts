@@ -549,7 +549,7 @@ describe('engine/book/apply-lines — a filter’s first line moves as a line, i
         expect(inverse).toEqual([lines(true, false, 0, 1)]);
         const after = new Workbook(book);
         applyOps(after, [lines(true, true, 0, 1)]);
-        expect(after.sheets.get('a')?.records.records('filter').get('f')).toEqual({ rect: [1, 0, LAST_ROW, 4] });
+        expect(after.records.records('a', 'filter').get('f')).toEqual({ rect: [1, 0, LAST_ROW, 4] });
     });
 
     test('a filter from row 2 to the last row: a delete above it, its undo and the undo of that', () => {
@@ -557,7 +557,7 @@ describe('engine/book/apply-lines — a filter’s first line moves as a line, i
         expect(landed(book, lines(true, false, 0, 2))).toEqual([lines(true, true, 0, 2, 0)]);
         const after = new Workbook(book);
         applyOps(after, [lines(true, false, 0, 2)]);
-        expect(after.sheets.get('a')?.records.records('filter').get('f')).toEqual({ rect: [0, 0, LAST_ROW, 4] });
+        expect(after.records.records('a', 'filter').get('f')).toEqual({ rect: [0, 0, LAST_ROW, 4] });
     });
 
     // The filter's span along the edited axis before and after, at, above and below its first line and at the grid's
@@ -610,7 +610,7 @@ describe('engine/book/apply-lines — a filter’s first line moves as a line, i
                 const after = new Workbook(book);
                 applyOps(after, [lines(rows, insert, index, count)]);
                 const expected = rows ? onRows : onColumns;
-                const filter = after.sheets.get('a')?.records.records('filter').get('f');
+                const filter = after.records.records('a', 'filter').get('f');
                 expect(filter).toEqual(expected ? { rect: rect(expected) } : undefined);
             });
         }
@@ -958,9 +958,9 @@ describe('engine/book/apply-lines — LAW 2, law 6 and law 8 over random books a
         // Line edits at or above the first line of a filter that reaches the grid's last line.
         let filterToEnd = 0;
         const reachesUnder = (book: Workbook, { sheet, rows, index }: LinesOp) =>
-            [...(book.sheets.get(sheet)?.records.records('filter').values() ?? [])].some(
-                ({ rect: [top, left, bottom, right] }) =>
-                    rows ? index <= top && bottom === LAST_ROW : index <= left && right === LAST_COLUMN,
+            book.sheets.has(sheet) &&
+            [...book.records.records(sheet, 'filter').values()].some(({ rect: [top, left, bottom, right] }) =>
+                rows ? index <= top && bottom === LAST_ROW : index <= left && right === LAST_COLUMN,
             );
         // What the inverses of the lines ops held beyond the lines op itself.
         const parts = { looks: 0, lineKeys: 0, content: 0, records: 0, lost: 0, insertLost: 0 };

@@ -72,13 +72,13 @@ describe('engine/book/apply-record — a sheet’s fields', () => {
         const book = bookOf(sheetOf('a'), sheetOf('b', { hide: 1 }), sheetOf('c'));
         expect(applyOps(book, [fields('c', { hide: 1 })])).toEqual([fields('c', { hide: null })]);
         expect(refusalOf(() => applyOps(book, [fields('a', { hide: 1 })]))).toBe('last-sheet');
-        expect(book.sheets.get('a')?.records.fields.hide).toBeUndefined();
+        expect(book.records.fields('a').hide).toBeUndefined();
         // A sheet that is hidden already is hidden again.
         expect(applyOps(book, [fields('b', { hide: 1 })])).toEqual([]);
         expect(applyOps(book, [fields('b', { hide: null })])).toEqual([fields('b', { hide: 1 })]);
         expect(applyOps(book, [fields('a', { hide: 1 })])).toEqual([fields('a', { hide: null })]);
         expect(refusalOf(() => applyOps(book, [fields('b', { hide: 1, color: '#ff0000' })]))).toBe('last-sheet');
-        expect(book.sheets.get('b')?.records.fields.color).toBeUndefined();
+        expect(book.records.fields('b').color).toBeUndefined();
     });
 
     test('a sheet that is hidden is not the last shown sheet: hiding it again is no refusal', () => {
@@ -92,7 +92,7 @@ describe('engine/book/apply-record — a sheet’s fields', () => {
         expect(
             applyOps(book, [fields('b', { name: 'data', color: '#ff0000' }), fields('a', { color: '#00ff00' })]),
         ).toEqual([fields('a', { color: null })]);
-        expect(book.sheets.get('b')?.records.fields).toEqual({ name: 'Totals', order: 'a1' });
+        expect(book.records.fields('b')).toEqual({ name: 'Totals', order: 'a1' });
         applyOps(book, [fields('a', { color: null })]);
         expect(bytes(book)).toBe(before);
     });
@@ -102,7 +102,7 @@ describe('engine/book/apply-record — a sheet’s fields', () => {
         expect(applyOps(book, [fields('a', { name: 'DATA' })])).toEqual([fields('a', { name: 'Data' })]);
         expect(applyOps(book, [fields('a', { name: 'DATA' })])).toEqual([]);
         expect(applyOps(book, [fields('b', { name: 'Data 2' })])).toEqual([fields('b', { name: 'Totals' })]);
-        expect(book.sheets.get('a')?.records.fields.name).toBe('DATA');
+        expect(book.records.fields('a').name).toBe('DATA');
     });
 
     test('the engine learns a sheet’s new name: a formula typed with it reads the sheet', () => {
@@ -177,7 +177,7 @@ describe('engine/book/apply-record — the records of a sheet', () => {
         expect(applyOps(book, [merge('x', [2, 4, 3, 5])])).toEqual([
             { kind: 'record', sheet: 'a', type: 'merge', id: 'x' },
         ]);
-        expect(book.sheets.get('a')?.records.merge(3, 3)).toEqual([0, 0, 3, 3]);
+        expect(book.records.merge('a', 3, 3)).toEqual([0, 0, 3, 3]);
     });
 
     test('a make under an id another sheet holds for its type is refused; on its own sheet it replaces', () => {

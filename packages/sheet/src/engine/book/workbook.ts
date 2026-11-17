@@ -1,8 +1,8 @@
 // The state of one spreadsheet document on one host, such as a browser tab or the server: the formula engine, which
-// keeps the cells' values and formulas, one table of looks, and per sheet the bands that say which look a cell wears,
-// the keys of its rows and columns, what its cells hold beyond a value, and its records. It is built from a decoded
-// snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever their history. It
-// keeps what the limits weigh as a count, and tells the engine which rows a sheet hides and filters.
+// keeps the cells' values and formulas, one table of looks, one store of every sheet's records, and per sheet the bands
+// that say which look a cell wears, the keys of its rows and columns and what its cells hold beyond a value. It is
+// built from a decoded snapshot and walks back to one, so equal documents give equal snapshots once computed, whatever
+// their history. It keeps what the limits weigh as a count, and tells the engine which rows a sheet hides and filters.
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine, errorOf } from '@workspace/formula';
@@ -19,18 +19,17 @@ import type { Extra } from './extras';
 import { Extras, textOf } from './extras';
 import { LineRuns } from './line-runs';
 import { LookTable } from './look-table';
-import { SheetRecords } from './records';
+import { BookRecords } from './records';
 
-// The parts of one sheet. Its cells are the engine's, under the sheet's id, and its fields are its records'. A part
-// takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an insert pushes
-// something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines` and `move`
-// return what they replaced, removed or covered, as the part's reads list it. Records plan an edit before it writes.
+// The parts of one sheet. Its cells are the engine's and its fields and records the record store's, under the sheet's
+// id. A part takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an
+// insert pushes something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines`
+// and `move` return what they replaced, removed or covered, as the part's reads list it.
 export type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;
     readonly columns: LineRuns;
     readonly extras: Extras;
-    readonly records: SheetRecords;
 };
 
 // A look table that holds fewer looks is not swept: the looks no cell wears then cost next to nothing.
@@ -40,6 +39,7 @@ export class Workbook {
     public readonly engine: Engine;
     // A look id is this table's, so it means the same look on every sheet, until the next sweep.
     public readonly looks = new LookTable();
+    public readonly records = new BookRecords();
     // In tab order, as the engine holds them, so every reader walks the sheets in one order whatever its history.
     private parts = new Map<string, BookSheet>();
     // The generation: it rises only when the document is replaced whole, never with an edit.
@@ -60,13 +60,12 @@ export class Workbook {
         const parts = ordered.map((sheet) => this.partsOf(sheet));
         let slots = 0;
         for (const sheet of ordered) slots += slotsOf(sheet);
-        const records = parts.map((part) => part.records.weight().records);
-        const refusal = fits({ slots, ...this.held, records: Math.max(0, ...records), sheets: parts.length });
+        const refusal = fits({ slots, ...this.held, records: this.records.weight(), sheets: parts.length });
         if (refusal) throw new Refusal(refusal);
 
         // The rows a sheet hides and filters come with its cells, as the values of a computed load were computed
         // with them.
-        const sources = ordered.map((sheet, at) => ({ ...sourceOf(sheet), ...rowsOut(parts[at]) }));
+        const sources = ordered.map((sheet, at) => ({ ...sourceOf(sheet), ...this.rowsOut(sheet.id, parts[at]) }));
         this.engine = new Engine(sources, now, seed, computed);
         for (const [at, { id }] of ordered.entries()) this.parts.set(id, parts[at]);
         this.g = g;
@@ -92,7 +91,7 @@ export class Workbook {
     }
 
     // One sheet whole, as the snapshot lists it and a `sheet` op adds it.
-    public sheetContent(id: string, { bands, rows, columns, extras, records }: BookSheet): SheetContent {
+    public sheetContent(id: string, { bands, rows, columns, extras }: BookSheet): SheetContent {
         const cells: Placed<CellRecord>[] = [];
         const list = (row: number, column: number, value: Literal | null, formula: string | null, extra?: Extra) => {
             const cell: CellRecord = {};
@@ -126,13 +125,13 @@ export class Workbook {
         const look = bands.content();
         return {
             id,
-            fields: records.fields,
+            fields: this.records.fields(id),
             cells,
             looks: look.looks.map((at) => this.looks.look(at)),
             bands: look.bands,
             rows: rows.content(),
             columns: columns.content(),
-            records: records.content(),
+            records: this.records.content(id),
         };
     }
 
@@ -140,8 +139,8 @@ export class Workbook {
     // `checked`, its parts and cells are weighed before the engine takes it; a refusal, the engine's too, leaves none.
     public addSheet(sheet: SheetContent, checked: boolean): EditResult {
         let place = 0;
-        for (const [id, { records }] of this.parts) {
-            if (compareRules(records.fields.order, id, sheet.fields.order, sheet.id) < 0) place += 1;
+        for (const id of this.parts.keys()) {
+            if (compareRules(this.records.fields(id).order, id, sheet.fields.order, sheet.id) < 0) place += 1;
         }
         const part = this.partsOf(sheet);
         try {
@@ -151,7 +150,7 @@ export class Workbook {
             this.place(sheet.id, part, place);
             return result;
         } catch (error) {
-            this.forget(part);
+            this.forget(sheet.id, part);
             throw error;
         }
     }
@@ -167,7 +166,7 @@ export class Workbook {
     public removeSheet(id: string): void {
         this.engine.removeSheet(id);
         const part = this.parts.get(id);
-        if (part) this.forget(part);
+        if (part) this.forget(id, part);
         this.parts.delete(id);
     }
 
@@ -183,16 +182,14 @@ export class Workbook {
     // sheet with none, so the frame calls this at the end of a batch that can have changed them.
     public setRowsOut(): void {
         for (const [id, part] of this.parts) {
-            const { hidden, filtered } = rowsOut(part);
+            const { hidden, filtered } = this.rowsOut(id, part);
             this.engine.setRowsOut(id, hidden, filtered);
         }
     }
 
     // What the limits count: the engine's slots, the runs, bands and extras of every sheet, its records, the sheets.
     public weight(): WorkbookWeight {
-        let records = 0;
-        for (const part of this.parts.values()) records = Math.max(records, part.records.weight().records);
-        return { slots: this.engine.slots(), ...this.held, records, sheets: this.parts.size };
+        return { slots: this.engine.slots(), ...this.held, records: this.records.weight(), sheets: this.parts.size };
     }
 
     // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this many slots
@@ -216,6 +213,7 @@ export class Workbook {
         for (const [row, column, { s, link, qp }] of cells) {
             if (s || link || qp) extras.write(row, column, { s, link, qp });
         }
+        this.records.add(id, fields, records);
         return {
             bands: new Bands(
                 bands,
@@ -225,16 +223,29 @@ export class Workbook {
             rows: new LineRuns(rows),
             columns: new LineRuns(columns),
             extras,
-            records: new SheetRecords(id, fields, records),
         };
     }
 
-    // Takes what a sheet's parts weigh out of the count: the sheet leaves the workbook, or never entered it.
-    private forget({ bands, extras }: BookSheet): void {
+    // Takes the sheet's records and what its parts weigh out of the book: it leaves the workbook, or never entered it.
+    private forget(id: string, { bands, extras }: BookSheet): void {
+        this.records.remove(id);
         const looks = bands.weight();
         this.held.runs -= looks.runs;
         this.held.bands -= looks.bands;
         this.held.extras -= extras.weight();
+    }
+
+    // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
+    // the sheet's filter left out. While the filter leaves a row out, Excel counts every hidden row of the sheet as
+    // filtered, inside its range or not. A hidden column matters to neither function.
+    private rowsOut(sheet: string, { rows }: BookSheet): { hidden: number[]; filtered: number[] } {
+        const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
+        const filters = this.records.records(sheet, 'filter');
+        const filtered = [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) =>
+            filters.has(column.filter) ? column.rows : [],
+        );
+        if (filtered.length > 0) filtered.push(...hidden);
+        return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
     }
 
     private place(id: string, part: BookSheet, place: number): void {
@@ -267,19 +278,6 @@ function slotsOf({ cells }: SheetContent): number {
         length = row + 1;
     }
     return slots + length;
-}
-
-// The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
-// the sheet's filter left out. While the filter leaves a row out, Excel counts every hidden row of the sheet as
-// filtered, inside its range or not. A hidden column matters to neither function.
-function rowsOut({ rows, records }: BookSheet): { hidden: number[]; filtered: number[] } {
-    const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
-    const filters = records.records('filter');
-    const filtered = [...records.records('filterColumn').values()].flatMap((column) =>
-        filters.has(column.filter) ? column.rows : [],
-    );
-    if (filtered.length > 0) filtered.push(...hidden);
-    return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
 }
 
 // Spans in the order of their first line as pairs of a first and a last line, those that meet or touch as one.

@@ -4,7 +4,7 @@ import { exceedsChartSpecBytes, newChartSpecParts, sampleChartSpec } from '@work
 import type { Op, SheetContent, SheetFields } from '@workspace/lib/sheets/ops';
 import { isSheetContent, readBatch } from '@workspace/lib/sheets/ops-validate';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
-import { SheetRecords } from '../../../engine/book/records';
+import { BookRecords } from '../../../engine/book/records';
 import { Workbook } from '../../../engine/book/workbook';
 import { batchOf, randomBookContent, randomLinesOp, randomMoveOp, randomOp, randomRecordOp } from './batches';
 import type { Book } from './book-fixtures';
@@ -93,25 +93,20 @@ describe('engine/book — the model and the batches the appliers are held to', (
                 const after = modelAfter(model, batchOf(random, model, randomRecordOp, 6));
                 if (typeof after !== 'string') model = after;
             }
-            const stores = new Map(
-                contentOfModel(model).sheets.map(({ id, fields, records }) => [
-                    id,
-                    new SheetRecords(id, fields, records),
-                ]),
-            );
+            const store = new BookRecords();
+            const { sheets } = contentOfModel(model);
+            for (const { id, fields, records } of sheets) store.add(id, fields, records);
             const op = random() < 0.5 ? randomLinesOp(random, model) : randomMoveOp(random, model);
-            const source = stores.get(op.sheet);
-            if (!source || (op.kind === 'move' && !stores.has(op.toSheet))) continue;
+            const ids = new Set(sheets.map(({ id }) => id));
+            if (!ids.has(op.sheet) || (op.kind === 'move' && !ids.has(op.toSheet))) continue;
             // The applier plans no move of a block onto itself, which changes nothing.
             const still =
                 op.kind === 'move' && op.sheet === op.toSheet && op.toRow === op.from[0] && op.toColumn === op.from[1];
             if (still) continue;
             const expected = modelAfter(model, { now: 1, seed: 1, ops: [op] });
-            const plans = [...stores.values()].map((store) =>
-                op.kind === 'move' ? store.planMove(op, source) : store.planLines(op),
-            );
-            const refused = plans.find((plan) => typeof plan === 'string');
-            if (refused) {
+            const plan = op.kind === 'move' ? store.planMove(op) : store.planLines(op);
+            if (typeof plan === 'string') {
+                const refused = plan;
                 expect(expected).toBe(refused);
                 cut += 1;
                 continue;
@@ -121,11 +116,10 @@ describe('engine/book — the model and the batches the appliers are held to', (
                 expect(expected).toBe('grid-end');
                 continue;
             }
-            expect(op.kind === 'lines' && op.insert && source.wouldPush(op)).toBe(false);
-            for (const plan of plans) if (typeof plan !== 'string') plan.commit();
+            expect(op.kind === 'lines' && op.insert && store.wouldPush(op)).toBe(false);
+            plan.commit();
             for (const sheet of contentOfModel(expected).sheets) {
-                const store = stores.get(sheet.id);
-                expect({ fields: store?.fields, records: store?.content() }).toEqual({
+                expect({ fields: store.fields(sheet.id), records: store.content(sheet.id) }).toEqual({
                     fields: sheet.fields,
                     records: sheet.records,
                 });

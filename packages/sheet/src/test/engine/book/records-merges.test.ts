@@ -5,8 +5,8 @@
 
 import { expect, spyOn, test } from 'bun:test';
 import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
-import type { SheetRecords } from '../../../engine/book/records';
-import { LAST_COLUMN, LAST_ROW, sheetOf } from './records-fixtures';
+import type { BookRecords } from '../../../engine/book/records';
+import { LAST_COLUMN, LAST_ROW, storeOf } from './records-fixtures';
 
 const CASES = 100;
 const STEPS = 6;
@@ -75,11 +75,11 @@ function mergesOn(random: Random): Record<string, { rect: Rect }> {
     return merges;
 }
 
-const rectsOf = (sheet: SheetRecords): Rect[] => [...sheet.records('merge').values()].map(({ rect }) => rect);
+const rectsOf = (store: BookRecords): Rect[] => [...store.records('S', 'merge').values()].map(({ rect }) => rect);
 
 // Every read of the index, at the cells and rectangles on and around each merge, against the records themselves.
-function expectIndexReads(sheet: SheetRecords, random: Random): void {
-    const rects = rectsOf(sheet);
+function expectIndexReads(store: BookRecords, random: Random): void {
+    const rects = rectsOf(store);
     for (const [i, a] of rects.entries()) {
         for (const b of rects.slice(i + 1)) expect({ a, b, meet: meets(a, b) }).toEqual({ a, b, meet: false });
     }
@@ -114,53 +114,53 @@ function expectIndexReads(sheet: SheetRecords, random: Random): void {
     queries.push([0, column, LAST_ROW, column]);
     for (const [row, column] of cells) {
         const expected = rects.find((rect) => meets(rect, [row, column, row, column]));
-        expect({ row, column, merge: sheet.merge(row, column) }).toEqual({ row, column, merge: expected });
+        expect({ row, column, merge: store.merge('S', row, column) }).toEqual({ row, column, merge: expected });
     }
     for (const query of queries) {
         const expected = inPlaceOrder(rects.filter((rect) => meets(rect, query)));
-        expect({ query, merges: sheet.mergesIn(query) }).toEqual({ query, merges: expected });
-        expect({ query, touches: sheet.touchesMerge(query) }).toEqual({ query, touches: expected.length > 0 });
+        expect({ query, merges: store.mergesIn('S', query) }).toEqual({ query, merges: expected });
+        expect({ query, touches: store.touchesMerge('S', query) }).toEqual({ query, touches: expected.length > 0 });
     }
 }
 
 // A record write, with the refusal and the records the model expects.
-function writeMerge(sheet: SheetRecords, random: Random, step: number): void {
-    const before = new Map([...sheet.records('merge')].map(([id, { rect }]) => [id, rect]));
+function writeMerge(store: BookRecords, random: Random, step: number): void {
+    const before = new Map([...store.records('S', 'merge')].map(([id, { rect }]) => [id, rect]));
     const ids = [...before.keys()];
     const roll = random();
     const id = roll < 0.4 || ids.length === 0 ? `w${step}` : pick(random, ids);
     if (roll > 0.85) {
-        sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id });
+        store.write({ kind: 'record', sheet: 'S', type: 'merge', id });
         before.delete(id);
     } else {
         const rect = rectOn(random, [...before.values()]);
         const whole = random() < 0.5;
         const written = whole
-            ? sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id, set: { rect }, whole: 1 })
-            : sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id, set: { rect } });
+            ? store.write({ kind: 'record', sheet: 'S', type: 'merge', id, set: { rect }, whole: 1 })
+            : store.write({ kind: 'record', sheet: 'S', type: 'merge', id, set: { rect } });
         const taken = [...before].some(([other, held]) => other !== id && meets(held, rect));
         const skipped = !whole && !before.has(id);
         expect({ rect, refused: written === 'merge-overlap' }).toEqual({ rect, refused: taken && !skipped });
         if (!taken && !skipped) before.set(id, rect);
     }
-    expect(new Map([...sheet.records('merge')].map(([key, { rect }]) => [key, rect]))).toEqual(before);
+    expect(new Map([...store.records('S', 'merge')].map(([key, { rect }]) => [key, rect]))).toEqual(before);
 }
 
-function editLines(sheet: SheetRecords, random: Random): void {
+function editLines(store: BookRecords, random: Random): void {
     const rows = random() < 0.6;
     const last = rows ? LAST_ROW : LAST_COLUMN;
     const count = pick(random, [1, 2, 3, 64, 100, 5000]);
     const index = clamp((rows ? rowOn(random) : columnOn(random)) - below(random, 3), last + 1 - count);
     const edit: LinesOp = { kind: 'lines', insert: random() < 0.5, index, count, sheet: 'S', rows };
-    if (edit.insert && sheet.wouldPush(edit)) return;
-    const plan = sheet.planLines(edit);
+    if (edit.insert && store.wouldPush(edit)) return;
+    const plan = store.planLines(edit);
     if (typeof plan === 'string') throw new Error(plan);
     plan.commit();
 }
 
 // A move on the sheet, with the refusal and the merges the model expects.
-function moveBlock(sheet: SheetRecords, random: Random): void {
-    const before = rectsOf(sheet);
+function moveBlock(store: BookRecords, random: Random): void {
+    const before = rectsOf(store);
     const from = random() < 0.6 && before.length > 0 ? pick(random, before) : rectOn(random, before);
     const height = from[2] - from[0];
     const width = from[3] - from[1];
@@ -171,7 +171,7 @@ function moveBlock(sheet: SheetRecords, random: Random): void {
     const carried = before.filter((rect) => meets(rect, from));
     const landedOn = before.filter((rect) => meets(rect, target) && !carried.includes(rect));
     const cut = carried.some((rect) => !within(rect, from)) || landedOn.some((rect) => !within(rect, target));
-    const plan = sheet.planMove(op, sheet);
+    const plan = store.planMove(op);
     expect({ op, refused: plan }).toEqual({ op, refused: cut ? 'merge-cut' : expect.any(Object) });
     if (typeof plan === 'string') return;
     plan.commit();
@@ -184,27 +184,27 @@ function moveBlock(sheet: SheetRecords, random: Random): void {
     const after = before
         .filter((rect) => !landedOn.includes(rect))
         .map((rect) => (carried.includes(rect) ? shift(rect) : rect));
-    expect({ op, merges: inPlaceOrder(rectsOf(sheet)) }).toEqual({ op, merges: inPlaceOrder(after) });
+    expect({ op, merges: inPlaceOrder(rectsOf(store)) }).toEqual({ op, merges: inPlaceOrder(after) });
 }
 
 test('the index reads as the records do, through writes, line edits and moves', () => {
     const random = randomFrom(23);
     const kinds = { tall: 0, wide: 0, touching: 0 };
     for (let i = 0; i < CASES; i += 1) {
-        const sheet = sheetOf({ merge: mergesOn(random) });
-        const rects = rectsOf(sheet);
+        const store = storeOf({ merge: mergesOn(random) });
+        const rects = rectsOf(store);
         if (rects.some((rect) => rect[0] === 0 && rect[2] === LAST_ROW)) kinds.tall += 1;
         if (rects.some((rect) => rect[1] === 0 && rect[3] === LAST_COLUMN)) kinds.wide += 1;
         if (rects.some((a) => rects.some((b) => a !== b && meets([a[0], a[1], a[2] + 1, a[3] + 1], b)))) {
             kinds.touching += 1;
         }
-        expectIndexReads(sheet, random);
+        expectIndexReads(store, random);
         for (let step = 0; step < STEPS; step += 1) {
             const roll = random();
-            if (roll < 0.4) writeMerge(sheet, random, step);
-            else if (roll < 0.8) editLines(sheet, random);
-            else moveBlock(sheet, random);
-            expectIndexReads(sheet, random);
+            if (roll < 0.4) writeMerge(store, random, step);
+            else if (roll < 0.8) editLines(store, random);
+            else moveBlock(store, random);
+            expectIndexReads(store, random);
         }
     }
     expect(kinds.tall).toBeGreaterThan(CASES / 5);
@@ -219,10 +219,10 @@ test('the index of a merge costs the same whatever its height or width', () => {
             Array.from({ length: count }, (_, index) => [`m${index}`, { rect: rectOf(index) }]),
         );
         const sets = spyOn(Map.prototype, 'set');
-        const sheet = sheetOf({ merge });
+        const store = storeOf({ merge });
         const writes = sets.mock.calls.length;
         sets.mockRestore();
-        expect(sheet.records('merge').size).toBe(count);
+        expect(store.records('S', 'merge').size).toBe(count);
         return writes;
     };
     const small = built((index) => [0, index, 1, index]);

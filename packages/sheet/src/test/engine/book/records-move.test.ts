@@ -17,8 +17,8 @@ import {
     moveBlock,
     ref,
     reverseOf,
-    sheetNamed,
-    sheetOf,
+    storeOf,
+    storeOfSheets,
     typedAt,
 } from './records-fixtures';
 
@@ -37,33 +37,29 @@ const move = (toSheet = 'S', from: Rect = [1, 1, 2, 2], toRow = 4, toColumn = 4)
 });
 
 const book = (onS: Records, onT: Records = {}) =>
-    new Map([
-        ['S', sheetOf(onS)],
-        ['T', sheetOf(onT, {}, 'T')],
+    storeOfSheets([
+        ['S', onS],
+        ['T', onT],
     ]);
 
 function moved(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
-    const restore = moveBlock(sheets, op);
-    return { s: contentOf(sheetNamed(sheets, 'S')).records, t: contentOf(sheetNamed(sheets, 'T')).records, restore };
+    const store = book(onS, onT);
+    const restore = moveBlock(store, op);
+    return { s: contentOf(store).records, t: contentOf(store, 'T').records, restore };
 }
 
 function roundTrips(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
+    const store = book(onS, onT);
     const before = book(onS, onT);
-    const restore = moveBlock(sheets, op);
-    moveBlock(sheets, reverseOf(op));
-    applyRecordOps(sheets, before, restore);
-    for (const id of ['S', 'T']) expect(contentOf(sheetNamed(sheets, id))).toEqual(contentOf(sheetNamed(before, id)));
+    const restore = moveBlock(store, op);
+    moveBlock(store, reverseOf(op));
+    applyRecordOps(store, before, restore);
+    for (const id of ['S', 'T']) expect(contentOf(store, id)).toEqual(contentOf(before, id));
 }
 
 function refused(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
-    const source = sheetNamed(sheets, 'S');
-    return [...sheets.values()].map((sheet) => {
-        const plan = sheet.planMove(op, source);
-        return typeof plan === 'string' ? plan : null;
-    });
+    const plan = book(onS, onT).planMove(op);
+    return typeof plan === 'string' ? plan : null;
 }
 
 describe('comments', () => {
@@ -107,7 +103,7 @@ describe('a block that lands on its own records', () => {
     const onS: Records = { merge: { m: { rect: [1, 1, 1, 2] } }, comment: { c: { row: 2, column: 2 } } };
 
     test('carries them, as they are not records it lands on', () => {
-        expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toEqual([null, null]);
+        expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toBeNull();
         roundTrips(onS, move('S', [1, 1, 2, 2], 2, 1));
     });
 });
@@ -122,13 +118,13 @@ describe('merges', () => {
     });
 
     test('a merge the block cuts refuses the move, where it leaves', () => {
-        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move())).toEqual(['merge-cut', null]);
-        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move('T'))).toEqual(['merge-cut', null]);
+        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move())).toBe('merge-cut');
+        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move('T'))).toBe('merge-cut');
     });
 
     test('a merge where the block lands, partly covered, refuses the move', () => {
-        expect(refused({ merge: { m: { rect: [5, 5, 7, 7] } } }, move())).toEqual(['merge-cut', null]);
-        expect(refused({}, move('T'), { merge: { m: { rect: [3, 3, 4, 4] } } })).toEqual([null, 'merge-cut']);
+        expect(refused({ merge: { m: { rect: [5, 5, 7, 7] } } }, move())).toBe('merge-cut');
+        expect(refused({}, move('T'), { merge: { m: { rect: [3, 3, 4, 4] } } })).toBe('merge-cut');
     });
 
     test('a merge the block lands on whole goes, and comes back whole in the restore ops', () => {
@@ -177,7 +173,7 @@ describe('the ranges of rules', () => {
     });
 
     test('to another sheet, no range moves', () => {
-        const before = sheetOf(rules([inside]));
+        const before = storeOf(rules([inside]));
         const { s } = moved(rules([inside]), move('T'));
         expect(s).toEqual(contentOf(before).records);
         roundTrips(rules([inside]), move('T'));
@@ -263,10 +259,10 @@ describe('chart refs', () => {
 
     test('a ref partly in the block stays, the chart itself', () => {
         const records = reading(ref('S', [1, 3], [1, 1]));
-        const sheets = book(records);
-        const before = sheetNamed(sheets, 'S').records('chart').get('g');
-        moveBlock(sheets, move());
-        expect(sheetNamed(sheets, 'S').records('chart').get('g')).toBe(before);
+        const store = book(records);
+        const before = store.records('S', 'chart').get('g');
+        moveBlock(store, move());
+        expect(store.records('S', 'chart').get('g')).toBe(before);
         roundTrips(records, move());
     });
 
@@ -277,8 +273,8 @@ describe('chart refs', () => {
         let n = 0;
         for (let step = 2 ** 16; step >= 1; step /= 2) if (!exceedsChartSpecBytes(padded(n + step))) n += step;
         const records: Records = { chart: { g: padded(n) } };
-        expect(refused(records, move('S', [1, 1, 2, 2], 100_000, 1))).toEqual(['key-too-long', null]);
-        expect(refused(records, move('S', [1, 1, 2, 2], 4, 1))).toEqual([null, null]);
+        expect(refused(records, move('S', [1, 1, 2, 2], 100_000, 1))).toBe('key-too-long');
+        expect(refused(records, move('S', [1, 1, 2, 2], 4, 1))).toBeNull();
     });
 
     test('a ref the block lands on stays, and the restore puts it back after the move back took it', () => {
@@ -302,5 +298,5 @@ test('a move leaves the filter, the frozen panes and images as they were', () =>
         image: { i: { index: 'a', x: 1, y: 1, width: 5, height: 5, mediaName: 'm.png' } },
     };
     const { s } = moved(records, move());
-    expect(s).toEqual(contentOf(sheetOf(records)).records);
+    expect(s).toEqual(contentOf(storeOf(records)).records);
 });

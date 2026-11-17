@@ -1,8 +1,9 @@
 // The applier of a `record` op, which the frame calls for each op of a batch: one record of a sheet made, changed or
-// deleted, such as a merge or a filter, or fields of the sheet itself set, such as its name. The sheet's record store
-// writes it and hands back the ops that undo it. What the store cannot see is checked here first: a new record's id
-// and a new name against the other sheets, and that a sheet stays shown. A new name and tab place go to the engine
-// first, as formulas read sheets by both; the inverse of a name that bound formulas renames back, then writes them.
+// deleted, such as a merge or a filter, or fields of the sheet itself set, such as its name. The book's record store
+// writes it, refusing an id another sheet holds, and hands back the ops that undo it. What the store cannot see is
+// checked here first: a new name against the other sheets, and that a sheet stays shown. A new name and tab place go
+// to the engine first, as formulas read sheets by both; the inverse of a name that bound formulas renames back, then
+// writes them.
 
 import { sheetNameKey } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
@@ -12,22 +13,15 @@ import { lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
 export function applyRecord(book: Workbook, op: RecordOp): (RecordOp | InputOp)[] {
-    const sheet = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
-    if (!sheet) return [];
-    // An id names one record of its type in the whole book.
-    if (
-        op.whole &&
-        [...book.sheets].some(([id, other]) => id !== op.sheet && other.records.records(op.type).has(op.id))
-    )
-        throw new Refusal('id-in-use');
+    if (!book.sheets.has(op.sheet)) return [];
     let lost: InputOp[] = [];
     if (op.type === 'sheet') {
-        const { fields } = sheet.records;
+        const fields = book.records.fields(op.sheet);
         const { name, order, hide } = op.set;
-        const others = [...book.sheets]
-            .filter(([id]) => id !== op.sheet)
-            .map(([id, other]) => ({ id, ...other.records.fields }));
+        const others = [...book.sheets.keys()]
+            .filter((id) => id !== op.sheet)
+            .map((id) => ({ id, ...book.records.fields(id) }));
         if (hide === 1 && !fields.hide && others.every((other) => other.hide)) throw new Refusal('last-sheet');
         if (name && name !== fields.name) {
             // The engine throws on a name in use, and a peer may have taken it first: the op is skipped alone.
@@ -40,8 +34,8 @@ export function applyRecord(book: Workbook, op: RecordOp): (RecordOp | InputOp)[
             book.moveSheet(op.sheet, before.length);
         }
     }
-    const inverse = sheet.records.write(op);
-    // The store writes nothing when it refuses: a merge onto another, or a chart past its size bound.
+    const inverse = book.records.write(op);
+    // The store writes nothing when it refuses: an id in use, a merge onto another, or a chart past its size bound.
     if (typeof inverse === 'string') throw new Refusal(inverse);
     return [...inverse, ...lost];
 }

@@ -271,13 +271,12 @@ describe('engine/book/workbook — the limits at the door', () => {
         const comments = Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`c${i}`, { row: i, column: 0 }]));
         const book = new Workbook(bookOf(sheetOf('a', { records: { comment: comments } }), sheetOf('b')));
         expect(book.weight()).toMatchObject({ records: 5, sheets: 2 });
-        const records = book.sheets.get('b')?.records;
         for (let i = 0; i <= MAX_RECORDS_PER_TYPE; i += 1) {
-            records?.write({
+            book.records.write({
                 kind: 'record',
                 sheet: 'b',
                 type: 'comment',
-                id: `c${i}`,
+                id: `b${i}`,
                 set: { row: i % 1000, column: 0 },
                 whole: 1,
             });

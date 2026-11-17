@@ -8,6 +8,7 @@ import type {
     LinesOp,
     MoveOp,
     Op,
+    RecordOp,
     Rect,
     SheetContent,
 } from '@workspace/lib/sheets/ops';
@@ -147,9 +148,9 @@ describe('engine/book/apply-move — what a move writes', () => {
         expect(book.engine.formulaOf('a', 3, 1)).toBe('=R[-1]C*2');
         expect(book.sheets.get('a')?.extras.at(2, 2)).toEqual({ s: [...RICH], link: LINK });
         expect(book.sheets.get('a')?.extras.at(4, 2)).toEqual({ qp: 1 });
-        expect(book.sheets.get('a')?.records.records('merge').get('in')).toEqual({ rect: [2, 1, 3, 1] });
-        expect(book.sheets.get('a')?.records.records('conditionalFormat').get('r')?.ranges).toEqual([[2, 1, 3, 2]]);
-        expect(book.sheets.get('a')?.records.comments(2, 2)).toEqual(['bc']);
+        expect(book.records.records('a', 'merge').get('in')).toEqual({ rect: [2, 1, 3, 1] });
+        expect(book.records.records('a', 'conditionalFormat').get('r')?.ranges).toEqual([[2, 1, 3, 2]]);
+        expect(book.records.comments('a', 2, 2)).toEqual(['bc']);
         expect(book.looks.look(book.sheets.get('a')?.bands.look(5, 2) ?? 0)).toEqual(IT);
     });
 
@@ -172,8 +173,8 @@ describe('engine/book/apply-move — what a move writes', () => {
     test('a comment where the block lands goes, and the ones it brings take its place', () => {
         const book = new Workbook(bookOf(A, B));
         applyOps(book, [moveOf([0, 1, 0, 1], 4, 2)]);
-        expect(book.sheets.get('a')?.records.comments(4, 2)).toEqual(['bc']);
-        expect(book.sheets.get('a')?.records.records('comment').has('tc')).toBe(false);
+        expect(book.records.comments('a', 4, 2)).toEqual(['bc']);
+        expect(book.records.records('a', 'comment').has('tc')).toBe(false);
         expectLaw2(bookOf(A, B), [moveOf([0, 1, 0, 1], 4, 2)]);
         expectLaw2(bookOf(A, B), [moveOf([0, 0, 3, 1], 4, 2, 'b')]);
     });
@@ -186,9 +187,43 @@ describe('engine/book/apply-move — what a move writes', () => {
         const b = book.sheets.get('b');
         expect(book.looks.look(b?.bands.look(2, 1) ?? 0)).toEqual(IT);
         expect(book.looks.look(b?.bands.look(5, 2) ?? 0)).toEqual(IT);
-        expect(b?.records.records('merge').get('in')).toEqual({ rect: [2, 1, 3, 1] });
-        expect(b?.records.comments(2, 2)).toEqual(['bc']);
-        expect(book.sheets.get('a')?.records.records('conditionalFormat').get('r')?.ranges).toEqual([[0, 0, 1, 1]]);
+        expect(book.records.records('b', 'merge').get('in')).toEqual({ rect: [2, 1, 3, 1] });
+        expect(book.records.comments('b', 2, 2)).toEqual(['bc']);
+        expect(book.records.records('a', 'conditionalFormat').get('r')?.ranges).toEqual([[0, 0, 1, 1]]);
+    });
+
+    test('a move to another sheet takes its records under their ids, and each id stays the whole book’s', () => {
+        const book = new Workbook(bookOf(A, B));
+        const before = bytes(book);
+        const undo = applyOps(book, [moveOf([0, 0, 3, 1], 2, 1, 'b')]);
+        const after = bytes(book);
+        expect([book.records.records('a', 'comment').has('bc'), book.records.comments('b', 2, 2)]).toEqual([
+            false,
+            ['bc'],
+        ]);
+        expect([book.records.records('a', 'merge').has('in'), book.records.merge('b', 3, 1)]).toEqual([
+            false,
+            [2, 1, 3, 1],
+        ]);
+        const make = (sheet: string): RecordOp => ({
+            kind: 'record',
+            sheet,
+            type: 'comment',
+            id: 'bc',
+            set: { row: 9, column: 9 },
+            whole: 1,
+        });
+        const twin = sheetOf('n', { records: { merge: { in: { rect: [0, 0, 1, 1] } } } });
+        expect(refusalOf(book, [make('a')])).toBe('id-in-use');
+        expect(refusalOf(book, [{ kind: 'sheet', add: twin }])).toBe('id-in-use');
+        expect(bytes(book)).toBe(after);
+        // On the sheet that holds it now, the make replaces the comment, and its undo puts it back.
+        applyOps(book, applyOps(book, [make('b')]));
+        expect(bytes(book)).toBe(after);
+        applyOps(book, undo);
+        expect(bytes(book)).toBe(before);
+        expect(refusalOf(book, [make('b')])).toBe('id-in-use');
+        expect(book.records.comments('a', 0, 1)).toEqual(['bc']);
     });
 
     test('a block moved onto itself changes nothing and has no inverse', () => {
@@ -286,7 +321,7 @@ describe('engine/book/apply-move — the inverse, part by part', () => {
         ]);
         const book = new Workbook(content);
         applyOps(book, [OVERLAP]);
-        expect(Object.fromEntries(book.sheets.get('a')?.records.records('comment') ?? [])).toEqual({
+        expect(Object.fromEntries(book.records.records('a', 'comment') ?? [])).toEqual({
             bc: { row: 2, column: 2 },
             oc: { row: 5, column: 2 },
         });
@@ -352,7 +387,7 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
                 A,
                 sheetOf(ID, {
                     records: {
-                        conditionalFormat: { r: formulaRule([[0, 0, 0, 0]], LONG.replace('R1C1', '[a]!R4C4')) },
+                        conditionalFormat: { far: formulaRule([[0, 0, 0, 0]], LONG.replace('R1C1', '[a]!R4C4')) },
                     },
                 }),
             ),
@@ -400,7 +435,7 @@ describe('engine/book/apply-move — refusals leave the book as it was', () => {
     test('a merge the block lands on whole is removed and comes back', () => {
         const book = new Workbook(bookOf(A, B));
         applyOps(book, [moveOf([10, 0, 10, 2], 5, 1)]);
-        expect(book.sheets.get('a')?.records.records('merge').has('landed')).toBe(false);
+        expect(book.records.records('a', 'merge').has('landed')).toBe(false);
         expectLaw2(bookOf(A, B), [moveOf([10, 0, 10, 2], 5, 1)]);
     });
 });

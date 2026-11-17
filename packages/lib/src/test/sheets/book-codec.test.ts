@@ -150,9 +150,10 @@ function randomSheet(next: () => number, index: number): SheetContent {
         bands.push(first, pairs.length / 2, ...pairs);
     }
     const records: SheetContent['records'] = {};
-    // A record's id is unique in the whole book, so each sheet tags the ids it takes, and a column its filter's.
+    // A record's id is unique in the whole book, so each sheet tags the ids it takes, and a column its filter's. A
+    // column comes only with its filter, which `RECORDS` lists before it.
     for (const [type, items] of Object.entries(RECORDS)) {
-        if (next() >= 0.4) continue;
+        if (next() >= 0.4 || (type === 'filterColumn' && records.filter === undefined)) continue;
         const tagged = Object.entries(items).map(([id, item]) => [
             `${id}.${index}`,
             'filter' in item ? { ...item, filter: `${item.filter}.${index}` } : item,
@@ -476,6 +477,18 @@ describe('refusal', () => {
         // Ids are a type's own: a merge may share its id with a comment.
         expect(book({ merge: { 'card-9': { rect: [4, 4, 5, 5] } } })).not.toBeNull();
         expect(book({ comment: { 'card-8': { row: 4, column: 4 } } })).not.toBeNull();
+    });
+
+    test('of a sheet with a filter column whose filter it does not hold, or with two filters', () => {
+        const twin = (records: SheetContent['records']) => ({ ...BOOK.sheets[1], records });
+        const book = (records: SheetContent['records']) =>
+            decodeBook(encodeBook({ ...BOOK, sheets: [BOOK.sheets[0], twin(records)] }));
+        const column = (filter: string) => ({ filter, column: 1, rows: [] });
+        expect(book({ filter: { f2: { rect: [0, 0, 5, 5] } }, filterColumn: { c2: column('f2') } })).not.toBeNull();
+        expect(book({ filterColumn: { c2: column('f2') } })).toBeNull();
+        // Ids are book-wide, so a column may not name the filter another sheet holds.
+        expect(book({ filterColumn: { c2: column('f1') } })).toBeNull();
+        expect(book({ filter: { f2: { rect: [0, 0, 5, 5] }, f3: { rect: [6, 0, 9, 5] } } })).toBeNull();
     });
 
     test('of a clock, a generation or a head out of range', () => {
