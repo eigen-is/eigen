@@ -8,7 +8,7 @@ describe('engine/book/bands — law 6: the bands are the plain grid’s bands on
             const counts = fuzzBands(seed, 3000);
             expect(counts.undone).toBeGreaterThan(800);
             expect(counts.refused).toBeGreaterThan(0);
-            expect(Object.keys(counts.ops).length).toBe(13);
+            expect(Object.keys(counts.ops).length).toBe(14);
             expect(counts.mostBands).toBeGreaterThan(5);
         });
     }

@@ -27,14 +27,14 @@ function randomRect(random: Random): Rect {
 
 describe('engine/book/bands — growth', () => {
     test('a plain sheet: one cell may add three runs and two bands', () => {
-        expect(new Bands([], []).growth([[2, 2]])).toEqual({ runs: 3, bands: 2 });
-        expect(new Bands([], []).growth([[0, LAST_COLUMN]])).toEqual({ runs: 3, bands: 0 });
-        expect(new Bands([], []).growth([])).toEqual({ runs: 0, bands: 0 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([[2, 2]])).toEqual({ runs: 3, bands: 2 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([[0, LAST_COLUMN]])).toEqual({ runs: 3, bands: 0 });
+        expect(new Bands([], [], { runs: 0, bands: 0 }).growth([])).toEqual({ runs: 0, bands: 0 });
     });
 
     test('a cut copies the runs of the band it cuts, once however many writes cut there', () => {
-        const bands = new Bands([], []);
-        for (let r = 0; r < 200; r += 2) bands.write(row(r), () => 1);
+        const bands = new Bands([], [], { runs: 0, bands: 0 });
+        for (let r = 0; r < 200; r += 2) bands.write([row(r)], () => 1);
         expect(bands.weight()).toEqual({ runs: 200, bands: 1 });
         // A cut at column 5 and one at column 6: two copies of 200 runs, and three runs in the band between.
         expect(bands.growth([[5, 5]])).toEqual({ runs: 2 * 200 + 3, bands: 2 });
@@ -54,10 +54,10 @@ describe('engine/book/bands — growth', () => {
     test('a write counts the bands the other writes cut out of its columns', () => {
         // The review's case: columns formatted one by one, then a row across them. Each rectangle alone adds 3 runs,
         // yet the row adds runs to every band the columns made.
-        const bands = new Bands([], []);
+        const bands = new Bands([], [], { runs: 0, bands: 0 });
         const writes: Rect[] = [column(2), column(4), column(6), row(5)];
         const bound = bands.growth(writes.map(([, left, , right]): Span => [left, right]));
-        for (const [id, rect] of writes.entries()) bands.write(rect, () => id + 1);
+        for (const [id, rect] of writes.entries()) bands.write([rect], () => id + 1);
         expect(bands.weight()).toEqual({ runs: 4 * 3 + 3 * 3, bands: 7 });
         expect(bound.bands).toBe(6);
         expect(bound.runs).toBeGreaterThanOrEqual(21);
@@ -72,15 +72,15 @@ describe('engine/book/bands — growth', () => {
         let cases = 0;
         for (let seed = 1; seed <= 4000; seed += 1) {
             const random = randomOf(seed * 104_729);
-            const bands = new Bands([], []);
+            const bands = new Bands([], [], { runs: 0, bands: 0 });
             for (let n = below(random, 12); n > 0; n -= 1) {
                 const id = below(random, 4);
-                bands.write(randomRect(random), () => id);
+                bands.write([randomRect(random)], () => id);
             }
             // Now and then a band of many stripes, which a cut copies.
             if (random() < 0.3) {
                 const left = below(random, 10);
-                for (let r = 0; r < 60; r += 2) bands.write([r, left, r, left + 1 + below(random, 6)], () => 5);
+                for (let r = 0; r < 60; r += 2) bands.write([[r, left, r, left + 1 + below(random, 6)]], () => 5);
             }
             const writes = Array.from({ length: 1 + below(random, 8) }, () => randomRect(random));
             const bound = bands.growth(writes.map(([, left, , right]): Span => [left, right]));
@@ -92,7 +92,7 @@ describe('engine/book/bands — growth', () => {
             }
             for (const rect of writes.slice(0, 1 + below(random, writes.length))) {
                 const id = 6 + below(random, 3);
-                bands.write(rect, (look) => (random() < 0.5 ? id : look + 10));
+                bands.write([rect], (look) => (random() < 0.5 ? id : look + 10));
                 const after = bands.weight();
                 expect(after.runs - before.runs, `seed ${seed}`).toBeLessThanOrEqual(bound.runs);
                 expect(after.bands - before.bands, `seed ${seed}`).toBeLessThanOrEqual(bound.bands);

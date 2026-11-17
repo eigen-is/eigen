@@ -6,12 +6,15 @@
 
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
+import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
+import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
-import { contentOf, textOf } from './extras';
-import { RectIndex } from './rect-index';
+import { contentOf, textOf, unitsOf } from './extras';
+import { columnHull, RectIndex } from './rect-index';
 import type { Workbook } from './workbook';
+import { reachesEngine } from './workbook';
 
 // What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
 type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
@@ -21,43 +24,61 @@ type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent 
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
 
-export function applyInput(book: Workbook, op: InputOp): InputOp[] {
+// `checked`, it throws before a write when the cells it fills would leave the workbook over a limit inside a batch,
+// counting nothing it frees.
+export function applyInput(book: Workbook, op: InputOp, checked: boolean): InputOp[] {
     const part = book.sheets.get(op.sheet);
     // A peer may have deleted the sheet after the op was written: every reader skips the op alone.
     if (!part) return [];
     const { engine } = book;
     const { sheet } = op;
     const { extras } = part;
-    const gathered: Gathered = { runs: [], cells: [] };
-    const read = new RectIndex();
-    for (const [rect] of op.runs ?? []) {
-        readBlock(book, sheet, extras, rect, (group) => gather(gathered, group, contentOfGroup(group)));
-        read.set('', undefined, [rect]);
+    if (checked) {
+        let slots = 0;
+        const units = filled(op, (column, length) => {
+            slots += Math.max(0, length - engine.columnLength(sheet, column));
+        });
+        const over = book.over(slots, units * EXTRA_WEIGHT);
+        if (over) throw new Refusal(over);
     }
+    const gathered: Gathered = { runs: [], cells: [] };
+    const runs = op.runs ?? [];
+    // A run that does not reach the engine empties the cells its read finds there.
+    const emptied: Group[] = [];
+    const read = readBlocks(
+        book,
+        sheet,
+        extras,
+        runs.map(([rect]) => rect),
+        (group, at) => {
+            gather(gathered, group, contentOfGroup(group));
+            const content = runs[at][1];
+            const empties = content === null || !reachesEngine(content);
+            if (empties && (group.held.value !== null || group.held.formula !== null)) emptied.push(group);
+        },
+    );
     // A listed cell inside a run was read with the run.
     for (const [row, column] of op.cells ?? []) {
         if (read.meeting([row, column, row, column]).length === 0)
             gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
     }
 
-    for (const [rect, content] of op.runs ?? []) {
+    for (const [rect, content] of runs) {
         const [top, left, bottom, right] = rect;
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.fillFormula(sheet, top, left, bottom, right, content.f, value);
-        else if (value === null) {
-            for (let column = left; column <= right; column += 1) {
-                for (let row = engine.nextCell(sheet, column, top, bottom); row >= 0; ) {
-                    engine.clear(sheet, row, column);
-                    row = engine.nextCell(sheet, column, row + 1, bottom);
-                }
-            }
-        } else {
+        else if (value !== null) {
             for (let column = left; column <= right; column += 1) {
                 for (let row = top; row <= bottom; row += 1) engine.setValue(sheet, row, column, value);
             }
         }
-        extras.fill(rect, content ?? {});
     }
+    for (const { top, left, bottom, right } of emptied) {
+        for (let column = left; column <= right; column += 1) {
+            for (let row = top; row <= bottom; row += 1) engine.clear(sheet, row, column);
+        }
+    }
+    if (runs.length > 0) extras.fill(runs.map(([rect, content]) => [rect, content ?? {}]));
     for (const [row, column, content] of op.cells ?? []) {
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.setFormula(sheet, row, column, content.f, value);
@@ -66,6 +87,30 @@ export function applyInput(book: Workbook, op: InputOp): InputOp[] {
         extras.write(row, column, content ?? {});
     }
     return [inputOf(sheet, gathered)];
+}
+
+// What an input fills: `column` is told once per column the rows it holds once the op's cells that reach the engine
+// hold their value, formula or rich text. Returns the units of what the filled cells hold beyond a value.
+export function filled(op: InputOp, column: (column: number, length: number) => void): number {
+    let units = 0;
+    const reach = new Map<number, number>();
+    const runs: Rect[] = [];
+    for (const [rect, content] of op.runs ?? []) {
+        if (!content) continue;
+        const [top, left, bottom, right] = rect;
+        units += unitsOf(content) * (bottom - top + 1) * (right - left + 1);
+        if (reachesEngine(content)) runs.push(rect);
+    }
+    for (const [, left, bottom, right] of columnHull(runs)) {
+        for (let at = left; at <= right; at += 1) reach.set(at, bottom + 1);
+    }
+    for (const [row, at, content] of op.cells ?? []) {
+        if (!content) continue;
+        units += unitsOf(content);
+        if (reachesEngine(content)) reach.set(at, Math.max(reach.get(at) ?? 0, row + 1));
+    }
+    for (const [at, length] of reach) column(at, length);
+    return units;
 }
 
 // What a cell holds now, as an op would say it, null for an empty cell.
@@ -104,13 +149,17 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
         if (!blocks) continue;
         const moves = after?.sheet === sheet ? after : undefined;
         const gathered: Gathered = { runs: [], cells: [] };
+        const rects: Rect[] = [];
+        const texts: string[] = [];
         for (const { top, left, bottom, right, lost } of blocks) {
             if (lost === null) continue;
-            readBlock(book, sheet, extras, [top, left, bottom, right], (group) => {
-                const content = { ...contentOfGroup(group), f: lost };
-                for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
-            });
+            rects.push([top, left, bottom, right]);
+            texts.push(lost);
         }
+        readBlocks(book, sheet, extras, rects, (group, at) => {
+            const content = { ...contentOfGroup(group), f: texts[at] };
+            for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
+        });
         if (gathered.runs.length + gathered.cells.length > 0) ops.push(inputOf(sheet, gathered));
     }
     return ops;
@@ -122,11 +171,9 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     const part = book.sheets.get(sheet);
     if (!part) return undefined;
     const gathered: Gathered = { runs: [], cells: [] };
-    for (const rect of rects) {
-        readBlock(book, sheet, part.extras, rect, (group) => {
-            if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
-        });
-    }
+    readBlocks(book, sheet, part.extras, rects, (group) => {
+        if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
+    });
     return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
 }
 
@@ -144,12 +191,54 @@ function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Grou
         .map(([start, end]) => (rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end }));
 }
 
-// Reads a block a column at a time, down the cells the engine and the extras hold, and hands over each rectangle
-// of equal content, or of empty cells, once it can grow no further. A run of equal content down a column joins the
-// rectangle to its left that spans the same rows with the same content.
-function readBlock(book: Workbook, sheet: string, extras: Extras, rect: Rect, close: (group: Group) => void): void {
+// Reads blocks of a sheet, which share no cell, and hands over each rectangle of equal content, or of empty cells, of
+// each block with its place in the list, once it can grow no further. Each column is read once, down the rows the
+// blocks span there, the cells the engine and the extras hold; a cell goes to its block through the index, returned.
+function readBlocks(
+    book: Workbook,
+    sheet: string,
+    extras: Extras,
+    rects: readonly Rect[],
+    close: (group: Group, at: number) => void,
+): RectIndex {
     const { engine } = book;
-    const [top, left, bottom, right] = rect;
+    const index = RectIndex.of(rects);
+    if (rects.length === 0) return index;
+    const found: Placed<Held>[][] = rects.map(() => []);
+    const take = (row: number, column: number, value: Literal | null, formula: string | null, extra?: Extra) => {
+        const meeting = index.meeting([row, column, row, column]);
+        if (meeting.length === 0) return;
+        const given = formula !== null && engine.isGiven(sheet, row, column);
+        for (const [id] of meeting) found[Number(id)].push([row, column, { value, formula, given, extra }]);
+    };
+    // A cell that holds only a link or a mark is no cell of the engine's: it is read in its place among them.
+    for (const rect of columnHull(rects)) {
+        const marked = extras.cells(rect);
+        let mark = marked.next();
+        const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
+            for (; !mark.done; mark = marked.next()) {
+                const [r, c, extra] = mark.value;
+                if (c > column || (c === column && r >= row)) break;
+                take(r, c, null, null, extra);
+            }
+            const here = !mark.done && mark.value[0] === row && mark.value[1] === column;
+            take(row, column, value, formula, here ? mark.value[2] : undefined);
+            if (here) mark = marked.next();
+        };
+        engine.cells(sheet, cell, ...rect);
+        for (; !mark.done; mark = marked.next()) take(mark.value[0], mark.value[1], null, null, mark.value[2]);
+    }
+    for (const [at, rect] of rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
+    return index;
+}
+
+// Groups the cells a block holds, in column order, a column at a time. A run of equal content down a column joins the
+// rectangle to its left that spans the same rows with the same content.
+function groupBlock(
+    [top, left, bottom, right]: Rect,
+    cells: readonly Placed<Held>[],
+    close: (group: Group) => void,
+): void {
     // The rectangles that reach the column before, and the runs of this one, both sorted by row.
     let open: Group[] = [];
     let down: Group[] = [];
@@ -165,9 +254,8 @@ function readBlock(book: Workbook, sheet: string, extras: Extras, rect: Rect, cl
         for (const group of down) {
             for (; at < open.length && open[at].top < group.top; at += 1) close(open[at]);
             const before = open[at];
-            const { value, formula, given, extra } = group.held;
             const joins = before?.top === group.top && before.bottom === group.bottom;
-            if (joins && holds(before.held, value, formula, given, extra)) {
+            if (joins && sameHeld(before.held, group.held)) {
                 before.right = column;
                 grown.push(before);
                 at += 1;
@@ -179,50 +267,31 @@ function readBlock(book: Workbook, sheet: string, extras: Extras, rect: Rect, cl
         column += 1;
         next = top;
     };
-    const cell = (row: number, at: number, value: Literal | null, formula: string | null, extra?: Extra) => {
-        while (column < at) endColumn();
+    // Ends the columns before `at`. From the second empty one on, each joins the one empty rectangle the first left
+    // open, so they end at once.
+    const reach = (at: number) => {
+        for (let ended = 0; ended < 2 && column < at; ended += 1) endColumn();
+        if (column < at) {
+            open[0].right = at - 1;
+            column = at;
+        }
+    };
+    for (const [row, at, held] of cells) {
+        reach(at);
         gap(row - 1);
         next = row + 1;
-        const given = formula !== null && engine.isGiven(sheet, row, at);
         const last = down.at(-1);
-        if (last?.bottom === row - 1 && holds(last.held, value, formula, given, extra)) last.bottom = row;
-        else down.push({ top: row, left: at, bottom: row, right: at, held: { value, formula, given, extra } });
-    };
-    // A cell that holds only a link or a mark is no cell of the engine's: it is read in its place among them.
-    const marked = extras.cells(rect);
-    let mark = marked.next();
-    engine.cells(
-        sheet,
-        (row, at, value, formula) => {
-            for (; !mark.done; mark = marked.next()) {
-                const [r, c, extra] = mark.value;
-                if (c > at || (c === at && r >= row)) break;
-                cell(r, c, null, null, extra);
-            }
-            const here = !mark.done && mark.value[0] === row && mark.value[1] === at;
-            cell(row, at, value, formula, here ? mark.value[2] : undefined);
-            if (here) mark = marked.next();
-        },
-        top,
-        left,
-        bottom,
-        right,
-    );
-    for (; !mark.done; mark = marked.next()) cell(mark.value[0], mark.value[1], null, null, mark.value[2]);
-    while (column <= right) endColumn();
+        if (last?.bottom === row - 1 && sameHeld(last.held, held)) last.bottom = row;
+        else down.push({ top: row, left: at, bottom: row, right: at, held });
+    }
+    reach(right + 1);
     for (const group of open) close(group);
 }
 
-// Whether a cell read holds what a run holds, compared on what an op would carry, without making a `Held` of it.
-function holds(
-    held: Held,
-    value: Literal | null,
-    formula: string | null,
-    given: boolean,
-    extra: Extra | undefined,
-): boolean {
-    if (held.formula !== formula || held.given !== given || !sameExtra(held.extra, extra)) return false;
-    return (formula !== null && !given) || sameValue(held.value, value);
+// Whether two cells read hold the same, compared on what an op would carry.
+function sameHeld(a: Held, b: Held): boolean {
+    if (a.formula !== b.formula || a.given !== b.given || !sameExtra(a.extra, b.extra)) return false;
+    return (a.formula !== null && !a.given) || sameValue(a.value, b.value);
 }
 
 // The engine hands out an error a file brought as a new object each time, so errors compare by their text.

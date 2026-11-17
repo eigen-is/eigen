@@ -302,7 +302,7 @@ describe('engine/book/apply-ops — LAW 1: a refused batch leaves the bytes as t
         const state = () => JSON.stringify(book.content().sheets.map(({ fields, records }) => [fields, records]));
         // A book at the limit takes a batch, and one band more takes none.
         expect(refusalOf(() => land(book, batch(LANDING[0])))).toBeUndefined();
-        book.sheets.get('a')?.bands.write([0, 9, 0, 9], () => 0);
+        book.sheets.get('a')?.bands.write([[0, 9, 0, 9]], () => 0);
         const before = state();
         expect(refusalOf(() => land(book, batch(...LANDING.slice(1))))).toBe('too-many-formats');
         expect(state()).toBe(before);

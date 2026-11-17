@@ -17,6 +17,7 @@ const KINDS = [
     'columns',
     'set',
     'clear',
+    'stripes',
     'insertRows',
     'deleteRows',
     'insertColumns',
@@ -45,7 +46,7 @@ export function rawBands(bands: Bands): number[] {
 
 // The spans a write, a delete or a move handed back, written back as the inverse ops of an applier would.
 export function writeBack(bands: Bands, spans: readonly LookSpan[]): void {
-    for (const { r0, c0, r1, c1, look } of spans) bands.write([r0, c0, r1, c1], () => look);
+    for (const { r0, c0, r1, c1, look } of spans) bands.write([[r0, c0, r1, c1]], () => look);
 }
 
 function same(a: readonly number[], b: readonly number[]): boolean {
@@ -53,7 +54,9 @@ function same(a: readonly number[], b: readonly number[]): boolean {
 }
 
 // Random ops on two sheets, each against its plain grid. After every op the bands are the grid's bands entry for
-// entry and read the same in every cell; `wouldPush` answers as the grid does; and every third op is undone by its
+// entry and read the same in every cell, and the count they share is what both weigh; a write hands back the spans
+// whose look it changed, and one of several rectangles is the grid's after each; `wouldPush` answers as the grid
+// does; and every third op is undone by its
 // inverse (what a write or a move covered written back; a delete for an insert; an insert and a write back for a
 // delete), which must give the arrays back. Throws on the first difference.
 export function fuzzBands(seed: number, steps: number): FuzzCounts {
@@ -64,7 +67,8 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
     };
-    const sheets = [0, 1].map(() => ({ bands: new Bands([], []), grid: new LooksGrid() }));
+    const held = { runs: 0, bands: 0 };
+    const sheets = [0, 1].map(() => ({ bands: new Bands([], [], held), grid: new LooksGrid() }));
     const counts: FuzzCounts = { ops: {}, undone: 0, refused: 0, mostBands: 0, mostRuns: 0 };
 
     // A real line, or the grid's end: near a line where the looks change, and now and then anywhere.
@@ -149,6 +153,13 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
                     : kind === 'column'
                       ? [top, left, bottom, left]
                       : [top, left, bottom, right];
+            // Stripes: rectangles over the same columns, down the rows, that share no row.
+            const rects: Rect[] = [rect];
+            for (let row = bottom + 1 + rnd(3); kind === 'stripes' && rects.length < 5 && row <= LAST_ROW; ) {
+                const end = Math.min(LAST_ROW, row + rnd(4) * rnd(4));
+                rects.push([row, left, end, right]);
+                row = end + 1 + rnd(3);
+            }
             const id = rnd(5);
             const add = 1 + rnd(4);
             const to =
@@ -157,18 +168,29 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
                     : kind === 'clear'
                       ? () => 0
                       : (look: number) => (look + add) % 5;
-            const spans = a.bands.write(rect, to);
+            const areaOf = ({ r0, r1, c0, c1 }: LookSpan) => (r1 - r0 + 1) * (c1 - c0 + 1);
+            // The cells whose look the write leaves as it is: the spans handed back are all the others.
             let cells = 0;
-            for (const { r0, r1, c0, c1, look } of spans) {
-                cells += (r1 - r0 + 1) * (c1 - c0 + 1);
-                if (look !== a.grid.look(r0, c0) || look !== a.grid.look(r1, c1)) throw new Error(`${where}: replaced`);
+            for (const one of rects) {
+                for (const span of a.bands.spans(one)) if (to(span.look) === span.look) cells += areaOf(span);
             }
-            if (cells !== (rect[2] - rect[0] + 1) * (rect[3] - rect[1] + 1))
+            const spans = a.bands.write(rects, to);
+            for (const span of spans) {
+                const { r0, r1, c0, c1, look } = span;
+                cells += areaOf(span);
+                if (look !== a.grid.look(r0, c0) || look !== a.grid.look(r1, c1) || to(look) === look)
+                    throw new Error(`${where}: replaced`);
+            }
+            if (cells !== rects.reduce((sum, [t, l, b, r]) => sum + (b - t + 1) * (r - l + 1), 0))
                 throw new Error(`${where}: replaced cells`);
-            a.grid.format(rect, to);
+            for (const one of rects) a.grid.format(one, to);
             undo = () => writeBack(a.bands, spans);
         }
 
+        const [one, other] = sheets.map(({ bands }) => bands.weight());
+        if (held.runs !== one.runs + other.runs || held.bands !== one.bands + other.bands) {
+            throw new Error(`${where}: the count holds ${JSON.stringify(held)}`);
+        }
         for (const { bands, grid } of sheets) {
             const raw = rawBands(bands);
             if (!same(raw, grid.flat(true))) {
@@ -190,10 +212,13 @@ export function fuzzBands(seed: number, steps: number): FuzzCounts {
             }
             if (step % 8 === 0) {
                 // A build from the flat form, said the short way and the long way, and what the form weighs and spans.
-                if (!same(rawBands(new Bands(grid.flat(true), IDS)), raw)) throw new Error(`${where}: build`);
-                if (!same(rawBands(new Bands(grid.flat(false), IDS)), raw)) throw new Error(`${where}: long build`);
+                if (!same(rawBands(new Bands(grid.flat(true), IDS, { runs: 0, bands: 0 })), raw))
+                    throw new Error(`${where}: build`);
+                if (!same(rawBands(new Bands(grid.flat(false), IDS, { runs: 0, bands: 0 })), raw))
+                    throw new Error(`${where}: long build`);
                 const again = bands.content();
-                if (!same(rawBands(new Bands(again.bands, again.looks)), raw)) throw new Error(`${where}: round trip`);
+                if (!same(rawBands(new Bands(again.bands, again.looks, { runs: 0, bands: 0 })), raw))
+                    throw new Error(`${where}: round trip`);
                 let runs = 0;
                 const firsts: number[] = [];
                 for (let at = 0; at < raw.length; at += 2 + 2 * raw[at + 1]) {

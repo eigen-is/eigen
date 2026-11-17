@@ -1,13 +1,14 @@
 // What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
 // and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
 // lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
-// fill, link and shift the entries as cells, lines and blocks change, the weight kept as they go. A rich cell's text
-// is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
+// fill, link and shift the entries as cells, lines and blocks change, and each write adds to the workbook's count. A
+// rich cell's text is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
 import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
+import { columnHull, RectIndex } from './rect-index';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
@@ -50,11 +51,15 @@ export function contentOf(
 export class Extras {
     private places: number[] = [];
     private held: Extra[] = [];
-    private units = 0;
 
-    // What the limits count of the entries, in units of `EXTRA_WEIGHT`.
+    // `total` counts the units of the entries of every sheet of the workbook: each write here adds what it changed.
+    public constructor(private readonly total: { extras: number }) {}
+
+    // What the limits count of this sheet's entries, in units of `EXTRA_WEIGHT`, walked.
     public weight(): number {
-        return this.units;
+        let units = 0;
+        for (const extra of this.held) units += unitsOf(extra);
+        return units;
     }
 
     public at(row: number, column: number): Extra | undefined {
@@ -91,7 +96,7 @@ export class Extras {
         const old = this.places[at] === place ? this.held[at] : undefined;
         const replaced = old ? 1 : 0;
         const entry = entryOf(extra);
-        this.units += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
+        this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
         if (entry) {
             this.places.splice(at, replaced, place);
             this.held.splice(at, replaced, entry);
@@ -102,15 +107,19 @@ export class Extras {
         return old;
     }
 
-    // Puts one entry in every cell of a block, or with none of the three empties it.
-    public fill(rect: Rect, extra: Extra): void {
-        const entry = entryOf(extra);
-        this.merge(rect, () => entry);
+    // Puts in every cell of each block, which share no cell, its one entry, or with none of the three empties it.
+    public fill(blocks: readonly (readonly [Rect, Extra])[]): void {
+        const entries = blocks.map(([, extra]) => entryOf(extra));
+        this.merge(
+            blocks.map(([rect]) => rect),
+            (_, at) => entries[at],
+        );
     }
 
-    // Sets the link of every cell of a block, or with none clears it, each cell keeping its runs and its mark.
-    public link(rect: Rect, link: CellLink | undefined): void {
-        this.merge(rect, (old) => entryOf({ ...old, link }));
+    // Sets the link of every cell of the rectangles, which share no cell, or with none clears it, each cell keeping its
+    // runs and its mark.
+    public link(rects: readonly Rect[], link: CellLink | undefined): void {
+        this.merge(rects, (old) => entryOf({ ...old, link }));
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -127,7 +136,7 @@ export class Extras {
         let at = 0;
         // Both lists ascend, and a block shifted whole still does, so one pass merges them.
         for (const [row, column, extra] of block) {
-            this.units += unitsOf(extra);
+            this.total.extras += unitsOf(extra);
             const place = placeOf(row, column) + shift;
             for (; at < this.places.length && this.places[at] < place; at += 1) {
                 places.push(this.places[at]);
@@ -169,56 +178,70 @@ export class Extras {
         return removed;
     }
 
-    // Puts in every cell of a block the entry `to` makes of the one it holds, in one pass over the entries between the
-    // block's first place and its last: the cells with none all take `to` of none.
-    private merge([top, left, bottom, right]: Rect, to: (old: Extra | undefined) => Extra | undefined): void {
-        const blank = to(undefined);
-        const start = this.search(placeOf(top, left));
-        const end = this.search(placeOf(bottom, right) + 1);
-        const places: number[] = [];
-        const held: Extra[] = [];
-        // The next cell of the block to lay, in column order, when there is an entry to lay.
-        let row = top;
-        let column = left;
-        let laid = 0;
-        const step = () => {
-            if (row < bottom) row += 1;
-            else {
-                row = top;
-                column += 1;
-            }
-        };
-        const lay = (before: number) => {
-            for (; blank && column <= right && placeOf(row, column) < before; step()) {
-                places.push(placeOf(row, column));
-                held.push(blank);
-                laid += 1;
-            }
-        };
-        for (let at = start; at < end; at += 1) {
-            const place = this.places[at];
-            const old = this.held[at];
-            lay(place);
-            if (place % GRID_ROWS < top || place % GRID_ROWS > bottom) {
-                places.push(place);
-                held.push(old);
+    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds and of the
+    // rectangle's place in the list: the cells with none all take `to` of none. The cells the rectangles change are
+    // found first, then one pass over the entries between the first and the last puts them all in.
+    private merge(rects: readonly Rect[], to: (old: Extra | undefined, at: number) => Extra | undefined): void {
+        const changed: number[] = [];
+        const entries: (Extra | undefined)[] = [];
+        // The rectangles whose empty cells stay empty change only their entries, found a column at a time for all.
+        const kept: Rect[] = [];
+        const keptAt: number[] = [];
+        for (const [at, rect] of rects.entries()) {
+            const blank = to(undefined, at);
+            if (!blank) {
+                kept.push(rect);
+                keptAt.push(at);
                 continue;
             }
-            if (blank) step();
-            const entry = to(old);
-            this.units += (entry ? unitsOf(entry) : 0) - unitsOf(old);
+            const [top, left, bottom, right] = rect;
+            const cells = this.cells(rect);
+            let next = cells.next();
+            for (let column = left; column <= right; column += 1) {
+                for (let row = top; row <= bottom; row += 1) {
+                    const here = !next.done && next.value[0] === row && next.value[1] === column;
+                    changed.push(placeOf(row, column));
+                    entries.push(here ? to(next.value[2], at) : blank);
+                    if (here) next = cells.next();
+                }
+            }
+        }
+        const index = RectIndex.of(kept);
+        for (const rect of columnHull(kept)) {
+            for (const [row, column, old] of this.cells(rect)) {
+                for (const [id] of index.meeting([row, column, row, column])) {
+                    changed.push(placeOf(row, column));
+                    entries.push(to(old, keptAt[Number(id)]));
+                }
+            }
+        }
+        if (changed.length === 0) return;
+        const order = changed.map((_, at) => at).sort((a, b) => changed[a] - changed[b]);
+        const start = this.search(changed[order[0]]);
+        const end = this.search(changed[order[order.length - 1]] + 1);
+        const places: number[] = [];
+        const held: Extra[] = [];
+        let at = start;
+        for (const change of order) {
+            const place = changed[change];
+            for (; this.places[at] < place; at += 1) {
+                places.push(this.places[at]);
+                held.push(this.held[at]);
+            }
+            const old = this.places[at] === place ? this.held[at] : undefined;
+            if (old) at += 1;
+            const entry = entries[change];
+            this.total.extras += (entry ? unitsOf(entry) : 0) - (old ? unitsOf(old) : 0);
             if (entry) {
                 places.push(place);
                 held.push(entry);
             }
         }
-        lay(Number.POSITIVE_INFINITY);
-        if (blank) this.units += unitsOf(blank) * laid;
         // A spread passes its items as arguments, which an engine bounds, so a long span goes in by parts.
-        for (let at = 0; at === 0 || at < places.length; at += SPREAD) {
-            const removed = at === 0 ? end - start : 0;
-            this.places.splice(start + at, removed, ...places.slice(at, at + SPREAD));
-            this.held.splice(start + at, removed, ...held.slice(at, at + SPREAD));
+        for (let part = 0; part === 0 || part < places.length; part += SPREAD) {
+            const removed = part === 0 ? end - start : 0;
+            this.places.splice(start + part, removed, ...places.slice(part, part + SPREAD));
+            this.held.splice(start + part, removed, ...held.slice(part, part + SPREAD));
         }
     }
 
@@ -231,7 +254,7 @@ export class Extras {
             const row = places[at] % GRID_ROWS;
             const column = (places[at] - row) / GRID_ROWS;
             if (row >= top && row <= bottom && column >= left && column <= right) {
-                this.units -= unitsOf(held[at]);
+                this.total.extras -= unitsOf(held[at]);
                 taken.push([row, column, held[at]]);
                 continue;
             }

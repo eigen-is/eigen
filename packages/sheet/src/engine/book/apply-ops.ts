@@ -1,8 +1,8 @@
 // The one way a batch of ops changes a workbook, on every host alike, such as the editor's tab, a peer's and the
 // server's fold. It applies the ops in order, each through the applier of its kind, and hands back the batch that
-// undoes them. A batch lands whole or not at all: when an op is refused, or the workbook is past its limits after
-// the last one, the ops that landed are taken back with their own inverses and the refusal is thrown. The ops are
-// trusted, since the validators read them at the door.
+// undoes them. A batch lands whole or not at all: when an op is refused, or the workbook is past twice a limit after
+// an op or past a limit after the last, the ops that landed are taken back with their own inverses, unchecked, and
+// the refusal is thrown. The ops are trusted, since the validators read them at the door.
 
 import { EditRefusal } from '@workspace/formula';
 import { fits } from '@workspace/lib/sheets/limits';
@@ -30,14 +30,18 @@ export function applyOps(book: Workbook, ops: readonly Op[]): Op[] {
     // JavaScript's limit on arguments.
     const landed: Op[][] = [];
     try {
-        for (const op of ops) landed.push(applyOne(book, op));
+        for (const op of ops) {
+            landed.push(applyOne(book, op, true));
+            const midway = book.over();
+            if (midway) throw new Refusal(midway);
+        }
         const over = fits(book.weight());
         if (over) throw new Refusal(over);
     } catch (error) {
         // The engine refuses an edit before it writes, as an applier does, so the op that threw left nothing.
         const refusal = error instanceof EditRefusal ? new Refusal(REFUSAL_OF[error.reason]) : error;
         if (refusal instanceof Refusal) {
-            for (const op of landed.reverse().flat()) applyOne(book, op);
+            for (const op of landed.reverse().flat()) applyOne(book, op, false);
             close(book, ops);
         }
         throw refusal;
@@ -53,21 +57,21 @@ function close(book: Workbook, ops: readonly Op[]): void {
     if (ops.some((op) => op.kind !== 'input' && !(op.kind === 'format' && 'ranges' in op))) book.setRowsOut();
 }
 
-// An applier checks what its op can be refused for and reads what the inverse needs, throwing before its first
-// write, then writes, the engine first. It returns the ops that undo its op, in the order they apply.
-function applyOne(book: Workbook, op: Op): Op[] {
+// An applier checks what its op can be refused for, `checked` also what it can add, and reads what the inverse needs,
+// throwing before its first write, then writes, the engine first. It returns the ops that undo its op, in order.
+function applyOne(book: Workbook, op: Op, checked: boolean): Op[] {
     switch (op.kind) {
         case 'input':
-            return applyInput(book, op);
+            return applyInput(book, op, checked);
         case 'format':
-            return applyFormat(book, op);
+            return applyFormat(book, op, checked);
         case 'record':
             return applyRecord(book, op);
         case 'lines':
-            return applyLines(book, op);
+            return applyLines(book, op, checked);
         case 'move':
-            return applyMove(book, op);
+            return applyMove(book, op, checked);
         case 'sheet':
-            return applySheet(book, op);
+            return applySheet(book, op, checked);
     }
 }

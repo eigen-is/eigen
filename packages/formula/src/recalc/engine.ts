@@ -1,9 +1,8 @@
 // The engine as a host holds it: one workbook loaded from a description of its sheets, the writes of a cell, the
-// structural edits, the clock of each batch of them, the rows a sheet hides or filters, a recalc of what they reach,
-// and the reads, such as the value of a cell and a walk of a sheet. A sheet is named by its id and a cell by its row
-// and column from 0. It reads the store and changes it only through the recalc. What a host can get wrong, such as a
-// cell off the grid, is checked here, once, before anything is noted or changed: so a call that throws left the
-// workbook as it was.
+// structural edits, the clock of each batch, the rows a sheet hides or filters, a recalc of what they reach, and reads
+// such as a cell's value and a walk of a sheet. A sheet is named by its id and a cell by its row and column from 0.
+// It changes the store only through the recalc. What a host can get wrong, such as a cell off the grid, is checked
+// here once, before anything changes, so a call that throws leaves the workbook as it was.
 
 import type { Move } from '../edit/move';
 import type { LineEdit } from '../edit/transform';
@@ -203,6 +202,18 @@ export class Engine {
         const { kind, shape, length } = cells;
         const end = Math.min(last + 1, length);
         for (let at = row; at < end; at += 1) {
+            if (kind[at] !== 0 || shape[at] !== 0) return at;
+        }
+        return -1;
+    }
+
+    // The last row from `first` up to `row` where a column holds a value or a formula, or -1.
+    public lastCell(sheet: string, column: number, row: number, first: number): number {
+        const cells = this.workbook.known(sheet).columns[column];
+        if (cells === undefined) return -1;
+        const { kind, shape, length } = cells;
+        const end = Math.max(first, 0);
+        for (let at = Math.min(row, length - 1); at >= end; at -= 1) {
             if (kind[at] !== 0 || shape[at] !== 0) return at;
         }
         return -1;
