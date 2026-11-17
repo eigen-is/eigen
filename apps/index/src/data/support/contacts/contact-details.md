@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, photo, birthday, details, edit]
 related: [contacts/add-a-contact, contacts/edit-or-delete]
 order: 40
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 Contacts can hold more than a name and email address. You can attach a photo, record where someone works, store their birthday and postal address, and add free-form notes. All of these fields are optional and can be filled in when you first create a contact or added later.
@@ -55,6 +55,10 @@ In the **Additional information** section, click the **Birthday** field and pick
 ## Notes
 
 The **Notes** field in the **Additional information** section is a free-text area. Use it to record anything else you want to remember: how you met, preferred contact method, or any other context. Notes appear in the contact detail view below the other information.
+
+::: grid columns="1"
+![A contact with a phone number, a company, a note and a label](/data/about/media/contacts-still-card.webp)
+:::
 
 ## Save your changes
 

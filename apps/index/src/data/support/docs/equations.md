@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
 order: 56
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
@@ -22,6 +22,10 @@ You need edit access to insert or change an equation. On a phone, equations show
 5. Press **Cmd+Enter** (**Ctrl+Enter** on Windows and Linux), or click outside the field. The equation is saved, and your cursor goes back to the document, right after the equation. **Enter** starts a new line in the field, which keeps long LaTeX readable and draws the same equation.
 
 Leaving the field, for example by clicking back in the document, saves the equation too. Press **Escape** to throw away what you typed since the last save.
+
+::: grid columns="1"
+![An equation selected, with its LaTeX in the panel beside it](/data/about/media/docs-still-equation.webp)
+:::
 
 ## Write LaTeX
 

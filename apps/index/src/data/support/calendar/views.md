@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, navigation, month, week]
 related: [calendar/get-started, calendar/create-event]
 order: 20
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Calendar opens in month view by default. You can switch to week view for a closer look at a single week, and use the navigation controls in the toolbar to move between periods.
@@ -15,6 +15,10 @@ Calendar opens in month view by default. You can switch to week view for a close
 In the toolbar at the top of the page, find the dropdown on the right side. It shows the current view, either **Month** or **Week**. Click it and choose the other option to switch.
 
 The view changes immediately, staying on the same point in time. If you are looking at June in month view, switching to week view shows the week that contains your current date in June.
+
+::: grid columns="1"
+![A week in the week view](/data/about/media/calendar-still-week.webp)
+:::
 
 ## Move to the next or previous period
 

@@ -6,7 +6,7 @@ category: Files
 tags: [chat, files, attachments, drive, sharing]
 related: [chat/get-started, chat/send-messages, drive/get-started]
 order: 50
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 You can attach files to any chat message, either by picking something from Drive or uploading directly from your computer. Recipients can preview, download, or save the file to their own Drive.
@@ -36,6 +36,10 @@ When you select a document, spreadsheet, presentation, or other Eigen file type 
 If you want the other person to have access to the document, share it with them first from Drive. See [Share a file or folder](/support/drive/share-a-file).
 
 </div>
+
+::: grid columns="1"
+![A spreadsheet shared in a room as a link, with its Open chip under the message](/data/about/media/chat-still-volunteers.webp)
+:::
 
 ## Open or download a received attachment
 

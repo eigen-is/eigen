@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -24,6 +24,10 @@ You can download a copy of any document as a Word file, a PDF, or a standalone w
 A progress dialog appears while the file is being prepared. Your browser downloads the file automatically when it is ready. The file is named after your document.
 
 When the file leaves something out or draws it simpler, a message says so after the download, for example "1 chart was left out of the file; 2 charts were simplified." It also says when part of the document couldn't be read and is missing from the file.
+
+::: grid columns="1"
+![The File menu open on Download, with its three formats](/data/about/media/docs-still-download.webp)
+:::
 
 ## Export from Drive
 
