@@ -11,6 +11,7 @@ import { covers } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
 import { contentOf, literalOf, unitsOf } from './extras';
+import { axisOf, spansAfter } from './record-lines';
 import { ColumnSweep } from './rect-index';
 import type { Held, Workbook } from './workbook';
 import { reachesEngine } from './workbook';
@@ -199,18 +200,14 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     return inputOf(sheet, gathered);
 }
 
-// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
-// A delete here undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
-function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Group[] {
+// A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it. A delete here
+// undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
+function afterLines(edit: LinesOp, group: Group): Group[] {
+    const { rows } = edit;
     const [first, last] = rows ? [group.top, group.bottom] : [group.left, group.right];
-    const shift = insert ? count : -count;
-    const parts = [
-        [first, Math.min(last, index - 1)],
-        [Math.max(first, index) + shift, last + shift],
-    ];
-    return parts
-        .filter(([start, end]) => start <= end)
-        .map(([start, end]) => (rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end }));
+    return spansAfter(axisOf(edit), first, last, 'closed').map(([start, end]) =>
+        rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end },
+    );
 }
 
 // Reads the blocks a sweep covers and hands over each rectangle of equal content, or of empty cells, of each block with

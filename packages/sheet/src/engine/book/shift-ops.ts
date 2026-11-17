@@ -19,7 +19,6 @@ import type {
 } from '@workspace/lib/sheets/ops';
 import { isStructural } from '@workspace/lib/sheets/ops';
 import { inputOf } from './apply-input';
-import type { Reach } from './record-lines';
 import {
     chartAfter,
     commentAfter,
@@ -31,7 +30,7 @@ import {
     mergeAfter,
     ruleAfter,
     sheetAfter,
-    spanAfter,
+    spansAfter,
     validationAfter,
 } from './record-lines';
 
@@ -59,21 +58,6 @@ export function shiftOps(ops: readonly Op[], edit: LinesOp): Op[] | null {
         if (next) shifted.push(next);
     }
     return shifted.length > 0 ? shifted : null;
-}
-
-// The lines `first` to `last` where they stand after the edit: two spans around inserted lines, none when all are
-// deleted. A look reaches the lines that enter at the grid's end on a delete, so its span stays open there.
-function spansAfter(axis: Edit, first: number, last: number, reach: Reach): Span[] {
-    if (!axis.insert) {
-        const after = spanAfter(axis, first, last, reach);
-        return after ? [after] : [];
-    }
-    const { index, count, lines } = axis;
-    const parts: Span[] = [
-        [first, Math.min(last, index - 1)],
-        [Math.max(first, index) + count, Math.min(last + count, lines - 1)],
-    ];
-    return parts.filter(([start, end]) => start <= end);
 }
 
 function onLines(rect: Rect, rows: boolean, [start, end]: Span): Rect {
