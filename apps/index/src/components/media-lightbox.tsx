@@ -4,8 +4,9 @@
 // The corner button that opens one, which shows while the pointer is over it, lives here too.
 
 import { useMediaQuery } from '@workspace/lib/media';
-import { PREVIEW_BODY_MAX_HEIGHT, PreviewLightbox } from '@workspace/ui/components/preview-lightbox';
+import { PreviewLightbox, previewFitStyle } from '@workspace/ui/components/preview-lightbox';
 import { Maximize } from 'lucide-react';
+import { useState } from 'react';
 import type { MediaItem } from '../../scripts/lib/content-types';
 import { splitKetNames } from './ket-names';
 
@@ -22,10 +23,7 @@ type MediaLightboxProps = {
 };
 
 export function MediaLightbox({ items, index, onIndexChange, onClose }: MediaLightboxProps) {
-    const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const item = items[index];
-    const style = { maxHeight: PREVIEW_BODY_MAX_HEIGHT };
-
     return (
         <PreviewLightbox
             title={item.caption && <Caption text={item.caption} />}
@@ -35,24 +33,40 @@ export function MediaLightbox({ items, index, onIndexChange, onClose }: MediaLig
             onNext={() => onIndexChange(index + 1)}
             onClose={onClose}
         >
-            {item.type === 'image' && (
-                <img src={item.src} alt={item.caption ?? ''} className="max-w-full rounded" style={style} />
-            )}
-            {item.type === 'video' && (
-                <video
-                    key={item.src}
-                    src={item.src}
-                    poster={item.poster}
-                    controls
-                    playsInline
-                    autoPlay={!reduceMotion}
-                    muted={item.loop}
-                    loop={item.loop}
-                    className="max-w-full rounded"
-                    style={style}
-                />
-            )}
+            <LightboxMedia key={item.src} item={item} />
         </PreviewLightbox>
+    );
+}
+
+// The site stores no sizes, so a picture or film fits the lightbox once it has loaded enough to give its shape.
+function LightboxMedia({ item }: { item: LightboxItem }) {
+    const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+    const [ratio, setRatio] = useState<number>();
+    const style = previewFitStyle(ratio);
+    if (item.type === 'image') {
+        return (
+            <img
+                src={item.src}
+                alt={item.caption ?? ''}
+                className="rounded"
+                style={style}
+                onLoad={(e) => setRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+            />
+        );
+    }
+    return (
+        <video
+            src={item.src}
+            poster={item.poster}
+            controls
+            playsInline
+            autoPlay={!reduceMotion}
+            muted={item.loop}
+            loop={item.loop}
+            className="rounded"
+            style={style}
+            onLoadedMetadata={(e) => setRatio(e.currentTarget.videoWidth / e.currentTarget.videoHeight)}
+        />
     );
 }
 

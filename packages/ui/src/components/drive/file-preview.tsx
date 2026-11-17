@@ -16,7 +16,7 @@ import { ArrowRight, FolderDown } from 'lucide-react';
 import { useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
-import { PREVIEW_BODY_MAX_HEIGHT, PreviewLightbox } from '../preview-lightbox';
+import { PREVIEW_BODY_MAX_HEIGHT, PreviewLightbox, previewFitStyle } from '../preview-lightbox';
 import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
 import { getFileIcon } from './file-presentation';
 import { IcsPreviewContent, MailIcsPreviewContent } from './ics-preview-content';
@@ -100,16 +100,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                 />
             )}
             {previewMode === 'video' && (
-                <video
-                    src={info.embedUrl}
-                    controls
-                    autoPlay
-                    className="max-w-full rounded"
-                    style={{
-                        maxHeight: PREVIEW_BODY_MAX_HEIGHT,
-                        aspectRatio: aspectRatio ? `${aspectRatio}` : undefined,
-                    }}
-                />
+                <PreviewVideo key={info.embedUrl} src={info.embedUrl} aspectRatio={aspectRatio} />
             )}
             {previewMode === 'audio' && (
                 <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
@@ -215,6 +206,21 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     );
 }
 
+// Without a stored size, as for a mail part, the film fits the room once its metadata gives its shape.
+function PreviewVideo({ src, aspectRatio }: { src: string; aspectRatio?: number }) {
+    const [loadedRatio, setLoadedRatio] = useState<number>();
+    return (
+        <video
+            src={src}
+            controls
+            autoPlay
+            className="rounded"
+            style={previewFitStyle(aspectRatio ?? loadedRatio)}
+            onLoadedMetadata={(e) => setLoadedRatio(e.currentTarget.videoWidth / e.currentTarget.videoHeight)}
+        />
+    );
+}
+
 function ProgressiveImage({
     thumbnailUrl,
     previewUrl,
@@ -234,11 +240,7 @@ function ProgressiveImage({
     // Once the ratio is known, the box is exactly the image area, so the checkerboard sits only behind the image.
     // That keeps transparent line art readable on the dark backdrop.
     const style: React.CSSProperties = ratio
-        ? {
-              width: `min(90vw, calc(${PREVIEW_BODY_MAX_HEIGHT} * ${ratio}))`,
-              height: `min(${PREVIEW_BODY_MAX_HEIGHT}, calc(90vw / ${ratio}))`,
-              ...IMAGE_CHECKERBOARD_STYLE,
-          }
+        ? { ...previewFitStyle(ratio), ...IMAGE_CHECKERBOARD_STYLE }
         : { width: '90vw', height: PREVIEW_BODY_MAX_HEIGHT };
 
     return (

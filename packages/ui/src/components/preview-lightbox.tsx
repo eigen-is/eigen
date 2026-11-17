@@ -7,12 +7,22 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useRef } from 'react';
 import { useFocusReturn } from '../hooks/use-focus-return';
 
 // The room the two bars leave, which a body sizes itself to.
 export const PREVIEW_BODY_MAX_HEIGHT = 'calc(100vh - 7rem)';
+
+// The largest box of a picture's or film's shape that fits the room, so a small one grows to fill the lightbox and
+// every item of a group takes the same space. Until its shape is known, an item keeps its own size within the room.
+export function previewFitStyle(ratio: number | undefined): CSSProperties {
+    if (!ratio) return { maxWidth: '90vw', maxHeight: PREVIEW_BODY_MAX_HEIGHT };
+    return {
+        width: `min(90vw, calc(${PREVIEW_BODY_MAX_HEIGHT} * ${ratio}))`,
+        height: `min(${PREVIEW_BODY_MAX_HEIGHT}, calc(90vw / ${ratio}))`,
+    };
+}
 
 type PreviewLightboxProps = {
     title: ReactNode;
