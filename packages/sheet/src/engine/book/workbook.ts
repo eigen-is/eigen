@@ -227,10 +227,7 @@ export class Workbook {
 
     // The rows the sheet's filter leaves out, a list of spans per column of it, each ascending.
     public filtered(sheet: string): (readonly Span[])[] {
-        const filters = this.records.records(sheet, 'filter');
-        return [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) =>
-            filters.has(column.filter) ? [column.rows] : [],
-        );
+        return [...this.records.records(sheet, 'filterColumn').values()].map(({ rows }) => rows);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
