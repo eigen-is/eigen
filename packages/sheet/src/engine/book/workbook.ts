@@ -21,10 +21,8 @@ import { LineRuns } from './line-runs';
 import { LookTable } from './look-table';
 import { BookRecords } from './records';
 
-// The parts of one sheet. Its cells are the engine's and its fields and records the record store's, under the sheet's
-// id. A part takes the op of an act itself: `lines(op)` inserts or deletes lines, `wouldPush(op)` says whether an
-// insert pushes something off the grid, and `move(op, source)` is called on the part a block lands on. `write`, `lines`
-// and `move` return what they replaced, removed or covered, as the part's reads list it.
+// The parts of one sheet; its cells are the engine's, its fields and records the record store's. Each part takes an
+// op itself, `lines(op)`, `wouldPush(op)` and `move(op, source)`, the last called on the part a block lands on.
 export type BookSheet = {
     readonly bands: Bands;
     readonly rows: LineRuns;

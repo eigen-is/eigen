@@ -104,9 +104,9 @@ export class Extras {
         return this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]);
     }
 
-    // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
-    // entry, so writing none deletes.
-    public write(row: number, column: number, extra: Extra): Extra | undefined {
+    // Puts what a cell holds in place of what it held. A cell that holds none of the three has no entry, so writing
+    // none deletes.
+    public write(row: number, column: number, extra: Extra): void {
         const place = placeOf(row, column);
         const at = this.search(place);
         const old = this.places[at] === place ? this.held[at] : undefined;
@@ -120,7 +120,6 @@ export class Extras {
             this.places.splice(at, replaced);
             this.held.splice(at, replaced);
         }
-        return old;
     }
 
     // Puts in every cell of each rectangle the sweep covers the one entry at its place in `extras`, or with none of the
@@ -136,12 +135,10 @@ export class Extras {
         this.merge(sweep, (old) => entryOf({ ...old, link }));
     }
 
-    // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
-    // they were before the move.
-    public move({ from, toRow, toColumn }: MoveOp, source: Extras): Placed<Extra>[] {
+    // The block leaves `source`, empty where it was, and lands here over what it covered.
+    public move({ from, toRow, toColumn }: MoveOp, source: Extras): void {
         const [top, left, bottom, right] = from;
         const target: Rect = [toRow, toColumn, toRow + bottom - top, toColumn + right - left];
-        const covered = this.cells(target);
         const block = source.take(from);
         this.take(target);
         const shift = placeOf(toRow, toColumn) - placeOf(top, left);
@@ -165,7 +162,6 @@ export class Extras {
         }
         this.places = places;
         this.held = held;
-        return covered;
     }
 
     // Whether the insert would push an entry off the grid's end.
@@ -175,12 +171,10 @@ export class Extras {
         return this.places.some((place) => place % GRID_ROWS >= GRID_ROWS - count);
     }
 
-    // The new lines hold nothing. Returns the entries of the deleted lines, where they were.
-    public lines({ rows, insert, index, count }: LinesOp): Placed<Extra>[] {
+    // The new lines hold nothing, and the entries of deleted lines go with them.
+    public lines({ rows, insert, index, count }: LinesOp): void {
         const last = index + count - 1;
-        const removed = insert
-            ? []
-            : this.take(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last]);
+        if (!insert) this.take(rows ? [index, 0, last, GRID_COLUMNS - 1] : [0, index, GRID_ROWS - 1, last]);
         const shift = insert ? count : -count;
         const { places } = this;
         for (let at = 0; at < places.length; at += 1) {
@@ -189,7 +183,6 @@ export class Extras {
                 places[at] += rows ? shift : shift * GRID_ROWS;
             }
         }
-        return removed;
     }
 
     // Puts in every cell of the rectangles the sweep covers the entry `to` makes of the one it holds and of the
