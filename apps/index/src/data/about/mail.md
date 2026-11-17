@@ -3,7 +3,7 @@ title: Mail
 description: Email on your own server and your own domain, in the browser and in the mail app you already use.
 ---
 
-eigen|mail⟩ is the [email app](/support/mail/get-started) in Eigen. Your mailboxes on the left, the list in the middle, the open message on the right. It is ordinary mail on your own server, so the mail app on your phone can read it too.
+eigen|mail⟩ is [your email](/support/mail/get-started) in Eigen. You read, write and organize messages in the browser: your mailboxes on the left, the list in the middle, the open message on the right. It is ordinary mail on your own server, so the mail app on your phone can read it too.
 
 ::: video src="/data/about/media/mail-hero" caption="Saar turns the generator quote into a sheet, then goes back to the thread."
 :::

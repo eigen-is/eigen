@@ -3,7 +3,7 @@ title: Docs
 description: Documents you write together, with comments, footnotes, equations and Word files, on your own server.
 ---
 
-eigen|docs⟩ is the [word processor](/support/docs/get-started) in Eigen. You write on a page, and it saves as you type, so there is no Save button. Other people can write in the same document at the same time.
+eigen|docs⟩ is [where you write](/support/docs/get-started) in Eigen. You work on a page, and it saves as you type, so there is no Save button. Other people can write in the same document at the same time.
 
 ::: video src="/data/about/media/docs-hero" caption="A line added to the production plan, and undo takes it back."
 :::

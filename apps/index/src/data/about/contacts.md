@@ -3,7 +3,7 @@ title: Contacts
 description: Your address book and your team's, on your own server, synced to the contacts app on your phone.
 ---
 
-eigen|contacts⟩ is the [address book](/support/contacts/get-started) in Eigen. It keeps names, email addresses, phone numbers, addresses, birthdays and notes, and an email address on a card starts a new mail in one click.
+eigen|contacts⟩ is [where you keep the people you work with](/support/contacts/get-started) in Eigen. It holds names, email addresses, phone numbers, addresses, birthdays and notes, and an email address on a card starts a new mail in one click.
 
 ::: video src="/data/about/media/contacts-hero" caption="Saar searches the crew's address book and opens a card."
 :::
