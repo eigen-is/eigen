@@ -5,6 +5,7 @@
 // rich cell's text is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
 
 import type { Literal } from '@workspace/formula';
+import { errorOf } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
@@ -43,6 +44,14 @@ export function contentOf(
     if (extra?.link) content.link = extra.link;
     if (extra?.qp) content.qp = extra.qp;
     return content;
+}
+
+// The value a cell of this content holds, or null for none: the joined text of rich runs, an error literal, or the
+// value as it is. Beside a formula it is the value given with it.
+export function literalOf({ v, e, s }: CellContent): Literal | null {
+    if (s) return textOf(s);
+    if (v === undefined) return null;
+    return e && typeof v === 'string' ? errorOf(v) : v;
 }
 
 export class Extras {

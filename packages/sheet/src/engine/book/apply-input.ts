@@ -5,20 +5,16 @@
 // held, for an edit that takes them, and turns formulas an edit could not keep, such as a rename, back into their text.
 
 import type { EditResult, Literal } from '@workspace/formula';
-import { errorOf } from '@workspace/formula';
-import { GRID_COLUMNS } from '@workspace/formula/text';
 import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
-import { contentOf, textOf, unitsOf } from './extras';
+import { contentOf, literalOf, unitsOf } from './extras';
 import { ColumnSweep } from './rect-index';
-import type { Workbook } from './workbook';
+import type { Held, Workbook } from './workbook';
 import { reachesEngine } from './workbook';
 
-// What one cell holds, as read: its value counts beside no formula or beside one whose value is given.
-type Held = { value: Literal | null; formula: string | null; given: boolean; extra: Extra | undefined };
 // A rectangle of cells that hold equal content, or none, as it grows down a column and then across.
 type Group = { top: number; left: number; bottom: number; right: number; held: Held };
 type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent | null>[] };
@@ -208,8 +204,7 @@ function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Grou
 }
 
 // Reads the blocks a sweep covers and hands over each rectangle of equal content, or of empty cells, of each block with
-// its place in the list, once it can grow no further. The extras inside the blocks are read first; then down each
-// column the engine is read over the rows of the blocks it holds, which come in turn, and the two are joined.
+// its place in the list, once it can grow no further.
 function readBlocks(
     book: Workbook,
     sheet: string,
@@ -217,43 +212,9 @@ function readBlocks(
     sweep: ColumnSweep,
     close: (group: Group, at: number) => void,
 ): void {
-    const { rects, live } = sweep;
-    if (rects.length === 0) return;
-    const { engine } = book;
-    const found: Placed<Held>[][] = rects.map(() => []);
-    const marks: [row: number, column: number, extra: Extra, at: number][] = [];
-    extras.within(sweep, (...mark) => marks.push(mark));
-    let mark = 0;
-    // The block the engine reads now, whose cells it hands out.
-    let block = 0;
-    // A cell that holds only a link or a mark is no cell of the engine's: it is read in its place among them.
-    const before = (row: number, column: number) => {
-        for (; mark < marks.length; mark += 1) {
-            const [r, c, extra, at] = marks[mark];
-            if (c > column || (c === column && r >= row)) break;
-            found[at].push([r, c, { ...EMPTY, extra }]);
-        }
-    };
-    const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
-        before(row, column);
-        const here = marks[mark]?.[0] === row && marks[mark][1] === column;
-        const given = formula !== null && engine.isGiven(sheet, row, column);
-        found[block].push([row, column, { value, formula, given, extra: here ? marks[mark][2] : undefined }]);
-        if (here) mark += 1;
-    };
-    sweep.pass((left, right) => {
-        for (let column = left; column <= right; column += 1) {
-            // The blocks that start past the column's last cell hold nothing of the engine's.
-            const end = sweep.after(engine.columnLength(sheet, column) - 1);
-            for (let at = 0; at < end; at += 1) {
-                block = live[at];
-                const [top, , bottom] = rects[block];
-                engine.cells(sheet, cell, top, column, bottom, column);
-            }
-        }
-    });
-    before(0, GRID_COLUMNS);
-    for (const [at, rect] of rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
+    const found: Placed<Held>[][] = sweep.rects.map(() => []);
+    book.cellsIn(sheet, extras, sweep, (row, column, held, at) => found[at].push([row, column, held]));
+    for (const [at, rect] of sweep.rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
 }
 
 // Groups the cells a block holds, in column order, a column at a time. A run of equal content down a column joins the
@@ -346,12 +307,4 @@ function gather({ runs, cells }: Gathered, { top, left, bottom, right }: Group, 
 function inputOf(sheet: string, { runs, cells }: Gathered): InputOp {
     cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-}
-
-// The value a cell of this content holds, or null for none: the joined text of rich runs, an error literal, or the
-// value as it is. Beside a formula it is the value given with it.
-function literalOf({ v, e, s }: CellContent): Literal | null {
-    if (s) return textOf(s);
-    if (v === undefined) return null;
-    return e && typeof v === 'string' ? errorOf(v) : v;
 }
