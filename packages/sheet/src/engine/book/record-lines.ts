@@ -40,7 +40,6 @@ export class LineMap {
     public readonly rows: boolean;
     // The edit that undoes this one, as a formula's transform takes it.
     private readonly back: LineEdit;
-    // The edit as an index on its axis maps through it.
     public readonly axis: Edit;
     private readonly inverse: Edit;
     // Whether the inverse edit gives back every line, span and formula mapped in the current `through`.
