@@ -15,7 +15,7 @@ rows:
   admin: People, teams, storage and backups, for whoever runs the server.
 ---
 
-Eigen is a self-hosted alternative to Google Workspace. It is ten apps for the work a team does together, on a server you run yourself.
+Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV, and WebDAV, and it opens and saves Word, Excel, and PowerPoint files.
 
 You can try it without installing anything at [demo.eigen.is](https://demo.eigen.is). It is a shared workspace that resets every hour.
 
