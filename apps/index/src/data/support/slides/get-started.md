@@ -10,7 +10,9 @@ order: 10
 updated: 2026-11-17
 ---
 
-Slides is where you build presentations in Eigen. Each presentation is a collection of slides, 16:9 or 4:3, that you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
+Slides is where you build presentations in Eigen. You fill slides with text, shapes, and images, and present the deck in full screen from the browser.
+
+An open presentation has the slides as thumbnails on the left, the slide you edit in the middle, and the properties of whatever you select on the right.
 
 ::: video src="/data/about/media/slides-hero" caption="A line on a slide changed, and undo takes it back."
 :::

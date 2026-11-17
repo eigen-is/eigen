@@ -10,7 +10,9 @@ order: 10
 updated: 2026-11-17
 ---
 
-Contacts is where you keep the people you work with. You can store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page. This page is a quick tour of what you can do.
+Contacts is where you keep the people you work with. You store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page.
+
+The screen has the sidebar on the left, with your address books and labels, and the list of contacts beside it. Click someone, and their details open on the right.
 
 ::: video src="/data/about/media/contacts-hero" caption="A search in a team's address book, and a contact opened."
 :::

@@ -10,7 +10,9 @@ order: 10
 updated: 2026-11-17
 ---
 
-Sheets is Eigen's spreadsheet editor. You can create a spreadsheet from scratch, import an Excel file, enter data and formulas, and share the result with other people. Everything saves as you work, so there is nothing to click when you are done.
+Sheets is the spreadsheet app in Eigen. You create a spreadsheet from scratch or import an Excel file, enter data and formulas, and share the result with other people. Everything saves as you work, so there is nothing to click when you are done.
+
+An open spreadsheet has the menus across the top, the grid of rows and columns in the middle, and the tabs of its sheets below the grid.
 
 ::: video src="/data/about/media/sheets-hero" caption="A formula typed, the totals update, and undo takes it back."
 :::

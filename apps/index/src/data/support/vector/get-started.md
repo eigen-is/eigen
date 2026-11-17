@@ -10,7 +10,9 @@ order: 10
 updated: 2026-11-17
 ---
 
-Vector is where you make drawings and diagrams in Eigen. You work on an infinite canvas, so there's no page edge to bump into: add shapes, connect them with arrows, drop in text and images, and the canvas grows to fit. This page is a quick tour of what you can do.
+Vector is where you make drawings and diagrams in Eigen. You work on an infinite canvas, so there's no page edge to bump into: add shapes, connect them with arrows, drop in text and images, and the canvas grows to fit.
+
+An open drawing has the toolbar across the top, the canvas in the middle, and the properties of whatever you select on the right.
 
 ::: video src="/data/about/media/vector-hero" caption="A shape moved, and the lines connected to it follow."
 :::
