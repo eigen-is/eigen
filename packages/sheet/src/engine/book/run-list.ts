@@ -76,9 +76,8 @@ export class RunList {
         return copy;
     }
 
-    // Every row of the spans, which ascend and share no row, wears `to` of the look it wore: `to` is told which span
-    // the row is in. One walk lays anew the runs the spans reach, jumping from span to span, and the runs between
-    // them move whole, once.
+    // Every row of the spans, which ascend and share no row, wears `to` of its look and its span's place. One walk lays
+    // anew the runs the spans reach, jumping from span to span, and the runs between them move whole, once.
     public format(rows: readonly Span[], to: (look: number, span: number) => number): void {
         const { size } = this;
         const stretches: Stretch[] = [];

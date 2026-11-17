@@ -190,10 +190,8 @@ export class Extras {
         }
     }
 
-    // Puts in every cell of the rectangles the sweep covers the entry `to` makes of the one it holds and of the
-    // rectangle's place in the list: the cells with none all take `to` of none. The cells the rectangles change are
-    // found first; then each stretch of them with no untouched entry between is laid anew, and the entries between
-    // stretches move whole, as a run list moves its runs.
+    // Puts in each cell the sweep covers what `to` makes of its entry and its rectangle's place, `to` of none where it
+    // has none. The changed cells are found first, then each stretch of them is laid anew and the entries between move.
     private merge(sweep: ColumnSweep, to: (old: Extra | undefined, at: number) => Extra | undefined): void {
         const { rects } = sweep;
         // The cells changed, each with its rectangle's place: a rectangle whose empty cells stay empty changes only the
@@ -306,9 +304,8 @@ function entryOf({ s, link, qp }: Extra): Extra | undefined {
     return Object.freeze({ ...(s && { s }), ...(link && { link }), ...(qp && { qp }) });
 }
 
-// What the limits count of what a cell holds beyond its value, nothing when it holds none of the three: an entry
-// weighs two units, its place and its object, its link three more and each run of its text one. A unit is about the
-// bytes one run of a rich text costs.
+// What the limits count of what a cell holds beyond its value, in units of about the bytes of one rich-text run: an
+// entry weighs two, its link three more and each run of its text one; a cell with none of the three weighs nothing.
 export function unitsOf({ s, link, qp }: Extra): number {
     return s || link || qp ? 2 + (link ? 3 : 0) + (s?.length ?? 0) : 0;
 }

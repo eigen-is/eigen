@@ -23,9 +23,8 @@ export type LookSpan<L = number> = {
 export class Bands {
     private readonly bands: Band[] = [{ first: 0, list: new RunList() }];
 
-    // A sheet from a snapshot's flat form: per band its first column, n, then n pairs of start row and look index,
-    // where index i names `looks[i - 1]` and 0 is plain. Equal neighbours join; columns before the first are plain.
-    // `held` counts the runs and the bands of every sheet of the workbook: each write here adds what it changed.
+    // From a snapshot's flat bands (first column, n, n pairs of start row and look index i: `looks[i - 1]`, 0 plain),
+    // equal neighbours joined. `held` counts every sheet's runs and bands, and each write here adds what it changed.
     public constructor(
         flat: readonly number[],
         looks: readonly number[],

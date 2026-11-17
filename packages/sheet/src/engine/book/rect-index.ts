@@ -84,9 +84,8 @@ export class RectIndex {
     }
 }
 
-// One sweep left to right over the columns that rectangles sharing no cell cover. At each stretch of columns the same
-// ones cover, `live` holds their places in the list sorted by top, so down a column they come in turn. It changes in
-// place as rectangles start and end, so it serves one pass at a time.
+// One sweep left to right over the columns that rectangles sharing no cell cover. At each stretch of columns `live`
+// holds the places of the rectangles over it sorted by top, changed in place, so it serves one pass at a time.
 export class ColumnSweep {
     public readonly live: number[] = [];
     // The columns where a rectangle starts or one ends, and the places by the column each starts at and ends past.

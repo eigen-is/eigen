@@ -55,9 +55,8 @@ export class Workbook {
     // What the limit on formats counts over every sheet: the bands and the extras add to it wherever they write.
     private readonly held = { runs: 0, bands: 0, extras: 0 };
 
-    // Loads a snapshot, weighing the limits on the bands as rebuilt, the extras as held and the cells as listed
-    // before the engine allocates: a document over one throws its refusal. A cell's `spill` mark is dropped, as a
-    // band said twice is.
+    // Loads a snapshot, weighing the bands as rebuilt, the extras as held and the cells as listed before the engine
+    // allocates: a document over a limit throws its refusal. A cell's `spill` mark is dropped, as a band said twice is.
     public constructor({ g, now, seed, computed, sheets }: Readonly<BookContent>) {
         const ordered = sheets.toSorted((a, b) => compareRules(a.fields.order, a.id, b.fields.order, b.id));
         const parts = ordered.map((sheet) => this.partsOf(sheet));
@@ -265,9 +264,8 @@ export class Workbook {
         this.held.extras -= extras.weight();
     }
 
-    // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those a person hid and those the columns of
-    // the sheet's filter left out. While the filter leaves a row out, Excel counts every hidden row of the sheet as
-    // filtered, inside its range or not. A hidden column matters to neither function.
+    // The rows SUBTOTAL and AGGREGATE leave out, as the engine takes them: those hidden and those the filter leaves
+    // out. While the filter leaves one out, Excel counts every hidden row as filtered too; no hidden column matters.
     private rowsOut(sheet: string, { rows }: BookSheet): { hidden: number[]; filtered: number[] } {
         const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
         const filtered = this.filtered(sheet).flat();

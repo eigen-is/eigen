@@ -158,9 +158,8 @@ export class Workbook {
         if (named !== undefined && named !== holder) throw new Error(`Sheet name ${name} is in use`);
     }
 
-    // Reads one sheet from its description to the end, with the workbook's tables untouched: whatever the source
-    // does while it is read, such as a call of the engine, meets the workbook as it was. Its formulas are to be
-    // computed unless a full pass computed their values.
+    // Reads one sheet from its description to the end, the tables untouched, so what the source does meanwhile, such
+    // as a call of the engine, meets the workbook as it was. Unless `computed`, its formulas are to be computed.
     public read(source: SheetSource, computed: boolean): Draft {
         const lengths: number[] = [];
         walk(source, (row, column) => {

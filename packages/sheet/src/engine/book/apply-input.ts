@@ -158,9 +158,8 @@ export function entryAt(op: InputOp, row: number, column: number): CellContent |
     return op.runs?.find(([rect]) => covers(rect, row, column))?.[1];
 }
 
-// The ops that put back the text of every formula an edit could not keep, such as a rename that bound it or rows
-// deleted under what it read, one per sheet, each cell with the link, the mark and the given value it holds. They
-// apply after the edit's own inverse: where that is a line edit, `after`, each cell is said where it stands then.
+// One op per sheet that puts back, with all else the cell holds, the text of each formula an edit could not keep.
+// They apply after the edit's own inverse, so with a line edit `after` each cell is said where it stands then.
 export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: LinesOp): InputOp[] {
     const bySheet = Map.groupBy(rewrites, ({ sheet }) => sheet);
     const ops: InputOp[] = [];
