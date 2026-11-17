@@ -77,8 +77,9 @@ describe('the work of a block of a growing range follows its rows', () => {
         '=SUM(R1C1:RC1)/COUNT(R1C1:RC1)',
         '=SUBTOTAL(109,R1C1:RC1)',
         '=SUM(R1C1:R2000C1)',
-        // Two carries that differ only in the skips, and two ranges 16 columns apart.
+        // Two carries that differ only in the skips or the right column, and two ranges 16 columns apart.
         '=SUM(R1C1:RC1)-SUBTOTAL(109,R1C1:RC1)',
+        '=SUM(R1C1:RC1)-SUM(R1C1:RC2)',
         '=SUM(R1C1:RC1)-SUM(R1C17:RC17)',
     ];
 
@@ -374,7 +375,7 @@ describe('a formula computed after a range took its carry and before the body re
         expect(valuesWith([SPELT], cells, ['D1', 'E1'])).toEqual([2, 7]);
     });
 
-    test('that takes the slot for another range leaves the sum its own', () => {
+    test('that takes the slot for another range leaves both sums their own', () => {
         const range = (left: number): Reference => {
             return { type: ValueType.Reference, sheet: 0, top: 0, left, bottom: 0, right: left, next: null };
         };
@@ -388,10 +389,11 @@ describe('a formula computed after a range took its carry and before the body re
             A1: 1,
             [`${letter}1`]: 10,
             [`${letter}2`]: 20,
-            [`${letter}3`]: 40,
+            // E1 ends its carry where D1 does, and F1 goes on from it after D1.
             D1: '=SPELT($A$1:A1,E1)',
-            E1: `=SUM(${letter}$1:${letter}3)`,
+            E1: `=SUM(${letter}$1:${letter}1)`,
+            F1: `=SUM(${letter}$1:${letter}2)`,
         };
-        expect(valuesWith([SPELT], cells, ['D1', 'E1'])).toEqual([2, 70]);
+        expect(valuesWith([SPELT], cells, ['D1', 'E1', 'F1'])).toEqual([2, 10, 30]);
     });
 });
