@@ -17,7 +17,8 @@ import { reachesEngine } from './workbook';
 
 // A rectangle of cells that hold equal content, or none, as it grows down a column and then across.
 type Group = { top: number; left: number; bottom: number; right: number; held: Held };
-type Gathered = { runs: [Rect, CellContent | null][]; cells: Placed<CellContent | null>[] };
+// The runs and cells of an input op as they are read.
+export type Gathered = Required<Omit<InputOp, 'kind' | 'sheet'>>;
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
 
@@ -93,7 +94,8 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
         else engine.setValue(sheet, row, column, value);
         extras.write(row, column, content ?? {});
     }
-    return [inputOf(sheet, gathered)];
+    const back = inputOf(sheet, gathered);
+    return back ? [back] : [];
 }
 
 // What an input fills: `column` is told once per column the rows it holds once the op's cells that reach the engine
@@ -123,6 +125,13 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
     }
     for (const [at, length] of reach) column(at, length);
     return units;
+}
+
+// The input that writes these runs and cells, the cells sorted in column order, or none when there are neither.
+export function inputOf(sheet: string, { runs, cells }: Gathered): InputOp | undefined {
+    if (runs.length + cells.length === 0) return undefined;
+    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
 }
 
 // What a cell holds now, as an op would say it, null for an empty cell.
@@ -172,7 +181,8 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
             const content = { ...contentOfGroup(group), f: texts[at] };
             for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
         });
-        if (gathered.runs.length + gathered.cells.length > 0) ops.push(inputOf(sheet, gathered));
+        const back = inputOf(sheet, gathered);
+        if (back) ops.push(back);
     }
     return ops;
 }
@@ -186,7 +196,7 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     readBlocks(book, sheet, part.extras, new ColumnSweep(rects), (group) => {
         if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
     });
-    return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
+    return inputOf(sheet, gathered);
 }
 
 // A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it.
@@ -302,9 +312,4 @@ function contentOfGroup({ held }: Group): CellContent | null {
 function gather({ runs, cells }: Gathered, { top, left, bottom, right }: Group, content: CellContent | null): void {
     if (top === bottom && left === right) cells.push([top, left, content]);
     else runs.push([[top, left, bottom, right], content]);
-}
-
-function inputOf(sheet: string, { runs, cells }: Gathered): InputOp {
-    cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-    return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
 }

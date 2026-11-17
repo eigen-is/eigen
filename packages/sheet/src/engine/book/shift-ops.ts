@@ -18,6 +18,7 @@ import type {
     Span,
 } from '@workspace/lib/sheets/ops';
 import { isStructural } from '@workspace/lib/sheets/ops';
+import { inputOf } from './apply-input';
 import type { Reach } from './record-lines';
 import {
     chartAfter,
@@ -119,8 +120,7 @@ function inputAfter(op: InputOp, edit: LinesOp, axis: Edit): InputOp | undefined
         }
         cells.push(rows ? [after, column, next] : [row, after, next]);
     }
-    if (runs.length + cells.length === 0) return undefined;
-    return { kind: 'input', sheet: op.sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
+    return inputOf(op.sheet, { runs, cells });
 }
 
 // A format on the edited sheet. Undefined when no cell or line of it is left.

@@ -8,7 +8,7 @@ import type { CellContent, FormatOp, InputOp, Op, RecordOp, Rect, Span } from '@
 import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, intersect, outsideOf } from '@workspace/lib/sheets/rect';
 import { Areas, keyOf, names, restyled } from './apply-format';
-import { cellAt, entryAt } from './apply-input';
+import { cellAt, entryAt, inputOf } from './apply-input';
 import { LINE_KEYS } from './line-runs';
 import type { BookSheet, Workbook } from './workbook';
 
@@ -126,8 +126,7 @@ function inputHolding(op: InputOp, holds: Holds): InputOp | undefined {
         holding(rect, holds).map((piece) => [piece, before] as const),
     );
     const cells = (op.cells ?? []).filter(([row, column]) => holds(row, column));
-    if (runs.length + cells.length === 0) return undefined;
-    return { kind: 'input', sheet: op.sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
+    return inputOf(op.sheet, { runs, cells });
 }
 
 // What still holds of the ranges of one key, undefined when all does. Of each part a write of the edit covers, newest

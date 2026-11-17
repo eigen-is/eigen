@@ -6,11 +6,12 @@
 
 import type { Move } from '@workspace/formula';
 import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
-import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
+import type { FormatOp, InputOp, MoveOp, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { covers, intersect, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { wornLooks } from './apply-format';
-import { inputOfBlocks, lostInputs } from './apply-input';
+import type { Gathered } from './apply-input';
+import { inputOf, inputOfBlocks, lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
 // `checked`, it throws before a write when the block could leave the workbook over a limit inside a batch where it
@@ -85,7 +86,7 @@ export function moveOf({ sheet, from: [top, left, bottom, right], toSheet, toRow
 function movedBack(ops: readonly InputOp[], op: MoveOp, target: Rect): InputOp[] {
     const rowShift = op.toRow - op.from[0];
     const columnShift = op.toColumn - op.from[1];
-    const bySheet = new Map<string, { runs: [Rect, CellContent | null][]; cells: Placed<CellContent | null>[] }>();
+    const bySheet = new Map<string, Gathered>();
     const of = (sheet: string) => {
         let gathered = bySheet.get(sheet);
         if (!gathered) {
@@ -105,8 +106,5 @@ function movedBack(ops: readonly InputOp[], op: MoveOp, target: Rect): InputOp[]
             else of(op.sheet).cells.push([row - rowShift, column - columnShift, content]);
         }
     }
-    return [...bySheet].map(([sheet, { runs, cells }]) => {
-        cells.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-        return { kind: 'input', sheet, ...(runs.length > 0 && { runs }), ...(cells.length > 0 && { cells }) };
-    });
+    return [...bySheet].flatMap(([sheet, gathered]) => inputOf(sheet, gathered) ?? []);
 }
