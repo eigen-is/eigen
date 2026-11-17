@@ -38,6 +38,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **All images in Drive** — the list includes the images someone shared with you directly
 - **Shared with me in Drive** — a file someone shared with you shows its current name, folder, size and thumbnail, also after they moved or changed it, or moved the folder it is in. When they move it to the Trash or restore it, it leaves and returns without a "shared with you" or "removed your access" notification
 - **Sharing with your own team** — a file you share with a team you are in stays out of your own **Shared with me** and sends you no notice. A team drive's file shared with a member shows only in the team drive
+- **Theme on the public site** — picking a theme from your account menu on a help, blog or About page changes the colors at once, and **System** follows your computer when it switches
 - **Files on the server's own disk** — a save replaces a file in one step, so a crash during the save, or a download at that moment, gets the whole old file or the whole new one, never part of either
 - **Large files on the server's own disk** — the server keeps answering other requests while it copies one in Drive or attaches one from Drive to a mail
 - **Saving from Word and Excel over WebDAV** — **Save as** into a mounted drive works. A save, move or copy over an existing file that the server refuses leaves that file in place instead of in the Trash

@@ -19,6 +19,7 @@ export { RequestAccessView } from './request-access-view';
 export { SettingsFooter } from './settings-footer';
 export { SettingsPage } from './settings-page';
 export { SettingsSection } from './settings-section';
+export { ThemeProvider } from './theme-provider';
 export { Topbar } from './topbar';
 export { UnsyncedEditsGuard } from './unsynced-edits-guard';
 export { VersionLabel } from './version-label';
