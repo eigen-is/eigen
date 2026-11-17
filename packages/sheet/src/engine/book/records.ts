@@ -102,7 +102,16 @@ const CHANGE_OP: { readonly [T in ChangedKind]: (body: ChangeBody<T>) => RecordO
 export class BookRecords {
     private readonly sheets = new Map<string, Held>();
     // The sheet that holds each record, under its type and id: an id names one record of its type in the whole book.
-    private readonly owner = new Map<string, Held>();
+    private readonly owner: { readonly [T in Kind]: Map<string, Held> } = {
+        merge: new Map(),
+        filter: new Map(),
+        filterColumn: new Map(),
+        comment: new Map(),
+        conditionalFormat: new Map(),
+        validation: new Map(),
+        image: new Map(),
+        chart: new Map(),
+    };
 
     public add(sheet: string, fields: SheetFields, records: SheetContent['records']): void {
         const held: Held = {
@@ -133,7 +142,7 @@ export class BookRecords {
 
     public remove(sheet: string): void {
         const { stored } = this.held(sheet);
-        for (const type of KINDS) for (const id of stored[type].keys()) this.owner.delete(ownerKey(type, id));
+        for (const type of KINDS) for (const id of stored[type].keys()) this.owner[type].delete(id);
         this.sheets.delete(sheet);
     }
 
@@ -147,7 +156,7 @@ export class BookRecords {
 
     // Whether the book holds a record of one of the types of `records` under one of its ids.
     public inUse(records: SheetContent['records']): boolean {
-        return KINDS.some((type) => Object.keys(records[type] ?? {}).some((id) => this.owner.has(ownerKey(type, id))));
+        return KINDS.some((type) => Object.keys(records[type] ?? {}).some((id) => this.owner[type].has(id)));
     }
 
     // A sheet's records as a snapshot holds them: by type and by id in order, a type with no record left out.
@@ -172,8 +181,10 @@ export class BookRecords {
 
     // What the limit on records counts: the most records of one type on one sheet.
     public weight(): number {
-        const sizes = [...this.sheets.values()].flatMap(({ stored }) => KINDS.map((type) => stored[type].size));
-        return Math.max(0, ...sizes);
+        let most = 0;
+        for (const { stored } of this.sheets.values())
+            for (const type of KINDS) most = Math.max(most, stored[type].size);
+        return most;
     }
 
     public merge(sheet: string, row: number, column: number): Rect | undefined {
@@ -233,7 +244,7 @@ export class BookRecords {
                 : [];
         }
         // A record another sheet holds is not this sheet's to change or delete, nor its id this sheet's to make.
-        const at = this.owner.get(ownerKey(op.type, op.id));
+        const at = this.owner[op.type].get(op.id);
         if (at && at !== held) return op.whole ? 'id-in-use' : [];
         const { stored } = held;
         if (op.whole) {
@@ -493,25 +504,20 @@ export class BookRecords {
     // Every write lands here, which keeps the sheet of each record and the indexes of where they lie in step. A
     // record written to another sheet than the one that holds it, as a move carries it, leaves that one.
     private replace<T extends Kind>(type: T, held: Held, id: string, record: Records[T] | undefined): void {
-        const key = ownerKey(type, id);
-        const was = this.owner.get(key);
+        const was = this.owner[type].get(id);
         if (was && was !== held) this.replace(type, was, id, undefined);
         const old = held.stored[type].get(id);
         if (record === undefined) {
             held.stored[type].delete(id);
-            this.owner.delete(key);
+            this.owner[type].delete(id);
         } else {
             Object.freeze(record);
             held.stored[type].set(id, record);
-            this.owner.set(key, held);
+            if (was !== held) this.owner[type].set(id, held);
         }
         const places: { readonly [K in Kind]?: RectIndex } = held.places;
         places[type]?.set(id, old && RECTS[type]?.(old), record && RECTS[type]?.(record));
     }
-}
-
-function ownerKey(type: Kind, id: string): string {
-    return `${type} ${id}`;
 }
 
 function planned(restore: RecordOp[], writes: readonly (() => void)[]): Planned {
