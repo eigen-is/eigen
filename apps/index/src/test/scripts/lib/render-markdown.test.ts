@@ -26,6 +26,13 @@ describe('renderMarkdown', () => {
         expect(toc.map((t) => t.level)).toEqual([2]);
     });
 
+    test('a picture gets a full-screen button, unless a link holds it, and one without alt text fails the build', () => {
+        const { html } = renderMarkdown('![A budget](/a.webp)\n\n[![b](/b.webp)](#elsewhere)');
+        expect(html).toContain('<span class="media-frame"><img src="/a.webp" alt="A budget"><button');
+        expect(html).toContain('<a href="#elsewhere"><img src="/b.webp" alt="b"></a>');
+        expect(() => renderMarkdown('![](/a.webp)')).toThrow('needs alt text: /a.webp');
+    });
+
     describe('app names', () => {
         const ket = (name: string) => `<span class="ket-name">${name}</span>`;
 

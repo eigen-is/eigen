@@ -48,7 +48,7 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
     };
     const open = (slide: number) => {
         const items = slides.map(({ type, src, caption }) =>
-            type === 'video' ? loopingVideoItem(src, caption?.text) : { type, src, caption: caption?.text },
+            type === 'video' ? loopingVideoItem(src, caption.text) : { type, src, caption: caption.text },
         );
         onOpen(items, slide);
     };
@@ -75,14 +75,19 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
                     <figure key={i} className="media-carousel-slide">
                         <div className="media-frame">
                             {type === 'video' ? (
-                                <LoopingVideo src={src} playing={i === current} onClick={() => open(i)} />
+                                <LoopingVideo
+                                    src={src}
+                                    label={caption.text}
+                                    playing={i === current}
+                                    onClick={() => open(i)}
+                                />
                             ) : (
-                                <img src={src} alt={caption?.text ?? ''} draggable={false} onClick={() => open(i)} />
+                                <img src={src} alt={caption.text} draggable={false} onClick={() => open(i)} />
                             )}
                             <ExpandButton onClick={() => open(i)} />
                         </div>
                         {/* Safe: build-time-rendered HTML from trusted, in-repo Markdown. */}
-                        {caption && <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />}
+                        <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />
                     </figure>
                 ))}
             </div>

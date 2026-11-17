@@ -33,7 +33,7 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 async function renderVideo() {
-    const body = renderMarkdown('::: video src="/data/about/media/sheets-chart"\n:::');
+    const body = renderMarkdown('::: video src="/data/about/media/sheets-chart" caption="A bar grows"\n:::');
     const { container } = await renderInDocument(<ArticleContent body={body} />);
     const video = container.querySelector('video');
     if (!video) throw new Error('No video rendered');
@@ -414,6 +414,17 @@ describe('lightbox', () => {
             next: null,
         });
         expect(document.querySelector<HTMLVideoElement>('[role="dialog"] video')?.loop).toBe(true);
+    });
+
+    test('a film is named by its caption, on the page, on a slide and in the lightbox', async () => {
+        const body = renderMarkdown(
+            '::: video src="/data/about/media/sheets-chart" caption="A *bar* grows"\n:::\n\n::: carousel\n![Two at once](/data/about/media/sheets-hero)\n:::',
+        );
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        const names = [...container.querySelectorAll('video')].map((video) => video.getAttribute('aria-label'));
+        expect(names).toEqual(['A bar grows', 'Two at once']);
+        await clickOn(container, '.media-video video');
+        expect(document.querySelector('[role="dialog"] video')?.getAttribute('aria-label')).toBe('A bar grows');
     });
 
     test('a looping video with controls keeps its clicks for them', async () => {

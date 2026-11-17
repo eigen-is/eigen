@@ -53,8 +53,7 @@ export function markdownBlocks(
                 media.push(block);
             };
             // Inline rendering runs a caption through the text rule, so app names in it are set like the prose.
-            const captionOf = (markdown?: string): MediaCaption | undefined => {
-                if (!markdown) return undefined;
+            const captionOf = (markdown: string): MediaCaption => {
                 const tokens = md.parseInline(markdown, state.env)[0].children ?? [];
                 return {
                     html: md.renderer.renderInline(tokens, md.options, state.env),
@@ -70,7 +69,7 @@ export function markdownBlocks(
                 for (const ext of VIDEO_FILES) checkFile(`${src}${ext}`);
             };
             const images = () => {
-                const lines: { src: string; title?: string; caption?: MediaCaption }[] = [];
+                const lines: { src: string; title?: string; caption: MediaCaption }[] = [];
                 for (let line = startLine + 1; line < closeLine; line++) {
                     const text = lineText(line);
                     if (!text) continue;
@@ -78,6 +77,8 @@ export function markdownBlocks(
                     if (image?.type !== 'image' || others.length) {
                         throw new Error(`${where} takes one image per line, not ${text}`);
                     }
+                    // The alt text is the caption, which a screen reader reads for the picture or film.
+                    if (!image.content.trim()) throw new Error(`${where} needs alt text on ${text}`);
                     lines.push({
                         src: image.attrGet('src') ?? '',
                         title: image.attrGet('title') ?? undefined,
@@ -97,9 +98,12 @@ export function markdownBlocks(
                 const src = attrs.get('src');
                 if (!src) throw new Error(`${where} needs a src`);
                 checkVideo(src);
-                mark({ kind: 'video', src, caption: captionOf(attrs.get('caption')) });
+                const caption = attrs.get('caption');
+                if (!caption) throw new Error(`${where} needs a caption`);
+                mark({ kind: 'video', src, caption: captionOf(caption) });
             } else if (name === 'carousel') {
                 // A src with no file ending names a video's files, as a video block's does.
+                const groupCaption = attrs.get('caption');
                 const slides = images().map(({ src, caption }) => {
                     if (/\.\w+$/.test(src)) return { type: 'image' as const, src, caption };
                     checkVideo(src);
@@ -109,7 +113,7 @@ export function markdownBlocks(
                     kind: 'carousel',
                     slides,
                     autoplay: attrs.has('autoplay'),
-                    caption: captionOf(attrs.get('caption')),
+                    caption: groupCaption ? captionOf(groupCaption) : undefined,
                 });
             } else {
                 const columns = gridColumns.find((count) => count === attrs.get('columns'));
@@ -119,8 +123,8 @@ export function markdownBlocks(
                     checkFile(src);
                     if (title) checkFile(title);
                     return src.endsWith('.mp4')
-                        ? { src, type: 'video' as const, caption: caption?.text, poster: title }
-                        : { src, type: 'image' as const, caption: caption?.text, thumbnail: title };
+                        ? { src, type: 'video' as const, caption: caption.text, poster: title }
+                        : { src, type: 'image' as const, caption: caption.text, thumbnail: title };
                 });
                 mark({ kind: 'grid', columns, items });
             }

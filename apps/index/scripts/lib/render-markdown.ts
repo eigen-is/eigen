@@ -1,8 +1,8 @@
 // Renders the site's Markdown, such as help articles, blog posts and the changelog, to HTML at build time. Each h2
 // and h3 gets a slug id and a link icon, and is collected for the page's table of contents. Raw HTML passes through,
-// since every source is written in this repo, each app name in the text is marked to be set in the mono font, each
-// picture outside a link gets the full-screen button the site's media show, and a media block such as a looping
-// video or a carousel leaves a marker, with what it shows in `media`.
+// since every source is written in this repo, each app name in the text is marked to be set in the mono font, a
+// picture without alt text fails the build, each picture outside a link gets the full-screen button the site's media
+// show, and a media block such as a looping video or a carousel leaves a marker, with what it shows in `media`.
 
 import { join } from 'node:path';
 import MarkdownIt from 'markdown-it';
@@ -62,9 +62,11 @@ export function renderMarkdown(
             .map((part, i) => (i % 2 ? `<span class="ket-name">${part}</span>` : md.utils.escapeHtml(part)))
             .join('');
     };
-    // A picture in a link follows the link, so it gets no button, and a button can't sit inside a link anyway.
+    // A picture needs alt text for a screen reader, and the lightbox shows it as the title. A picture in a link
+    // follows the link, so it gets no button, and a button can't sit inside a link anyway.
     const renderImage = md.renderer.rules.image;
     md.renderer.rules.image = (tokens, idx, options, env, self) => {
+        if (!tokens[idx].content.trim()) throw new Error(`A picture needs alt text: ${tokens[idx].attrGet('src')}`);
         const image = renderImage
             ? renderImage(tokens, idx, options, env, self)
             : self.renderToken(tokens, idx, options);

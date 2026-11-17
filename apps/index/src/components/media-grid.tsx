@@ -1,6 +1,6 @@
 // A grid of images and videos inside a blog post or Support article, which the article's Markdown declares as a
 // `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, the full-screen mark the site's
-// other pictures show, and its caption. A click hands the page around it the item to open in its lightbox, with the
+// other pictures show, and its caption, which names the button, so the thumbnail itself has empty alt text. A click hands the page around it the item to open in its lightbox, with the
 // grid as the group.
 
 import { cn } from '@workspace/ui/lib/utils';
@@ -35,16 +35,22 @@ function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: Medi
                 {type === 'image' && (
                     <img
                         src={thumbnail ?? src}
-                        alt={caption ?? ''}
+                        alt=""
                         className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                     />
                 )}
                 {type === 'video' && (
                     <div className="relative w-full h-full">
                         {poster ? (
-                            <img src={poster} alt={caption ?? ''} className="w-full h-full object-cover" />
+                            <img src={poster} alt="" className="w-full h-full object-cover" />
                         ) : (
-                            <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
+                            <video
+                                src={src}
+                                className="w-full h-full object-cover"
+                                muted
+                                preload="metadata"
+                                aria-hidden="true"
+                            />
                         )}
                         {/* Black and white, not theme tokens, on purpose: the mark sits on any photo, in either theme. */}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
@@ -57,11 +63,9 @@ function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: Medi
                     <Maximize />
                 </span>
             </div>
-            {caption && (
-                <p className="mt-2 text-[11px] text-muted-foreground text-center">
-                    <Caption text={caption} />
-                </p>
-            )}
+            <p className="mt-2 text-[11px] text-muted-foreground text-center">
+                <Caption text={caption} />
+            </p>
         </button>
     );
 }

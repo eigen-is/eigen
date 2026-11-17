@@ -27,7 +27,7 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
         if (!(e.target instanceof Element)) return;
         const image = e.target.closest('.media-frame')?.querySelector('img') ?? e.target.closest('img');
         if (image && !image.closest('a, button')) {
-            openLightbox([{ type: 'image', src: image.getAttribute('src') ?? '', caption: image.alt || undefined }], 0);
+            openLightbox([{ type: 'image', src: image.getAttribute('src') ?? '', caption: image.alt }], 0);
             return;
         }
         if (!window.getSelection()?.isCollapsed) return;

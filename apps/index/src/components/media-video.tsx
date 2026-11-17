@@ -13,22 +13,23 @@ import { ExpandButton } from './media-lightbox';
 const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
 
 export function MediaVideo({ src, caption, onOpen }: MediaVideoData & { onOpen: OpenLightbox }) {
-    const open = () => onOpen([loopingVideoItem(src, caption?.text)], 0);
+    const open = () => onOpen([loopingVideoItem(src, caption.text)], 0);
     return (
         <figure className="media-video">
             <div className="media-frame">
-                <LoopingVideo src={src} playing onClick={open} />
+                <LoopingVideo src={src} label={caption.text} playing onClick={open} />
                 <ExpandButton onClick={open} />
             </div>
             {/* Safe: build-time-rendered HTML from trusted, in-repo Markdown. */}
-            {caption && <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />}
+            <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />
         </figure>
     );
 }
 
-type LoopingVideoProps = { src: string; playing: boolean; onClick: () => void };
+// `label` is the film's caption, which a screen reader reads for it.
+type LoopingVideoProps = { src: string; label: string; playing: boolean; onClick: () => void };
 
-export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
+export function LoopingVideo({ src, label, playing, onClick }: LoopingVideoProps) {
     const ref = useRef<HTMLVideoElement>(null);
     const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const [refused, setRefused] = useState(false);
@@ -51,6 +52,7 @@ export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
     return (
         <video
             ref={ref}
+            aria-label={label}
             muted
             loop
             playsInline
@@ -66,7 +68,7 @@ export function LoopingVideo({ src, playing, onClick }: LoopingVideoProps) {
 }
 
 // The lightbox plays one file: the one the browser picks from the two sources.
-export function loopingVideoItem(src: string, caption?: string): LightboxItem {
+export function loopingVideoItem(src: string, caption: string): LightboxItem {
     const codec = document.createElement('video').canPlayType(AV1) ? 'av1' : 'h264';
     return { type: 'video', src: `${src}.${codec}.mp4`, poster: `${src}.webp`, caption, loop: true };
 }

@@ -26,7 +26,7 @@ export function MediaLightbox({ items, index, onIndexChange, onClose }: MediaLig
     const item = items[index];
     return (
         <PreviewLightbox
-            title={item.caption && <Caption text={item.caption} />}
+            title={<Caption text={item.caption} />}
             hasPrev={index > 0}
             hasNext={index < items.length - 1}
             onPrev={() => onIndexChange(index - 1)}
@@ -47,7 +47,7 @@ function LightboxMedia({ item }: { item: LightboxItem }) {
         return (
             <img
                 src={item.src}
-                alt={item.caption ?? ''}
+                alt={item.caption}
                 className="rounded"
                 style={style}
                 onLoad={(e) => setRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
@@ -63,6 +63,7 @@ function LightboxMedia({ item }: { item: LightboxItem }) {
             autoPlay={!reduceMotion}
             muted={item.loop}
             loop={item.loop}
+            aria-label={item.caption}
             className="rounded"
             style={style}
             onLoadedMetadata={(e) => setRatio(e.currentTarget.videoWidth / e.currentTarget.videoHeight)}
