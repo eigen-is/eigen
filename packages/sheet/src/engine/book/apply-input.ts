@@ -17,7 +17,7 @@ import { reachesEngine } from './workbook';
 
 // A rectangle of cells that hold equal content, or none, as it grows down a column and then across.
 type Group = { top: number; left: number; bottom: number; right: number; held: Held };
-// The runs and cells of an input op as they are read.
+// The runs and cells of an input op, as an applier gathers them.
 export type Gathered = Required<Omit<InputOp, 'kind' | 'sheet'>>;
 
 const EMPTY: Held = { value: null, formula: null, given: false, extra: undefined };
@@ -198,6 +198,11 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     return inputOf(sheet, gathered);
 }
 
+// Whether two values write the same JSON, a missing one as null.
+export function sameJson(a: unknown, b: unknown): boolean {
+    return a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
 // A rectangle where its cells stand after a line edit: in two parts when lines are inserted inside it. A delete here
 // undoes an insert, whose rewrites the engine never lays over the empty lines it inserted.
 function afterLines(edit: LinesOp, group: Group): Group[] {
@@ -293,11 +298,6 @@ function sameValue(a: Literal | null, b: Literal | null): boolean {
 function sameExtra(a: Extra | undefined, b: Extra | undefined): boolean {
     if (a === undefined || b === undefined) return a === b;
     return a.qp === b.qp && sameJson(a.s, b.s) && sameJson(a.link, b.link);
-}
-
-// Whether two values write the same JSON, a missing one as null.
-export function sameJson(a: unknown, b: unknown): boolean {
-    return a === b || JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
 function contentOfGroup({ held }: Group): CellContent | null {
