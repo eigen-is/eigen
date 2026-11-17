@@ -106,8 +106,21 @@ export class Sheet {
         };
     }
 
-    public row(row: number): Readonly<LineAttrs> {
-        return this.parts.rows.at(row);
+    // A row's keys, with `filtered` while the sheet's filter leaves it out.
+    public row(row: number): Readonly<LineAttrs & { filtered?: 1 }> {
+        const attrs = this.parts.rows.at(row);
+        for (const spans of this.book.filtered(this.id)) {
+            // The first span that ends at the row or past it holds the row when it starts there or before.
+            let low = 0;
+            let high = spans.length;
+            while (low < high) {
+                const middle = (low + high) >> 1;
+                if (spans[middle][1] < row) low = middle + 1;
+                else high = middle;
+            }
+            if (low < spans.length && spans[low][0] <= row) return { ...attrs, filtered: 1 };
+        }
+        return attrs;
     }
 
     public column(column: number): Readonly<LineAttrs> {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
-import type { CellContent, Placed, RecordOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
+import type { CellContent, FilterColumnRecord, Placed, RecordOp, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { covers, meets } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { applyOps } from '../../../engine/book/apply-ops';
@@ -102,6 +102,44 @@ describe('engine/book/handle — identity', () => {
         expect(only(book).row(2)).toEqual({ size: 30 });
         expect(only(book).row(6)).toEqual({});
         expect(only(book).row(6)).toBe(only(book).column(0));
+    });
+
+    test('a row the filter leaves out reads filtered beside its keys, a row hidden by hand does not', () => {
+        const filterColumn: Record<string, FilterColumnRecord> = {
+            k: {
+                filter: 'f',
+                column: 0,
+                rows: [
+                    [3, 4],
+                    [8, 8],
+                ],
+            },
+            l: { filter: 'f', column: 1, rows: [[6, 6]] },
+        };
+        const book = new Workbook(
+            bookOf(
+                sheetOf('a', {
+                    rows: [[[3, 3], { size: 30 }]],
+                    records: { filter: { f: { rect: [0, 0, 20, 1] } }, filterColumn },
+                }),
+            ),
+        );
+        const rows = () => [2, 3, 4, 5, 6, 7, 8, 9].map((row) => only(book).row(row));
+        expect(rows()).toEqual([
+            {},
+            { size: 30, filtered: 1 },
+            { filtered: 1 },
+            {},
+            { filtered: 1 },
+            {},
+            { filtered: 1 },
+            {},
+        ]);
+        expect(only(book).row(2)).toBe(only(book).column(0));
+        applyOps(book, [{ kind: 'format', sheet: 'a', lines: 'rows', spans: [[5, 5]], set: { hidden: 1 } }]);
+        expect(only(book).row(5)).toEqual({ hidden: 1 });
+        applyOps(book, [{ kind: 'record', sheet: 'a', type: 'filter', id: 'f' }]);
+        expect(rows()).toEqual([{}, { size: 30 }, {}, { hidden: 1 }, {}, {}, {}, {}]);
     });
 
     test('a book makes its sheets once: sheet(id) is the sheet sheets() lists, and a new book makes new ones', () => {
@@ -452,7 +490,11 @@ function expectSheetReads(sheet: Sheet, model: Model, modelSheet: ModelSheet): v
         expect(sheet.hasFormula(row, column)).toBe(held?.f !== undefined);
         if (held?.f === undefined) expect(sheet.value(row, column)).toEqual(modelValue(held));
         expect(sheet.look(row, column)).toEqual(model.looks[modelSheet.looks.look(row, column)]);
-        expect(sheet.row(row)).toEqual(modelSheet.rows.get(row) ?? {});
+        const { filter, filterColumn } = modelSheet.records;
+        const out = [...filterColumn.values()].some(
+            (at) => filter.has(at.filter) && at.rows.some(([first, last]) => first <= row && row <= last),
+        );
+        expect(sheet.row(row)).toEqual({ ...modelSheet.rows.get(row), ...(out && { filtered: 1 }) });
         expect(sheet.column(column)).toEqual(modelSheet.columns.get(column) ?? {});
         const covering = [...merge.values()].find(({ rect }) => covers(rect, row, column));
         expect(sheet.merge(row, column)).toEqual(covering?.rect);

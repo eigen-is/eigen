@@ -223,6 +223,14 @@ export class Workbook {
         return fits({ slots: this.engine.slots() + slots, ...more, records: 0, sheets: this.parts.size }, MIDWAY);
     }
 
+    // The rows the sheet's filter leaves out, a list of spans per column of it, each ascending.
+    public filtered(sheet: string): (readonly Span[])[] {
+        const filters = this.records.records(sheet, 'filter');
+        return [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) =>
+            filters.has(column.filter) ? [column.rows] : [],
+        );
+    }
+
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in
     // every sheet's bands: an applier calls it once a batch is done, with no look id in hand.
     public sweepLooks(): void {
@@ -262,10 +270,7 @@ export class Workbook {
     // filtered, inside its range or not. A hidden column matters to neither function.
     private rowsOut(sheet: string, { rows }: BookSheet): { hidden: number[]; filtered: number[] } {
         const hidden = rows.content().flatMap(([span, attrs]) => (attrs.hidden ? [span] : []));
-        const filters = this.records.records(sheet, 'filter');
-        const filtered = [...this.records.records(sheet, 'filterColumn').values()].flatMap((column) =>
-            filters.has(column.filter) ? column.rows : [],
-        );
+        const filtered = this.filtered(sheet).flat();
         if (filtered.length > 0) filtered.push(...hidden);
         return { hidden: pairsOf(hidden), filtered: pairsOf(filtered.sort((a, b) => a[0] - b[0])) };
     }
