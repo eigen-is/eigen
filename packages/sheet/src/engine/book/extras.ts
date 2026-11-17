@@ -65,16 +65,18 @@ export class Extras {
         return this.places[at] === place ? this.held[at] : undefined;
     }
 
-    // The entries of a block in column order. It reads the lists as it goes, so nothing is written during a walk.
-    public *cells(rect: Rect): Generator<Placed<Extra>> {
-        for (const [row, column, extra] of this.within(new ColumnSweep([rect]))) yield [row, column, extra];
+    // The entries of a block in column order.
+    public cells(rect: Rect): Placed<Extra>[] {
+        const found: Placed<Extra>[] = [];
+        this.within(new ColumnSweep([rect]), (row, column, extra) => found.push([row, column, extra]));
+        return found;
     }
 
-    // The entries of the rectangles a sweep covers, in column order, each with its rectangle's place in the list. Down
-    // a column an entry stays in the rectangle of the one before while it can; a gap is jumped by a search.
-    public *within(sweep: ColumnSweep): Generator<[row: number, column: number, extra: Extra, at: number]> {
+    // Tells `visit`, which must not write here, the entries of the rectangles a sweep covers in column order, each with
+    // its rectangle's place in the list. Down a column an entry stays in the rectangle before while it can.
+    public within(sweep: ColumnSweep, visit: (row: number, column: number, extra: Extra, at: number) => void): void {
         const { rects, live } = sweep;
-        for (const [left, right] of sweep.stretches()) {
+        sweep.pass((left, right) => {
             const first = rects[live[0]][0];
             let at = this.search(placeOf(first, left));
             // The column of the last entry handed out, and the place in `live` of its rectangle.
@@ -87,7 +89,7 @@ export class Extras {
                 if (next !== column || row > rects[live[block]][2]) block = sweep.after(row) - 1;
                 if (block >= 0 && rects[live[block]][2] >= row) {
                     column = next;
-                    yield [row, column, this.held[at], live[block]];
+                    visit(row, column, this.held[at], live[block]);
                     at += 1;
                 } else {
                     column = -1;
@@ -95,11 +97,11 @@ export class Extras {
                     at = this.search(below < 0 ? placeOf(first, next + 1) : placeOf(below, next));
                 }
             }
-        }
+        });
     }
 
     public content(): Placed<Extra>[] {
-        return [...this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1])];
+        return this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]);
     }
 
     // Puts what a cell holds in place of what it held, which is returned. A cell that holds none of the three has no
@@ -139,7 +141,7 @@ export class Extras {
     public move({ from, toRow, toColumn }: MoveOp, source: Extras): Placed<Extra>[] {
         const [top, left, bottom, right] = from;
         const target: Rect = [toRow, toColumn, toRow + bottom - top, toColumn + right - left];
-        const covered = [...this.cells(target)];
+        const covered = this.cells(target);
         const block = source.take(from);
         this.take(target);
         const shift = placeOf(toRow, toColumn) - placeOf(top, left);
@@ -201,12 +203,12 @@ export class Extras {
         const changed: number[] = [];
         const owners: number[] = [];
         const blanks = rects.map((_, at) => to(undefined, at));
-        for (const [row, column, , at] of this.within(sweep)) {
+        this.within(sweep, (row, column, _, at) => {
             if (blanks[at] === undefined) {
                 changed.push(placeOf(row, column));
                 owners.push(at);
             }
-        }
+        });
         for (const [at, [top, left, bottom, right]] of rects.entries()) {
             if (blanks[at] === undefined) continue;
             for (let column = left; column <= right; column += 1) {

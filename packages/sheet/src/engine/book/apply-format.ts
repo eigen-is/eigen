@@ -103,12 +103,12 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
     const links: Placed<CellLink>[] = [];
     const sweep = new ColumnSweep(op.ranges);
     if (runKeys.length > 0 || linked) {
-        for (const [row, column, extra] of extras.within(sweep)) {
+        extras.within(sweep, (row, column, extra) => {
             if (extra.s && runKeys.length > 0) {
                 rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
             }
             if (extra.link && linked) links.push([row, column, extra.link]);
-        }
+        });
     }
 
     // Per named key, the cells of each old value it changed, under that value as text, with the look of one of them.

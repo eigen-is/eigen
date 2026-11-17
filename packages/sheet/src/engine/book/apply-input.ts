@@ -55,17 +55,19 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     });
     // A listed cell inside a run was read with the run. Both come in column order.
     const listed = op.cells ?? [];
-    const inRun: boolean[] = [];
+    const inRun = new Set<number>();
     let next = 0;
-    for (const [left, right] of listed.length > 0 ? sweep.stretches() : []) {
-        for (; next < listed.length && listed[next][1] <= right; next += 1) {
-            const [row, column] = listed[next];
-            const at = sweep.after(row) - 1;
-            inRun[next] = column >= left && at >= 0 && sweep.rects[sweep.live[at]][2] >= row;
-        }
+    if (runs.length > 0) {
+        sweep.pass((left, right) => {
+            for (; next < listed.length && listed[next][1] <= right; next += 1) {
+                const at = sweep.after(listed[next][0]) - 1;
+                if (listed[next][1] >= left && at >= 0 && sweep.rects[sweep.live[at]][2] >= listed[next][0])
+                    inRun.add(next);
+            }
+        });
     }
     for (const [at, [row, column]] of listed.entries()) {
-        if (!inRun[at]) gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+        if (!inRun.has(at)) gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
     }
 
     for (const [rect, content] of runs) {
@@ -111,10 +113,12 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
         if (reachesEngine(content)) runs.push(rect);
     }
     // Down a column the last run that reaches the engine is the lowest.
-    const sweep = new ColumnSweep(runs);
-    for (const [left, right] of sweep.stretches()) {
-        const length = runs[sweep.live[sweep.live.length - 1]][2] + 1;
-        for (let at = left; at <= right; at += 1) reach.set(at, length);
+    if (runs.length > 0) {
+        const sweep = new ColumnSweep(runs);
+        sweep.pass((left, right) => {
+            const length = runs[sweep.live[sweep.live.length - 1]][2] + 1;
+            for (let at = left; at <= right; at += 1) reach.set(at, length);
+        });
     }
     for (const [row, at, content] of op.cells ?? []) {
         if (!content) continue;
@@ -217,7 +221,8 @@ function readBlocks(
     if (rects.length === 0) return;
     const { engine } = book;
     const found: Placed<Held>[][] = rects.map(() => []);
-    const marks = [...extras.within(sweep)];
+    const marks: [row: number, column: number, extra: Extra, at: number][] = [];
+    extras.within(sweep, (...mark) => marks.push(mark));
     let mark = 0;
     // The block the engine reads now, whose cells it hands out.
     let block = 0;
@@ -236,7 +241,7 @@ function readBlocks(
         found[block].push([row, column, { value, formula, given, extra: here ? marks[mark][2] : undefined }]);
         if (here) mark += 1;
     };
-    for (const [left, right] of sweep.stretches()) {
+    sweep.pass((left, right) => {
         for (let column = left; column <= right; column += 1) {
             // The blocks that start past the column's last cell hold nothing of the engine's.
             const end = sweep.after(engine.columnLength(sheet, column) - 1);
@@ -246,7 +251,7 @@ function readBlocks(
                 engine.cells(sheet, cell, top, column, bottom, column);
             }
         }
-    }
+    });
     before(0, GRID_COLUMNS);
     for (const [at, rect] of rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
 }

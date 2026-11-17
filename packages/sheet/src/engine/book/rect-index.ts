@@ -90,11 +90,12 @@ export class RectIndex {
 export class ColumnSweep {
     public readonly live: number[] = [];
     // The columns where a rectangle starts or one ends, and the places by the column each starts at and ends past.
-    private readonly edges: number[];
-    private readonly starts: number[];
-    private readonly ends: number[];
+    private readonly edges: number[] = [];
+    private readonly starts: number[] = [];
+    private readonly ends: number[] = [];
 
     public constructor(public readonly rects: readonly Rect[]) {
+        if (rects.length === 0) return;
         const edges = rects.flatMap(([, left, , right]) => [left, right + 1]).sort((a, b) => a - b);
         this.edges = edges.filter((edge, at) => edge !== edges[at + 1]);
         const places = [...rects.keys()];
@@ -102,10 +103,11 @@ export class ColumnSweep {
         this.ends = places.sort((a, b) => rects[a][3] - rects[b][3]);
     }
 
-    // The stretches in column order, each as its first and last column while `live` holds its rectangles.
-    public *stretches(): Generator<[left: number, right: number]> {
+    // Tells `visit` the first and last column of each stretch, in column order, while `live` holds its rectangles.
+    public pass(visit: (left: number, right: number) => void): void {
         const { rects, live, edges, starts, ends } = this;
-        live.length = 0;
+        // A pass before this one left the rectangles of its last stretch, which all end at the last edge.
+        if (live.length > 0) live.length = 0;
         let started = 0;
         let ended = 0;
         for (let at = 0; at < edges.length - 1; at += 1) {
@@ -116,7 +118,7 @@ export class ColumnSweep {
             for (; started < starts.length && rects[starts[started]][1] === left; started += 1) {
                 live.splice(this.after(rects[starts[started]][0]), 0, starts[started]);
             }
-            if (live.length > 0) yield [left, edges[at + 1] - 1];
+            if (live.length > 0) visit(left, edges[at + 1] - 1);
         }
     }
 
