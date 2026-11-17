@@ -133,7 +133,7 @@ async function mountListing() {
         if (!row) throw new Error(`no ${label} row`);
         return run(() => row.click());
     };
-    const preview = () => document.querySelector('[data-slot="file-preview"]');
+    const preview = () => document.querySelector('[data-slot="preview-lightbox"]');
     const cursor = () => document.querySelector('[data-cursor]')?.textContent;
     const listHasFocus = () => document.activeElement?.hasAttribute('data-list') === true;
     await settle();
@@ -177,12 +177,12 @@ test('a preview opened from a row’s menu, then Save to Drive in it, gives the 
     await run(controls.openMenu);
     await clickRow('[role="menuitem"]', 'Quick preview');
     // The focus is on the preview's Save to Drive button as it opens the picker.
-    document.querySelector<HTMLElement>('[data-slot="file-preview"] button')?.focus();
+    document.querySelector<HTMLElement>('[data-slot="preview-lightbox"] button')?.focus();
     await run(controls.openSave);
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Folder');
 
     await clickRow('button', 'Cancel');
-    expect(document.activeElement?.closest('[data-slot="file-preview"]')).not.toBeNull();
+    expect(document.activeElement?.closest('[data-slot="preview-lightbox"]')).not.toBeNull();
     await press('Escape');
     await settle();
     expect(preview()).toBeNull();

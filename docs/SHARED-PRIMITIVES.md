@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2369 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2371 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (323)
+## Components (324)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -261,6 +261,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverTrigger` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
+| `PreviewLightbox` | `@workspace/ui/components/preview-lightbox` | packages/ui/src/components/preview-lightbox.tsx |
 | `Progress` | `@workspace/ui/components/progress` | packages/ui/src/components/progress.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
 | `AlignSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/align-section.tsx |
@@ -1164,7 +1165,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1241)
+## Utilities & constants (1242)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2360,6 +2361,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readImageSizeFromUrl` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
 | `focusLeftToEditor` | `@workspace/ui/components/menubar` | packages/ui/src/components/menubar.tsx |
 | `pressClosesMenu` | `@workspace/ui/components/menubar` | packages/ui/src/components/menubar.tsx |
+| `PREVIEW_BODY_MAX_HEIGHT` | `@workspace/ui/components/preview-lightbox` | packages/ui/src/components/preview-lightbox.tsx |
 | `getMergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `holdCapture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `isMixed` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |

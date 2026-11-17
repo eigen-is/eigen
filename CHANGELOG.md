@@ -9,12 +9,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name where you can't see the folders above
 - **Recent files in the command palette** — ⌘K with nothing typed lists your five newest recent files. Typing a recent file's name puts it on top at once
 - **About pages** — the public site has an About section, linked from the footer of every page, with what Eigen is and a page with short films for each app and for Admin. On the landing page, each app's name links to its page
-- **Pictures and films on the site** — in help articles, blog posts and About pages, a click opens a picture or film bigger, and each has a thin border. A page can show a looping film, a carousel of pictures and films, or two pictures side by side
+- **Pictures and films on the site** — in help articles, blog posts and About pages, a click or the full-screen button in its corner opens a picture or film in the same preview as Drive. A page can show a looping film, a carousel you can drag with the mouse, or pictures side by side
 
 ### Changed
 
 - **Documents over WebDAV** — a WebDAV client can add a file to a document's `media` folder by saving or copying it there. Moving a file into a document is refused, since the next **Delete history…** would delete it
 - **Renaming a file in Drive** — the **Rename** dialog shows the whole name with the part before the extension selected, so you can change the extension too. A document made in Eigen keeps its extension hidden
+- **Quick preview** — the previous and next arrows sit as round buttons at the left and right edges instead of in the top bar. On a video you clicked, the arrow keys and Space control the video
 - **Guest sign-in code** — the code mailed to a guest works for 15 minutes instead of 5, so a mail that arrives late still gets them in
 - **Times on a 24-hour clock** — Calendar, Mail, Drive, chat, comments, version history and the admin pages write times as 09:00 and 14:30, not 9 AM and 2:30 PM. So does an invitation email
 - **Forwarded mail** — the details above a message forwarded inside another give its date as 14 Nov 2026, 15:42 UTC instead of Sat, 14 Nov 2026 15:42:11 GMT, and no date at all when the original's can't be read

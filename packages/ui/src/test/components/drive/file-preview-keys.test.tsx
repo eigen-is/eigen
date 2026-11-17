@@ -119,7 +119,7 @@ test('Escape with a layer open above the overlay is that layer’s, not the over
 
 test('Space on a focused control inside the overlay is that control’s own activation', async () => {
     const { closed, press, cleanup } = await mount(false);
-    const button = document.querySelector('[data-slot="file-preview"] button');
+    const button = document.querySelector('[data-slot="preview-lightbox"] button');
     if (!button) throw new Error('the overlay drew no button');
     const onButton = await press(' ', button);
     expect(closed.count).toBe(0);
@@ -218,7 +218,7 @@ async function mountStickiesChain() {
         [...document.querySelectorAll('[data-slot="dialog-content"]')].find(
             (layer) => layer.querySelector('h2')?.textContent === title,
         );
-    const preview = () => document.querySelector('[data-slot="file-preview"]');
+    const preview = () => document.querySelector('[data-slot="preview-lightbox"]');
     const chip = () => document.querySelector<HTMLElement>('[data-chip]');
     const pressEscape = () =>
         act(async () => {
