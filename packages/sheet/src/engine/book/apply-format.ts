@@ -19,7 +19,7 @@ import type {
     RunStyle,
     Span,
 } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { CellLink } from '@workspace/lib/sheets/types';
 import { pick } from 'es-toolkit';
@@ -28,18 +28,6 @@ import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
 import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
-
-// Every run-style key once: the mapped type fails the build on a key left out.
-const RUN_KEY: { readonly [K in keyof RunStyle]-?: K } = {
-    bl: 'bl',
-    it: 'it',
-    ff: 'ff',
-    fs: 'fs',
-    fc: 'fc',
-    cl: 'cl',
-    un: 'un',
-};
-export const RUN_KEYS = Object.values(RUN_KEY);
 
 type Look = Readonly<CellAttrs>;
 

@@ -20,10 +20,10 @@ import type {
     Run,
     SheetContent,
 } from '@workspace/lib/sheets/ops';
-import { isStructural, LOOK_KEYS } from '@workspace/lib/sheets/ops';
+import { isStructural, LOOK_KEYS, RUN_KEYS } from '@workspace/lib/sheets/ops';
 import { covers, meets } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { names, RUN_KEYS } from '../../../engine/book/apply-format';
+import { names } from '../../../engine/book/apply-format';
 import { entryAt } from '../../../engine/book/apply-input';
 import { applyOps } from '../../../engine/book/apply-ops';
 import { commutes } from '../../../engine/book/commutes';
