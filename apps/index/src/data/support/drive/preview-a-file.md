@@ -6,7 +6,7 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-11-02
+updated: 2026-11-17
 ---
 
 Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, contact files, saved emails, and calendar files all have a built-in preview. Text files over 1 MB show the file card instead.
@@ -43,8 +43,10 @@ Quick preview is not available for folders. Pressing **Space** on a folder does 
 
 When the preview is open, you can move to the next or previous file without closing it:
 
-- Click the previous and next arrow buttons in the top-right corner of the preview.
+- Click the round arrow buttons at the left and right edges of the preview.
 - Press the left and right arrow keys on the keyboard.
+
+After you click a video's controls, the arrow keys skip through the video and **Space** plays or pauses it.
 
 ## Download from the preview
 

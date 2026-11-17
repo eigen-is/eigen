@@ -70,7 +70,7 @@ async function renderQuickLook() {
             }),
         ),
     );
-    const container = document.querySelector<HTMLElement>('[data-slot="file-preview"]');
+    const container = document.querySelector<HTMLElement>('[data-slot="preview-lightbox"]');
     if (!container) throw new Error('the preview did not open');
     return { container, unmount };
 }

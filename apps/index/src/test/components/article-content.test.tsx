@@ -33,7 +33,7 @@ function stubReducedMotion(reduce: boolean) {
 }
 
 async function renderVideo() {
-    const body = renderMarkdown('::: video src="/data/about/media/sheets-chart"\n:::');
+    const body = renderMarkdown('::: video src="/data/about/media/sheets-chart" caption="A bar grows"\n:::');
     const { container } = await renderInDocument(<ArticleContent body={body} />);
     const video = container.querySelector('video');
     if (!video) throw new Error('No video rendered');
@@ -114,6 +114,29 @@ describe('carousel', () => {
         await scrollTo(0);
         expect(current()).toBe(0);
         expect(prev.disabled).toBe(true);
+    });
+
+    test('a mouse drag moves the strip to the next slide that way, and its click opens nothing', async () => {
+        stubReducedMotion(true);
+        const { strip, current } = await renderCarousel();
+        const pointer = (type: string, clientX: number) =>
+            act(async () => {
+                strip.dispatchEvent(
+                    new PointerEvent(type, { pointerType: 'mouse', button: 0, clientX, bubbles: true }),
+                );
+            });
+        await pointer('pointerdown', 500);
+        await pointer('pointermove', 400);
+        expect(strip.hasAttribute('data-dragging')).toBe(true);
+        expect(strip.scrollLeft).toBe(100);
+        await pointer('pointerup', 400);
+        await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+        strip.dispatchEvent(new Event('scroll'));
+        await act(async () => strip.querySelector<HTMLElement>('img')?.click());
+        expect(strip.scrollLeft).toBe(600);
+        expect(strip.hasAttribute('data-dragging')).toBe(false);
+        expect(current()).toBe(1);
+        expect(lightbox()).toBeNull();
     });
 
     test('a dot scrolls to its slide', async () => {
@@ -265,7 +288,7 @@ describe('ArticleContent', () => {
     });
 });
 
-// The open lightbox: what it shows, its caption, and its previous and next buttons, if any.
+// The open lightbox: what it shows, its caption as the title, and its previous and next buttons, if any.
 function lightbox() {
     const dialog = document.querySelector('[role="dialog"]');
     if (!dialog) return null;
@@ -273,9 +296,10 @@ function lightbox() {
     return {
         count: document.querySelectorAll('[role="dialog"]').length,
         src: media?.getAttribute('src'),
-        caption: dialog.querySelector('p')?.textContent,
-        prev: dialog.querySelector<HTMLButtonElement>('button[aria-label="Previous"]'),
-        next: dialog.querySelector<HTMLButtonElement>('button[aria-label="Next"]'),
+        caption: dialog.querySelector('h2')?.textContent,
+        prev: dialog.querySelector<HTMLButtonElement>('button[aria-label="Previous (←)"]'),
+        next: dialog.querySelector<HTMLButtonElement>('button[aria-label="Next (→)"]'),
+        footer: dialog.querySelector('a, button:not([aria-label])'),
     };
 }
 
@@ -295,7 +319,38 @@ describe('lightbox', () => {
         const html = '<p><img src="/a.webp" alt="A budget"></p>';
         const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, 'img');
-        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget', prev: null, next: null });
+        expect(lightbox()).toMatchObject({
+            count: 1,
+            src: '/a.webp',
+            caption: 'A budget',
+            prev: null,
+            next: null,
+            footer: null,
+        });
+    });
+
+    test('a picture in the Markdown opens from its full-screen button, and one in a link has none', async () => {
+        const body = renderMarkdown('![A budget](/a.webp)\n\n[![b](/b.webp)](#elsewhere)');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        expect(container.querySelectorAll('.media-expand').length).toBe(1);
+        expect(container.querySelector('a .media-expand')).toBeNull();
+        await clickOn(container, '.media-expand');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget' });
+    });
+
+    test('a slide’s full-screen button opens that slide, in its group', async () => {
+        const body = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        await clickOn(container, '.media-carousel-slide:nth-child(2) .media-expand');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/b.webp' });
+        expect(lightbox()?.prev).not.toBeNull();
+    });
+
+    test('a looping video opens from its full-screen button, also while it shows its controls', async () => {
+        stubReducedMotion(true);
+        await renderVideo();
+        await clickOn(document.body, '.media-video .media-expand');
+        expect(lightbox()?.src).toBe('/data/about/media/sheets-chart.h264.mp4');
     });
 
     test('a carousel image opens with the carousel as its group, at the image clicked', async () => {
@@ -314,19 +369,15 @@ describe('lightbox', () => {
         expect(lightbox()?.src).toBe('/b.webp');
     });
 
-    test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
+    test('an arrow key on a film seeks it, and one on the lightbox pages', async () => {
         const body = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
         const { container } = await renderInDocument(<ArticleContent body={body} />);
         await clickOn(container, '.media-carousel-slide video');
-        const press = (target: Element | null | undefined, handled = false) =>
+        const press = (target: Element | null | undefined) =>
             act(async () => {
-                const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
-                if (handled) event.preventDefault();
-                target?.dispatchEvent(event);
+                target?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
             });
         await press(document.querySelector('[role="dialog"] video'));
-        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
-        await press(document.querySelector('[role="dialog"]'), true);
         expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
         await press(document.querySelector('[role="dialog"]'));
         expect(lightbox()?.src).toBe('/b.webp');
@@ -363,6 +414,17 @@ describe('lightbox', () => {
             next: null,
         });
         expect(document.querySelector<HTMLVideoElement>('[role="dialog"] video')?.loop).toBe(true);
+    });
+
+    test('a film is named by its caption, on the page, on a slide and in the lightbox', async () => {
+        const body = renderMarkdown(
+            '::: video src="/data/about/media/sheets-chart" caption="A *bar* grows"\n:::\n\n::: carousel\n![Two at once](/data/about/media/sheets-hero)\n:::',
+        );
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        const names = [...container.querySelectorAll('video')].map((video) => video.getAttribute('aria-label'));
+        expect(names).toEqual(['A bar grows', 'Two at once']);
+        await clickOn(container, '.media-video video');
+        expect(document.querySelector('[role="dialog"] video')?.getAttribute('aria-label')).toBe('A bar grows');
     });
 
     test('a looping video with controls keeps its clicks for them', async () => {

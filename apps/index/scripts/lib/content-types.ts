@@ -68,10 +68,11 @@ export type ArticleMeta = {
 export type ContentManifest = { articles: ArticleMeta[] };
 
 // A picture or a film of a media grid. The grid shows `thumbnail`, or a film's `poster`, and the lightbox the `src`.
+// The caption is its text alternative too, so the build requires one.
 export type MediaItem = {
     src: string;
     type: 'image' | 'video';
-    caption?: string;
+    caption: string;
     thumbnail?: string;
     poster?: string;
 };
@@ -84,10 +85,10 @@ export type MediaGridData = { columns: (typeof gridColumns)[number]; items: Medi
 export type MediaCaption = { html: string; text: string };
 
 // A looping video's `src` names its files without their endings, and so does a video slide's.
-export type MediaVideoData = { src: string; caption?: MediaCaption };
+export type MediaVideoData = { src: string; caption: MediaCaption };
 
 export type MediaCarouselData = {
-    slides: { type: 'image' | 'video'; src: string; caption?: MediaCaption }[];
+    slides: { type: 'image' | 'video'; src: string; caption: MediaCaption }[];
     autoplay: boolean;
     caption?: MediaCaption;
 };

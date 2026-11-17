@@ -10,7 +10,7 @@ const { renderToStaticMarkup } = await import('react-dom/server');
 const { MediaGrid } = await import('../../components/media-grid');
 
 describe('MediaGrid', () => {
-    test('sets an app name in a caption apart and keeps the alt text plain', () => {
+    test('sets an app name in a caption apart, and the caption alone names the thumbnail', () => {
         const html = renderToStaticMarkup(
             <MediaGrid
                 columns="2"
@@ -19,7 +19,7 @@ describe('MediaGrid', () => {
             />,
         );
         expect(html).toContain('The inbox of <span class="ket-name">eigen|mail⟩</span>');
-        expect(html).toContain('alt="The inbox of eigen|mail⟩"');
+        expect(html).toContain('alt=""');
     });
 
     test('leaves a caption without a name as text', () => {
