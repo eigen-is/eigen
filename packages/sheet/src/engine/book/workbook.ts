@@ -6,12 +6,13 @@
 
 import type { EditResult, Literal, SheetSource } from '@workspace/formula';
 import { Engine } from '@workspace/formula';
-import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
+import { GRID_COLUMNS } from '@workspace/formula/text';
 import { compareRules } from '@workspace/lib/sheets';
 import type { BookContent } from '@workspace/lib/sheets/book-codec';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
 import { fits, MIDWAY } from '@workspace/lib/sheets/limits';
 import type { CellContent, CellRecord, Placed, SheetContent, Span } from '@workspace/lib/sheets/ops';
+import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Bands } from './bands';
@@ -95,15 +96,10 @@ export class Workbook {
     // One sheet whole, as the snapshot lists it and a `sheet` op adds it.
     public sheetContent(id: string, { bands, rows, columns, extras }: BookSheet): SheetContent {
         const cells: Placed<CellRecord>[] = [];
-        this.cellsIn(
-            id,
-            extras,
-            new ColumnSweep([[0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]]),
-            (row, column, { value, formula, extra }) => {
-                const cell = contentOf(value, formula, true, extra);
-                if (cell) cells.push([row, column, cell]);
-            },
-        );
+        this.cellsIn(id, extras, new ColumnSweep([WHOLE_GRID]), (row, column, { value, formula, extra }) => {
+            const cell = contentOf(value, formula, true, extra);
+            if (cell) cells.push([row, column, cell]);
+        });
         const look = bands.content();
         return {
             id,
@@ -287,7 +283,7 @@ export class Workbook {
         }
         const moved = this.looks.sweep(worn);
         for (const { bands } of this.parts.values()) {
-            bands.write([[0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]], (id) => moved[id]);
+            bands.write([WHOLE_GRID], (id) => moved[id]);
         }
         this.swept = this.looks.size;
     }

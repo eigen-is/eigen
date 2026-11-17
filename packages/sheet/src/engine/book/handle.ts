@@ -5,7 +5,6 @@
 
 import type { Literal } from '@workspace/formula';
 import { numberDisplay } from '@workspace/formula/format';
-import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type {
     CellAttrs,
     CellContent,
@@ -17,6 +16,7 @@ import type {
     Span,
     ValidationRecord,
 } from '@workspace/lib/sheets/ops';
+import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import { cellAt } from './apply-input';
 import type { BookSheet, Workbook } from './workbook';
 
@@ -33,8 +33,6 @@ type LookArea = {
     readonly r1: number;
     readonly look: Readonly<CellAttrs>;
 };
-
-const WHOLE_GRID: Rect = [0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1];
 
 // The workbook as it is now. A book holds no copy, so it reads every later edit too, but its sheets are the ones the
 // workbook held when it was made: one deleted since throws at a read, as the engine does, and reads again once added.

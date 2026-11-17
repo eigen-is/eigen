@@ -109,10 +109,6 @@ export class Extras {
         });
     }
 
-    public content(): Placed<Extra>[] {
-        return this.cells([0, 0, GRID_ROWS - 1, GRID_COLUMNS - 1]);
-    }
-
     // Puts what a cell holds in place of what it held. A cell that holds none of the three has no entry, so writing
     // none deletes.
     public write(row: number, column: number, extra: Extra): void {
