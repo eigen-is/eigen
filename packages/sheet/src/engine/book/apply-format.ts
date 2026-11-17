@@ -5,7 +5,7 @@
 // held it, joined into rectangles, then the old content of each rich cell whose runs a format cannot say back.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
-import { EXTRA_WEIGHT, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
+import { MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     CellAttrKey,
     CellAttrs,
@@ -81,7 +81,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
                 if (tiles > MAX_STYLE_RUNS) throw new Refusal('too-many-formats');
             }
         }
-        const over = link ? book.over(0, unitsOf({ link }) * EXTRA_WEIGHT * cells) : null;
+        const over = link ? book.over({ extras: unitsOf({ link }) * cells }) : null;
         if (over) throw new Refusal(over);
     }
 

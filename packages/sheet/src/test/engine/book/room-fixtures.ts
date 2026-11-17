@@ -3,7 +3,7 @@
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { WorkbookWeight } from '@workspace/lib/sheets/limits';
-import { BAND_WEIGHT, EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
+import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellRecord, FormatOp, Placed, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { WHOLE_GRID } from '@workspace/lib/sheets/rect';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -38,10 +38,6 @@ export function refusalOf(run: () => unknown): RefusalKey | undefined {
         throw error;
     }
     return undefined;
-}
-
-export function formatsOf({ runs, bands, extras }: Pick<WorkbookWeight, 'runs' | 'bands' | 'extras'>): number {
-    return runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
 }
 
 // What the limits count of a book, walked from what its parts and its engine list: per column the row after its

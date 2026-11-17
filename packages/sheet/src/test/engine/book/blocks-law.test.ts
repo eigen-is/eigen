@@ -53,10 +53,10 @@ function checkCount(book: Workbook, where: string) {
 }
 // After every write inside a batch: every `over` call is a point between writes.
 const realOver = Workbook.prototype.over;
-Workbook.prototype.over = function (this: Workbook, slots = 0, formats = 0) {
+Workbook.prototype.over = function (this: Workbook, more) {
     // A sheet add weighs its new part before it is listed (the reviewer's ADDING case).
     if ((CUR.op as { kind?: string } | null)?.kind !== 'sheet') checkCount(this, 'over');
-    return realOver.call(this, slots, formats);
+    return realOver.call(this, more);
 };
 afterAll(() => {
     Workbook.prototype.over = realOver;

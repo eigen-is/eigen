@@ -43,13 +43,16 @@ export type WorkbookWeight = {
     readonly sheets: number;
 };
 
+// What the limit on formats counts, in runs: the runs, the bands and what cells hold beyond a value.
+export function formatsOf({ runs, bands, extras }: Pick<WorkbookWeight, 'runs' | 'bands' | 'extras'>): number {
+    return runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
+}
+
 // The first limit a workbook of this weight is over, or null: the limits as they are for a workbook a batch leaves,
 // `times` each for one inside a batch.
 export function fits(weight: WorkbookWeight, times = 1): RefusalKey | null {
     if (weight.slots > times * MAX_VALUE_SLOTS) return 'too-many-cells';
-    if (weight.runs + weight.bands * BAND_WEIGHT + weight.extras * EXTRA_WEIGHT > times * MAX_STYLE_RUNS) {
-        return 'too-many-formats';
-    }
+    if (formatsOf(weight) > times * MAX_STYLE_RUNS) return 'too-many-formats';
     if (weight.records > times * MAX_RECORDS_PER_TYPE) return 'too-many-records';
     if (weight.sheets > times * MAX_SHEETS) return 'too-many-sheets';
     return null;

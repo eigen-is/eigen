@@ -5,7 +5,6 @@
 // held, for an edit that takes them, and turns formulas an edit could not keep, such as a rename, back into their text.
 
 import type { EditResult, Literal } from '@workspace/formula';
-import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -37,7 +36,7 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
         const units = filled(op, (column, length) => {
             slots += Math.max(0, length - engine.columnLength(sheet, column));
         });
-        const over = book.over(slots, units * EXTRA_WEIGHT);
+        const over = book.over({ slots, extras: units });
         if (over) throw new Refusal(over);
     }
     const gathered: Gathered = { runs: [], cells: [] };

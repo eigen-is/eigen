@@ -33,7 +33,7 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
         for (let column = book.engine.lastColumn(sheet); column >= 0; column -= 1) {
             if (book.engine.columnLength(sheet, column) > index) pushed += 1;
         }
-        const over = book.over(pushed * count);
+        const over = book.over({ slots: pushed * count });
         if (over) throw new Refusal(over);
     }
     const last = index + count - 1;

@@ -1,13 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import {
-    BAND_WEIGHT,
-    EXTRA_WEIGHT,
-    MAX_RECORDS_PER_TYPE,
-    MAX_SHEETS,
-    MAX_STYLE_RUNS,
-} from '@workspace/lib/sheets/limits';
+import { BAND_WEIGHT, formatsOf, MAX_RECORDS_PER_TYPE, MAX_SHEETS, MAX_STYLE_RUNS } from '@workspace/lib/sheets/limits';
 import type {
     Batch,
     CellContent,
@@ -343,14 +337,11 @@ describe('engine/book/apply-ops — LAW 1: a format past the format limit is ref
             looks: [{ bl: 1 }, { it: 1 }],
             bands: Array.from({ length: columns }, (_, column) => [column, 1, 0, 1 + (column % 2)]).flat(),
         });
-    const formatsOf = (book: Workbook) => {
-        const { runs, bands, extras } = book.weight();
-        return runs + bands * BAND_WEIGHT + extras * EXTRA_WEIGHT;
-    };
     const near = (() => {
         const content = twoSheets();
         const full = Array.from({ length: 7 }, (_, at) => filler(`f${at}`, GRID_COLUMNS));
-        const left = MAX_STYLE_RUNS - formatsOf(new Workbook({ ...content, sheets: [...content.sheets, ...full] }));
+        const left =
+            MAX_STYLE_RUNS - formatsOf(new Workbook({ ...content, sheets: [...content.sheets, ...full] }).weight());
         // A filler band weighs its run and itself.
         const columns = Math.floor((left - MARGIN) / (1 + BAND_WEIGHT));
         return { ...content, sheets: [...content.sheets, ...full, filler('f7', columns)] };
@@ -371,11 +362,11 @@ describe('engine/book/apply-ops — LAW 1: a format past the format limit is ref
 
     test('the book is a margin short of the limit, and the landing ops fit in it', () => {
         const book = new Workbook(near);
-        const short = MAX_STYLE_RUNS - formatsOf(book);
+        const short = MAX_STYLE_RUNS - formatsOf(book.weight());
         expect(short).toBeGreaterThanOrEqual(MARGIN);
         expect(short).toBeLessThan(MARGIN + 1 + BAND_WEIGHT);
         land(book, batch(...LANDING, TRAILING));
-        expect(MAX_STYLE_RUNS - formatsOf(book)).toBeGreaterThan(MARGIN / 2);
+        expect(MAX_STYLE_RUNS - formatsOf(book.weight())).toBeGreaterThan(MARGIN / 2);
     });
 
     for (const [reached, past] of PAST) {

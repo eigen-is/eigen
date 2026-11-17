@@ -167,7 +167,7 @@ export class Workbook {
         }
         const part = this.partsOf(sheet);
         try {
-            const over = checked ? this.over(slotsOf(sheet)) : null;
+            const over = checked ? this.over({ slots: slotsOf(sheet) }) : null;
             if (over) throw new Refusal(over);
             const result = this.engine.addSheet(sourceOf(sheet), place);
             this.place(sheet.id, part, place);
@@ -215,13 +215,12 @@ export class Workbook {
         return { slots: this.engine.slots(), ...this.held, records: this.records.weight(), sheets: this.parts.size };
     }
 
-    // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this many slots
-    // and this much weight of formats more, or null. Records are weighed at the end of a batch only.
-    public over(slots = 0, formats = 0): RefusalKey | null {
-        const { runs, bands, extras } = this.held;
-        const sheets = this.parts.size;
-        const weight = { slots: this.engine.slots() + slots, runs: runs + formats, bands, extras, records: 0, sheets };
-        return fits(weight, MIDWAY);
+    // The limit the workbook would be over inside a batch, where each holds `MIDWAY` times, with this much more, or
+    // null. Records are weighed at the end of a batch only.
+    public over({ slots = 0, runs = 0, bands = 0, extras = 0 }: Partial<WorkbookWeight> = {}): RefusalKey | null {
+        const { held } = this;
+        const more = { runs: held.runs + runs, bands: held.bands + bands, extras: held.extras + extras };
+        return fits({ slots: this.engine.slots() + slots, ...more, records: 0, sheets: this.parts.size }, MIDWAY);
     }
 
     // Forgets the looks no cell wears once the table holds twice the looks its last sweep left, renumbering the rest in

@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { GRID_COLUMNS } from '@workspace/formula/text';
-import { MAX_STYLE_RUNS, MIDWAY } from '@workspace/lib/sheets/limits';
+import { formatsOf, MAX_STYLE_RUNS, MIDWAY } from '@workspace/lib/sheets/limits';
 import type { CellContent, CellRecord, InputOp, Op, Placed, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
@@ -14,7 +14,7 @@ import { RunList } from '../../../engine/book/run-list';
 import { Workbook } from '../../../engine/book/workbook';
 import type { Book } from './book-fixtures';
 import { bytes } from './bytes';
-import { bookOf, format, formatsOf, LAST_COLUMN, LAST_ROW, refusalOf, sheetOf, striped, WHOLE } from './room-fixtures';
+import { bookOf, format, LAST_COLUMN, LAST_ROW, refusalOf, sheetOf, striped, WHOLE } from './room-fixtures';
 
 const LINK: CellLink = { type: 'webpage', address: 'https://eigen.is' };
 const EVERY_COLUMN = Array.from({ length: GRID_COLUMNS }, (_, column) => column);
@@ -609,7 +609,7 @@ describe('engine/book/room — a refused batch is taken back within four limits,
             let peak = 0;
             let total = { read: 0, moved: 0 };
             const over = book.over.bind(book);
-            const asked = spyOn(book, 'over').mockImplementation((slots, formats) => over(slots, formats));
+            const asked = spyOn(book, 'over').mockImplementation((more) => over(more));
             const doors = BANDS_WRITES.map((door) => {
                 const real = Bands.prototype[door];
                 return spyOn(Bands.prototype, door).mockImplementation(function (this: Bands, ...args: never[]) {
@@ -620,9 +620,9 @@ describe('engine/book/room — a refused batch is taken back within four limits,
             });
             try {
                 total = workOf((work) => {
-                    asked.mockImplementation((slots, formats) => {
+                    asked.mockImplementation((more) => {
                         forward = work.read + work.moved;
-                        return over(slots, formats);
+                        return over(more);
                     });
                     // The only sheet shown cannot be deleted: the batch is refused after its first op landed.
                     expect(refusalOf(() => applyOps(book, [op, refusedLater]))).toBe('last-sheet');

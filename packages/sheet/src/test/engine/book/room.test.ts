@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { GRID_ROWS } from '@workspace/formula/text';
 import { encodeBook } from '@workspace/lib/sheets/book-codec';
-import { fits, MAX_STYLE_RUNS, MAX_VALUE_SLOTS, MIDWAY } from '@workspace/lib/sheets/limits';
+import { fits, formatsOf, MAX_STYLE_RUNS, MAX_VALUE_SLOTS, MIDWAY } from '@workspace/lib/sheets/limits';
 import type { CellRecord, InputOp, Op, Placed, Rect, SheetContent } from '@workspace/lib/sheets/ops';
 import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import type { RefusalKey } from '@workspace/lib/sheets/refusal';
@@ -21,7 +21,6 @@ import {
     ballast,
     bookOf,
     format,
-    formatsOf,
     LAST_COLUMN,
     LAST_ROW,
     refusalOf,
@@ -84,10 +83,10 @@ describe('engine/book/room — the counts the workbook keeps are what a walk of 
                     adding = false;
                 }
             });
-            spyOn(book, 'over').mockImplementation((slots, formats) => {
+            spyOn(book, 'over').mockImplementation((more) => {
                 asked += 1;
                 if (!adding) expect(book.weight()).toMatchObject(walked(book));
-                return over(slots, formats);
+                return over(more);
             });
             let model: Model = modelOf(book.content());
             for (let round = 0; round < 6; round += 1) {

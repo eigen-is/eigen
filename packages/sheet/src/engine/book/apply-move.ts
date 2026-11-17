@@ -5,7 +5,6 @@
 // on outside it held, the records the move removed or changed, and the formulas it made lossy.
 
 import type { Move } from '@workspace/formula';
-import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { FormatOp, InputOp, MoveOp, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
 import { covers, intersect, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
@@ -43,8 +42,7 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         const writes = [...source.bands.spans([top, left, top, right])];
         const growth = landing.bands.growth(writes.map(({ c0, c1 }): Span => [c0 + columnShift, c1 + columnShift]));
         // An upper bound: a move with the book at a limit at both ends can be refused though it would fit.
-        const formats = growth.runs + growth.bands * BAND_WEIGHT + source.bands.tiles(op.from);
-        const over = book.over(slots, formats);
+        const over = book.over({ slots, runs: growth.runs + source.bands.tiles(op.from), bands: growth.bands });
         if (over) throw new Refusal(over);
     }
     // The move back leaves the landed-on cells outside the block plain and empty, so only those are written back.
