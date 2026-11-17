@@ -98,9 +98,10 @@ export class ColumnSweep {
         if (rects.length === 0) return;
         const edges = rects.flatMap(([, left, , right]) => [left, right + 1]).sort((a, b) => a - b);
         this.edges = edges.filter((edge, at) => edge !== edges[at + 1]);
+        // Ties go by top, so the rectangles that start or end at one column join and leave `live` at its end.
         const places = [...rects.keys()];
-        this.starts = places.toSorted((a, b) => rects[a][1] - rects[b][1]);
-        this.ends = places.sort((a, b) => rects[a][3] - rects[b][3]);
+        this.starts = places.toSorted((a, b) => rects[a][1] - rects[b][1] || rects[a][0] - rects[b][0]);
+        this.ends = places.sort((a, b) => rects[a][3] - rects[b][3] || rects[b][0] - rects[a][0]);
     }
 
     // Tells `visit` the first and last column of each stretch, in column order, while `live` holds its rectangles.
