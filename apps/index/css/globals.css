@@ -159,7 +159,7 @@
 
     /* A picture or film opens bigger on a click, unless a link or a button holds it. */
     :is(img, figure video):not(a img, button img) {
-        cursor: zoom-in;
+        cursor: pointer;
     }
 
     /* A media block from the Markdown, such as a looping video or a carousel. */

@@ -30,7 +30,7 @@ export function MediaGrid({ columns, items, onOpen }: MediaGridData & { onOpen: 
 
 function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: MediaItem & { onClick: () => void }) {
     return (
-        <button type="button" className="group block w-full text-left" onClick={onClick}>
+        <button type="button" className="group block w-full cursor-pointer text-left" onClick={onClick}>
             <div className="media-frame overflow-hidden rounded-lg bg-muted">
                 {type === 'image' && (
                     <img
