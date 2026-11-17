@@ -435,6 +435,105 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
     }, 120_000);
 });
 
+describe('engine/book/room — an op reads its blocks, not the cells and entries between them', () => {
+    // The rows the engine walks down a column, the searches of the extras, and the items the lists take or put one by
+    // one while `op` lands: a splice's shift of the items behind it is one native move, as in every single write.
+    const readWork = (book: Workbook, op: Op) => {
+        const { engine } = book;
+        const cells = engine.cells.bind(engine);
+        let work = 0;
+        const walks = spyOn(engine, 'cells').mockImplementation(
+            (sheet, cell, top = 0, left = 0, bottom = LAST_ROW, right = LAST_COLUMN) => {
+                for (let column = left; column <= right; column += 1) {
+                    work += Math.max(0, Math.min(bottom + 1, engine.columnLength(sheet, column)) - top);
+                }
+                cells(sheet, cell, top, left, bottom, right);
+            },
+        );
+        const { push, splice } = Array.prototype;
+        const search = Reflect.get(Extras.prototype, 'search');
+        Reflect.set(Extras.prototype, 'search', function (this: Extras, place: number) {
+            work += 1;
+            return Reflect.apply(search, this, [place]);
+        });
+        Array.prototype.push = function (this: unknown[], ...items: unknown[]) {
+            work += items.length;
+            return push.apply(this, items);
+        };
+        Array.prototype.splice = function (this: unknown[], at: number, removed: number, ...items: unknown[]) {
+            work += removed + items.length;
+            return splice.call(this, at, removed, ...items);
+        };
+        let inverse: Op[] = [];
+        try {
+            inverse = applyOps(book, [op]);
+        } finally {
+            Object.assign(Array.prototype, { push, splice });
+            Reflect.set(Extras.prototype, 'search', search);
+            walks.mockRestore();
+        }
+        return { work, inverse };
+    };
+    // The work of one op on a fresh book, and its undo back to the bytes before it.
+    const measuredRead = (cells: Placed<CellRecord>[], op: Op) => {
+        const book = new Workbook(bookOf(sheetOf('S', { cells })));
+        const before = bytes(book);
+        const { work, inverse } = readWork(book, op);
+        applyOps(book, inverse);
+        expect(bytes(book)).toBe(before);
+        return work;
+    };
+    const column = (length: number, at: number, content: CellRecord) =>
+        Array.from({ length }, (_, row): Placed<CellRecord> => [row, at, content]);
+
+    test('two 2-cell runs at the top and the bottom of a column of 200,000 values read their four cells', () => {
+        const op = input([
+            [[0, 0, 1, 0], { v: 'a' }],
+            [[199_998, 0, 199_999, 0], { v: 'b' }],
+        ]);
+        // Two blocks over one column, four cells inside.
+        expect(measuredRead(column(200_000, 0, { v: 1 }), op)).toBeLessThanOrEqual(40 * (2 + 4));
+    }, 60_000);
+
+    test('two full-width rows cleared at the top and the bottom of 30 columns of 40,000 values read the two rows', () => {
+        const cells = Array.from({ length: 30 }, (_, at) => column(40_000, at, { v: at })).flat();
+        const op = input([
+            [[0, 0, 0, LAST_COLUMN], null],
+            [[39_999, 0, 39_999, LAST_COLUMN], null],
+        ]);
+        expect(measuredRead(cells, op)).toBeLessThanOrEqual(8 * (2 * GRID_COLUMNS + 60));
+    }, 60_000);
+
+    test('a link set, cleared or input over the top and the bottom of a column of 30,000 links reads those cells', () => {
+        const cells = column(30_000, 5, { v: 1, link: LINK });
+        const ends: Rect[] = [
+            [0, 5, 0, 5],
+            [29_999, 5, 29_999, 5],
+        ];
+        const ops: Op[] = [
+            format(ends, { link: { type: 'webpage', address: 'https://eigen.is/other' } }),
+            format(ends, undefined, ['link']),
+            input([
+                [[0, 5, 1, 5], { v: 2, link: LINK }],
+                [[29_998, 5, 29_999, 5], { v: 2 }],
+            ]),
+        ];
+        for (const op of ops) expect(measuredRead(cells, op)).toBeLessThanOrEqual(40 * (2 + 4));
+    }, 60_000);
+
+    test('a format over 500 full-width rows under a link or a rich text in every column searches each column once', () => {
+        const rows = Array.from({ length: 500 }, (_, k): Rect => [k + 1, 0, k + 1, LAST_COLUMN]);
+        const cases: [CellRecord, Op][] = [
+            [{ link: LINK }, format(rows, undefined, ['link'])],
+            [{ s: [{ v: 'a', it: 1 }] }, format(rows, { bl: 1 })],
+        ];
+        for (const [cell, op] of cases) {
+            const cells = EVERY_COLUMN.map((at): Placed<CellRecord> => [0, at, cell]);
+            expect(measuredRead(cells, op)).toBeLessThanOrEqual(8 * (GRID_COLUMNS + rows.length));
+        }
+    }, 60_000);
+});
+
 describe('engine/book/room — a refused batch is taken back within four limits, for at most three times its work', () => {
     const refusedLater: Op = { kind: 'sheet', delete: 'S' };
     // The way back of the columns eaten out of a band is a staircase over tall lists: each of its steps moves the

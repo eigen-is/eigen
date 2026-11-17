@@ -101,13 +101,11 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
     const rich: (readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look])[] = [];
     const links: Placed<CellLink>[] = [];
     if (runKeys.length > 0 || linked) {
-        for (const rect of op.ranges) {
-            for (const [row, column, extra] of extras.cells(rect)) {
-                if (extra.s && runKeys.length > 0) {
-                    rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
-                }
-                if (extra.link && linked) links.push([row, column, extra.link]);
+        for (const [row, column, extra] of extras.within(op.ranges)) {
+            if (extra.s && runKeys.length > 0) {
+                rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
             }
+            if (extra.link && linked) links.push([row, column, extra.link]);
         }
     }
 
