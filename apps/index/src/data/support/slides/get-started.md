@@ -7,10 +7,13 @@ tags: [slides, getting-started, presentation, canvas]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Slides is where you build presentations in Eigen. Each presentation is a collection of slides, 16:9 or 4:3, that you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
+
+::: video src="/data/about/media/slides-hero" caption="A line on a slide changed, and undo takes it back."
+:::
 
 ## Create a presentation
 

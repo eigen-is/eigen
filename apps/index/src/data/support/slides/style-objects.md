@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, styling, fill, stroke, colors, text]
 related: [slides/insert-content, slides/draw-shapes-and-arrows, slides/arrange-and-align]
 order: 50
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 Select an object on a slide and the panel on the right fills with its style controls. This page lists every section, top to bottom, and what each control does.
@@ -38,6 +38,10 @@ Shows for a text box and for a shape that holds text: a rectangle, diamond, elli
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** |
 | **Align** | Left, center, right, or justified |
 | **Vertical** | Top, middle, or bottom of the box |
+
+::: grid columns="1"
+![A heading selected, with its font in the panel beside it](/data/about/media/slides-still-heading.webp)
+:::
 
 ### Spacing
 

@@ -7,10 +7,13 @@ tags: [contacts, getting-started, people, address-book]
 related: [contacts/add-a-contact, contacts/edit-or-delete, contacts/search-contacts]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Contacts is where you keep the people you work with. You can store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page. This page is a quick tour of what you can do.
+
+::: video src="/data/about/media/contacts-hero" caption="A search in a team's address book, and a contact opened."
+:::
 
 ## The contact list
 

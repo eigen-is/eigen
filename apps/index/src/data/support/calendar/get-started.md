@@ -7,10 +7,13 @@ tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Calendar is where you keep your schedule in Eigen. You can create events, invite other people, and see calendars that others have shared with you. This page is a quick tour of the layout and the things you'll do most.
+
+::: video src="/data/about/media/calendar-hero" caption="An event opened on its guests and their answers, then a team's calendar hidden and shown again."
+:::
 
 ## The two views
 

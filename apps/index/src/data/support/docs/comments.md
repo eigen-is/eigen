@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-11-10
+updated: 2026-11-17
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -53,6 +53,9 @@ Click the filter button (the funnel icon) at the top of the sidebar to narrow th
 Click a comment in the sidebar (or click its highlighted text in the document) to open the thread. Type your reply in the **Reply...** box at the bottom and press Enter to send.
 
 To @mention someone, type `@` followed by their name.
+
+::: video src="/data/about/media/docs-comment" caption="A comment opened from the sidebar, with the replies in its thread."
+:::
 
 ## Resolve a comment
 

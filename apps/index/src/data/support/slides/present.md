@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, full-screen]
 related: [slides/get-started, slides/add-slides]
 order: 60
-updated: 2026-10-27
+updated: 2026-11-17
 ---
 
 You can present your slides straight from the Slides editor, in full screen, without any extra software.
@@ -29,6 +29,9 @@ With the keyboard:
 - **Left arrow**, **Up arrow**, or **Page Up** for the previous slide.
 
 A presentation clicker sends those same keys, so it works too. On a phone, tap the screen to move to the next slide.
+
+::: video src="/data/about/media/slides-present" caption="A deck presented slide by slide, and back to the editor."
+:::
 
 ## Leave the presentation
 

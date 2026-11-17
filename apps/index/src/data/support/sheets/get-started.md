@@ -7,10 +7,13 @@ tags: [sheets, getting-started, spreadsheet, grid]
 related: [sheets/create-and-edit, sheets/enter-and-edit-data, sheets/formulas]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-02
+updated: 2026-11-17
 ---
 
 Sheets is Eigen's spreadsheet editor. You can create a spreadsheet from scratch, import an Excel file, enter data and formulas, and share the result with other people. Everything saves as you work, so there is nothing to click when you are done.
+
+::: video src="/data/about/media/sheets-hero" caption="A formula typed, the totals update, and undo takes it back."
+:::
 
 ## Open Sheets
 

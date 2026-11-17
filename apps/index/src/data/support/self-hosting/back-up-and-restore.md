@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, s3, cron]
 related: [self-hosting/move-to-another-server, self-hosting/update, admin/server-settings, admin/back-up-home, admin/backup-contents]
 order: 90
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops. Only one thing can wait: while the backup copies one very large file on a drive, a rename or move on that drive, and the saves and uploads on that drive after it. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
@@ -69,6 +69,10 @@ It prints each step, then the name and size of the backup. Pick what goes in:
 Backups land in `backups/` in the install folder, named `server-<why>-<level>-<date>-<time>.tar`, where `<why>` is `scheduled`, `manual`, or `pre-update`. Eigen checks that the folder has room before it starts. Backups you make by hand are never deleted by Eigen: delete them in **Settings → Backups** when you no longer need them. Treat a backup like `.env.production`: it holds everything.
 
 With Eigen stopped there is nothing to run the backup, so `./eigen backup` refuses. A copy of `data/` and `.env.production` is a backup too.
+
+::: grid columns="1"
+![Settings, Backups: the nightly backup turned on, and a backup of the whole server made by hand, verified](/data/about/media/admin-still-backups.webp)
+:::
 
 ## What a backup leaves out
 

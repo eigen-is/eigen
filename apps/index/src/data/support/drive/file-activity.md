@@ -7,7 +7,7 @@ tags: [drive, activity, history, collaboration, docs]
 related: [drive/watch-for-changes, drive/file-versions]
 crossSections: [docs]
 order: 130
-updated: 2026-11-04
+updated: 2026-11-17
 ---
 
 Eigen keeps a record of what happens to your files: who created one, who edited it, who changed the sharing, and who left a comment. You can read that record in Drive, or in more detail inside an editor.
@@ -22,6 +22,10 @@ The **Recent activity** block lists the five most recent things that happened. E
 For a folder, the list covers everything inside it as well, so you can see activity on a whole project without opening each file.
 
 The block only appears once there is something to show. A file nobody has touched since it arrived has no **Recent activity** section.
+
+::: grid columns="1"
+![A folder selected, with who has access and its recent activity beside the list](/data/about/media/drive-still-activity.webp)
+:::
 
 ## What the lines mean
 

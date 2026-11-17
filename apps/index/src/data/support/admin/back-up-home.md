@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -43,6 +43,9 @@ A backup file holds everything in that account, including the stored storage cre
 </div>
 
 Only one backup or restore can run per user or per team at a time. If a job is already running, **Create backup** stays disabled until it finishes. While a backup of the whole server copies this user or team, a new job is refused for that moment too.
+
+::: video src="/data/about/media/admin-backup" caption="A member's backup created and verified, then deleted again."
+:::
 
 ## Download an archive
 

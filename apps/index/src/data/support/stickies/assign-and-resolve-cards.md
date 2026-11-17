@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, kanban, assignee, resolve]
 related: [stickies/add-and-edit-cards, stickies/filter-a-board, stickies/card-comments]
 order: 35
-updated: 2026-11-09
+updated: 2026-11-17
 ---
 
 An assignee says who is looking after a card. Resolving a card says the work on it is done. Both need write access to the board.
@@ -31,6 +31,9 @@ A person gets at most one email an hour for each board. Any other cards you assi
 To take the assignee off again, choose **Unassigned**.
 
 On the board, the assignee shows as a small avatar in the bottom corner of the card. On an open card assigned to you, the avatar has a colored ring, so the cards waiting on you stand out.
+
+::: video src="/data/about/media/stickies-assign" caption="A card assigned to someone from its menu, then taken off again."
+:::
 
 ## Resolve a card
 

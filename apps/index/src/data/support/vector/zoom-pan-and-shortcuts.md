@@ -6,7 +6,7 @@ category: Reference
 tags: [vector, shortcuts, keyboard, zoom, navigation, search]
 related: [vector/get-started, vector/arrange-and-align]
 order: 60
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Vector gives you an endless canvas to draw on. This page covers how to move around it, how to find text in a drawing, and every keyboard shortcut, grouped so you can look one up fast.
@@ -22,6 +22,9 @@ You pan and zoom the canvas with the mouse or trackpad. Nothing you do here chan
 - **Pan by dragging** when you'd rather not scroll. Hold the **Space** bar and drag, or drag with the middle mouse button. Both move the canvas without touching your objects.
 
 Zoom runs from 10% right up to 3000%.
+
+::: video src="/data/about/media/vector-zoom" caption="A drawing zoomed out to see all of it, and back in."
+:::
 
 ### The zoom readout
 

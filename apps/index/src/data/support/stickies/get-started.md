@@ -7,10 +7,13 @@ tags: [stickies, kanban, cards, columns, getting-started]
 related: [stickies/create-board, stickies/add-and-edit-cards, stickies/move-cards, stickies/card-comments]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-17
 ---
 
 Stickies is a kanban board. You organize work into columns, and each column holds cards. A card has a title, an optional description, a color, and its own comment thread where you can discuss it with the people you share the board with. This page is a quick tour of what you can do.
+
+::: video src="/data/about/media/stickies-hero" caption="A card dragged into the next column, and undo puts it back."
+:::
 
 ## The board
 

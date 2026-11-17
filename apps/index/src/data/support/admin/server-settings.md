@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-11-11
+updated: 2026-11-17
 ---
 
 The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
@@ -17,6 +17,10 @@ To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click 
 **Organization name** is the name people see in Eigen and in the mail it sends. You can change it here.
 
 **Web address** and **Mail domain** are shown but can't be changed. They were set when the server was first set up, and every account's address is on the mail domain.
+
+::: grid columns="1"
+![The top of Settings: the organization name, the web address and the server](/data/about/media/admin-still-settings.webp)
+:::
 
 ## Server
 

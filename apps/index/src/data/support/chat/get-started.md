@@ -7,10 +7,13 @@ tags: [chat, getting-started, messages, rooms, teams]
 related: [chat/personal-and-team-chats, chat/send-messages]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-02
+updated: 2026-11-17
 ---
 
 Chat lets you send messages to other people in Eigen, organize conversations into named rooms, and share files without leaving the browser. This page is a quick tour of what you can do.
+
+::: video src="/data/about/media/chat-pair" caption="One room in two windows: a message sent on the right arrives on the left, then is deleted again."
+:::
 
 ## Your chat rooms
 

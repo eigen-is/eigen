@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/get-started]
 order: 20
-updated: 2026-11-15
+updated: 2026-11-17
 ---
 
 Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with everyone on your Eigen server who has the link, and decide whether they can view it or also make changes.
@@ -20,6 +20,9 @@ Everything in Drive is private to you until you share it. You can share a file o
 5. Click **Save**.
 
 To remove someone later, open the same dialog, set their dropdown to **Remove**, and click **Save**.
+
+::: video src="/data/about/media/drive-share" caption="A person added as a viewer in the Share dialog, then cancelled instead of saved."
+:::
 
 ## Share with a team
 
