@@ -66,6 +66,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Changing slides in Slides** — going to another slide drops the selection on the slide you left, so the properties panel no longer edits a box you can't see
 - **Invitations in Mail** — an invitation shows one attachment, its `invite.ics`, without a nameless second chip beside it. An invitation that sends only the calendar keeps its chip and **Import to Calendar**
 - **Replies in Mail** — a reply has no blank lines between your text and the quoted message
+- **New mail from the bell** — a mail you open from a notification stays read in the list after you move on, instead of showing its unread dot until a reload
 - **Keyboard in Contacts** — the highlighted person is the one Enter opens, also when the list holds a name filed under #, such as Łukasz or Иван
 - **Names in Contacts** — a contact saved with capitals in its address, such as Grace@example.com, shows its name and photo wherever that person appears
 - **Calendar colours** — event names and checkboxes on a light calendar colour, such as pale yellow, are black, so they stay readable. A label in Contacts reads the same way, in light and dark mode

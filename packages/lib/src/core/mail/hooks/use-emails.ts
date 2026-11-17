@@ -1,6 +1,6 @@
 // The mail app's queries and mutations for messages: the paged mailbox list, one message, and the
-// read, flag, move and delete changes. Those four patch the cached lists before the server answers,
-// and the SSE handler skips the echo of a change this tab already patched in.
+// read, flag, move and delete changes. Those four patch the cached lists before the server answers
+// and again when it does, and the SSE handler skips the echo of a change this tab already patched in.
 
 import type { InfiniteData, QueryClient, UseInfiniteQueryResult } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -121,7 +121,8 @@ export function useDeleteEmail() {
                 'remove',
                 email.mailbox === MAILBOX_TRASH ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
             ),
-        onSuccess: (email) => {
+        onSuccess: (email, _email, context) => {
+            void confirmMailMutation(queryClient, context);
             if (email.mailbox === MAILBOX_TRASH) {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
@@ -164,7 +165,8 @@ export function useToggleReadEmail() {
                 SSEventType.MAIL_READ_CHANGED,
             );
         },
-        onSuccess: (email) => {
+        onSuccess: (email, _vars, context) => {
+            void confirmMailMutation(queryClient, context);
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
@@ -201,7 +203,10 @@ export function useToggleFlaggedEmail() {
                 SSEventType.MAIL_FLAGS_CHANGED,
             );
         },
-        onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
+        onSuccess: (email, _vars, context) => {
+            void confirmMailMutation(queryClient, context);
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+        },
         onError: (error, _vars, context) => {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
@@ -225,7 +230,8 @@ export function useMoveEmail() {
         },
         onMutate: ({ email }) =>
             beginOptimisticMailMutation(queryClient, ownerId, email.id, 'remove', SSEventType.MAIL_MOVED),
-        onSuccess: (email, variables) => {
+        onSuccess: (email, variables, context) => {
+            void confirmMailMutation(queryClient, context);
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             // Only the source list was patched ahead of the server, so the target list reloads to show the message.
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, variables.mailbox) });
@@ -247,9 +253,16 @@ export function useOpenWriteEmailTo(): (addresses: string | readonly string[]) =
 }
 
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
-type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
+type MailMutationContext = {
+    snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
+    ownerId: string;
+    messageId: string;
+    patch: EmailListPatch;
+};
 
-// The fetches are cancelled before the snapshot, so a page that lands late can't overwrite the patch.
+// The fetches with data are cancelled before the snapshot, so a page that lands late can't overwrite the patch. A
+// list still on its first fetch keeps fetching: TanStack never restarts a cancelled query that had no data, and the
+// confirm below corrects its answer.
 async function beginOptimisticMailMutation(
     queryClient: QueryClient,
     ownerId: string,
@@ -257,16 +270,28 @@ async function beginOptimisticMailMutation(
     patch: EmailListPatch,
     event: SSEventMail['type'],
 ): Promise<MailMutationContext> {
-    await queryClient.cancelQueries({ queryKey: emailKeys.lists(ownerId) });
+    await queryClient.cancelQueries({
+        queryKey: emailKeys.lists(ownerId),
+        predicate: (query) => query.state.data !== undefined,
+    });
     const snapshot = queryClient.getQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) });
-    // TanStack never restarts a canceled query that had no data yet, so a list still on its first
-    // fetch would stay empty for good.
-    for (const [key, data] of snapshot) {
-        if (data === undefined) queryClient.refetchQueries({ queryKey: key });
-    }
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    return { snapshot };
+    return { snapshot, ownerId, messageId, patch };
+}
+
+// A list page the server read before it stored the change can land after the patch and undo it, and the echo that
+// would correct it is skipped. So once the server answers, every list fetch still running is cancelled, the patch is
+// applied again, and the cancelled fetches start over, now asking after the write. The cancel comes first: a refetch
+// of a list with no data joins the fetch already running instead of sending a new one.
+async function confirmMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): Promise<void> {
+    if (!context) return;
+    const { ownerId, messageId, patch } = context;
+    const lists = { queryKey: emailKeys.lists(ownerId) };
+    const fetching = queryClient.getQueryCache().findAll({ ...lists, fetchStatus: 'fetching' });
+    await queryClient.cancelQueries(lists);
+    patchEmailInLists(queryClient, ownerId, messageId, patch);
+    for (const query of fetching) queryClient.refetchQueries({ queryKey: query.queryKey, exact: true });
 }
 
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {
