@@ -202,6 +202,23 @@ export function restyled(runs: readonly Run[], keys: readonly (keyof RunStyle)[]
     });
 }
 
+// The formats that put each look back over the cells that wore it, given look by look: the look's keys set and the
+// keys it lacks cleared, so a look is put back whole whatever the cells wear then.
+export function wornLooks(
+    book: Workbook,
+    sheet: string,
+    worn: readonly (readonly [look: number, rect: Rect])[],
+): FormatOp[] {
+    return [...Map.groupBy(worn, ([look]) => look)].map(([id, rects]) => {
+        const areas = new Areas();
+        for (const [, rect] of rects) areas.add(...rect);
+        const look = book.looks.look(id);
+        const clear = LOOK_KEYS.filter((key) => look[key] === undefined);
+        const format: FormatOp = { kind: 'format', sheet, ranges: areas.joined(), set: { ...look } };
+        return clear.length > 0 ? { ...format, clear } : format;
+    });
+}
+
 // The rectangles of the cells that held one old value. They come band by band, rows down within a band, so a span
 // joins the one above it as it comes, and once all are in, neighbours across bands over the same rows join.
 export class Areas {

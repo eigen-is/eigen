@@ -7,9 +7,8 @@
 
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { FormatOp, InputOp, LinesOp, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { Areas } from './apply-format';
+import { wornLooks } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
@@ -47,17 +46,12 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
     // The inverse of a delete inserts the lines like the line before them, or at the grid's start like the line they
     // push on, so only a span that wore another look than that line wears beside it is written back, plain included.
     const like = Math.max(0, index - 1);
-    const worn = new Map<number, Areas>();
+    const worn: [look: number, rect: Rect][] = [];
     for (const { c0, c1, r0, r1, look } of bands.lines(op)) {
         for (const beside of bands.spans(rows ? [like, c0, like, c1] : [r0, like, r1, like])) {
-            if (beside.look === look) continue;
-            let areas = worn.get(look);
-            if (!areas) {
-                areas = new Areas();
-                worn.set(look, areas);
+            if (beside.look !== look) {
+                worn.push([look, rows ? [r0, beside.c0, r1, beside.c1] : [beside.r0, c0, beside.r1, c1]]);
             }
-            if (rows) areas.add(r0, beside.c0, r1, beside.c1);
-            else areas.add(beside.r0, c0, beside.r1, c1);
         }
     }
     const keyed = new Map<string, FormatOp & { spans: Span[] }>();
@@ -71,14 +65,9 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
     plan.commit();
 
     const back: LinesOp = { kind: 'lines', sheet, rows, insert: !insert, index, count, ...(!insert && { like }) };
-    const looks = [...worn].map(([id, areas]): FormatOp => {
-        const look = book.looks.look(id);
-        const clear = LOOK_KEYS.filter((key) => look[key] === undefined);
-        return { kind: 'format', sheet, ranges: areas.joined(), set: look, clear };
-    });
     return [
         back,
-        ...looks,
+        ...wornLooks(book, sheet, worn),
         ...keyed.values(),
         ...(content ? [content] : []),
         ...plan.restore,

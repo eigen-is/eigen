@@ -7,10 +7,9 @@
 import type { Move } from '@workspace/formula';
 import { BAND_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, FormatOp, InputOp, MoveOp, Placed, RecordOp, Rect, Span } from '@workspace/lib/sheets/ops';
-import { LOOK_KEYS } from '@workspace/lib/sheets/ops';
-import { covers, outsideOf, within } from '@workspace/lib/sheets/rect';
+import { covers, intersect, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
-import { Areas } from './apply-format';
+import { wornLooks } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
 import type { Workbook } from './workbook';
 
@@ -60,26 +59,15 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         { kind: 'move', sheet: op.toSheet, from: target, toSheet: op.sheet, toRow: top, toColumn: left },
     ];
     // Each look the landed-on cells wore, put back whole over the cells that wore it.
-    const looks = new Map<number, Areas>();
+    const worn: [look: number, rect: Rect][] = [];
     for (const { c0, c1, r0, r1, look } of covered) {
         if (look === 0) continue;
-        for (const [t, l, b, r] of outside) {
-            const span: Rect = [Math.max(r0, t), Math.max(c0, l), Math.min(r1, b), Math.min(c1, r)];
-            if (span[0] > span[2] || span[1] > span[3]) continue;
-            let areas = looks.get(look);
-            if (!areas) {
-                areas = new Areas();
-                looks.set(look, areas);
-            }
-            areas.add(...span);
+        for (const rect of outside) {
+            const both = intersect([r0, c0, r1, c1], rect);
+            if (both) worn.push([look, both]);
         }
     }
-    for (const [id, areas] of looks) {
-        const look = book.looks.look(id);
-        const clear = LOOK_KEYS.filter((key) => look[key] === undefined);
-        const format: FormatOp = { kind: 'format', sheet: op.toSheet, ranges: areas.joined(), set: { ...look } };
-        inverse.push(clear.length > 0 ? { ...format, clear } : format);
-    }
+    inverse.push(...wornLooks(book, op.toSheet, worn));
     if (held) inverse.push(held);
     inverse.push(...plan.restore);
     inverse.push(...movedBack(lostInputs(book, result), op, target));
