@@ -104,6 +104,8 @@ export class Numbers {
     // carried: its value, the cells counted and, of a sum, the sum before its last addition.
     private range: Reference | null = null;
     private carry: Carry | null = null;
+    // The carry's mark when it was taken, which moves when a formula computed meanwhile takes it for another range.
+    private mark = 0;
     private prior = 0;
     private priorCount = 0;
     private priorBefore = 0;
@@ -134,11 +136,11 @@ export class Numbers {
         return numbers;
     }
 
-    // Bound numbers that are of one range alone, with what the pass carries of it: true until the body returns, as
-    // no row computes a formula between its collector and its body.
+    // Bound numbers that are of one range alone, with what the pass carries of it.
     public static carrying(numbers: Numbers, range: Reference, carry: Carry): Numbers {
         numbers.range = range;
         numbers.carry = carry;
+        numbers.mark = carry.mark;
         return numbers;
     }
 
@@ -224,8 +226,12 @@ export class Numbers {
     // rows below when it knows some, and nothing when it knows them all.
     private resume(answer: Answer): Evaluator {
         const { carry, range, ctx } = this;
-        const end = carry === null ? -1 : carry.ends[answer];
-        if (carry === null || range === null || end <= range.top) {
+        // A formula computed between the look and the body may have taken the carry for another range or carried it
+        // past this one's last row: then the walk goes from the top and carries nothing.
+        const kept = carry !== null && range !== null && carry.mark === this.mark && carry.settled === range.bottom + 1;
+        if (!kept) this.carry = null;
+        const end = kept ? carry.ends[answer] : -1;
+        if (!kept || end <= range.top) {
             this.prior = NOTHING[answer];
             this.priorCount = 0;
             this.priorBefore = 0;

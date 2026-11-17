@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { Carries } from '../../eval/carry';
+import { Families } from '../../eval/families';
 import { Walk } from '../../eval/walk';
+import { fn, NUMBERS, TEXTS } from '../../functions/registry';
 import type { Literal, SheetSource } from '../../index';
 import { Engine } from '../../index';
 import { Recalc } from '../../recalc/recalc';
 import { DIV0, NA, REF } from '../../values/errors';
 import type { Reference, Scalar } from '../../values/value';
+import { ValueType } from '../../values/value';
+import { valuesWith } from '../recalc/support';
 
 // A range that grows by a row per formula is worked out from what the formula above it found: the work of a block
 // follows its rows, not their square, and every value is the one each formula has on its own.
@@ -358,5 +362,36 @@ describe('a loop through a growing range', () => {
         engine.recalc(ALL);
         expect(engine.valueOf('s1', 1, 2)).toBe(4);
         expect(engine.valueOf('s1', 2, 3)).toBe(REF);
+    });
+});
+
+describe('a formula computed after a range took its carry and before the body reads it', () => {
+    // No row of this build reads texts after its numbers: the texts compute E1 once the numbers took their carry.
+    const SPELT = fn('SPELT', [NUMBERS, TEXTS], (numbers, texts) => numbers.sum() + texts.length);
+
+    test('that carries the same range further down leaves the sum its own', () => {
+        const cells = { A1: 1, A2: 2, A3: 4, D1: '=SPELT($A$1:A1,E1)', E1: '=SUM($A$1:A3)' };
+        expect(valuesWith([SPELT], cells, ['D1', 'E1'])).toEqual([2, 7]);
+    });
+
+    test('that takes the slot for another range leaves the sum its own', () => {
+        const range = (left: number): Reference => {
+            return { type: ValueType.Reference, sheet: 0, top: 0, left, bottom: 0, right: left, next: null };
+        };
+        const carries = new Carries();
+        const ofA = carries.of(range(0), Families.Numbers, 0, 1);
+        let column = 1;
+        while (column < 26 && carries.of(range(column), Families.Numbers, 0, 1) !== ofA) column += 1;
+        expect(column).toBeLessThan(26);
+        const letter = String.fromCharCode(65 + column);
+        const cells = {
+            A1: 1,
+            [`${letter}1`]: 10,
+            [`${letter}2`]: 20,
+            [`${letter}3`]: 40,
+            D1: '=SPELT($A$1:A1,E1)',
+            E1: `=SUM(${letter}$1:${letter}3)`,
+        };
+        expect(valuesWith([SPELT], cells, ['D1', 'E1'])).toEqual([2, 70]);
     });
 });
