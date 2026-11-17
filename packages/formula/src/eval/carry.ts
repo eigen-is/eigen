@@ -50,7 +50,9 @@ export class Carries {
         const { sheet, top, left, right } = area;
         const { kinds, errors } = family;
         const walks = kinds | (errors << 8);
-        const carry = this.slots[(sheet * 7 + top * 31 + left * 17 + kinds * 3 + errors * 5) & (SLOTS - 1)];
+        // Ranges side by side, ranges 16 columns apart and calls that skip other rows fall in slots of their own.
+        const columns = left * 17 + (left >> 4) * 9 + (right - left) * 13;
+        const carry = this.slots[(sheet * 7 + top * 31 + columns + kinds * 3 + errors * 5 + skips * 11) & (SLOTS - 1)];
         const same = carry.top === top && carry.left === left && carry.right === right && carry.sheet === sheet;
         const walked = carry.walks === walks && carry.skips === skips && carry.settled <= area.bottom + 1;
         if (carry.era === era && same && walked) return carry;

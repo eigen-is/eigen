@@ -73,6 +73,9 @@ describe('the work of a block of a growing range follows its rows', () => {
         '=SUM(R1C1:RC1)/COUNT(R1C1:RC1)',
         '=SUBTOTAL(109,R1C1:RC1)',
         '=SUM(R1C1:R2000C1)',
+        // Two carries that differ only in the skips, and two ranges 16 columns apart.
+        '=SUM(R1C1:RC1)-SUBTOTAL(109,R1C1:RC1)',
+        '=SUM(R1C1:RC1)-SUM(R1C17:RC17)',
     ];
 
     for (const shape of SHAPES) {
