@@ -1,13 +1,11 @@
-// A picture or film from a page of the public site shown bigger in a dialog, its caption under it, such as an item
-// of a media grid or an image or looping video in an article. Opened from a group, such as the grid or a carousel,
-// it pages through the group with its arrows and the arrow keys. A film plays with controls unless the reader asked
-// for less motion, and a looping one stays a muted loop.
+// A picture or film from a page of the public site, shown bigger in the quick preview lightbox the apps use, with its
+// caption as the title and no actions. Opened from a group, such as a media grid or a carousel, it pages through the
+// group. A film plays with controls unless the reader asked for less motion, and a looping one stays a muted loop.
+// The corner button that opens one, which shows while the pointer is over it, lives here too.
 
 import { useMediaQuery } from '@workspace/lib/media';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogTitle } from '@workspace/ui/components/dialog';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import { PREVIEW_BODY_MAX_HEIGHT, PreviewLightbox } from '@workspace/ui/components/preview-lightbox';
+import { Maximize } from 'lucide-react';
 import type { MediaItem } from '../../scripts/lib/content-types';
 import { splitKetNames } from './ket-names';
 
@@ -19,77 +17,51 @@ export type OpenLightbox = (items: readonly LightboxItem[], index: number) => vo
 type MediaLightboxProps = {
     items: readonly LightboxItem[];
     index: number;
-    open: boolean;
     onIndexChange: (index: number) => void;
-    onOpenChange: (open: boolean) => void;
+    onClose: () => void;
 };
 
-export function MediaLightbox({ items, index, open, onIndexChange, onOpenChange }: MediaLightboxProps) {
+export function MediaLightbox({ items, index, onIndexChange, onClose }: MediaLightboxProps) {
     const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
     const item = items[index];
-    const step = (by: number) => {
-        if (items[index + by]) onIndexChange(index + by);
-    };
-    // On a film the arrow keys seek it.
-    const onKeyDown = (e: KeyboardEvent) => {
-        if (e.defaultPrevented || e.target instanceof HTMLVideoElement) return;
-        if (e.key === 'ArrowLeft') step(-1);
-        if (e.key === 'ArrowRight') step(1);
-    };
+    const style = { maxHeight: PREVIEW_BODY_MAX_HEIGHT };
 
     return (
-        <Dialog open={open && item !== undefined} onOpenChange={onOpenChange}>
-            <DialogContent className="justify-items-center p-4 pt-12 sm:max-w-6xl sm:p-6" onKeyDown={onKeyDown}>
-                <DialogTitle className="sr-only">{item?.caption ?? 'Media preview'}</DialogTitle>
-                {item?.type === 'image' && (
-                    <img src={item.src} alt={item.caption ?? ''} className="max-h-[75vh] max-w-full rounded" />
-                )}
-                {item?.type === 'video' && (
-                    <video
-                        key={item.src}
-                        src={item.src}
-                        poster={item.poster}
-                        controls
-                        playsInline
-                        autoPlay={!reduceMotion}
-                        muted={item.loop}
-                        loop={item.loop}
-                        className="max-h-[75vh] max-w-full rounded"
-                    />
-                )}
-                {(item?.caption || items.length > 1) && (
-                    <div className="flex w-full max-w-2xl items-center gap-3">
-                        {items.length > 1 && (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="rounded-full"
-                                aria-label="Previous"
-                                disabled={index === 0}
-                                onClick={() => step(-1)}
-                            >
-                                <ChevronLeft />
-                            </Button>
-                        )}
-                        <p className="flex-1 text-center text-sm text-muted-foreground">
-                            {item?.caption && <Caption text={item.caption} />}
-                        </p>
-                        {items.length > 1 && (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="rounded-full"
-                                aria-label="Next"
-                                disabled={index === items.length - 1}
-                                onClick={() => step(1)}
-                            >
-                                <ChevronRight />
-                            </Button>
-                        )}
-                    </div>
-                )}
-            </DialogContent>
-        </Dialog>
+        <PreviewLightbox
+            title={item.caption && <Caption text={item.caption} />}
+            hasPrev={index > 0}
+            hasNext={index < items.length - 1}
+            onPrev={() => onIndexChange(index - 1)}
+            onNext={() => onIndexChange(index + 1)}
+            onClose={onClose}
+        >
+            {item.type === 'image' && (
+                <img src={item.src} alt={item.caption ?? ''} className="max-w-full rounded" style={style} />
+            )}
+            {item.type === 'video' && (
+                <video
+                    key={item.src}
+                    src={item.src}
+                    poster={item.poster}
+                    controls
+                    playsInline
+                    autoPlay={!reduceMotion}
+                    muted={item.loop}
+                    loop={item.loop}
+                    className="max-w-full rounded"
+                    style={style}
+                />
+            )}
+        </PreviewLightbox>
+    );
+}
+
+// The Markdown's own pictures get the same button from the build, so the two keep one label and icon.
+export function ExpandButton({ onClick }: { onClick: () => void }) {
+    return (
+        <button type="button" className="media-expand" aria-label="Full screen" title="Full screen" onClick={onClick}>
+            <Maximize aria-hidden="true" />
+        </button>
     );
 }
 

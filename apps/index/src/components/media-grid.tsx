@@ -1,9 +1,10 @@
 // A grid of images and videos inside a blog post or Support article, which the article's Markdown declares as a
-// `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, and its caption. A click hands
-// the page around it the item to open in its lightbox, with the grid as the group.
+// `::: grid` block. Each item is a button with a thumbnail, a play mark on a video, the full-screen mark the site's
+// other pictures show, and its caption. A click hands the page around it the item to open in its lightbox, with the
+// grid as the group.
 
 import { cn } from '@workspace/ui/lib/utils';
-import { Play } from 'lucide-react';
+import { Maximize, Play } from 'lucide-react';
 import type { MediaGridData, MediaItem } from '../../scripts/lib/content-types';
 import type { OpenLightbox } from './media-lightbox';
 import { Caption } from './media-lightbox';
@@ -30,7 +31,7 @@ export function MediaGrid({ columns, items, onOpen }: MediaGridData & { onOpen: 
 function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: MediaItem & { onClick: () => void }) {
     return (
         <button type="button" className="group block w-full text-left" onClick={onClick}>
-            <div className="relative overflow-hidden rounded-lg bg-muted">
+            <div className="media-frame overflow-hidden rounded-lg bg-muted">
                 {type === 'image' && (
                     <img
                         src={thumbnail ?? src}
@@ -51,6 +52,10 @@ function MediaThumbnail({ src, type, caption, thumbnail, poster, onClick }: Medi
                         </div>
                     </div>
                 )}
+                {/* The whole thumbnail is the button, so the mark only shows what a click does. */}
+                <span className="media-expand" aria-hidden="true">
+                    <Maximize />
+                </span>
             </div>
             {caption && (
                 <p className="mt-2 text-[11px] text-muted-foreground text-center">

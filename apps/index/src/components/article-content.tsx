@@ -18,18 +18,14 @@ import { MediaVideo } from './media-video';
 type ArticleContentProps = { body: ArticleBody; blocks?: Readonly<Record<string, ReactNode>>; className?: string };
 
 export function ArticleContent({ body, blocks, className }: ArticleContentProps) {
-    const [lightbox, setLightbox] = useState<{ items: readonly LightboxItem[]; index: number; open: boolean }>({
-        items: [],
-        index: 0,
-        open: false,
-    });
-    const openLightbox: OpenLightbox = (items, index) => setLightbox({ items, index, open: true });
+    const [lightbox, setLightbox] = useState<{ items: readonly LightboxItem[]; index: number } | null>(null);
+    const openLightbox: OpenLightbox = (items, index) => setLightbox({ items, index });
 
-    // A picture opens bigger unless a link or a button holds it. A heading copies its link only where its icon
+    // A picture, or its full-screen button, opens it bigger unless a link or a button holds it. A heading copies its link only where its icon
     // shows, as touch screens hide it, and never over a selection.
     const onMarkdownClick = (e: MouseEvent) => {
         if (!(e.target instanceof Element)) return;
-        const image = e.target.closest('img');
+        const image = e.target.closest('.media-frame')?.querySelector('img') ?? e.target.closest('img');
         if (image && !image.closest('a, button')) {
             openLightbox([{ type: 'image', src: image.getAttribute('src') ?? '', caption: image.alt || undefined }], 0);
             return;
@@ -72,11 +68,13 @@ export function ArticleContent({ body, blocks, className }: ArticleContentProps)
                     </Fragment>
                 ))}
             </div>
-            <MediaLightbox
-                {...lightbox}
-                onIndexChange={(index) => setLightbox((current) => ({ ...current, index }))}
-                onOpenChange={(open) => setLightbox((current) => ({ ...current, open }))}
-            />
+            {lightbox && (
+                <MediaLightbox
+                    {...lightbox}
+                    onIndexChange={(index) => setLightbox({ ...lightbox, index })}
+                    onClose={() => setLightbox(null)}
+                />
+            )}
         </>
     );
 }

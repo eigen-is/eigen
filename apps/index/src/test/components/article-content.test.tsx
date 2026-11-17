@@ -116,6 +116,29 @@ describe('carousel', () => {
         expect(prev.disabled).toBe(true);
     });
 
+    test('a mouse drag moves the strip to the next slide that way, and its click opens nothing', async () => {
+        stubReducedMotion(true);
+        const { strip, current } = await renderCarousel();
+        const pointer = (type: string, clientX: number) =>
+            act(async () => {
+                strip.dispatchEvent(
+                    new PointerEvent(type, { pointerType: 'mouse', button: 0, clientX, bubbles: true }),
+                );
+            });
+        await pointer('pointerdown', 500);
+        await pointer('pointermove', 400);
+        expect(strip.hasAttribute('data-dragging')).toBe(true);
+        expect(strip.scrollLeft).toBe(100);
+        await pointer('pointerup', 400);
+        await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+        strip.dispatchEvent(new Event('scroll'));
+        await act(async () => strip.querySelector<HTMLElement>('img')?.click());
+        expect(strip.scrollLeft).toBe(600);
+        expect(strip.hasAttribute('data-dragging')).toBe(false);
+        expect(current()).toBe(1);
+        expect(lightbox()).toBeNull();
+    });
+
     test('a dot scrolls to its slide', async () => {
         const { strip, dots } = await renderCarousel();
         await act(async () => dots[2]?.click());
@@ -265,7 +288,7 @@ describe('ArticleContent', () => {
     });
 });
 
-// The open lightbox: what it shows, its caption, and its previous and next buttons, if any.
+// The open lightbox: what it shows, its caption as the title, and its previous and next buttons, if any.
 function lightbox() {
     const dialog = document.querySelector('[role="dialog"]');
     if (!dialog) return null;
@@ -273,9 +296,10 @@ function lightbox() {
     return {
         count: document.querySelectorAll('[role="dialog"]').length,
         src: media?.getAttribute('src'),
-        caption: dialog.querySelector('p')?.textContent,
-        prev: dialog.querySelector<HTMLButtonElement>('button[aria-label="Previous"]'),
-        next: dialog.querySelector<HTMLButtonElement>('button[aria-label="Next"]'),
+        caption: dialog.querySelector('h2')?.textContent,
+        prev: dialog.querySelector<HTMLButtonElement>('button[aria-label="Previous (←)"]'),
+        next: dialog.querySelector<HTMLButtonElement>('button[aria-label="Next (→)"]'),
+        footer: dialog.querySelector('a, button:not([aria-label])'),
     };
 }
 
@@ -295,7 +319,38 @@ describe('lightbox', () => {
         const html = '<p><img src="/a.webp" alt="A budget"></p>';
         const { container } = await renderInDocument(<ArticleContent body={{ html, media: [] }} />);
         await clickOn(container, 'img');
-        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget', prev: null, next: null });
+        expect(lightbox()).toMatchObject({
+            count: 1,
+            src: '/a.webp',
+            caption: 'A budget',
+            prev: null,
+            next: null,
+            footer: null,
+        });
+    });
+
+    test('a picture in the Markdown opens from its full-screen button, and one in a link has none', async () => {
+        const body = renderMarkdown('![A budget](/a.webp)\n\n[![b](/b.webp)](#elsewhere)');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        expect(container.querySelectorAll('.media-expand').length).toBe(1);
+        expect(container.querySelector('a .media-expand')).toBeNull();
+        await clickOn(container, '.media-expand');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/a.webp', caption: 'A budget' });
+    });
+
+    test('a slide’s full-screen button opens that slide, in its group', async () => {
+        const body = renderMarkdown('::: carousel\n![a](/a.webp)\n![b](/b.webp)\n:::');
+        const { container } = await renderInDocument(<ArticleContent body={body} />);
+        await clickOn(container, '.media-carousel-slide:nth-child(2) .media-expand');
+        expect(lightbox()).toMatchObject({ count: 1, src: '/b.webp' });
+        expect(lightbox()?.prev).not.toBeNull();
+    });
+
+    test('a looping video opens from its full-screen button, also while it shows its controls', async () => {
+        stubReducedMotion(true);
+        await renderVideo();
+        await clickOn(document.body, '.media-video .media-expand');
+        expect(lightbox()?.src).toBe('/data/about/media/sheets-chart.h264.mp4');
     });
 
     test('a carousel image opens with the carousel as its group, at the image clicked', async () => {
@@ -314,19 +369,15 @@ describe('lightbox', () => {
         expect(lightbox()?.src).toBe('/b.webp');
     });
 
-    test('an arrow key on a film seeks it, and one something else handled does not page either', async () => {
+    test('an arrow key on a film seeks it, and one on the lightbox pages', async () => {
         const body = renderMarkdown('::: carousel\n![a](/data/about/media/sheets-hero)\n![b](/b.webp)\n:::');
         const { container } = await renderInDocument(<ArticleContent body={body} />);
         await clickOn(container, '.media-carousel-slide video');
-        const press = (target: Element | null | undefined, handled = false) =>
+        const press = (target: Element | null | undefined) =>
             act(async () => {
-                const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true });
-                if (handled) event.preventDefault();
-                target?.dispatchEvent(event);
+                target?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
             });
         await press(document.querySelector('[role="dialog"] video'));
-        expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
-        await press(document.querySelector('[role="dialog"]'), true);
         expect(document.querySelector('[role="dialog"] video')).not.toBeNull();
         await press(document.querySelector('[role="dialog"]'));
         expect(lightbox()?.src).toBe('/b.webp');

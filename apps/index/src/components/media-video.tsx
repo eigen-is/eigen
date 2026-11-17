@@ -2,19 +2,24 @@
 // `::: video` block, the film over its caption, and LoopingVideo the film alone, which a carousel shows on a slide.
 // The markup has no autoplay, so the server render holds still: the film starts from an effect while its caller says
 // it is in view, and holds still with controls for a reader who asked for less motion. A click on a film without
-// controls opens it bigger.
+// controls, or on its corner button, opens it bigger.
 
 import { useMediaQuery } from '@workspace/lib/media';
 import { useEffect, useRef, useState } from 'react';
 import type { MediaVideoData } from '../../scripts/lib/content-types';
 import type { LightboxItem, OpenLightbox } from './media-lightbox';
+import { ExpandButton } from './media-lightbox';
 
 const AV1 = 'video/mp4; codecs="av01.0.08M.08"';
 
 export function MediaVideo({ src, caption, onOpen }: MediaVideoData & { onOpen: OpenLightbox }) {
+    const open = () => onOpen([loopingVideoItem(src, caption?.text)], 0);
     return (
         <figure className="media-video">
-            <LoopingVideo src={src} playing onClick={() => onOpen([loopingVideoItem(src, caption?.text)], 0)} />
+            <div className="media-frame">
+                <LoopingVideo src={src} playing onClick={open} />
+                <ExpandButton onClick={open} />
+            </div>
             {/* Safe: build-time-rendered HTML from trusted, in-repo Markdown. */}
             {caption && <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />}
         </figure>
