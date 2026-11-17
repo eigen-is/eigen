@@ -12,7 +12,6 @@ import { covers, outsideOf, within } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import { Areas } from './apply-format';
 import { inputOfBlocks, lostInputs } from './apply-input';
-import type { Planned } from './records';
 import type { Workbook } from './workbook';
 
 // `checked`, it throws before a write when the block could leave the workbook over a limit inside a batch where it
@@ -29,15 +28,9 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
     if (oneSheet && rowShift === 0 && columnShift === 0) return [];
     const target: Rect = [op.toRow, op.toColumn, bottom + rowShift, right + columnShift];
 
-    // Rule formulas on any sheet may read the block, so every sheet plans before anything is written: the one the
-    // block leaves first and the one it lands on next, so every reader refuses with one key.
-    const plans: Planned[] = [];
-    const planning = new Set([source, landing, ...book.sheets.values()]);
-    for (const { records } of planning) {
-        const plan = records.planMove(op, source.records);
-        if (typeof plan === 'string') throw new Refusal(plan);
-        plans.push(plan);
-    }
+    // Rule formulas and charts on any sheet may read the block, so the records plan before anything is written.
+    const plan = book.records.planMove(op);
+    if (typeof plan === 'string') throw new Refusal(plan);
     if (checked) {
         const { engine } = book;
         let slots = 0;
@@ -58,20 +51,10 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
     const outside = oneSheet ? outsideOf(target, op.from) : [target];
     const held = inputOfBlocks(book, op.toSheet, outside);
 
-    const move: Move = {
-        fromSheet: op.sheet,
-        row: top,
-        column: left,
-        rows: bottom - top + 1,
-        columns: right - left + 1,
-        toSheet: op.toSheet,
-        toRow: op.toRow,
-        toColumn: op.toColumn,
-    };
-    const result = book.engine.moveCells(move);
+    const result = book.engine.moveCells(moveOf(op));
     const covered = landing.bands.move(op, source.bands);
     landing.extras.move(op, source.extras);
-    for (const plan of plans) plan.commit();
+    plan.commit();
 
     const inverse: (MoveOp | FormatOp | InputOp | RecordOp)[] = [
         { kind: 'move', sheet: op.toSheet, from: target, toSheet: op.sheet, toRow: top, toColumn: left },
@@ -98,9 +81,15 @@ export function applyMove(book: Workbook, op: MoveOp, checked: boolean): (MoveOp
         inverse.push(clear.length > 0 ? { ...format, clear } : format);
     }
     if (held) inverse.push(held);
-    for (const plan of plans) inverse.push(...plan.restore);
+    inverse.push(...plan.restore);
     inverse.push(...movedBack(lostInputs(book, result), op, target));
     return inverse;
+}
+
+// The engine's move of the op's block.
+export function moveOf({ sheet, from: [top, left, bottom, right], toSheet, toRow, toColumn }: MoveOp): Move {
+    const rows = bottom - top + 1;
+    return { fromSheet: sheet, row: top, column: left, rows, columns: right - left + 1, toSheet, toRow, toColumn };
 }
 
 // The lossy formulas are read where the move left them, and written back after the move back: those in the block go

@@ -5,7 +5,7 @@
 
 import { expect, spyOn, test } from 'bun:test';
 import type { LinesOp, MoveOp, Rect } from '@workspace/lib/sheets/ops';
-import type { SheetRecords } from '../../../engine/book/records';
+import type { SheetRecords } from './records-fixtures';
 import { LAST_COLUMN, LAST_ROW, sheetOf } from './records-fixtures';
 
 const CASES = 100;
@@ -171,7 +171,7 @@ function moveBlock(sheet: SheetRecords, random: Random): void {
     const carried = before.filter((rect) => meets(rect, from));
     const landedOn = before.filter((rect) => meets(rect, target) && !carried.includes(rect));
     const cut = carried.some((rect) => !within(rect, from)) || landedOn.some((rect) => !within(rect, target));
-    const plan = sheet.planMove(op, sheet);
+    const plan = sheet.planMove(op);
     expect({ op, refused: plan }).toEqual({ op, refused: cut ? 'merge-cut' : expect.any(Object) });
     if (typeof plan === 'string') return;
     plan.commit();

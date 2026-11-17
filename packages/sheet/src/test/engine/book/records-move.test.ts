@@ -19,6 +19,7 @@ import {
     reverseOf,
     sheetNamed,
     sheetOf,
+    sheetsOf,
     typedAt,
 } from './records-fixtures';
 
@@ -37,9 +38,9 @@ const move = (toSheet = 'S', from: Rect = [1, 1, 2, 2], toRow = 4, toColumn = 4)
 });
 
 const book = (onS: Records, onT: Records = {}) =>
-    new Map([
-        ['S', sheetOf(onS)],
-        ['T', sheetOf(onT, {}, 'T')],
+    sheetsOf([
+        ['S', onS],
+        ['T', onT],
     ]);
 
 function moved(onS: Records, op: MoveOp, onT: Records = {}) {
@@ -58,12 +59,8 @@ function roundTrips(onS: Records, op: MoveOp, onT: Records = {}) {
 }
 
 function refused(onS: Records, op: MoveOp, onT: Records = {}) {
-    const sheets = book(onS, onT);
-    const source = sheetNamed(sheets, 'S');
-    return [...sheets.values()].map((sheet) => {
-        const plan = sheet.planMove(op, source);
-        return typeof plan === 'string' ? plan : null;
-    });
+    const plan = sheetNamed(book(onS, onT), 'S').planMove(op);
+    return typeof plan === 'string' ? plan : null;
 }
 
 describe('comments', () => {
@@ -107,7 +104,7 @@ describe('a block that lands on its own records', () => {
     const onS: Records = { merge: { m: { rect: [1, 1, 1, 2] } }, comment: { c: { row: 2, column: 2 } } };
 
     test('carries them, as they are not records it lands on', () => {
-        expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toEqual([null, null]);
+        expect(refused(onS, move('S', [1, 1, 2, 2], 2, 1))).toBeNull();
         roundTrips(onS, move('S', [1, 1, 2, 2], 2, 1));
     });
 });
@@ -122,13 +119,13 @@ describe('merges', () => {
     });
 
     test('a merge the block cuts refuses the move, where it leaves', () => {
-        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move())).toEqual(['merge-cut', null]);
-        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move('T'))).toEqual(['merge-cut', null]);
+        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move())).toBe('merge-cut');
+        expect(refused({ merge: { m: { rect: [2, 2, 3, 3] } } }, move('T'))).toBe('merge-cut');
     });
 
     test('a merge where the block lands, partly covered, refuses the move', () => {
-        expect(refused({ merge: { m: { rect: [5, 5, 7, 7] } } }, move())).toEqual(['merge-cut', null]);
-        expect(refused({}, move('T'), { merge: { m: { rect: [3, 3, 4, 4] } } })).toEqual([null, 'merge-cut']);
+        expect(refused({ merge: { m: { rect: [5, 5, 7, 7] } } }, move())).toBe('merge-cut');
+        expect(refused({}, move('T'), { merge: { m: { rect: [3, 3, 4, 4] } } })).toBe('merge-cut');
     });
 
     test('a merge the block lands on whole goes, and comes back whole in the restore ops', () => {
@@ -277,8 +274,8 @@ describe('chart refs', () => {
         let n = 0;
         for (let step = 2 ** 16; step >= 1; step /= 2) if (!exceedsChartSpecBytes(padded(n + step))) n += step;
         const records: Records = { chart: { g: padded(n) } };
-        expect(refused(records, move('S', [1, 1, 2, 2], 100_000, 1))).toEqual(['key-too-long', null]);
-        expect(refused(records, move('S', [1, 1, 2, 2], 4, 1))).toEqual([null, null]);
+        expect(refused(records, move('S', [1, 1, 2, 2], 100_000, 1))).toBe('key-too-long');
+        expect(refused(records, move('S', [1, 1, 2, 2], 4, 1))).toBeNull();
     });
 
     test('a ref the block lands on stays, and the restore puts it back after the move back took it', () => {

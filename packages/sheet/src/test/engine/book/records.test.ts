@@ -37,14 +37,14 @@ describe('the store', () => {
 
     test('the weight is the most records of one type, as they are now', () => {
         const sheet = sheetOf({ comment: { a: { row: 1, column: 1 }, b: { row: 2, column: 1 } } });
-        expect(sheet.weight()).toEqual({ records: 2 });
+        expect(sheet.weight()).toBe(2);
         sheet.write({ kind: 'record', sheet: 'S', type: 'merge', id: 'm', set: { rect: [0, 0, 1, 1] }, whole: 1 });
         sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'c', set: { row: 3, column: 1 }, whole: 1 });
-        expect(sheet.weight()).toEqual({ records: 3 });
+        expect(sheet.weight()).toBe(3);
         sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'a' });
         sheet.write({ kind: 'record', sheet: 'S', type: 'comment', id: 'b' });
-        expect(sheet.weight()).toEqual({ records: 1 });
-        expect(sheetOf().weight()).toEqual({ records: 0 });
+        expect(sheet.weight()).toBe(1);
+        expect(sheetOf().weight()).toBe(0);
     });
 });
 

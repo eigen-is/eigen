@@ -26,6 +26,7 @@ import {
     rowsAt,
     sheetNamed,
     sheetOf,
+    sheetsOf,
     typedAt,
 } from './records-fixtures';
 
@@ -33,21 +34,21 @@ type Records = SheetContent['records'];
 
 function edited(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}) {
     const sheet = sheetOf(records, fields);
-    const restore = editLines([sheet], edit);
+    const restore = editLines(sheet, edit);
     return { sheet, content: contentOf(sheet), restore };
 }
 
 // The edit, the inverse edit, then the record ops, on sheets S and T: every record as it was.
 function roundTrips(records: Records, edit: LinesOp, fields: Partial<SheetFields> = {}, onT: Records = {}) {
     const build = () =>
-        new Map([
-            ['S', sheetOf(records, fields)],
-            ['T', sheetOf(onT, {}, 'T')],
+        sheetsOf([
+            ['S', records, fields],
+            ['T', onT],
         ]);
     const sheets = build();
     const before = build();
-    const restore = editLines(sheets.values(), edit);
-    editLines(sheets.values(), inverseOf(edit));
+    const restore = editLines(sheetNamed(sheets, 'S'), edit);
+    editLines(sheetNamed(sheets, 'S'), inverseOf(edit));
     applyRecordOps(sheets, before, restore);
     for (const id of ['S', 'T']) expect(contentOf(sheetNamed(sheets, id))).toEqual(contentOf(sheetNamed(before, id)));
 }
@@ -194,8 +195,8 @@ describe('a filter and its columns', () => {
             filterColumn: { c: { filter: 'f', column: 0, rows: [[5, LAST_ROW]] } },
         });
         const sheet = sheetOf(open());
-        expect(editLines([sheet], rowsAt(true, 2, 3))).toEqual([]);
-        expect(editLines([sheet], rowsAt(false, 2, 3))).toEqual([]);
+        expect(editLines(sheet, rowsAt(true, 2, 3))).toEqual([]);
+        expect(editLines(sheet, rowsAt(false, 2, 3))).toEqual([]);
         expect(contentOf(sheet).records).toEqual(open());
         roundTrips(open(), rowsAt(false, 0, 10));
     });
@@ -350,8 +351,8 @@ describe('the ranges of a rule', () => {
         const open = both([rowsOf([0, LAST_ROW])]);
         const sheet = sheetOf(open);
         const rule = sheet.records('validation').get('v');
-        expect(editLines([sheet], rowsAt(true, 4, 9))).toEqual([]);
-        expect(editLines([sheet], rowsAt(false, 4, 9))).toEqual([]);
+        expect(editLines(sheet, rowsAt(true, 4, 9))).toEqual([]);
+        expect(editLines(sheet, rowsAt(false, 4, 9))).toEqual([]);
         expect(sheet.records('validation').get('v')).toBe(rule);
         roundTrips(open, rowsAt(false, 4, 9));
     });
@@ -420,8 +421,14 @@ describe('the formula of a conditional format', () => {
 
     test('a rule on another sheet follows a qualified ref to the edited sheet, and its ranges stay', () => {
         const onT = { conditionalFormat: { r: formulaRule([column([0, 3])], keyOf('=S!A5>1', 0, 0)) } };
-        const t = sheetOf(onT, {}, 'T');
-        editLines([sheetOf(), t], rowsAt(true, 0, 2));
+        const t = sheetNamed(
+            sheetsOf([
+                ['S', {}],
+                ['T', onT],
+            ]),
+            'T',
+        );
+        editLines(t, rowsAt(true, 0, 2));
         const after = t.records('conditionalFormat').get('r');
         expect(after?.ranges).toEqual([column([0, 3])]);
         expect(typedAt(String(keyOfRule(after)), 0, 0)).toBe('=S!A7>1');
@@ -429,9 +436,15 @@ describe('the formula of a conditional format', () => {
     });
 
     test('an edit on another sheet leaves an unqualified formula the same record', () => {
-        const sheet = sheetOf(rule([column([0, 3])], '=A1>1'));
+        const sheet = sheetNamed(
+            sheetsOf([
+                ['S', rule([column([0, 3])], '=A1>1')],
+                ['T', {}],
+            ]),
+            'S',
+        );
         const before = sheet.records('conditionalFormat').get('r');
-        editLines([sheet], rowsAt(true, 0, 2, 'T'));
+        editLines(sheet, rowsAt(true, 0, 2, 'T'));
         expect(sheet.records('conditionalFormat').get('r')).toBe(before);
     });
 
@@ -469,17 +482,29 @@ describe('charts and images', () => {
     });
 
     test('a chart on another sheet follows its refs to the edited sheet', () => {
-        const t = sheetOf({ chart: { c: chart() } }, {}, 'T');
-        editLines([sheetOf(), t], columnsAt(true, 0));
+        const t = sheetNamed(
+            sheetsOf([
+                ['S', {}],
+                ['T', { chart: { c: chart() } }],
+            ]),
+            'T',
+        );
+        editLines(t, columnsAt(true, 0));
         expect(chartData(t.records('chart').get('c'))?.series[0].values?.column).toEqual([2, 2]);
     });
 
     test('an edit on another sheet leaves a chart and an image the same records', () => {
         const image = { index: 'a1', x: 0, y: 0, width: 10, height: 10, mediaName: 'm.png' };
-        const sheet = sheetOf({ chart: { c: chart() }, image: { i: image } });
+        const sheet = sheetNamed(
+            sheetsOf([
+                ['S', { chart: { c: chart() }, image: { i: image } }],
+                ['T', {}],
+            ]),
+            'S',
+        );
         const before = sheet.records('chart').get('c');
-        editLines([sheet], rowsAt(true, 0, 3, 'T'));
-        editLines([sheet], columnsAt(false, 0, 3, 'T'));
+        editLines(sheet, rowsAt(true, 0, 3, 'T'));
+        editLines(sheet, columnsAt(false, 0, 3, 'T'));
         expect(sheet.records('chart').get('c')).toBe(before);
         expect(sheet.records('image').get('i')).toBe(image);
     });
@@ -601,8 +626,14 @@ test('an edit of lines on another sheet moves no range, place or freeze', () => 
         comment: { c: { row: 4, column: 4 } },
         filter: { f: { rect: [0, 0, 5, 5] } },
     };
-    const sheet = sheetOf(records, { frozenRows: 2 });
+    const sheet = sheetNamed(
+        sheetsOf([
+            ['S', records, { frozenRows: 2 }],
+            ['T', {}],
+        ]),
+        'S',
+    );
     const before = contentOf(sheet);
-    expect(editLines([sheet], rowsAt(false, 0, 4, 'T'))).toEqual([]);
+    expect(editLines(sheet, rowsAt(false, 0, 4, 'T'))).toEqual([]);
     expect(contentOf(sheet)).toEqual(before);
 });

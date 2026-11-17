@@ -7,7 +7,7 @@ import { describe, expect, test } from 'bun:test';
 import type { DataValidationRule } from '@workspace/lib/sheets';
 import { compareRules } from '@workspace/lib/sheets';
 import type { ConditionalFormatRecord, LinesOp, MoveOp, Rect, ValidationRecord } from '@workspace/lib/sheets/ops';
-import type { SheetRecords } from '../../../engine/book/records';
+import type { SheetRecords } from './records-fixtures';
 import { LAST_COLUMN, LAST_ROW, planned, rowsAt, sheetOf } from './records-fixtures';
 
 const CASES = 120;
@@ -192,7 +192,7 @@ function moveBlock(sheet: SheetRecords, random: Random): void {
               ]
             : range;
     const after = [...sheet.records('validation')].map(([id, rule]) => [id, rule.ranges.map(shift)]);
-    planned(sheet.planMove(op, sheet)).commit();
+    planned(sheet.planMove(op)).commit();
     expect([...sheet.records('validation')].map(([id, rule]) => [id, rule.ranges])).toEqual(after);
 }
 
@@ -274,7 +274,7 @@ describe('the conditional formats of a rectangle', () => {
             [[7, 2, 8, 3]],
         ]);
         const op: MoveOp = { kind: 'move', sheet: 'S', from: [24, 0, 24, 0], toSheet: 'S', toRow: 40, toColumn: 9 };
-        planned(formats.planMove(op, formats)).commit();
+        planned(formats.planMove(op)).commit();
         expect(ids([24, 0, 24, 0])).toEqual([]);
         expect(ids([40, 9, 40, 9])).toEqual(['b']);
     });

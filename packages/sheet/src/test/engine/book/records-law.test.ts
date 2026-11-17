@@ -7,7 +7,7 @@ import { expect, test } from 'bun:test';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { LinesOp, MoveOp, RecordOp, Rect, SheetContent, SheetFields, Span } from '@workspace/lib/sheets/ops';
 import { readBatch } from '@workspace/lib/sheets/ops-validate';
-import type { SheetRecords } from '../../../engine/book/records';
+import type { SheetRecords } from './records-fixtures';
 import {
     applyRecordOps,
     chartOf,
@@ -20,7 +20,7 @@ import {
     ref,
     reverseOf,
     sheetNamed,
-    sheetOf,
+    sheetsOf,
 } from './records-fixtures';
 
 const CASES = 1500;
@@ -89,14 +89,14 @@ function recordsOn(random: Random, id: string): { records: SheetContent['records
     }
     if (random() < 0.6) {
         const rect = rectOn(random);
-        records.filter = { f: { rect } };
+        records.filter = { [`${id}f`]: { rect } };
         records.filterColumn = {};
         for (let column = rect[1]; column <= Math.min(rect[3], rect[1] + 2); column += 1) {
             if (random() < 0.5) continue;
             const first = spanOn(random, GRID_ROWS);
             const rows: Span[] =
                 first[1] < GRID_ROWS - 3 && random() < 0.5 ? [first, [first[1] + 2, first[1] + 2]] : [first];
-            records.filterColumn[`k${column}`] = { filter: 'f', column, rows };
+            records.filterColumn[`${id}k${column}`] = { filter: `${id}f`, column, rows };
         }
     }
     for (let i = below(random, 4); i > 0; i -= 1) {
@@ -104,20 +104,23 @@ function recordsOn(random: Random, id: string): { records: SheetContent['records
         const formula = FORMULAS[below(random, FORMULAS.length)];
         records.conditionalFormat = {
             ...records.conditionalFormat,
-            [`r${i}`]: formulaRule(ranges, keyOf(formula, ranges[0][0], ranges[0][1])),
+            [`${id}r${i}`]: formulaRule(ranges, keyOf(formula, ranges[0][0], ranges[0][1])),
         };
     }
     for (let i = below(random, 3); i > 0; i -= 1) {
         const ranges = Array.from({ length: 1 + below(random, 2) }, () => rectOn(random));
         const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
-        records.validation = { ...records.validation, [`v${i}`]: { ranges, order: `a${i}`, rule } };
+        records.validation = { ...records.validation, [`${id}v${i}`]: { ranges, order: `a${i}`, rule } };
     }
     if (random() < 0.5) {
         const on = () => (random() < 0.5 ? 'S' : 'T');
         const [top, left, bottom, right] = rectOn(random);
         const values = ref(on(), [top, bottom], [left, right]);
         records.chart = {
-            c: chartOf({ categories: random() < 0.5 ? values : null, series: [{ id: 's', name: 'n', values }] }),
+            [`${id}c`]: chartOf({
+                categories: random() < 0.5 ? values : null,
+                series: [{ id: 's', name: 'n', values }],
+            }),
         };
     }
     const fields = id === 'S' ? { frozenRows: below(random, 8), frozenColumns: below(random, 4) } : {};
@@ -128,9 +131,9 @@ function bookOn(random: Random) {
     const s = recordsOn(random, 'S');
     const t = recordsOn(random, 'T');
     return () =>
-        new Map([
-            ['S', sheetOf(structuredClone(s.records), s.fields)],
-            ['T', sheetOf(structuredClone(t.records), t.fields, 'T')],
+        sheetsOf([
+            ['S', structuredClone(s.records), s.fields],
+            ['T', structuredClone(t.records), t.fields],
         ]);
 }
 
@@ -164,10 +167,10 @@ function* lineCases(): Generator<Case> {
         yield {
             build,
             run: (sheets) => {
-                const restore = editLines(sheets.values(), edit);
+                const restore = editLines(sheetNamed(sheets, 'S'), edit);
                 if (!edit.insert)
                     expect(sheetNamed(sheets, edit.sheet).wouldPush({ ...edit, insert: true })).toBe(false);
-                editLines(sheets.values(), inverseOf(edit));
+                editLines(sheetNamed(sheets, 'S'), inverseOf(edit));
                 return restore;
             },
         };
@@ -189,8 +192,7 @@ function* moveCases(): Generator<Case> {
             toColumn: below(random, 12),
         };
         const sheets = build();
-        const source = sheetNamed(sheets, 'S');
-        if ([...sheets.values()].some((sheet) => typeof sheet.planMove(op, source) === 'string')) continue;
+        if ([...sheets.values()].some((sheet) => typeof sheet.planMove(op) === 'string')) continue;
         yield {
             build,
             run: (sheets) => {

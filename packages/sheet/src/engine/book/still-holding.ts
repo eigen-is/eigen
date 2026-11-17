@@ -35,7 +35,7 @@ export function stillHolding(book: Workbook, apply: readonly Op[], written: read
             const next = inputHolding(op, holds);
             if (next) held.push(next);
         } else if (op.kind === 'record') {
-            const next = recordHolding(part, op, written);
+            const next = recordHolding(book, op, written);
             if (next) held.push(next);
         } else if ('lines' in op) held.push(...linesHolding(part, op, written));
         else held.push(...cellsHolding(book, part, op, written, holds));
@@ -65,7 +65,7 @@ function asLeft(book: Workbook, part: BookSheet, sheet: string, apply: readonly 
                 const bound = bindSheet(tree, op.set.name, op.sheet);
                 if (bound === tree) continue;
                 // A formula a rename bound goes back only while the sheet has that name, or it would bind elsewhere.
-                if (book.sheets.get(op.sheet)?.records.fields.name !== op.set.name) return false;
+                if (!book.sheets.has(op.sheet) || book.records.fields(op.sheet).name !== op.set.name) return false;
                 left = { ...left, f: printStored(bound) };
                 wrote = true;
             }
@@ -242,7 +242,7 @@ function linesHolding(part: BookSheet, op: LineFormat, written: readonly Op[]): 
 
 // A record holds field by field where the inverse sets fields, and whole where it makes or deletes the record: then
 // the record must be as the edit left it, or the peer's record stays. A sheet has one filter, whatever its id.
-function recordHolding(part: BookSheet, op: RecordOp, written: readonly Op[]): RecordOp | undefined {
+function recordHolding(book: Workbook, op: RecordOp, written: readonly Op[]): RecordOp | undefined {
     let id = op.id;
     // A make of any filter takes the place of the live one; a change or delete writes only the record of its id.
     const slot = (other: RecordOp) => other.id === id || (other.type === 'filter' && other.whole === 1);
@@ -261,13 +261,13 @@ function recordHolding(part: BookSheet, op: RecordOp, written: readonly Op[]): R
         id = other.id;
     }
     if (!state) return op;
-    const { records } = part;
-    const [filter] = records.records('filter');
+    const { records } = book;
+    const [filter] = records.records(op.sheet, 'filter');
     const live =
         op.type === 'sheet'
-            ? records.fields
+            ? records.fields(op.sheet)
             : op.type !== 'filter'
-              ? records.records(op.type).get(id)
+              ? records.records(op.sheet, op.type).get(id)
               : filter && (state === 'gone' || filter[0] === id)
                 ? filter[1]
                 : undefined;

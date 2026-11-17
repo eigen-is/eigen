@@ -12,18 +12,96 @@ import type {
     RecordOp,
     Records,
     RecordType,
+    Rect,
     SheetContent,
     SheetFields,
 } from '@workspace/lib/sheets/ops';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
-import type { Planned } from '../../../engine/book/records';
-import { SheetRecords } from '../../../engine/book/records';
+import { BookRecords } from '../../../engine/book/records';
 
 export const LAST_ROW = GRID_ROWS - 1;
 export const LAST_COLUMN = GRID_COLUMNS - 1;
 
+type Kind = Exclude<RecordType, 'sheet'>;
+
+// One sheet of a book's record store, read and written as the store's tests do.
+export class SheetRecords {
+    public constructor(
+        public readonly store: BookRecords,
+        public readonly id: string,
+    ) {}
+
+    public get fields() {
+        return this.store.fields(this.id);
+    }
+
+    public records<T extends Kind>(type: T) {
+        return this.store.records(this.id, type);
+    }
+
+    public content() {
+        return this.store.content(this.id);
+    }
+
+    public weight() {
+        return this.store.weight();
+    }
+
+    public write(op: RecordOp) {
+        return this.store.write(op);
+    }
+
+    public wouldPush(op: LinesOp) {
+        return this.store.wouldPush(op);
+    }
+
+    public planLines(op: LinesOp) {
+        return this.store.planLines(op);
+    }
+
+    public planMove(op: MoveOp) {
+        return this.store.planMove(op);
+    }
+
+    public merge(row: number, column: number) {
+        return this.store.merge(this.id, row, column);
+    }
+
+    public touchesMerge(rect: Rect) {
+        return this.store.touchesMerge(this.id, rect);
+    }
+
+    public mergesIn(rect: Rect) {
+        return this.store.mergesIn(this.id, rect);
+    }
+
+    public validation(row: number, column: number) {
+        return this.store.validation(this.id, row, column);
+    }
+
+    public rulesIn<T extends 'conditionalFormat' | 'validation'>(type: T, rect: Rect) {
+        return this.store.rulesIn(this.id, type, rect);
+    }
+
+    public comments(row: number, column: number) {
+        return this.store.comments(this.id, row, column);
+    }
+}
+
+// A store of one sheet, S unless named.
 export function sheetOf(records: SheetContent['records'] = {}, fields: Partial<SheetFields> = {}, id = 'S') {
-    return new SheetRecords(id, { name: id, order: id, ...fields }, records);
+    const store = new BookRecords();
+    store.add(id, { name: id, order: id, ...fields }, records);
+    return new SheetRecords(store, id);
+}
+
+// The sheets of one store, by id.
+export function sheetsOf(
+    sheets: readonly [string, SheetContent['records'], Partial<SheetFields>?][],
+): Map<string, SheetRecords> {
+    const store = new BookRecords();
+    for (const [id, records, fields] of sheets) store.add(id, { name: id, order: id, ...fields }, records);
+    return new Map(sheets.map(([id]) => [id, new SheetRecords(store, id)]));
 }
 
 export function rowsAt(insert: boolean, index: number, count = 1, sheet = 'S'): LinesOp {
@@ -38,23 +116,22 @@ export function inverseOf(edit: LinesOp): LinesOp {
     return { ...edit, insert: !edit.insert };
 }
 
-export function planned(result: Planned | string): Planned {
+export function planned<P extends object>(result: P | string): P {
     if (typeof result === 'string') throw new Error(`refused: ${result}`);
     return result;
 }
 
-// Plans the edit on every sheet before any writes, as the applier does, and returns the record ops of all sheets.
-export function editLines(sheets: Iterable<SheetRecords>, edit: LinesOp): RecordOp[] {
-    const plans = [...sheets].map((sheet) => planned(sheet.planLines(edit)));
-    for (const plan of plans) plan.commit();
-    return plans.flatMap((plan) => plan.restore);
+// Plans the edit on the sheet's store, as the applier does, and returns its record ops.
+export function editLines(sheet: SheetRecords, edit: LinesOp): RecordOp[] {
+    const plan = planned(sheet.planLines(edit));
+    plan.commit();
+    return [...plan.restore];
 }
 
 export function moveBlock(sheets: ReadonlyMap<string, SheetRecords>, op: MoveOp): RecordOp[] {
-    const source = sheetNamed(sheets, op.sheet);
-    const plans = [...sheets.values()].map((sheet) => planned(sheet.planMove(op, source)));
-    for (const plan of plans) plan.commit();
-    return plans.flatMap((plan) => plan.restore);
+    const plan = planned(sheetNamed(sheets, op.sheet).planMove(op));
+    plan.commit();
+    return [...plan.restore];
 }
 
 // The move that takes a block back to where it came from.

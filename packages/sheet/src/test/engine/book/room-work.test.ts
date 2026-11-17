@@ -324,7 +324,7 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
         const book = new Workbook(bookOf(...sheets));
         const ops = Array.from({ length: 2000 }, (_, at) => input(undefined, [[1 + (at % 50), 0, { v: at }]], 'T0'));
         const walks = [spyOn(Bands.prototype, 'weight'), spyOn(Extras.prototype, 'weight')];
-        const records = [...book.sheets.values()].map((part) => spyOn(part.records, 'weight'));
+        const records = [spyOn(book.records, 'weight')];
         const slots = spyOn(book.engine, 'slots');
         try {
             applyOps(book, ops);

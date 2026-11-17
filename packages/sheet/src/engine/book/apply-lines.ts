@@ -24,15 +24,11 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
     const keys = rows ? part.rows : part.columns;
     // The lines an insert pushes off the grid must be empty, or no delete brings them back. The engine refuses the
     // insert for a value or a formula on them, the parts for what they hold.
-    if (insert && (bands.wouldPush(op) || keys.wouldPush(op) || extras.wouldPush(op) || part.records.wouldPush(op))) {
+    if (insert && (bands.wouldPush(op) || keys.wouldPush(op) || extras.wouldPush(op) || book.records.wouldPush(op))) {
         throw new Refusal('grid-end');
     }
-    // A rule's formula and a chart's refs on any sheet may read the edited lines.
-    const plans = [...book.sheets.values()].map(({ records }) => {
-        const plan = records.planLines(op);
-        if (plan === 'key-too-long') throw new Refusal(plan);
-        return plan;
-    });
+    const plan = book.records.planLines(op);
+    if (plan === 'key-too-long') throw new Refusal(plan);
     if (checked && insert && rows) {
         let pushed = 0;
         for (let column = book.engine.lastColumn(sheet); column >= 0; column -= 1) {
@@ -72,7 +68,7 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
         else keyed.set(held, { kind: 'format', sheet, lines: rows ? 'rows' : 'columns', spans: [span], set: attrs });
     }
     extras.lines(op);
-    for (const plan of plans) plan.commit();
+    plan.commit();
 
     const back: LinesOp = { kind: 'lines', sheet, rows, insert: !insert, index, count, ...(!insert && { like }) };
     const looks = [...worn].map(([id, areas]): FormatOp => {
@@ -85,7 +81,7 @@ export function applyLines(book: Workbook, op: LinesOp, checked: boolean): (Line
         ...looks,
         ...keyed.values(),
         ...(content ? [content] : []),
-        ...plans.flatMap((plan) => plan.restore),
+        ...plan.restore,
         ...lostInputs(book, result, back),
     ];
 }
