@@ -89,6 +89,7 @@ export class RectIndex {
 export type ColumnStretch = { left: number; right: number; blocks: number[] };
 
 export function columnStretches(rects: readonly Rect[]): ColumnStretch[] {
+    if (rects.length === 0) return [];
     const edges = rects.flatMap(([, left, , right]) => [left, right + 1]).sort((a, b) => a - b);
     const byLeft = rects.map((_, at) => at).sort((a, b) => rects[a][1] - rects[b][1]);
     const stretches: ColumnStretch[] = [];
