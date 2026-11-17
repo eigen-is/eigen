@@ -8,6 +8,8 @@ Mail, drive, docs, sheets, slides, vector, stickies, calendar, contacts and chat
 
 The demo is a shared workspace that resets every hour. Eigen is pre-1.0, so do not trust it yet with data you cannot afford to lose.
 
+https://github.com/user-attachments/assets/e6153819-1d7c-4029-aa0c-39928aaf8049
+
 <table>
   <tr>
     <td width="33%"><a href="https://eigen.is/about/docs"><img src="apps/index/public/data/about/media/row-docs.webp" alt="Eigen Docs"></a><br><b>Docs</b>: documents you write together, saved as you type.</td>
