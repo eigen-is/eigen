@@ -47,7 +47,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
             // Most often the one argument is one range: its cells are computed and looked at in one go.
             const one = to === at + 1 && isReference(value) && value.next === null ? value : null;
             if (one !== null && ctx.anchored) {
-                const error = carried(ctx, frame, p, at, one, family);
+                const error = lookPastCarry(ctx, frame, p, at, one, family);
                 if (error !== null) return error;
             } else {
                 if (one !== null) ctx.recalc.settleArea(one);
@@ -92,7 +92,7 @@ export function look(ctx: Evaluator, entry: Entry, frame: Frame, count: number, 
 // The one range `one`, argument `at`, of parameter `p` in a formula whose ranges keep their top down a block: its
 // cells are computed and looked at but for the rows the pass carries from a call that read it down to a row above.
 // The error that ends the call, or null with the parameter bound to numbers that go on from the carry.
-function carried(
+function lookPastCarry(
     ctx: Evaluator,
     frame: Frame,
     p: number,
@@ -117,7 +117,7 @@ function carried(
     }
     if (found !== null) return found;
     const numbers = Numbers.bind(frame.numbers(p), at, at + 1, family, true);
-    frame.args[p] = live ? Numbers.carrying(numbers, one, carry) : numbers;
+    frame.args[p] = live ? Numbers.fromCarry(numbers, one, carry) : numbers;
     return null;
 }
 

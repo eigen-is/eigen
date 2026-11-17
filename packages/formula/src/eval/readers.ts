@@ -137,7 +137,7 @@ export class Numbers {
     }
 
     // Bound numbers that are of one range alone, with what the pass carries of it.
-    public static carrying(numbers: Numbers, range: Reference, carry: Carry): Numbers {
+    public static fromCarry(numbers: Numbers, range: Reference, carry: Carry): Numbers {
         numbers.range = range;
         numbers.carry = carry;
         numbers.mark = carry.mark;
@@ -155,7 +155,7 @@ export class Numbers {
     public sum(): number {
         const { walk, recalc } = this.resume(Answer.Sum);
         const sum = add(walk, recalc, this.prior, this.priorBefore);
-        this.carried(Answer.Sum, sum);
+        this.finish(Answer.Sum, sum);
         return this.snaps ? snapSum(sum, walk.before) : sum;
     }
 
@@ -164,14 +164,14 @@ export class Numbers {
         if (this.counted >= 0) return this.counted;
         const { walk } = this.resume(Answer.Count);
         while (walk.next());
-        return this.carried(Answer.Count, 0);
+        return this.finish(Answer.Count, 0);
     }
 
     public min(): number {
         const { walk } = this.resume(Answer.Least);
         let least = this.prior;
         while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] < least) least = walk.num[i];
-        this.carried(Answer.Least, least);
+        this.finish(Answer.Least, least);
         return least;
     }
 
@@ -179,7 +179,7 @@ export class Numbers {
         const { walk } = this.resume(Answer.Most);
         let most = this.prior;
         while (walk.next()) for (let i = walk.from; i < walk.to; i += 1) if (walk.num[i] > most) most = walk.num[i];
-        this.carried(Answer.Most, most);
+        this.finish(Answer.Most, most);
         return most;
     }
 
@@ -247,7 +247,7 @@ export class Numbers {
     }
 
     // The cells counted after an answer's walk, with the answer carried down to the range's last row.
-    private carried(answer: Answer, value: number): number {
+    private finish(answer: Answer, value: number): number {
         const { walk } = this.ctx;
         const counted = this.priorCount + this.done();
         this.counted = counted;
