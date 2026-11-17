@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-17
+
+Saving from Word and Excel into a mounted drive keeps a file's sharing and history, and the Trash in Drive gathers what you and your teams deleted. Times use a 24-hour clock, line spacing in Docs matches Word, and Sheets rounds numbers as Excel does. The public site gets About pages with short films of each app, and follows your computer's light or dark setting.
+
 ### Added
 
 - **Location in Drive** — the details panel shows the drive and folders a file is in, and links to its folder. For a file shared with you, it starts at the owner's name
