@@ -8,6 +8,7 @@ import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
+import { columnHull, RectIndex } from './rect-index';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
@@ -183,17 +184,18 @@ export class Extras {
     private merge(rects: readonly Rect[], to: (old: Extra | undefined, at: number) => Extra | undefined): void {
         const changed: number[] = [];
         const entries: (Extra | undefined)[] = [];
+        // The rectangles whose empty cells stay empty change only their entries, found a column at a time for all.
+        const kept: Rect[] = [];
+        const keptAt: number[] = [];
         for (const [at, rect] of rects.entries()) {
             const blank = to(undefined, at);
-            const cells = this.cells(rect);
             if (!blank) {
-                for (const [row, column, old] of cells) {
-                    changed.push(placeOf(row, column));
-                    entries.push(to(old, at));
-                }
+                kept.push(rect);
+                keptAt.push(at);
                 continue;
             }
             const [top, left, bottom, right] = rect;
+            const cells = this.cells(rect);
             let next = cells.next();
             for (let column = left; column <= right; column += 1) {
                 for (let row = top; row <= bottom; row += 1) {
@@ -204,8 +206,16 @@ export class Extras {
                 }
             }
         }
+        const index = RectIndex.of(kept);
+        for (const rect of columnHull(kept)) {
+            for (const [row, column, old] of this.cells(rect)) {
+                for (const [id] of index.meeting([row, column, row, column])) {
+                    changed.push(placeOf(row, column));
+                    entries.push(to(old, keptAt[Number(id)]));
+                }
+            }
+        }
         if (changed.length === 0) return;
-        // Each rectangle's cells come in place order, so the sort only merges them.
         const order = changed.map((_, at) => at).sort((a, b) => changed[a] - changed[b]);
         const start = this.search(changed[order[0]]);
         const end = this.search(changed[order[order.length - 1]] + 1);

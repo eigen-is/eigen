@@ -379,42 +379,58 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
         expect(book.weight().extras).toBe(5 * 10_000);
     }, 60_000);
 
-    test('a clear of full-width rows costs its columns, its rows and its cells, not rows times columns', () => {
-        for (const count of [1000, 10_000]) {
-            // A linked value on each row, and one cell far right, so the clear empties cells and links alike.
-            const cells = Array.from(
-                { length: count },
-                (_, row): Placed<CellRecord> => [row, 3, { v: row, link: LINK }],
-            );
-            cells.push([count >> 1, 9000, { v: 1 }]);
-            const book = new Workbook(bookOf(sheetOf('S', { cells })));
-            const before = bytes(book);
-            const rows = Array.from({ length: count }, (_, k): [Rect, null] => [[k, 0, k, LAST_COLUMN], null]);
-            // The engine's walks down a column, and the items the lists of the read and the extras take, put or
-            // shift along behind a splice.
-            let work = 0;
-            const asked = spyOn(book.engine, 'nextCell');
-            const { push, splice } = Array.prototype;
-            Array.prototype.push = function (this: unknown[], ...items: unknown[]) {
-                work += items.length;
-                return push.apply(this, items);
-            };
-            Array.prototype.splice = function (this: unknown[], start: number, removed: number, ...items: unknown[]) {
-                work += removed + items.length + (removed === items.length ? 0 : this.length - start - removed);
-                return splice.call(this, start, removed, ...items);
-            };
-            let inverse: Op[] = [];
-            try {
-                inverse = applyOps(book, [input(rows)]);
-            } finally {
-                Object.assign(Array.prototype, { push, splice });
-                asked.mockRestore();
+    test('a clear of full-width rows costs its columns, its rows, its cells and entries, not rows times columns', () => {
+        // A linked value on each row, and one cell far right, so the clear empties cells and links alike; or a link in
+        // every column above the rows, so each row would search the entries of every column.
+        const shapes = [
+            (count: number): Placed<CellRecord>[] => [
+                ...Array.from({ length: count }, (_, row): Placed<CellRecord> => [row, 3, { v: row, link: LINK }]),
+                [count >> 1, 9000, { v: 1 }],
+            ],
+            (): Placed<CellRecord>[] => EVERY_COLUMN.map((column) => [0, column, { link: LINK }]),
+        ];
+        for (const [shape, cellsOf] of shapes.entries()) {
+            for (const count of [1000, 10_000]) {
+                const cells = cellsOf(count);
+                const book = new Workbook(bookOf(sheetOf('S', { cells })));
+                const before = bytes(book);
+                const first = shape === 0 ? 0 : 1;
+                const rows = Array.from({ length: count }, (_, k): [Rect, null] => [
+                    [first + k, 0, first + k, LAST_COLUMN],
+                    null,
+                ]);
+                // The engine's walks down a column, the searches of the extras, and the items the lists of the read
+                // and the extras take, put or shift along behind a splice.
+                let work = 0;
+                const asked = spyOn(book.engine, 'nextCell');
+                const { push, splice } = Array.prototype;
+                const search = Reflect.get(Extras.prototype, 'search');
+                Reflect.set(Extras.prototype, 'search', function (this: Extras, place: number) {
+                    work += 1;
+                    return Reflect.apply(search, this, [place]);
+                });
+                Array.prototype.push = function (this: unknown[], ...items: unknown[]) {
+                    work += items.length;
+                    return push.apply(this, items);
+                };
+                Array.prototype.splice = function (this: unknown[], at: number, removed: number, ...items: unknown[]) {
+                    work += removed + items.length + (removed === items.length ? 0 : this.length - at - removed);
+                    return splice.call(this, at, removed, ...items);
+                };
+                let inverse: Op[] = [];
+                try {
+                    inverse = applyOps(book, [input(rows)]);
+                } finally {
+                    Object.assign(Array.prototype, { push, splice });
+                    Reflect.set(Extras.prototype, 'search', search);
+                    asked.mockRestore();
+                }
+                work += asked.mock.calls.length;
+                expect(book.weight().extras).toBe(shape === 0 ? 0 : 5 * GRID_COLUMNS);
+                expect(work).toBeLessThanOrEqual(4 * GRID_COLUMNS + 40 * (rows.length + cells.length));
+                applyOps(book, inverse);
+                expect(bytes(book)).toBe(before);
             }
-            work += asked.mock.calls.length;
-            expect(book.weight().extras).toBe(0);
-            expect(work).toBeLessThanOrEqual(GRID_COLUMNS + 40 * (rows.length + cells.length));
-            applyOps(book, inverse);
-            expect(bytes(book)).toBe(before);
         }
     }, 120_000);
 });

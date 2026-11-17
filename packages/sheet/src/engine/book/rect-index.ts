@@ -1,8 +1,8 @@
-// Where the rectangles of one record type lie on a sheet, such as its merges or the ranges of its rules, so a read
-// finds the ones at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size,
-// the smallest power of two rows and of two columns that hold its height and its width, so it lies in four tiles at
-// most whatever its area, and a read looks, per tile size in use, at the tiles it covers only. The sheet's records
-// keep it in step with every record they write, by id.
+// Where rectangles lie on a sheet, such as the merges of a record type or the runs of one op, so a read finds the ones
+// at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest
+// power of two rows and of two columns that hold its height and its width, so it lies in four tiles at most, and a
+// read looks, per tile size in use, at the tiles it covers only. The records keep one by id; an op's read lists its
+// runs by place, and walks the columns they cover once, through their hull.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
 import type { Rect } from '@workspace/lib/sheets/ops';
@@ -19,6 +19,13 @@ type Tile = Map<string, Rect[]>;
 export class RectIndex {
     // By tile size, then by tile, then by id: the rectangles of that size with a cell in the tile.
     private readonly sizes = new Map<number, Map<number, Tile>>();
+
+    // The rectangles of a list, each by its place in it as its id.
+    public static of(rects: readonly Rect[]): RectIndex {
+        const index = new RectIndex();
+        for (const [at, rect] of rects.entries()) index.set(String(at), undefined, [rect]);
+        return index;
+    }
 
     // The rectangles with a cell in this one, each once with its id, in no order.
     public meeting(rect: Rect): [id: string, rect: Rect][] {
@@ -82,4 +89,63 @@ export class RectIndex {
             }
         }
     }
+}
+
+// The columns the rectangles cover as rectangles side by side, in column order: each spans its columns from the first
+// row any of the rectangles covers there to the last. A pass hands each column to the first rectangle in its order
+// that covers it: `next` leads from a column towards the first one no earlier rectangle took, and each search points
+// the columns it passed straight at what it found.
+export function columnHull(rects: readonly Rect[]): Rect[] {
+    if (rects.length === 0) return [];
+    let low = GRID_COLUMNS;
+    let high = -1;
+    for (const [, left, , right] of rects) {
+        low = Math.min(low, left);
+        high = Math.max(high, right);
+    }
+    const width = high - low + 1;
+    const tops = new Int32Array(width).fill(-1);
+    const bottoms = new Int32Array(width);
+    const next = new Int32Array(width + 1);
+    // Each rectangle in its order writes its row into the columns no earlier one took, a stretch of them at a time.
+    const pass = (order: Rect[], rows: Int32Array, row: (rect: Rect) => number) => {
+        for (let at = 0; at <= width; at += 1) next[at] = at;
+        const free = (from: number) => {
+            let found = from;
+            while (next[found] !== found) found = next[found];
+            for (let at = from; at !== found; ) {
+                const step = next[at];
+                next[at] = found;
+                at = step;
+            }
+            return found;
+        };
+        for (const rect of order) {
+            const last = rect[3] - low;
+            for (let at = free(rect[1] - low); at <= last; ) {
+                let end = at;
+                while (end <= last && next[end] === end) end += 1;
+                rows.fill(row(rect), at, end);
+                next.fill(end, at, end);
+                at = free(end);
+            }
+        }
+    };
+    pass(
+        [...rects].sort((a, b) => a[0] - b[0]),
+        tops,
+        ([top]) => top,
+    );
+    pass(
+        [...rects].sort((a, b) => b[2] - a[2]),
+        bottoms,
+        ([, , bottom]) => bottom,
+    );
+    const hull: Rect[] = [];
+    for (let at = 0, start = 0; at <= width; at += 1) {
+        if (at < width && tops[at] === tops[start] && bottoms[at] === bottoms[start]) continue;
+        if (tops[start] >= 0) hull.push([tops[start], low + start, bottoms[start], low + at - 1]);
+        start = at;
+    }
+    return hull;
 }
