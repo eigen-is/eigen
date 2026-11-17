@@ -1,8 +1,8 @@
-// Where rectangles lie on a sheet, such as the merges of a record type or the runs of one op, so a read finds the ones
-// at a cell or on a screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest
-// power of two rows and of two columns that hold its height and its width, so it lies in four tiles at most, and a
-// read looks, per tile size in use, at the tiles it covers only. The records keep one by id. An op's read sweeps its
-// rectangles instead, a stretch of columns at a time, down which it goes from one to the next.
+// Where rectangles lie on a sheet, such as the merges of a record type, so a read finds the ones at a cell or on a
+// screen without a walk of them all. A rectangle is listed in tiles of its own size, the smallest power of two rows
+// and of two columns that hold its height and its width, so it lies in four tiles at most, and a read looks, per tile
+// size in use, at the tiles it covers only. The records keep one by id. An op's read and a sheet's walk sweep their
+// rectangles instead, a stretch of columns at a time, down which they go from one to the next.
 
 import { GRID_COLUMNS } from '@workspace/formula/text';
 import type { Rect } from '@workspace/lib/sheets/ops';

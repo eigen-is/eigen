@@ -1,8 +1,8 @@
 // The limits of a workbook and of what enters one: how many sheets, value slots and style runs a workbook may hold,
 // with what its cells hold beyond a value weighed beside the runs, how many records and rich-text runs a sheet's parts
 // may hold, and how long an id, an order key, a text and a batch of ops may be. The op validators check the bounds on
-// what a peer or a file wrote, and every door that changes a workbook, such as the importer, the loader and the
-// applier, weighs the result with `fits`, so every reader refuses one edit.
+// what a peer or a file wrote, and the workbook's load and its appliers weigh the result with `fits`, so every
+// reader refuses one edit.
 
 import { MAX_STORED_LENGTH } from '@workspace/formula/text';
 import type { RefusalKey } from './refusal';

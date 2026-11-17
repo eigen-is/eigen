@@ -1,8 +1,8 @@
-// What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link,
-// and the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel
-// lists sorted in column order, as the engine walks its cells. The workbook holds one per sheet; its appliers write,
-// fill, link and shift the entries as cells, lines and blocks change, and each write adds to the workbook's count. A
-// rich cell's text is the engine's value of it, and `contentOf` joins the two into what an op says the cell holds.
+// What a cell of one sheet holds beyond the value the formula engine keeps for it: the runs of a rich text, a link, and
+// the mark of a text typed with a leading quote. Few cells hold any, so they are kept by place in two parallel lists
+// sorted in column order, as the engine walks its cells. The workbook holds one per sheet, whose appliers write and
+// shift the entries, each write adding to its count. A rich cell's text is the engine's value of it: `contentOf` joins
+// the two into what an op says the cell holds, and `literalOf` gives the engine its part.
 
 import type { Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';

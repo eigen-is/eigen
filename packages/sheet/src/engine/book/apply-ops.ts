@@ -1,8 +1,8 @@
-// The one way a batch of ops changes a workbook, on every host alike, such as the editor's tab, a peer's and the
-// server's fold. It applies the ops in order, each through the applier of its kind, and hands back the batch that
-// undoes them. A batch lands whole or not at all: when an op is refused, or the workbook is past twice a limit after
-// an op or past a limit after the last, the ops that landed are taken back with their own inverses, unchecked, and
-// the refusal is thrown. The ops are trusted, since the validators read them at the door.
+// The frame: the one way a batch of ops changes a workbook, on every host alike, such as the editor's tab, a peer's and
+// the server's fold. It applies the ops in order, each through the applier of its kind, and hands back the batch that
+// undoes them. A batch lands whole or not at all: when an op is refused, or the workbook is past twice a limit after an
+// op or past a limit after the last, the ops that landed are taken back with their own inverses, unchecked, and the
+// refusal is thrown. The ops are trusted, since the validators read them at the door.
 
 import { EditRefusal } from '@workspace/formula';
 import { fits } from '@workspace/lib/sheets/limits';
