@@ -26,6 +26,7 @@ import { pick } from 'es-toolkit';
 import type { Extra } from './extras';
 import { unitsOf } from './extras';
 import { LINE_KEYS } from './line-runs';
+import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
 
 // Every run-style key once: the mapped type fails the build on a key left out.
@@ -100,8 +101,9 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
     // write replaces.
     const rich: (readonly [row: number, column: number, extra: Extra, runs: readonly Run[], look: Look])[] = [];
     const links: Placed<CellLink>[] = [];
+    const sweep = new ColumnSweep(op.ranges);
     if (runKeys.length > 0 || linked) {
-        for (const [row, column, extra] of extras.within(op.ranges)) {
+        for (const [row, column, extra] of extras.within(sweep)) {
             if (extra.s && runKeys.length > 0) {
                 rich.push([row, column, extra, extra.s, book.looks.look(bands.look(row, column))]);
             }
@@ -169,7 +171,7 @@ export function applyFormat(book: Workbook, op: FormatOp, checked: boolean): (Fo
         if (!stopped) extras.write(row, column, { ...extra, s: restyled(runs, runKeys, looks) });
     }
     if (linked && !stopped) {
-        extras.link(op.ranges, link);
+        extras.link(sweep, link);
         if (link) inverse.push({ kind: 'format', sheet, ranges: op.ranges, clear: ['link'] });
         const held = new Map<string, { value: CellLink; areas: Areas }>();
         for (const [row, column, value] of links.sort((a, b) => a[1] - b[1] || a[0] - b[0])) {

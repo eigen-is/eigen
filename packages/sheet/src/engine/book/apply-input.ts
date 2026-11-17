@@ -6,14 +6,14 @@
 
 import type { EditResult, Literal } from '@workspace/formula';
 import { errorOf } from '@workspace/formula';
+import { GRID_COLUMNS } from '@workspace/formula/text';
 import { EXTRA_WEIGHT } from '@workspace/lib/sheets/limits';
 import type { CellContent, InputOp, LinesOp, Placed, Rect } from '@workspace/lib/sheets/ops';
 import { covers } from '@workspace/lib/sheets/rect';
 import { Refusal } from '@workspace/lib/sheets/refusal';
 import type { Extra, Extras } from './extras';
 import { contentOf, textOf, unitsOf } from './extras';
-import type { ColumnStretch } from './rect-index';
-import { blockAt, columnStretches } from './rect-index';
+import { ColumnSweep } from './rect-index';
 import type { Workbook } from './workbook';
 import { reachesEngine } from './workbook';
 
@@ -46,22 +46,26 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
     const runs = op.runs ?? [];
     // A run that does not reach the engine empties the cells its read finds there.
     const emptied: Group[] = [];
-    const rects = runs.map(([rect]) => rect);
-    const stretches = readBlocks(book, sheet, extras, rects, (group, at) => {
+    const sweep = new ColumnSweep(runs.map(([rect]) => rect));
+    readBlocks(book, sheet, extras, sweep, (group, at) => {
         gather(gathered, group, contentOfGroup(group));
         const content = runs[at][1];
         const empties = content === null || !reachesEngine(content);
         if (empties && (group.held.value !== null || group.held.formula !== null)) emptied.push(group);
     });
     // A listed cell inside a run was read with the run. Both come in column order.
-    let stretch = 0;
-    for (const [row, column] of op.cells ?? []) {
-        while (stretch < stretches.length && stretches[stretch].right < column) stretch += 1;
-        const blocks = stretch < stretches.length && stretches[stretch].left <= column ? stretches[stretch].blocks : [];
-        const at = blockAt(rects, blocks, row);
-        if (at === blocks.length || rects[blocks[at]][0] > row) {
-            gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
+    const listed = op.cells ?? [];
+    const inRun: boolean[] = [];
+    let next = 0;
+    for (const [left, right] of listed.length > 0 ? sweep.stretches() : []) {
+        for (; next < listed.length && listed[next][1] <= right; next += 1) {
+            const [row, column] = listed[next];
+            const at = sweep.after(row) - 1;
+            inRun[next] = column >= left && at >= 0 && sweep.rects[sweep.live[at]][2] >= row;
         }
+    }
+    for (const [at, [row, column]] of listed.entries()) {
+        if (!inRun[at]) gathered.cells.push([row, column, cellAt(book, sheet, extras, row, column)]);
     }
 
     for (const [rect, content] of runs) {
@@ -79,7 +83,11 @@ export function applyInput(book: Workbook, op: InputOp, checked: boolean): Input
             for (let row = top; row <= bottom; row += 1) engine.clear(sheet, row, column);
         }
     }
-    if (runs.length > 0) extras.fill(runs.map(([rect, content]) => [rect, content ?? {}]));
+    if (runs.length > 0)
+        extras.fill(
+            sweep,
+            runs.map(([, content]) => content ?? {}),
+        );
     for (const [row, column, content] of op.cells ?? []) {
         const value = content === null ? null : literalOf(content);
         if (content?.f !== undefined) engine.setFormula(sheet, row, column, content.f, value);
@@ -103,8 +111,9 @@ export function filled(op: InputOp, column: (column: number, length: number) => 
         if (reachesEngine(content)) runs.push(rect);
     }
     // Down a column the last run that reaches the engine is the lowest.
-    for (const { left, right, blocks } of columnStretches(runs)) {
-        const length = runs[blocks[blocks.length - 1]][2] + 1;
+    const sweep = new ColumnSweep(runs);
+    for (const [left, right] of sweep.stretches()) {
+        const length = runs[sweep.live[sweep.live.length - 1]][2] + 1;
         for (let at = left; at <= right; at += 1) reach.set(at, length);
     }
     for (const [row, at, content] of op.cells ?? []) {
@@ -159,7 +168,7 @@ export function lostInputs(book: Workbook, { rewrites }: EditResult, after?: Lin
             rects.push([top, left, bottom, right]);
             texts.push(lost);
         }
-        readBlocks(book, sheet, extras, rects, (group, at) => {
+        readBlocks(book, sheet, extras, new ColumnSweep(rects), (group, at) => {
             const content = { ...contentOfGroup(group), f: texts[at] };
             for (const placed of moves ? afterLines(moves, group) : [group]) gather(gathered, placed, content);
         });
@@ -174,7 +183,7 @@ export function inputOfBlocks(book: Workbook, sheet: string, rects: readonly Rec
     const part = book.sheets.get(sheet);
     if (!part) return undefined;
     const gathered: Gathered = { runs: [], cells: [] };
-    readBlocks(book, sheet, part.extras, rects, (group) => {
+    readBlocks(book, sheet, part.extras, new ColumnSweep(rects), (group) => {
         if (group.held !== EMPTY) gather(gathered, group, contentOfGroup(group));
     });
     return gathered.runs.length + gathered.cells.length > 0 ? inputOf(sheet, gathered) : undefined;
@@ -194,53 +203,52 @@ function afterLines({ rows, insert, index, count }: LinesOp, group: Group): Grou
         .map(([start, end]) => (rows ? { ...group, top: start, bottom: end } : { ...group, left: start, right: end }));
 }
 
-// Reads blocks of a sheet, which share no cell, and hands over each rectangle of equal content, or of empty cells, of
-// each block with its place in the list, once it can grow no further. Down each column the blocks come in turn, the
-// engine read over their rows only and the extras searched to each; it returns the stretches of columns it read.
+// Reads the blocks a sweep covers and hands over each rectangle of equal content, or of empty cells, of each block with
+// its place in the list, once it can grow no further. The extras inside the blocks are read first; then down each
+// column the engine is read over the rows of the blocks it holds, which come in turn, and the two are joined.
 function readBlocks(
     book: Workbook,
     sheet: string,
     extras: Extras,
-    rects: readonly Rect[],
+    sweep: ColumnSweep,
     close: (group: Group, at: number) => void,
-): ColumnStretch[] {
-    if (rects.length === 0) return [];
+): void {
+    const { rects, live } = sweep;
+    if (rects.length === 0) return;
     const { engine } = book;
     const found: Placed<Held>[][] = rects.map(() => []);
-    const marks = extras.within(rects);
-    let mark = marks.next();
+    const marks = [...extras.within(sweep)];
+    let mark = 0;
     // The block the engine reads now, whose cells it hands out.
     let block = 0;
     // A cell that holds only a link or a mark is no cell of the engine's: it is read in its place among them.
-    const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
-        for (; !mark.done; mark = marks.next()) {
-            const [r, c, extra, at] = mark.value;
+    const before = (row: number, column: number) => {
+        for (; mark < marks.length; mark += 1) {
+            const [r, c, extra, at] = marks[mark];
             if (c > column || (c === column && r >= row)) break;
             found[at].push([r, c, { ...EMPTY, extra }]);
         }
-        const here = !mark.done && mark.value[0] === row && mark.value[1] === column;
-        const given = formula !== null && engine.isGiven(sheet, row, column);
-        found[block].push([row, column, { value, formula, given, extra: here ? mark.value[2] : undefined }]);
-        if (here) mark = marks.next();
     };
-    const stretches = columnStretches(rects);
-    for (const { left, right, blocks } of stretches) {
+    const cell = (row: number, column: number, value: Literal | null, formula: string | null) => {
+        before(row, column);
+        const here = marks[mark]?.[0] === row && marks[mark][1] === column;
+        const given = formula !== null && engine.isGiven(sheet, row, column);
+        found[block].push([row, column, { value, formula, given, extra: here ? marks[mark][2] : undefined }]);
+        if (here) mark += 1;
+    };
+    for (const [left, right] of sweep.stretches()) {
         for (let column = left; column <= right; column += 1) {
-            const length = engine.columnLength(sheet, column);
-            for (const at of blocks) {
-                const [top, , bottom] = rects[at];
-                if (top >= length) break;
-                block = at;
+            // The blocks that start past the column's last cell hold nothing of the engine's.
+            const end = sweep.after(engine.columnLength(sheet, column) - 1);
+            for (let at = 0; at < end; at += 1) {
+                block = live[at];
+                const [top, , bottom] = rects[block];
                 engine.cells(sheet, cell, top, column, bottom, column);
             }
         }
     }
-    for (; !mark.done; mark = marks.next()) {
-        const [row, column, extra, at] = mark.value;
-        found[at].push([row, column, { ...EMPTY, extra }]);
-    }
+    before(0, GRID_COLUMNS);
     for (const [at, rect] of rects.entries()) groupBlock(rect, found[at], (group) => close(group, at));
-    return stretches;
 }
 
 // Groups the cells a block holds, in column order, a column at a time. A run of equal content down a column joins the

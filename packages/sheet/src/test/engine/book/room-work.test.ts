@@ -436,8 +436,8 @@ describe('engine/book/room — work is counted: a format costs what it reaches a
 });
 
 describe('engine/book/room — an op reads its blocks, not the cells and entries between them', () => {
-    // The rows the engine walks down a column, the searches of the extras, and the items the lists take or put one by
-    // one while `op` lands: a splice's shift of the items behind it is one native move, as in every single write.
+    // The rows the engine walks down a column, the searches of the extras, and the items the lists take, put, filter or
+    // sort one by one while `op` lands: a splice's shift of the items behind it is one native move, as in every write.
     const readWork = (book: Workbook, op: Op) => {
         const { engine } = book;
         const cells = engine.cells.bind(engine);
@@ -450,7 +450,16 @@ describe('engine/book/room — an op reads its blocks, not the cells and entries
                 cells(sheet, cell, top, left, bottom, right);
             },
         );
-        const { push, splice } = Array.prototype;
+        const { push, splice, filter, sort } = Array.prototype;
+        for (const [name, door] of [
+            ['filter', filter],
+            ['sort', sort],
+        ] as const) {
+            Reflect.set(Array.prototype, name, function (this: unknown[], ...args: unknown[]) {
+                work += this.length;
+                return Reflect.apply(door, this, args);
+            });
+        }
         const search = Reflect.get(Extras.prototype, 'search');
         Reflect.set(Extras.prototype, 'search', function (this: Extras, place: number) {
             work += 1;
@@ -468,7 +477,7 @@ describe('engine/book/room — an op reads its blocks, not the cells and entries
         try {
             inverse = applyOps(book, [op]);
         } finally {
-            Object.assign(Array.prototype, { push, splice });
+            Object.assign(Array.prototype, { push, splice, filter, sort });
             Reflect.set(Extras.prototype, 'search', search);
             walks.mockRestore();
         }
@@ -479,6 +488,7 @@ describe('engine/book/room — an op reads its blocks, not the cells and entries
         const book = new Workbook(bookOf(sheetOf('S', { cells })));
         const before = bytes(book);
         const { work, inverse } = readWork(book, op);
+        console.log('WORK', work);
         applyOps(book, inverse);
         expect(bytes(book)).toBe(before);
         return work;
@@ -532,6 +542,34 @@ describe('engine/book/room — an op reads its blocks, not the cells and entries
             expect(measuredRead(cells, op)).toBeLessThanOrEqual(8 * (GRID_COLUMNS + rows.length));
         }
     }, 60_000);
+
+    // A staircase of 16,000 rows that end at the last column, each one column further right: every edge brings one
+    // block and keeps all before it. Its work is a log per edge and per column visited, plus the cells inside.
+    const STEPS = 16_000;
+    const sweepBound = (inside: number) => 4 * ((2 * STEPS + GRID_COLUMNS) * Math.log2(STEPS) + inside);
+    const stairs = (row: (step: number) => number) =>
+        Array.from({ length: STEPS }, (_, step): Rect => [row(step), step, row(step), LAST_COLUMN]);
+
+    test('a staircase cleared over empty columns, its steps arriving below or above those before', () => {
+        for (const rects of [stairs((step) => step + 1), stairs((step) => STEPS - step)]) {
+            const op = input(rects.map((rect): [Rect, null] => [rect, null]));
+            expect(measuredRead([[0, 0, { v: 1 }]], op)).toBeLessThanOrEqual(sweepBound(0));
+        }
+    }, 120_000);
+
+    test('a staircase under a link in every column, its links cleared or its cells cleared', () => {
+        const cells = EVERY_COLUMN.map((at): Placed<CellRecord> => [0, at, { link: LINK }]);
+        const rects = stairs((step) => step + 1);
+        for (const op of [format(rects, undefined, ['link']), input(rects.map((rect): [Rect, null] => [rect, null]))]) {
+            expect(measuredRead(cells, op)).toBeLessThanOrEqual(sweepBound(0));
+        }
+    }, 120_000);
+
+    test('a staircase cleared over a full column of values reads the cell of each step in that column, real work', () => {
+        const cells = column(STEPS + 2, LAST_COLUMN, { v: 1 });
+        const op = input(stairs((step) => step + 1).map((rect): [Rect, null] => [rect, null]));
+        expect(measuredRead(cells, op)).toBeLessThanOrEqual(sweepBound(STEPS));
+    }, 120_000);
 });
 
 describe('engine/book/room — a refused batch is taken back within four limits, for at most three times its work', () => {

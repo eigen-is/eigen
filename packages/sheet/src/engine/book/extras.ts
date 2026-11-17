@@ -8,7 +8,7 @@ import type { Literal } from '@workspace/formula';
 import { GRID_COLUMNS, GRID_ROWS } from '@workspace/formula/text';
 import type { CellContent, LinesOp, MoveOp, Placed, Rect, Run } from '@workspace/lib/sheets/ops';
 import type { CellLink } from '@workspace/lib/sheets/types';
-import { blockAt, columnStretches } from './rect-index';
+import { ColumnSweep } from './rect-index';
 
 export type Extra = Readonly<Pick<CellContent, 's' | 'link' | 'qp'>>;
 
@@ -67,30 +67,32 @@ export class Extras {
 
     // The entries of a block in column order. It reads the lists as it goes, so nothing is written during a walk.
     public *cells(rect: Rect): Generator<Placed<Extra>> {
-        for (const [row, column, extra] of this.within([rect])) yield [row, column, extra];
+        for (const [row, column, extra] of this.within(new ColumnSweep([rect]))) yield [row, column, extra];
     }
 
-    // The entries of rectangles that share no cell, in column order, each with its rectangle's place in the list. Down
+    // The entries of the rectangles a sweep covers, in column order, each with its rectangle's place in the list. Down
     // a column an entry stays in the rectangle of the one before while it can; a gap is jumped by a search.
-    public *within(rects: readonly Rect[]): Generator<[row: number, column: number, extra: Extra, at: number]> {
-        for (const { left, right, blocks } of columnStretches(rects)) {
-            const first = rects[blocks[0]][0];
+    public *within(sweep: ColumnSweep): Generator<[row: number, column: number, extra: Extra, at: number]> {
+        const { rects, live } = sweep;
+        for (const [left, right] of sweep.stretches()) {
+            const first = rects[live[0]][0];
             let at = this.search(placeOf(first, left));
+            // The column of the last entry handed out, and the place in `live` of its rectangle.
             let column = -1;
             let block = 0;
             while (at < this.places.length) {
                 const row = this.places[at] % GRID_ROWS;
                 const next = (this.places[at] - row) / GRID_ROWS;
                 if (next > right) break;
-                if (next !== column || row > rects[blocks[block]][2]) {
+                if (next !== column || row > rects[live[block]][2]) block = sweep.after(row) - 1;
+                if (block >= 0 && rects[live[block]][2] >= row) {
                     column = next;
-                    block = blockAt(rects, blocks, row);
-                }
-                if (block === blocks.length) at = this.search(placeOf(first, column + 1));
-                else if (rects[blocks[block]][0] > row) at = this.search(placeOf(rects[blocks[block]][0], column));
-                else {
-                    yield [row, column, this.held[at], blocks[block]];
+                    yield [row, column, this.held[at], live[block]];
                     at += 1;
+                } else {
+                    column = -1;
+                    const below = block + 1 < live.length ? rects[live[block + 1]][0] : -1;
+                    at = this.search(below < 0 ? placeOf(first, next + 1) : placeOf(below, next));
                 }
             }
         }
@@ -119,19 +121,17 @@ export class Extras {
         return old;
     }
 
-    // Puts in every cell of each block, which share no cell, its one entry, or with none of the three empties it.
-    public fill(blocks: readonly (readonly [Rect, Extra])[]): void {
-        const entries = blocks.map(([, extra]) => entryOf(extra));
-        this.merge(
-            blocks.map(([rect]) => rect),
-            (_, at) => entries[at],
-        );
+    // Puts in every cell of each rectangle the sweep covers the one entry at its place in `extras`, or with none of the
+    // three empties it.
+    public fill(sweep: ColumnSweep, extras: readonly Extra[]): void {
+        const entries = extras.map(entryOf);
+        this.merge(sweep, (_, at) => entries[at]);
     }
 
-    // Sets the link of every cell of the rectangles, which share no cell, or with none clears it, each cell keeping its
-    // runs and its mark.
-    public link(rects: readonly Rect[], link: CellLink | undefined): void {
-        this.merge(rects, (old) => entryOf({ ...old, link }));
+    // Sets the link of every cell of the rectangles the sweep covers, or with none clears it, each cell keeping its runs
+    // and its mark.
+    public link(sweep: ColumnSweep, link: CellLink | undefined): void {
+        this.merge(sweep, (old) => entryOf({ ...old, link }));
     }
 
     // The block leaves `source`, empty where it was, and lands here over what it returns: the entries it covered, as
@@ -190,17 +190,18 @@ export class Extras {
         return removed;
     }
 
-    // Puts in every cell of the rectangles, which share no cell, the entry `to` makes of the one it holds and of the
+    // Puts in every cell of the rectangles the sweep covers the entry `to` makes of the one it holds and of the
     // rectangle's place in the list: the cells with none all take `to` of none. The cells the rectangles change are
     // found first; then each stretch of them with no untouched entry between is laid anew, and the entries between
     // stretches move whole, as a run list moves its runs.
-    private merge(rects: readonly Rect[], to: (old: Extra | undefined, at: number) => Extra | undefined): void {
+    private merge(sweep: ColumnSweep, to: (old: Extra | undefined, at: number) => Extra | undefined): void {
+        const { rects } = sweep;
         // The cells changed, each with its rectangle's place: a rectangle whose empty cells stay empty changes only the
         // cells that hold an entry, which one walk reads for all; the others change every cell.
         const changed: number[] = [];
         const owners: number[] = [];
         const blanks = rects.map((_, at) => to(undefined, at));
-        for (const [row, column, , at] of this.within(rects)) {
+        for (const [row, column, , at] of this.within(sweep)) {
             if (blanks[at] === undefined) {
                 changed.push(placeOf(row, column));
                 owners.push(at);
