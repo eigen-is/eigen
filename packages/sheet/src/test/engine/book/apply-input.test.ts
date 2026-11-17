@@ -200,6 +200,24 @@ describe('engine/book/apply-input — what an input writes', () => {
         expectLaw2(bookOf(sheetOf('a', { cells })), ops);
     });
 
+    test('a cell with only a link or a mark is read with its own run, when a later run in its column reads a value', () => {
+        const cells: SheetContent['cells'] = [
+            [0, 0, { link: LINK }],
+            [2, 0, { qp: 1 }],
+            [5, 0, { v: 1 }],
+        ];
+        const ops = [
+            input({
+                runs: [
+                    [[0, 0, 0, 0], { v: 'x' }],
+                    [[2, 0, 2, 0], { v: 'y' }],
+                    [[5, 0, 5, 0], { v: 'z' }],
+                ],
+            }),
+        ];
+        expect(expectLaw2(bookOf(sheetOf('a', { cells })), ops)).toEqual([input({ cells })]);
+    });
+
     test('a formula run is one stored key in every cell, and a value run that value in every cell', () => {
         const book = new Workbook(bookOf(sheetOf('a', { cells: [[0, 0, { v: 3 }]] })));
         applyOps(book, [
