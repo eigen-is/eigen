@@ -270,6 +270,7 @@ Only S and XS rows, grouped by area. Anything larger goes in P2.
 | Package direction is enforced for package names only | S | The `noRestrictedImports` rules in `biome.jsonc` match package specifiers, so a relative import into another package's `src`, such as lib importing `../../../formula/src/recalc/engine`, passes the lint and resolves. Refuse a relative specifier that leaves its own package, in biome or as a `scripts/check-standards.ts` metric. |
 | The pre-commit hook re-stages a whole partly staged file | XS | `.githooks/pre-commit` ends in `git update-index --again`, so a commit split by hunks silently takes the rest of the file. Stage only the files Biome changed, or skip a file with unstaged changes. |
 | The two account menus repeat each other | XS | `GuestUserDropdown` and `UserDropdown` (`packages/ui/src/components/layout/app/topbar.tsx`) repeat the trigger, the name, **Support**, **About Eigen**, **Log out** and the two dialogs. Make one menu that leaves out **Profile**, **Settings** and **Theme** for a guest. |
+| `LocalFilesystem` reads every error as "not there" | S | `delete`, `list`, `dirExists` and `dirSize` (`apps/api/src/lib/core/local-filesystem.ts`) catch every error, so a permission error or a broken disk reads as a missing file or an empty folder to every caller. Let only ENOENT through, with `isEnoent`, as `unlinkDurable` does, and check the callers that relied on the silence. |
 
 ## Focused audits
 

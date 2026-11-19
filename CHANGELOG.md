@@ -8,6 +8,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 
+### Security
+
+- **Server runtime** — the server runs on Bun 1.4.5, which fixes security issues in its web server, its encrypted connections, its DNS lookups and its decompression
+
 ## [0.4.4] - 2026-11-17
 
 Saving from Word and Excel into a mounted drive keeps a file's sharing and history, and the Trash in Drive gathers what you and your teams deleted. Times use a 24-hour clock, line spacing in Docs matches Word, and Sheets rounds numbers as Excel does. The public site gets About pages with short films of each app, and follows your computer's light or dark setting.
