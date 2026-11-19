@@ -62,9 +62,9 @@ To @mention someone, type `@` followed by their name.
 When a discussion is done, you can mark it resolved.
 
 - In the sidebar or in the document, right-click the comment and choose **Resolve comment**.
-- Or open the thread and click **Resolve** under **Status**.
+- Or open the thread and click **Resolve** at the bottom of the dialog.
 
-The text of a resolved comment loses its highlight. Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click **Resolved** under **Status**.
+The text of a resolved comment loses its highlight. Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click **Resolved** at the bottom of the dialog.
 
 ## Edit or delete a comment
 
@@ -79,6 +79,6 @@ To edit the title or description of an existing comment, open the thread, point 
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) at the top of the dialog, next to the close button. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

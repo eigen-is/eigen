@@ -38,7 +38,7 @@ On the board, the assignee shows as a small avatar in the bottom corner of the c
 ## Resolve a card
 
 1. Click the card to open it.
-2. Under **Status**, at the bottom of the card, click **Resolve**.
+2. At the bottom of the card, click **Resolve**.
 
 The button now reads **Resolved**, and a tick appears before the title. On the board the card stays where it is, with a small tick in its bottom corner to show it is resolved.
 

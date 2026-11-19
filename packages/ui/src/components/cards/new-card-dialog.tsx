@@ -108,13 +108,23 @@ function NewCardForm({
                 </>
             }
             footer={
-                <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" form={formId} disabled={!title.trim() || isSubmitting}>
-                        Add {noun}
-                    </Button>
+                <div className="flex flex-col gap-3">
+                    <CardProperties
+                        color={color}
+                        onColorChange={setColor}
+                        assignee={assignee}
+                        onAssigneeChange={setAssignee}
+                        members={members}
+                        currentUserEmail={currentUserEmail}
+                    />
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" form={formId} disabled={!title.trim() || isSubmitting}>
+                            Add {noun}
+                        </Button>
+                    </div>
                 </div>
             }
         >
@@ -149,14 +159,6 @@ function NewCardForm({
                         onPickFromDevice={stage}
                     />
                 )}
-                <CardProperties
-                    color={color}
-                    onColorChange={setColor}
-                    assignee={assignee}
-                    onAssigneeChange={setAssignee}
-                    members={members}
-                    currentUserEmail={currentUserEmail}
-                />
             </form>
         </CardDialogShell>
     );

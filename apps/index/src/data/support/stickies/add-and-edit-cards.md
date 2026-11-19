@@ -37,7 +37,7 @@ Click the card to open it. You change it right there, without a separate edit mo
 - Changed something by mistake? Press **Ctrl+Z** (**Cmd+Z** on a Mac) while the card is open to undo it.
 - **Color** and **Assignee** sit in the row at the bottom of the card. A change there takes effect straight away.
 
-To delete the card, click the trash icon (**Delete**) at the bottom of the card, next to who created it, and confirm.
+To delete the card, click the trash icon (**Delete**) at the top of the dialog, next to the close button, and confirm.
 
 ## Add a checklist
 

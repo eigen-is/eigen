@@ -40,6 +40,9 @@ type CardDialogShellProps = {
     // An open edit, or a new card's fields once anything is typed.
     unsaved: boolean;
     onCancel: () => void;
+    // Icon buttons for the whole card beside the close button, such as copy link and delete.
+    actions?: ReactNode;
+    // A bar along the bottom of the card's column, as tall as the thread's reply box beside it, so their top lines meet.
     footer: ReactNode;
     thread?: { content: ReactNode; placement: ThreadPlacement };
     children: ReactNode;
@@ -52,6 +55,7 @@ export function CardDialogShell({
     title,
     unsaved,
     onCancel,
+    actions,
     footer,
     thread,
     children,
@@ -98,6 +102,7 @@ export function CardDialogShell({
                     <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
                     {/* Radix requires a description on every DialogContent; the body below is the card itself. */}
                     <DialogDescription className="sr-only">Card details, attachments and replies.</DialogDescription>
+                    {actions}
                     {/* It keeps the focus where it is, or an open edit would lose it, and save, before the cancel. */}
                     <TooltipButton
                         icon={X}
@@ -112,7 +117,7 @@ export function CardDialogShell({
                         <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4', layout?.cardText)}>
                             {children}
                         </div>
-                        <div className="shrink-0 px-4 pb-3">{footer}</div>
+                        <div className="shrink-0 border-t px-4 py-3 empty:hidden">{footer}</div>
                     </div>
                     {thread && layout && (
                         <div className={cn('flex min-h-0 flex-col', layout.thread)}>{thread.content}</div>

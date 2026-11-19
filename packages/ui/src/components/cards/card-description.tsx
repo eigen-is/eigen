@@ -84,7 +84,7 @@ export function CardDescription({
     }
 
     return (
-        <div className="group relative -mx-2 rounded-md px-2 py-1 transition-colors pointer-fine:hover:bg-muted/50">
+        <div className="group relative -mx-2 rounded-md px-2 py-1 pr-9 transition-colors pointer-fine:hover:bg-muted/50">
             {description ? (
                 <div
                     ref={descriptionRef}

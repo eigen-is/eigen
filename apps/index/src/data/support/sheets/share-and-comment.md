@@ -94,9 +94,9 @@ Click the filter button (the funnel icon) at the top of the panel to narrow the 
 When a discussion is finished, you can mark the comment resolved.
 
 - Right-click the cell and choose **Resolve comment** from the menu.
-- Or open the comment thread and click **Resolve** under **Status**.
+- Or open the comment thread and click **Resolve** at the bottom of the dialog.
 
-Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click **Resolved** under **Status**.
+Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click **Resolved** at the bottom of the dialog.
 
 ## Edit, change color, or delete a comment
 
@@ -111,6 +111,6 @@ To edit the title or description of an existing comment, open the thread, point 
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) at the top of the dialog, next to the close button. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned.

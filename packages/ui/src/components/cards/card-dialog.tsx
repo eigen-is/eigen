@@ -173,28 +173,41 @@ function OpenCardDialog({
                     />
                 </>
             }
+            actions={
+                <>
+                    {copyLinkUrl && (
+                        <TooltipButton
+                            icon={LinkIcon}
+                            tooltipText="Copy link"
+                            className="text-current hover:bg-current/10"
+                            onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
+                        />
+                    )}
+                    {canWrite && onDelete && (
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
+                            className="text-current hover:bg-current/10"
+                            onClick={() => onDelete(card.id)}
+                        />
+                    )}
+                </>
+            }
             footer={
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    {card.creator && <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />}
-                    <span className="ml-auto flex shrink-0 items-center">
-                        {copyLinkUrl && (
-                            <TooltipButton
-                                icon={LinkIcon}
-                                tooltipText="Copy link"
-                                className="h-7 w-7"
-                                onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
-                            />
-                        )}
-                        {canWrite && onDelete && (
-                            <TooltipButton
-                                icon={Trash2}
-                                tooltipText="Delete"
-                                className="h-7 w-7"
-                                onClick={() => onDelete(card.id)}
-                            />
-                        )}
-                    </span>
-                </div>
+                <CardProperties
+                    color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
+                    onColorChange={canEdit ? (color) => onUpdate?.(card.id, { color }) : undefined}
+                    assignee={entry?.assignee ?? null}
+                    onAssigneeChange={
+                        canWrite && chatName && onAssign ? (email) => onAssign(chatName, email, card.title) : undefined
+                    }
+                    members={members}
+                    currentUserEmail={currentUserEmail}
+                    status={chatName ? status : undefined}
+                    onStatusChange={
+                        canWrite && chatName && onResolve ? (next) => onResolve(chatName, next, card.title) : undefined
+                    }
+                />
             }
             thread={{
                 placement: threadPlacement,
@@ -212,6 +225,11 @@ function OpenCardDialog({
             }}
         >
             <div className="flex min-h-full flex-col gap-4" onPaste={onPaste} {...targetProps}>
+                {card.creator && (
+                    <div className="text-xs text-muted-foreground">
+                        <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />
+                    </div>
+                )}
                 <CardDescription
                     description={card.description}
                     canWrite={canEdit}
@@ -221,7 +239,7 @@ function OpenCardDialog({
                     onSave={(html) => save('description', html === null ? null : { description: html })}
                     onTick={(html) => onUpdate?.(card.id, { description: html })}
                 />
-                <div className="mt-auto flex flex-col gap-3">
+                <div className="mt-auto">
                     <CardAttachmentRow
                         onAdd={canAttach ? () => setPickerOpen(true) : undefined}
                         hasAttachments={!!card.attachments?.length}
@@ -260,24 +278,6 @@ function OpenCardDialog({
                             </AttachmentStrip>
                         )}
                     </CardAttachmentRow>
-                    <CardProperties
-                        color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
-                        onColorChange={canEdit ? (color) => onUpdate?.(card.id, { color }) : undefined}
-                        assignee={entry?.assignee ?? null}
-                        onAssigneeChange={
-                            canWrite && chatName && onAssign
-                                ? (email) => onAssign(chatName, email, card.title)
-                                : undefined
-                        }
-                        members={members}
-                        currentUserEmail={currentUserEmail}
-                        status={chatName ? status : undefined}
-                        onStatusChange={
-                            canWrite && chatName && onResolve
-                                ? (next) => onResolve(chatName, next, card.title)
-                                : undefined
-                        }
-                    />
                 </div>
             </div>
             <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">

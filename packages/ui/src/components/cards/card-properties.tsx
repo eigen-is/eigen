@@ -1,6 +1,6 @@
-// The row under a card's text in its dialog: its color, its assignee and, on a card that has its thread, the button
-// that resolves or reopens it. The dialog that adds a card holds the first two until Add, and an open card applies each
-// at once. A reader sees the assignee and whether the card is resolved, without the controls.
+// The row along the bottom of a card's column in its dialog: its color, its assignee and, on a card that has its
+// thread, the button that resolves or reopens it. The dialog that adds a card holds the first two until Add, and an open
+// card applies each at once. A reader sees the assignee and whether the card is resolved, without the controls.
 
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -44,13 +44,16 @@ export function CardProperties({
                 members={members}
                 currentUserEmail={currentUserEmail}
             >
-                <Button type="button" variant="outline" size="sm" className="max-w-48 font-normal">
-                    {assignee ? (
-                        <AssigneeChip email={assignee} />
-                    ) : (
-                        <span className="text-muted-foreground">Unassigned</span>
-                    )}
-                </Button>
+                {/* Named Assignee, as the row has no labels and an avatar alone could be anyone. */}
+                <TooltipTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" className="max-w-48 font-normal">
+                        {assignee ? (
+                            <AssigneeChip email={assignee} />
+                        ) : (
+                            <span className="text-muted-foreground">Unassigned</span>
+                        )}
+                    </Button>
+                </TooltipTrigger>
             </AssigneePicker>
         );
     }
@@ -83,12 +86,12 @@ export function CardProperties({
         );
     }
 
-    // A reader of an open, unassigned card has nothing here, and gets no divider either.
+    // A reader of an open, unassigned card has nothing here, and the bar around it hides.
     if (!onColorChange && !assigneeControl && !statusControl) return null;
     return (
-        <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-t pt-3">
+        <div className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-2">
             {onColorChange && (
-                <Property label="Color">
+                <div role="group" aria-label="Color">
                     <ColorPicker
                         value={color}
                         onChange={onColorChange}
@@ -96,21 +99,23 @@ export function CardProperties({
                         columns={EIGEN_STICKIES_COLORS[0].length}
                         showReset={false}
                     />
-                </Property>
+                </div>
             )}
-            <div className="ml-auto flex flex-wrap items-start gap-x-6 gap-y-3">
-                {assigneeControl && <Property label="Assignee">{assigneeControl}</Property>}
-                {statusControl && <Property label="Status">{statusControl}</Property>}
+            <div className="ml-auto flex items-center gap-2">
+                {assigneeControl && (
+                    <Tooltip>
+                        <div role="group" aria-label="Assignee">
+                            {assigneeControl}
+                        </div>
+                        {onAssigneeChange && <TooltipContent>Assignee</TooltipContent>}
+                    </Tooltip>
+                )}
+                {statusControl && (
+                    <div role="group" aria-label="Status">
+                        {statusControl}
+                    </div>
+                )}
             </div>
-        </div>
-    );
-}
-
-function Property({ label, children }: { label: string; children: ReactNode }) {
-    return (
-        <div className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">{label}</span>
-            {children}
         </div>
     );
 }
