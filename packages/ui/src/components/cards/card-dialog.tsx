@@ -1,7 +1,7 @@
 // The dialog a comment card opens into, in every host: the card's title, description and attachments, which a writer
-// edits in place, its color, assignee and resolve controls, who created it, and its thread beside it. A deleted comment
-// opens the deleted state instead, with nothing that acts. The host's comment lifecycle decides which state a card is
-// in, and it does the writes this dialog asks for.
+// edits in place, its color, assignee and resolve controls, who created it, and its thread under tabs, beside or below
+// it. A deleted comment opens the deleted state instead, with nothing that acts. The host's comment lifecycle decides
+// which state a card is in, and it does the writes this dialog asks for.
 
 import { wasToasted } from '@workspace/lib/api-error';
 import { copyToClipboard } from '@workspace/lib/clipboard';
@@ -22,7 +22,6 @@ import { AttachmentStrip } from '../attachment/attachment-strip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
-import { CommentThread } from '../comments/comment-thread';
 import { CreatedByMeta } from '../comments/created-by-meta';
 import { DeletedComment } from '../comments/deleted-comment';
 import { ContextMenuAnchor } from '../context-menu';
@@ -36,6 +35,7 @@ import { CardDescription } from './card-description';
 import type { ThreadPlacement } from './card-dialog-shell';
 import { CardDialogShell } from './card-dialog-shell';
 import { CardProperties } from './card-properties';
+import { CardThreadTabs } from './card-thread-tabs';
 import { CardTitle } from './card-title';
 
 type CardDialogProps = {
@@ -199,7 +199,7 @@ function OpenCardDialog({
             thread={{
                 placement: threadPlacement,
                 content: chatName ? (
-                    <CommentThread
+                    <CardThreadTabs
                         ownerId={ownerId}
                         mountId={mountId}
                         pathId={pathId}

@@ -161,3 +161,22 @@ test("the description opens from its pencil, and its cancel button in the pencil
     expect(updates).toEqual([]);
     expect(closes).toBe(0);
 });
+
+test('the thread sits under All, Comments and Activity, and Activity has nothing yet', async () => {
+    await renderDialog();
+    const tab = (name: string) => {
+        const found = [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === name);
+        if (!found) throw new Error(`no ${name} tab`);
+        return found;
+    };
+    // Radix tabs switch on the press, not the click.
+    const pick = (name: string) =>
+        act(async () => {
+            tab(name).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        });
+    expect(tab('All').getAttribute('aria-selected')).toBe('true');
+    await pick('Activity');
+    expect(document.body.textContent).toContain('No activity yet');
+    await pick('Comments');
+    expect(document.body.textContent).not.toContain('No activity yet');
+});
