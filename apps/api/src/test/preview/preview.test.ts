@@ -602,20 +602,19 @@ describe('one generation per preview', () => {
         }
     });
 
-    test('a request still looking for a stale body when another finishes reads the written file', async () => {
+    test('a request still looking for an older body when another finishes reads the written file', async () => {
         const bytes = Buffer.from('late body');
         const { mount, path } = await previewMount('late-text-generation', 'notes.txt', 'text/plain', bytes);
         const readBytes = spyOn(mount, 'readBytes');
         const { promise: firstDone, resolve: releaseSecond } = Promise.withResolvers<void>();
-        // readdir's overloads defeat a typed spy, so the stale lookup's listing is swapped by hand: the second request's
-        // waits until the first request has its preview.
         const realReaddir = fsPromises.readdir;
         let listings = 0;
-        Reflect.set(fsPromises, 'readdir', async (...args: unknown[]) => {
+        // The second request's listing waits until the first request has its preview.
+        const readdir = spyOn(fsPromises, 'readdir').mockImplementation((async (dir: string) => {
             listings += 1;
             if (listings === 2) await firstDone;
-            return Reflect.apply(realReaddir, fsPromises, args);
-        });
+            return realReaddir(dir);
+        }) as typeof fsPromises.readdir);
         try {
             const first = getTextPreview(mount, path);
             const second = getTextPreview(mount, path);
@@ -624,7 +623,7 @@ describe('one generation per preview', () => {
             expect((await second)?.value.body).toContain('late body');
             expect(readBytes).toHaveBeenCalledTimes(1);
         } finally {
-            Reflect.set(fsPromises, 'readdir', realReaddir);
+            readdir.mockRestore();
             readBytes.mockRestore();
         }
     });
@@ -638,19 +637,17 @@ describe('one generation per preview', () => {
 
         const readBytes = spyOn(mount, 'readBytes');
         try {
-            const served = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
-            for (const stale of served) {
-                expect(stale?.stale).toBe(true);
-                expect(stale?.value.body).toContain('version one');
-            }
+            // The second request gets the new body instead when the first one's regeneration finished while it looked.
+            const [first] = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
+            expect(first?.stale).toBe(true);
+            expect(first?.value.body).toContain('version one');
             let fresh = await getTextPreview(mount, edited);
             for (let i = 0; i < 40 && fresh?.stale !== false; i++) {
                 await Bun.sleep(25);
                 fresh = await getTextPreview(mount, edited);
             }
             expect(fresh?.value.body).toContain('version two');
-            // A second request whose stale read outlasted the first regeneration starts one more.
-            expect(readBytes.mock.calls.length).toBeLessThanOrEqual(2);
+            expect(readBytes).toHaveBeenCalledTimes(1);
         } finally {
             readBytes.mockRestore();
         }
