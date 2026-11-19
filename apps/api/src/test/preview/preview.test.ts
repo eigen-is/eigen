@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { promises as fsPromises, mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -598,6 +598,33 @@ describe('one generation per preview', () => {
             expect(cached?.stale).toBe(false);
             expect(readBytes).toHaveBeenCalledTimes(1);
         } finally {
+            readBytes.mockRestore();
+        }
+    });
+
+    test('a request still looking for a stale body when another finishes reads the written file', async () => {
+        const bytes = Buffer.from('late body');
+        const { mount, path } = await previewMount('late-text-generation', 'notes.txt', 'text/plain', bytes);
+        const readBytes = spyOn(mount, 'readBytes');
+        const { promise: firstDone, resolve: releaseSecond } = Promise.withResolvers<void>();
+        // readdir's overloads defeat a typed spy, so the stale lookup's listing is swapped by hand: the second request's
+        // waits until the first request has its preview.
+        const realReaddir = fsPromises.readdir;
+        let listings = 0;
+        Reflect.set(fsPromises, 'readdir', async (...args: unknown[]) => {
+            listings += 1;
+            if (listings === 2) await firstDone;
+            return Reflect.apply(realReaddir, fsPromises, args);
+        });
+        try {
+            const first = getTextPreview(mount, path);
+            const second = getTextPreview(mount, path);
+            expect((await first)?.value.body).toContain('late body');
+            releaseSecond();
+            expect((await second)?.value.body).toContain('late body');
+            expect(readBytes).toHaveBeenCalledTimes(1);
+        } finally {
+            Reflect.set(fsPromises, 'readdir', realReaddir);
             readBytes.mockRestore();
         }
     });

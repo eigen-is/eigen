@@ -209,6 +209,10 @@ async function getOrCacheText<T>(
 
     // A cached previous version is served while the current one regenerates in the background.
     const stale = await readNewestStaleText(previewsDir, pathId, cacheName, format, parse);
+    // A job for this name may have finished during that disk read, so the check runs again with no wait before a job
+    // starts.
+    const written = await readCachedText(cacheFile, parse);
+    if (written !== null) return { value: written, stale: false };
     if (stale !== null) {
         if (!failed) generateText('background').catch(() => {});
         return { value: stale, stale: true };
