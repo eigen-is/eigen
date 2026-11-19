@@ -13,6 +13,17 @@
     color: var(--doc-color, #1a1a2e);
 }
 
+/* A light editor's placeholder, shown while its text is one empty paragraph, which TipTap draws as a lone trailing
+   break. A float of no height overlaps the first line without pushing the caret aside. The text's own color, faded,
+   needs no theme variable, which an exported document doesn't declare. */
+.tiptap[data-placeholder]:has(> p:only-child > br.ProseMirror-trailingBreak:only-child)::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 /* ===== Shared rules: headings, code, formatting, tables, images ===== */
 .eigen-prose,
 .tiptap {
