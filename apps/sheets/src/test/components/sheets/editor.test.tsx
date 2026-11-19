@@ -132,7 +132,7 @@ mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
     ...realSearch,
     DocSearchProvider: Children,
 }));
-mock.module('@workspace/ui/components/cards', () => ({ ...realCards, CardFormDialog: Nothing }));
+mock.module('@workspace/ui/components/cards', () => ({ ...realCards, NewCardDialog: Nothing }));
 mock.module('../../../components/sheets/hooks/use-sheet', () => ({ useSheet: () => sheet }));
 mock.module('../../../components/sheets/hooks/use-presence', () => ({ usePresence: () => () => {} }));
 mock.module('../../../components/sheets/hooks/use-search-controller', () => ({

@@ -1,13 +1,12 @@
-// Saves a comment card's edit into the Y.Doc: the fields the patch names, in one transaction, and an empty
-// attachment list clears the field. The comment lifecycle hands it to the card dialog.
+// Saves a comment card's edit into the Y.Doc: the fields the patch names, in one transaction. The attachments change
+// the list the doc holds at that moment, so an upload that lands late keeps what a peer or the user changed meanwhile,
+// and an emptied list clears the field. The comment lifecycle hands it to the card dialog.
 
 import { useCallback } from 'react';
 import * as Y from 'yjs';
-import type { CardFormPatch, CommentCard, CommentMapName } from '../../../types/comments';
+import type { CommentCardPatch, CommentMapName } from '../../../types/comments';
 import { getItemMapRoot } from '../../collab/yjs-utils';
-
-// A card form's patch with its attachments, which the dialog resolves before it saves them.
-export type CommentCardPatch = CardFormPatch & Pick<CommentCard, 'attachments'>;
+import { readCardAttachments } from './use-comment-cards';
 
 export function useUpdateCommentCard(
     doc: Y.Doc | null,
@@ -22,8 +21,9 @@ export function useUpdateCommentCard(
                 if (patch.title !== undefined) card.set('title', patch.title);
                 if (patch.description !== undefined) card.set('description', patch.description);
                 if (patch.color !== undefined) card.set('color', patch.color);
-                if (patch.attachments !== undefined) {
-                    if (patch.attachments.length > 0) card.set('attachments', patch.attachments);
+                if (patch.attachments) {
+                    const next = patch.attachments(readCardAttachments(card.get('attachments')) ?? []);
+                    if (next.length > 0) card.set('attachments', next);
                     else card.delete('attachments');
                 }
             });

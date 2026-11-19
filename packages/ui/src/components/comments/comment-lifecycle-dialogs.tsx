@@ -1,6 +1,6 @@
 // The card dialog and the comment right-click menu every editor mounts, driven by the comment lifecycle bundle. The
 // editor owns the context menu's state and supplies the delete that strips its own anchor, such as a mark in docs or a
-// cell's card ids in sheets. A delete from the dialog's edit form or that menu asks first, through DeleteCommentDialog,
+// cell's card ids in sheets. A delete from the dialog or that menu asks first, through DeleteCommentDialog,
 // so every editor asks the same way. Everything else, the deleted state included, comes from the bundle.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
@@ -34,18 +34,8 @@ export function CommentLifecycleDialogs({
     noun = 'comment',
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const {
-        updateCard,
-        members,
-        openCard,
-        openEntry,
-        openCardDeleted,
-        openCardEditing,
-        setOpenCardEditing,
-        setOpenCardId,
-        resolveComment,
-        assignComment,
-    } = lifecycle;
+    const { updateCard, members, openCard, openEntry, openCardDeleted, setOpenCardId, resolveComment, assignComment } =
+        lifecycle;
     const { user } = useAuth();
     const shown = !!openCard || !!openEntry;
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
@@ -73,12 +63,10 @@ export function CommentLifecycleDialogs({
                 pathId={path.id}
                 canWrite={canWrite}
                 deleted={openCardDeleted}
-                isEditing={openCardEditing}
-                onEditingChange={setOpenCardEditing}
                 copyLinkUrl={openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}
                 currentUserEmail={user?.email}
-                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
+                onUpdate={updateCard}
                 onResolve={(chatName, next, title) => resolveComment.mutate({ chatName, status: next, title })}
                 onAssign={(chatName, assignee, title) => assignComment.mutate({ chatName, assignee, title })}
                 onDelete={setDeleteCardId}

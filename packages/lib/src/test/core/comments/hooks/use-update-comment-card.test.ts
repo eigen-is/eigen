@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
 import { writeCardToDoc } from '../../../../core/comments/hooks/use-create-comment-card';
-import type { CommentCardPatch } from '../../../../core/comments/hooks/use-update-comment-card';
 import { useUpdateCommentCard } from '../../../../core/comments/hooks/use-update-comment-card';
+import type { CommentCardPatch } from '../../../../types/comments';
 import { installHappyDom } from '../../../happy-dom';
 import { renderHook } from '../../../render-hook';
 
@@ -45,16 +45,30 @@ describe('useUpdateCommentCard', () => {
         expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('color')).toBe('#00ff00');
     });
 
-    test('attachments: sets the array and deletes the key when emptied', async () => {
+    test('attachments change the list as it stands in the doc, and an emptied list deletes the key', async () => {
         const doc = seed();
-        await updateCard(doc, 'c1', { attachments: ['a.png'] });
-        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('attachments')).toEqual(['a.png']);
+        const y = doc.getMap<Y.Map<unknown>>('comments').get('c1')!;
+        await updateCard(doc, 'c1', { attachments: (current) => [...current, 'a.png'] });
+        expect(y.get('attachments')).toEqual(['a.png']);
+
+        // A peer attached a file since this dialog last drew the card, so the add keeps it.
+        y.set('attachments', ['a.png', 'peer.png']);
+        await updateCard(doc, 'c1', { attachments: (current) => [...current, 'b.png'] });
+        expect(y.get('attachments')).toEqual(['a.png', 'peer.png', 'b.png']);
 
         await updateCard(doc, 'c1', { title: 'x' });
-        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.get('attachments')).toEqual(['a.png']);
+        expect(y.get('attachments')).toEqual(['a.png', 'peer.png', 'b.png']);
 
-        await updateCard(doc, 'c1', { attachments: [] });
-        expect(doc.getMap<Y.Map<unknown>>('comments').get('c1')!.has('attachments')).toBe(false);
+        await updateCard(doc, 'c1', { attachments: () => [] });
+        expect(y.has('attachments')).toBe(false);
+    });
+
+    test("a peer's malformed list reads as the valid entries it holds", async () => {
+        const doc = seed();
+        const y = doc.getMap<Y.Map<unknown>>('comments').get('c1')!;
+        y.set('attachments', ['a.png', 42, null]);
+        await updateCard(doc, 'c1', { attachments: (current) => [...current, 'b.png'] });
+        expect(y.get('attachments')).toEqual(['a.png', 'b.png']);
     });
 
     test('no-op when cardId is missing', async () => {

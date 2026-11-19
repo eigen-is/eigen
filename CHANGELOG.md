@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Cards and comments** — in Stickies, Docs, Sheets, Slides and Vector, an open card shows its thread beside it and edits in place: click the title or description, and Esc cancels. Color, assignee, **Resolve** and attachments apply at once
+
 ## [0.4.4] - 2026-11-17
 
 Saving from Word and Excel into a mounted drive keeps a file's sharing and history, and the Trash in Drive gathers what you and your teams deleted. Times use a 24-hour clock, line spacing in Docs matches Word, and Sheets rounds numbers as Excel does. The public site gets About pages with short films of each app, and follows your computer's light or dark setting.

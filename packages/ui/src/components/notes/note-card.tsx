@@ -1,8 +1,8 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
 // description, how far its checklist is done, and a muted footer with an unread dot, replies, attachments and
 // the assignee, whose avatar gets a ring in the app's color on an open card assigned to the viewer. A deleted
-// comment keeps the uncolored frame and only its title. The caller handles a click, usually by opening
-// NoteCardDialog.
+// comment keeps the uncolored frame and only its title. The caller handles a click, usually by opening the card's
+// dialog.
 
 import { useAuth } from '@workspace/lib/auth';
 import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';

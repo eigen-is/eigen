@@ -6,7 +6,7 @@ category: Sharing
 tags: [vector, sharing, permissions, comments, collaboration]
 related: [vector/get-started, drive/share-a-file]
 order: 70
-updated: 2026-11-11
+updated: 2026-11-19
 ---
 
 Drawings are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you can edit a drawing, you can also leave comments, either on a single object or on the drawing as a whole.
@@ -56,7 +56,7 @@ Comments attach to a single object on the canvas, such as a shape, an arrow, or 
 
 1. Right-click the object.
 2. Choose **Add comment** from the menu.
-3. In the **New comment** dialog, give the comment a title and, if you like, a description and a color. You can also assign it to someone.
+3. In the dialog that opens, give the comment a title at the top and, if you like, a description and a color. You can also assign it to someone.
 4. Click **Add comment**.
 
 Or select one object and choose **Comment** from the **Insert** menu, which opens the same dialog.
@@ -83,6 +83,6 @@ Open a comment and mark it as resolved. Resolved comments are hidden by default.
 
 ### Copy a link to a comment
 
-Open a comment and click the link icon (**Copy link**) near the top of the dialog. The link opens the drawing with that comment's thread already visible.
+Open a comment and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link opens the drawing with that comment's thread already visible.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

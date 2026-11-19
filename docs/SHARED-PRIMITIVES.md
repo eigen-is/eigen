@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2379 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2378 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (324)
+## Components (322)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -52,8 +52,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardHeader` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardTitle` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
-| `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
-| `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `NewCardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/new-card-dialog.tsx |
 | `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChartSections` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-sections.tsx |
@@ -256,7 +255,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MountForm` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `S3ConfigCard` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/s3-config-card.tsx |
 | `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
-| `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `Popover` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
@@ -692,7 +690,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (470)
+## Types (471)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1012,6 +1010,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardFormPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `CommentCardPatch` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentHover` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentHoverTarget` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentMapName` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |

@@ -6,7 +6,7 @@ category: Sharing
 tags: [sheets, sharing, permissions, comments, collaboration]
 related: [sheets/get-started, drive/share-a-file, getting-started/how-sharing-works]
 order: 120
-updated: 2026-11-09
+updated: 2026-11-19
 ---
 
 A spreadsheet is private to you until you share it. You can give specific people access, share with a whole team, or give anyone with the link the ability to view or edit. Once collaborators have access, you can use cell comments to leave notes and discuss specific values without changing the data itself.
@@ -68,7 +68,7 @@ You need write access to add comments. If you only have view access, the option 
 
 1. Click the cell you want to comment on.
 2. Right-click and choose **Add comment** from the context menu. You can also open the **Insert** menu and choose **Comment**.
-3. In the **New comment** dialog, the **Title** is pre-filled with the cell address (for example, "Cell B3"). Edit it if you like, and add a longer note in the **Description** field. Pick a color for the comment marker.
+3. In the dialog that opens, the title at the top is pre-filled with the cell address (for example, "Cell B3"). Edit it if you like, and add a longer note under **Add a description…**. Pick a color for the comment marker.
 4. Click **Add comment**.
 
 A small triangle appears in the corner of the cell to show it has a comment attached. Rest your mouse on the cell to read the comment's card, and click the card to open the thread.
@@ -94,9 +94,9 @@ Click the filter button (the funnel icon) at the top of the panel to narrow the 
 When a discussion is finished, you can mark the comment resolved.
 
 - Right-click the cell and choose **Resolve comment** from the menu.
-- Or open the comment thread and click the checkmark icon (**Resolve**) near the top of the dialog.
+- Or open the comment thread and click **Resolve** under **Status**.
 
-Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
+Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click **Resolved** under **Status**.
 
 ## Edit, change color, or delete a comment
 
@@ -107,10 +107,10 @@ Right-click a cell that has a comment to see its options:
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: removes the comment from the cell, once you confirm. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
-To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread and click the title or the description. Press **Enter** in the title, or click anywhere else, to save. **Esc** cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned.

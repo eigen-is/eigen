@@ -4,7 +4,7 @@ This proposal adds a small surprise when you finish something in Eigen: a burst 
 
 **Status:** Phase 1 is built: `useCelebrate`, the confetti burst, the setting and the checklist trigger ([STICKIES.md](../STICKIES.md#ticking-the-last-box-of-a-checklist-celebrates-now-and-then)). Phases 2 to 4 are not started. The empty states and the new triggers were added on 2026-11-01.
 
-> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in `NoteCardDialog`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti, and the same figures sit in the apps' empty states, which is where a new user meets them first. One personal setting turns the celebrations off. No package, no new route, no migration.
+> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in the card dialog's description. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti, and the same figures sit in the apps' empty states, which is where a new user meets them first. One personal setting turns the celebrations off. No package, no new route, no migration.
 
 ## Why
 
@@ -39,9 +39,9 @@ A burst is a fixed, full-viewport `<canvas>` with `pointer-events: none`, append
 
 ### The first trigger: a sticky's checklist
 
-`NoteCardDialog` (`packages/ui/src/components/notes/note-card-dialog.tsx`) toggles a task-list checkbox in `handleDescriptionClick` and passes the new HTML to `onDescriptionChange`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input)`. The confetti comes out of the box you just ticked.
+`CardDescription` (`packages/ui/src/components/cards/card-description.tsx`) toggles a task-list checkbox in its click handler and passes the new HTML to `onTick`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input)`. The confetti comes out of the box you just ticked.
 
-`countTaskItems` (`packages/lib/src/core/html.ts`) counts checked and total items for both `NoteCard` and the dialog. `NoteCardDialog` also serves `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`), so cards outside the Stickies app get the same behavior.
+`countTaskItems` (`packages/lib/src/core/html.ts`) counts checked and total items for both `NoteCard` and the dialog. `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`) renders it in every host, so cards outside the Stickies app get the same behavior.
 
 A checklist with one item is a toggle, not a list, so it doesn't count.
 

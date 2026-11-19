@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
-import { CardFormDialog } from '../cards';
+import { NewCardDialog } from '../cards';
 import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '../comments';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { CollabDocumentGate } from '../layout/app/collab-document-gate';
@@ -116,15 +116,13 @@ export function CanvasDocumentShell({
 
                 {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
 
-                <CardFormDialog
+                <NewCardDialog
                     open={comments.addOpen}
                     onOpenChange={comments.closeAdd}
                     onSave={comments.handleSaveNew}
                     allowAttachments={!!mediaFolderId}
                     members={comments.members}
                     currentUserEmail={comments.currentUserEmail}
-                    dialogTitle="New comment"
-                    submitLabel="Add comment"
                 />
 
                 <CommentHoverCard side="right" {...comments.hoverCardProps} />

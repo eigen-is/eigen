@@ -62,19 +62,22 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
             chatName: typeof chatName === 'string' ? chatName : undefined,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
-            // A peer can write anything into the list, and sameAttachments and the chips read each entry as a file name
-            // or a reference, so anything else would crash the render.
-            attachments: Array.isArray(attachments)
-                ? attachments.filter(
-                      (a): a is ChatAttachment =>
-                          typeof a === 'string' ||
-                          (a?.type === 'reference' && typeof a.name === 'string' && typeof a.mimeType === 'string'),
-                  )
-                : undefined,
+            attachments: readCardAttachments(attachments),
             deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,
         };
     }
     return out;
+}
+
+// A peer can write anything into the list, and sameAttachments and the chips read each entry as a file name or a
+// reference, so anything else would crash the render.
+export function readCardAttachments(value: unknown): ChatAttachment[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    return value.filter(
+        (a): a is ChatAttachment =>
+            typeof a === 'string' ||
+            (a?.type === 'reference' && typeof a.name === 'string' && typeof a.mimeType === 'string'),
+    );
 }
 
 function sameCard(a: CommentCard, b: CommentCard): boolean {

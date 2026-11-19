@@ -1,6 +1,7 @@
 // Ticking the last box of a card's checklist celebrates: once per opening, only for a list of two or more,
 // only on the tick itself, and never with the setting off. The chance is forced to win throughout. Each click
-// is saved and drawn again, as a card's parent does, which replaces the boxes in the page.
+// is saved and drawn again, as a card's parent does, which replaces the boxes in the page. An opening is a mount,
+// as the dialog mounts the description afresh each time it opens. A click on the text opens the editor.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
@@ -17,7 +18,7 @@ mock.module('@workspace/lib/space', () => ({
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const confetti = await import('../../../components/celebrate/confetti-burst');
-const { NoteCardDialog } = await import('../../../components/notes/note-card-dialog');
+const { CardDescription } = await import('../../../components/cards/card-description');
 
 const burst = spyOn(confetti, 'burstConfetti').mockImplementation(() => {});
 const roll = spyOn(Math, 'random').mockReturnValue(0);
@@ -31,24 +32,29 @@ const item = (checked: boolean, text: string) =>
     `<li data-checked="${checked}" data-type="taskItem"><label><input type="checkbox"${checked ? ' checked' : ''}></label><div><p>${text}</p></div></li>`;
 const twoItems = `<ul data-type="taskList">${item(true, 'Buy paint')}${item(false, 'Paint the shed')}</ul>`;
 
-let root = createRoot(document.createElement('div'));
+const mount = () => createRoot(document.body.appendChild(document.createElement('div')));
+let root = mount();
 let saved = '';
+let edits = 0;
 
 function render(open: boolean, description: string) {
     saved = description;
     act(() =>
         root.render(
-            createElement(NoteCardDialog, {
-                open,
-                onOpenChange: () => {},
-                title: 'Shed',
-                description,
-                canWrite: true,
-                onDescriptionChange: (html: string) => {
-                    saved = html;
-                },
-                children: null,
-            }),
+            open
+                ? createElement(CardDescription, {
+                      description,
+                      canWrite: true,
+                      editing: false,
+                      onEdit: () => {
+                          edits += 1;
+                      },
+                      onSave: () => {},
+                      onTick: (html: string) => {
+                          saved = html;
+                      },
+                  })
+                : null,
         ),
     );
 }
@@ -62,8 +68,9 @@ function click(text: string) {
 beforeEach(() => {
     settings = {};
     burst.mockClear();
+    edits = 0;
     window.happyDOM.settings.device.prefersReducedMotion = 'no-preference';
-    root = createRoot(document.createElement('div'));
+    root = mount();
     render(false, twoItems);
 });
 afterEach(() => act(() => root.unmount()));
@@ -133,19 +140,18 @@ test('the setting off does not celebrate', () => {
     expect(burst).not.toHaveBeenCalled();
 });
 
-test('the actions under the description are named buttons', () => {
-    act(() =>
-        root.render(
-            createElement(NoteCardDialog, {
-                open: true,
-                onOpenChange: () => {},
-                title: 'Shed',
-                description: '',
-                canWrite: true,
-                onEdit: () => {},
-                children: null,
-            }),
-        ),
-    );
-    expect(document.querySelector('button[aria-label="Edit"]')).not.toBeNull();
+test('a click on the text opens the editor, and a tick or a link does not', () => {
+    render(true, `${twoItems}<p>Ask <a href="https://example.com">the shop</a></p>`);
+    act(() => document.querySelector('p')?.click());
+    expect(edits).toBe(1);
+    click('Paint the shed');
+    act(() => document.querySelector('a')?.click());
+    expect(edits).toBe(1);
+});
+
+test('an empty description offers to add one, and the pencil names its action', () => {
+    render(true, '');
+    expect(document.body.textContent).toContain('Add a description');
+    render(true, '<p>Paint</p>');
+    expect(document.querySelector('button[aria-label="Edit description"]')).not.toBeNull();
 });

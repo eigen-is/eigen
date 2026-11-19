@@ -40,9 +40,6 @@ type CommentLifecycle = {
     // Opens the comment a chat name names, and says whether one did. A host that reveals a card's anchor first passes
     // its own openCard, which then opens a card the chat name finds.
     openChat: (chatName: string, openCard?: (cardId: string) => void) => boolean;
-    openCardForEdit: (cardId: string) => void;
-    openCardEditing: boolean;
-    setOpenCardEditing: (editing: boolean) => void;
 };
 
 // A host passes `ready` once its cards have synced and its active set is computed. Until then a landing waits instead
@@ -77,8 +74,6 @@ export function useCommentLifecycle({
     onCardNotFound?: () => void;
 }): CommentLifecycle {
     const [open, setOpen] = useState<OpenComment | null>(null);
-    // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
-    const [editCardId, setEditCardId] = useState<string | null>(null);
 
     const { user } = useAuth();
     const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, pathId);
@@ -135,11 +130,5 @@ export function useCommentLifecycle({
         isCardDeleted,
         setOpenCardId,
         openChat,
-        openCardForEdit: (cardId: string) => {
-            setOpenCardId(cardId);
-            setEditCardId(cardId);
-        },
-        openCardEditing: !!openCard && openCard.id === editCardId,
-        setOpenCardEditing: (editing: boolean) => setEditCardId(editing ? (openCard?.id ?? null) : null),
     };
 }

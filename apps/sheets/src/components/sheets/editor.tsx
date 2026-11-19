@@ -22,7 +22,7 @@ import type { ImageSize } from '@workspace/lib/vector';
 import { fitImageSize } from '@workspace/lib/vector';
 import type { ChartPanelState, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { ChartPanelSections, Workbook } from '@workspace/sheet';
-import { CardFormDialog } from '@workspace/ui/components/cards';
+import { NewCardDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -493,7 +493,7 @@ export function SheetEditor({
                 </div>
             </div>
 
-            <CardFormDialog
+            <NewCardDialog
                 open={addOpen}
                 onOpenChange={(o) => {
                     setAddOpen(o);
@@ -504,8 +504,6 @@ export function SheetEditor({
                 allowAttachments={!!mediaFolderId}
                 members={members}
                 currentUserEmail={auth.user?.email}
-                dialogTitle="New comment"
-                submitLabel="Add comment"
             />
 
             <CommentHoverCard

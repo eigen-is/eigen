@@ -89,8 +89,6 @@ function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
                 pathId: 'doc-1',
                 canWrite: true,
                 deleted,
-                isEditing: false,
-                onEditingChange: () => {},
                 members: [member],
                 currentUserEmail: 'ada@example.com',
                 onUpdate: () => {},

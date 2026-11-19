@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-11-17
+updated: 2026-11-19
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -17,7 +17,7 @@ You need write access to add comments. If you only have view access, the option 
 
 1. Select the text you want to comment on.
 2. Right-click the selection and choose **Add comment** from the menu.
-3. In the **New comment** dialog, the **Title** is pre-filled with your selected text. You can edit it, or add a longer note in the **Description** field. Pick a color if you like.
+3. In the dialog that opens, the title at the top is pre-filled with your selected text. You can edit it, or add a longer note under **Add a description…**. Pick a color if you like.
 4. Click **Add comment**.
 
 The selected text is highlighted in the document with the comment's color, so it's easy to see at a glance which passages have comments.
@@ -62,9 +62,9 @@ To @mention someone, type `@` followed by their name.
 When a discussion is done, you can mark it resolved.
 
 - In the sidebar or in the document, right-click the comment and choose **Resolve comment**.
-- Or open the thread and click the checkmark icon at the top right of the dialog.
+- Or open the thread and click **Resolve** under **Status**.
 
-The text of a resolved comment loses its highlight. Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
+The text of a resolved comment loses its highlight. Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click **Resolved** under **Status**.
 
 ## Edit or delete a comment
 
@@ -75,10 +75,10 @@ Right-click a comment highlight in the document to open its context menu. In a t
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: asks you to confirm, then removes the comment and its highlight, so it no longer appears in the document or the sidebar.
 
-To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread and click the title or the description. Press **Enter** in the title, or click anywhere else, to save. **Esc** cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

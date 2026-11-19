@@ -1,11 +1,11 @@
-// The rows of a comment's or a sticky's menu: view, edit, color, assign, resolve or reopen, and delete, or Add when
+// The rows of a comment's or a sticky's menu: view, color, assign, resolve or reopen, and delete, or Add when
 // nothing has a comment yet. A card's own menu draws them alone; a host's menu, such as a cell's, draws them in its groups.
 
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { Check, MessageSquare, MessageSquarePlus, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
 import { MenuSections } from '../context-menu/menu-sections';
 import { ChoiceMenuSub, DropdownMenuItem } from '../dropdown-menu';
 import { AssigneeMenuItems } from './assignee-menu-items';
@@ -14,12 +14,11 @@ export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | 
 
 type CommentMenuItemsProps = {
     item: CommentContextMenuItem | null;
-    // Noun in user-visible labels: "Edit {noun}", "{Noun} color", "Delete {noun}".
+    // Noun in user-visible labels: "View {noun}", "{Noun} color", "Delete {noun}".
     // Defaults to "comment"; stickies passes "sticky".
     noun?: string;
     onAddComment?: () => void;
     onOpen?: (cardId: string) => void;
-    onEdit?: (cardId: string) => void;
     onChangeColor?: (cardId: string, color: string) => void;
     onResolve?: (chatName: string, title?: string) => void;
     onReopen?: (chatName: string, title?: string) => void;
@@ -37,7 +36,6 @@ export function CommentMenuItems({
     noun = 'comment',
     onAddComment,
     onOpen,
-    onEdit,
     onChangeColor,
     onResolve,
     onReopen,
@@ -68,11 +66,6 @@ export function CommentMenuItems({
     );
     const organize = (
         <>
-            {onEdit && (
-                <DropdownMenuItem onClick={() => onEdit(card.id)}>
-                    <Pencil className="h-4 w-4" /> Edit {noun}
-                </DropdownMenuItem>
-            )}
             {onChangeColor && (
                 <ChoiceMenuSub
                     trigger={

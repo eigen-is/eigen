@@ -20,7 +20,6 @@ const { useSheetContextMenu } = await import('../../../components/ContextMenu/us
 
 const lifecycle = {
     setOpenCardId: () => {},
-    openCardForEdit: () => {},
     updateCard: () => {},
     resolveComment: { mutate: () => {} },
     assignComment: { mutate: () => {} },

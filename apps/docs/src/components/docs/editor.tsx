@@ -34,7 +34,7 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
-import { CardFormDialog } from '@workspace/ui/components/cards';
+import { NewCardDialog } from '@workspace/ui/components/cards';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
@@ -1065,7 +1065,7 @@ const TiptapEditor = ({
 
             {chartDataOpen && <ChartDataEditor editor={editor} undoManager={undoManager} onClose={closeChartData} />}
 
-            <CardFormDialog
+            <NewCardDialog
                 open={addOpen}
                 onOpenChange={(open) => {
                     setAddOpen(open);
@@ -1076,8 +1076,6 @@ const TiptapEditor = ({
                 allowAttachments={!!mediaFolderId}
                 members={members}
                 currentUserEmail={auth.user?.email}
-                dialogTitle="New comment"
-                submitLabel="Add comment"
             />
 
             <CommentHoverCard

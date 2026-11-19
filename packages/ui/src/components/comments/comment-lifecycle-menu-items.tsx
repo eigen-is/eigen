@@ -27,8 +27,7 @@ export function CommentLifecycleMenuItems({
     onDelete,
     part,
 }: CommentLifecycleMenuItemsProps) {
-    const { setOpenCardId, openCardForEdit, updateCard, resolveComment, assignComment, members, isCardDeleted } =
-        lifecycle;
+    const { setOpenCardId, updateCard, resolveComment, assignComment, members, isCardDeleted } = lifecycle;
     const { user } = useAuth();
     // A deleted comment keeps only View and Delete: its thread is gone, or the document no longer uses it.
     const canChange = canWrite && !(item && isCardDeleted(item.card));
@@ -40,7 +39,6 @@ export function CommentLifecycleMenuItems({
             part={part}
             onAddComment={canWrite ? onAddComment : undefined}
             onOpen={setOpenCardId}
-            onEdit={canChange ? openCardForEdit : undefined}
             onChangeColor={canChange ? (cardId, color) => updateCard(cardId, { color }) : undefined}
             onResolve={
                 canChange

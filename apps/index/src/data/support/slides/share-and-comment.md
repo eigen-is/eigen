@@ -6,7 +6,7 @@ category: Sharing
 tags: [slides, sharing, permissions, comments, collaboration]
 related: [slides/get-started, drive/share-a-file]
 order: 80
-updated: 2026-11-11
+updated: 2026-11-19
 ---
 
 Presentations are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you have editor access, you can also leave comments tied to specific objects on a slide.
@@ -56,7 +56,7 @@ Comments attach to a single object on a slide, such as a text box, an image, a s
 
 1. Right-click the object on the canvas.
 2. Choose **Add comment** from the context menu.
-3. A **New comment** dialog appears. Give the comment a title and, optionally, a description and color.
+3. A dialog opens. Give the comment a title at the top and, optionally, a description and color.
 4. Click **Add comment**.
 
 Or select one object and choose **Comment** from the **Insert** menu, which opens the same dialog.
@@ -83,6 +83,6 @@ Open the comment thread and mark it as resolved. Resolved comments are hidden by
 
 ### Copy a link to a comment
 
-Open a comment and click the link icon (**Copy link**) near the top of the dialog. The link opens the presentation with that comment's thread already visible.
+Open a comment and click the link icon (**Copy link**) at the bottom of the comment, next to who created it. The link opens the presentation with that comment's thread already visible.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

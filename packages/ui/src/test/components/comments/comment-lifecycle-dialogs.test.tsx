@@ -1,6 +1,6 @@
 // The card dialog closes one way, however it closes. A peer who deletes the open card takes it away under the dialog,
 // and that runs the same close as the user's own: the host clears its landing, and an undo that brings the card back
-// doesn't open the dialog again. A delete from the edit form or the comment menu asks first, in every host, and only
+// doesn't open the dialog again. A delete from the card dialog or the comment menu asks first, in every host, and only
 // then runs the host's delete and closes the dialog.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
@@ -155,7 +155,7 @@ const dialogButton = (name: string) => {
     return button;
 };
 
-test('deleting from the edit form asks first, then runs the delete and closes the dialog', async () => {
+test('deleting from the card dialog asks first, then runs the delete and closes it', async () => {
     const { onDelete, onCardDialogClose } = await mountBoard();
     await act(async () => seen.onDelete?.('card-1'));
     expect(onDelete).not.toHaveBeenCalled();

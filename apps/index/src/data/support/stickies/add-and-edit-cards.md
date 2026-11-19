@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, kanban, editing]
 related: [stickies/get-started, stickies/move-cards, stickies/delete-cards]
 order: 30
-updated: 2026-10-28
+updated: 2026-11-19
 ---
 
 Cards are the individual items on a Stickies board. Each card has a title, an optional description, and a color. This article covers how to add a new card and how to change a card's content after you've created it.
@@ -16,37 +16,41 @@ You need write access to the board to add cards. If you can only view the board,
 
 1. Find the column you want to add the card to.
 2. Click **Add a sticky** at the bottom of the column, or click the **+** button in the column header.
-3. The **Add sticky** dialog opens. Type a title in the **Title** field. A title is required.
-4. Optionally, add text to the **Description** field. The description supports formatted text and checklists.
-5. Optionally, pick a color from the **Color** row at the bottom of the dialog.
-6. Click **Add sticky**. The card appears at the top of the column.
+3. A dialog opens with the cursor in the title at the top, which reads **Title** until you type. A title is required.
+4. Optionally, click **Add a description…** and add text. The description supports formatted text and checklists.
+5. Optionally, pick a color from the **Color** row. The top of the dialog takes the color, so you see how the card will look.
+6. Click **Add sticky**, or press **Enter** in the title. The card appears at the top of the column.
 
-You can also double-click an empty spot in a column to add a card there. The same **Add sticky** dialog opens.
+Once you've typed something, a click outside the dialog doesn't close it, so a stray click loses nothing. Click **Cancel** or press **Esc** to throw the new card away.
+
+You can also double-click an empty spot in a column to add a card there. The same dialog opens.
 
 To copy a card you already have, hold **Alt** (**Option** on a Mac) while you drag it, and let go where you want the copy. The original stays where it was. The copy takes the title, description, color, and attachments with it, and starts its own comment thread.
 
 ## Edit a card
 
-1. Click the card to open it.
-2. In the card dialog, click the pencil icon (**Edit**) in the strip below the description.
-3. The card's title, description, and color open for editing inside the card.
-4. Change whatever you like, then click **Save**. Click **Cancel** to discard your changes.
+Click the card to open it. You change it right there, without a separate edit mode.
 
-You can also start editing from the context menu: right-click the card and choose **Edit sticky**.
+- **Title**: click the title at the top. Type the new one and press **Enter**, or click anywhere else, to save it.
+- **Description**: click the description text, or **Add a description…** on a card without one. Click anywhere else in the card, or press **Ctrl+Enter** (**Cmd+Enter** on a Mac), to save it.
+- Press **Esc** to cancel an edit and keep what was there. On a phone, tap the **X** at the top while you edit: it cancels the edit, and a second tap closes the card.
+- **Color** and **Assignee** sit in the row at the bottom of the card. A change there takes effect straight away.
+
+To delete the card, click the trash icon (**Delete**) at the bottom of the card, next to who created it, and confirm.
 
 ## Add a checklist
 
 A card's **Description** can hold a checklist, which is handy for tracking the small steps in a piece of work.
 
-1. Open the **Add sticky** dialog, or open a card and start editing it, then click in the **Description** field.
+1. Start a new card, or open a card, then click in its description.
 2. Type `[]` at the start of a line to start a checklist, or select a few lines and click the **Checklist** button in the editor's toolbar. Each line becomes an item with its own checkbox.
-3. Add as many items as you need, then save the card.
+3. Add as many items as you need, then add the card, or click outside the description to save it.
 
 To tick items off, open the card and click a checkbox in the description. A ticked item gets a line through it. You need write access to the board to tick items.
 
 Once a card has a checklist, a small progress bar and a count, such as **1/3**, appear on the card so you can see how far along it is at a glance.
 
-## Change a card's color without opening the edit dialog
+## Change a card's color without opening it
 
 Right-click a card to open the context menu, then point to **Sticky color**. A list of colors appears. Click any color to apply it straight away.
 
@@ -56,6 +60,6 @@ Press **Ctrl+Z** (Windows) or **Cmd+Z** (macOS) to undo the last change to the b
 
 <div class="eigen-callout">
 
-Every card has its own comment thread where you and your team can discuss the work. Click the card to open it and scroll down to the thread. See [Discuss a card with comments](/support/stickies/card-comments) for details.
+Every card has its own comment thread where you and your team can discuss the work. Click the card to open it, and the thread is on the right (below the card on a phone). See [Discuss a card with comments](/support/stickies/card-comments) for details.
 
 </div>

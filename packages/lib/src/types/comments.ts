@@ -26,8 +26,13 @@ export function commentMapName(type: DriveCollabType): CommentMapName {
     return type === DRIVE_TYPE_STICKIES ? 'tasks' : 'comments';
 }
 
-// What a card form emits on Save: only the fields the user actually changed.
+// The fields a new card's dialog fills in on Add.
 export type CardFormPatch = Partial<Pick<CommentCard, 'title' | 'description' | 'color'>>;
+
+// What a save writes to a card: the fields it changes, and its attachments as a change to the list the doc holds then.
+export type CommentCardPatch = CardFormPatch & {
+    attachments?: (current: readonly ChatAttachment[]) => ChatAttachment[];
+};
 
 // An attachment a card form holds before Save: one the card already has, a file picked from Drive, or a file from the
 // device. useResolveCardAttachments turns each into a ChatAttachment when the card is saved.
