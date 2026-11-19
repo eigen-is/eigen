@@ -1,5 +1,6 @@
 // Binds undo and redo to a Yjs UndoManager for an editor without its own keymap, such as a canvas or a Stickies
-// board. The keys work anywhere on the page, for as long as the caller says the user may write.
+// board. The keys work anywhere on the page, for as long as the caller says the user may write, except in a text field,
+// such as a card's open description, which undoes its own typing.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/constants/hotkeys';
@@ -14,10 +15,12 @@ export function useYjsUndoHotkeys(undoManager: Y.UndoManager | null, canWrite: b
     const managerRef = useRef(undoManager);
     managerRef.current = undoManager;
     const undo = useCallback((e: KeyboardEvent) => {
+        if (inTextField(e)) return;
         e.preventDefault();
         managerRef.current?.undo();
     }, []);
     const redo = useCallback((e: KeyboardEvent) => {
+        if (inTextField(e)) return;
         e.preventDefault();
         managerRef.current?.redo();
     }, []);
@@ -26,4 +29,10 @@ export function useYjsUndoHotkeys(undoManager: Y.UndoManager | null, canWrite: b
     useHotkey(UNDO_HOTKEY, undo, options);
     useHotkey(REDO_ALT_HOTKEY, redo, options);
     useHotkey(REDO_HOTKEY, redo, options);
+}
+
+// The hotkeys' own input check reads only the element the key landed on, which in a rich-text editor can be a paragraph
+// inside the editable root.
+function inTextField(e: KeyboardEvent): boolean {
+    return e.target instanceof Element && !!e.target.closest('input, textarea, [contenteditable="true"]');
 }
