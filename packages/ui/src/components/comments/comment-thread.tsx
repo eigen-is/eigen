@@ -15,7 +15,11 @@ import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { LoadingState } from '../layout/app/loading-state';
 
 const FLOW = {
-    below: { thread: 'grow', list: 'flex-none overflow-visible', composer: 'sticky bottom-0 mt-auto bg-background' },
+    below: {
+        thread: 'h-auto grow',
+        list: 'flex-none overflow-visible',
+        composer: 'sticky bottom-0 mt-auto bg-background',
+    },
     beside: {
         thread: 'h-full max-md:h-auto max-md:grow',
         list: 'max-md:flex-none max-md:overflow-visible',
