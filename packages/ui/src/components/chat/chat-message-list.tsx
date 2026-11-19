@@ -22,6 +22,7 @@ import { DropdownMenuItem } from '../dropdown-menu';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { LoadingState } from '../layout/app/loading-state';
+import { HoverActionBar } from '../layout/toolbar/hover-action-bar';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserAvatar } from '../user/user-avatar';
 import { InlineEdit } from './inline-edit';
@@ -247,11 +248,9 @@ export function ChatMessageList({
                 const actions = getMessageActions(message);
                 const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
                 const actionProps = hasActions ? bind(message) : {};
-                // A mouse user sees the bar while the pointer is over the message, and Tab reaches and shows it. Until
-                // then it takes no click, so a click there lands on the message, even where the bar hangs over the
-                // next one. A touch screen never shows it, since a long press opens the same actions in the menu.
+                // A touch screen never shows the bar, since a long press opens the same actions in the menu.
                 const hoverActions = hasActions ? (
-                    <div className="absolute right-(--app-gutter-x) top-1 z-10 flex items-center rounded-md border bg-background shadow-sm pointer-events-none opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-has-focus-visible:pointer-events-auto group-has-focus-visible:opacity-100">
+                    <HoverActionBar className="right-(--app-gutter-x)">
                         {actions.canSaveAttachments && (
                             <TooltipButton
                                 icon={Download}
@@ -279,7 +278,7 @@ export function ChatMessageList({
                                 onClick={() => onDeleteMessage(message)}
                             />
                         )}
-                    </div>
+                    </HoverActionBar>
                 ) : null;
 
                 if (isEmote) {

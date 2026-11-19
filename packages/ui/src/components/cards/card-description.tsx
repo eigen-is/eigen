@@ -7,12 +7,15 @@ import { countTaskItems } from '@workspace/lib/html';
 import { Pencil, X } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useEffect, useRef } from 'react';
-import { cn, SOFT_HOVER_REVEAL_CLASS } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { useCelebrate } from '../celebrate/use-celebrate';
 import { LightEditor } from '../editor/light-editor';
+import { HoverActionBar } from '../layout/toolbar/hover-action-bar';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
 const PLACEHOLDER = 'Add a description…';
+// A card has no long press that offers Edit, so a touch screen shows its action bar at all times.
+export const SHOW_ON_TOUCH = 'pointer-coarse:pointer-events-auto pointer-coarse:opacity-100';
 
 type CardDescriptionProps = {
     description: string;
@@ -81,11 +84,11 @@ export function CardDescription({
     }
 
     return (
-        <div className="group relative">
+        <div className="group relative -mx-2 rounded-md px-2 py-1 transition-colors pointer-fine:hover:bg-muted/50">
             {description ? (
                 <div
                     ref={descriptionRef}
-                    className="eigen-prose pr-9 text-sm"
+                    className="eigen-prose text-sm"
                     onClick={handleClick}
                     dangerouslySetInnerHTML={{ __html: description }}
                 />
@@ -99,12 +102,9 @@ export function CardDescription({
                 </button>
             )}
             {description && (
-                <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Edit description"
-                    className={cn('absolute -top-1 right-0 h-7 w-7', SOFT_HOVER_REVEAL_CLASS)}
-                    onClick={onEdit}
-                />
+                <HoverActionBar className={cn('right-1', SHOW_ON_TOUCH)}>
+                    <TooltipButton icon={Pencil} tooltipText="Edit description" className="h-7 w-7" onClick={onEdit} />
+                </HoverActionBar>
             )}
         </div>
     );

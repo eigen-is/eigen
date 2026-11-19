@@ -5,9 +5,11 @@
 import { Pencil } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useRef } from 'react';
-import { cn, SOFT_HOVER_REVEAL_CLASS } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { DialogTitle } from '../dialog';
+import { HoverActionBar } from '../layout/toolbar/hover-action-bar';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { SHOW_ON_TOUCH } from './card-description';
 
 type CardTitleProps = {
     title: string;
@@ -28,14 +30,11 @@ export function CardTitle({ title, canWrite, editing, onEdit, onSave }: CardTitl
     }
     if (!canWrite) return <DialogTitle className="py-1.5 pr-0">{title}</DialogTitle>;
     return (
-        <DialogTitle className="group flex min-w-0 flex-1 items-center gap-1 pr-0">
-            <span className="min-w-0 break-words py-1.5">{title}</span>
-            <TooltipButton
-                icon={Pencil}
-                tooltipText="Edit title"
-                className={cn('h-7 w-7 shrink-0 text-current hover:bg-current/10', SOFT_HOVER_REVEAL_CLASS)}
-                onClick={onEdit}
-            />
+        <DialogTitle className="group relative min-w-0 flex-1 pr-10">
+            <span className="block break-words py-1.5">{title}</span>
+            <HoverActionBar className={cn('right-0', SHOW_ON_TOUCH)}>
+                <TooltipButton icon={Pencil} tooltipText="Edit title" className="h-7 w-7" onClick={onEdit} />
+            </HoverActionBar>
         </DialogTitle>
     );
 }
