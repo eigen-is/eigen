@@ -30,9 +30,10 @@ export function CardTitle({ title, canWrite, editing, onEdit, onSave }: CardTitl
     }
     if (!canWrite) return <DialogTitle className="py-1.5 pr-0">{title}</DialogTitle>;
     return (
-        <DialogTitle className="group relative min-w-0 flex-1 pr-10">
-            <span className="block break-words py-1.5">{title}</span>
-            <HoverActionBar className={cn('right-0', SHOW_ON_TOUCH)}>
+        <DialogTitle className="group flex min-w-0 flex-1 items-center gap-2 pr-0">
+            <span className="min-w-0 break-words py-1.5">{title}</span>
+            {/* In the line, right after the text, rather than floating over a corner as on a message. */}
+            <HoverActionBar className={cn('static shrink-0', SHOW_ON_TOUCH)}>
                 <TooltipButton icon={Pencil} tooltipText="Edit title" className="h-7 w-7" onClick={onEdit} />
             </HoverActionBar>
         </DialogTitle>
