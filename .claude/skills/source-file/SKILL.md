@@ -1,6 +1,6 @@
 ---
 name: source-file
-description: Use when cleaning up, simplifying or reviewing one source file for readability, when writing or fixing the header comment at the top of a file, when a file has no header comment yet, or when creating a new source file in this repo. Also for a sweep that tidies the files of one folder one by one.
+description: Use before any edit to a `.ts` or `.tsx` source file, however small, including a feature or a fix in an existing file. Also when cleaning up, simplifying or reviewing one source file for readability, when writing or fixing the header comment at the top of a file, when a file has no header comment yet, or when creating a new source file in this repo, and for a sweep that tidies the files of one folder one by one.
 ---
 
 # Source file
