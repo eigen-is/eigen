@@ -23,15 +23,21 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
         editor.view.dispatch(editor.state.tr.setMeta(LIGHT_EDITOR_BUBBLE_MENU, 'updatePosition'));
     }, [editor, showLinkInput]);
 
+    // Closing the field gives the focus back to the text, so an editor that saves when the focus leaves it stays open.
+    const closeLinkInput = useCallback(() => {
+        editor.commands.focus();
+        setShowLinkInput(false);
+        setLinkUrl('');
+    }, [editor]);
+
     const setLink = useCallback(() => {
         if (linkUrl.trim()) {
             const url =
                 linkUrl.startsWith('http://') || linkUrl.startsWith('https://') ? linkUrl : `https://${linkUrl}`;
             editor.chain().focus().setLink({ href: url }).run();
         }
-        setShowLinkInput(false);
-        setLinkUrl('');
-    }, [editor, linkUrl]);
+        closeLinkInput();
+    }, [editor, linkUrl, closeLinkInput]);
 
     return (
         <div className="flex items-center gap-0.5 p-1 rounded-md border bg-popover text-popover-foreground shadow-md">
@@ -101,7 +107,7 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                             e.preventDefault();
                             setLink();
                         }
-                        if (e.key === 'Escape') setShowLinkInput(false);
+                        if (e.key === 'Escape') closeLinkInput();
                     }}
                 />
             )}
