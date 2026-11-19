@@ -89,6 +89,7 @@ function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
                 pathId: 'doc-1',
                 canWrite: true,
                 deleted,
+                noun: 'comment',
                 threadPlacement: 'below',
                 members: [member],
                 currentUserEmail: 'ada@example.com',

@@ -83,6 +83,6 @@ Open the comment thread and mark it as resolved. Resolved comments are hidden by
 
 ### Copy a link to a comment
 
-Open a comment and click the link icon (**Copy link**) at the top of the dialog, next to the close button. The link opens the presentation with that comment's thread already visible.
+Open a comment and click the link icon (**Copy link to comment**) at the top of the dialog, next to the close button. The link opens the presentation with that comment's thread already visible.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

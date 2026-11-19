@@ -14,6 +14,8 @@ import { ColorPicker } from '../media/color-picker';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip';
 
 type CardPropertiesProps = {
+    // Buttons for the whole card at the start of the right-hand group, such as an open card's delete.
+    actions?: ReactNode;
     color: string;
     onColorChange?: (color: string) => void;
     assignee: string | null;
@@ -25,6 +27,7 @@ type CardPropertiesProps = {
 };
 
 export function CardProperties({
+    actions,
     color,
     onColorChange,
     assignee,
@@ -87,7 +90,7 @@ export function CardProperties({
     }
 
     // A reader of an open, unassigned card has nothing here, and the bar around it hides.
-    if (!onColorChange && !assigneeControl && !statusControl) return null;
+    if (!actions && !onColorChange && !assigneeControl && !statusControl) return null;
     return (
         <div className="flex min-h-10 flex-wrap items-center gap-x-4 gap-y-2">
             {onColorChange && (
@@ -102,6 +105,7 @@ export function CardProperties({
                 </div>
             )}
             <div className="ml-auto flex items-center gap-2">
+                {actions}
                 {assigneeControl && (
                     <Tooltip>
                         <div role="group" aria-label="Assignee">

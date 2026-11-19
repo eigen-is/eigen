@@ -67,6 +67,7 @@ export function CommentLifecycleDialogs({
                 pathId={path.id}
                 canWrite={canWrite}
                 deleted={openCardDeleted}
+                noun={noun}
                 threadPlacement={threadPlacement}
                 copyLinkUrl={openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}

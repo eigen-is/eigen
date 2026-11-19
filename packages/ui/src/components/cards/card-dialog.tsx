@@ -49,6 +49,8 @@ type CardDialogProps = {
     pathId: string;
     canWrite?: boolean;
     deleted: boolean;
+    // In the labels, such as "Delete this sticky".
+    noun: string;
     threadPlacement: ThreadPlacement;
     copyLinkUrl?: string;
     members?: EffectiveMember[];
@@ -89,6 +91,7 @@ function OpenCardDialog({
     mountId,
     pathId,
     canWrite = true,
+    noun,
     threadPlacement,
     copyLinkUrl,
     members,
@@ -174,27 +177,28 @@ function OpenCardDialog({
                 </>
             }
             actions={
-                <>
-                    {copyLinkUrl && (
-                        <TooltipButton
-                            icon={LinkIcon}
-                            tooltipText="Copy link"
-                            className="text-current hover:bg-current/10"
-                            onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
-                        />
-                    )}
-                    {canWrite && onDelete && (
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            className="text-current hover:bg-current/10"
-                            onClick={() => onDelete(card.id)}
-                        />
-                    )}
-                </>
+                copyLinkUrl && (
+                    <TooltipButton
+                        icon={LinkIcon}
+                        tooltipText={`Copy link to ${noun}`}
+                        className="text-current hover:bg-current/10"
+                        onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
+                    />
+                )
             }
             footer={
                 <CardProperties
+                    // Away from the close button, so a slip of the pointer there deletes nothing.
+                    actions={
+                        canWrite &&
+                        onDelete && (
+                            <TooltipButton
+                                icon={Trash2}
+                                tooltipText={`Delete this ${noun}`}
+                                onClick={() => onDelete(card.id)}
+                            />
+                        )
+                    }
                     color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
                     onColorChange={canEdit ? (color) => onUpdate?.(card.id, { color }) : undefined}
                     assignee={entry?.assignee ?? null}

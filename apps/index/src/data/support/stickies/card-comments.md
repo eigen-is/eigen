@@ -37,4 +37,4 @@ See [Share a board and manage access](/support/stickies/share-board) for how to 
 
 ## Share a link to a specific card
 
-To send someone directly to a card's thread, open the card and click the link icon (**Copy link**) at the top of the dialog, next to the close button. Eigen copies a link to your clipboard. Anyone with access to the board can open that link and land straight on the card.
+To send someone directly to a card's thread, open the card and click the link icon (**Copy link to sticky**) at the top of the dialog, next to the close button. Eigen copies a link to your clipboard. Anyone with access to the board can open that link and land straight on the card.

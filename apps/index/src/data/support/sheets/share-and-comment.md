@@ -107,10 +107,10 @@ Right-click a cell that has a comment to see its options:
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: removes the comment from the cell, once you confirm. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
-To edit the title or description of an existing comment, open the thread, point at the title or the description, and click its pencil button (**Edit title** or **Edit description**). Press **Enter** in the title, or click anywhere else, to save. The **X** (**Cancel**) where the pencil was, or **Esc**, cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread, point at the title or the description, and click its pencil button (**Edit title** or **Edit description**). Press **Enter** in the title, or click anywhere else, to save. The **X** (**Cancel**) where the pencil was, or **Esc**, cancels the edit. The trash icon (**Delete this comment**) at the bottom of the dialog, beside the assignee, deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) at the top of the dialog, next to the close button. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
+Open a comment thread and click the link icon (**Copy link to comment**) at the top of the dialog, next to the close button. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned.

@@ -75,10 +75,10 @@ Right-click a comment highlight in the document to open its context menu. In a t
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: asks you to confirm, then removes the comment and its highlight, so it no longer appears in the document or the sidebar.
 
-To edit the title or description of an existing comment, open the thread, point at the title or the description, and click its pencil button (**Edit title** or **Edit description**). Press **Enter** in the title, or click anywhere else, to save. The **X** (**Cancel**) where the pencil was, or **Esc**, cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread, point at the title or the description, and click its pencil button (**Edit title** or **Edit description**). Press **Enter** in the title, or click anywhere else, to save. The **X** (**Cancel**) where the pencil was, or **Esc**, cancels the edit. The trash icon (**Delete this comment**) at the bottom of the dialog, beside the assignee, deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) at the top of the dialog, next to the close button. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
+Open a comment thread and click the link icon (**Copy link to comment**) at the top of the dialog, next to the close button. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.
