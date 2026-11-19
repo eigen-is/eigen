@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# A named bash runs with -o pipefail; the default runs `bash -e` alone, so a failing command piped into tee passed.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # Every gate `bun run check` runs except the API, formula and sheet suites, beside the jobs that run them.
   checks:
