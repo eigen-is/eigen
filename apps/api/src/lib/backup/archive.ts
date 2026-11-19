@@ -163,7 +163,7 @@ export async function readArchiveMember(member: ArchiveMemberLocation): Promise<
 }
 
 // This streams the byte range rather than passing a sliced BunFile to Bun.write. Bun ignores the slice there and
-// writes the whole archive, still in Bun 1.4.4.
+// writes the whole archive, still in Bun 1.4.5.
 export async function copyArchiveMember(member: ArchiveMemberLocation, destPath: string): Promise<void> {
     // A read stream refuses an `end` before its `start`, and an empty member's range is exactly that.
     if (member.bytes === 0) {
