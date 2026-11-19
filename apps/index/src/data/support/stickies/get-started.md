@@ -37,7 +37,7 @@ You can reorder columns by dragging their header left or right.
 
 To add a card to a column, click **Add a sticky** at the bottom of that column (or the plus icon in the column header). A dialog opens, where you fill in a title, an optional description, and pick a color. Click **Add sticky** to save it.
 
-To edit a card you have already added, open it by clicking on it, then click the pencil icon in the card detail view.
+To edit a card you have already added, open it by clicking on it, then click the pencil beside its title or description to change it in place.
 
 Cards have a color to help you group related work at a glance. You can change a card's color while you edit it, or right-click a card and choose a color from the context menu.
 

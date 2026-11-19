@@ -13,7 +13,7 @@ import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard, CommentCardPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { Check, Link as LinkIcon, Paperclip, Trash2 } from 'lucide-react';
+import { Check, Link as LinkIcon, Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -31,6 +31,7 @@ import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { CardAttachmentRow } from './card-attachment-row';
 import { CardDescription } from './card-description';
 import { CardDialogShell } from './card-dialog-shell';
 import { CardProperties } from './card-properties';
@@ -199,7 +200,7 @@ function OpenCardDialog({
                         mountId={mountId}
                         pathId={pathId}
                         chatName={chatName}
-                        className="h-full"
+                        className="h-full max-md:h-auto max-md:grow"
                     />
                 ) : (
                     <div className="p-4 text-sm text-muted-foreground">No chat available for this card.</div>
@@ -212,19 +213,15 @@ function OpenCardDialog({
                     canWrite={canEdit}
                     editing={editing === 'description'}
                     onEdit={() => setEditing('description')}
+                    onCancel={() => setEditing(null)}
                     onSave={(html) => save('description', html === null ? null : { description: html })}
                     onTick={(html) => onUpdate?.(card.id, { description: html })}
                 />
-                {(canAttach || !!card.attachments?.length) && (
-                    <div className="flex min-w-0 items-center gap-2">
-                        {canAttach && (
-                            <TooltipButton
-                                icon={Paperclip}
-                                tooltipText="Add attachment"
-                                className="shrink-0"
-                                onClick={() => setPickerOpen(true)}
-                            />
-                        )}
+                <div className="mt-auto flex flex-col gap-3">
+                    <CardAttachmentRow
+                        onAdd={canAttach ? () => setPickerOpen(true) : undefined}
+                        hasAttachments={!!card.attachments?.length}
+                    >
                         {!!card.attachments?.length && (
                             <AttachmentStrip className="min-w-0 flex-1" {...bind()}>
                                 {card.attachments.map((attachment) => {
@@ -258,13 +255,7 @@ function OpenCardDialog({
                                 })}
                             </AttachmentStrip>
                         )}
-                        <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
-                            <FileActionMenuItems runner={runner} />
-                        </ContextMenuAnchor>
-                        {runner.dialogs}
-                    </div>
-                )}
-                <div className="mt-auto border-t pt-3">
+                    </CardAttachmentRow>
                     <CardProperties
                         color={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
                         onColorChange={canEdit ? (color) => onUpdate?.(card.id, { color }) : undefined}
@@ -285,6 +276,10 @@ function OpenCardDialog({
                     />
                 </div>
             </div>
+            <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
+                <FileActionMenuItems runner={runner} />
+            </ContextMenuAnchor>
+            {runner.dialogs}
             {canAttach && (
                 <DrivePickerWithUpload
                     open={pickerOpen}

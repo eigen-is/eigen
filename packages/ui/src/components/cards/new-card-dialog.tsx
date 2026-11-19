@@ -6,7 +6,6 @@ import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { Paperclip } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -14,9 +13,8 @@ import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { Button } from '../button';
 import { DialogTitle } from '../dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
-import { LightEditor } from '../editor/light-editor';
-import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import { DESCRIPTION_EDITOR_CLASS, DESCRIPTION_PLACEHOLDER } from './card-description';
+import { CardAttachmentRow } from './card-attachment-row';
+import { CardDescriptionEditor } from './card-description';
 import { CardDialogShell } from './card-dialog-shell';
 import { CardProperties } from './card-properties';
 import { CardTitleInput } from './card-title';
@@ -34,12 +32,20 @@ type NewCardDialogProps = {
     onSave: (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string) => void | Promise<void>;
 };
 
-// Each opening starts from empty fields, and from the title the host passes then, such as a docs selection.
+// Each opening starts from empty fields, and from the title the host passes then, such as a docs selection. The form
+// remounts as the dialog opens rather than unmounting as it closes, so the dialog keeps its closing animation.
 export function NewCardDialog(props: NewCardDialogProps) {
-    return props.open && <NewCardForm {...props} />;
+    const [opening, setOpening] = useState(0);
+    const [wasOpen, setWasOpen] = useState(props.open);
+    if (props.open !== wasOpen) {
+        setWasOpen(props.open);
+        if (props.open) setOpening((n) => n + 1);
+    }
+    return <NewCardForm key={opening} {...props} />;
 }
 
 function NewCardForm({
+    open,
     onOpenChange,
     noun = 'comment',
     initialTitle = '',
@@ -84,7 +90,7 @@ function NewCardForm({
 
     return (
         <CardDialogShell
-            open
+            open={open}
             onOpenChange={onOpenChange}
             color={color}
             unsaved={unsaved}
@@ -122,50 +128,35 @@ function NewCardForm({
                 className="flex flex-col gap-4"
                 {...targetProps}
             >
-                <div className={DESCRIPTION_EDITOR_CLASS}>
-                    <LightEditor
-                        content=""
-                        onChange={setDescription}
-                        taskList
-                        submitOnModEnter
-                        placeholder={DESCRIPTION_PLACEHOLDER}
-                        containerClassName="relative flex flex-col"
-                        className="min-h-[120px]"
+                <CardDescriptionEditor content="" onChange={setDescription} editorClassName="min-h-[160px]" />
+                <CardAttachmentRow
+                    onAdd={allowAttachments ? () => setPickerOpen(true) : undefined}
+                    hasAttachments={drafts.length > 0}
+                >
+                    <AttachmentDraftChips
+                        items={drafts}
+                        onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+                        className="min-w-0 flex-1"
                     />
-                </div>
+                </CardAttachmentRow>
                 {allowAttachments && (
-                    <div className="flex min-w-0 items-center gap-2">
-                        <TooltipButton
-                            icon={Paperclip}
-                            tooltipText="Add attachment"
-                            className="shrink-0"
-                            onClick={() => setPickerOpen(true)}
-                        />
-                        <AttachmentDraftChips
-                            items={drafts}
-                            onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
-                            className="min-w-0 flex-1"
-                        />
-                        <DrivePickerWithUpload
-                            open={pickerOpen}
-                            onOpenChange={setPickerOpen}
-                            multiSelect
-                            multiple
-                            onPickFromDrive={stage}
-                            onPickFromDevice={stage}
-                        />
-                    </div>
-                )}
-                <div className="border-t pt-3">
-                    <CardProperties
-                        color={color}
-                        onColorChange={setColor}
-                        assignee={assignee}
-                        onAssigneeChange={setAssignee}
-                        members={members}
-                        currentUserEmail={currentUserEmail}
+                    <DrivePickerWithUpload
+                        open={pickerOpen}
+                        onOpenChange={setPickerOpen}
+                        multiSelect
+                        multiple
+                        onPickFromDrive={stage}
+                        onPickFromDevice={stage}
                     />
-                </div>
+                )}
+                <CardProperties
+                    color={color}
+                    onColorChange={setColor}
+                    assignee={assignee}
+                    onAssigneeChange={setAssignee}
+                    members={members}
+                    currentUserEmail={currentUserEmail}
+                />
             </form>
         </CardDialogShell>
     );

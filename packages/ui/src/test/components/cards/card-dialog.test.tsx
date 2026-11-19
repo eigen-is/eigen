@@ -1,5 +1,6 @@
-// An open card edits in place. A click on the title turns it into a field: Enter saves, Esc and the close button cancel
-// without closing the dialog, and an unchanged title writes nothing. The resolve button applies at once.
+// An open card edits in place. The title's pencil turns it into a field: Enter saves, Esc and the close button cancel
+// without closing the dialog, and an unchanged title writes nothing, even after a collaborator renamed the card while
+// the field was open. The resolve button applies at once.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentCardPatch } from '@workspace/lib/types/comments';
@@ -12,7 +13,7 @@ const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { CardDialog } = await import('../../../components/cards/card-dialog');
 const { PreviewProvider } = await import('../../../components/preview-provider');
 
@@ -47,27 +48,34 @@ beforeEach(() => {
     closes = 0;
 });
 
+// A collaborator's rename, as the lifecycle hands the dialog the card again.
+let rename: (title: string) => void = () => {};
+
+function Harness() {
+    const [title, setTitle] = useState(card.title);
+    rename = setTitle;
+    return createElement(
+        PreviewProvider,
+        null,
+        createElement(CardDialog, {
+            open: true,
+            onOpenChange: () => {
+                closes += 1;
+            },
+            card: { ...card, title },
+            entry,
+            ownerId: 'owner-1',
+            mountId: 'm1',
+            pathId: 'board-1',
+            deleted: false,
+            onUpdate: (cardId: string, patch: CommentCardPatch) => updates.push([cardId, patch]),
+            onResolve: (chatName: string, next: string, title?: string) => resolves.push([chatName, next, title]),
+        }),
+    );
+}
+
 async function renderDialog() {
-    ({ unmount } = await renderInDocument(
-        createElement(
-            PreviewProvider,
-            null,
-            createElement(CardDialog, {
-                open: true,
-                onOpenChange: () => {
-                    closes += 1;
-                },
-                card,
-                entry,
-                ownerId: 'owner-1',
-                mountId: 'm1',
-                pathId: 'board-1',
-                deleted: false,
-                onUpdate: (cardId: string, patch: CommentCardPatch) => updates.push([cardId, patch]),
-                onResolve: (chatName: string, next: string, title?: string) => resolves.push([chatName, next, title]),
-            }),
-        ),
-    ));
+    ({ unmount } = await renderInDocument(createElement(Harness)));
 }
 
 const button = (name: string) => {
@@ -80,7 +88,7 @@ const button = (name: string) => {
 const titleField = () => document.querySelector<HTMLInputElement>('input[aria-label="Title"]');
 
 async function editTitle(value: string) {
-    await act(async () => button(card.title).click());
+    await act(async () => button('Edit title').click());
     const field = titleField();
     if (!field) throw new Error('no title field');
     field.value = value;
@@ -103,6 +111,14 @@ test('an unchanged or emptied title writes nothing', async () => {
     await renderDialog();
     await press(await editTitle('Print wristbands'), 'Enter');
     await press(await editTitle('   '), 'Enter');
+    expect(updates).toEqual([]);
+});
+
+test('an untouched field writes nothing when a collaborator renamed the card meanwhile', async () => {
+    await renderDialog();
+    const field = await editTitle(card.title);
+    await act(async () => rename('Print tickets'));
+    await press(field, 'Enter');
     expect(updates).toEqual([]);
 });
 
@@ -132,4 +148,15 @@ test('Resolve applies at once, with the title for the activity row', async () =>
     await renderDialog();
     await act(async () => button('Resolve').click());
     expect(resolves).toEqual([['thread-1.eigenchat', 'resolved', 'Print wristbands']]);
+});
+
+test("the description opens from its pencil, and its cancel button in the pencil's place writes nothing", async () => {
+    await renderDialog();
+    await act(async () => button('Edit description').click());
+    expect(document.querySelector('[contenteditable="true"]')).not.toBeNull();
+    const cancels = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label="Cancel"]')];
+    await act(async () => cancels[cancels.length - 1]?.click());
+    expect(document.querySelector('[contenteditable="true"]')).toBeNull();
+    expect(updates).toEqual([]);
+    expect(closes).toBe(0);
 });

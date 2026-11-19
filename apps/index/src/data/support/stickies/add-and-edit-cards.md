@@ -31,9 +31,10 @@ To copy a card you already have, hold **Alt** (**Option** on a Mac) while you dr
 
 Click the card to open it. You change it right there, without a separate edit mode.
 
-- **Title**: click the title at the top. Type the new one and press **Enter**, or click anywhere else, to save it.
-- **Description**: click the description text, or **Add a description…** on a card without one. Click anywhere else in the card, or press **Ctrl+Enter** (**Cmd+Enter** on a Mac), to save it.
-- Press **Esc** to cancel an edit and keep what was there. On a phone, tap the **X** at the top while you edit: it cancels the edit, and a second tap closes the card.
+- **Title**: point at the title and click the pencil button (**Edit title**) beside it. Type the new one and press **Enter**, or click anywhere else, to save it.
+- **Description**: point at the description and click the pencil button (**Edit description**) in its top-right corner, or click **Add a description…** on a card without one. Click anywhere else in the card, or press **Ctrl+Enter** (**Cmd+Enter** on a Mac), to save it.
+- To cancel an edit and keep what was there, click the **X** (**Cancel**) where the pencil was, or press **Esc**. On a phone, the pencils always show, and the **X** at the top cancels the edit too.
+- Changed something by mistake? Press **Ctrl+Z** (**Cmd+Z** on a Mac) while the card is open to undo it.
 - **Color** and **Assignee** sit in the row at the bottom of the card. A change there takes effect straight away.
 
 To delete the card, click the trash icon (**Delete**) at the bottom of the card, next to who created it, and confirm.

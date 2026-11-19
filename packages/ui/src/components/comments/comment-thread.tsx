@@ -1,5 +1,6 @@
 // The comment thread beside a card, such as a sticky's: the messages of its chat room, the composer, and the dialog
-// that deletes a message. It finds the chat room by name in the document's chat folder.
+// that deletes a message. It finds the chat room by name in the document's chat folder. On a phone the card's dialog
+// scrolls the card and the messages as one, so the list doesn't scroll on its own there and the composer stays pinned.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
@@ -71,27 +72,29 @@ function CommentThreadInner({
                 mountId={mountId}
                 mediaFolderId={chat.mediaFolderId}
                 emptyMessage=""
-                className="flex-1 min-h-0"
+                className="flex-1 min-h-0 max-md:flex-none max-md:overflow-visible"
                 onEditMessage={(msg) => editing.setEditingMessageId(msg.id)}
                 onDeleteMessage={editing.setDeleteTarget}
                 editingMessageId={editing.editingMessageId}
                 onSaveEdit={editing.handleSaveEdit}
                 onCancelEdit={editing.endEditing}
             />
-            <ChatMessageInput
-                ref={inputRef}
-                onSend={chat.handleSendMessage}
-                disabled={chat.disabled}
-                readOnly={chat.readOnly}
-                placeholder="Reply..."
-                roomMembers={chat.roomMembers}
-                currentUserEmail={chat.currentUserEmail}
-                messageCount={chat.messages.length + editing.focusTrigger}
-                onKeyDown={editing.onKeyDown}
-                onAttachClick={() => setFilePickerOpen(true)}
-                driveAttachments={chat.driveAttachments}
-                onRemoveDriveAttachment={chat.removeDriveAttachment}
-            />
+            <div className="max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-background">
+                <ChatMessageInput
+                    ref={inputRef}
+                    onSend={chat.handleSendMessage}
+                    disabled={chat.disabled}
+                    readOnly={chat.readOnly}
+                    placeholder="Reply..."
+                    roomMembers={chat.roomMembers}
+                    currentUserEmail={chat.currentUserEmail}
+                    messageCount={chat.messages.length + editing.focusTrigger}
+                    onKeyDown={editing.onKeyDown}
+                    onAttachClick={() => setFilePickerOpen(true)}
+                    driveAttachments={chat.driveAttachments}
+                    onRemoveDriveAttachment={chat.removeDriveAttachment}
+                />
+            </div>
             <DeleteDialog
                 open={!!editing.deleteTarget}
                 onOpenChange={(open) => !open && editing.setDeleteTarget(null)}

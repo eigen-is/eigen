@@ -70,6 +70,10 @@ Most of `board.tsx` wires shared comment modules rather than board code:
 - One `useContextMenu` opens on right-click and on long-press. Cards are `touch-none` for the drag sensor, which suppresses the native context menu on touch.
 - `DocSearchProvider` with `useStickiesDocSearch` highlights matching cards and columns. The palette's comment search reveals a card by its `chatName`.
 
+## An open card keeps the board's undo
+
+The card dialog writes every edit straight into the board's Y.Doc, so ⌘Z in an open card undoes the board's last step, such as a description saved by mistake. The board's undo keys stay on while the open card is the dialog, and any other dialog, such as a column's settings, turns them off. A key pressed in a text field is the field's own: `useYjsUndoHotkeys` skips an input, a textarea and a rich-text editor, so ⌘Z while typing undoes the typing, not the board.
+
 ## Ticking the last box of a checklist celebrates now and then
 
 A card's description can hold a task list, and the card shows how far it is done. `countTaskItems` (`packages/lib/src/core/html.ts`) is the one count, for the card's progress bar and for the dialog. When a click in the card dialog's description (`CardDescription`) ticks the last open box of a list with at least two items, it calls `celebrate` from `useCelebrate` (`packages/ui/src/components/celebrate/`), and confetti sprays from the box. Every host opens the same `CardDialog`, so a comment card in a doc or a sheet gets the same.

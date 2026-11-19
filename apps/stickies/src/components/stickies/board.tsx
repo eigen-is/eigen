@@ -138,9 +138,10 @@ export function StickiesBoard({
     useStickiesPresence(provider, user, presenceCardIds);
     const cardPresence = useCardPresence(provider);
 
-    // The undo keys are off while a dialog is open, such as the card editor, so ⌘Z there never undoes the board.
+    // The undo keys stay on in an open card, whose edits are the board's, so ⌘Z takes back an edit saved by mistake.
+    // Another dialog, such as a column's settings, turns them off.
     const dialogOpen = useDialogOpen();
-    useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen);
+    useYjsUndoHotkeys(undoManager, canWrite && (!dialogOpen || !!openCard));
 
     const { isMobile } = useLayout();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);

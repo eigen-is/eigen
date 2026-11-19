@@ -13,7 +13,7 @@ A card can carry files: a screenshot of the bug, the PDF you are reviewing, the 
 ## Attach a file
 
 1. Open the card, or start a new card with **Add a sticky**.
-2. Click the paperclip button (**Add attachment**) under the description.
+2. Click **Add attachment** under the description. Once the card has files, it is the paperclip button beside them.
 3. The **Attach file** dialog opens on your Drive. Click the file you want, or hold Shift or Ctrl (Cmd on a Mac) to pick several.
 4. Click **Select**. The button shows a count, such as **Select (2)**, when you pick more than one.
 5. The files appear as chips beside the paperclip. On an open card they are attached straight away. On a new card they are attached when you click **Add sticky**.

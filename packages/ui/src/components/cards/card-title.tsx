@@ -1,11 +1,13 @@
-// A card's title in its dialog's header. A writer clicks it to edit it in place: Enter or clicking away saves, and an
-// emptied or unchanged title writes nothing. The dialog cancels the edit on Esc or its close button. The dialog that
+// A card's title in its dialog's header. A writer's pencil beside it, as on a chat message, edits it in place: Enter or
+// clicking away saves, and an emptied or unchanged title writes nothing. The dialog cancels the edit on Esc or its close button. The dialog that
 // adds a card types its title into the same input.
 
 import { Pencil } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { useRef } from 'react';
 import { cn, SOFT_HOVER_REVEAL_CLASS } from '../../lib/utils';
 import { DialogTitle } from '../dialog';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
 type CardTitleProps = {
     title: string;
@@ -17,39 +19,47 @@ type CardTitleProps = {
 
 export function CardTitle({ title, canWrite, editing, onEdit, onSave }: CardTitleProps) {
     if (editing) {
-        const save = (value: string) => {
-            const next = value.trim();
-            onSave(next && next !== title ? next : null);
-        };
         return (
             <>
                 <DialogTitle className="sr-only">{title}</DialogTitle>
-                <CardTitleInput
-                    autoFocus
-                    defaultValue={title}
-                    onFocus={(e) => e.currentTarget.select()}
-                    onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        save(e.currentTarget.value);
-                    }}
-                    onBlur={(e) => save(e.currentTarget.value)}
-                />
+                <TitleEditor initial={title} onSave={onSave} />
             </>
         );
     }
     if (!canWrite) return <DialogTitle className="py-1.5 pr-0">{title}</DialogTitle>;
     return (
-        <DialogTitle className="min-w-0 flex-1 pr-0">
-            <button
-                type="button"
+        <DialogTitle className="group flex min-w-0 flex-1 items-center gap-1 pr-0">
+            <span className="min-w-0 break-words py-1.5">{title}</span>
+            <TooltipButton
+                icon={Pencil}
+                tooltipText="Edit title"
+                className={cn('h-7 w-7 shrink-0 text-current hover:bg-current/10', SOFT_HOVER_REVEAL_CLASS)}
                 onClick={onEdit}
-                className="group -mx-1.5 flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-left pointer-fine:hover:bg-current/10"
-            >
-                <span className="min-w-0 break-words">{title}</span>
-                <Pencil className={cn('h-3.5 w-3.5 shrink-0', SOFT_HOVER_REVEAL_CLASS)} />
-            </button>
+            />
         </DialogTitle>
+    );
+}
+
+function TitleEditor({ initial, onSave }: { initial: string; onSave: (title: string | null) => void }) {
+    // The title as the field opened with it, so a peer's rename meanwhile isn't undone by a click in and out.
+    const baseline = useRef(initial);
+    const save = (value: string) => {
+        const next = value.trim();
+        onSave(next && next !== baseline.current ? next : null);
+    };
+    return (
+        <CardTitleInput
+            autoFocus
+            defaultValue={initial}
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+                // An input method's Enter confirms the word being composed.
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                save(e.currentTarget.value);
+            }}
+            onBlur={(e) => save(e.currentTarget.value)}
+        />
     );
 }
 

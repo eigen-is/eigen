@@ -1,7 +1,7 @@
 // Ticking the last box of a card's checklist celebrates: once per opening, only for a list of two or more,
 // only on the tick itself, and never with the setting off. The chance is forced to win throughout. Each click
 // is saved and drawn again, as a card's parent does, which replaces the boxes in the page. An opening is a mount,
-// as the dialog mounts the description afresh each time it opens. A click on the text opens the editor.
+// as the dialog mounts the description afresh each time it opens. Only the pencil opens the editor.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
@@ -49,6 +49,7 @@ function render(open: boolean, description: string) {
                       onEdit: () => {
                           edits += 1;
                       },
+                      onCancel: () => {},
                       onSave: () => {},
                       onTick: (html: string) => {
                           saved = html;
@@ -140,12 +141,12 @@ test('the setting off does not celebrate', () => {
     expect(burst).not.toHaveBeenCalled();
 });
 
-test('a click on the text opens the editor, and a tick or a link does not', () => {
-    render(true, `${twoItems}<p>Ask <a href="https://example.com">the shop</a></p>`);
+test('the pencil opens the editor, and a click on the text or a tick does not', () => {
+    render(true, `${twoItems}<p>Ask the shop</p>`);
     act(() => document.querySelector('p')?.click());
-    expect(edits).toBe(1);
     click('Paint the shed');
-    act(() => document.querySelector('a')?.click());
+    expect(edits).toBe(0);
+    act(() => document.querySelector<HTMLButtonElement>('button[aria-label="Edit description"]')?.click());
     expect(edits).toBe(1);
 });
 

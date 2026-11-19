@@ -55,8 +55,38 @@ export function CardProperties({
         );
     }
 
+    let statusControl: ReactNode = null;
+    if (status && onStatusChange) {
+        statusControl = (
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        type="button"
+                        variant={resolved ? 'default' : 'outline'}
+                        size="sm"
+                        aria-pressed={resolved}
+                        onClick={() => onStatusChange(resolved ? 'open' : 'resolved')}
+                    >
+                        <Check />
+                        {resolved ? 'Resolved' : 'Resolve'}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>{resolved ? 'Reopen' : 'Resolve'}</TooltipContent>
+            </Tooltip>
+        );
+    } else if (resolved) {
+        statusControl = (
+            <span className="flex h-8 items-center gap-1.5 text-sm">
+                <Check className="h-4 w-4" />
+                Resolved
+            </span>
+        );
+    }
+
+    // A reader of an open, unassigned card has nothing here, and gets no divider either.
+    if (!onColorChange && !assigneeControl && !statusControl) return null;
     return (
-        <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-3 border-t pt-3">
             {onColorChange && (
                 <Property label="Color">
                     <ColorPicker
@@ -68,34 +98,10 @@ export function CardProperties({
                     />
                 </Property>
             )}
-            {assigneeControl && <Property label="Assignee">{assigneeControl}</Property>}
-            {status && onStatusChange && (
-                <Property label="Status">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                type="button"
-                                variant={resolved ? 'default' : 'outline'}
-                                size="sm"
-                                aria-pressed={resolved}
-                                onClick={() => onStatusChange(resolved ? 'open' : 'resolved')}
-                            >
-                                <Check />
-                                {resolved ? 'Resolved' : 'Resolve'}
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{resolved ? 'Reopen' : 'Resolve'}</TooltipContent>
-                    </Tooltip>
-                </Property>
-            )}
-            {resolved && !onStatusChange && (
-                <Property label="Status">
-                    <span className="flex h-8 items-center gap-1.5 text-sm">
-                        <Check className="h-4 w-4" />
-                        Resolved
-                    </span>
-                </Property>
-            )}
+            <div className="ml-auto flex flex-wrap items-start gap-x-6 gap-y-3">
+                {assigneeControl && <Property label="Assignee">{assigneeControl}</Property>}
+                {statusControl && <Property label="Status">{statusControl}</Property>}
+            </div>
         </div>
     );
 }

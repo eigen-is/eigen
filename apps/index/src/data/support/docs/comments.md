@@ -75,7 +75,7 @@ Right-click a comment highlight in the document to open its context menu. In a t
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: asks you to confirm, then removes the comment and its highlight, so it no longer appears in the document or the sidebar.
 
-To edit the title or description of an existing comment, open the thread and click the title or the description. Press **Enter** in the title, or click anywhere else, to save. **Esc** cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread, point at the title or the description, and click its pencil button (**Edit title** or **Edit description**). Press **Enter** in the title, or click anywhere else, to save. The **X** (**Cancel**) where the pencil was, or **Esc**, cancels the edit. The trash icon (**Delete**) at the bottom of the dialog deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
