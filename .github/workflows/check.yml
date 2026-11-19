@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  # Every gate `bun run check` runs except the API suite, beside the jobs that run it.
+  # Every gate `bun run check` runs except the API, formula and sheet suites, beside the jobs that run them.
   checks:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -53,7 +53,29 @@ jobs:
       # In dependency order, one workspace after another: run all at once, they finish only 15 s sooner on four cores,
       # and the tests that time a run against a tenth of it fail.
       - name: Test packages
-        run: bun --filter '!@apps/api' test --timeout 30000
+        run: bun --filter '!@apps/api' --filter '!@workspace/formula' --filter '!@workspace/sheet' test --timeout 30000
+
+  # The formula and sheet suites, each on its own runner: in the checks job the two took the job past its 10 minutes,
+  # and on one runner beside each other they would fail the tests that time a run.
+  engine:
+    name: ${{ matrix.workspace }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: ["@workspace/formula", "@workspace/sheet"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      - name: Test ${{ matrix.workspace }}
+        run: bun --filter '${{ matrix.workspace }}' test --timeout 30000
 
   # The API suite in three shards, balanced by the per-file times in apps/api/src/test/timings.json.
   api:
