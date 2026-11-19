@@ -55,7 +55,13 @@ test('a draft stays behind when the thread moves to another card', async () => {
                 createElement(
                     PreviewProvider,
                     null,
-                    createElement(CommentThread, { ownerId: 'u1', mountId: 'm1', pathId: 'doc', chatName }),
+                    createElement(CommentThread, {
+                        ownerId: 'u1',
+                        mountId: 'm1',
+                        pathId: 'doc',
+                        chatName,
+                        placement: 'below',
+                    }),
                 ),
             ),
         );

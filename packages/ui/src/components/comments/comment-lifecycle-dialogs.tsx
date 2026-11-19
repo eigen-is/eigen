@@ -9,6 +9,7 @@ import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useEffect, useRef, useState } from 'react';
 import { CardDialog } from '../cards/card-dialog';
+import type { ThreadPlacement } from '../cards/card-dialog-shell';
 import type { useContextMenu } from '../context-menu';
 import type { DeleteDialogProps } from '../delete/delete-dialog';
 import { DeleteDialog } from '../delete/delete-dialog';
@@ -22,6 +23,8 @@ type CommentLifecycleDialogsProps = {
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onDelete: (cardId: string) => void;
     noun?: string;
+    // A board puts a sticky's thread beside it; a comment's goes below.
+    threadPlacement?: ThreadPlacement;
     onCardDialogClose?: () => void;
 };
 
@@ -32,6 +35,7 @@ export function CommentLifecycleDialogs({
     commentContextMenu,
     onDelete,
     noun = 'comment',
+    threadPlacement = 'below',
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
     const { updateCard, members, openCard, openEntry, openCardDeleted, setOpenCardId, resolveComment, assignComment } =
@@ -63,6 +67,7 @@ export function CommentLifecycleDialogs({
                 pathId={path.id}
                 canWrite={canWrite}
                 deleted={openCardDeleted}
+                threadPlacement={threadPlacement}
                 copyLinkUrl={openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}
                 currentUserEmail={user?.email}

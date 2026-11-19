@@ -1,11 +1,12 @@
-// The comment thread beside a card, such as a sticky's: the messages of its chat room, the composer, and the dialog
-// that deletes a message. It finds the chat room by name in the document's chat folder. On a phone the card's dialog
-// scrolls the card and the messages as one, so the list doesn't scroll on its own there and the composer stays pinned.
+// The comment thread in a card's dialog: the messages of its chat room, the composer, and the dialog that deletes a
+// message. It finds the chat room by name in the document's chat folder. Where the dialog scrolls the card and the
+// messages as one, below the card or on a phone, the list doesn't scroll on its own and the composer stays pinned.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
+import type { ThreadPlacement } from '../cards/card-dialog-shell';
 import type { ChatMessageInputHandle } from '../chat/chat-message-input';
 import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
@@ -13,16 +14,25 @@ import { DeleteDialog } from '../delete/delete-dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { LoadingState } from '../layout/app/loading-state';
 
+const FLOW = {
+    below: { thread: 'grow', list: 'flex-none overflow-visible', composer: 'sticky bottom-0 mt-auto bg-background' },
+    beside: {
+        thread: 'h-full max-md:h-auto max-md:grow',
+        list: 'max-md:flex-none max-md:overflow-visible',
+        composer: 'max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-background',
+    },
+} satisfies Record<ThreadPlacement, Record<string, string>>;
+
 type CommentThreadProps = {
     ownerId: string;
     mountId: string;
     // The container this comment sits in: its notifications are tagged with that path, not the chat's.
     pathId: string;
     chatName: string;
-    className?: string;
+    placement: ThreadPlacement;
 };
 
-export function CommentThread({ ownerId, mountId, pathId, chatName, className }: CommentThreadProps) {
+export function CommentThread({ ownerId, mountId, pathId, chatName, placement }: CommentThreadProps) {
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
@@ -30,7 +40,7 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
     // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
     if (!chatId) {
         return (
-            <div className={cn('h-[50vh] min-h-0', className)}>
+            <div className={cn('h-[50vh] min-h-0', FLOW[placement].thread)}>
                 <LoadingState />
             </div>
         );
@@ -43,7 +53,7 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
             mountId={mountId}
             pathId={pathId}
             chatId={chatId}
-            className={className}
+            placement={placement}
         />
     );
 }
@@ -53,8 +63,9 @@ function CommentThreadInner({
     mountId,
     pathId,
     chatId,
-    className,
+    placement,
 }: { chatId: string } & Omit<CommentThreadProps, 'chatName'>) {
+    const flow = FLOW[placement];
     const chat = useChatRoom(ownerId, mountId, chatId, pathId);
     const editing = useChatEditing(chat);
     const [filePickerOpen, setFilePickerOpen] = useState(false);
@@ -63,7 +74,7 @@ function CommentThreadInner({
     return (
         // Overflow stays visible, so the input's @-mention list can reach above the thread. min-h-0 lets this flex
         // item shrink below its content. Without it the list never scrolls, and the input ends up below the dialog.
-        <div className={cn('flex flex-col h-[50vh] min-h-0', className)}>
+        <div className={cn('flex flex-col h-[50vh] min-h-0', flow.thread)}>
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
@@ -72,14 +83,14 @@ function CommentThreadInner({
                 mountId={mountId}
                 mediaFolderId={chat.mediaFolderId}
                 emptyMessage=""
-                className="flex-1 min-h-0 max-md:flex-none max-md:overflow-visible"
+                className={cn('flex-1 min-h-0', flow.list)}
                 onEditMessage={(msg) => editing.setEditingMessageId(msg.id)}
                 onDeleteMessage={editing.setDeleteTarget}
                 editingMessageId={editing.editingMessageId}
                 onSaveEdit={editing.handleSaveEdit}
                 onCancelEdit={editing.endEditing}
             />
-            <div className="max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-background">
+            <div className={flow.composer}>
                 <ChatMessageInput
                     ref={inputRef}
                     onSend={chat.handleSendMessage}

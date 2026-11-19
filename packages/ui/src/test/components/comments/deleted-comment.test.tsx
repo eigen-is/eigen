@@ -89,6 +89,7 @@ function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
                 pathId: 'doc-1',
                 canWrite: true,
                 deleted,
+                threadPlacement: 'below',
                 members: [member],
                 currentUserEmail: 'ada@example.com',
                 onUpdate: () => {},
@@ -134,6 +135,7 @@ test('a thread the chat folder does not list shows the loading line and no reply
             mountId: 'm1',
             pathId: 'doc-1',
             chatName: card.chatName ?? '',
+            placement: 'below',
         }),
     ));
     expect(document.querySelector('svg')).not.toBeNull();

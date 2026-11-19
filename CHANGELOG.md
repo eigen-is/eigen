@@ -6,7 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
-- **Cards and comments** — in Stickies, Docs, Sheets, Slides and Vector, an open card shows its thread beside it, and the pencil beside its title or description edits it in place. Color, assignee, **Resolve** and attachments apply at once
+- **Cards and comments** — in Stickies, Docs, Sheets, Slides and Vector, the pencil beside an open card's title or description edits it in place. A sticky shows its thread beside it, a comment below it. Color, assignee, **Resolve** and attachments apply at once
 - **Undo on an open sticky** — Ctrl+Z (⌘Z on a Mac) with a card open undoes the board's last change, such as a description saved by mistake
 
 ### Fixed

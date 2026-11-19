@@ -68,6 +68,7 @@ function Harness() {
             mountId: 'm1',
             pathId: 'board-1',
             deleted: false,
+            threadPlacement: 'beside',
             onUpdate: (cardId: string, patch: CommentCardPatch) => updates.push([cardId, patch]),
             onResolve: (chatName: string, next: string, title?: string) => resolves.push([chatName, next, title]),
         }),

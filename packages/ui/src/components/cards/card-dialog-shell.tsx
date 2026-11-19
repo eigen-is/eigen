@@ -1,7 +1,8 @@
 // The frame of a card's dialog, both the one that adds a card and the one that opens it: a header in the card's color
-// with the title and a close button, the card's own column with a footer, and, once the card exists, its thread beside
-// it on a wide screen. On a phone the thread follows the card in one scroll, with its reply box pinned at the bottom. While something typed is unsaved, Esc and the close button cancel it
-// rather than close the dialog, which gives a phone a way back without an Esc key, and a click outside closes nothing.
+// with the title and a close button, the card's own column with a footer, and, once the card exists, its thread. A
+// comment's thread follows the card in one scroll, and a sticky's sits beside it on a wide screen, as on a board. While
+// something typed is unsaved, Esc and the close button cancel it rather than close the dialog, which gives a phone a
+// way back without an Esc key, and a click outside closes nothing.
 
 import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { X } from 'lucide-react';
@@ -9,6 +10,26 @@ import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { Dialog, DialogContent, DialogDescription, DialogHeader } from '../dialog';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+
+// Below, the card and its thread scroll as one with the reply box pinned at the bottom; beside does that only on a phone.
+export type ThreadPlacement = 'below' | 'beside';
+
+const LAYOUT = {
+    below: {
+        dialog: 'sm:max-w-2xl',
+        body: 'overflow-y-auto',
+        card: 'shrink-0',
+        cardText: 'overflow-visible',
+        thread: 'shrink-0 grow border-t',
+    },
+    beside: {
+        dialog: 'sm:max-w-5xl',
+        body: 'max-md:overflow-y-auto md:flex-row',
+        card: 'max-md:shrink-0 md:flex-[3] md:border-r',
+        cardText: 'max-md:overflow-visible',
+        thread: 'max-md:shrink-0 max-md:grow max-md:border-t md:flex-[2]',
+    },
+} satisfies Record<ThreadPlacement, Record<string, string>>;
 
 type CardDialogShellProps = {
     open: boolean;
@@ -20,7 +41,7 @@ type CardDialogShellProps = {
     unsaved: boolean;
     onCancel: () => void;
     footer: ReactNode;
-    thread?: ReactNode;
+    thread?: { content: ReactNode; placement: ThreadPlacement };
     children: ReactNode;
 };
 
@@ -35,13 +56,14 @@ export function CardDialogShell({
     thread,
     children,
 }: CardDialogShellProps) {
+    const layout = thread && LAYOUT[thread.placement];
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 showCloseButton={false}
                 className={cn(
                     'flex flex-col gap-0 overflow-hidden p-0',
-                    thread ? 'h-[min(85dvh,44rem)] max-sm:h-[calc(100dvh-2rem)] sm:max-w-5xl' : 'sm:max-w-lg',
+                    layout ? ['h-[min(85dvh,44rem)] max-sm:h-[calc(100dvh-2rem)]', layout.dialog] : 'sm:max-w-lg',
                 )}
                 // A field that owns Escape, such as the link field of the description's toolbar, has taken it already.
                 onEscapeKeyDown={(e) => {
@@ -85,22 +107,15 @@ export function CardDialogShell({
                         onClick={() => (unsaved ? onCancel() : onOpenChange(false))}
                     />
                 </DialogHeader>
-                <div className={cn('flex min-h-0 flex-1 flex-col', thread && 'max-md:overflow-y-auto md:flex-row')}>
-                    <div className={cn('flex min-h-0 flex-col', thread && 'max-md:shrink-0 md:flex-[3] md:border-r')}>
-                        <div
-                            className={cn(
-                                'min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4',
-                                thread && 'max-md:overflow-visible',
-                            )}
-                        >
+                <div className={cn('flex min-h-0 flex-1 flex-col', layout?.body)}>
+                    <div className={cn('flex min-h-0 flex-col', layout?.card)}>
+                        <div className={cn('min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4', layout?.cardText)}>
                             {children}
                         </div>
                         <div className="shrink-0 px-4 pb-3">{footer}</div>
                     </div>
-                    {thread && (
-                        <div className="flex min-h-0 flex-col max-md:shrink-0 max-md:grow max-md:border-t md:flex-[2]">
-                            {thread}
-                        </div>
+                    {thread && layout && (
+                        <div className={cn('flex min-h-0 flex-col', layout.thread)}>{thread.content}</div>
                     )}
                 </div>
             </DialogContent>

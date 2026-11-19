@@ -33,6 +33,7 @@ import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { CardAttachmentRow } from './card-attachment-row';
 import { CardDescription } from './card-description';
+import type { ThreadPlacement } from './card-dialog-shell';
 import { CardDialogShell } from './card-dialog-shell';
 import { CardProperties } from './card-properties';
 import { CardTitle } from './card-title';
@@ -48,6 +49,7 @@ type CardDialogProps = {
     pathId: string;
     canWrite?: boolean;
     deleted: boolean;
+    threadPlacement: ThreadPlacement;
     copyLinkUrl?: string;
     members?: EffectiveMember[];
     currentUserEmail?: string;
@@ -87,6 +89,7 @@ function OpenCardDialog({
     mountId,
     pathId,
     canWrite = true,
+    threadPlacement,
     copyLinkUrl,
     members,
     currentUserEmail,
@@ -193,19 +196,20 @@ function OpenCardDialog({
                     </span>
                 </div>
             }
-            thread={
-                chatName ? (
+            thread={{
+                placement: threadPlacement,
+                content: chatName ? (
                     <CommentThread
                         ownerId={ownerId}
                         mountId={mountId}
                         pathId={pathId}
                         chatName={chatName}
-                        className="h-full max-md:h-auto max-md:grow"
+                        placement={threadPlacement}
                     />
                 ) : (
                     <div className="p-4 text-sm text-muted-foreground">No chat available for this card.</div>
-                )
-            }
+                ),
+            }}
         >
             <div className="flex min-h-full flex-col gap-4" onPaste={onPaste} {...targetProps}>
                 <CardDescription

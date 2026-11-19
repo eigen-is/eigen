@@ -424,6 +424,7 @@ export function StickiesBoard({
                                             });
                                         }}
                                         noun="sticky"
+                                        threadPlacement="beside"
                                         onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>
