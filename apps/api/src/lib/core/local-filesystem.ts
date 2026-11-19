@@ -44,7 +44,7 @@ export class LocalFilesystem {
     // so a power loss can still lose a write there.
     public async syncDir(dirPath: string): Promise<void> {
         try {
-            await this.sync(dirPath);
+            await this.sync(dirPath, 'r');
         } catch (error) {
             if (!warnedDirSyncUnsupported) {
                 warnedDirSyncUnsupported = true;
@@ -57,7 +57,7 @@ export class LocalFilesystem {
     public async writeDurable(filePath: string, data: FileData): Promise<number> {
         try {
             const size = await this.write(filePath, data);
-            await this.sync(filePath);
+            await this.sync(filePath, 'r+');
             return size;
         } catch (error) {
             // No name points at a partial staged file yet, so it goes here.
@@ -242,9 +242,10 @@ export class LocalFilesystem {
         return resolveWithinBase(this.baseDir, filePath);
     }
 
-    // An fsync through a handle of its own, which flushes what any handle wrote to the file or folder.
-    private async sync(filePath: string): Promise<void> {
-        const handle = await fsPromises.open(this.getFilePath(filePath), 'r');
+    // An fsync through a handle of its own flushes what any handle wrote. Windows flushes a file only through a handle
+    // that may write it, and Linux opens a folder only to read it.
+    private async sync(filePath: string, flags: 'r' | 'r+'): Promise<void> {
+        const handle = await fsPromises.open(this.getFilePath(filePath), flags);
         try {
             await handle.sync();
         } finally {
