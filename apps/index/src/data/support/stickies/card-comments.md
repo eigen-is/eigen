@@ -13,7 +13,7 @@ Every card on a Stickies board has a built-in comment thread. You can use it to 
 ## Open a card's comment thread
 
 1. Click the card you want to discuss. The card dialog opens.
-2. The comment thread is on the right of the dialog, or below the card on a phone, under the **All** and **Comments** tabs. You can read all previous messages there.
+2. The comment thread is on the right of the dialog, or below the card on a phone, under the **Comments** tab. You can read all previous messages there.
 3. Type your message in the **Reply...** box at the bottom, then press **Enter** to send it.
 
 You can also open the thread from the context menu: right-click any card and choose **View sticky**.
