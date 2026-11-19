@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2379 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2385 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (324)
+## Components (330)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -255,6 +255,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MenubarTrigger` | `@workspace/ui/components/menubar` | packages/ui/src/components/menubar.tsx |
 | `MountForm` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `S3ConfigCard` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/s3-config-card.tsx |
+| `NavigationMenu` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
+| `NavigationMenuContent` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
+| `NavigationMenuItem` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
+| `NavigationMenuLink` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
+| `NavigationMenuList` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
+| `NavigationMenuTrigger` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `Popover` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |

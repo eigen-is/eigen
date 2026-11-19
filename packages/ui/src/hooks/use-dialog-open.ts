@@ -13,8 +13,9 @@ import { useSyncExternalStore } from 'react';
 // Radix keeps a closing dialog mounted as data-state="closed" for its exit animation.
 const OPEN_DIALOG = '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"])';
 
-// An open menu, such as a bar menu or a dropdown. A menu still fading out after a pick is not open.
-export const OPEN_MENU = '[role="menu"][data-state="open"]';
+// An open menu, such as a bar menu, a dropdown or the app switcher, whose links have no menu role. A menu still fading
+// out after a pick is not open.
+export const OPEN_MENU = '[role="menu"][data-state="open"], [data-slot="navigation-menu-content"][data-state="open"]';
 
 // One observer for every subscriber, alive only while one is mounted.
 const listeners = new Set<() => void>();

@@ -33,6 +33,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '../../dropdown-menu';
+import {
+    NavigationMenu,
+    NavigationMenuContent,
+    NavigationMenuItem,
+    NavigationMenuLink,
+    NavigationMenuList,
+    NavigationMenuTrigger,
+} from '../../navigation-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
 import { UserAvatar } from '../../user/user-avatar';
 import { UserItem } from '../../user/user-item';
@@ -98,58 +106,57 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const appList = useEnabledApps().filter((app) => !isGuest || GUEST_APPS.has(app.name));
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Switch app"
-                    className="mr-1 h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
-                >
-                    <Grip className="h-5 w-5" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="min-w-56 p-3" align="start" forceMount>
-                <div className="grid grid-cols-3 w-full gap-2">
-                    {appList.map((app) => {
-                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                        const Icon = app.icon;
-                        return (
-                            <DropdownMenuItem
-                                key={app.name}
-                                asChild
-                                className={cn(
-                                    'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
-                                    isActive ? 'bg-muted font-medium' : '',
-                                )}
-                            >
-                                <a href={app.href}>
-                                    <Icon className="size-4.5" style={{ color: app.color }} />
-                                    {app.name}
-                                </a>
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </div>
+        <NavigationMenu aria-label="Apps" className="mr-1">
+            <NavigationMenuList>
+                <NavigationMenuItem>
+                    <NavigationMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Switch app"
+                            className="h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
+                        >
+                            <Grip className="h-5 w-5" />
+                        </Button>
+                    </NavigationMenuTrigger>
+                    <NavigationMenuContent className="min-w-56 p-3">
+                        <div className="grid grid-cols-3 w-full gap-2">
+                            {appList.map((app) => {
+                                const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                                const Icon = app.icon;
+                                return (
+                                    <NavigationMenuLink
+                                        key={app.name}
+                                        href={app.href}
+                                        active={isActive}
+                                        className={cn(
+                                            'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
+                                            isActive ? 'bg-muted font-medium' : '',
+                                        )}
+                                    >
+                                        <Icon className="size-4.5" style={{ color: app.color }} />
+                                        {app.name}
+                                    </NavigationMenuLink>
+                                );
+                            })}
+                        </div>
 
-                <div className="border-t pt-3 mt-3">
-                    {isAdmin && !isGuest && (
-                        <DropdownMenuItem asChild>
-                            <a href={getAdminAppUrl()}>
-                                <Shield className="size-4.5" />
-                                Admin
-                            </a>
-                        </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem asChild>
-                        <a href={getSupportUrl()}>
-                            <LifeBuoy className="size-4.5" />
-                            Support
-                        </a>
-                    </DropdownMenuItem>
-                </div>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                        <div className="border-t pt-3 mt-3">
+                            {isAdmin && !isGuest && (
+                                <NavigationMenuLink href={getAdminAppUrl()}>
+                                    <Shield className="size-4.5" />
+                                    Admin
+                                </NavigationMenuLink>
+                            )}
+                            <NavigationMenuLink href={getSupportUrl()}>
+                                <LifeBuoy className="size-4.5" />
+                                Support
+                            </NavigationMenuLink>
+                        </div>
+                    </NavigationMenuContent>
+                </NavigationMenuItem>
+            </NavigationMenuList>
+        </NavigationMenu>
     );
 }
 

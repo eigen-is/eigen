@@ -18,9 +18,27 @@ function menu(state: 'open' | 'closed') {
     document.body.append(el);
 }
 
+// The app switcher's panel, which has no menu role.
+function switcher(state: 'open' | 'closed') {
+    const el = document.createElement('div');
+    el.setAttribute('data-slot', 'navigation-menu-content');
+    el.setAttribute('data-state', state);
+    document.body.append(el);
+}
+
 test('an open menu makes the press a close', () => {
     menu('open');
     expect(pressClosesMenu()).toBe(true);
+});
+
+test('an open app switcher makes the press a close', () => {
+    switcher('open');
+    expect(pressClosesMenu()).toBe(true);
+});
+
+test('a switcher closing does not', () => {
+    switcher('closed');
+    expect(pressClosesMenu()).toBe(false);
 });
 
 test('a menu fading out does not', () => {

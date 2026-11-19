@@ -6,7 +6,7 @@ category: Basics
 tags: [getting-started, sign-in, profile, space]
 related: [getting-started/about-eigen, drive/get-started]
 order: 2
-updated: 2026-10-28
+updated: 2026-11-19
 ---
 
 Eigen brings your mail, files, calendar, and more together in one place, each as its own app. This page shows you how to sign in, set up your profile, and move between the apps.
@@ -37,7 +37,7 @@ Your name and picture are public to everyone else in your Eigen. They show up ne
 
 ## Move between the apps
 
-Eigen is a set of apps that share the same account and the same look. At the top left of every app is a grid button (its label is **Switch app**). Click it to open the full list and jump to any of them:
+Eigen is a set of apps that share the same account and the same look. At the top left of every app is a grid button (its label is **Switch app**). Click it, or rest the mouse on it, to open the full list and jump to any of them:
 
 - **Mail** for your inbox.
 - **Drive** for your files and folders.

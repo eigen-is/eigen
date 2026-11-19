@@ -123,6 +123,14 @@ A bar trigger is a `role="menuitem"` inside `role="menubar"`, so a test looks fo
 
 The bar of every document app is a `CenteredToolbar`: menus left, the icon row at the true center, the share cluster right. The icon row folds into the menus as the bar narrows, so every icon it folds away is a menu row. Sheets reads the bar's own width through a container query, because a panel beside the workbook narrows the bar; the other editors read the viewport.
 
+## The app switcher is a NavigationMenu that opens on hover
+
+**The grip at the top left of every app is a shadcn `NavigationMenu`, not a `DropdownMenu`, because it is a list of links that opens as the mouse rests on it.** Radix's NavigationMenu waits 200 ms before it opens, so a pointer passing on its way to the browser's tabs opens nothing, and closes 150 ms after the mouse leaves the grip and the panel. It leaves the focus where it was while the mouse opens it, so an editor keeps the keys; a DropdownMenu would take the focus as it opens. A click, a tap or Enter opens it too.
+
+- Radix toggles on every click, so the press aimed at a grip the resting mouse just opened would close it. `NavigationMenuTrigger` keeps an open menu open on a mouse click; a tap or a key still toggles.
+- The panel is not portaled: it sits `absolute` under its trigger, so it needs `w-max` to size to its content instead of to the grip's width.
+- Its panel has no `role="menu"`, so `OPEN_MENU` names its `data-slot` too: a press on the canvas only closes it, and Vector's keys stand down while it is open, as for any menu.
+
 ## The bar's menus come in Google's order
 
 **An editor's bar menus read File, Edit, View, Insert, Format, the app's own menus, Tools and Help, as Google's do, and each app shows the ones it has.** Docs has File, Edit, Insert, Format and Tools; Sheets File, Edit, View, Insert, Format and Data; Slides and Vector File, Edit and Insert; Stickies File, Edit, Insert and Filter. A user who knows Google Docs or Sheets looks for a menu in that place, so an app that adds a menu puts it in its Google place.
