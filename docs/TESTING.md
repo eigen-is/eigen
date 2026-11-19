@@ -101,9 +101,10 @@ The drive resilience suites run on doubles at the `src/test/` root, each listing
 `.github/workflows/check.yml` runs on a push to `main`, `develop`, `release-*` or `ci-*` (for work on the workflow itself) and on a pull request to `main` or `develop`. Its jobs run side by side:
 
 - `checks`: the gates of `bun run check` except the API suite, then every other suite in turn except formula's and sheet's, with `bun --filter '!@apps/api' --filter '!@workspace/formula' --filter '!@workspace/sheet' test --timeout 30000`.
-- `@workspace/formula` and `@workspace/sheet`: those two suites, each on its own runner. Together in `checks` they took it past its 10 minutes, and side by side on one runner they would fail the tests that time a run.
+- `formula`: the formula suite on its own runner. Together with the sheet suite in `checks` it took that job past its 10 minutes.
+- `sheet 1/3` to `sheet 3/3`: the sheet suite in three shards, one file at a time each, balanced by the per-file times in `packages/sheet/src/test/timings.json`. On one runner it took 10.5 minutes, and two suites side by side on one runner fail the tests that time a run.
 - `api 1/3` to `api 3/3`: the API suite in three shards of four isolated workers each, balanced by the per-file times in `apps/api/src/test/timings.json`. Only these install the PDF engine.
-- `api-files` fails unless the shards together ran every API test file.
+- `api-files` and `sheet-files` fail unless a suite's shards together ran every one of its test files.
 - `launcher` runs `docker/test-launcher.sh`.
 - `cli` runs `docker/test-cli.sh` on a built install, with the checks that Docker Desktop's file share skips on a Mac.
 
@@ -117,7 +118,7 @@ The drive resilience suites run on doubles at the `src/test/` root, each listing
 - `SQLITE_IOERR_VNODE` in a sandboxed run is the sandbox: rerun outside before calling it a failure. A loaded or sleeping machine fakes timeouts: check `uptime`, run no second suite beside the check, and use `caffeinate -ims bun run check` on a Mac.
 - Under `GITHUB_ACTIONS` the preload prints each worker's RSS after every file. Exit code 143 is an out-of-memory kill; `bun --filter` buffers output, so the last test in the log is not the culprit.
 
-Refresh the timings after a batch of new API test files; each shard uploads its times as the artifact `api-shard-<i>`:
+Refresh the timings after a batch of new API or sheet test files; each shard uploads its times as the artifact `api-shard-<i>` or `sheet-shard-<i>`. For the API (for the sheet, `sheet` and `packages/sheet`):
 
 ```bash
 gh run download <run id> -p 'api-shard-*' -D /tmp/api-shards

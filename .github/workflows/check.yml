@@ -60,16 +60,10 @@ jobs:
       - name: Test packages
         run: bun --filter '!@apps/api' --filter '!@workspace/formula' --filter '!@workspace/sheet' test --timeout 30000
 
-  # The formula and sheet suites, each on its own runner: in the checks job the two took the job past its 10 minutes,
-  # and on one runner beside each other they would fail the tests that time a run.
-  engine:
-    name: ${{ matrix.workspace }}
+  # The formula suite on its own runner: in the checks job it and the sheet suite took the job past its 10 minutes.
+  formula:
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        workspace: ["@workspace/formula", "@workspace/sheet"]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -79,8 +73,43 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Test ${{ matrix.workspace }}
-        run: bun --filter '${{ matrix.workspace }}' test --timeout 30000
+      - name: Test formula
+        run: bun --filter '@workspace/formula' test --timeout 30000
+
+  # The sheet suite in three shards, balanced by the per-file times in packages/sheet/src/test/timings.json: on one
+  # runner it took 10.5 minutes. One file at a time per shard, so the tests that time a run have the cores to themselves.
+  sheet:
+    name: sheet ${{ matrix.shard }}/3
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+
+      # The shard's file count and its measured times go to the files job below.
+      - name: Test sheet
+        working-directory: packages/sheet
+        run: |
+          mkdir -p "$RUNNER_TEMP/shard"
+          bun run test --timeout 30000 --shard=${{ matrix.shard }}/3 --timings=src/test/timings.json --update-timings 2>&1 | tee "$RUNNER_TEMP/sheet.log"
+          grep -oE 'across [0-9]+ files?' "$RUNNER_TEMP/sheet.log" | tail -1 | grep -oE '[0-9]+' > "$RUNNER_TEMP/shard/files-${{ matrix.shard }}"
+          cp src/test/timings.json "$RUNNER_TEMP/shard/timings-${{ matrix.shard }}.json"
+
+      - uses: actions/upload-artifact@v7
+        if: success() || failure()
+        with:
+          name: sheet-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard
+          retention-days: 7
 
   # The API suite in three shards, balanced by the per-file times in apps/api/src/test/timings.json.
   api:
@@ -128,7 +157,7 @@ jobs:
           weasyprint --version
           pdftoppm -v
 
-      # The shard's file count and its measured times go to the api job below.
+      # The shard's file count and its measured times go to the files job below.
       - name: Test API
         working-directory: apps/api
         run: |
@@ -144,25 +173,34 @@ jobs:
           path: ${{ runner.temp }}/shard
           retention-days: 7
 
-  # The shards ran every API test file between them: a file in no shard would fail no run.
-  api-files:
-    needs: api
+  # The shards of a suite ran every one of its test files between them: a file in no shard would fail no run.
+  files:
+    name: ${{ matrix.suite }}-files
+    needs: [api, sheet]
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: api
+            dir: apps/api
+          - suite: sheet
+            dir: packages/sheet
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
         with:
-          pattern: api-shard-*
+          pattern: ${{ matrix.suite }}-shard-*
           merge-multiple: true
           path: shards
 
-      - name: Every API test file ran once
+      - name: Every ${{ matrix.suite }} test file ran once
         run: |
-          total=$(find apps/api -name node_modules -prune -o -type f -regextype posix-extended -regex '.*[._](test|spec)\.[cm]?[jt]sx?' -print | wc -l)
+          total=$(find ${{ matrix.dir }} -name node_modules -prune -o -type f -regextype posix-extended -regex '.*[._](test|spec)\.[cm]?[jt]sx?' -print | wc -l)
           ran=$(cat shards/files-* | paste -sd+ | bc)
-          echo "shards ran $ran of $total API test files"
+          echo "shards ran $ran of $total ${{ matrix.suite }} test files"
           [ "$ran" -eq "$total" ]
 
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
