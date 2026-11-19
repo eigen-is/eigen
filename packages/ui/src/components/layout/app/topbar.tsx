@@ -20,8 +20,7 @@ import { useTheme } from '@workspace/lib/space';
 import { THEMES } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogIn, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
-import type { PointerEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EigenLogo } from '../../braket/eigen-logo';
 import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
@@ -34,6 +33,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '../../dropdown-menu';
+import {
+    NavigationMenu,
+    NavigationMenuContent,
+    NavigationMenuItem,
+    NavigationMenuLink,
+    NavigationMenuList,
+    NavigationMenuTrigger,
+} from '../../navigation-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
 import { UserAvatar } from '../../user/user-avatar';
 import { UserItem } from '../../user/user-item';
@@ -93,115 +100,63 @@ function useLogout(rootRoute: TopbarProps['rootRoute']) {
     return { logoutDialogOpen, setLogoutDialogOpen, handleLogout };
 }
 
-// Long enough for the pointer to cross the gap between the grip and the menu.
-const HOVER_CLOSE_DELAY_MS = 200;
-
-// The menu takes the focus as it opens, so one the mouse opened gives it back, or a pointer passing by takes it from an
-// editor.
 function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const { appName } = useLayout();
     const isAdmin = useIsAdmin();
     const appList = useEnabledApps().filter((app) => !isGuest || GUEST_APPS.has(app.name));
-    const [open, setOpen] = useState(false);
-    const focusBeforeHoverRef = useRef<Element | null>(null);
-    const closeTimerRef = useRef<number | undefined>(undefined);
-
-    useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
-
-    const onPointerEnter = (event: PointerEvent) => {
-        if (event.pointerType !== 'mouse') return;
-        window.clearTimeout(closeTimerRef.current);
-        if (open) return;
-        focusBeforeHoverRef.current = document.activeElement;
-        setOpen(true);
-    };
-    const onPointerLeave = (event: PointerEvent) => {
-        if (event.pointerType !== 'mouse' || !focusBeforeHoverRef.current) return;
-        closeTimerRef.current = window.setTimeout(() => setOpen(false), HOVER_CLOSE_DELAY_MS);
-    };
 
     return (
-        <DropdownMenu
-            open={open}
-            onOpenChange={(next) => {
-                window.clearTimeout(closeTimerRef.current);
-                setOpen(next);
-            }}
-            // A modal menu turns off pointer events on the page, so the grip would never see the pointer come back.
-            modal={false}
-        >
-            <DropdownMenuTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Switch app"
-                    className="mr-1 h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
-                    onPointerEnter={onPointerEnter}
-                    onPointerLeave={onPointerLeave}
-                    // Radix skips its toggle on a prevented press, so a click keeps a menu the mouse opened.
-                    onPointerDown={(event) => {
-                        if (event.button !== 0 || !open || !focusBeforeHoverRef.current) return;
-                        focusBeforeHoverRef.current = null;
-                        event.preventDefault();
-                    }}
-                >
-                    <Grip className="h-5 w-5" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-                className="min-w-56 p-3"
-                align="start"
-                forceMount
-                onPointerEnter={onPointerEnter}
-                onPointerLeave={onPointerLeave}
-                onCloseAutoFocus={(event) => {
-                    const focused = focusBeforeHoverRef.current;
-                    focusBeforeHoverRef.current = null;
-                    if (!focused) return;
-                    event.preventDefault();
-                    if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
-                }}
-            >
-                <div className="grid grid-cols-3 w-full gap-2">
-                    {appList.map((app) => {
-                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                        const Icon = app.icon;
-                        return (
-                            <DropdownMenuItem
-                                key={app.name}
-                                asChild
-                                className={cn(
-                                    'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
-                                    isActive ? 'bg-muted font-medium' : '',
-                                )}
-                            >
-                                <a href={app.href}>
-                                    <Icon className="size-4.5" style={{ color: app.color }} />
-                                    {app.name}
-                                </a>
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </div>
+        <NavigationMenu aria-label="Apps" className="mr-1">
+            <NavigationMenuList>
+                <NavigationMenuItem>
+                    <NavigationMenuTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Switch app"
+                            className="h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
+                        >
+                            <Grip className="h-5 w-5" />
+                        </Button>
+                    </NavigationMenuTrigger>
+                    <NavigationMenuContent className="min-w-56 p-3">
+                        <div className="grid grid-cols-3 w-full gap-2">
+                            {appList.map((app) => {
+                                const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                                const Icon = app.icon;
+                                return (
+                                    <NavigationMenuLink
+                                        key={app.name}
+                                        href={app.href}
+                                        active={isActive}
+                                        className={cn(
+                                            'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
+                                            isActive ? 'bg-muted font-medium' : '',
+                                        )}
+                                    >
+                                        <Icon className="size-4.5" style={{ color: app.color }} />
+                                        {app.name}
+                                    </NavigationMenuLink>
+                                );
+                            })}
+                        </div>
 
-                <div className="border-t pt-3 mt-3">
-                    {isAdmin && !isGuest && (
-                        <DropdownMenuItem asChild>
-                            <a href={getAdminAppUrl()}>
-                                <Shield className="size-4.5" />
-                                Admin
-                            </a>
-                        </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem asChild>
-                        <a href={getSupportUrl()}>
-                            <LifeBuoy className="size-4.5" />
-                            Support
-                        </a>
-                    </DropdownMenuItem>
-                </div>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                        <div className="border-t pt-3 mt-3">
+                            {isAdmin && !isGuest && (
+                                <NavigationMenuLink href={getAdminAppUrl()}>
+                                    <Shield className="size-4.5" />
+                                    Admin
+                                </NavigationMenuLink>
+                            )}
+                            <NavigationMenuLink href={getSupportUrl()}>
+                                <LifeBuoy className="size-4.5" />
+                                Support
+                            </NavigationMenuLink>
+                        </div>
+                    </NavigationMenuContent>
+                </NavigationMenuItem>
+            </NavigationMenuList>
+        </NavigationMenu>
     );
 }
 
