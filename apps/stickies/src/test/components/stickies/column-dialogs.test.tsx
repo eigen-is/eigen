@@ -140,6 +140,9 @@ test('Column settings: Delete column asks first, then removes the column and its
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Delete column', 'Cancel', 'Save changes']);
     await act(async () => button('Delete column')?.click());
     expect(doc.getMap('columns').has('c1')).toBe(true);
+    expect([...document.querySelectorAll('[role="dialog"] p')].map((p) => p.textContent)).toContain(
+        'This will delete the column To do and 1 card within it. You can undo this straight after, until you close the board.',
+    );
     const confirm = button('Delete');
     expect(confirm).toBeDefined();
     await act(async () => confirm?.click());

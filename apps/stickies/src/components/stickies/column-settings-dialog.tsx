@@ -98,7 +98,7 @@ export function ColumnSettingsDialog({
                 title="Delete column"
                 description={
                     <>
-                        This will permanently delete the column <strong>{columnTitle}</strong>
+                        This will delete the column <strong>{columnTitle}</strong>
                         {cardCount > 0 && ` and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it`}. You can
                         undo this straight after, until you close the board.
                     </>
