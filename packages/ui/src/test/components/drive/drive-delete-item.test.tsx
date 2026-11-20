@@ -1,5 +1,6 @@
-// When Move to trash gets only part of a selection through, the dialog stays open, the after-delete step
-// runs for the ones that went, and the failures go to the dialog's owner, which narrows it to them.
+// Moving one of your own items to trash asks in a red confirm that names it. When Move to trash gets only part of a
+// selection through, the dialog stays open, the after-delete step runs for the ones that went, and the failures go to
+// the dialog's owner, which narrows it to them.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -63,4 +64,17 @@ test('a partial failure hands the failed item to the owner and keeps the dialog 
     await confirm();
     expect([deleted, after, failed]).toEqual([['good', 'bad', 'other'], ['good', 'other'], ['bad']]);
     expect(document.querySelector('[role="alertdialog"], [role="dialog"]')).not.toBeNull();
+});
+
+test('one item of your own asks to move it to trash by name', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(DriveDeleteItem, { paths: paths.slice(0, 1), open: true, onOpenChange: () => {} }),
+    ));
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.querySelector('h2')?.textContent).toBe('Move to trash');
+    expect(dialog?.querySelector('p')?.innerHTML).toBe(
+        'Move <strong>good.txt</strong>? You can restore it later from the trash.',
+    );
+    const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Move to trash');
+    expect(confirm?.getAttribute('data-variant')).toBe('destructive');
 });

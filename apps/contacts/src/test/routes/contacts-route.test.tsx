@@ -1,9 +1,10 @@
 // The contacts page lists the book, or a label's cards alone, sorted by first or last name. A contact URL
 // opens that contact beside the list; one whose contact is gone, deleted or never there, says so in the
-// detail, as Admin's users and teams do. The detail's Delete confirms first and sends the card's etag,
-// and your own card offers no Delete at all.
+// detail, as Admin's users and teams do. The detail's Delete confirms first, keeps naming the card while its
+// dialog closes and sends the card's etag, and your own card offers no Delete at all.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
+import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -147,14 +148,24 @@ test('a team member who is gone says so too', async () => {
 });
 
 test('Delete asks first, then deletes the card with the etag it was read with and closes the detail', async () => {
-    const page = await open('/book/all?contactId=c1');
-    await click(document.querySelector('button[aria-label="Delete"]'));
-    expect(deleteContact.mutateAsync).not.toHaveBeenCalled();
-    const dialog = document.querySelector('[role="alertdialog"], [role="dialog"]');
-    expect(dialog?.textContent).toContain('Ada Lovelace');
-    await click([...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Delete'));
-    expect(deleteContact.mutateAsync.mock.calls).toEqual([[{ id: 'c1', etag: 'e1' }]]);
-    expect(page.search()).toEqual({});
+    const release = holdClosingDialogs();
+    try {
+        const page = await open('/book/all?contactId=c1');
+        await click(document.querySelector('button[aria-label="Delete"]'));
+        expect(deleteContact.mutateAsync).not.toHaveBeenCalled();
+        const dialog = document.querySelector('[role="dialog"]');
+        const sentence = 'Are you sure you want to delete <strong>Ada Lovelace</strong>?';
+        expect(dialog?.querySelector('h2')?.textContent).toBe('Delete contact');
+        expect(dialog?.querySelector('p')?.innerHTML).toBe(sentence);
+        const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Delete');
+        expect(confirm?.getAttribute('data-variant')).toBe('destructive');
+        await click(confirm);
+        expect(deleteContact.mutateAsync.mock.calls).toEqual([[{ id: 'c1', etag: 'e1' }]]);
+        expect(page.search()).toEqual({});
+        expect(closingDialog()?.querySelector('p')?.innerHTML).toBe(sentence);
+    } finally {
+        release();
+    }
 });
 
 test('your own card offers no Delete', async () => {

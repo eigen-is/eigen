@@ -195,8 +195,8 @@ export function useMailActions() {
         return { needsConfirmation: false as const };
     };
 
-    // On a failure, `keepFailed` narrows the dialog to the emails still there and the first failure is rethrown. Its mutation
-    // already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
+    // On a failure, `keepFailed` narrows the dialog to the emails worth another try and the first failure is rethrown. Its
+    // mutation already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
@@ -204,12 +204,11 @@ export function useMailActions() {
         if (failures.length === 0) return;
         // A refused email, such as one already gone, gets the same no again, so only the others stay for a retry. A
         // refusal closes the dialog, so it is thrown only when no failure is worth another try.
-        keepFailed(
-            pendingEmails.filter((_, i) => {
-                const result = results[i];
-                return result.status === 'rejected' && !isRefusal(result.reason);
-            }),
-        );
+        const retry = pendingEmails.filter((_, i) => {
+            const result = results[i];
+            return result.status === 'rejected' && !isRefusal(result.reason);
+        });
+        if (retry.length > 0) keepFailed(retry);
         throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 

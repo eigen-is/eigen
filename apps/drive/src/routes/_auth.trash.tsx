@@ -20,7 +20,7 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import type { DriveListDate } from '@workspace/ui/components/drive/drive-table';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
@@ -131,7 +131,7 @@ function TrashRoute() {
                 </Column>
             </ColumnLayout>
 
-            <DeleteDialog
+            <ConfirmDialog
                 open={emptyTrashOpen}
                 onOpenChange={setEmptyTrashOpen}
                 title="Empty trash"
@@ -140,30 +140,36 @@ function TrashRoute() {
                         ? 'Are you sure you want to permanently delete all items from your own drive? Items from team drives stay in the trash. This action cannot be undone.'
                         : 'Are you sure you want to permanently delete all items in trash? This action cannot be undone.'
                 }
-                onDelete={async () => {
+                onConfirm={async () => {
                     await emptyTrash.mutateAsync();
                 }}
-                deleteText="Empty trash"
+                confirmText="Empty trash"
+                destructive
             />
 
             {deleteItems && (
-                <DeleteDialog
+                <ConfirmDialog
                     open={deleteDialog.open}
                     onOpenChange={deleteDialog.setOpen}
                     title="Delete permanently"
                     description={
-                        deleteItems.length > 1
-                            ? `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
-                            : 'Are you sure you want to permanently delete'
+                        deleteItems.length > 1 ? (
+                            `Are you sure you want to permanently delete ${deleteItems.length} items? This action cannot be undone.`
+                        ) : (
+                            <>
+                                Are you sure you want to permanently delete{' '}
+                                <strong>{stripEigenExtension(deleteItems[0].name)}</strong>?
+                            </>
+                        )
                     }
-                    itemName={deleteItems.length === 1 ? stripEigenExtension(deleteItems[0].name) : undefined}
-                    onDelete={async () => {
+                    onConfirm={async () => {
                         await permanentlyDelete.mutateAsync(deleteItems).catch((error: unknown) => {
                             if (error instanceof PartialBatchError) deleteDialog.openDialog(error.failed);
                             throw error;
                         });
                     }}
-                    deleteText="Delete permanently"
+                    confirmText="Delete permanently"
+                    destructive
                 />
             )}
         </>

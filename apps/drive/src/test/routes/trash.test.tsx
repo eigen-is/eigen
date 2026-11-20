@@ -230,6 +230,7 @@ test('Empty trash asks first, then empties every mount of the viewer', async () 
     expect(writes).toEqual([]);
     expect(dialog()?.textContent).toContain('permanently delete all items in trash');
     expect(dialog()?.textContent).not.toContain('team drives');
+    expect(button(dialog() ?? document, 'Empty trash')?.getAttribute('data-variant')).toBe('destructive');
     await click(button(dialog() ?? document, 'Empty trash'));
     expect([...writes].sort()).toEqual(EMPTIED);
 });

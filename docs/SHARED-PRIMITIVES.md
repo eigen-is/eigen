@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2385 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2383 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (330)
+## Components (329)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -113,7 +113,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `OrderMenuSub` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `CopyInput` | `@workspace/ui/components/copy-input` | packages/ui/src/components/copy-input.tsx |
 | `CountBadge` | `@workspace/ui/components/count-badge` | packages/ui/src/components/count-badge.tsx |
-| `DeleteDialog` | `@workspace/ui/components/delete/delete-dialog` | packages/ui/src/components/delete/delete-dialog.tsx |
 | `Dialog` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogContent` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogDescription` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
@@ -698,7 +697,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (470)
+## Types (469)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1124,7 +1123,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ConfirmDialogProps` | `@workspace/ui/components/confirm-dialog` | packages/ui/src/components/confirm-dialog.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
-| `DeleteDialogProps` | `@workspace/ui/components/delete/delete-dialog` | packages/ui/src/components/delete/delete-dialog.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveListDate` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveSortControl` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |

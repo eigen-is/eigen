@@ -1,6 +1,7 @@
 // A forward's parts ride in history state until a saved draft holds them all. The first save can run while one
 // still uploads, so its URL rewrite keeps them, and a reload before the next save attaches them again. A permanent
-// delete that fails for some emails keeps the dialog open on exactly those, beside the toasts their failures showed.
+// delete that fails for some emails keeps the dialog open on exactly those, beside the toasts their failures showed,
+// and one the server refuses for every email closes on the emails it showed.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { NavigateOptions } from '@tanstack/react-router';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
@@ -45,7 +46,7 @@ afterAll(() => {
 
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { useMailActions } = await import('../../../../components/mail/hooks/use-mail-actions');
-const { DeleteDialog } = await import('@workspace/ui/components/delete/delete-dialog');
+const { ConfirmDialog } = await import('@workspace/ui/components/confirm-dialog');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -118,12 +119,13 @@ test('a permanent delete that fails for one email keeps the dialog open on what 
         const actions = useMailActions();
         const [pending, setPending] = useState([trashed('m3'), trashed('m1'), trashed('m2')]);
         seen.pending = pending;
-        return createElement(DeleteDialog, {
+        return createElement(ConfirmDialog, {
             open: true,
             onOpenChange,
             title: 'Delete 3 emails',
-            description: 'Are you sure',
-            onDelete: () => actions.confirmDeleteEmails(pending, setPending),
+            description: 'Are you sure?',
+            onConfirm: () => actions.confirmDeleteEmails(pending, setPending),
+            confirmText: 'Delete',
         });
     }
     ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Route))));
@@ -137,4 +139,32 @@ test('a permanent delete that fails for one email keeps the dialog open on what 
 
     expect(seen.pending.map((e) => e.id)).toEqual(['m2']);
     expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('a permanent delete the server refuses for every email closes the dialog on the emails it showed', async () => {
+    const onOpenChange = mock((_open: boolean) => {});
+    const seen: { pending: Email[] } = { pending: [] };
+    function Route() {
+        const actions = useMailActions();
+        const [pending, setPending] = useState([trashed('m3')]);
+        seen.pending = pending;
+        return createElement(ConfirmDialog, {
+            open: true,
+            onOpenChange,
+            title: 'Delete email',
+            description: 'Are you sure?',
+            onConfirm: () => actions.confirmDeleteEmails(pending, setPending),
+            confirmText: 'Delete',
+        });
+    }
+    ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Route))));
+    const del = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Delete');
+    if (!del) throw new Error('no Delete button');
+
+    await act(async () => {
+        del.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(seen.pending.map((e) => e.id)).toEqual(['m3']);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });

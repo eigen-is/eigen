@@ -44,6 +44,6 @@ You cannot delete your default calendar.
 
 ## Remove a shared calendar from your view
 
-If you no longer want to see a calendar under **Shared with me**, open its **Shared calendar settings** (the **⋮** button on hover, then **Edit calendar**) and click **Remove**. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
+If you no longer want to see a calendar under **Shared with me**, open its **Shared calendar settings** (the **⋮** button on hover, then **Edit calendar**) and click **Remove**, then **Remove** again in the dialog that asks. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
 
 Team calendars under **Team calendars** do not have a **Remove** option.

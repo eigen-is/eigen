@@ -9,7 +9,7 @@ import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -61,17 +61,23 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
             </FormDialog>
 
             {/* Stacked on the open form, so a cancelled delete leaves its edits in place. */}
-            <DeleteDialog
+            <ConfirmDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}
                 title="Delete calendar"
-                description="Are you sure you want to delete this calendar? All events in it will be lost."
-                itemName={calendar?.name}
-                onDelete={async () => {
+                description={
+                    <>
+                        Are you sure you want to delete <strong>{calendar?.name}</strong>? All events in it will be
+                        lost.
+                    </>
+                }
+                onConfirm={async () => {
                     if (!calendar) return;
                     await deleteCalendar.mutateAsync(calendar.id);
                     onOpenChange(false);
                 }}
+                confirmText="Delete"
+                destructive
             />
         </>
     );

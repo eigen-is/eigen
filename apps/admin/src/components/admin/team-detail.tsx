@@ -8,7 +8,7 @@ import { useRemoveTeam } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Trash2 } from 'lucide-react';
@@ -39,12 +39,19 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
             {team.id !== config?.defaultTeamId && (
                 <>
                     <TooltipButton icon={Trash2} tooltipText="Delete team" onClick={() => setShowDelete(true)} />
-                    <DeleteDialog
+                    <ConfirmDialog
                         open={showDelete}
                         onOpenChange={setShowDelete}
                         title="Delete team"
-                        description={`Delete team "${team.name}"? Its drives, their files and its calendar are deleted too. This cannot be undone.`}
-                        onDelete={handleRemove}
+                        description={
+                            <>
+                                Delete team <strong>{team.name}</strong>? Its drives, their files and its calendar are
+                                deleted too. This cannot be undone.
+                            </>
+                        }
+                        onConfirm={handleRemove}
+                        confirmText="Delete"
+                        destructive
                     />
                 </>
             )}

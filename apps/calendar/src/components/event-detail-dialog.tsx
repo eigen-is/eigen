@@ -18,7 +18,7 @@ import {
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import {
     Dialog,
     DialogContent,
@@ -290,13 +290,18 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 </DialogContent>
             </Dialog>
 
-            <DeleteDialog
+            <ConfirmDialog
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
                 title="Delete event"
-                description="Are you sure you want to delete this event?"
-                itemName={event.title}
-                onDelete={handleNonRecurringDelete}
+                description={
+                    <>
+                        Are you sure you want to delete <strong>{event.title}</strong>?
+                    </>
+                }
+                onConfirm={handleNonRecurringDelete}
+                confirmText="Delete"
+                destructive
             />
 
             <RecurringActionDialog

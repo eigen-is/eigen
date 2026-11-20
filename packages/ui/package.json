@@ -42,7 +42,6 @@
     "./components/*": "./src/components/*.tsx",
     "./components/contacts/use-contact-input": "./src/components/contacts/use-contact-input.ts",
     "./components/use-contact-avatar-upload": "./src/components/use-contact-avatar-upload.ts",
-    "./components/delete/delete-dialog": "./src/components/delete/delete-dialog.tsx",
     "./components/search-bar/search-bar": "./src/components/search-bar/search-bar.tsx",
     "./components/transform/object-transform": "./src/components/transform/object-transform.tsx",
     "./components/drive/create-menu": "./src/components/drive/create-menu.ts",
