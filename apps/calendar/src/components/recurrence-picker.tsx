@@ -18,38 +18,15 @@ type RecurrencePickerProps = {
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-function getWeekdayIndex(date: Date): number {
-    const day = date.getDay();
-    return day === 0 ? 6 : day - 1;
-}
-
-function getWeekOfMonth(date: Date): number {
-    return Math.ceil(date.getDate() / 7);
-}
-
-function getOrdinal(n: number): string {
-    if (n === 1) return 'first';
-    if (n === 2) return 'second';
-    if (n === 3) return 'third';
-    if (n === 4) return 'fourth';
-    return 'last';
-}
-
-// A saved rule comes back as the server's iCal reader prints it, with no "RRULE:" prefix, so a preset is written that
-// way too and a saved rule finds its preset by plain comparison.
-function ruleString(options: Partial<Options>): string {
-    return RRule.optionsToString(options).replace(/^RRULE:/, '');
-}
-
 export function RecurrencePicker({ value, onChange, startDate, timezone, disabled }: RecurrencePickerProps) {
-    const weekdayIdx = getWeekdayIndex(startDate);
+    const weekdayIndex = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
-    const dayName = DAY_NAMES[weekdayIdx];
+    const dayName = DAY_NAMES[weekdayIndex];
     const monthName = formatMonth(startDate, 'long');
     const dayOfMonth = startDate.getDate();
 
     const presets = useMemo(() => {
-        const byDay = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][weekdayIdx];
+        const byDay = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][weekdayIndex];
 
         return [
             {
@@ -84,7 +61,7 @@ export function RecurrencePicker({ value, onChange, startDate, timezone, disable
                 }),
             },
         ];
-    }, [weekdayIdx, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
+    }, [weekdayIndex, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
 
     const currentValue = value || 'none';
     const rruleText = rruleToText(value, timezone);
@@ -110,4 +87,27 @@ export function RecurrencePicker({ value, onChange, startDate, timezone, disable
             </Select>
         </div>
     );
+}
+
+function getWeekdayIndex(date: Date): number {
+    const day = date.getDay();
+    return day === 0 ? 6 : day - 1;
+}
+
+function getWeekOfMonth(date: Date): number {
+    return Math.ceil(date.getDate() / 7);
+}
+
+// A saved rule comes back as the server's iCal reader prints it, with no "RRULE:" prefix, so a preset is written that
+// way too and a saved rule finds its preset by plain comparison.
+function ruleString(options: Partial<Options>): string {
+    return RRule.optionsToString(options).replace(/^RRULE:/, '');
+}
+
+function getOrdinal(n: number): string {
+    if (n === 1) return 'first';
+    if (n === 2) return 'second';
+    if (n === 3) return 'third';
+    if (n === 4) return 'fourth';
+    return 'last';
 }
