@@ -5,10 +5,9 @@
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { FieldError } from '@workspace/ui/components/field';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Table, Trash2 } from 'lucide-react';
@@ -92,7 +91,8 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
     const { showDialog, showNonModalDialog } = useDialog();
     const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
     const [problem, setProblem] = useState<Problem>();
-    const problemId = useId();
+    const id = useId();
+    const problemId = `${id}-problem`;
 
     // A change to the draft takes back the message about it.
     const update = (change: Partial<DataValidationDraft>) => {
@@ -108,11 +108,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
     });
 
     const problemMessage = (field: Problem['field']) =>
-        problem?.field === field && (
-            <FieldError id={problemId} className="mt-1.5">
-                {problem.message}
-            </FieldError>
-        );
+        problem?.field === field && <FieldError id={problemId}>{problem.message}</FieldError>;
 
     // The picker's OK opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
     const pickRange = (field: 'rangeTxt' | 'value1') => {
@@ -162,10 +158,11 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                 footerStart={<TooltipButton icon={Trash2} tooltipText="Remove validation" onClick={removeValidation} />}
             >
                 <div className="text-sm space-y-4 select-none">
-                    <div>
-                        <div className="text-sm font-medium mb-2">Cell range</div>
+                    <Field>
+                        <FieldLabel htmlFor={`${id}-range`}>Cell range</FieldLabel>
                         <div className="flex h-8 rounded-md border border-input overflow-hidden">
                             <Input
+                                id={`${id}-range`}
                                 className="flex-1 border-none rounded-none h-full"
                                 spellCheck={false}
                                 {...textField('rangeTxt', 'Cell range')}
@@ -181,10 +178,10 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                             </Button>
                         </div>
                         {problemMessage('range')}
-                    </div>
+                    </Field>
 
-                    <div className="space-y-2">
-                        <div className="text-sm font-medium">Validation condition</div>
+                    <Field>
+                        <FieldLabel htmlFor={`${id}-type`}>Validation condition</FieldLabel>
                         <Select
                             value={draft.type}
                             onValueChange={(value) => {
@@ -201,7 +198,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                                 });
                             }}
                         >
-                            <SelectTrigger size="sm" className="w-full">
+                            <SelectTrigger id={`${id}-type`} size="sm" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -232,13 +229,14 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                                         <Table />
                                     </Button>
                                 </div>
-                                <Label className="flex items-center gap-1.5">
+                                <Field orientation="horizontal">
                                     <Checkbox
+                                        id={`${id}-multiple`}
                                         checked={draft.type2 === 'true'}
                                         onCheckedChange={(checked) => update({ type2: `${checked}` })}
                                     />
-                                    Allow multiple selection
-                                </Label>
+                                    <FieldLabel htmlFor={`${id}-multiple`}>Allow multiple selection</FieldLabel>
+                                </Field>
                             </div>
                         )}
 
@@ -330,17 +328,18 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                             </div>
                         )}
                         {problemMessage('value')}
-                    </div>
+                    </Field>
 
                     <div className="space-y-2">
                         {HINT_TOGGLES.map(({ value, label }) => (
-                            <Label className="flex items-center gap-1.5" key={value}>
+                            <Field orientation="horizontal" key={value}>
                                 <Checkbox
+                                    id={`${id}-${value}`}
                                     checked={draft[value]}
                                     onCheckedChange={() => update({ [value]: !draft[value] })}
                                 />
-                                {label}
-                            </Label>
+                                <FieldLabel htmlFor={`${id}-${value}`}>{label}</FieldLabel>
+                            </Field>
                         ))}
                         {draft.hintShow && (
                             <Input

@@ -240,3 +240,16 @@ test("the list's grid button picks the options' source and keeps the range", asy
     expect(dialog.field('Cell range').value).toBe('B2:B3');
     expect(dialog.field('Options').value).toBe('A1:A2');
 });
+
+test('each label names its control', async () => {
+    await openDialog(B3);
+    const target = (text: string) => {
+        const label = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === text);
+        return label && document.getElementById(label.getAttribute('for') ?? '');
+    };
+    expect(target('Cell range')?.getAttribute('aria-label')).toBe('Cell range');
+    expect(target('Validation condition')?.getAttribute('role')).toBe('combobox');
+    for (const text of ['Allow multiple selection', 'Prohibit input when input data is invalid']) {
+        expect(target(text)?.getAttribute('role')).toBe('checkbox');
+    }
+});
