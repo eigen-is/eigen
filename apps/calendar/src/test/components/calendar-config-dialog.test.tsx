@@ -205,7 +205,10 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
     await open(calendar({}));
     await type('Office');
     await click(button(dialogTitled('Edit calendar'), 'Delete'));
-    expect(dialogTitled('Delete calendar')).toBeDefined();
+    expect(dialogTitled('Delete calendar')?.querySelector('p')?.innerHTML).toBe(
+        'Are you sure you want to delete <strong>Work</strong>? All events in it will be lost.',
+    );
+    expect(button(dialogTitled('Delete calendar'), 'Delete')?.getAttribute('data-variant')).toBe('destructive');
     expect(dialogTitled('Edit calendar')).toBeDefined();
 
     await click(button(dialogTitled('Delete calendar'), 'Cancel'));

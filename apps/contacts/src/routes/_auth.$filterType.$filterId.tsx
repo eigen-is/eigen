@@ -16,11 +16,12 @@ import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { contactFullName } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/file-kinds';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
 import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
@@ -56,13 +57,13 @@ function ContactsRoute() {
     const importFileMutation = useImportContactsFile();
 
     const [importOpen, setImportOpen] = useState(false);
-    const [deleteTargets, setDeleteTargets] = useState<Contact[]>([]);
-    const deleteDialogOpen = deleteTargets.length > 0;
+    const deleteDialog = useDialogValue<Contact[]>();
+    const deleteTargets = deleteDialog.value;
 
-    const handleConfirmDelete = async () => {
+    const handleConfirmDelete = async (targets: Contact[]) => {
         // allSettled, not all (matching onToggleLabel): one 412 mid-batch must not reject the whole run and
         // skip the navigate, leaving the dialog stuck open.
-        await Promise.allSettled(deleteTargets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
+        await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
@@ -122,7 +123,7 @@ function ContactsRoute() {
             filterId={filterId}
             labels={labels}
             onToggleLabel={handleToggleLabel}
-            onDeleteClick={() => setDeleteTargets([contact])}
+            onDeleteClick={() => deleteDialog.openDialog([contact])}
         />
     ) : null;
 
@@ -189,27 +190,30 @@ function ContactsRoute() {
                             search: { contactId: contact.id },
                         });
                     }}
-                    onDelete={(selectedContacts) => {
-                        setDeleteTargets(selectedContacts);
-                    }}
+                    onDelete={deleteDialog.openDialog}
                     onToggleLabel={handleToggleLabel}
                 />
             </ListDetailLayout>
 
-            <DeleteDialog
-                open={deleteDialogOpen}
-                onOpenChange={(open) => {
-                    if (!open) setDeleteTargets([]);
-                }}
-                title="Delete contact"
-                description={
-                    deleteTargets.length > 1
-                        ? `Are you sure you want to delete ${deleteTargets.length} contacts`
-                        : 'Are you sure you want to delete'
-                }
-                itemName={deleteTargets.length === 1 ? contactFullName(deleteTargets[0]) : undefined}
-                onDelete={handleConfirmDelete}
-            />
+            {deleteTargets && (
+                <ConfirmDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title="Delete contact"
+                    description={
+                        deleteTargets.length > 1 ? (
+                            `Are you sure you want to delete ${deleteTargets.length} contacts?`
+                        ) : (
+                            <>
+                                Are you sure you want to delete <strong>{contactFullName(deleteTargets[0])}</strong>?
+                            </>
+                        )
+                    }
+                    onConfirm={() => handleConfirmDelete(deleteTargets)}
+                    confirmText="Delete"
+                    destructive
+                />
+            )}
 
             <FileImportPicker
                 open={importOpen}

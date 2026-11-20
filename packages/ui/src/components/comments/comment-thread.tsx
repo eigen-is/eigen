@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 import type { ChatMessageInputHandle } from '../chat/chat-message-input';
 import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
-import { DeleteDialog } from '../delete/delete-dialog';
+import { ConfirmDialog } from '../confirm-dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { LoadingState } from '../layout/app/loading-state';
 
@@ -107,12 +107,14 @@ function CommentThreadInner({
                 driveAttachments={chat.driveAttachments}
                 onRemoveDriveAttachment={chat.removeDriveAttachment}
             />
-            <DeleteDialog
+            <ConfirmDialog
                 open={!!editing.deleteTarget}
                 onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
                 title="Delete message"
                 description="Are you sure you want to delete this message? This cannot be undone."
-                onDelete={editing.handleDeleteConfirm}
+                onConfirm={editing.handleDeleteConfirm}
+                confirmText="Delete"
+                destructive
             />
             <DrivePickerWithUpload
                 open={filePickerOpen}

@@ -275,8 +275,7 @@ A small `Globe` icon (lucide-react) renders next to the calendar name. Context m
 - **Refresh now** → `POST /calendar/:ownerId/subscriptions/:calId/refresh`.
 - **Edit subscription** → the Subscribe dialog pre-filled (URL and interval editable, preview
   re-runs).
-- **Unsubscribe** → standard delete via `DeleteDialog` from
-  `../../packages/ui/src/components/delete`. No special unsubscribe path — `deleteCalendar(id)`
+- **Unsubscribe** → the standard destructive `ConfirmDialog`. No special unsubscribe path — `deleteCalendar(id)`
   cascades events as today (its share-revocation propagation included).
 
 Error state from `subscription.lastError` shows as a small red dot next to the Globe icon, with

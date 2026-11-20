@@ -43,7 +43,7 @@ export function LabelManager({
 
     const handleDeleteLabel = async () => {
         if (!selectedLabel) return;
-        // A rejection keeps the DeleteDialog open for another try.
+        // Awaited, so a failed delete leaves the label dialog open.
         await deleteLabel(selectedLabel.id);
         setDialogOpen(false);
     };

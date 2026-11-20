@@ -20,9 +20,10 @@ import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/back
 import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/validation';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { BackupArtifactRow, VerifyBadge, VerifyFailures, VerifyLines } from './backup-artifact-row';
@@ -33,47 +34,63 @@ const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
     'failed-restore': 'A restore that did not finish',
 };
 
-// The four confirmations this pane asks for. One dialog is mounted for all of them, because a dialog that unmounts
-// on close skips its own closing animation. The choice keeps its name and kind until the next one replaces it.
-type BackupConfirm =
-    | { kind: 'restore-artifact'; name: string }
-    | { kind: 'delete-artifact'; name: string }
-    | { kind: 'restore-copy'; name: string }
-    | { kind: 'delete-copy'; name: string };
+type ConfirmTarget = { name: string; ownerId: string };
 
-const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: string; action: string }> = {
+// The four confirmations this pane asks for, one dialog for all of them. Each names what it acts on: a restore of
+// the whole account names the account, the others the archive or copy.
+const CONFIRM_COPY = {
     'restore-artifact': {
         title: 'Restore this account',
-        description:
-            'This replaces every file, mail and database of the account with the archive. The account is unavailable while the restore runs, every open page of it reloads, and the state it is in now is kept beside it as a safety copy. Restore the account of',
+        description: ({ ownerId }: ConfirmTarget) => (
+            <>
+                Restore the account of <strong>{ownerId}</strong>? This replaces every file, mail and database of the
+                account with the archive. The account is unavailable while the restore runs, every open page of it
+                reloads, and the state it is in now is kept beside it as a safety copy.
+            </>
+        ),
         action: 'Restore',
     },
     'delete-artifact': {
         title: 'Delete backup',
-        description: 'Permanently delete the archive',
+        description: ({ name }: ConfirmTarget) => (
+            <>
+                Permanently delete the archive <strong>{name}</strong>?
+            </>
+        ),
         action: 'Delete',
     },
     'restore-copy': {
         title: 'Restore this safety copy',
-        description:
-            "The account goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
+        description: ({ name }: ConfirmTarget) => (
+            <>
+                Restore the copy <strong>{name}</strong>? The account goes back to the state this copy holds, and the
+                state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from
+                the copy's own bucket objects.
+            </>
+        ),
         action: 'Restore',
     },
     'delete-copy': {
         title: 'Delete safety copy',
-        description:
-            'A safety copy is the only record of the account as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
+        description: ({ name }: ConfirmTarget) => (
+            <>
+                Permanently delete <strong>{name}</strong>? A safety copy is the only record of the account as it was at
+                that moment, and on a remote mount its own bucket objects are deleted with it.
+            </>
+        ),
         action: 'Delete',
     },
 };
+
+type BackupConfirm = { kind: keyof typeof CONFIRM_COPY; name: string };
 
 type BackupSectionProps = {
     ownerId: string;
 };
 
 export function BackupSection({ ownerId }: BackupSectionProps) {
-    const [confirm, setConfirm] = useState<BackupConfirm | null>(null);
-    const [confirmOpen, setConfirmOpen] = useState(false);
+    const confirmDialog = useDialogValue<BackupConfirm>();
+    const confirm = confirmDialog.value;
     const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
 
@@ -93,17 +110,11 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     const running = latest?.state === 'running' ? latest : undefined;
     const rowCount = data ? data.artifacts.length + data.safetyCopies.length : 0;
 
-    const ask = (next: BackupConfirm) => {
-        setConfirm(next);
-        setConfirmOpen(true);
-    };
-
-    const runConfirmed = async () => {
-        if (!confirm) return;
-        if (confirm.kind === 'restore-artifact') await restoreBackup.mutateAsync(confirm.name);
-        else if (confirm.kind === 'delete-artifact') await deleteArtifact.mutateAsync(confirm.name);
-        else if (confirm.kind === 'restore-copy') await restoreSafetyCopy.mutateAsync(confirm.name);
-        else await deleteSafetyCopy.mutateAsync(confirm.name);
+    const runConfirmed = async ({ kind, name }: BackupConfirm) => {
+        if (kind === 'restore-artifact') await restoreBackup.mutateAsync(name);
+        else if (kind === 'delete-artifact') await deleteArtifact.mutateAsync(name);
+        else if (kind === 'restore-copy') await restoreSafetyCopy.mutateAsync(name);
+        else await deleteSafetyCopy.mutateAsync(name);
     };
 
     const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,8 +193,10 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                             artifact={artifact}
                             busy={!!running}
                             onVerify={() => verifyBackup.mutate(artifact.name)}
-                            onRestore={() => ask({ kind: 'restore-artifact', name: artifact.name })}
-                            onDelete={() => ask({ kind: 'delete-artifact', name: artifact.name })}
+                            onRestore={() =>
+                                confirmDialog.openDialog({ kind: 'restore-artifact', name: artifact.name })
+                            }
+                            onDelete={() => confirmDialog.openDialog({ kind: 'delete-artifact', name: artifact.name })}
                         />
                     ))}
                     {data.safetyCopies.length > 0 && (
@@ -196,8 +209,10 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                                     key={copy.name}
                                     copy={copy}
                                     busy={!!running}
-                                    onRestore={() => ask({ kind: 'restore-copy', name: copy.name })}
-                                    onDelete={() => ask({ kind: 'delete-copy', name: copy.name })}
+                                    onRestore={() =>
+                                        confirmDialog.openDialog({ kind: 'restore-copy', name: copy.name })
+                                    }
+                                    onDelete={() => confirmDialog.openDialog({ kind: 'delete-copy', name: copy.name })}
                                 />
                             ))}
                         </div>
@@ -205,17 +220,17 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 </div>
             )}
 
-            <DeleteDialog
-                open={confirmOpen}
-                onOpenChange={setConfirmOpen}
-                title={confirm ? CONFIRM_COPY[confirm.kind].title : ''}
-                description={confirm ? CONFIRM_COPY[confirm.kind].description : ''}
-                // A restore of the whole home is confirmed against the home, not against the file it
-                // is being restored from.
-                itemName={confirm?.kind === 'restore-artifact' ? ownerId : confirm?.name}
-                deleteText={confirm ? CONFIRM_COPY[confirm.kind].action : undefined}
-                onDelete={runConfirmed}
-            />
+            {confirm && (
+                <ConfirmDialog
+                    open={confirmDialog.open}
+                    onOpenChange={confirmDialog.setOpen}
+                    title={CONFIRM_COPY[confirm.kind].title}
+                    description={CONFIRM_COPY[confirm.kind].description({ name: confirm.name, ownerId })}
+                    onConfirm={() => runConfirmed(confirm)}
+                    confirmText={CONFIRM_COPY[confirm.kind].action}
+                    destructive
+                />
+            )}
         </div>
     );
 }

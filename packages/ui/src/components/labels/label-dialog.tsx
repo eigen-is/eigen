@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -58,13 +58,18 @@ export function LabelDialog({
             </FormDialog>
 
             {/* Stacked on the open form, so a cancelled delete leaves its edits in place. */}
-            <DeleteDialog
+            <ConfirmDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}
                 title="Delete label"
-                description="Are you sure you want to delete this label"
-                itemName={selectedLabel?.name}
-                onDelete={onDelete}
+                description={
+                    <>
+                        Are you sure you want to delete the label <strong>{selectedLabel?.name}</strong>?
+                    </>
+                }
+                onConfirm={onDelete}
+                confirmText="Delete"
+                destructive
             />
         </>
     );

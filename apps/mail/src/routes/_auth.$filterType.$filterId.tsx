@@ -11,8 +11,9 @@ import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Column, ColumnLayout, EmptyState, useLayout } from '@workspace/ui/components/layout/app';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
@@ -78,8 +79,8 @@ function MailRoute() {
 
     const { user } = Route.useRouteContext();
     const [searchQuery, setSearchQuery] = useState('');
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
+    const deleteDialog = useDialogValue<Email[]>();
+    const pendingDeleteEmails = deleteDialog.value;
     const {
         emails,
         fetchNextPage,
@@ -143,16 +144,14 @@ function MailRoute() {
     const handleDeleteEmail = async (mail: Email) => {
         const result = await actions.handleDeleteEmail(mail);
         if (result.needsConfirmation) {
-            setPendingDeleteEmails(result.emails);
-            setDeleteDialogOpen(true);
+            deleteDialog.openDialog(result.emails);
         }
     };
 
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
         const result = await actions.handleDeleteEmailsByIds(emailIds);
         if (result.needsConfirmation) {
-            setPendingDeleteEmails(result.emails);
-            setDeleteDialogOpen(true);
+            deleteDialog.openDialog(result.emails);
         }
     };
 
@@ -171,8 +170,7 @@ function MailRoute() {
                   : orderedEmails[idx - 1]?.id;
         if (action === 'delete') {
             if (selectedEmail?.mailbox === MAILBOX_TRASH) {
-                setPendingDeleteEmails([selectedEmail]);
-                setDeleteDialogOpen(true);
+                deleteDialog.openDialog([selectedEmail]);
                 return;
             }
             void actions.deleteEmailByIdOnly(id);
@@ -187,8 +185,7 @@ function MailRoute() {
     const requestDeleteById = async (emailId: string) => {
         const res = await actions.deleteEmailByIdOnly(emailId);
         if (res.needsConfirmation) {
-            setPendingDeleteEmails(res.emails);
-            setDeleteDialogOpen(true);
+            deleteDialog.openDialog(res.emails);
             return false;
         }
         return true;
@@ -270,23 +267,32 @@ function MailRoute() {
     return (
         <>
             <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} enabled={shortcutsEnabled} />
-            <DeleteDialog
-                open={deleteDialogOpen}
-                onOpenChange={(open) => {
-                    setDeleteDialogOpen(open);
-                    if (!open) setPendingDeleteEmails([]);
-                }}
-                title={
-                    pendingDeleteEmails.length === 1 ? 'Delete email' : `Delete ${pendingDeleteEmails.length} emails`
-                }
-                description={
-                    pendingDeleteEmails.length === 1
-                        ? 'Are you sure you want to permanently delete this email'
-                        : `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails`
-                }
-                itemName={pendingDeleteEmails.length === 1 ? pendingDeleteEmails[0]?.subject || undefined : undefined}
-                onDelete={() => actions.confirmDeleteEmails(pendingDeleteEmails, setPendingDeleteEmails)}
-            />
+            {pendingDeleteEmails && (
+                <ConfirmDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title={
+                        pendingDeleteEmails.length === 1
+                            ? 'Delete email'
+                            : `Delete ${pendingDeleteEmails.length} emails`
+                    }
+                    description={
+                        pendingDeleteEmails.length > 1 ? (
+                            `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails?`
+                        ) : pendingDeleteEmails[0].subject ? (
+                            <>
+                                Are you sure you want to permanently delete{' '}
+                                <strong>{pendingDeleteEmails[0].subject}</strong>?
+                            </>
+                        ) : (
+                            'Are you sure you want to permanently delete this email?'
+                        )
+                    }
+                    onConfirm={() => actions.confirmDeleteEmails(pendingDeleteEmails, deleteDialog.openDialog)}
+                    confirmText="Delete"
+                    destructive
+                />
+            )}
             {/* display:contents, so the ref hangs on a real node without changing the layout. */}
             <div ref={mailSurfaceRef} className="contents">
                 <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>

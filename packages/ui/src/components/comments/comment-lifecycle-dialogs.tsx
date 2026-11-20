@@ -9,9 +9,9 @@ import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useEffect, useRef, useState } from 'react';
 import { CardDialog } from '../cards/card-dialog';
+import type { ConfirmDialogProps } from '../confirm-dialog';
+import { ConfirmDialog } from '../confirm-dialog';
 import type { useContextMenu } from '../context-menu';
-import type { DeleteDialogProps } from '../delete/delete-dialog';
-import { DeleteDialog } from '../delete/delete-dialog';
 import { CommentContextMenu } from './comment-context-menu';
 import type { CommentContextMenuItem } from './comment-menu-items';
 
@@ -106,12 +106,22 @@ export function CommentLifecycleDialogs({
     );
 }
 
-type DeleteCommentDialogProps = Omit<DeleteDialogProps, 'title' | 'description'> & { noun?: string };
+type DeleteCommentDialogProps = Pick<ConfirmDialogProps, 'open' | 'onOpenChange' | 'onCloseAutoFocus'> & {
+    onDelete: ConfirmDialogProps['onConfirm'];
+    noun?: string;
+};
 
 // The ask before a comment and its replies go, in the words every editor uses. A host that opens it from a menu of
 // its own, such as a sheet's cell menu, mounts it there and says where the focus goes as it closes.
-export function DeleteCommentDialog({ noun = 'comment', ...props }: DeleteCommentDialogProps) {
+export function DeleteCommentDialog({ noun = 'comment', onDelete, ...props }: DeleteCommentDialogProps) {
     return (
-        <DeleteDialog {...props} title={`Delete ${noun}`} description={`This deletes the ${noun} and its replies.`} />
+        <ConfirmDialog
+            {...props}
+            title={`Delete ${noun}`}
+            description={`This deletes the ${noun} and its replies.`}
+            onConfirm={onDelete}
+            confirmText="Delete"
+            destructive
+        />
     );
 }

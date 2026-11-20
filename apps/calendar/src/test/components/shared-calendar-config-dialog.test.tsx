@@ -151,13 +151,16 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 test('Remove asks on top of the open dialog, and a yes removes it and closes', async () => {
     await open(shared({}));
     await click(button(settings(), 'Remove'));
-    expect(dialogTitled('Remove shared calendar')).toBeDefined();
+    expect(dialogTitled('Remove shared calendar')?.querySelector('p')?.innerHTML).toBe(
+        'Remove <strong>Team</strong> from your view? You can be re-added by the owner.',
+    );
+    expect(button(dialogTitled('Remove shared calendar'), 'Remove')?.getAttribute('data-variant')).toBe('destructive');
     expect(settings()).toBeDefined();
     await click(button(dialogTitled('Remove shared calendar'), 'Cancel'));
     expect(settings()).toBeDefined();
 
     await click(button(settings(), 'Remove'));
-    await click(button(dialogTitled('Remove shared calendar'), 'Delete'));
+    await click(button(dialogTitled('Remove shared calendar'), 'Remove'));
     await settle();
     expect(deleteShared.mutateAsync.mock.calls).toEqual([['sc1']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);

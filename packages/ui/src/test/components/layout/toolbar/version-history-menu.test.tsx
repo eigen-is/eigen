@@ -113,6 +113,7 @@ test('the dialog names the size the menu passed and deletes on its button', asyn
     const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find(
         (button) => button.textContent === 'Delete history',
     );
+    expect(confirm?.getAttribute('data-variant')).toBe('destructive');
     await act(async () => confirm?.click());
     expect(deleteVersions).toHaveBeenCalledTimes(1);
 });

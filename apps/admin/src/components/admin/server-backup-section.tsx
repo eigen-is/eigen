@@ -26,13 +26,14 @@ import {
     CodeBlockContent,
     CodeBlockCopyButton,
 } from '@workspace/ui/components/code-block';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ErrorState, LoadingState, SettingsSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { S3ConfigCard } from '@workspace/ui/components/mount';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { AlertTriangle, Archive, X } from 'lucide-react';
 import { useState } from 'react';
 import { BackupJobStatus } from './backup-job-status';
@@ -73,8 +74,8 @@ export function ServerBackupSection({
     onDismissNotice,
 }: ServerBackupSectionProps) {
     const [level, setLevel] = useState<BackupLevel>('full');
-    const [deleting, setDeleting] = useState<string | null>(null);
-    const [deleteOpen, setDeleteOpen] = useState(false);
+    const deleteDialog = useDialogValue<string>();
+    const deleting = deleteDialog.value;
     const [dismissed, setDismissed] = useState<string[]>([]);
 
     const { data, isLoading, isError } = useServerArchives();
@@ -235,10 +236,7 @@ export function ServerBackupSection({
                             archive={archive}
                             uploadable={canUploadServerArchive(archive, { uploadEnabled: uploadSaved, jobs })}
                             onUpload={() => uploadArchive.mutate(archive.name)}
-                            onDelete={() => {
-                                setDeleting(archive.name);
-                                setDeleteOpen(true);
-                            }}
+                            onDelete={() => deleteDialog.openDialog(archive.name)}
                         />
                     ))}
                 </div>
@@ -268,16 +266,23 @@ export function ServerBackupSection({
                 </p>
             </div>
 
-            <DeleteDialog
-                open={deleteOpen}
-                onOpenChange={setDeleteOpen}
-                title="Delete server backup"
-                description="Permanently delete the backup"
-                itemName={deleting ?? undefined}
-                onDelete={async () => {
-                    if (deleting) await deleteArchive.mutateAsync(deleting);
-                }}
-            />
+            {deleting && (
+                <ConfirmDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title="Delete server backup"
+                    description={
+                        <>
+                            Permanently delete the backup <strong>{deleting}</strong>?
+                        </>
+                    }
+                    onConfirm={async () => {
+                        await deleteArchive.mutateAsync(deleting);
+                    }}
+                    confirmText="Delete"
+                    destructive
+                />
+            )}
         </SettingsSection>
     );
 }

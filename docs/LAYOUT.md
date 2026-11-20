@@ -55,6 +55,10 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 `DialogContent` caps its own size and scrolls inside, and its grid track is `minmax(0, 1fr)`, so a long word can't widen the box. Text a user owns still needs `min-w-0 break-words` where it sits in a flex row, or that row overflows the dialog.
 
+## Every yes or no is one `ConfirmDialog`
+
+A question with only a yes and a no, such as Delete calendar, Move to trash or Leave without saving, is `ConfirmDialog`, with no wrapper per kind. Its caller writes the whole description as sentences, the item's name in bold where it reads naturally (`<>Delete <strong>{name}</strong>? All events in it will be lost.</>`), and names its own button. The dialog adds nothing to the text, so a sentence never ends in a stray name or a doubled question mark. `destructive` makes the yes red where it loses work or access: delete, trash, empty trash, remove, delete history, leave a share, and a restore that replaces an account's live data. A restore of a document version saves the current state as a version first, so it stays plain.
+
 ## A closing dialog gives the focus back
 
 Radix gives the focus back only to a `DialogTrigger`. A dialog opened from a menu or a key would drop the focus on `<body>` as it closes, and a list's keys would do nothing until a click. `useFocusReturn` (`packages/ui/src/hooks/use-focus-return.ts`) fixes that: `DialogContent` and `FilePreview` call it, and so does any Radix dialog built outside `DialogContent`. It reads what had the focus as the dialog opens, before a field's `autoFocus` moves it.
@@ -167,7 +171,7 @@ A properties panel has no Delete button. An object's Delete is its menu's last r
 
 A button with text keeps an edge, `outline`, or is filled when it is the main action, so Cancel, Save and Share with team still read as buttons beside flat icons.
 
-An icon that deletes is flat too, and not red. The red is on the Delete of the confirmation it opens (`DeleteDialog`), and on a delete button that has words, which is `variant="destructive"`. A real primary action stays filled, such as chat's Send, and the list and grid switch keeps its edge because it is one control with two options.
+An icon that deletes is flat too, and not red. The red is on the Delete of the confirmation it opens (a `ConfirmDialog` with `destructive`), and on a delete button that has words, which is `variant="destructive"`. A real primary action stays filled, such as chat's Send, and the list and grid switch keeps its edge because it is one control with two options.
 
 `TooltipButton` and `KebabTrigger` take no `outline`, so a bordered icon fails typecheck. A plain `Button` with an icon size can still take one, which review catches.
 

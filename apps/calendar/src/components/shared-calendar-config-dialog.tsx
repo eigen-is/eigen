@@ -6,7 +6,7 @@ import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } f
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
@@ -26,7 +26,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const deleteSharedCalendar = useDeleteSharedCalendar(ownerId);
-    const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+    const [showRemoveConfirmation, setShowRemoveConfirmation] = useState(false);
 
     if (!sharedCalendar) return null;
 
@@ -42,18 +42,24 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 <SharedCalendarConfigForm
                     ownerId={ownerId}
                     sharedCalendar={sharedCalendar}
-                    onRemove={() => setShowDeleteConfirmation(true)}
+                    onRemove={() => setShowRemoveConfirmation(true)}
                 />
             </FormDialog>
 
             {/* Stacked on the open form, so a cancelled remove leaves the color as the user left it. */}
-            <DeleteDialog
-                open={showDeleteConfirmation}
-                onOpenChange={setShowDeleteConfirmation}
+            <ConfirmDialog
+                open={showRemoveConfirmation}
+                onOpenChange={setShowRemoveConfirmation}
                 title="Remove shared calendar"
-                description="Remove this shared calendar from your view? You can be re-added by the owner."
-                itemName={sharedCalendar.calendarName}
-                onDelete={async () => {
+                description={
+                    <>
+                        Remove <strong>{sharedCalendar.calendarName}</strong> from your view? You can be re-added by the
+                        owner.
+                    </>
+                }
+                confirmText="Remove"
+                destructive
+                onConfirm={async () => {
                     await deleteSharedCalendar.mutateAsync(sharedCalendar.id);
                     onOpenChange(false);
                 }}

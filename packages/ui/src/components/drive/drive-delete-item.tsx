@@ -5,7 +5,7 @@
 import { PartialBatchError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 
 export type DriveDeleteItemProps = {
     paths: readonly DrivePath[];
@@ -21,7 +21,8 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
     const isSharedWithMe = useIsSharedWithMe();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
 
-    const isSingle = paths.length === 1;
+    const count = paths.length;
+    const isSingle = count === 1;
     // The server leaves a direct share instead of trashing it, and an item in someone else's drive goes to
     // their trash. The dialog's text says which.
     const leaving = paths.filter(isSharedWithMe).length;
@@ -38,38 +39,52 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
         for (const path of deleted) onAfterAction?.('delete', path);
     };
 
+    const name = isSingle && <strong>{stripEigenExtension(paths[0].name)}</strong>;
     const copy =
-        leaving === paths.length
+        leaving === count
             ? {
-                  title: isSingle ? 'Remove shared item' : `Remove ${paths.length} shared items`,
-                  description: isSingle
-                      ? 'This item is shared with you. Removing it only takes away your access, and the owner can share it again. Remove'
-                      : `These ${paths.length} items are shared with you. Removing them only takes away your access, and the owners can share them again.`,
-                  deleteText: 'Remove',
+                  title: isSingle ? 'Remove shared item' : `Remove ${count} shared items`,
+                  description: isSingle ? (
+                      <>
+                          Remove {name}? This item is shared with you. Removing it only takes away your access, and the
+                          owner can share it again.
+                      </>
+                  ) : (
+                      `These ${count} items are shared with you. Removing them only takes away your access, and the owners can share them again.`
+                  ),
+                  confirmText: 'Remove',
               }
             : {
-                  title: isSingle ? 'Move to trash' : `Move ${paths.length} items to trash`,
-                  description: isSingle
-                      ? foreign
-                          ? 'This item is in someone else’s drive. It goes to their trash, and only they can restore it. Move'
-                          : 'You can restore it later from the trash. Move'
-                      : `This will move ${paths.length} items to trash.${
-                            foreign
-                                ? ' Items from other drives go to their owner’s trash, and only the owner can restore them.'
-                                : ' You can restore them later from the trash.'
-                        }${leaving ? ` ${leaving} of them are shared with you and will only be removed from your view.` : ''}`,
-                  deleteText: 'Move to trash',
+                  title: isSingle ? 'Move to trash' : `Move ${count} items to trash`,
+                  description: isSingle ? (
+                      <>
+                          Move {name}?{' '}
+                          {foreign
+                              ? 'This item is in someone else’s drive. It goes to their trash, and only they can restore it.'
+                              : 'You can restore it later from the trash.'}
+                      </>
+                  ) : (
+                      <>
+                          This will move {count} items to trash.{' '}
+                          {foreign
+                              ? 'Items from other drives go to their owner’s trash, and only the owner can restore them.'
+                              : 'You can restore them later from the trash.'}
+                          {leaving > 0 &&
+                              ` ${leaving} of them are shared with you and will only be removed from your view.`}
+                      </>
+                  ),
+                  confirmText: 'Move to trash',
               };
 
     return (
-        <DeleteDialog
+        <ConfirmDialog
             open={open}
             onOpenChange={onOpenChange}
             title={copy.title}
             description={copy.description}
-            itemName={isSingle ? stripEigenExtension(paths[0].name) : undefined}
-            onDelete={handleDelete}
-            deleteText={copy.deleteText}
+            onConfirm={handleDelete}
+            confirmText={copy.confirmText}
+            destructive
         />
     );
 }

@@ -159,7 +159,9 @@ test('deleting from the edit form asks first, then runs the delete and closes th
     const { onDelete, onCardDialogClose } = await mountBoard();
     await act(async () => seen.onDelete?.('card-1'));
     expect(onDelete).not.toHaveBeenCalled();
-    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+    expect(confirmDialog()?.querySelector('h2')?.textContent).toBe('Delete sticky');
+    expect(confirmDialog()?.querySelector('p')?.textContent).toBe('This deletes the sticky and its replies.');
+    expect(dialogButton('Delete').getAttribute('data-variant')).toBe('destructive');
     expect(seen.open).toBe(true);
 
     await act(async () => dialogButton('Delete').click());

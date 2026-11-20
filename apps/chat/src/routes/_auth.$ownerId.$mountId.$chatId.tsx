@@ -8,7 +8,7 @@ import { useCheckPermissions } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { ChatMessageInputHandle } from '@workspace/ui/components/chat';
 import { ChatMessageInput, ChatMessageList } from '@workspace/ui/components/chat';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';
@@ -119,12 +119,14 @@ function ChatRoomView() {
                 <DriveRenameItem path={chat.chatPath} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
             )}
 
-            <DeleteDialog
+            <ConfirmDialog
                 open={!!editing.deleteTarget}
                 onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
                 title="Delete message"
                 description="Are you sure you want to delete this message? This cannot be undone."
-                onDelete={editing.handleDeleteConfirm}
+                onConfirm={editing.handleDeleteConfirm}
+                confirmText="Delete"
+                destructive
             />
 
             <DrivePickerWithUpload

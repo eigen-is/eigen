@@ -3,7 +3,7 @@
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -92,16 +92,20 @@ export function ColumnSettingsDialog({
                 </FormDialogForm>
             </FormDialog>
 
-            <DeleteDialog
+            <ConfirmDialog
                 open={isDeleteDialogOpen}
                 onOpenChange={setIsDeleteDialogOpen}
                 title="Delete column"
                 description={
-                    cardCount > 0
-                        ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. You can undo this straight after, until you close the board.`
-                        : 'This will permanently delete the column. You can undo this straight after, until you close the board.'
+                    <>
+                        This will permanently delete the column <strong>{columnTitle}</strong>
+                        {cardCount > 0 && ` and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it`}. You can
+                        undo this straight after, until you close the board.
+                    </>
                 }
-                onDelete={handleDelete}
+                onConfirm={handleDelete}
+                confirmText="Delete"
+                destructive
             />
         </>
     );

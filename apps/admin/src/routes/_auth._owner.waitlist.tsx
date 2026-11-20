@@ -12,13 +12,14 @@ import {
 import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { Badge } from '@workspace/ui/components/badge';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { UserItem } from '@workspace/ui/components/user';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
@@ -43,7 +44,8 @@ function WaitlistRoute() {
     const activeTab = tab ?? 'pending';
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
-    const [showDelete, setShowDelete] = useState(false);
+    const deleteDialog = useDialogValue<WaitlistEntry>();
+    const deleting = deleteDialog.value;
 
     const { data: entries = [], isLoading } = useWaitlistEntries(activeTab);
 
@@ -71,9 +73,8 @@ function WaitlistRoute() {
 
     const handleBack = () => navigate({ to: '/waitlist', search: { tab: activeTab } });
 
-    const handleDelete = async () => {
-        if (!selected) return;
-        await remove.mutateAsync(selected.id);
+    const handleDelete = async (entry: WaitlistEntry) => {
+        await remove.mutateAsync(entry.id);
         handleBack();
     };
 
@@ -91,7 +92,7 @@ function WaitlistRoute() {
             onAccept={() => accept.mutate(selected.id)}
             onReject={() => reject.mutate(selected.id)}
             onResend={() => resend.mutate(selected.id)}
-            onDelete={() => setShowDelete(true)}
+            onDelete={() => deleteDialog.openDialog(selected)}
             isPending={isPending}
         />
     ) : null;
@@ -146,13 +147,21 @@ function WaitlistRoute() {
                 )}
             </Column>
 
-            <DeleteDialog
-                open={showDelete}
-                onOpenChange={setShowDelete}
-                title="Delete waitlist entry"
-                description={`Permanently delete the waitlist entry for ${selected?.email}?`}
-                onDelete={handleDelete}
-            />
+            {deleting && (
+                <ConfirmDialog
+                    open={deleteDialog.open}
+                    onOpenChange={deleteDialog.setOpen}
+                    title="Delete waitlist entry"
+                    description={
+                        <>
+                            Permanently delete the waitlist entry for <strong>{deleting.email}</strong>?
+                        </>
+                    }
+                    onConfirm={() => handleDelete(deleting)}
+                    confirmText="Delete"
+                    destructive
+                />
+            )}
         </ColumnLayout>
     );
 }

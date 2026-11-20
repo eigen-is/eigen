@@ -14,7 +14,6 @@ import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { History, Save, Trash2 } from 'lucide-react';
 import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
-import { DeleteDialog } from '../../delete/delete-dialog';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -142,7 +141,7 @@ export function DeleteHistoryDialog({
     const deleteVersions = useDeleteVersions(path.ownerId, path.mountId, path.id);
 
     return (
-        <DeleteDialog
+        <ConfirmDialog
             open={open}
             onOpenChange={onOpenChange}
             title="Delete version history?"
@@ -151,8 +150,9 @@ export function DeleteHistoryDialog({
                 `restored after this. Images and comments you deleted are removed now, except those added or ` +
                 `replied to in the last ${SWEEP_GRACE_DAYS} days.`
             }
-            deleteText="Delete history"
-            onDelete={() => deleteVersions.mutateAsync()}
+            onConfirm={() => deleteVersions.mutateAsync()}
+            confirmText="Delete history"
+            destructive
         />
     );
 }

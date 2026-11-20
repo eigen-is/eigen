@@ -1,38 +1,36 @@
+// The red "Danger zone" at the foot of a detail page, such as an admin's user detail: a line on what the action does
+// and a button that asks before it runs, in a destructive ConfirmDialog.
+
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Button } from '../button';
-import { DeleteDialog } from './delete-dialog';
+import { ConfirmDialog } from '../confirm-dialog';
 
 export type DangerZoneProps = {
-    title?: string;
     description: string;
     buttonLabel: string;
     confirmTitle: string;
-    confirmDescription: string;
+    confirmDescription: ReactNode;
     onConfirm: () => void | Promise<void>;
 };
 
-export function DangerZone({
-    title = 'Danger zone',
-    description,
-    buttonLabel,
-    confirmTitle,
-    confirmDescription,
-    onConfirm,
-}: DangerZoneProps) {
+export function DangerZone({ description, buttonLabel, confirmTitle, confirmDescription, onConfirm }: DangerZoneProps) {
     const [showConfirm, setShowConfirm] = useState(false);
     return (
         <div className="border-t pt-6">
-            <h3 className="text-sm font-medium text-destructive mb-2">{title}</h3>
+            <h3 className="text-sm font-medium text-destructive mb-2">Danger zone</h3>
             <p className="text-sm text-muted-foreground mb-3">{description}</p>
             <Button variant="destructive" size="sm" onClick={() => setShowConfirm(true)}>
                 {buttonLabel}
             </Button>
-            <DeleteDialog
+            <ConfirmDialog
                 open={showConfirm}
                 onOpenChange={setShowConfirm}
                 title={confirmTitle}
                 description={confirmDescription}
-                onDelete={onConfirm}
+                onConfirm={onConfirm}
+                confirmText="Delete"
+                destructive
             />
         </div>
     );
