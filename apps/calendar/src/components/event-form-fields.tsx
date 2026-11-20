@@ -15,8 +15,6 @@ import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, toTimeString } from './time-select';
 
 type EventFormFieldsProps = {
-    titlePlaceholder: string;
-    locationPlaceholder: string;
     title: string;
     setTitle: (value: string) => void;
     allDay: boolean;
@@ -47,8 +45,6 @@ type EventFormFieldsProps = {
 };
 
 export function EventFormFields({
-    titlePlaceholder,
-    locationPlaceholder,
     title,
     setTitle,
     allDay,
@@ -94,7 +90,7 @@ export function EventFormFields({
         <div className="space-y-4">
             <div>
                 <Input
-                    placeholder={titlePlaceholder}
+                    placeholder="Add title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     disabled={detailsDisabled}
@@ -194,7 +190,7 @@ export function EventFormFields({
             <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                 <Input
-                    placeholder={locationPlaceholder}
+                    placeholder="Add location"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     disabled={detailsDisabled}

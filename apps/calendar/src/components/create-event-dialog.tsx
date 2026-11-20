@@ -88,8 +88,6 @@ function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDia
             }}
         >
             <EventFormFields
-                titlePlaceholder="Add title"
-                locationPlaceholder="Add location"
                 title={title}
                 setTitle={setTitle}
                 allDay={allDay}
