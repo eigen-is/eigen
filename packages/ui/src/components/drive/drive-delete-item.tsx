@@ -27,6 +27,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
     // their trash. The dialog's text says which.
     const leaving = paths.filter(isSharedWithMe).length;
     const foreign = paths.some((path) => !isEffectiveOwnerOf(path.ownerId));
+    const kind = leaving === count ? 'leave' : foreign ? 'foreign' : 'own';
 
     const handleDelete = async () => {
         const deleted = await deletePathsMutation.mutateAsync(paths).catch((error: unknown) => {
@@ -40,41 +41,44 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
     };
 
     const name = isSingle && <strong>{stripEigenExtension(paths[0].name)}</strong>;
-    const copy =
-        leaving === count
-            ? {
-                  title: isSingle ? 'Remove shared item' : `Remove ${count} shared items`,
-                  description: isSingle ? (
-                      <>
-                          Remove {name}? This item is shared with you. Removing it only takes away your access, and the
-                          owner can share it again.
-                      </>
-                  ) : (
-                      `These ${count} items are shared with you. Removing them only takes away your access, and the owners can share them again.`
-                  ),
-                  confirmText: 'Remove',
-              }
-            : {
-                  title: isSingle ? 'Move to trash' : `Move ${count} items to trash`,
-                  description: isSingle ? (
-                      <>
-                          Move {name}?{' '}
-                          {foreign
-                              ? 'This item is in someone else’s drive. It goes to their trash, and only they can restore it.'
-                              : 'You can restore it later from the trash.'}
-                      </>
-                  ) : (
-                      <>
-                          This will move {count} items to trash.{' '}
-                          {foreign
-                              ? 'Items from other drives go to their owner’s trash, and only the owner can restore them.'
-                              : 'You can restore them later from the trash.'}
-                          {leaving > 0 &&
-                              ` ${leaving} of them are shared with you and will only be removed from your view.`}
-                      </>
-                  ),
-                  confirmText: 'Move to trash',
-              };
+    const alsoLeaving =
+        leaving > 0 ? ` ${leaving} of them are shared with you and will only be removed from your view.` : '';
+    const trashTitle = isSingle ? 'Move to trash' : `Move ${count} items to trash`;
+    const copy = {
+        leave: {
+            title: isSingle ? 'Remove shared item' : `Remove ${count} shared items`,
+            description: isSingle ? (
+                <>
+                    Remove {name}? This item is shared with you. Removing it only takes away your access, and the owner
+                    can share it again.
+                </>
+            ) : (
+                `These ${count} items are shared with you. Removing them only takes away your access, and the owners can share them again.`
+            ),
+            confirmText: 'Remove',
+        },
+        foreign: {
+            title: trashTitle,
+            description: isSingle ? (
+                <>
+                    Move {name}? This item is in someone else’s drive. It goes to their trash, and only they can restore
+                    it.
+                </>
+            ) : (
+                `This will move ${count} items to trash. Items from other drives go to their owner’s trash, and only the owner can restore them.${alsoLeaving}`
+            ),
+            confirmText: 'Move to trash',
+        },
+        own: {
+            title: trashTitle,
+            description: isSingle ? (
+                <>Move {name}? You can restore it later from the trash.</>
+            ) : (
+                `This will move ${count} items to trash. You can restore them later from the trash.${alsoLeaving}`
+            ),
+            confirmText: 'Move to trash',
+        },
+    }[kind];
 
     return (
         <ConfirmDialog
