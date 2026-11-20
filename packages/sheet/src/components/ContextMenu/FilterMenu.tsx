@@ -601,7 +601,7 @@ export const FilterMenu: React.FC = () => {
                 <div className="h-px my-1 bg-border" />
                 <div className="flex items-center justify-between px-1 py-1">
                     <Button
-                        variant="destructive"
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                             setContext((draftCtx) => {
