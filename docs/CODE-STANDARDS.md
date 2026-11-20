@@ -69,6 +69,8 @@ Workspace imports resolve through each package's `exports` map, never tsconfig a
 
 **UI labels are sentence case**: only the first word and proper nouns start with a capital ("Keep aspect ratio"), in buttons, menu items, dialog titles, tabs, field labels, tooltips, placeholders, toasts, empty states and section headings. `bun scripts/check-standards.ts` fails a capital after the first word in a label prop or element; `PROPER_NOUNS` in `scripts/sentence-case.ts` is the one list of names that keep theirs. Help-center articles quote labels exactly, so a renamed label changes the articles that bold it in the same commit.
 
+**Copy follows Google Workspace**: where a label, placeholder, button or message has a counterpart in Google's apps, use Google's words ("Add title", "Add location" in both New event and Edit event), so a question about wording is settled by looking, not by taste.
+
 ## Key Patterns
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
