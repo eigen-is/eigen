@@ -28,8 +28,7 @@ import {
 } from '../../state';
 import { CellRangeDialog } from '../CellRangeDialog';
 
-// The range picker is a narrow card, a few pixels under the link's cell.
-const RANGE_PICKER_WIDTH = 380;
+// The range picker opens a few pixels under the link's cell.
 const RANGE_PICKER_GAP = 5;
 
 const LINK_TYPES: { text: string; value: CellLinkType }[] = [
@@ -86,7 +85,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         const cancel = () => reopen(before.address);
         showNonModalDialog(
             <CellRangeDialog value={before.address} variant="link" onConfirm={reopen} onCancel={cancel} />,
-            { width: RANGE_PICKER_WIDTH, anchor: rangePickerAnchor(), onEscape: cancel },
+            { anchor: rangePickerAnchor(), onEscape: cancel },
         );
     };
 

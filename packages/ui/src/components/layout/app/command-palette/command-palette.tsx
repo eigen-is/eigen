@@ -126,7 +126,7 @@ export function CommandPalette({ ctx }: Props) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="overflow-hidden p-0 sm:max-w-xl">
+            <DialogContent size="lg" className="overflow-hidden p-0">
                 {/* Radix requires a title for the dialog to be accessible; both are visually hidden. */}
                 <DialogTitle className="sr-only">Command palette</DialogTitle>
                 <DialogDescription className="sr-only">Search and jump to anything across your apps.</DialogDescription>

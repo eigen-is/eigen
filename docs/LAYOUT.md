@@ -45,7 +45,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 ## A dialog is a question or a page, so it has two widths
 
-**`DialogContent` takes `size="sm"` (448px, the default) or `size="lg"` (672px), and nothing in between.** A question or a short form is `sm`, such as a confirm, Rename or a few fields: narrow keeps the question near its buttons. A page in a box is `lg`, such as a card with its thread, an event, a list of people or a picker. A middle width makes every new dialog a judgment call, and widths multiply one call at a time, so a form that feels cramped at `sm` gets a two-column layout inside, not a third size. A layer that isn't a dialog keeps its own width through `className`: the command palette is a search bar, and the sheet's range picker sets its width inline inside the `lg` cap.
+**`DialogContent` takes `size="sm"` (448px, the default) or `size="lg"` (672px), and nothing in between.** A question or a short form is `sm`, such as a confirm, Rename or a few fields: narrow keeps the question near its buttons. A page in a box is `lg`, such as a card with its thread, an event, a list of people or a picker. A middle width makes every new dialog a judgment call, and widths multiply one call at a time, so a form that feels cramped at `sm` gets a two-column layout inside, not a third size.
 
 ## A dialog never grows to fit what a user typed
 

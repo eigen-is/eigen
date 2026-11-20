@@ -11,15 +11,11 @@ import type { ViewportPoint } from '../state';
 
 // The range picker's shell. It draws no backdrop, and a click on the grid picks a range instead of closing it.
 type NonModalOptions = {
-    // The shell's width in pixels.
-    width?: number;
     // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
     // Escape leaves the shell open until this opens the next dialog, as the picker's Cancel button does.
     onEscape: () => void;
 };
-
-const DEFAULT_WIDTH = 500;
 
 // Distance a clamped dialog keeps from the viewport edges.
 export const VIEWPORT_MARGIN = 8;
@@ -126,7 +122,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
 }
 
 function NonModalShell({
-    options: { width = DEFAULT_WIDTH, anchor, onEscape },
+    options: { anchor, onEscape },
     children,
 }: {
     options: NonModalOptions;
@@ -160,8 +156,6 @@ function NonModalShell({
         >
             <DialogContent
                 ref={measure}
-                // The picker sets its own width, inside the wide dialog's cap.
-                size="lg"
                 aria-describedby={undefined}
                 showCloseButton={false}
                 // A press on the grid, and the focus that moves there with it, picks a range. Neither may close the
@@ -170,7 +164,7 @@ function NonModalShell({
                 // An anchored picker drops DialogContent's centering translate. The left and top below place it
                 // instead.
                 className={cn(position && 'translate-x-0 translate-y-0')}
-                style={{ width, ...(position && { left: position.left, top: position.top }) }}
+                style={position && { left: position.left, top: position.top }}
                 {...STOP_MOUSE_EVENTS}
             >
                 {children}
