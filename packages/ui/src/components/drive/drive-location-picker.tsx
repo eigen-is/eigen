@@ -15,8 +15,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
@@ -120,15 +120,12 @@ function DriveLocationPickerBody({
             {/* Edge to edge, so the folder browser's line spans the dialog. */}
             <div className="-mx-6 flex min-h-0 flex-1 flex-col">
                 {hasName && (
-                    <div className="px-6 pb-2">
-                        <Label htmlFor="picker-name" className="text-sm text-muted-foreground">
-                            {resolvedNameLabel}
-                        </Label>
+                    <Field className="px-6 pb-2">
+                        <FieldLabel htmlFor="picker-name">{resolvedNameLabel}</FieldLabel>
                         <Input
                             id="picker-name"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="mt-1.5"
                             autoFocus
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && name.trim()) {
@@ -137,7 +134,7 @@ function DriveLocationPickerBody({
                                 }
                             }}
                         />
-                    </div>
+                    </Field>
                 )}
                 <DriveLocationField
                     value={location}

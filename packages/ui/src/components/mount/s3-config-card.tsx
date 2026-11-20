@@ -15,14 +15,23 @@ import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, ShieldCheck, Wifi } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Alert, AlertDescription } from '../alert';
 import { EigenLoader } from '../braket/eigen-loader';
 import { Button } from '../button';
 import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from '../code-block';
+import { Field, FieldDescription, FieldLabel } from '../field';
 import { FormDialog, FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
-import { Label } from '../label';
+
+const S3_FIELDS: { key: keyof S3Config; label: string; placeholder: string }[] = [
+    { key: 'endpoint', label: 'Endpoint', placeholder: 'https://s3.amazonaws.com' },
+    { key: 'bucket', label: 'Bucket', placeholder: 'my-bucket' },
+    { key: 'prefix', label: 'Prefix', placeholder: 'optional/path' },
+    { key: 'region', label: 'Region', placeholder: 'eu-west-1' },
+    { key: 'accessKeyId', label: 'Access key ID', placeholder: 'AKIA...' },
+    { key: 'secretAccessKey', label: 'Secret access key', placeholder: 'Enter the secret access key' },
+];
 
 type S3ConfigCardProps = {
     value: S3Config;
@@ -49,6 +58,7 @@ export function S3ConfigCard({
     const [checking, setChecking] = useState(false);
     const [retentionOpen, setRetentionOpen] = useState(false);
     const [days, setDays] = useState(S3_NONCURRENT_DAYS_DEFAULT);
+    const fieldId = useId();
 
     const valid = isS3ConfigValid(value, secretSaved);
 
@@ -102,55 +112,20 @@ export function S3ConfigCard({
             )}
 
             <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                    <Label>Endpoint</Label>
-                    <Input
-                        value={value.endpoint}
-                        onChange={(e) => updateField('endpoint', e.target.value)}
-                        placeholder="https://s3.amazonaws.com"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Bucket</Label>
-                    <Input
-                        value={value.bucket}
-                        onChange={(e) => updateField('bucket', e.target.value)}
-                        placeholder="my-bucket"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Prefix</Label>
-                    <Input
-                        value={value.prefix}
-                        onChange={(e) => updateField('prefix', e.target.value)}
-                        placeholder="optional/path"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Region</Label>
-                    <Input
-                        value={value.region ?? ''}
-                        onChange={(e) => updateField('region', e.target.value)}
-                        placeholder="eu-west-1"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Access key ID</Label>
-                    <Input
-                        value={value.accessKeyId}
-                        onChange={(e) => updateField('accessKeyId', e.target.value)}
-                        placeholder="AKIA..."
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label>Secret access key</Label>
-                    <Input
-                        type="password"
-                        value={value.secretAccessKey}
-                        onChange={(e) => updateField('secretAccessKey', e.target.value)}
-                        placeholder={secretSaved ? 'Saved. Leave empty to keep it' : 'Enter the secret access key'}
-                    />
-                </div>
+                {S3_FIELDS.map(({ key, label, placeholder }) => (
+                    <Field key={key}>
+                        <FieldLabel htmlFor={`${fieldId}-${key}`}>{label}</FieldLabel>
+                        <Input
+                            id={`${fieldId}-${key}`}
+                            type={key === 'secretAccessKey' ? 'password' : undefined}
+                            value={value[key] ?? ''}
+                            onChange={(e) => updateField(key, e.target.value)}
+                            placeholder={
+                                key === 'secretAccessKey' && secretSaved ? 'Saved. Leave empty to keep it' : placeholder
+                            }
+                        />
+                    </Field>
+                ))}
             </div>
 
             <div className="flex items-center gap-3">
@@ -387,23 +362,25 @@ function RetentionForm({
                     whole bucket.
                 </p>
             )}
-            <Label className="font-normal">
-                Expire old versions after
-                <Input
-                    type="number"
-                    min={1}
-                    max={S3_NONCURRENT_DAYS_MAX}
-                    step={1}
-                    className="h-8 w-20"
-                    value={days}
-                    onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
-                />
-                days
-            </Label>
-            <p className="text-sm text-muted-foreground">
-                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of versions. More
-                days means more to recover from, and more storage used.
-            </p>
+            <Field>
+                <FieldLabel className="font-normal">
+                    Expire old versions after
+                    <Input
+                        type="number"
+                        min={1}
+                        max={S3_NONCURRENT_DAYS_MAX}
+                        step={1}
+                        className="h-8 w-20"
+                        value={days}
+                        onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
+                    />
+                    days
+                </FieldLabel>
+                <FieldDescription>
+                    Eigen re-uploads whole files on every save, so an often-edited document makes a lot of versions.
+                    More days means more to recover from, and more storage used.
+                </FieldDescription>
+            </Field>
         </FormDialogForm>
     );
 }

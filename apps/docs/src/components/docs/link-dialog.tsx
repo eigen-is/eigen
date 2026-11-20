@@ -73,10 +73,8 @@ function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
                 }
             }}
         >
-            <div className="space-y-3">
-                <LinkTextField value={text} onValueChange={setText} disabled={!atCaret} />
-                <LinkAddressField value={address} onValueChange={setAddress} autoFocus />
-            </div>
+            <LinkTextField value={text} onValueChange={setText} disabled={!atCaret} />
+            <LinkAddressField value={address} onValueChange={setAddress} autoFocus />
         </FormDialogForm>
     );
 }

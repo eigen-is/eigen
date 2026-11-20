@@ -17,9 +17,9 @@ import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { useState } from 'react';
 import { Button } from '../button';
+import { Field, FieldLabel } from '../field';
 import { FormDialog, FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
-import { Label } from '../label';
 import { ErrorState } from '../layout/app/error-state';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
@@ -108,7 +108,7 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                     }
                 />
             ) : (
-                <div className="space-y-3">
+                <>
                     <Select value={target} onValueChange={setChosenTarget} disabled={!calendars}>
                         <SelectTrigger className="w-full">
                             <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
@@ -129,19 +129,12 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                     </Select>
 
                     {isNew && (
-                        <div>
-                            <Label htmlFor="import-calendar-name" className="text-sm text-muted-foreground">
-                                Calendar name
-                            </Label>
-                            <Input
-                                id="import-calendar-name"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="mt-1.5"
-                            />
-                        </div>
+                        <Field>
+                            <FieldLabel htmlFor="import-calendar-name">Calendar name</FieldLabel>
+                            <Input id="import-calendar-name" value={name} onChange={(e) => setName(e.target.value)} />
+                        </Field>
                     )}
-                </div>
+                </>
             )}
         </FormDialogForm>
     );
