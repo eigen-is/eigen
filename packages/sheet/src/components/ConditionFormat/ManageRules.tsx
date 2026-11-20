@@ -74,6 +74,47 @@ export function ManageRules() {
     );
 }
 
+function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
+    if (rule.type === 'default') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border text-[10px] font-medium flex items-center justify-center shrink-0"
+                style={{
+                    backgroundColor: rule.format.cellColor ?? undefined,
+                    color: rule.format.textColor ?? undefined,
+                }}
+            >
+                Ab
+            </div>
+        );
+    }
+    if (rule.type === 'colorGradation') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border shrink-0"
+                style={{ background: `linear-gradient(to right, ${rule.format.join(', ')})` }}
+            />
+        );
+    }
+    const [color] = rule.format;
+    return (
+        <div className="w-8 h-6 rounded border border-border shrink-0 flex items-center px-0.5">
+            <div className="h-3 w-5 rounded-sm" style={{ backgroundColor: color }} />
+        </div>
+    );
+}
+
+function describeRule(rule: ConditionalFormatRule): string {
+    switch (rule.type) {
+        case 'colorGradation':
+            return 'Color scale';
+        case 'dataBar':
+            return 'Data bar';
+        case 'default':
+            return describeDefaultRule(rule);
+    }
+}
+
 function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
     const label = RULE_LABELS[rule.conditionName] ?? rule.conditionName;
     const values = rule.conditionValue ?? [];
@@ -105,48 +146,4 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         default:
             return label;
     }
-}
-
-function describeRule(rule: ConditionalFormatRule): string {
-    switch (rule.type) {
-        case 'colorGradation':
-            return 'Color scale';
-        case 'dataBar':
-            return 'Data bar';
-        case 'default':
-            return describeDefaultRule(rule);
-    }
-}
-
-function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
-    if (rule.type === 'default') {
-        return (
-            <div
-                className="w-8 h-6 rounded border border-border text-[10px] font-medium flex items-center justify-center shrink-0"
-                style={{
-                    backgroundColor: rule.format.cellColor ?? undefined,
-                    color: rule.format.textColor ?? undefined,
-                }}
-            >
-                Ab
-            </div>
-        );
-    }
-    if (rule.type === 'colorGradation') {
-        return (
-            <div
-                className="w-8 h-6 rounded border border-border shrink-0"
-                style={{ background: `linear-gradient(to right, ${rule.format.join(', ')})` }}
-            />
-        );
-    }
-    if (rule.type === 'dataBar') {
-        const [color] = rule.format;
-        return (
-            <div className="w-8 h-6 rounded border border-border shrink-0 flex items-center px-0.5">
-                <div className="h-3 w-5 rounded-sm" style={{ backgroundColor: color }} />
-            </div>
-        );
-    }
-    return <div className="w-8 h-6 rounded border border-border shrink-0" />;
 }
