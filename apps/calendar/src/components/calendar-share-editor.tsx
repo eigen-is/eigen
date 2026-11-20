@@ -1,3 +1,6 @@
+// The Sharing part of Edit calendar: add a person by email, set each one's access or remove them, and the footer's
+// Share with team. Each change only edits the dialog's list of shares, which Save sends with the name and color.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -19,10 +22,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@workspace/ui/components/select';
-import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
-import { useCallback, useMemo } from 'react';
+
+// The words for each access level, in the editor's menu and wherever a share is named, such as a shared calendar's
+// settings.
+export const CALENDAR_PERMISSION_LABELS: Record<CalendarShare['permission'], string> = {
+    write: 'Can edit',
+    read: 'Can view',
+    'free-busy': 'Free/Busy',
+};
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -30,48 +39,27 @@ type CalendarShareEditorProps = {
 };
 
 export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorProps) {
-    const currentShares = shares || [];
-
-    const { data: myTeams } = useMyTeams();
+    const currentShares = shares ?? [];
     const { user } = useAuth();
 
-    const excludeEmails = useMemo(() => {
-        const emails = currentShares.map((s) => s.targetId);
-        if (user?.email) emails.push(user.email);
-        return emails;
-    }, [currentShares, user?.email]);
+    const excludeEmails = currentShares.map((s) => s.targetId);
+    if (user?.email) excludeEmails.push(user.email);
 
-    const addShare = useCallback(
-        (targetId: string, permission: CalendarShare['permission'] = 'read') => {
-            if (currentShares.some((s) => s.targetId.toLowerCase() === targetId.toLowerCase())) return;
-            onChange([...currentShares, { targetId, permission }]);
-        },
-        [currentShares, onChange],
-    );
-
-    const contactInput = useContactInput((contact) => {
-        addShare(contact.email);
+    const contactInput = useContactInput(({ email }) => {
+        if (!currentShares.some((s) => s.targetId.toLowerCase() === email.toLowerCase())) {
+            onChange([...currentShares, { targetId: email, permission: 'read' }]);
+        }
         return true;
     });
 
-    const handlePermissionChange = useCallback(
-        (targetId: string, permission: string) => {
-            const next = CALENDAR_SHARE_PERMISSIONS.find((p) => p === permission);
-            if (permission === 'remove') {
-                onChange(currentShares.filter((s) => s.targetId !== targetId));
-            } else if (next) {
-                onChange(currentShares.map((s) => (s.targetId === targetId ? { ...s, permission: next } : s)));
-            }
-        },
-        [currentShares, onChange],
-    );
-
-    const handleAddTeam = useCallback(
-        (teamId: string) => {
-            addShare(teamOwnerId(teamId));
-        },
-        [addShare],
-    );
+    const handlePermissionChange = (targetId: string, permission: string) => {
+        const next = CALENDAR_SHARE_PERMISSIONS.find((p) => p === permission);
+        if (permission === 'remove') {
+            onChange(currentShares.filter((s) => s.targetId !== targetId));
+        } else if (next) {
+            onChange(currentShares.map((s) => (s.targetId === targetId ? { ...s, permission: next } : s)));
+        }
+    };
 
     return (
         <div className="space-y-3">
@@ -99,9 +87,11 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="write">Can edit</SelectItem>
-                                    <SelectItem value="read">Can view</SelectItem>
-                                    <SelectItem value="free-busy">Free/Busy</SelectItem>
+                                    {Object.entries(CALENDAR_PERMISSION_LABELS).map(([permission, label]) => (
+                                        <SelectItem key={permission} value={permission}>
+                                            {label}
+                                        </SelectItem>
+                                    ))}
                                     <SelectSeparator />
                                     <SelectItem value="remove" variant="destructive">
                                         Remove
@@ -112,32 +102,38 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                     ))}
                 </div>
             )}
-
-            {myTeams && myTeams.length > 0 && (
-                <>
-                    <Separator />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="gap-2">
-                                <Users className="h-4 w-4" />
-                                Share with team
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            {myTeams.map((team) => (
-                                <DropdownMenuItem
-                                    key={team.id}
-                                    onClick={() => handleAddTeam(team.id)}
-                                    disabled={currentShares.some((s) => s.targetId === teamOwnerId(team.id))}
-                                >
-                                    <Users className="h-4 w-4" />
-                                    {team.name}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </>
-            )}
         </div>
+    );
+}
+
+// The footer's Share with team: a menu of the user's teams, each added as a viewer. It shows only for someone in a team.
+export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorProps) {
+    const { data: myTeams } = useMyTeams();
+    if (!myTeams || myTeams.length === 0) return null;
+    const currentShares = shares ?? [];
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                    <Users className="h-4 w-4" />
+                    Share with team
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+                {myTeams.map((team) => (
+                    <DropdownMenuItem
+                        key={team.id}
+                        onClick={() =>
+                            onChange([...currentShares, { targetId: teamOwnerId(team.id), permission: 'read' }])
+                        }
+                        disabled={currentShares.some((s) => s.targetId === teamOwnerId(team.id))}
+                    >
+                        <Users className="h-4 w-4" />
+                        {team.name}
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }

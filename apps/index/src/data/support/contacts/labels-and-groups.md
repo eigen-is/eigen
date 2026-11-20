@@ -17,7 +17,7 @@ Labels live in the sidebar under the **Labels** heading.
 1. Open Contacts.
 2. Click the **+** button next to **Labels** in the sidebar. The **Add label** dialog opens.
 3. Enter a name in the **Label name** field.
-4. Click the color swatch to pick a color for the label.
+4. Click the color swatch at the start of the **Label name** field to pick a color for the label.
 5. Click **Save**. The new label appears in the sidebar. **Save** stays off until the label has a name.
 
 ## Assign a label to a contact
@@ -55,4 +55,4 @@ To go back to all contacts, click **My contacts** in the sidebar.
 
 To rename a label or change its color, hover over it in the sidebar and click the pencil icon that appears on the right. The **Edit label** dialog opens. Make your changes and click **Save**.
 
-To delete a label, open **Edit label** and click **Delete**. You will be asked to confirm, on top of **Edit label**, so if you cancel, your changes to the label are still there. Deleting a label removes it from all contacts that had it, but the contacts themselves are not deleted.
+To delete a label, open **Edit label** and click the trash icon (**Delete label**) in the bottom-left corner. You will be asked to confirm, on top of **Edit label**, so if you cancel, your changes to the label are still there. Deleting a label removes it from all contacts that had it, but the contacts themselves are not deleted.

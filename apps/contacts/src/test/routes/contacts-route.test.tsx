@@ -1,6 +1,6 @@
-// The contacts page lists the book, or a label's cards alone, sorted by first or last name. A contact URL
-// opens that contact beside the list; one whose contact is gone, deleted or never there, says so in the
-// detail, as Admin's users and teams do. The detail's Delete confirms first, keeps naming the card while its
+// The contacts page lists the book, or a label's cards alone, sorted by first or last name, and a label that is gone
+// goes back to the book. A contact URL opens that contact beside the list; one whose contact is gone, deleted or never
+// there, says so in the detail, as Admin's users and teams do. The detail's Delete confirms first, keeps naming the card while its
 // dialog closes and sends the card's etag, and your own card offers no Delete at all.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -30,7 +30,7 @@ const contacts: { data: Contact[]; isLoading: boolean; error: Error | null } = {
     isLoading: false,
     error: null,
 };
-const labels = { data: [{ id: 'l1', name: 'Navy', color: '#1e3a8a' }] };
+const labels = { data: [{ id: 'l1', name: 'Navy', color: '#1e3a8a' }], isSuccess: true };
 const teams = {
     data: [
         { id: 't1', name: 'Design', members: [{ userId: 'u2', name: 'Grace Hopper', email: 'grace@test.eigen.is' }] },
@@ -86,7 +86,11 @@ async function open(url: string) {
     await router.load();
     const rendered = await renderInDocument(createElement(RouterProvider, { router }));
     unmount = rendered.unmount;
-    return { text: () => rendered.container.textContent ?? '', search: () => router.state.location.search };
+    return {
+        text: () => rendered.container.textContent ?? '',
+        search: () => router.state.location.search,
+        pathname: () => router.state.location.pathname,
+    };
 }
 
 const click = (element: Element | null | undefined) =>
@@ -108,6 +112,13 @@ test('the book lists every contact by first name', async () => {
 test('a label lists only its own cards', async () => {
     await open('/label/l1');
     expect(rows()).toEqual(['Grace Hopper']);
+});
+
+test('a label that is gone, such as one just deleted, goes back to All contacts', async () => {
+    const page = await open('/label/gone');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(page.pathname()).toBe('/book/all');
+    expect(rows()).toEqual(['Ada Lovelace', 'Grace Hopper', 'Me Myself']);
 });
 
 test('sorting by last name reorders the list and names each card last name first', async () => {

@@ -1,7 +1,7 @@
 // New calendar and Edit calendar: Save and Enter wait for a name with more than spaces, Save creates or updates the
 // calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection.
 // Delete asks first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has
-// no Delete.
+// no Delete. Share with team sits in the footer after the trash, as in the Share dialog.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
@@ -41,7 +41,8 @@ mock.module('@workspace/lib/calendar', () => ({
     useUpdateCalendar: () => updateCalendar,
     useDeleteCalendar: () => deleteCalendar,
 }));
-mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: [] }) }));
+let myTeams: { id: string; name: string }[] = [];
+mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: myTeams }) }));
 mock.module('@workspace/lib/contacts', () => ({
     ...realContacts,
     useContactSuggestions: () => ({ suggestions: [], isLoading: false }),
@@ -93,6 +94,7 @@ beforeEach(() => {
     }
     onOpenChange.mockClear();
     unhandled.length = 0;
+    myTeams = [];
 });
 
 // The dialog under a parent that owns `open`, as the sidebar does.
@@ -116,7 +118,9 @@ async function open(item: CalendarItem | null) {
 const dialogs = () => [...document.querySelectorAll('[role="dialog"]')];
 const dialogTitled = (title: string) => dialogs().find((d) => d.querySelector('h2')?.textContent === title);
 const button = (dialog: Element | undefined, label: string) =>
-    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => (b.textContent || b.getAttribute('aria-label')) === label,
+    );
 const nameField = () => {
     const input = document.querySelector<HTMLInputElement>('input[placeholder="Enter calendar name"]');
     if (!input) throw new Error('the dialog has no name field');
@@ -137,8 +141,8 @@ const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve
 test('New calendar waits for a name with more than spaces, then creates the trimmed calendar and closes', async () => {
     await open(null);
     const dialog = dialogTitled('New calendar');
-    expect(dialog?.textContent).toContain('Create a new calendar.');
-    expect(button(dialog, 'Delete')).toBeUndefined();
+    expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
+    expect(button(dialog, 'Delete calendar')).toBeUndefined();
     expect(button(dialog, 'Save')?.disabled).toBe(true);
 
     await type('   ');
@@ -170,7 +174,7 @@ test('Edit calendar refuses a name emptied to spaces', async () => {
 test('Edit calendar starts from the calendar and saves its name, color and shares', async () => {
     await open(calendar({}));
     const dialog = dialogTitled('Edit calendar');
-    expect(dialog?.textContent).toContain('Edit calendar settings and sharing.');
+    expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(nameField().value).toBe('Work');
     await type('Office');
     await click(button(dialog, 'Save'));
@@ -204,7 +208,8 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes and closes', async () => {
     await open(calendar({}));
     await type('Office');
-    await click(button(dialogTitled('Edit calendar'), 'Delete'));
+    expect(button(dialogTitled('Edit calendar'), 'Delete calendar')?.dataset.variant).toBe('ghost');
+    await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     expect(dialogTitled('Delete calendar')?.querySelector('p')?.innerHTML).toBe(
         'Are you sure you want to delete <strong>Work</strong>? All events in it will be lost.',
     );
@@ -215,7 +220,7 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
     expect(dialogTitled('Delete calendar')).toBeUndefined();
     expect(nameField().value).toBe('Office');
 
-    await click(button(dialogTitled('Edit calendar'), 'Delete'));
+    await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     await click(button(dialogTitled('Delete calendar'), 'Delete'));
     await settle();
     expect(deleteCalendar.mutateAsync.mock.calls).toEqual([['work']]);
@@ -225,5 +230,24 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
 
 test('the default calendar has no Delete', async () => {
     await open(calendar({ isDefault: true }));
-    expect(button(dialogTitled('Edit calendar'), 'Delete')).toBeUndefined();
+    expect(button(dialogTitled('Edit calendar'), 'Delete calendar')).toBeUndefined();
+});
+
+test('Share with team sits in the footer after the trash, as in the Share dialog', async () => {
+    myTeams = [{ id: 'crew', name: 'Crew' }];
+    await open(calendar({}));
+    const footer = dialogTitled('Edit calendar')?.querySelector('[data-slot="dialog-footer"]');
+    expect(
+        [...(footer?.querySelectorAll('button') ?? [])].map((b) => b.textContent || b.getAttribute('aria-label')),
+    ).toEqual(['Delete calendar', 'Share with team', 'Cancel', 'Save']);
+});
+
+test('the color swatch sits inside the name field, which its label names', async () => {
+    await open(calendar({}));
+    expect(
+        nameField().closest('[data-slot="input-group"]')?.querySelector('button[aria-label="Color"]'),
+    ).not.toBeNull();
+    expect(document.querySelector<HTMLLabelElement>(`label[for="${nameField().id}"]`)?.textContent).toBe(
+        'Calendar name',
+    );
 });

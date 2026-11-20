@@ -118,13 +118,7 @@ function OpenDialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
-    return (
-        <div
-            data-slot="dialog-header"
-            className={cn('flex flex-col gap-2 text-center sm:text-left', className)}
-            {...props}
-        />
-    );
+    return <div data-slot="dialog-header" className={cn('flex flex-col gap-2', className)} {...props} />;
 }
 
 function DialogFooter({
@@ -141,7 +135,10 @@ function DialogFooter({
             className={cn(
                 // A wide dialog's footer runs edge to edge under its line and sticks to the bottom of the scrolling
                 // content. No negative bottom margin: a sticky box that overhangs its parent is pushed back up inside it.
+                // On a phone the left slot's mr-auto would shrink it in the stack: it spans the width instead, its icons
+                // stay a row at the start, and a text button in it fills the row like Cancel.
                 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
+                'max-sm:*:mr-0 max-sm:[&>*>[data-slot=button]:not([data-size^=icon])]:flex-1',
                 'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
                 className,
             )}

@@ -3,7 +3,7 @@
 // one that is gone says so there.
 // The page also hosts the delete confirmation and the import picker its list and detail share.
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router';
 import {
     useContacts,
     useDeleteContact,
@@ -49,7 +49,7 @@ function ContactsRoute() {
     const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
 
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
-    const { data: labels = [] } = useLabels();
+    const { data: labels = [], isSuccess: labelsLoaded } = useLabels();
     const { data: myTeams = [], isLoading: teamsLoading } = useMyTeams();
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
@@ -157,6 +157,11 @@ function ContactsRoute() {
                 />
             </ListDetailLayout>
         );
+    }
+
+    // A label deleted here or elsewhere leaves its page with nothing to show.
+    if (filterType === 'label' && labelsLoaded && !labels.some((label) => label.id === filterId)) {
+        return <Navigate to={Route.fullPath} params={{ filterType: 'book', filterId: 'all' }} replace />;
     }
 
     if (contactsLoading) {

@@ -4,17 +4,17 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
-import { Button } from '@workspace/ui/components/button';
+import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
+import { Field, FieldContent, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Label } from '@workspace/ui/components/label';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-
-const PERMISSION_LABELS: Partial<Record<CalendarShare['permission'], string>> = { write: 'Editor', read: 'Viewer' };
+import { CALENDAR_PERMISSION_LABELS } from './calendar-share-editor';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
@@ -37,7 +37,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 onOpenChange={onOpenChange}
                 title="Shared calendar settings"
                 size="sm"
-                description={`${sharedCalendar.calendarName} — ${sharedCalendar.permission} access`}
+                description={`${sharedCalendar.calendarName} — ${CALENDAR_PERMISSION_LABELS[sharedCalendar.permission]}`}
             >
                 <SharedCalendarConfigForm
                     ownerId={ownerId}
@@ -95,39 +95,34 @@ function SharedCalendarConfigForm({
                 });
             }}
             footerStart={
-                !isTeamCalendar && (
-                    <Button variant="destructive" onClick={onRemove}>
-                        Remove
-                    </Button>
-                )
+                !isTeamCalendar && <TooltipButton icon={Trash2} tooltipText="Remove calendar" onClick={onRemove} />
             }
         >
-            <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                    <Label>Color</Label>
+            <Field>
+                <FieldTitle>Color</FieldTitle>
+                <FieldContent>
                     <ColorPickerSwatch value={color} onChange={setColor} />
-                </div>
+                </FieldContent>
+            </Field>
 
-                {!isTeamCalendar && (
-                    <>
-                        <Separator />
-
-                        <div>
-                            <Label className="text-sm font-medium">People with access</Label>
-                            <div className="mt-2 space-y-3">
-                                <UserItem userId={sharedCalendar.ownerUserId} label="Owner" />
-                                {accessData?.shares?.map((share) => (
-                                    <UserItem
-                                        key={share.targetId}
-                                        email={share.targetId}
-                                        label={PERMISSION_LABELS[share.permission] ?? share.permission}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    </>
-                )}
-            </div>
+            {!isTeamCalendar && (
+                <>
+                    <Separator />
+                    <Field>
+                        <FieldTitle>People with access</FieldTitle>
+                        <FieldContent className="gap-3">
+                            <UserItem userId={sharedCalendar.ownerUserId} label="Owner" />
+                            {accessData?.shares?.map((share) => (
+                                <UserItem
+                                    key={share.targetId}
+                                    email={share.targetId}
+                                    label={CALENDAR_PERMISSION_LABELS[share.permission]}
+                                />
+                            ))}
+                        </FieldContent>
+                    </Field>
+                </>
+            )}
         </FormDialogForm>
     );
 }

@@ -106,7 +106,9 @@ const dialogs = () => [...document.querySelectorAll('[role="dialog"]')];
 const dialogTitled = (title: string) => dialogs().find((d) => d.querySelector('h2')?.textContent === title);
 const settings = () => dialogTitled('Shared calendar settings');
 const button = (dialog: Element | undefined, label: string) =>
-    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => (b.textContent || b.getAttribute('aria-label')) === label,
+    );
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -114,11 +116,17 @@ const click = (target: HTMLButtonElement | undefined) =>
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('it names the calendar and the access, and lists the owner and the people with access', async () => {
+test('it names the calendar and the access in the share words, and lists the owner and the people with access', async () => {
     await open(shared({}));
-    expect(settings()?.textContent).toContain('Team — read access');
+    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Can view');
     expect(settings()?.textContent).toContain('People with access');
     expect(settings()?.textContent).toContain('ada@example.org');
+    expect(settings()?.textContent).toContain('Can edit');
+});
+
+test('free/busy access reads as the share editor says it', async () => {
+    await open(shared({ permission: 'free-busy' }));
+    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Free/Busy');
 });
 
 test("Save with the owner's color stores none, and the dialog closes", async () => {
@@ -150,7 +158,7 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 
 test('Remove asks on top of the open dialog, and a yes removes it and closes', async () => {
     await open(shared({}));
-    await click(button(settings(), 'Remove'));
+    await click(button(settings(), 'Remove calendar'));
     expect(dialogTitled('Remove shared calendar')?.querySelector('p')?.innerHTML).toBe(
         'Remove <strong>Team</strong> from your view? You can be re-added by the owner.',
     );
@@ -159,7 +167,7 @@ test('Remove asks on top of the open dialog, and a yes removes it and closes', a
     await click(button(dialogTitled('Remove shared calendar'), 'Cancel'));
     expect(settings()).toBeDefined();
 
-    await click(button(settings(), 'Remove'));
+    await click(button(settings(), 'Remove calendar'));
     await click(button(dialogTitled('Remove shared calendar'), 'Remove'));
     await settle();
     expect(deleteShared.mutateAsync.mock.calls).toEqual([['sc1']]);
@@ -169,6 +177,6 @@ test('Remove asks on top of the open dialog, and a yes removes it and closes', a
 
 test("a team's calendar can't be removed and lists no people", async () => {
     await open(shared({ ownerUserId: teamOwnerId('0123456789abcdef0123456789abcdef') }));
-    expect(button(settings(), 'Remove')).toBeUndefined();
+    expect(button(settings(), 'Remove calendar')).toBeUndefined();
     expect(settings()?.textContent).not.toContain('People with access');
 });

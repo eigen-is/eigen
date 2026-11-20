@@ -10,7 +10,6 @@ import { SidebarItem } from '../layout/sidebar';
 import { DroppableSidebarItem } from '../layout/sidebar/droppable-sidebar-item';
 import { SidebarSection } from '../layout/sidebar/sidebar-section';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import type { LabelFormValues } from './label-dialog';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
 
@@ -38,7 +37,7 @@ export function LabelManager({
         setDialogOpen(true);
     };
 
-    const handleSubmit = (data: LabelFormValues) =>
+    const handleSubmit = (data: Omit<Label, 'id'>) =>
         selectedLabel ? updateLabel({ ...selectedLabel, ...data }) : addLabel(data);
 
     const handleDeleteLabel = async () => {
@@ -62,8 +61,6 @@ export function LabelManager({
                             <TooltipButton
                                 icon={Pencil}
                                 tooltipText="Edit label"
-                                variant="ghost"
-                                size="icon"
                                 onClick={() => handleEditClick(label)}
                             />
                         </div>

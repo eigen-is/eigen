@@ -28,8 +28,8 @@ type FormDialogFormProps = {
     onSubmit: DialogAction;
     canSubmit?: boolean;
     submitLabel: string;
-    // A button on the left of the footer, such as Delete, which waits while a submit runs. A raw <button> there needs
-    // type="button": it comes before the submit button, so Enter in a field would click it.
+    // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
+    // <button> there needs type="button": it comes before the submit button, so Enter in a field would click it.
     footerStart?: ReactNode;
     // A Close button alone, for someone who may only look.
     readOnly?: boolean;
@@ -107,7 +107,7 @@ export function FormDialogForm({
             ) : (
                 <DialogFooter>
                     {footerStart && (
-                        <fieldset disabled={pending} className="mr-auto flex gap-2">
+                        <fieldset disabled={pending} className="mr-auto flex gap-2 empty:hidden">
                             {footerStart}
                         </fieldset>
                     )}

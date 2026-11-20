@@ -1,6 +1,6 @@
 // The data-validation dialog over a column header's selection names it B:B and puts the rule on the whole column, to
 // the grid's last row. OK checks the draft first: a refused range or value keeps the dialog open with the reason under
-// it and the draft as typed. Delete validation takes a range out of a rule and keeps the rest. A grid button swaps
+// it and the draft as typed. Remove validation takes a range out of a rule and keeps the rest. A grid button swaps
 // the dialog for the range picker, and the picker's OK or Cancel brings it back with the draft as the user left it.
 
 import { expect, test } from 'bun:test';
@@ -47,7 +47,7 @@ type Dialog = Awaited<ReturnType<typeof openDialog>>;
 
 const rules = (dialog: Dialog) => dialog.context().sheets[0].dataValidations;
 
-// The message that says why OK or Delete refused what a field holds.
+// The message that says why OK or Remove validation refused what a field holds.
 const problemOf = (field: HTMLElement) => {
     const id = field.getAttribute('aria-describedby');
     return id ? document.getElementById(id)?.textContent : undefined;
@@ -68,7 +68,8 @@ test('a column header selection is named B:B, and OK puts the rule on the whole 
     });
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
-    expect(dialog.footer()).toEqual(['Delete validation', 'Cancel', 'OK']);
+    expect(dialog.footer()).toEqual(['Remove validation', 'Cancel', 'OK']);
+    expect(dialog.button('Remove validation')?.dataset.variant).toBe('ghost');
     expect(dialog.button('OK')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     expect(dialog.field('Cell range').value).toBe('B:B');
@@ -147,14 +148,14 @@ test('a range that names no cells keeps the dialog open and says why under the r
     expect(rules(dialog)).toEqual({});
 });
 
-test("opening on a rule's cell reads the rule, and Delete validation takes its range out of the rule", async () => {
+test("opening on a rule's cell reads the rule, and Remove validation takes its range out of the rule", async () => {
     const dialog = await openDialog(B3, {
         v: { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: LIST },
     });
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Options').value).toBe('Yes,No');
     await dialog.type('Cell range', 'B2:B3');
-    await dialog.click('Delete validation');
+    await dialog.click('Remove validation');
     expect(rules(dialog)).toEqual({
         v: {
             ranges: [
@@ -168,12 +169,12 @@ test("opening on a rule's cell reads the rule, and Delete validation takes its r
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('Delete with no range to take the rule from stays open and says why under the range', async () => {
+test('Remove validation with no range to take the rule from stays open and says why under the range', async () => {
     const dialog = await openDialog(B3, {
         v: { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: LIST },
     });
     await dialog.type('Cell range', '');
-    await dialog.click('Delete validation');
+    await dialog.click('Remove validation');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
     expect(problemOf(dialog.field('Cell range'))).toBe(NO_RANGE);
@@ -238,4 +239,17 @@ test("the list's grid button picks the options' source and keeps the range", asy
     await dialog.click('OK');
     expect(dialog.field('Cell range').value).toBe('B2:B3');
     expect(dialog.field('Options').value).toBe('A1:A2');
+});
+
+test('each label names its control', async () => {
+    await openDialog(B3);
+    const target = (text: string) => {
+        const label = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === text);
+        return label && document.getElementById(label.getAttribute('for') ?? '');
+    };
+    expect(target('Cell range')?.getAttribute('aria-label')).toBe('Cell range');
+    expect(target('Validation condition')?.getAttribute('role')).toBe('combobox');
+    for (const text of ['Allow multiple selection', 'Prohibit input when input data is invalid']) {
+        expect(target(text)?.getAttribute('role')).toBe('checkbox');
+    }
 });
