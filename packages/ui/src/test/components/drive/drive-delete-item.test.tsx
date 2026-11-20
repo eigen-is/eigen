@@ -73,7 +73,7 @@ test('one item of your own asks to move it to trash by name', async () => {
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog?.querySelector('h2')?.textContent).toBe('Move to trash');
     expect(dialog?.querySelector('p')?.innerHTML).toBe(
-        'Move <strong>good.txt</strong>? You can restore it later from the trash.',
+        'Move <strong>good.txt</strong> to the trash? You can restore it later from the trash.',
     );
     const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Move to trash');
     expect(confirm?.getAttribute('data-variant')).toBe('destructive');
