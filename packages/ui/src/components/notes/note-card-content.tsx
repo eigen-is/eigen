@@ -31,8 +31,8 @@ export function NoteCardContent({
     meta,
 }: NoteCardContentProps) {
     const celebrate = useCelebrate();
-    // One try per mount, which is one per opening: the chance is rolled once, so unticking and re-ticking the last box
-    // can't farm it. An unmount also disarms a tick whose save never came back, so it can't celebrate a peer's edit.
+    // One roll per opening, so re-ticking the last box can't farm it. The refs die with the card, which also disarms a
+    // tick whose save never came back.
     const celebratedRef = useRef(false);
     // The parent draws the saved description again, which replaces every box in the page. So the celebration waits for
     // that and starts from the box at the same place in the list, as the clicked one is gone by then.

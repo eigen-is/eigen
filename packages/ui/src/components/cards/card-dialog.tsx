@@ -169,23 +169,16 @@ export function CardDialog({
         }
     }
 
-    // One line, read left to right: who made the card, who it is for, and a check once it is resolved, as on the board.
-    const resolved = status === 'resolved';
+    // Who made the card on the left, who it is for on the right. On a narrow screen the creator's name gives way first.
     const meta =
-        card.creator || assigneeControl || resolved ? (
-            <span className="flex min-w-0 items-center gap-1.5 [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
+        card.creator || assigneeControl ? (
+            <span className="flex min-w-0 flex-1 items-center gap-2">
                 {card.creator && (
                     <span className="min-w-0 truncate">
                         <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />
                     </span>
                 )}
-                {assigneeControl && <span className="shrink-0">{assigneeControl}</span>}
-                {resolved && (
-                    <span className="shrink-0">
-                        <Check className="mr-1 inline h-3 w-3 align-[-0.125em]" />
-                        Resolved
-                    </span>
-                )}
+                {assigneeControl && <span className="ml-auto shrink-0">{assigneeControl}</span>}
             </span>
         ) : undefined;
 

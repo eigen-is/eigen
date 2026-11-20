@@ -6,7 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Link as LinkIcon, Pencil } from 'lucide-react';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
-export type NoteCardActionsProps = {
+type NoteCardActionsProps = {
     copyLinkUrl?: string;
     onEdit?: () => void;
     // The card's own action, such as Resolve or Reopen.
