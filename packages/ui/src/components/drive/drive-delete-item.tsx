@@ -61,8 +61,8 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
             title: trashTitle,
             description: isSingle ? (
                 <>
-                    Move {name}? This item is in someone else’s drive. It goes to their trash, and only they can restore
-                    it.
+                    Move {name} to the trash? This item is in someone else’s drive. It goes to their trash, and only
+                    they can restore it.
                 </>
             ) : (
                 `This will move ${count} items to trash. Items from other drives go to their owner’s trash, and only the owner can restore them.${alsoLeaving}`
@@ -72,7 +72,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction, onPa
         own: {
             title: trashTitle,
             description: isSingle ? (
-                <>Move {name}? You can restore it later from the trash.</>
+                <>Move {name} to the trash? You can restore it later from the trash.</>
             ) : (
                 `This will move ${count} items to trash. You can restore them later from the trash.${alsoLeaving}`
             ),
