@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Open recent** — in Docs, Sheets, Slides, Stickies and Vector, File › Open recent lists up to eight of your newest files of that kind, from Drive's Recent files
+
 ### Changed
 
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too

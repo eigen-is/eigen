@@ -1,5 +1,5 @@
-// The files and folders that recently involved the signed-in user, wherever they live, for Drive's Recent page
-// and the command palette. The server records each open and each notification about a file and reads every owner
+// The files and folders that recently involved the signed-in user, wherever they live, for lists such as Drive's
+// Recent page and the command palette. The server records each open and each notification about a file and reads every owner
 // in the list at once, so the hook only reads it, and refetches no sooner than a minute after the last read.
 // A guest has no list, and the caller decides when to read, such as only while the palette is open.
 

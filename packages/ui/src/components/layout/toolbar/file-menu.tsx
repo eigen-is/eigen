@@ -1,13 +1,15 @@
 // The File menu on the toolbar of an open Eigen document, such as a doc, a sheet or a board. It
 // creates, opens, copies, renames, downloads, shares and trashes the document, and opens its version history.
+// Open recent lists the newest files of the same kind from the viewer's recent list, which Drive's Recent page reads.
 // Its Drive rows, such as Rename and Move to trash, come from the Drive action catalog with Drive's
 // gates. It also hands the document and those rows to the command palette, so both offer the same ones.
 
 import { useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
+import { useIsGuest } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useDriveActionsFor, useMakeCopy } from '@workspace/lib/drive';
+import { useDriveActionsFor, useMakeCopy, useRecentPaths } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -17,6 +19,7 @@ import {
     DRIVE_MIME_STICKIES,
     DRIVE_MIME_VECTOR,
     exportFormatsFor,
+    stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import { EXPORT_FORMAT_LABELS } from '@workspace/lib/types/drive-convert';
@@ -30,7 +33,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import type { LucideIcon } from 'lucide-react';
-import { CopyPlus, Download, FileText, Folder, Upload } from 'lucide-react';
+import { Clock, CopyPlus, Download, FileText, Folder, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { DriveActionMenuItem } from '../../drive/drive-action-menu-item';
@@ -40,6 +43,7 @@ import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
 import { DriveFilePicker } from '../../drive/drive-file-picker';
 import { DriveRenameItem } from '../../drive/drive-rename-item';
+import { getFileIcon } from '../../drive/file-presentation';
 import { AppBarMenu } from './app-bar-menu';
 import { DeleteHistoryDialog, RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
@@ -51,6 +55,8 @@ const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
     vector: { mime: DRIVE_MIME_VECTOR, title: 'Open vector' },
 };
+
+const RECENT_LIMIT = 8;
 
 type FileMenuProps = {
     path: DrivePath;
@@ -140,6 +146,7 @@ export function FileMenu({
                 <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
                     <Folder className="h-4 w-4" /> Open…
                 </DropdownMenuItem>
+                <OpenRecentMenu path={path} mime={openConfig.mime} />
                 {canWrite && onImport && (
                     <DropdownMenuItem onClick={onImport}>
                         <Upload className="h-4 w-4" /> Import…
@@ -237,5 +244,29 @@ export function FileMenu({
                 />
             )}
         </>
+    );
+}
+
+// It mounts with the menu, so the list is loading before the pointer reaches the row. A guest has no recent list.
+function OpenRecentMenu({ path, mime }: { path: DrivePath; mime: string }) {
+    const isGuest = useIsGuest();
+    const { data = [] } = useRecentPaths(true);
+    if (isGuest) return null;
+    const recent = data.filter((item) => item.mimeType === mime && item.id !== path.id).slice(0, RECENT_LIMIT);
+
+    return (
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={recent.length === 0}>
+                <Clock className="h-4 w-4" /> Open recent
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-w-72">
+                {recent.map((item) => (
+                    <DropdownMenuItem key={item.id} onSelect={() => openDocument(item)}>
+                        {getFileIcon(item.mimeType, item.type, item.name, { className: 'h-4 w-4' })}
+                        <span className="truncate">{stripEigenExtension(item.name)}</span>
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
     );
 }

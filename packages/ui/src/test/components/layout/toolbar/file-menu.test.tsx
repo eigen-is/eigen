@@ -2,10 +2,12 @@
 // gated as Drive gates them, and hands the command palette the same rows. A guest may not mail people
 // through the server, a reader may not share, and an item shared with the viewer is removed, not trashed.
 // Make a copy lands beside the file as Drive's Duplicate does, and greys out where Duplicate would not apply.
+// Open recent lists the viewer's recent files of the app's own kind, without the open one.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { installHappyDom } from '../../../happy-dom';
+import { openSubmenu } from '../../../menu-rows';
 import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
@@ -15,8 +17,11 @@ const g = globalThis as any;
 
 // What the copy route was asked for: the source id and the body.
 const copies: { sourceId: string; body: unknown }[] = [];
+// What the recent route answers, newest first.
+let recent: DrivePath[] = [];
 g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
+    if (/\/recent(\?|$)/.test(url)) return Response.json(recent);
     const sourceId = /\/path\/([^/]+)\/copy$/.exec(url)?.[1];
     if (!sourceId) return Response.json([]);
     copies.push({ sourceId, body: JSON.parse(String(init?.body)) });
@@ -31,7 +36,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
-const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('../../../drive-path');
 const { CommandPaletteProvider } = await import(
     '../../../../components/layout/app/command-palette/command-palette-provider'
@@ -88,6 +93,8 @@ async function openFileMenu(path: DrivePath = plan, canWrite = true) {
     await act(async () => {
         trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     });
+    // Lets the recent list arrive.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     const items = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
     const rows = items.map((item) => item.textContent?.trim());
     const disabled = items.filter((item) => item.hasAttribute('data-disabled')).map((item) => item.textContent?.trim());
@@ -137,7 +144,30 @@ test('the palette gets the rows the menu draws, plus the link and the mail', asy
 test('Make a copy follows Import, in the group that makes and opens files', async () => {
     isGuest = false;
     const { rows } = await openFileMenu(plan);
-    expect(rows.slice(0, 4)).toEqual(['New doc', 'Open…', 'Import…', 'Make a copy']);
+    expect(rows.slice(0, 5)).toEqual(['New doc', 'Open…', 'Open recent', 'Import…', 'Make a copy']);
+});
+
+test('Open recent lists the recent docs without the open one, and no sheet', async () => {
+    isGuest = false;
+    recent = [
+        plan,
+        drivePath({ id: 'budget', name: 'Budget', mimeType: DRIVE_MIME_SHEETS }),
+        drivePath({ id: 'notes', name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC }),
+        drivePath({ id: 'memo', name: 'Memo.eigendoc', mimeType: DRIVE_MIME_DOC }),
+    ];
+    expect((await openFileMenu(plan)).disabled).not.toContain('Open recent');
+    await openSubmenu('Open recent');
+    const submenu = [...document.querySelectorAll('[role="menu"]')].at(-1);
+    const rows = [...(submenu?.querySelectorAll('[role="menuitem"]') ?? [])].map((row) => row.textContent?.trim());
+    expect(rows).toEqual(['Notes', 'Memo']);
+});
+
+test('Open recent greys out with no other doc to list, and a guest has none', async () => {
+    isGuest = false;
+    recent = [plan];
+    expect((await openFileMenu(plan)).disabled).toContain('Open recent');
+    isGuest = true;
+    expect((await openFileMenu(plan)).rows).not.toContain('Open recent');
 });
 
 test('Make a copy shows greyed out for a reader and for an item shared with the viewer', async () => {
