@@ -28,14 +28,7 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
                     <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
                     {label.name}
                 </h1>
-                <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Edit label"
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                    onClick={() => setDialogOpen(true)}
-                />
+                <TooltipButton icon={Pencil} tooltipText="Edit label" onClick={() => setDialogOpen(true)} />
             </div>
 
             <LabelDialog

@@ -61,8 +61,6 @@ export function LabelManager({
                             <TooltipButton
                                 icon={Pencil}
                                 tooltipText="Edit label"
-                                variant="ghost"
-                                size="icon"
                                 onClick={() => handleEditClick(label)}
                             />
                         </div>
