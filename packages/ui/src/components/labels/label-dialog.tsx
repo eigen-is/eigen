@@ -34,12 +34,7 @@ export function LabelDialog({
 
     return (
         <>
-            <FormDialog
-                open={open}
-                onOpenChange={onOpenChange}
-                title={selectedLabel ? 'Edit label' : 'Add label'}
-                description={selectedLabel ? 'Make changes to your label here.' : 'Add a new label to your collection.'}
-            >
+            <FormDialog open={open} onOpenChange={onOpenChange} title={selectedLabel ? 'Edit label' : 'Add label'}>
                 <LabelForm
                     selectedLabel={selectedLabel}
                     labelCount={labelCount}

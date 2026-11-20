@@ -99,7 +99,7 @@ const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve
 test('Add label waits for a name with more than spaces, then hands the trimmed label on and closes', async () => {
     await open(null);
     const dialog = dialogTitled('Add label');
-    expect(dialog?.textContent).toContain('Add a new label to your collection.');
+    expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(button(dialog, 'Delete label')).toBeUndefined();
     expect(button(dialog, 'Save')?.disabled).toBe(true);
 
@@ -156,7 +156,6 @@ test('Delete waits while a save runs', async () => {
 
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes', async () => {
     await open(urgent);
-    expect(dialogTitled('Edit label')?.textContent).toContain('Make changes to your label here.');
     expect(nameField().value).toBe('Urgent');
     await type('Later');
     expect(button(dialogTitled('Edit label'), 'Delete label')?.dataset.variant).toBe('ghost');

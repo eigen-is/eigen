@@ -141,7 +141,7 @@ const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve
 test('New calendar waits for a name with more than spaces, then creates the trimmed calendar and closes', async () => {
     await open(null);
     const dialog = dialogTitled('New calendar');
-    expect(dialog?.textContent).toContain('Create a new calendar.');
+    expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(button(dialog, 'Delete calendar')).toBeUndefined();
     expect(button(dialog, 'Save')?.disabled).toBe(true);
 
@@ -174,7 +174,7 @@ test('Edit calendar refuses a name emptied to spaces', async () => {
 test('Edit calendar starts from the calendar and saves its name, color and shares', async () => {
     await open(calendar({}));
     const dialog = dialogTitled('Edit calendar');
-    expect(dialog?.textContent).toContain('Edit calendar settings and sharing.');
+    expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(nameField().value).toBe('Work');
     await type('Office');
     await click(button(dialog, 'Save'));
