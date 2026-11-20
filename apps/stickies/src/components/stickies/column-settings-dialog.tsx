@@ -7,6 +7,7 @@ import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
@@ -31,17 +32,9 @@ export function ColumnSettingsDialog({
     yjsDoc,
     undoManager,
 }: ColumnSettingsDialogProps) {
-    const [title, setTitle] = useState(columnTitle);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-
-    const handleSubmit = () => {
-        if (!yjsDoc) return false;
-
-        yjsDoc.transact(() => {
-            const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
-            if (columnMap instanceof Y.Map) columnMap.set('title', title.trim());
-        });
-    };
+    // The column as the confirmation opened, so its sentence stays while it fades out after the delete.
+    const deleteConfirm = useDialogValue<{ title: string; cardCount: number }>();
+    const deleting = deleteConfirm.value;
 
     const handleDelete = () => {
         if (!yjsDoc) return;
@@ -76,40 +69,65 @@ export function ColumnSettingsDialog({
     return (
         <>
             <FormDialog open={isOpen} onOpenChange={onClose} title="Column settings">
-                <FormDialogForm
-                    canSubmit={title.trim() !== ''}
-                    submitLabel="Save changes"
-                    onSubmit={handleSubmit}
-                    footerStart={
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete column"
-                            onClick={() => setIsDeleteDialogOpen(true)}
-                        />
-                    }
-                >
-                    <Field>
-                        <FieldLabel htmlFor="title">Title</FieldLabel>
-                        <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-                    </Field>
-                </FormDialogForm>
+                <ColumnSettingsForm
+                    columnId={columnId}
+                    columnTitle={columnTitle}
+                    yjsDoc={yjsDoc}
+                    onDelete={() => deleteConfirm.openDialog({ title: columnTitle, cardCount })}
+                />
             </FormDialog>
 
-            <ConfirmDialog
-                open={isDeleteDialogOpen}
-                onOpenChange={setIsDeleteDialogOpen}
-                title="Delete column"
-                description={
-                    <>
-                        This will delete the column <strong>{columnTitle}</strong>
-                        {cardCount > 0 && ` and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it`}. You can
-                        undo this straight after, until you close the board.
-                    </>
-                }
-                onConfirm={handleDelete}
-                confirmText="Delete"
-                destructive
-            />
+            {deleting && (
+                <ConfirmDialog
+                    open={deleteConfirm.open}
+                    onOpenChange={deleteConfirm.setOpen}
+                    title="Delete column"
+                    description={
+                        <>
+                            This will delete the column <strong>{deleting.title}</strong>
+                            {deleting.cardCount > 0 &&
+                                ` and ${deleting.cardCount} ${deleting.cardCount === 1 ? 'card' : 'cards'} within it`}
+                            . You can undo this straight after, until you close the board.
+                        </>
+                    }
+                    onConfirm={handleDelete}
+                    confirmText="Delete"
+                    destructive
+                />
+            )}
         </>
+    );
+}
+
+// Mounted with the dialog, so each opening starts from the column's title.
+function ColumnSettingsForm({
+    columnId,
+    columnTitle,
+    yjsDoc,
+    onDelete,
+}: Pick<ColumnSettingsDialogProps, 'columnId' | 'columnTitle' | 'yjsDoc'> & { onDelete: () => void }) {
+    const [title, setTitle] = useState(columnTitle);
+
+    const handleSubmit = () => {
+        if (!yjsDoc) return false;
+
+        yjsDoc.transact(() => {
+            const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
+            if (columnMap instanceof Y.Map) columnMap.set('title', title.trim());
+        });
+    };
+
+    return (
+        <FormDialogForm
+            canSubmit={title.trim() !== ''}
+            submitLabel="Save changes"
+            onSubmit={handleSubmit}
+            footerStart={<TooltipButton icon={Trash2} tooltipText="Delete column" onClick={onDelete} />}
+        >
+            <Field>
+                <FieldLabel htmlFor="title">Title</FieldLabel>
+                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </Field>
+        </FormDialogForm>
     );
 }
