@@ -116,11 +116,17 @@ const click = (target: HTMLButtonElement | undefined) =>
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('it names the calendar and the access, and lists the owner and the people with access', async () => {
+test('it names the calendar and the access in the share words, and lists the owner and the people with access', async () => {
     await open(shared({}));
-    expect(settings()?.textContent).toContain('Team — read access');
+    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Can view');
     expect(settings()?.textContent).toContain('People with access');
     expect(settings()?.textContent).toContain('ada@example.org');
+    expect(settings()?.textContent).toContain('Can edit');
+});
+
+test('free/busy access reads as the share editor says it', async () => {
+    await open(shared({ permission: 'free-busy' }));
+    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Free/Busy');
 });
 
 test("Save with the owner's color stores none, and the dialog closes", async () => {

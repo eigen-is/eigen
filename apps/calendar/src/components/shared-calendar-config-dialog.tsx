@@ -4,7 +4,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldContent, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
@@ -14,8 +14,7 @@ import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-
-const PERMISSION_LABELS: Partial<Record<CalendarShare['permission'], string>> = { write: 'Editor', read: 'Viewer' };
+import { CALENDAR_PERMISSION_LABELS } from './calendar-share-editor';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
@@ -38,7 +37,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 onOpenChange={onOpenChange}
                 title="Shared calendar settings"
                 size="sm"
-                description={`${sharedCalendar.calendarName} — ${sharedCalendar.permission} access`}
+                description={`${sharedCalendar.calendarName} — ${CALENDAR_PERMISSION_LABELS[sharedCalendar.permission]}`}
             >
                 <SharedCalendarConfigForm
                     ownerId={ownerId}
@@ -117,7 +116,7 @@ function SharedCalendarConfigForm({
                                 <UserItem
                                     key={share.targetId}
                                     email={share.targetId}
-                                    label={PERMISSION_LABELS[share.permission] ?? share.permission}
+                                    label={CALENDAR_PERMISSION_LABELS[share.permission]}
                                 />
                             ))}
                         </FieldContent>

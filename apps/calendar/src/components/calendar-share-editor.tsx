@@ -25,6 +25,14 @@ import {
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
 
+// The words for each access level, in the editor's menu and wherever a share is named, such as a shared calendar's
+// settings.
+export const CALENDAR_PERMISSION_LABELS: Record<CalendarShare['permission'], string> = {
+    write: 'Can edit',
+    read: 'Can view',
+    'free-busy': 'Free/Busy',
+};
+
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
     onChange: (shares: CalendarShare[] | null) => void;
@@ -79,9 +87,11 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="write">Can edit</SelectItem>
-                                    <SelectItem value="read">Can view</SelectItem>
-                                    <SelectItem value="free-busy">Free/Busy</SelectItem>
+                                    {Object.entries(CALENDAR_PERMISSION_LABELS).map(([permission, label]) => (
+                                        <SelectItem key={permission} value={permission}>
+                                            {label}
+                                        </SelectItem>
+                                    ))}
                                     <SelectSeparator />
                                     <SelectItem value="remove" variant="destructive">
                                         Remove
