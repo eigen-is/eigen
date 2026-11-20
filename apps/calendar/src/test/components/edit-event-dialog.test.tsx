@@ -153,7 +153,7 @@ const click = (label: string) => act(async () => button(label).click());
 const save = () => click('Save');
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 const titleField = () => {
-    const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Event title"]');
+    const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Add title"]');
     if (!field) throw new Error('the dialog has no title field');
     return field;
 };

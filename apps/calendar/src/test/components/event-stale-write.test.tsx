@@ -246,7 +246,7 @@ const click = async (name: string) => {
     await settle();
 };
 const titleField = () => {
-    const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Event title"]');
+    const field = document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Add title"]');
     if (!field) throw new Error('no dialog has a title field');
     return field;
 };
@@ -370,7 +370,7 @@ test('a refusal keeps what was typed and follows the rest, and the next Save sen
     await click('Save');
     expect(toasts).toEqual([STALE_TOAST]);
     expect(titleField().value).toBe('Dentist at noon');
-    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Location"]')?.value).toBe(
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Add location"]')?.value).toBe(
         'New practice',
     );
 

@@ -19,7 +19,7 @@ A recurring event is one that repeats on a schedule. You set it up once and Cale
 
    - **Daily**: every day from the start date.
    - **Weekly on [day]**: every week on the same day as the start date.
-   - **Monthly on the [ordinal] [day]**: for example, "monthly on the second Tuesday".
+   - **Monthly on the [ordinal] [day]**: for example, "monthly on the second Tuesday". A start date in the fifth week of the month repeats on the last one, such as "Monthly on the last Friday", so the event comes back every month.
    - **Annually on [day] [month]**: the same date each year, for example "Annually on 8 June".
    - **Every weekday (Monday to Friday)**: each working day.
 

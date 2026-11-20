@@ -157,9 +157,8 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             timezone,
             data: { ...event.data, attendees },
         };
-        // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
-        // those would drag the series' start onto that date and drop every occurrence before it. Its guests are its
-        // own list with the guests added or removed here, so a guest the date leaves out stays on the series.
+        // The master takes only what the user changed: the clicked occurrence's times would restart the series there.
+        // Its guests are its own list plus or minus the guests changed here, so one this date leaves out stays on.
         const seriesUpdates = master
             ? {
                   rrule: updates.rrule,
@@ -274,8 +273,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                     )}
 
                     <EventFormFields
-                        titlePlaceholder="Event title"
-                        locationPlaceholder="Location"
                         title={title}
                         setTitle={(value) => edit({ title: value })}
                         allDay={allDay}

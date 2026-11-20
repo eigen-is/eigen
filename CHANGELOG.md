@@ -12,6 +12,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 
+### Fixed
+
+- **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
+
 ### Security
 
 - **Server runtime** — the server runs on Bun 1.4.5, which fixes security issues in its web server, its encrypted connections, its DNS lookups and its decompression
