@@ -295,7 +295,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                         calendarOptions={calendarOptions}
                         recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
                         timezone={event.timezone || viewerTimeZone()}
-                        allDayId="edit-all-day"
                         detailsDisabled={isLinkedEvent}
                         attendeesSection={
                             isLinkedEvent ? (
