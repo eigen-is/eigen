@@ -17,7 +17,6 @@ import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, to
 type EventFormFieldsProps = {
     titlePlaceholder: string;
     locationPlaceholder: string;
-    descriptionPlaceholder: string;
     title: string;
     setTitle: (value: string) => void;
     allDay: boolean;
@@ -50,7 +49,6 @@ type EventFormFieldsProps = {
 export function EventFormFields({
     titlePlaceholder,
     locationPlaceholder,
-    descriptionPlaceholder,
     title,
     setTitle,
     allDay,
@@ -87,9 +85,9 @@ export function EventFormFields({
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
-        const d = new Date(`${startDate}T00:00`);
-        d.setDate(d.getDate() + dayOffset);
-        setEndDate(toLocalDateString(d));
+        const endDay = new Date(`${startDate}T00:00`);
+        endDay.setDate(endDay.getDate() + dayOffset);
+        setEndDate(toLocalDateString(endDay));
     };
 
     return (
@@ -207,7 +205,7 @@ export function EventFormFields({
             <div className="flex items-start gap-3">
                 <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                 <Textarea
-                    placeholder={descriptionPlaceholder}
+                    placeholder="Add description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={detailsDisabled}

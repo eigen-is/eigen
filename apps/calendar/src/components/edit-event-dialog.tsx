@@ -276,7 +276,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                     <EventFormFields
                         titlePlaceholder="Event title"
                         locationPlaceholder="Location"
-                        descriptionPlaceholder="Description"
                         title={title}
                         setTitle={(value) => edit({ title: value })}
                         allDay={allDay}

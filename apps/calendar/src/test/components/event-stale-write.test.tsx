@@ -251,7 +251,9 @@ const titleField = () => {
     return field;
 };
 const descriptionField = () => {
-    const field = document.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea[placeholder="Description"]');
+    const field = document.querySelector<HTMLTextAreaElement>(
+        '[role="dialog"] textarea[placeholder="Add description"]',
+    );
     if (!field) throw new Error('no dialog has a description field');
     return field;
 };

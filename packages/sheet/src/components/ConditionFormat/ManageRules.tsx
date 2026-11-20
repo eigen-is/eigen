@@ -32,7 +32,16 @@ export function ManageRules() {
     const rules = orderedRules(findSheet(context, context.currentSheetId)?.conditionalFormats);
 
     return (
-        <FormDialog {...dialogProps} title="Manage rules" size="lg">
+        <FormDialog
+            {...dialogProps}
+            title="Manage rules"
+            size="lg"
+            // Enter or Space on the first delete button would remove a rule, so the dialog itself takes the focus.
+            onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
+            }}
+        >
             {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
             ) : (
@@ -63,6 +72,47 @@ export function ManageRules() {
             <DialogFooter showCloseButton />
         </FormDialog>
     );
+}
+
+function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
+    if (rule.type === 'default') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border text-[10px] font-medium flex items-center justify-center shrink-0"
+                style={{
+                    backgroundColor: rule.format.cellColor ?? undefined,
+                    color: rule.format.textColor ?? undefined,
+                }}
+            >
+                Ab
+            </div>
+        );
+    }
+    if (rule.type === 'colorGradation') {
+        return (
+            <div
+                className="w-8 h-6 rounded border border-border shrink-0"
+                style={{ background: `linear-gradient(to right, ${rule.format.join(', ')})` }}
+            />
+        );
+    }
+    const [color] = rule.format;
+    return (
+        <div className="w-8 h-6 rounded border border-border shrink-0 flex items-center px-0.5">
+            <div className="h-3 w-5 rounded-sm" style={{ backgroundColor: color }} />
+        </div>
+    );
+}
+
+function describeRule(rule: ConditionalFormatRule): string {
+    switch (rule.type) {
+        case 'colorGradation':
+            return 'Color scale';
+        case 'dataBar':
+            return 'Data bar';
+        case 'default':
+            return describeDefaultRule(rule);
+    }
 }
 
 function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
@@ -96,48 +146,4 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         default:
             return label;
     }
-}
-
-function describeRule(rule: ConditionalFormatRule): string {
-    switch (rule.type) {
-        case 'colorGradation':
-            return 'Color scale';
-        case 'dataBar':
-            return 'Data bar';
-        case 'default':
-            return describeDefaultRule(rule);
-    }
-}
-
-function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
-    if (rule.type === 'default') {
-        return (
-            <div
-                className="w-8 h-6 rounded border border-border text-[10px] font-medium flex items-center justify-center shrink-0"
-                style={{
-                    backgroundColor: rule.format.cellColor ?? undefined,
-                    color: rule.format.textColor ?? undefined,
-                }}
-            >
-                Ab
-            </div>
-        );
-    }
-    if (rule.type === 'colorGradation') {
-        return (
-            <div
-                className="w-8 h-6 rounded border border-border shrink-0"
-                style={{ background: `linear-gradient(to right, ${rule.format.join(', ')})` }}
-            />
-        );
-    }
-    if (rule.type === 'dataBar') {
-        const [color] = rule.format;
-        return (
-            <div className="w-8 h-6 rounded border border-border shrink-0 flex items-center px-0.5">
-                <div className="h-3 w-5 rounded-sm" style={{ backgroundColor: color }} />
-            </div>
-        );
-    }
-    return <div className="w-8 h-6 rounded border border-border shrink-0" />;
 }
