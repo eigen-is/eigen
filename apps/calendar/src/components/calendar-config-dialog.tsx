@@ -8,13 +8,14 @@ import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@worksp
 import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
-import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -129,9 +130,7 @@ function CalendarConfigForm({
                 footerStart={
                     calendar &&
                     !calendar.isDefault && (
-                        <Button variant="destructive" onClick={onDelete}>
-                            Delete
-                        </Button>
+                        <TooltipButton icon={Trash2} tooltipText="Delete calendar" onClick={onDelete} />
                     )
                 }
             >

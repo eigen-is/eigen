@@ -116,7 +116,9 @@ async function open(item: CalendarItem | null) {
 const dialogs = () => [...document.querySelectorAll('[role="dialog"]')];
 const dialogTitled = (title: string) => dialogs().find((d) => d.querySelector('h2')?.textContent === title);
 const button = (dialog: Element | undefined, label: string) =>
-    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => (b.textContent || b.getAttribute('aria-label')) === label,
+    );
 const nameField = () => {
     const input = document.querySelector<HTMLInputElement>('input[placeholder="Enter calendar name"]');
     if (!input) throw new Error('the dialog has no name field');
@@ -138,7 +140,7 @@ test('New calendar waits for a name with more than spaces, then creates the trim
     await open(null);
     const dialog = dialogTitled('New calendar');
     expect(dialog?.textContent).toContain('Create a new calendar.');
-    expect(button(dialog, 'Delete')).toBeUndefined();
+    expect(button(dialog, 'Delete calendar')).toBeUndefined();
     expect(button(dialog, 'Save')?.disabled).toBe(true);
 
     await type('   ');
@@ -204,7 +206,8 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes and closes', async () => {
     await open(calendar({}));
     await type('Office');
-    await click(button(dialogTitled('Edit calendar'), 'Delete'));
+    expect(button(dialogTitled('Edit calendar'), 'Delete calendar')?.dataset.variant).toBe('ghost');
+    await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     expect(dialogTitled('Delete calendar')?.querySelector('p')?.innerHTML).toBe(
         'Are you sure you want to delete <strong>Work</strong>? All events in it will be lost.',
     );
@@ -215,7 +218,7 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
     expect(dialogTitled('Delete calendar')).toBeUndefined();
     expect(nameField().value).toBe('Office');
 
-    await click(button(dialogTitled('Edit calendar'), 'Delete'));
+    await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     await click(button(dialogTitled('Delete calendar'), 'Delete'));
     await settle();
     expect(deleteCalendar.mutateAsync.mock.calls).toEqual([['work']]);
@@ -225,5 +228,5 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
 
 test('the default calendar has no Delete', async () => {
     await open(calendar({ isDefault: true }));
-    expect(button(dialogTitled('Edit calendar'), 'Delete')).toBeUndefined();
+    expect(button(dialogTitled('Edit calendar'), 'Delete calendar')).toBeUndefined();
 });

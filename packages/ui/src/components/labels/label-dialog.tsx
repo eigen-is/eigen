@@ -4,12 +4,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
-import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media/color-picker-swatch';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -110,11 +111,7 @@ function LabelForm({
                     if (!saved) return false;
                 }}
                 footerStart={
-                    selectedLabel && (
-                        <Button variant="destructive" onClick={onDelete}>
-                            Delete
-                        </Button>
-                    )
+                    selectedLabel && <TooltipButton icon={Trash2} tooltipText="Delete label" onClick={onDelete} />
                 }
             >
                 <div className="flex gap-2">

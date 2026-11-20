@@ -106,7 +106,9 @@ const dialogs = () => [...document.querySelectorAll('[role="dialog"]')];
 const dialogTitled = (title: string) => dialogs().find((d) => d.querySelector('h2')?.textContent === title);
 const settings = () => dialogTitled('Shared calendar settings');
 const button = (dialog: Element | undefined, label: string) =>
-    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => (b.textContent || b.getAttribute('aria-label')) === label,
+    );
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -150,7 +152,7 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 
 test('Remove asks on top of the open dialog, and a yes removes it and closes', async () => {
     await open(shared({}));
-    await click(button(settings(), 'Remove'));
+    await click(button(settings(), 'Remove calendar'));
     expect(dialogTitled('Remove shared calendar')?.querySelector('p')?.innerHTML).toBe(
         'Remove <strong>Team</strong> from your view? You can be re-added by the owner.',
     );
@@ -159,7 +161,7 @@ test('Remove asks on top of the open dialog, and a yes removes it and closes', a
     await click(button(dialogTitled('Remove shared calendar'), 'Cancel'));
     expect(settings()).toBeDefined();
 
-    await click(button(settings(), 'Remove'));
+    await click(button(settings(), 'Remove calendar'));
     await click(button(dialogTitled('Remove shared calendar'), 'Remove'));
     await settle();
     expect(deleteShared.mutateAsync.mock.calls).toEqual([['sc1']]);
@@ -169,6 +171,6 @@ test('Remove asks on top of the open dialog, and a yes removes it and closes', a
 
 test("a team's calendar can't be removed and lists no people", async () => {
     await open(shared({ ownerUserId: teamOwnerId('0123456789abcdef0123456789abcdef') }));
-    expect(button(settings(), 'Remove')).toBeUndefined();
+    expect(button(settings(), 'Remove calendar')).toBeUndefined();
     expect(settings()?.textContent).not.toContain('People with access');
 });

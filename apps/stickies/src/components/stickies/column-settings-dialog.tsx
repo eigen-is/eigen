@@ -2,11 +2,12 @@
 // Yjs document itself. A delete takes the column's cards with it, as one undo step.
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
-import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
 
@@ -80,9 +81,11 @@ export function ColumnSettingsDialog({
                     submitLabel="Save changes"
                     onSubmit={handleSubmit}
                     footerStart={
-                        <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
-                            Delete column
-                        </Button>
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete column"
+                            onClick={() => setIsDeleteDialogOpen(true)}
+                        />
                     }
                 >
                     <Field>

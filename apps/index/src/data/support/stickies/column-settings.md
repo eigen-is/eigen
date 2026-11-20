@@ -29,7 +29,7 @@ The column header updates straight away.
 Deleting a column removes it and all the cards it contains. Press **Ctrl+Z** (Mac: **⌘Z**) straight after to bring them back.
 
 1. Open **Column settings** for the column you want to remove.
-2. Click **Delete column**.
+2. Click the trash icon (**Delete column**) in the bottom-left corner.
 3. A confirmation dialog appears. If the column contains cards, it tells you how many will be deleted.
 4. Click **Delete** in the confirmation dialog.
 

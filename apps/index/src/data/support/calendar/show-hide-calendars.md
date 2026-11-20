@@ -38,12 +38,12 @@ For calendars under **Shared with me** or **Team calendars**, the same **Edit ca
 
 ## Delete a calendar you own
 
-Open the **Edit calendar** dialog for the calendar you want to remove, then click **Delete**. This removes the calendar and all the events in it permanently.
+Open the **Edit calendar** dialog for the calendar you want to remove, then click the trash icon (**Delete calendar**) in the bottom-left corner and **Delete** in the dialog that asks. This removes the calendar and all the events in it permanently.
 
 You cannot delete your default calendar.
 
 ## Remove a shared calendar from your view
 
-If you no longer want to see a calendar under **Shared with me**, open its **Shared calendar settings** (the **⋮** button on hover, then **Edit calendar**) and click **Remove**, then **Remove** again in the dialog that asks. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
+If you no longer want to see a calendar under **Shared with me**, open its **Shared calendar settings** (the **⋮** button on hover, then **Edit calendar**) and click the trash icon (**Remove calendar**) in the bottom-left corner, then **Remove** in the dialog that asks. The calendar disappears from your sidebar. The owner's calendar and events are not affected, and the owner can add you again if needed.
 
-Team calendars under **Team calendars** do not have a **Remove** option.
+Team calendars under **Team calendars** do not have a **Remove calendar** option.

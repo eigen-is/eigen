@@ -39,7 +39,8 @@ const enter = () => act(async () => pressEnter(titleField()));
 const footerButtons = () => [
     ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [data-slot="dialog-footer"] button'),
 ];
-const button = (label: string) => footerButtons().find((b) => b.textContent === label);
+const button = (label: string) =>
+    footerButtons().find((b) => (b.textContent || b.getAttribute('aria-label')) === label);
 
 async function openAddColumn() {
     onClose.mockClear();
@@ -137,7 +138,12 @@ test('Column settings: a blank title keeps Save changes off, and Enter saves not
 test('Column settings: Delete column asks first, then removes the column and its card', async () => {
     const doc = boardDoc();
     await openColumnSettings(doc);
-    expect(footerButtons().map((b) => b.textContent)).toEqual(['Delete column', 'Cancel', 'Save changes']);
+    expect(footerButtons().map((b) => b.textContent || b.getAttribute('aria-label'))).toEqual([
+        'Delete column',
+        'Cancel',
+        'Save changes',
+    ]);
+    expect(button('Delete column')?.dataset.variant).toBe('ghost');
     await act(async () => button('Delete column')?.click());
     expect(doc.getMap('columns').has('c1')).toBe(true);
     expect([...document.querySelectorAll('[role="dialog"] p')].map((p) => p.textContent)).toContain(

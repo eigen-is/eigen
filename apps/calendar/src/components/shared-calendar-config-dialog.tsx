@@ -5,13 +5,14 @@ import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
-import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
+import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 const PERMISSION_LABELS: Partial<Record<CalendarShare['permission'], string>> = { write: 'Editor', read: 'Viewer' };
@@ -95,11 +96,7 @@ function SharedCalendarConfigForm({
                 });
             }}
             footerStart={
-                !isTeamCalendar && (
-                    <Button variant="destructive" onClick={onRemove}>
-                        Remove
-                    </Button>
-                )
+                !isTeamCalendar && <TooltipButton icon={Trash2} tooltipText="Remove calendar" onClick={onRemove} />
             }
         >
             <div className="space-y-4">

@@ -45,7 +45,7 @@ You need write access to the board to add or change columns.
 Deleting a column also deletes all the cards in it. Press **Ctrl+Z** (Mac: **⌘Z**) straight after to bring them back.
 
 1. Click the pencil icon in the column header to open **Column settings**.
-2. Click **Delete column**. A confirmation dialog appears.
+2. Click the trash icon (**Delete column**) in the bottom-left corner. A confirmation dialog appears.
 3. Confirm the deletion.
 
 <div class="eigen-callout">

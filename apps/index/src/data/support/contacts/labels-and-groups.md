@@ -55,4 +55,4 @@ To go back to all contacts, click **My contacts** in the sidebar.
 
 To rename a label or change its color, hover over it in the sidebar and click the pencil icon that appears on the right. The **Edit label** dialog opens. Make your changes and click **Save**.
 
-To delete a label, open **Edit label** and click **Delete**. You will be asked to confirm, on top of **Edit label**, so if you cancel, your changes to the label are still there. Deleting a label removes it from all contacts that had it, but the contacts themselves are not deleted.
+To delete a label, open **Edit label** and click the trash icon (**Delete label**) in the bottom-left corner. You will be asked to confirm, on top of **Edit label**, so if you cancel, your changes to the label are still there. Deleting a label removes it from all contacts that had it, but the contacts themselves are not deleted.

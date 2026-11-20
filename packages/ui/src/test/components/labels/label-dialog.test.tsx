@@ -73,7 +73,9 @@ async function open(selectedLabel: Label | null) {
 const dialogs = () => [...document.querySelectorAll('[role="dialog"]')];
 const dialogTitled = (title: string) => dialogs().find((d) => d.querySelector('h2')?.textContent === title);
 const button = (dialog: Element | undefined, label: string) =>
-    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => (b.textContent || b.getAttribute('aria-label')) === label,
+    );
 const nameField = () => {
     const input = document.querySelector<HTMLInputElement>('input[placeholder="Enter label name"]');
     if (!input) throw new Error('the dialog has no name field');
@@ -98,7 +100,7 @@ test('Add label waits for a name with more than spaces, then hands the trimmed l
     await open(null);
     const dialog = dialogTitled('Add label');
     expect(dialog?.textContent).toContain('Add a new label to your collection.');
-    expect(button(dialog, 'Delete')).toBeUndefined();
+    expect(button(dialog, 'Delete label')).toBeUndefined();
     expect(button(dialog, 'Save')?.disabled).toBe(true);
 
     await type('   ');
@@ -143,10 +145,10 @@ test('Delete waits while a save runs', async () => {
     onSubmit.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
     await open(urgent);
     const dialog = dialogTitled('Edit label');
-    expect(isDisabled(button(dialog, 'Delete'))).toBe(false);
+    expect(isDisabled(button(dialog, 'Delete label'))).toBe(false);
     await click(button(dialog, 'Save'));
     await settle();
-    expect(isDisabled(button(dialog, 'Delete'))).toBe(true);
+    expect(isDisabled(button(dialog, 'Delete label'))).toBe(true);
     await act(async () => finish());
     await settle();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
@@ -157,14 +159,15 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
     expect(dialogTitled('Edit label')?.textContent).toContain('Make changes to your label here.');
     expect(nameField().value).toBe('Urgent');
     await type('Later');
-    await click(button(dialogTitled('Edit label'), 'Delete'));
-    expect(dialogTitled('Delete label')).toBeDefined();
+    expect(button(dialogTitled('Edit label'), 'Delete label')?.dataset.variant).toBe('ghost');
+    await click(button(dialogTitled('Edit label'), 'Delete label'));
+    expect(button(dialogTitled('Delete label'), 'Delete')?.dataset.variant).toBe('destructive');
     expect(dialogTitled('Edit label')).toBeDefined();
 
     await click(button(dialogTitled('Delete label'), 'Cancel'));
     expect(nameField().value).toBe('Later');
 
-    await click(button(dialogTitled('Edit label'), 'Delete'));
+    await click(button(dialogTitled('Edit label'), 'Delete label'));
     await click(button(dialogTitled('Delete label'), 'Delete'));
     await settle();
     expect(onDelete).toHaveBeenCalledTimes(1);
