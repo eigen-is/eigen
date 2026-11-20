@@ -6,7 +6,7 @@
 import { eigenColor } from '@workspace/lib/constants/colors';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { FieldError } from '@workspace/ui/components/field';
+import { FieldError, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -155,8 +155,8 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                     </div>
                 )}
 
-                <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Set as:</p>
+                <FieldSet>
+                    <FieldLegend variant="label">Set as:</FieldLegend>
                     <div className="rounded-md border p-3 space-y-3">
                         <ColorChoice
                             id="checkTextColor"
@@ -171,7 +171,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                             onChange={(cellColor) => edit({ cellColor })}
                         />
                     </div>
-                </div>
+                </FieldSet>
             </FormDialogForm>
         </FormDialog>
     );
