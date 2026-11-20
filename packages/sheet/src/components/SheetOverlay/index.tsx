@@ -12,10 +12,10 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
+import { toast } from 'sonner';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { cellDisplay } from '../../engine/format';
-import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
     commentHoverAt,
@@ -51,7 +51,6 @@ const DEFAULT_ADD_ROWS = 50;
 
 export const SheetOverlay: React.FC = () => {
     const { context, getContext, setContext, refs } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const {
         onContextMenu: cellAreaContextMenu,
         openAtPoint: cellAreaLongPressOpen,
@@ -258,17 +257,14 @@ export const SheetOverlay: React.FC = () => {
         setContext((draftCtx) => tryInsertRowCol(draftCtx, insertRowColOp, false), { insertRowColOp });
     }, [getContext, setContext]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showNotice + setContext are stable
+    // The field is cleared once shown, so the same refusal again warns again.
     useEffect(() => {
-        if (context.warnDialog) {
-            // Consume the event so repeating the same invalid op warns again.
-            const message = context.warnDialog;
-            setTimeout(() => showNotice(message), 240);
-            setContext((ctx) => {
-                ctx.warnDialog = undefined;
-            });
-        }
-    }, [context.warnDialog]);
+        if (!context.warnDialog) return;
+        toast.error(context.warnDialog);
+        setContext((ctx) => {
+            ctx.warnDialog = undefined;
+        });
+    }, [context.warnDialog, setContext]);
 
     // Keyed on scrollRequest, not on the scrollLeft and scrollTop mirror: syncScroll updates that on every recipe,
     // which would rewind a scroll in progress.

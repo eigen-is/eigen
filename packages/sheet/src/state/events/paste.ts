@@ -7,6 +7,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { CellBorderSides } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, MAX_GRID_SLOTS, sheetFitsGrid } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, times } from 'es-toolkit/compat';
+import { toast } from 'sonner';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { writeFormulaResult } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -60,10 +61,7 @@ export function handlePaste(ctx: Context, clipboardData: PastedData, onImageFile
 
 // A menu row has no paste event, so it reads the clipboard itself and hands the paste what a ⌘V would have had. Where
 // the browser refuses the read, or has no such read, it says to press the key, as Google Sheets does.
-export async function pasteFromClipboard(
-    paste: (clipboardData: DataTransfer) => void,
-    showNotice: (text: string) => void,
-) {
+export async function pasteFromClipboard(paste: (clipboardData: DataTransfer) => void) {
     const clipboardData = new DataTransfer();
     try {
         for (const item of await navigator.clipboard.read()) {
@@ -74,7 +72,7 @@ export async function pasteFromClipboard(
             }
         }
     } catch {
-        showNotice(`Your browser blocks Paste from a menu. Press ${formatForDisplay(SHEET_HOTKEYS.paste)} instead.`);
+        toast.error(`Your browser blocks Paste from a menu. Press ${formatForDisplay(SHEET_HOTKEYS.paste)} instead.`);
         return;
     }
     paste(clipboardData);

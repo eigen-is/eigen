@@ -101,10 +101,19 @@ describe('a FormDialog in the host', () => {
     test('a submit that opens another dialog leaves that one open', async () => {
         const { dialogs } = await renderHost();
         await act(async () =>
-            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showNotice('Replace it?', 'yesno') })),
+            dialogs.showDialog(
+                createElement(Rename, {
+                    onSubmit: () =>
+                        dialogs.showConfirm({
+                            title: 'Replace data?',
+                            description: 'Replace it?',
+                            onConfirm: () => {},
+                        }),
+                }),
+            ),
         );
         await click(button('Save'));
-        expect(title()).toBe('Notice');
+        expect(title()).toBe('Replace data?');
         expect(openDialogs()).toHaveLength(1);
     });
 
@@ -130,7 +139,9 @@ describe('the range picker in the slot', () => {
         expect(dialogs.pickerOpen).toBe(false);
         await act(async () => dialogs.showNonModalDialog('Pick a range', { onEscape }));
         expect(opened.dialogs?.pickerOpen).toBe(true);
-        await act(async () => dialogs.showNotice('A notice'));
+        await act(async () =>
+            dialogs.showConfirm({ title: 'Delete sheet?', description: 'A question', onConfirm: () => {} }),
+        );
         expect(opened.dialogs?.pickerOpen).toBe(false);
     });
 
@@ -212,12 +223,17 @@ describe('the focus after a dialog closes', () => {
 
     test('stays in the confirm a submit opened', async () => {
         const dialog = await renderSheetDialog((d) =>
-            d.showDialog(createElement(Rename, { onSubmit: () => d.showNotice('Replace it?', 'yesno') })),
+            d.showDialog(
+                createElement(Rename, {
+                    onSubmit: () =>
+                        d.showConfirm({ title: 'Replace data?', description: 'Replace it?', onConfirm: () => {} }),
+                }),
+            ),
         );
         await dialog.click('Save');
         await focusSettled();
         const [confirm] = dialog.dialogs();
-        expect(dialog.title()).toBe('Notice');
+        expect(dialog.title()).toBe('Replace data?');
         expect(confirm?.contains(document.activeElement)).toBe(true);
     });
 

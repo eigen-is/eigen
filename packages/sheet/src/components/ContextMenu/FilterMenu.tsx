@@ -15,8 +15,8 @@ import { concat, debounce, omit, union, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { WorkbookContext } from '../../context';
-import { useDialog } from '../../hooks/useDialog';
 import type { Context, FilterColor, FilterConditionName, FilterDate, FilterValue } from '../../state';
 import {
     api,
@@ -180,7 +180,6 @@ export const FilterMenu: React.FC = () => {
     const [conditionValues, setConditionValues] = useState<[string, string]>(['', '']);
     const [showSubMenu, setShowSubMenu] = useState(false);
     const subMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const { showNotice } = useDialog();
     contextRef.current = context;
 
     // Bridge the gap between the trigger and the portaled PopoverContent so the cursor
@@ -261,10 +260,10 @@ export const FilterMenu: React.FC = () => {
             if (col == null) return;
             setContext((draftCtx) => {
                 const errMsg = sortFilterRange(draftCtx, startRow, startCol, endRow, endCol, col, asc);
-                if (errMsg != null) showNotice(errMsg);
+                if (errMsg != null) toast.error(errMsg);
             });
         },
-        [col, setContext, startRow, startCol, endRow, endCol, showNotice],
+        [col, setContext, startRow, startCol, endRow, endCol],
     );
 
     useEffect(() => {
@@ -602,7 +601,7 @@ export const FilterMenu: React.FC = () => {
                 <div className="h-px my-1 bg-border" />
                 <div className="flex items-center justify-between px-1 py-1">
                     <Button
-                        variant="destructive"
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                             setContext((draftCtx) => {

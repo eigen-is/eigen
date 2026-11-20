@@ -13,6 +13,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { useDialog } from '../../hooks/useDialog';
@@ -41,7 +42,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
-    const { showNotice } = useDialog();
+    const { showConfirm } = useDialog();
 
     useEffect(() => {
         const name = editable.current;
@@ -71,23 +72,22 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         [refocusGrid],
     );
 
-    // A refused name throws out of the write, which then applies nothing, and the notice opens outside the recipe.
+    // A refused name throws out of the write, which then applies nothing.
     const onBlur = useCallback(() => {
         const input = editable.current;
         if (input) {
             try {
                 setContext((draftCtx) => editSheetName(draftCtx, id, input), { renameSheetOp: { id } });
             } catch (e) {
-                if (e instanceof Error) showNotice(e.message);
+                if (e instanceof Error) toast.error(e.message);
             }
         }
         setEditing(false);
-    }, [id, setContext, showNotice]);
+    }, [id, setContext]);
 
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLSpanElement>) => {
-            // The blur may open a notice whose OK button takes the focus at once, and the browser would send this
-            // Enter's keypress on to that button and close the notice. Otherwise the next keys go to the grid.
+            // Enter commits the name instead of starting a new line in it, and the next keys go to the grid.
             if (e.key === 'Enter') {
                 e.preventDefault();
                 editable.current?.blur();
@@ -209,11 +209,20 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     onClick={() => {
                         const refusal = lastShownSheetRefusal(context, id, 'delete');
                         if (refusal) {
-                            showNotice(refusal);
+                            toast.error(refusal);
                             return;
                         }
-                        showNotice(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
-                            setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } });
+                        showConfirm({
+                            title: 'Delete sheet?',
+                            description: (
+                                <>
+                                    Delete <strong>{sheet.name}</strong>? Formulas that refer to it will show a #REF!
+                                    error.
+                                </>
+                            ),
+                            confirmText: 'Delete',
+                            destructive: true,
+                            onConfirm: () => setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } }),
                         });
                     }}
                 >

@@ -18,7 +18,6 @@ import type { ReactNode, Ref } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import { useDialog } from '../../hooks/useDialog';
 import { useEditorSelectionStyle } from '../../hooks/useEditorSelectionStyle';
 import {
     clearSelectedContents,
@@ -48,7 +47,6 @@ type Props = {
 export function WorkbookMenuBar({ leftItems, rightItems, ref }: Props) {
     const { context, getContext, setContext, refs, handleUndo, handleRedo, pasteClipboard } =
         useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     const refocusCellEditor = useCellEditorRefocus();
     // Read once for the toolbar and the Format menu, so a caret move reads the editor once.
     const caret = useEditorSelectionStyle();
@@ -97,9 +95,7 @@ export function WorkbookMenuBar({ leftItems, rightItems, ref }: Props) {
                                         onCut={context.allowEdit ? () => cutOrCopy(true) : undefined}
                                         onCopy={() => cutOrCopy(false)}
                                         onPaste={
-                                            context.allowEdit
-                                                ? () => pasteFromClipboard(pasteClipboard, showNotice)
-                                                : undefined
+                                            context.allowEdit ? () => pasteFromClipboard(pasteClipboard) : undefined
                                         }
                                         onSelectAll={() => setContext(selectAll)}
                                         selectionEmpty={!context.activeObject && !context.selections?.length}

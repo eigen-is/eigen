@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, split text, data, columns]
 related: [sheets/sort-and-filter, sheets/rows-and-columns]
 order: 135
-updated: 2026-11-02
+updated: 2026-11-20
 ---
 
 If one column holds values that belong in several, such as `Ada,Lovelace` in a single cell, you can split them apart. Sheets cuts each cell at the separator you pick and writes the pieces across the row.
@@ -27,7 +27,7 @@ If the text contains none of the separators you ticked, there is nothing to spli
 
 Sheets does not insert new columns for the pieces. It writes them into the cells that are already there, so anything in the way is replaced.
 
-If those cells hold values, a **Notice** dialog appears first and asks: "There is already data here. Do you want to replace it?" Click **OK** to go ahead, or **Cancel** to leave the sheet alone.
+If those cells hold values, a **Replace data?** dialog appears first and names the cells, such as "There's already data in B1:B2. Do you want to replace it?" Click **Replace** to go ahead, or **Cancel** to leave the sheet alone.
 
 <div class="eigen-callout">
 

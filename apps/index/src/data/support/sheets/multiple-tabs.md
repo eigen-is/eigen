@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
 order: 100
-updated: 2026-11-11
+updated: 2026-11-20
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
@@ -32,7 +32,7 @@ Double-click a tab to edit its name inline. Type the new name, then press **Ente
 
 A name has 1 to 31 characters. It can't contain `\ / ? * [ ] :`, and it can't start or end with an apostrophe (`'`). The fullwidth `：` and `？` are fine. If a name breaks these rules, Sheets keeps the old name and tells you why.
 
-Two tabs can't share a name, and letter case doesn't count, as in Excel. If you type a name another tab already has, such as `data` next to `Data`, the tab keeps its old name and a **Notice** says "Another sheet already has this name". A formula finds the sheet even when its name's case differs, so `=data!A1` reads the tab named `Data`.
+Two tabs can't share a name, and letter case doesn't count, as in Excel. If you type a name another tab already has, such as `data` next to `Data`, the tab keeps its old name and a message says "Another sheet already has this name". A formula finds the sheet even when its name's case differs, so `=data!A1` reads the tab named `Data`.
 
 Formulas, formula rules, dropdown lists and links that name the sheet follow the new name, on every sheet, and **Undo** renames it back.
 
@@ -62,7 +62,7 @@ To show a hidden sheet again, open the **View** menu in the menu bar. If any she
 
 ## Delete a sheet
 
-Click the **⌄** arrow on a tab and choose **Delete**. You will be asked to confirm before the sheet is removed.
+Click the **⌄** arrow on a tab and choose **Delete**. A **Delete sheet?** dialog asks first: click **Delete** to remove the sheet, or **Cancel** to keep it. Formulas that refer to the deleted sheet show a `#REF!` error.
 
 You cannot delete the last sheet in a spreadsheet.
 
