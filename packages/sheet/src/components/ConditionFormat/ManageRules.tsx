@@ -32,7 +32,16 @@ export function ManageRules() {
     const rules = orderedRules(findSheet(context, context.currentSheetId)?.conditionalFormats);
 
     return (
-        <FormDialog {...dialogProps} title="Manage rules" size="lg">
+        <FormDialog
+            {...dialogProps}
+            title="Manage rules"
+            size="lg"
+            // Enter or Space on the first delete button would remove a rule, so the dialog itself takes the focus.
+            onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
+            }}
+        >
             {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
             ) : (

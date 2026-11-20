@@ -71,3 +71,8 @@ test('a formula rule, such as one whose value reads a cell, shows its formula', 
     const dialog = await openManageRules([{ ...GREATER_THAN, conditionName: 'formula', conditionValue: ['=A1>$B$1'] }]);
     expect(dialog.dialogs()[0]?.textContent).toContain('Custom formula =A1>$B$1');
 });
+
+test('it opens with the focus on the dialog, not on a delete button that Enter would press', async () => {
+    await openManageRules([GREATER_THAN, COLOR_SCALE]);
+    expect(document.activeElement?.getAttribute('role')).toBe('dialog');
+});
