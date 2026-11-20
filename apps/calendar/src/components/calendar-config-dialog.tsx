@@ -19,7 +19,7 @@ import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { CalendarShareEditor } from './calendar-share-editor';
+import { CalendarShareEditor, ShareWithTeamButton } from './calendar-share-editor';
 
 const calendarFormSchema = z.object({
     name: z
@@ -128,9 +128,13 @@ function CalendarConfigForm({
                     if (!saved) return false;
                 }}
                 footerStart={
-                    calendar &&
-                    !calendar.isDefault && (
-                        <TooltipButton icon={Trash2} tooltipText="Delete calendar" onClick={onDelete} />
+                    calendar && (
+                        <>
+                            {!calendar.isDefault && (
+                                <TooltipButton icon={Trash2} tooltipText="Delete calendar" onClick={onDelete} />
+                            )}
+                            <ShareWithTeamButton shares={shares} onChange={setShares} />
+                        </>
                     )
                 }
             >

@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, sharing, permissions, collaboration, team]
 related: [calendar/show-hide-calendars, calendar/get-started]
 order: 100
-updated: 2026-10-28
+updated: 2026-11-20
 ---
 
 A calendar in Eigen is private to you until you share it. You can share with specific people by email, choose how much they can see or do, and share with a whole team at once.
@@ -36,6 +36,6 @@ Open the **Edit calendar** dialog for the calendar, find the person under **Peop
 
 ## Share with a team
 
-If you belong to one or more teams, a **Share with team** button appears at the bottom of the **Sharing** section. Click it to open a menu of your teams, then click the team you want to add. The team appears in the **People with access** list. Click **Save**.
+If you belong to one or more teams, a **Share with team** button appears in the bottom-left corner of **Edit calendar**. Click it to open a menu of your teams, then click the team you want to add. The team appears in the **People with access** list. Click **Save**.
 
 Everyone in that team will see the calendar under **Shared with me** in their sidebar.

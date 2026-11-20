@@ -107,7 +107,7 @@ export function FormDialogForm({
             ) : (
                 <DialogFooter>
                     {footerStart && (
-                        <fieldset disabled={pending} className="mr-auto flex gap-2">
+                        <fieldset disabled={pending} className="mr-auto flex gap-2 empty:hidden">
                             {footerStart}
                         </fieldset>
                     )}

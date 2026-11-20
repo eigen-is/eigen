@@ -1,7 +1,7 @@
 // New calendar and Edit calendar: Save and Enter wait for a name with more than spaces, Save creates or updates the
 // calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection.
 // Delete asks first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has
-// no Delete.
+// no Delete. Share with team sits in the footer after the trash, as in the Share dialog.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
@@ -41,7 +41,8 @@ mock.module('@workspace/lib/calendar', () => ({
     useUpdateCalendar: () => updateCalendar,
     useDeleteCalendar: () => deleteCalendar,
 }));
-mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: [] }) }));
+let myTeams: { id: string; name: string }[] = [];
+mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: myTeams }) }));
 mock.module('@workspace/lib/contacts', () => ({
     ...realContacts,
     useContactSuggestions: () => ({ suggestions: [], isLoading: false }),
@@ -93,6 +94,7 @@ beforeEach(() => {
     }
     onOpenChange.mockClear();
     unhandled.length = 0;
+    myTeams = [];
 });
 
 // The dialog under a parent that owns `open`, as the sidebar does.
@@ -229,4 +231,13 @@ test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes
 test('the default calendar has no Delete', async () => {
     await open(calendar({ isDefault: true }));
     expect(button(dialogTitled('Edit calendar'), 'Delete calendar')).toBeUndefined();
+});
+
+test('Share with team sits in the footer after the trash, as in the Share dialog', async () => {
+    myTeams = [{ id: 'crew', name: 'Crew' }];
+    await open(calendar({}));
+    const footer = dialogTitled('Edit calendar')?.querySelector('[data-slot="dialog-footer"]');
+    expect(
+        [...(footer?.querySelectorAll('button') ?? [])].map((b) => b.textContent || b.getAttribute('aria-label')),
+    ).toEqual(['Delete calendar', 'Share with team', 'Cancel', 'Save']);
 });
