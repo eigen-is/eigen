@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2383 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2382 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -697,7 +697,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (469)
+## Types (468)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1133,7 +1133,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
-| `LabelFormValues` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-dialog.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
 | `ColumnProps` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `SidebarBodyProps` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
