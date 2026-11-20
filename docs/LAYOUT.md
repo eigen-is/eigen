@@ -49,7 +49,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 **A wide dialog's footer has a line above it and stays in view.** `DialogFooter` in an `lg` dialog runs edge to edge under a top border and sticks to the bottom of the box while the body scrolls; the header has no line under it. A narrow dialog has no lines. The content box says its width as `data-size`, and the footer reads it through the `group/dialog` variant, so no caller passes a class for it. A wide box that holds a footer drops its bottom padding, and the footer's own padding takes its place. The footer has no negative bottom margin: a sticky box is kept inside its parent, so one that hangs 24px below a form's bottom is pushed 24px back up, over the last field. Content that should run edge to edge too, such as a picker's browser, takes `-mx-6` against the box's padding.
 
-**There is one footer.** Its right side holds Cancel and the main button. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, pushed there with `mr-auto`, as `FormDialogForm`'s `footerStart` does. On a phone the buttons stack, the main one on top.
+**There is one footer.** Its right side holds Cancel and the main button. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, pushed there with `mr-auto`, as `FormDialogForm`'s `footerStart` does. On a phone the buttons stack, the main one on top, and the left slot spans the width under them: its icons stay one row at the start, and a text button in it, such as Share with team, fills the row like Cancel. The title sits on the left at every width.
 
 ## A dialog never grows to fit what a user typed
 
