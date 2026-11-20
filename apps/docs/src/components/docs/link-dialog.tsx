@@ -34,7 +34,6 @@ export function LinkDialog({ open, onOpenChange, onCloseAutoFocus, ...target }: 
             open={open}
             onOpenChange={onOpenChange}
             title={target.href ? 'Edit link' : 'Insert link'}
-            size="md"
             onCloseAutoFocus={onCloseAutoFocus}
         >
             <LinkForm {...target} />

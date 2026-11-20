@@ -91,7 +91,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     };
 
     return (
-        <FormDialog {...dialogProps} title={link.originAddress ? 'Edit link' : 'Insert link'} size="md">
+        <FormDialog {...dialogProps} title={link.originAddress ? 'Edit link' : 'Insert link'}>
             <FormDialogForm
                 submitLabel="OK"
                 canSubmit={validity.isValid}

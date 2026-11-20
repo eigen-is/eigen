@@ -28,7 +28,7 @@ type CreateEventDialogProps = {
 
 export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCalendarId }: CreateEventDialogProps) {
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title="New event" size="md">
+        <FormDialog open={open} onOpenChange={onOpenChange} title="New event" size="lg">
             <CreateEventForm defaultDate={defaultDate} defaultCalendarId={defaultCalendarId} />
         </FormDialog>
     );

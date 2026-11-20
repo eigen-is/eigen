@@ -160,6 +160,8 @@ function NonModalShell({
         >
             <DialogContent
                 ref={measure}
+                // The picker sets its own width, inside the wide dialog's cap.
+                size="lg"
                 aria-describedby={undefined}
                 showCloseButton={false}
                 // A press on the grid, and the focus that moves there with it, picks a range. Neither may close the

@@ -154,7 +154,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
     };
 
     return (
-        <FormDialog {...dialogProps} title="Data validation" size="md">
+        <FormDialog {...dialogProps} title="Data validation">
             <FormDialogForm
                 submitLabel="OK"
                 onSubmit={apply}

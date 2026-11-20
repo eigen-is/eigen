@@ -31,12 +31,12 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
     );
 }
 
-type DialogSize = 'xs' | 'sm' | 'md' | 'lg';
+// Two widths, so a new dialog only asks whether it is a question or a page: sm for a confirm or a short form, lg for
+// what a user reads or picks from, such as a card, an event or a file picker.
+type DialogSize = 'sm' | 'lg';
 
 const dialogSizeMap: Record<DialogSize, string> = {
-    xs: 'sm:max-w-sm',
     sm: 'sm:max-w-md',
-    md: 'sm:max-w-lg',
     lg: 'sm:max-w-2xl',
 };
 
@@ -65,7 +65,7 @@ function OpenDialogContent({
     className,
     children,
     showCloseButton = true,
-    size,
+    size = 'sm',
     onEscapeKeyDown,
     onCloseAutoFocus,
     ref,
@@ -92,7 +92,7 @@ function OpenDialogContent({
                 // below its content: an auto column would grow to fit a very long title and push the footer's
                 // buttons out of the dialog.
                 'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-                size ? dialogSizeMap[size] : 'sm:max-w-xl',
+                dialogSizeMap[size],
                 className,
             )}
             onEscapeKeyDown={(e) => {

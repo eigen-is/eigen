@@ -25,7 +25,7 @@ export function FormatDialog({
     const dialogProps = useDialogProps();
 
     return (
-        <FormDialog {...dialogProps} title={title} size="md">
+        <FormDialog {...dialogProps} title={title} size="lg">
             <FormDialogForm
                 submitLabel="Apply"
                 canSubmit={canSubmit}

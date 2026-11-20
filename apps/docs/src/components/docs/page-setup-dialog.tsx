@@ -75,7 +75,7 @@ export function PageSetupDialog({
             open={open}
             onOpenChange={onOpenChange}
             title="Page setup"
-            size="md"
+            size="lg"
             onCloseAutoFocus={onCloseAutoFocus}
         >
             <PageSetupForm
@@ -291,7 +291,6 @@ export function HeadersAndFootersDialog({
             open={open}
             onOpenChange={onOpenChange}
             title="Headers and footers"
-            size="xs"
             onCloseAutoFocus={onCloseAutoFocus}
         >
             <HeadersAndFootersForm setup={setup} onSetupChange={onSetupChange} />

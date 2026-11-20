@@ -42,7 +42,7 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
     const reasonId = useId();
 
     return (
-        <FormDialog {...dialogProps} title={isRow ? 'Row height' : 'Column width'} size="md">
+        <FormDialog {...dialogProps} title={isRow ? 'Row height' : 'Column width'}>
             <FormDialogForm
                 submitLabel="OK"
                 canSubmit={canSubmit}

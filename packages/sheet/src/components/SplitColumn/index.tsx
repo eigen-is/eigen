@@ -60,7 +60,7 @@ export function SplitColumn() {
     };
 
     return (
-        <FormDialog {...dialogProps} title="Split text" size="md">
+        <FormDialog {...dialogProps} title="Split text">
             <FormDialogForm submitLabel="OK" onSubmit={split}>
                 <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
                     <div>Separators</div>

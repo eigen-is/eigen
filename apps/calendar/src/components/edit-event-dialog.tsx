@@ -249,7 +249,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 open={open && !showRecurringDialog && !showMoveConfirm}
                 onOpenChange={onOpenChange}
                 title="Edit event"
-                size="md"
+                size="lg"
             >
                 <FormDialogForm
                     canSubmit={title.trim() !== '' && (!isPartOfSeries || !!master)}

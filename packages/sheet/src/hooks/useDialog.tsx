@@ -37,7 +37,7 @@ function NoticeDialog({ type, onOk, children }: { type: 'ok' | 'yesno'; onOk?: (
     const close = () => dialogProps.onOpenChange(false);
 
     return (
-        <FormDialog {...dialogProps} title="Notice" size="md">
+        <FormDialog {...dialogProps} title="Notice">
             <DialogDescription className="text-foreground">{children}</DialogDescription>
             <DialogFooter>
                 {type === 'yesno' && (

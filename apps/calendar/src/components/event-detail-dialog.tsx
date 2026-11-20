@@ -179,7 +179,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
                 onOpenChange={onOpenChange}
             >
-                <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
+                <DialogContent size="lg" onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
                         <DialogTitle className="text-xl">{event.title}</DialogTitle>
                         <DialogDescription className="sr-only">

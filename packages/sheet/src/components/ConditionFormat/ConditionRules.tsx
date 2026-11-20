@@ -64,7 +64,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const percent = type === 'top10_percent' || type === 'last10_percent';
 
     return (
-        <FormDialog {...dialogProps} title={label} description={description} size="md">
+        <FormDialog {...dialogProps} title={label} description={description}>
             <FormDialogForm
                 submitLabel="OK"
                 onSubmit={() => {

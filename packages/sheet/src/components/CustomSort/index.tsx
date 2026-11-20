@@ -45,7 +45,7 @@ export function CustomSort({ selection }: { selection: Selection }) {
     }
 
     return (
-        <FormDialog {...dialogProps} title="Custom sort" size="md">
+        <FormDialog {...dialogProps} title="Custom sort">
             <FormDialogForm
                 submitLabel="Sort"
                 onSubmit={() =>
