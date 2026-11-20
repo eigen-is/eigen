@@ -4,10 +4,9 @@
 
 import type { CellLinkType } from '@workspace/lib/sheets';
 import { isCellLinkType } from '@workspace/lib/sheets';
-import { FieldError } from '@workspace/ui/components/field';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
@@ -96,88 +95,86 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 canSubmit={validity.isValid}
                 onSubmit={() => setContext((ctx) => saveHyperlink(ctx, r, c, linkText, linkType, linkAddress))}
             >
-                <div className="space-y-3">
-                    <LinkTextField value={linkText} onValueChange={setLinkText} autoFocus />
-                    <div className="space-y-1.5">
-                        <Label htmlFor="link-type">Link type</Label>
+                <LinkTextField value={linkText} onValueChange={setLinkText} autoFocus />
+                <Field>
+                    <FieldLabel htmlFor="link-type">Link type</FieldLabel>
+                    <Select
+                        value={linkType}
+                        onValueChange={(value) => {
+                            if (!isCellLinkType(value)) return;
+                            if (value === 'cellrange') {
+                                pickRange({ text: linkText, type: value, address: '' });
+                                return;
+                            }
+                            if (value === 'sheet') {
+                                if (!linkText) setLinkText(context.sheets[0].name);
+                                setLinkAddress(context.sheets[0].name);
+                            } else {
+                                setLinkAddress('');
+                            }
+                            setLinkType(value);
+                        }}
+                    >
+                        <SelectTrigger id="link-type" size="sm" className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {LINK_TYPES.map((type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                    {type.text}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </Field>
+                {linkType === 'webpage' && <LinkAddressField value={linkAddress} onValueChange={setLinkAddress} />}
+                {linkType === 'cellrange' && (
+                    <Field>
+                        <FieldLabel htmlFor="link-cell">Cell range</FieldLabel>
+                        <div className="relative">
+                            <Input
+                                id="link-cell"
+                                aria-describedby={validity.tooltip ? refusalId : undefined}
+                                className={cn('pr-9', validity.tooltip && 'border-destructive')}
+                                spellCheck="false"
+                                value={linkAddress}
+                                onChange={(e) => setLinkAddress(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                aria-label="Select cell range"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+                                onClick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
+                            >
+                                <Grid3x3 className="size-4" aria-hidden="true" />
+                            </button>
+                        </div>
+                        {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
+                    </Field>
+                )}
+                {linkType === 'sheet' && (
+                    <Field>
+                        <FieldLabel htmlFor="link-sheet">Worksheet</FieldLabel>
                         <Select
-                            value={linkType}
+                            value={linkAddress}
                             onValueChange={(value) => {
-                                if (!isCellLinkType(value)) return;
-                                if (value === 'cellrange') {
-                                    pickRange({ text: linkText, type: value, address: '' });
-                                    return;
-                                }
-                                if (value === 'sheet') {
-                                    if (!linkText) setLinkText(context.sheets[0].name);
-                                    setLinkAddress(context.sheets[0].name);
-                                } else {
-                                    setLinkAddress('');
-                                }
-                                setLinkType(value);
+                                if (!linkText) setLinkText(value);
+                                setLinkAddress(value);
                             }}
                         >
-                            <SelectTrigger id="link-type" size="sm" className="w-full">
+                            <SelectTrigger id="link-sheet" size="sm" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {LINK_TYPES.map((type) => (
-                                    <SelectItem key={type.value} value={type.value}>
-                                        {type.text}
+                                {context.sheets.map((sheet) => (
+                                    <SelectItem key={sheet.id} value={sheet.name}>
+                                        {sheet.name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
-                    {linkType === 'webpage' && <LinkAddressField value={linkAddress} onValueChange={setLinkAddress} />}
-                    {linkType === 'cellrange' && (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="link-cell">Cell range</Label>
-                            <div className="relative">
-                                <Input
-                                    id="link-cell"
-                                    aria-describedby={validity.tooltip ? refusalId : undefined}
-                                    className={cn('pr-9', validity.tooltip && 'border-destructive')}
-                                    spellCheck="false"
-                                    value={linkAddress}
-                                    onChange={(e) => setLinkAddress(e.target.value)}
-                                />
-                                <button
-                                    type="button"
-                                    aria-label="Select cell range"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                                    onClick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
-                                >
-                                    <Grid3x3 className="size-4" aria-hidden="true" />
-                                </button>
-                            </div>
-                            {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
-                        </div>
-                    )}
-                    {linkType === 'sheet' && (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="link-sheet">Worksheet</Label>
-                            <Select
-                                value={linkAddress}
-                                onValueChange={(value) => {
-                                    if (!linkText) setLinkText(value);
-                                    setLinkAddress(value);
-                                }}
-                            >
-                                <SelectTrigger id="link-sheet" size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {context.sheets.map((sheet) => (
-                                        <SelectItem key={sheet.id} value={sheet.name}>
-                                            {sheet.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-                </div>
+                    </Field>
+                )}
             </FormDialogForm>
         </FormDialog>
     );

@@ -2,9 +2,9 @@
 // list of functions, with one highlighted. OK opens the in-cell editor on the focus cell with that function's name and
 // an open bracket, so the user types its arguments next.
 
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useScrollToIndex } from '@workspace/ui/hooks/use-scroll-to-index';
 import { cn } from '@workspace/ui/lib/utils';
@@ -68,8 +68,8 @@ export function InsertFunctionDialog() {
         <FormDialog {...dialogProps} title="Select a function">
             <FormDialogForm submitLabel="OK" canSubmit={functions.length > 0} onSubmit={insert}>
                 <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="search-function">Search function</Label>
+                    <Field>
+                        <FieldLabel htmlFor="search-function">Search function</FieldLabel>
                         <Input
                             id="search-function"
                             placeholder="Function name or brief description of function"
@@ -86,9 +86,9 @@ export function InsertFunctionDialog() {
                                 setHighlight((i) => Math.max(0, Math.min(i + step, functions.length - 1)));
                             }}
                         />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="function-category">Or select a category</Label>
+                    </Field>
+                    <Field className="w-[160px]">
+                        <FieldLabel htmlFor="function-category">Or select a category</FieldLabel>
                         <Select
                             value={String(category)}
                             onValueChange={(value) => {
@@ -96,7 +96,7 @@ export function InsertFunctionDialog() {
                                 setHighlight(0);
                             }}
                         >
-                            <SelectTrigger id="function-category" className="w-[160px]">
+                            <SelectTrigger id="function-category">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -107,7 +107,7 @@ export function InsertFunctionDialog() {
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
+                    </Field>
                 </div>
                 <div ref={listRef} className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
                     {functions.map((fn, index) => (

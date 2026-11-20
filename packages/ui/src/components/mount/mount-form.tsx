@@ -9,9 +9,9 @@ import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { useState } from 'react';
+import { Field, FieldDescription, FieldLabel } from '../field';
 import { FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
-import { Label } from '../label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
 import { S3ConfigCard } from './s3-config-card';
 
@@ -60,8 +60,8 @@ export function MountForm({
                 onSubmit({ name: name.trim(), storageType, maxSizeMB, s3Config: isS3 ? s3Config : undefined })
             }
         >
-            <div className="space-y-1.5">
-                <Label htmlFor="mount-name">Name</Label>
+            <Field>
+                <FieldLabel htmlFor="mount-name">Name</FieldLabel>
                 <Input
                     id="mount-name"
                     value={name}
@@ -69,10 +69,10 @@ export function MountForm({
                     placeholder="e.g. shared files"
                     autoFocus={!isEdit}
                 />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-                <Label htmlFor="mount-storage-type">Storage type</Label>
+            <Field>
+                <FieldLabel htmlFor="mount-storage-type">Storage type</FieldLabel>
                 <Select
                     value={storageType}
                     onValueChange={(value) => isStorageType(value) && setStorageType(value)}
@@ -89,11 +89,11 @@ export function MountForm({
                         ))}
                     </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{STORAGE_TYPE_HINTS[storageType]}</p>
-            </div>
+                <FieldDescription>{STORAGE_TYPE_HINTS[storageType]}</FieldDescription>
+            </Field>
 
-            <div className="space-y-1.5">
-                <Label htmlFor="mount-max-size">Max size (MB)</Label>
+            <Field>
+                <FieldLabel htmlFor="mount-max-size">Max size (MB)</FieldLabel>
                 <Input
                     id="mount-max-size"
                     type="number"
@@ -101,7 +101,7 @@ export function MountForm({
                     value={maxSizeMB}
                     onChange={(e) => setMaxSizeMB(e.target.valueAsNumber || QUOTA_MIN_MB)}
                 />
-            </div>
+            </Field>
 
             {isS3 && (
                 <S3ConfigCard

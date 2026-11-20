@@ -5,9 +5,8 @@
 import { webLinkHref } from '@workspace/lib/validation';
 import { useId } from 'react';
 import { cn } from '../lib/utils';
-import { FieldError } from './field';
+import { Field, FieldError, FieldLabel } from './field';
 import { Input } from './input';
-import { Label } from './label';
 
 type LinkFieldProps = {
     value: string;
@@ -17,8 +16,8 @@ type LinkFieldProps = {
 
 export function LinkTextField({ value, onValueChange, autoFocus, disabled }: LinkFieldProps & { disabled?: boolean }) {
     return (
-        <div className="space-y-1.5">
-            <Label htmlFor="link-text">Display text</Label>
+        <Field>
+            <FieldLabel htmlFor="link-text">Display text</FieldLabel>
             <Input
                 id="link-text"
                 spellCheck="false"
@@ -27,7 +26,7 @@ export function LinkTextField({ value, onValueChange, autoFocus, disabled }: Lin
                 value={value}
                 onChange={(e) => onValueChange(e.target.value)}
             />
-        </div>
+        </Field>
     );
 }
 
@@ -35,8 +34,8 @@ export function LinkAddressField({ value, onValueChange, autoFocus }: LinkFieldP
     const refused = value.trim() !== '' && webLinkHref(value) == null;
     const refusalId = useId();
     return (
-        <div className="space-y-1.5">
-            <Label htmlFor="link-address">Link address</Label>
+        <Field>
+            <FieldLabel htmlFor="link-address">Link address</FieldLabel>
             <Input
                 id="link-address"
                 autoFocus={autoFocus}
@@ -47,6 +46,6 @@ export function LinkAddressField({ value, onValueChange, autoFocus }: LinkFieldP
                 onChange={(e) => onValueChange(e.target.value)}
             />
             {refused && <FieldError id={refusalId}>Please enter a valid link</FieldError>}
-        </div>
+        </Field>
     );
 }

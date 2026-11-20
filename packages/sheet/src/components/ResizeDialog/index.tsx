@@ -1,7 +1,7 @@
 // The Row height and Column width dialog, opened from a row or column header's menu. It sets every selected row or
 // column to one size in pixels, and opens on their size when they all share one.
 
-import { FieldError } from '@workspace/ui/components/field';
+import { Field, FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useContext, useId, useMemo, useState } from 'react';
@@ -55,7 +55,7 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
                     })
                 }
             >
-                <div>
+                <Field>
                     <div className="flex items-center gap-2">
                         <Input
                             type="number"
@@ -70,11 +70,9 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
                         <span className="text-sm text-muted-foreground">px</span>
                     </div>
                     {refused && (
-                        <FieldError id={reasonId} className="mt-1.5">
-                            {`Enter a value between 1 and ${MAX_SIZE[mode]}.`}
-                        </FieldError>
+                        <FieldError id={reasonId}>{`Enter a value between 1 and ${MAX_SIZE[mode]}.`}</FieldError>
                     )}
-                </div>
+                </Field>
             </FormDialogForm>
         </FormDialog>
     );

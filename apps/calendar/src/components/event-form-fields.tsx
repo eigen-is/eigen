@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useId } from 'react';
 import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, toTimeString } from './time-select';
@@ -72,6 +73,7 @@ export function EventFormFields({
     attendeesSection,
     detailsDisabled,
 }: EventFormFieldsProps) {
+    const id = useId();
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
         const end = endForStart(new Date(`${startDate}T${newStart}`), { date: endDate, time: endTime });
@@ -89,7 +91,11 @@ export function EventFormFields({
     return (
         <div className="space-y-4">
             <div>
+                <Label htmlFor={`${id}-title`} className="sr-only">
+                    Title
+                </Label>
                 <Input
+                    id={`${id}-title`}
                     placeholder="Add title"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -104,7 +110,11 @@ export function EventFormFields({
                 <div className="flex-1 space-y-3">
                     {allDay ? (
                         <div className="flex flex-wrap items-center gap-2">
+                            <Label htmlFor={`${id}-start-date`} className="sr-only">
+                                Start date
+                            </Label>
                             <Input
+                                id={`${id}-start-date`}
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => {
@@ -115,7 +125,11 @@ export function EventFormFields({
                                 className="flex-1 min-w-fit h-8 text-sm"
                             />
                             <span className="text-muted-foreground text-sm">to</span>
+                            <Label htmlFor={`${id}-end-date`} className="sr-only">
+                                End date
+                            </Label>
                             <Input
+                                id={`${id}-end-date`}
                                 type="date"
                                 value={endDate}
                                 min={startDate}
@@ -126,7 +140,11 @@ export function EventFormFields({
                         </div>
                     ) : (
                         <div className="flex flex-wrap items-center gap-2">
+                            <Label htmlFor={`${id}-start-date`} className="sr-only">
+                                Start date
+                            </Label>
                             <Input
+                                id={`${id}-start-date`}
                                 type="date"
                                 value={startDate}
                                 onChange={(e) => {
@@ -136,9 +154,21 @@ export function EventFormFields({
                                 disabled={detailsDisabled}
                                 className="h-8 text-sm"
                             />
-                            <TimeSelect value={startTime} onChange={handleStartTimeChange} disabled={detailsDisabled} />
-                            <span className="text-muted-foreground text-sm">–</span>
+                            <Label htmlFor={`${id}-start-time`} className="sr-only">
+                                Start time
+                            </Label>
                             <TimeSelect
+                                id={`${id}-start-time`}
+                                value={startTime}
+                                onChange={handleStartTimeChange}
+                                disabled={detailsDisabled}
+                            />
+                            <span className="text-muted-foreground text-sm">–</span>
+                            <Label htmlFor={`${id}-end-time`} className="sr-only">
+                                End time
+                            </Label>
+                            <TimeSelect
+                                id={`${id}-end-time`}
                                 value={endTime}
                                 onChange={handleEndTimeChange}
                                 referenceTime={startTime}
@@ -189,7 +219,11 @@ export function EventFormFields({
 
             <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
+                <Label htmlFor={`${id}-location`} className="sr-only">
+                    Location
+                </Label>
                 <Input
+                    id={`${id}-location`}
                     placeholder="Add location"
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
@@ -200,7 +234,11 @@ export function EventFormFields({
 
             <div className="flex items-start gap-3">
                 <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
+                <Label htmlFor={`${id}-description`} className="sr-only">
+                    Description
+                </Label>
                 <Textarea
+                    id={`${id}-description`}
                     placeholder="Add description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -213,8 +251,11 @@ export function EventFormFields({
             {calendarOptions.length > 1 && (
                 <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <Label htmlFor={`${id}-calendar`} className="sr-only">
+                        Calendar
+                    </Label>
                     <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
-                        <SelectTrigger className="flex-1 min-w-0">
+                        <SelectTrigger id={`${id}-calendar`} className="flex-1 min-w-0">
                             <SelectValue placeholder="Select calendar" />
                         </SelectTrigger>
                         <SelectContent>

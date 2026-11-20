@@ -4,6 +4,7 @@
 
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Checkbox } from '@workspace/ui/components/checkbox';
+import { FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
@@ -58,43 +59,43 @@ export function CustomSort({ selection }: { selection: Selection }) {
                     Sort range from {toA1(range.row[0], columnStart)} to {toA1(range.row[1], columnEnd)}
                 </p>
 
-                <div className="space-y-2.5">
-                    <Label className="flex items-center gap-1.5">
-                        <Checkbox checked={hasHeaderRow} onCheckedChange={(v) => setHasHeaderRow(v === true)} />
-                        Data has a header row
-                    </Label>
+                <Label className="flex items-center gap-1.5">
+                    <Checkbox checked={hasHeaderRow} onCheckedChange={(v) => setHasHeaderRow(v === true)} />
+                    Data has a header row
+                </Label>
 
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 flex-1">
-                            <span>Sort by</span>
-                            <Select value={sortColumn} onValueChange={setSortColumn}>
-                                <SelectTrigger size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {columns.map(({ offset, label }) => (
-                                        <SelectItem value={String(offset)} key={offset}>
-                                            {label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <RadioGroup
-                            value={ascending ? 'asc' : 'desc'}
-                            onValueChange={(v) => setAscending(v === 'asc')}
-                            className="gap-1.5"
-                        >
-                            <Label className="flex items-center gap-1.5">
-                                <RadioGroupItem value="asc" />
-                                Ascending
-                            </Label>
-                            <Label className="flex items-center gap-1.5">
-                                <RadioGroupItem value="desc" />
-                                Descending
-                            </Label>
-                        </RadioGroup>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-1">
+                        <FieldLabel htmlFor="custom-sort-column" className="shrink-0">
+                            Sort by
+                        </FieldLabel>
+                        <Select value={sortColumn} onValueChange={setSortColumn}>
+                            <SelectTrigger id="custom-sort-column" size="sm" className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {columns.map(({ offset, label }) => (
+                                    <SelectItem value={String(offset)} key={offset}>
+                                        {label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
+                    <RadioGroup
+                        value={ascending ? 'asc' : 'desc'}
+                        onValueChange={(v) => setAscending(v === 'asc')}
+                        className="gap-1.5"
+                    >
+                        <Label className="flex items-center gap-1.5">
+                            <RadioGroupItem value="asc" />
+                            Ascending
+                        </Label>
+                        <Label className="flex items-center gap-1.5">
+                            <RadioGroupItem value="desc" />
+                            Descending
+                        </Label>
+                    </RadioGroup>
                 </div>
             </FormDialogForm>
         </FormDialog>

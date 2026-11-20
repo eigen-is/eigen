@@ -9,6 +9,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -75,47 +76,45 @@ function EmailCollaboratorsForm({ path, signature }: { path: DrivePath; signatur
                 });
             }}
         >
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="email-subject">Subject</Label>
-                    <Input
-                        id="email-subject"
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        // An email can't be taken back, so Enter in the subject doesn't send it.
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') e.preventDefault();
-                        }}
-                        maxLength={SUBJECT_LIMIT}
+            <Field>
+                <FieldLabel htmlFor="email-subject">Subject</FieldLabel>
+                <Input
+                    id="email-subject"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    // An email can't be taken back, so Enter in the subject doesn't send it.
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.preventDefault();
+                    }}
+                    maxLength={SUBJECT_LIMIT}
+                />
+            </Field>
+            <Field>
+                <FieldLabel>Message</FieldLabel>
+                <div className="rounded-md border">
+                    <LightEditor
+                        content={message}
+                        onChange={setMessage}
+                        onChangeText={setMessageText}
+                        onReady={({ text }) => setSeedText(text)}
+                        placeholder="Write a message..."
+                        className="px-3 py-2"
+                        containerClassName="min-h-[180px] flex flex-col"
                     />
                 </div>
-                <div className="space-y-2">
-                    <Label>Message</Label>
-                    <div className="rounded-md border">
-                        <LightEditor
-                            content={message}
-                            onChange={setMessage}
-                            onChangeText={setMessageText}
-                            onReady={({ text }) => setSeedText(text)}
-                            placeholder="Write a message..."
-                            className="px-3 py-2"
-                            containerClassName="min-h-[180px] flex flex-col"
-                        />
-                    </div>
-                    <div className="text-xs text-muted-foreground text-right">
-                        {messageText.length.toLocaleString()}/{MESSAGE_TEXT_LIMIT.toLocaleString()}
-                    </div>
+                <div className="text-xs text-muted-foreground text-right">
+                    {messageText.length.toLocaleString()}/{MESSAGE_TEXT_LIMIT.toLocaleString()}
                 </div>
-                <div className="flex items-center gap-2">
-                    <Checkbox
-                        id="email-copy-self"
-                        checked={sendCopyToSelf}
-                        onCheckedChange={(v) => setSendCopyToSelf(v === true)}
-                    />
-                    <Label htmlFor="email-copy-self" className="text-sm font-normal">
-                        Send copy to self
-                    </Label>
-                </div>
+            </Field>
+            <div className="flex items-center gap-2">
+                <Checkbox
+                    id="email-copy-self"
+                    checked={sendCopyToSelf}
+                    onCheckedChange={(v) => setSendCopyToSelf(v === true)}
+                />
+                <Label htmlFor="email-copy-self" className="text-sm font-normal">
+                    Send copy to self
+                </Label>
             </div>
             <p className="text-xs text-muted-foreground">A link to the document will be included in the message</p>
         </FormDialogForm>
