@@ -1,8 +1,10 @@
-// The comment thread beside a card, such as a sticky's: the messages of its chat room, the composer, and the dialog
-// that deletes a message. It finds the chat room by name in the document's chat folder.
+// The comment thread under a card, such as a sticky's: the card itself on top, the Activity of its chat room below it
+// in one scroll, the composer pinned under both, and the dialog that deletes a message. It fills the height its host
+// gives it, such as a dialog's. It finds the chat room by name in the document's chat folder.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
+import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import type { ChatMessageInputHandle } from '../chat/chat-message-input';
@@ -18,10 +20,12 @@ type CommentThreadProps = {
     // The container this comment sits in: its notifications are tagged with that path, not the chat's.
     pathId: string;
     chatName: string;
+    // The card the thread belongs to, drawn above the messages.
+    lead?: ReactNode;
     className?: string;
 };
 
-export function CommentThread({ ownerId, mountId, pathId, chatName, className }: CommentThreadProps) {
+export function CommentThread({ ownerId, mountId, pathId, chatName, lead, className }: CommentThreadProps) {
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
@@ -29,7 +33,8 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
     // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
     if (!chatId) {
         return (
-            <div className={cn('h-[50vh] min-h-0', className)}>
+            <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', className)}>
+                {lead}
                 <LoadingState />
             </div>
         );
@@ -42,6 +47,7 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, className }:
             mountId={mountId}
             pathId={pathId}
             chatId={chatId}
+            lead={lead}
             className={className}
         />
     );
@@ -52,6 +58,7 @@ function CommentThreadInner({
     mountId,
     pathId,
     chatId,
+    lead,
     className,
 }: { chatId: string } & Omit<CommentThreadProps, 'chatName'>) {
     const chat = useChatRoom(ownerId, mountId, chatId, pathId);
@@ -62,8 +69,16 @@ function CommentThreadInner({
     return (
         // Overflow stays visible, so the input's @-mention list can reach above the thread. min-h-0 lets this flex
         // item shrink below its content. Without it the list never scrolls, and the input ends up below the dialog.
-        <div className={cn('flex flex-col h-[50vh] min-h-0', className)}>
+        <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
             <ChatMessageList
+                lead={
+                    <>
+                        {lead}
+                        {chat.messages.some((message) => !message.deletedAt) && (
+                            <h3 className="eigen-section-label app-gutter-x mt-2 mb-2">Activity</h3>
+                        )}
+                    </>
+                }
                 messages={chat.messages}
                 isLoading={chat.isLoading}
                 currentUserEmail={chat.currentUserEmail}

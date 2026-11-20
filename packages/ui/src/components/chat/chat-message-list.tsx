@@ -1,7 +1,8 @@
 // A chat's messages, oldest at the top: each with its author and time, its attachments, and an inline editor for
 // the one being edited. A message's own actions, such as Edit and Delete, sit in a bar shown on hover and in the
 // menu a right-click or a long press opens. The list scrolls to a new message at the end and asks for older ones
-// near the top. Its caller, such as the chat page or a comment thread, passes in the messages and the handlers.
+// near the top. Its caller, such as the chat page or a comment thread, passes in the messages and the handlers. A
+// caller can put content above the messages that scrolls with them, such as the card a comment thread belongs to.
 
 import { formatDateTime } from '@workspace/lib/date';
 import { useAttachmentSubjects } from '@workspace/lib/drive';
@@ -10,6 +11,7 @@ import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { UserNameCard } from '@workspace/ui/components/user/user-name-card';
 import { Download, Pencil, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
@@ -36,6 +38,9 @@ type ChatMessageListProps = {
     mountId?: string;
     mediaFolderId?: string | null;
     className?: string;
+    // Scrolls with the messages, above them. A list with a lead opens at the top, on the lead, not at the newest
+    // message.
+    lead?: ReactNode;
     emptyMessage?: string;
     hasOlderMessages?: boolean;
     isFetchingOlderMessages?: boolean;
@@ -64,6 +69,7 @@ export function ChatMessageList({
     mountId,
     mediaFolderId,
     className,
+    lead,
     emptyMessage = 'No messages yet. Start the conversation!',
     hasOlderMessages,
     isFetchingOlderMessages,
@@ -114,12 +120,13 @@ export function ChatMessageList({
         });
     }, []);
 
+    const opensAtTop = lead !== undefined;
     useEffect(() => {
         if (messages.length > 0 && isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
-            scrollToBottom();
+            if (!opensAtTop) scrollToBottom();
         }
-    }, [messages.length, scrollToBottom]);
+    }, [messages.length, opensAtTop, scrollToBottom]);
 
     // A new message at the end scrolls the list down when the user sent it or was near the bottom. The scroll handler
     // records whether the user was near the bottom. Measuring here would include the message just drawn, and a tall
@@ -158,10 +165,6 @@ export function ChatMessageList({
         return () => container.removeEventListener('scroll', handleScroll);
     }, [handleScroll]);
 
-    if (isLoading) {
-        return <LoadingState />;
-    }
-
     const renderAttachments = (message: ChatMessage) => {
         if (!message.attachments || message.attachments.length === 0) return null;
 
@@ -192,10 +195,20 @@ export function ChatMessageList({
         );
     };
 
-    if (messages.length === 0) {
+    // The scroller is drawn while loading too, so the scroll listener finds it on mount.
+    if (isLoading || messages.length === 0) {
         return (
-            <div className={cn('flex items-center justify-center flex-1', className)}>
-                <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+            <div ref={scrollRef} className={cn('flex flex-col flex-1 overflow-y-auto relative', className)}>
+                {lead}
+                {isLoading ? (
+                    <LoadingState />
+                ) : (
+                    emptyMessage && (
+                        <div className="flex flex-1 items-center justify-center">
+                            <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+                        </div>
+                    )
+                )}
             </div>
         );
     }
@@ -205,6 +218,7 @@ export function ChatMessageList({
 
     return (
         <div ref={scrollRef} className={cn('flex-1 overflow-y-auto relative', className)}>
+            {lead}
             {isFetchingOlderMessages && (
                 <div className="flex justify-center py-3">
                     <EigenLoader />

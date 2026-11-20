@@ -1,40 +1,35 @@
-import type { ChatAttachment } from '@workspace/lib/types/chat';
+// The dialog that adds a comment card or a sticky: the card form under the host's title, such as "Add comment" in docs
+// or a new sticky on a board. It is as wide as the dialog an existing card opens into, so a card looks the same being
+// made as being read. The host saves the card; the dialog closes once that resolves.
+
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent } from '../dialog';
 import { CardForm } from './card-form';
 
 type CardFormDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    mode?: 'create' | 'edit';
+    dialogTitle: string;
+    submitLabel: string;
     initialTitle?: string;
-    initialDescription?: string;
-    initialColor?: string;
     allowAttachments?: boolean;
-    initialAttachments?: ChatAttachment[];
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    initialAssignee?: string | null;
     onSave: (
         patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
         assignee?: string | null,
     ) => void | Promise<void>;
-    dialogTitle?: string;
-    placeholderTitle?: string;
-    placeholderDescription?: string;
-    submitLabel?: string;
 };
 
-export function CardFormDialog({ open, onOpenChange, onSave, dialogTitle = 'New card', ...rest }: CardFormDialogProps) {
+export function CardFormDialog({ open, onOpenChange, onSave, ...rest }: CardFormDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="md">
+            <DialogContent size="lg">
                 {open && (
                     <CardForm
                         {...rest}
-                        dialogTitle={dialogTitle}
                         onSave={async (patch, attachments, assignee) => {
                             await onSave(patch, attachments, assignee);
                             onOpenChange(false);

@@ -1,6 +1,7 @@
 // Ticking the last box of a card's checklist celebrates: once per opening, only for a list of two or more,
 // only on the tick itself, and never with the setting off. The chance is forced to win throughout. Each click
-// is saved and drawn again, as a card's parent does, which replaces the boxes in the page.
+// is saved and drawn again, as a card's parent does, which replaces the boxes in the page. A closed card is an
+// unmounted one, as in a dialog.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
@@ -17,7 +18,8 @@ mock.module('@workspace/lib/space', () => ({
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const confetti = await import('../../../components/celebrate/confetti-burst');
-const { NoteCardDialog } = await import('../../../components/notes/note-card-dialog');
+const { NoteCardActions } = await import('../../../components/notes/note-card-actions');
+const { NoteCardContent } = await import('../../../components/notes/note-card-content');
 
 const burst = spyOn(confetti, 'burstConfetti').mockImplementation(() => {});
 const roll = spyOn(Math, 'random').mockReturnValue(0);
@@ -38,17 +40,16 @@ function render(open: boolean, description: string) {
     saved = description;
     act(() =>
         root.render(
-            createElement(NoteCardDialog, {
-                open,
-                onOpenChange: () => {},
-                title: 'Shed',
-                description,
-                canWrite: true,
-                onDescriptionChange: (html: string) => {
-                    saved = html;
-                },
-                children: null,
-            }),
+            open
+                ? createElement(NoteCardContent, {
+                      title: 'Shed',
+                      description,
+                      canWrite: true,
+                      onDescriptionChange: (html: string) => {
+                          saved = html;
+                      },
+                  })
+                : null,
         ),
     );
 }
@@ -63,7 +64,9 @@ beforeEach(() => {
     settings = {};
     burst.mockClear();
     window.happyDOM.settings.device.prefersReducedMotion = 'no-preference';
-    root = createRoot(document.createElement('div'));
+    const container = document.createElement('div');
+    document.body.replaceChildren(container);
+    root = createRoot(container);
     render(false, twoItems);
 });
 afterEach(() => act(() => root.unmount()));
@@ -133,19 +136,7 @@ test('the setting off does not celebrate', () => {
     expect(burst).not.toHaveBeenCalled();
 });
 
-test('the actions under the description are named buttons', () => {
-    act(() =>
-        root.render(
-            createElement(NoteCardDialog, {
-                open: true,
-                onOpenChange: () => {},
-                title: 'Shed',
-                description: '',
-                canWrite: true,
-                onEdit: () => {},
-                children: null,
-            }),
-        ),
-    );
+test("the card's actions are named buttons", () => {
+    act(() => root.render(createElement(NoteCardActions, { onEdit: () => {} })));
     expect(document.querySelector('button[aria-label="Edit"]')).not.toBeNull();
 });

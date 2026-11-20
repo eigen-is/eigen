@@ -1,7 +1,7 @@
-// The dialog a comment card opens into, in every host: the card's title, description and attachments, its assignee
-// and resolve controls, the edit form in place, and the card's thread below. A deleted comment opens the deleted
-// state instead, with nothing that acts. The host's comment lifecycle decides which state a card is in, and it does
-// the writes this dialog asks for.
+// The dialog a comment card opens into, in every host: its link, edit and resolve actions in the top bar, then the
+// card's title, description, attachments and assignee with its thread below in one scroll, or the edit form in place.
+// A deleted comment opens the deleted state instead, with nothing that acts. The host's comment lifecycle decides
+// which state a card is in, and it does the writes this dialog asks for.
 
 import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
@@ -27,6 +27,8 @@ import { ContextMenuAnchor } from '../context-menu';
 import { Dialog, DialogContent, DialogTitle } from '../dialog';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
+import { NoteCardActions } from '../notes/note-card-actions';
+import { NoteCardContent } from '../notes/note-card-content';
 import { NoteCardDialog } from '../notes/note-card-dialog';
 import { CardForm } from './card-form';
 
@@ -148,7 +150,7 @@ export function CardDialog({
                     <button
                         type="button"
                         // items-baseline lines the name up with the Created by text. The avatar centers itself.
-                        className="-my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
+                        className="-mx-1 -my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
                     >
                         {assignee ? (
                             <AssigneeChip email={assignee} />
@@ -167,15 +169,23 @@ export function CardDialog({
         }
     }
 
+    // One line, read left to right: who made the card, who it is for, and a check once it is resolved, as on the board.
+    const resolved = status === 'resolved';
     const meta =
-        card.creator || assigneeControl ? (
-            <span className="flex items-center gap-2">
+        card.creator || assigneeControl || resolved ? (
+            <span className="flex min-w-0 items-center gap-1.5 [&>*+*]:before:mr-1.5 [&>*+*]:before:content-['·']">
                 {card.creator && (
                     <span className="min-w-0 truncate">
                         <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />
                     </span>
                 )}
-                {assigneeControl && <span className="ml-auto shrink-0">{assigneeControl}</span>}
+                {assigneeControl && <span className="shrink-0">{assigneeControl}</span>}
+                {resolved && (
+                    <span className="shrink-0">
+                        <Check className="mr-1 inline h-3 w-3 align-[-0.125em]" />
+                        Resolved
+                    </span>
+                )}
             </span>
         ) : undefined;
 
@@ -202,18 +212,13 @@ export function CardDialog({
             />
         ) : undefined;
 
-    return (
-        <NoteCardDialog
-            open={open}
-            onOpenChange={handleOpenChange}
+    const content = (
+        <NoteCardContent
             title={card.title}
             description={card.description}
             meta={meta}
             color={card.color}
             canWrite={canWrite}
-            onEdit={canEdit ? () => onEditingChange(true) : undefined}
-            editForm={editForm}
-            copyLinkUrl={copyLinkUrl}
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (
@@ -243,19 +248,40 @@ export function CardDialog({
                     </>
                 ) : undefined
             }
-            {...action}
+        />
+    );
+
+    let body: React.ReactNode;
+    if (editForm) {
+        // The form scrolls inside on short viewports, and the thread hides while it is open.
+        body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col pb-6">{editForm}</div>;
+    } else if (chatName) {
+        body = <CommentThread ownerId={ownerId} mountId={mountId} pathId={pathId} chatName={chatName} lead={content} />;
+    } else {
+        body = (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                {content}
+                <p className="app-gutter-x pb-4 text-sm text-muted-foreground">No chat available for this card.</p>
+            </div>
+        );
+    }
+
+    return (
+        <NoteCardDialog
+            open={open}
+            onOpenChange={handleOpenChange}
+            title={card.title}
+            actions={
+                !editForm && (
+                    <NoteCardActions
+                        copyLinkUrl={copyLinkUrl}
+                        onEdit={canEdit ? () => onEditingChange(true) : undefined}
+                        {...action}
+                    />
+                )
+            }
         >
-            {chatName ? (
-                <CommentThread
-                    ownerId={ownerId}
-                    mountId={mountId}
-                    pathId={pathId}
-                    chatName={chatName}
-                    className="h-full"
-                />
-            ) : (
-                <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
-            )}
+            {body}
         </NoteCardDialog>
     );
 }
