@@ -5,6 +5,7 @@ import { rruleToText } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useMemo } from 'react';
+import type { Options } from 'rrule';
 import { Frequency, RRule } from 'rrule';
 
 type RecurrencePickerProps = {
@@ -34,6 +35,12 @@ function getOrdinal(n: number): string {
     return 'last';
 }
 
+// A saved rule comes back as the server's iCal reader prints it, with no "RRULE:" prefix, so a preset is written that
+// way too and a saved rule finds its preset by plain comparison.
+function ruleString(options: Partial<Options>): string {
+    return RRule.optionsToString(options).replace(/^RRULE:/, '');
+}
+
 export function RecurrencePicker({ value, onChange, startDate, timezone, disabled }: RecurrencePickerProps) {
     const weekdayIdx = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
@@ -51,30 +58,30 @@ export function RecurrencePicker({ value, onChange, startDate, timezone, disable
             },
             {
                 label: 'Daily',
-                value: new RRule({ freq: Frequency.DAILY }).toString(),
+                value: ruleString({ freq: Frequency.DAILY }),
             },
             {
                 label: `Weekly on ${dayName}`,
-                value: new RRule({ freq: Frequency.WEEKLY, byweekday: [byDay] }).toString(),
+                value: ruleString({ freq: Frequency.WEEKLY, byweekday: [byDay] }),
             },
             {
                 label: `Monthly on the ${getOrdinal(weekOfMonth)} ${dayName}`,
-                value: new RRule({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)] }).toString(),
+                value: ruleString({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)] }),
             },
             {
                 label: `Annually on ${dayOfMonth} ${monthName}`,
-                value: new RRule({
+                value: ruleString({
                     freq: Frequency.YEARLY,
                     bymonth: [startDate.getMonth() + 1],
                     bymonthday: [dayOfMonth],
-                }).toString(),
+                }),
             },
             {
                 label: 'Every weekday (Monday to Friday)',
-                value: new RRule({
+                value: ruleString({
                     freq: Frequency.WEEKLY,
                     byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
-                }).toString(),
+                }),
             },
         ];
     }, [weekdayIdx, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
