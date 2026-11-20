@@ -247,7 +247,7 @@ export function CardDialog({
     let body: React.ReactNode;
     if (editForm) {
         // The form scrolls inside on short viewports, and the thread hides while it is open.
-        body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col pb-6">{editForm}</div>;
+        body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col">{editForm}</div>;
     } else if (chatName) {
         body = <CommentThread ownerId={ownerId} mountId={mountId} pathId={pathId} chatName={chatName} lead={content} />;
     } else {

@@ -90,8 +90,9 @@ function OpenDialogContent({
             data-size={size}
             className={cn(
                 // A caller that sets its own height overrides max-h and overflow. The one column may shrink below its
-                // content, or a very long title would widen it and push the footer's buttons out of the dialog.
-                'group/dialog fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+                // content, or a very long title would widen it and push the footer's buttons out of the dialog. A wide
+                // dialog's footer brings its own bottom padding. A nested dialog portals out, so :has sees only this one.
+                'group/dialog data-[size=lg]:has-[[data-slot=dialog-footer]]:pb-0 fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
                 dialogSizeMap[size],
                 className,
             )}
@@ -139,9 +140,9 @@ function DialogFooter({
             data-slot="dialog-footer"
             className={cn(
                 // A wide dialog's footer runs edge to edge under its line and sticks to the bottom of the scrolling
-                // content, so the negative margins cancel the content's padding.
+                // content. No negative bottom margin: a sticky box that overhangs its parent is pushed back up inside it.
                 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
-                'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:-mb-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
+                'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
                 className,
             )}
             {...props}
