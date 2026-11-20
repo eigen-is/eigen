@@ -227,8 +227,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg" className="flex flex-col p-0 gap-0 max-w-[90vw] h-[620px] max-h-[85vh]">
-                <DialogHeader className="px-6 py-4 border-b shrink-0">
+            <DialogContent className="flex flex-col max-w-[90vw] h-[620px] max-h-[85vh]">
+                <DialogHeader>
                     <DialogTitle>New chat</DialogTitle>
                     <DialogDescription className="sr-only">
                         Choose who to chat with, then name the chat.
@@ -236,9 +236,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                 </DialogHeader>
 
                 {step === 1 ? (
-                    <div className="flex flex-1 flex-col min-h-0">
+                    <div className="-mx-6 flex flex-1 flex-col min-h-0">
                         {teamMode ? (
-                            <div className="shrink-0 px-6 pt-4 pb-2">
+                            <div className="shrink-0 px-6 pb-2">
                                 <InfoBlock className="w-full text-sm">
                                     <div className="flex min-w-0 items-center gap-2">
                                         <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -261,7 +261,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             </div>
                         ) : (
                             <>
-                                <div className="shrink-0 px-6 pt-4 pb-2">
+                                <div className="shrink-0 px-6 pb-2">
                                     <ContactAddRow
                                         id="chat-wizard-people"
                                         value={contactInput.value}
@@ -336,8 +336,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                               )}
                     </div>
                 ) : (
-                    <div className="flex flex-1 flex-col min-h-0">
-                        <div className="shrink-0 px-6 pt-4 pb-2">
+                    <div className="-mx-6 flex flex-1 flex-col min-h-0">
+                        <div className="shrink-0 px-6 pb-2">
                             <Label htmlFor="chat-wizard-name" className="text-sm text-muted-foreground">
                                 Name
                             </Label>
@@ -410,13 +410,13 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                     </div>
                 )}
 
-                <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between shrink-0">
+                <DialogFooter>
                     {step === 1 ? (
                         <>
-                            {myTeams && myTeams.length > 0 ? (
+                            {myTeams && myTeams.length > 0 && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="gap-2">
+                                        <Button variant="outline" className="mr-auto gap-2">
                                             <Users className="h-4 w-4" />
                                             Team chat
                                         </Button>
@@ -440,27 +440,24 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
-                            ) : (
-                                <div />
                             )}
-                            <div className="flex gap-2">
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
+                            <Button variant="outline" onClick={() => onOpenChange(false)}>
+                                Cancel
+                            </Button>
+                            {hasMatches && (
+                                <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
+                                    Create new chat
                                 </Button>
-                                {hasMatches && (
-                                    <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
-                                        Create new chat
-                                    </Button>
-                                )}
-                                <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
-                                    Let's chat
-                                </Button>
-                            </div>
+                            )}
+                            <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
+                                Let's chat
+                            </Button>
                         </>
                     ) : (
                         <>
                             <Button
                                 variant="outline"
+                                className="mr-auto"
                                 onClick={() => {
                                     setCreateError(null);
                                     setStep(1);
@@ -468,14 +465,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             >
                                 Back
                             </Button>
-                            <div className="flex gap-2">
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
-                                </Button>
-                                <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
-                                    Let's chat
-                                </Button>
-                            </div>
+                            <Button variant="outline" onClick={() => onOpenChange(false)}>
+                                Cancel
+                            </Button>
+                            <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
+                                Let's chat
+                            </Button>
                         </>
                     )}
                 </DialogFooter>
