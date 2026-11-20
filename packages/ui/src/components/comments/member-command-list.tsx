@@ -15,7 +15,7 @@ import { MemberAvatar } from './member-avatar';
 const memberRowClassName =
     'relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
 
-// The "me / Unassigned" header block shared by AssigneePicker and AssigneeMenuItems.
+// The Me and Unassigned rows an assignee picker pins above the list.
 export function PinnedAssigneeRows({
     currentUserEmail,
     selected,
@@ -43,8 +43,7 @@ export function PinnedAssigneeRows({
     );
 }
 
-// Filter-semantics sibling of PinnedAssigneeRows (CommentAssigneeFilter values, not string | null),
-// shared by CommentFilterButton and CommentFilterMenuItems.
+// The Anyone, Me and Unassigned rows the comment filter pins above the list.
 export function PinnedAssigneeFilterRows({
     assignee,
     onSelect,
@@ -81,7 +80,7 @@ export function PinnedAssigneeFilterRows({
 const CARET_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'Home', 'End']);
 
 type MemberCommandListProps = {
-    members: EffectiveMember[];
+    members: readonly EffectiveMember[];
     selectedEmail: string | null;
     onSelect: (email: string) => void;
     header?: ReactNode;
@@ -112,7 +111,7 @@ export function MemberCommandList({
             )}
             {header}
             <CommandList className="max-h-56 overflow-y-auto">
-                {/* Anyone/Me/Unassigned live in the header, so an empty member list is normal — only a real search miss (list non-empty) warrants the message. */}
+                {/* The pinned rows sit in the header, so an empty list is normal: only a search miss gets the message. */}
                 {listed.length > 0 && <CommandEmpty>No people found.</CommandEmpty>}
                 {listed.map((m) => {
                     const displayName = users[m.email]?.name || m.email.split('@')[0];
@@ -130,7 +129,7 @@ export function MemberCommandList({
                 })}
             </CommandList>
             {showSearch && (
-                <div className="border-t px-2 py-1 text-[11px] text-muted-foreground">{listed.length} people</div>
+                <div className="border-t px-2 py-1 text-2xs text-muted-foreground">{listed.length} people</div>
             )}
         </Command>
     );

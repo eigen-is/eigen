@@ -1,3 +1,6 @@
+// The one-line summary of an active comment filter, such as "Open · assigned to me", with a Clear button. The comment
+// panel shows it as a strip above the cards, and a toolbar host as plain inline text.
+
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { useResolvedUser } from '@workspace/lib/public';
@@ -5,11 +8,9 @@ import { useResolvedUser } from '@workspace/lib/public';
 type FilterSummaryProps = {
     filter: ReturnType<typeof useCommentFilter>;
     onClear: () => void;
-    // Toolbar hosts render bare inline text; the panel uses the full-width strip (default).
     inline?: boolean;
 };
 
-// One-line human summary of the active filter, e.g. "Open · assigned to me".
 export function FilterSummary({ filter, onClear, inline = false }: FilterSummaryProps) {
     const { assignee, colors, status } = filter.filter;
     const memberEmail = typeof assignee === 'object' ? assignee.email : '';
@@ -27,8 +28,8 @@ export function FilterSummary({ filter, onClear, inline = false }: FilterSummary
         <div
             className={
                 inline
-                    ? 'flex items-center gap-2 text-[11px] text-muted-foreground'
-                    : 'flex items-center justify-between gap-2 border-b bg-primary/5 app-gutter-x py-1 text-[11px] text-primary'
+                    ? 'flex items-center gap-2 text-2xs text-muted-foreground'
+                    : 'flex items-center justify-between gap-2 border-b bg-primary/5 app-gutter-x py-1 text-2xs text-primary'
             }
         >
             <span className="truncate">{parts.join(' · ')}</span>

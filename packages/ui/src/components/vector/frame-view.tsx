@@ -114,7 +114,7 @@ export const FrameThumbnail = memo(function FrameThumbnail({
                 active && 'bg-accent',
             )}
         >
-            <span className="mt-1 w-4 flex-shrink-0 text-right text-[10px] text-muted-foreground">{index + 1}</span>
+            <span className="mt-1 w-4 flex-shrink-0 text-right text-2xs text-muted-foreground">{index + 1}</span>
             <FrameView
                 frame={frame}
                 elements={elements}

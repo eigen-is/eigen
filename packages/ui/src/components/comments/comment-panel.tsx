@@ -102,7 +102,7 @@ export function CommentPanel({
                         })}
                     </div>
                     {hidden > 0 && (
-                        <div className="app-gutter-x pb-3 text-center text-[11px] text-muted-foreground">
+                        <div className="app-gutter-x pb-3 text-center text-2xs text-muted-foreground">
                             {hidden} hidden ·{' '}
                             <button type="button" className="text-primary hover:underline" onClick={filter.clear}>
                                 Clear filters

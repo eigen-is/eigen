@@ -15,16 +15,12 @@ import { MemberCommandList, PinnedAssigneeFilterRows } from './member-command-li
 
 type CommentFilterButtonProps = {
     filter: ReturnType<typeof useCommentFilter>;
-    members: EffectiveMember[];
+    members: readonly EffectiveMember[];
     currentUserEmail: string;
 };
 
 function GroupLabel({ children }: { children: string }) {
-    return (
-        <div className="px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            {children}
-        </div>
-    );
+    return <div className="eigen-section-label px-1 pb-1">{children}</div>;
 }
 
 export function CommentFilterButton({ filter, members, currentUserEmail }: CommentFilterButtonProps) {

@@ -232,6 +232,9 @@
     --font-mono: "JetBrains Mono", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Fira Code", ui-monospace, monospace;
     --font-hand: "Excalifont", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Comic Sans MS", cursive;
     --font-math: "New Computer Modern Math", math;
+    /* One step below text-xs, for small grey labels and counts beside a list, such as "3 hidden". */
+    --text-2xs: 0.6875rem;
+    --text-2xs--line-height: 1rem;
 
     --animate-accordion-down: accordion-down 0.2s ease-out;
     --animate-accordion-up: accordion-up 0.2s ease-out;
@@ -379,7 +382,7 @@
        headers, and other small group labels. Typography only — callsites add
        any wrapping layout (height, padding, flex). */
     .eigen-section-label {
-        @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground;
+        @apply text-2xs font-medium uppercase tracking-[0.08em] text-muted-foreground;
     }
 
     /* Title shown in a content toolbar (drive filter views, chat name, plain

@@ -75,7 +75,7 @@ export function DrivePreview({ path, onActivate, className }: DrivePreviewProps)
             }
         >
             <span
-                className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-background text-[10px] font-medium uppercase tracking-wider"
+                className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-background text-2xs font-medium uppercase tracking-wider"
                 style={{ color: presentation.colorVar }}
             >
                 {presentation.label}
