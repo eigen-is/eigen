@@ -85,9 +85,9 @@ export function EventFormFields({
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
         setEndTime(newEnd);
-        const d = new Date(`${startDate}T00:00`);
-        d.setDate(d.getDate() + dayOffset);
-        setEndDate(toLocalDateString(d));
+        const endDay = new Date(`${startDate}T00:00`);
+        endDay.setDate(endDay.getDate() + dayOffset);
+        setEndDate(toLocalDateString(endDay));
     };
 
     return (
