@@ -1,7 +1,7 @@
 // Own or foreign, ⌘V and the Edit menu's Paste decide alike: a paste is this workbook's own copy exactly when the
 // clipboard's table carries the id of the workbook's copy. The clipboard here is a DataTransfer the copy events write
 // and the stubbed navigator.clipboard reads back.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -10,11 +10,15 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 const { MAX_SHEET_ROW_COUNT } = await import('../../../engine/defaults');
+const { toast } = await import('sonner');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
+const toastError = spyOn(toast, 'error');
+
 let cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
+    toastError.mockClear();
     for (const cleanup of cleanups) await cleanup();
     cleanups = [];
 });
@@ -124,20 +128,14 @@ async function mount(rows = 10) {
     return { cellAt, select, shortcut, menuPaste, paintOnce, sentOps: () => sent };
 }
 
-// The notice opens a moment after the edit.
-test('a paste past the row limit leaves a notice and no edit', async () => {
+test('a paste past the row limit shows an error toast and makes no edit', async () => {
     const { cellAt, select, shortcut, sentOps } = await mount(MAX_SHEET_ROW_COUNT);
     const clipboard = new DataTransfer();
     clipboard.setData('text/plain', 'a\nb');
     await select({ sheetId: 's1', r: MAX_SHEET_ROW_COUNT - 1, c: 0 });
     const sentBefore = sentOps();
     await shortcut('KeyV', clipboard);
-    await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-    });
-    expect(document.querySelector('[role="alertdialog"], [role="dialog"]')?.textContent).toContain(
-        `above the limit of ${MAX_SHEET_ROW_COUNT}`,
-    );
+    expect(String(toastError.mock.calls[0]?.[0])).toContain(`above the limit of ${MAX_SHEET_ROW_COUNT}`);
     expect(cellAt(MAX_SHEET_ROW_COUNT - 1, 0)).toBeNull();
     expect(sentOps()).toBe(sentBefore);
 });
@@ -210,7 +208,6 @@ test('a menu Paste the browser refuses pastes nothing and says to press the key'
     stubClipboard(() => Promise.reject(new DOMException('denied', 'NotAllowedError')));
     await select(B1);
     await menuPaste();
-    await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
-    expect(document.body.textContent).toContain('Your browser blocks Paste from a menu.');
+    expect(String(toastError.mock.calls[0]?.[0])).toContain('Your browser blocks Paste from a menu.');
     expect(cellAt(0, 1) ?? null).toBeNull();
 });

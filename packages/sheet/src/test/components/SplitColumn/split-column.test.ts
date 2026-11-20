@@ -1,6 +1,6 @@
 // The Split text dialog previews the selected column cut at the ticked separators, each named in sentence case. OK, or
-// Enter in the Other field, writes the pieces across the row and closes. When the cells to the right hold data, OK asks first and the question
-// stays open: only a yes overwrites them.
+// Enter in the Other field, writes the pieces across the row and closes. When the cells to the right hold data, OK asks
+// first, naming them, and the question stays open: only Replace overwrites them.
 
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -102,18 +102,20 @@ test('Enter in the Other field splits at its character', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('with data to the right, OK asks first, and the question stays open until a yes', async () => {
+test('with data to the right, OK asks first, and the question stays open until Replace', async () => {
     const dialog = await openSplitText([
         [cell('Ada,Lovelace'), cell('keep')],
         [cell('Alan,Turing'), null],
     ]);
     await tick('Comma');
     await dialog.click('OK');
-    expect(dialog.title()).toBe('Notice');
-    expect(dialog.dialogs()[0]?.textContent).toContain('There is already data here. Do you want to replace it?');
+    expect(dialog.title()).toBe('Replace data?');
+    expect(dialog.dialogs()[0]?.textContent).toContain("There's already data in B1:B2. Do you want to replace it?");
+    expect(dialog.footer()).toEqual(['Cancel', 'Replace']);
+    expect(dialog.button('Replace')?.dataset.variant).toBe('destructive');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(row(dialog.context(), 0)).toEqual(['Ada,Lovelace', 'keep']);
-    await dialog.click('OK');
+    await dialog.click('Replace');
     expect(row(dialog.context(), 0)).toEqual(['Ada', 'Lovelace']);
     expect(dialog.dialogs()).toHaveLength(0);
 });

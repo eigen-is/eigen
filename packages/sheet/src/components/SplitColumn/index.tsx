@@ -9,7 +9,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { cellValue } from '../../engine/format';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
-import { getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
+import { getDataArr, getFlowdata, getRangetxt, getRegStr, updateMoreCell } from '../../state';
 
 // Each id is the one getRegStr reads.
 const SEPARATORS = [
@@ -22,7 +22,7 @@ const SEPARATORS = [
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showNotice } = useDialog();
+    const { showConfirm } = useDialog();
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const [otherValue, setOtherValue] = useState('');
 
@@ -55,8 +55,23 @@ export function SplitColumn() {
                 if (cellValue(data[r + i][c + j]) != null) overwrites = true;
             }
         }
-        if (overwrites) showNotice('There is already data here. Do you want to replace it?', 'yesno', write);
-        else write();
+        if (!overwrites) {
+            write();
+            return;
+        }
+        const target = { row: [r, r + pieces.length - 1], column: [c + 1, c + pieces[0].length - 1] };
+        showConfirm({
+            title: 'Replace data?',
+            description: (
+                <>
+                    There's already data in <strong>{getRangetxt(context, context.currentSheetId, target)}</strong>. Do
+                    you want to replace it?
+                </>
+            ),
+            confirmText: 'Replace',
+            destructive: true,
+            onConfirm: write,
+        });
     };
 
     return (

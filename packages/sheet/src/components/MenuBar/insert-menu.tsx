@@ -22,6 +22,7 @@ import {
     Sigma,
 } from 'lucide-react';
 import { useContext } from 'react';
+import { toast } from 'sonner';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
 import { useDialog } from '../../hooks/useDialog';
@@ -47,7 +48,7 @@ const AUTO_SUM_FUNCTIONS = [
 export function InsertMenu() {
     const { context, getContext, setContext, refs } = useContext(WorkbookContext);
     const { onInsertImage, onAddComment, commentLifecycle, getCommentInfo } = refs.hooks.current;
-    const { showDialog, showNotice } = useDialog();
+    const { showDialog } = useDialog();
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -117,7 +118,7 @@ export function InsertMenu() {
                 onClick={() =>
                     setContext((draftCtx) => {
                         const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
-                        if (refusal) showNotice(CHART_RANGE_REFUSALS[refusal]);
+                        if (refusal) toast.error(CHART_RANGE_REFUSALS[refusal]);
                     })
                 }
             >

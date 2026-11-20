@@ -225,8 +225,8 @@ test('the cell editor waits off-screen only while the range picker holds the slo
     expect(parked()).toBe(false);
     await pickWith('Select cell range');
     expect(parked()).toBe(true);
-    await dialog.show((d) => d.showNotice('A notice'));
-    expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
+    await dialog.show((d) => d.showConfirm({ title: 'Delete sheet?', description: 'A question', onConfirm: () => {} }));
+    expect(dialog.dialogs()[0]?.textContent).toContain('A question');
     expect(parked()).toBe(false);
 });
 

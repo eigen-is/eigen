@@ -8,6 +8,7 @@ const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 const contextModule = await import('../../../state/context');
+const { toast } = await import('sonner');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
@@ -203,9 +204,8 @@ test("a cell's right-click menu puts Delete row and Delete column last, alone an
     ).toEqual(['Delete row', 'Delete column']);
 });
 
-// Enter ends a tab rename, and a refused name opens a notice whose OK button takes the focus at once. The browser then
-// sends the same Enter's keypress to that button, which clicks it, so the notice vanished before anyone saw it.
-test('Enter that ends a tab rename sends no keypress on to the notice', async () => {
+test('Enter that ends a refused tab rename shows the reason and hands the keys back to the grid', async () => {
+    const toastError = spyOn(toast, 'error');
     const { container } = await mountWorkbook();
     const name = tab(container, 'One').querySelector('span');
     if (!name) throw new Error('tab One has no name');
@@ -218,12 +218,7 @@ test('Enter that ends a tab rename sends no keypress on to the notice', async ()
     await act(async () => {
         name.dispatchEvent(enter);
     });
-    const notice = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
-    expect(notice()?.textContent).toContain('A sheet name has at most 31 characters');
-    // The browser sends the keydown's keypress to what has the focus, and on a button that is a click.
-    const focused = document.activeElement;
-    if (!enter.defaultPrevented && focused instanceof HTMLButtonElement) {
-        await act(async () => focused.click());
-    }
-    expect(notice()).not.toBeNull();
+    expect(String(toastError.mock.calls[0]?.[0])).toContain('A sheet name has at most 31 characters');
+    expect(enter.defaultPrevented).toBe(true);
+    expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
 });

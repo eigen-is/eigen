@@ -1,9 +1,9 @@
 // A sheet tab's Hide hides its sheet, unless it is the last one shown: the workbook always shows one, so Hide then
-// shows a notice that says so and leaves the sheet as it was. Delete refuses the same way, also when a peer's delete
-// made its sheet the last one shown while its confirm was open. A name the rename refuses, such as an empty one, shows
-// a notice with the reason and puts the old name back.
+// warns that it can't and leaves the sheet as it was. Delete asks first, and refuses the same way, also when a peer's
+// delete made its sheet the last one shown while its confirm was open. A name the rename refuses, such as an empty one,
+// shows an error toast with the reason and puts the old name back.
 
-import { expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -12,6 +12,10 @@ const { act, createElement } = await import('react');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { SheetItem } = await import('../../../components/SheetTab/SheetItem');
 const { applyBatch } = await import('../../../state/modules/apply-ops');
+const { toast } = await import('sonner');
+
+const toastError = spyOn(toast, 'error');
+afterEach(() => toastError.mockClear());
 
 type Sheet = import('../../../state').Sheet;
 
@@ -45,14 +49,14 @@ test('Hide hides a sheet while another one is shown', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('Hide on the last shown sheet shows a notice and keeps the sheet', async () => {
+test('Hide on the last shown sheet warns and keeps the sheet', async () => {
     const dialog = await openTabMenu([sheet('a', 'Only')]);
     expect(dialog.context().sheets[0]?.hide).toBeUndefined();
     expect(dialog.context().warnDialog).toContain('To hide this sheet');
     expect(dialog.context().warnDialog).not.toContain('delete');
 });
 
-test('an empty name shows a notice with the reason and keeps the old name', async () => {
+test('an empty name shows an error toast with the reason and keeps the old name', async () => {
     const dialog = await renderTabs([sheet('a', 'First')]);
     const name = document.querySelector<HTMLElement>('[role="button"] span');
     if (!name) throw new Error('no tab name');
@@ -61,8 +65,8 @@ test('an empty name shows a notice with the reason and keeps the old name', asyn
         name.innerText = '';
         name.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
     });
-    expect(dialog.title()).toBe('Notice');
-    expect(dialog.dialogs()[0]?.textContent).toContain('Sheet name cannot be empty');
+    expect(toastError).toHaveBeenCalledWith('Sheet name cannot be empty');
+    expect(dialog.dialogs()).toHaveLength(0);
     expect(dialog.context().sheets[0]?.name).toBe('First');
     expect(name.innerText).toBe('First');
 });
@@ -86,6 +90,14 @@ test('Duplicate leaves the focus on the grid, so the next keys reach a cell and 
     expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
 });
 
+test('Delete removes the sheet once confirmed', async () => {
+    const dialog = await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
+    await pick('Delete');
+    await dialog.click('Delete');
+    expect(dialog.context().sheets.map((s) => s.id)).toEqual(['b']);
+    expect(dialog.dialogs()).toHaveLength(0);
+});
+
 test('Rename puts the focus in the name with the name selected, so typing replaces it', async () => {
     await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
     await pick('Rename');
@@ -96,11 +108,14 @@ test('Rename puts the focus in the name with the name selected, so typing replac
 test('a delete confirmed after a peer deleted the other sheet refuses with the reason, and the confirm closes', async () => {
     const dialog = await renderTabs([sheet('a', 'First'), sheet('b', 'Second')]);
     await pick('Delete');
-    expect(dialog.dialogs()[0]?.textContent).toContain('Delete the sheet "First"?');
+    expect(dialog.title()).toBe('Delete sheet?');
+    expect(dialog.dialogs()[0]?.querySelector('strong')?.textContent).toBe('First');
+    expect(dialog.footer()).toEqual(['Cancel', 'Delete']);
+    expect(dialog.button('Delete')?.dataset.variant).toBe('destructive');
     await dialog.setContext((ctx) => {
         applyBatch(ctx, [{ op: 'deleteSheet', id: 'b', path: [], value: { id: 'b' } }]);
     });
-    await dialog.click('OK');
+    await dialog.click('Delete');
     expect(dialog.context().sheets.map((s) => s.id)).toEqual(['a']);
     expect(dialog.context().warnDialog).toContain('To delete this sheet');
     expect(dialog.dialogs()).toHaveLength(0);

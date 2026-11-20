@@ -88,7 +88,7 @@ export async function renderSheetDialog(
     const refs = workbookRefs();
     const harness: Harness = { context: workbookContextFactory({ getRefs: () => refs, ...params }), refs, grid };
     await renderInDocument(createElement(Workbook, { harness }));
-    // Opens a dialog in the slot the way the app does, such as a notice over the one open.
+    // Opens a dialog in the slot the way the app does, such as a confirm over the one open.
     const show = (open: (dialogs: Dialogs) => void) =>
         act(async () => {
             if (!harness.dialogs) throw new Error('the host did not render');

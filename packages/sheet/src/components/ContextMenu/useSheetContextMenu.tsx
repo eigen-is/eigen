@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
+import { toast } from 'sonner';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
@@ -56,7 +57,6 @@ type RowColType = 'row' | 'column';
 // The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
 function ClipboardItems() {
     const { context, setContext, pasteClipboard } = useContext(WorkbookContext);
-    const { showNotice } = useDialog();
     return (
         <ClipboardMenuItems
             onCut={() =>
@@ -67,7 +67,7 @@ function ClipboardItems() {
             }
             onCopy={() => {
                 if ((context.selections?.length ?? 0) > 1) {
-                    showNotice(ONE_AREA_ONLY);
+                    toast.error(ONE_AREA_ONLY);
                     return;
                 }
                 setContext((d) => {
@@ -75,7 +75,7 @@ function ClipboardItems() {
                     flushPendingCopy();
                 });
             }}
-            onPaste={() => pasteFromClipboard(pasteClipboard, showNotice)}
+            onPaste={() => pasteFromClipboard(pasteClipboard)}
         />
     );
 }

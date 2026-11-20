@@ -319,7 +319,7 @@ describe('the range picker', () => {
         position: { left: 0, top: 0, right: 74, bottom: 20 },
     };
 
-    test('the link card stays away until a notice takes its place', async () => {
+    test('the link card stays away until a confirm takes its place', async () => {
         const dialog = await openPicker();
         await dialog.setContext((ctx) => {
             const cell = ctx.sheets[0].data?.[0];
@@ -327,8 +327,10 @@ describe('the range picker', () => {
             ctx.linkCard = { ...HOVER_CARD, isEditing: false };
         });
         expect(document.querySelector('button[aria-label="Edit link"]')).toBeNull();
-        await dialog.show((d) => d.showNotice('A notice'));
-        expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
+        await dialog.show((d) =>
+            d.showConfirm({ title: 'Delete sheet?', description: 'A question', onConfirm: () => {} }),
+        );
+        expect(dialog.dialogs()[0]?.textContent).toContain('A question');
         expect(document.querySelector('button[aria-label="Edit link"]')).not.toBeNull();
     });
 

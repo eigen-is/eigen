@@ -15,7 +15,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
     'packages/sheet/src/components/CellRangeDialog/index.tsx', // a non-modal range picker over the grid
     'packages/sheet/src/components/ConditionFormat/ManageRules.tsx', // a list, in a FormDialog shell
-    'packages/sheet/src/hooks/useDialog.tsx', // a notice or a yes or no
     'packages/ui/src/components/cards/card-form.tsx', // the edit view a card dialog swaps in for its view
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid
     'packages/ui/src/components/chat/chat-create-wizard.tsx', // several steps
