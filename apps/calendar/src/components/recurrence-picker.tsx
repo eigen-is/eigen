@@ -4,7 +4,6 @@
 import { rruleToText } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useMemo } from 'react';
 import type { Options } from 'rrule';
 import { Frequency, RRule } from 'rrule';
 
@@ -20,48 +19,45 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 
 export function RecurrencePicker({ value, onChange, startDate, timezone, disabled }: RecurrencePickerProps) {
     const weekdayIndex = getWeekdayIndex(startDate);
-    const weekOfMonth = getWeekOfMonth(startDate);
+    const nth = getNthInMonth(startDate);
     const dayName = DAY_NAMES[weekdayIndex];
     const monthName = formatMonth(startDate, 'long');
     const dayOfMonth = startDate.getDate();
 
-    const presets = useMemo(() => {
-        const byDay = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][weekdayIndex];
-
-        return [
-            {
-                label: 'Does not repeat',
-                value: 'none',
-            },
-            {
-                label: 'Daily',
-                value: ruleString({ freq: Frequency.DAILY }),
-            },
-            {
-                label: `Weekly on ${dayName}`,
-                value: ruleString({ freq: Frequency.WEEKLY, byweekday: [byDay] }),
-            },
-            {
-                label: `Monthly on the ${getOrdinal(weekOfMonth)} ${dayName}`,
-                value: ruleString({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)] }),
-            },
-            {
-                label: `Annually on ${dayOfMonth} ${monthName}`,
-                value: ruleString({
-                    freq: Frequency.YEARLY,
-                    bymonth: [startDate.getMonth() + 1],
-                    bymonthday: [dayOfMonth],
-                }),
-            },
-            {
-                label: 'Every weekday (Monday to Friday)',
-                value: ruleString({
-                    freq: Frequency.WEEKLY,
-                    byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
-                }),
-            },
-        ];
-    }, [weekdayIndex, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
+    const byDay = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][weekdayIndex];
+    const presets = [
+        {
+            label: 'Does not repeat',
+            value: 'none',
+        },
+        {
+            label: 'Daily',
+            value: ruleString({ freq: Frequency.DAILY }),
+        },
+        {
+            label: `Weekly on ${dayName}`,
+            value: ruleString({ freq: Frequency.WEEKLY, byweekday: [byDay] }),
+        },
+        {
+            label: `Monthly on the ${getOrdinal(nth)} ${dayName}`,
+            value: ruleString({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(nth)] }),
+        },
+        {
+            label: `Annually on ${dayOfMonth} ${monthName}`,
+            value: ruleString({
+                freq: Frequency.YEARLY,
+                bymonth: [startDate.getMonth() + 1],
+                bymonthday: [dayOfMonth],
+            }),
+        },
+        {
+            label: 'Every weekday (Monday to Friday)',
+            value: ruleString({
+                freq: Frequency.WEEKLY,
+                byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
+            }),
+        },
+    ];
 
     const currentValue = value || 'none';
     const rruleText = rruleToText(value, timezone);
@@ -94,8 +90,10 @@ function getWeekdayIndex(date: Date): number {
     return day === 0 ? 6 : day - 1;
 }
 
-function getWeekOfMonth(date: Date): number {
-    return Math.ceil(date.getDate() / 7);
+// A fifth weekday repeats as the last one, as Google Calendar does, so the event comes back every month.
+function getNthInMonth(date: Date): number {
+    const week = Math.ceil(date.getDate() / 7);
+    return week === 5 ? -1 : week;
 }
 
 // A saved rule comes back as the server's iCal reader prints it, with no "RRULE:" prefix, so a preset is written that

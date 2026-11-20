@@ -983,7 +983,7 @@ function attendeeParameters(attendee: Attendee): Array<[string, string]> {
 
 function rruleProperty(rrule: string): ICAL.Property {
     const prop = new ICAL.Property('rrule');
-    // Eigen's frontend stores RRULE with the "RRULE:" prefix; strip it to avoid doubling.
+    // A client may send the "RRULE:" prefix rrule.js prints, and ical.js would read that rule with no FREQ.
     prop.setValue(ICAL.Recur.fromString(rrule.replace(/^RRULE:/i, '')));
     return prop;
 }
