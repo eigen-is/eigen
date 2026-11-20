@@ -35,7 +35,6 @@ export function ManageRules() {
         <FormDialog
             {...dialogProps}
             title="Manage rules"
-            size="sm"
             // Enter or Space on the first delete button would remove a rule, so the dialog itself takes the focus.
             onOpenAutoFocus={(event) => {
                 event.preventDefault();
