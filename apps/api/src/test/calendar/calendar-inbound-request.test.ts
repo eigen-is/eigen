@@ -14,6 +14,7 @@ import {
     resourceTextOf,
     storedEvents,
 } from '../calendar-test-helpers';
+import { cpuClock } from '../cpu-time';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import { findOrFail } from '../setup';
@@ -811,11 +812,11 @@ describe('a guest who removes this and following', () => {
     test('keeps the cut, fast, through a rule that never fires from 1900', async () => {
         const { harness, calendar } = await cutCopy();
         const never = series(harness.user.email, 'Standup', 'FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30', '19000102');
-        const startedAt = performance.now();
+        const cpuMs = cpuClock();
 
         await calendar.receiveRequest(never, link);
 
-        expect(performance.now() - startedAt).toBeLessThan(1000);
+        expect(cpuMs()).toBeLessThan(1000);
         const { calendarId } = findOrFail(await calendar.getEventsByUid(SERIES), (e) => !e.parentEventId);
         const resource = findOrFail(await calendar.listResources(calendarId), (r) => r.uid === SERIES);
         const text = await resourceTextOf(calendar, calendarId, resource.uri);

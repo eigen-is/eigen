@@ -18,6 +18,7 @@ import {
     readChart,
 } from '../../lib/ooxml/ooxml-chart';
 import type { Relationship } from '../../lib/ooxml/opc';
+import { cpuClock } from '../cpu-time';
 
 const STRICT = 'http://purl.oclc.org/ooxml';
 const ACCENTS = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47'];
@@ -521,9 +522,9 @@ describe('the data from the caches', () => {
             space(`<c:lineChart><c:grouping val="standard"/>${series.join('')}${filler}</c:lineChart>${AXES}`),
         );
         if (!root) throw new Error('no root');
-        const started = performance.now();
+        const cpuMs = cpuClock();
         expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true);
-        expect(performance.now() - started).toBeLessThan(500);
+        expect(cpuMs()).toBeLessThan(500);
     });
 
     test('multi-level categories read their innermost level', () => {
