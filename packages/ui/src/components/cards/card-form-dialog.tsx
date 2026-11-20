@@ -26,7 +26,7 @@ type CardFormDialogProps = {
 export function CardFormDialog({ open, onOpenChange, onSave, ...rest }: CardFormDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg">
+            <DialogContent>
                 {open && (
                     <CardForm
                         {...rest}

@@ -12,8 +12,8 @@ import { getRangetxt, isLinkValid } from '../../state';
 
 type CellRangeDialogProps = {
     value: string;
-    // 'link' is followed from any sheet, so it is typeable and its text carries the sheet
-    // name; 'validation' is pick-only and always relative to the current sheet.
+    // A link is followed from any sheet, so it is typeable and its text carries the sheet name. A validation range is
+    // pick-only and relative to the current sheet.
     variant: 'link' | 'validation';
     onConfirm: (rangeTxt: string) => void;
     onCancel: () => void;
@@ -24,16 +24,14 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
     const [rangeTxt, setRangeTxt] = useState<string>(value);
     const isLink = variant === 'link';
 
-    // Only a typed range can be malformed — one picked on the grid never is.
+    // Only a typed range can be malformed, never one picked on the grid.
     const validity = isLinkValid('cellrange', rangeTxt);
     const invalid = isLink && !validity.isValid;
 
-    // The picker opens seeded from the stored range (an existing cell-range link, the
-    // data-validation range), so the mount pass has to be skipped — it would overwrite
-    // that with the grid's current selection before the user picks anything.
+    // The picker opens on the stored range, such as an existing link's. The sync below skips its mount pass, which
+    // would overwrite that with the grid's selection before the user picks anything.
     const skipFirstSync = useRef(true);
 
-    // Keep the field in sync with the user's selection in the spreadsheet.
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-syncs when the selection changes; getRangetxt reads `context` directly
     useEffect(() => {
         if (skipFirstSync.current) {
@@ -55,7 +53,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                 <div className="space-y-1.5">
                     <Input
                         aria-label="Cell range"
-                        className={cn('h-8', invalid && rangeTxt && 'border-destructive')}
+                        className={cn(invalid && rangeTxt && 'border-destructive')}
                         spellCheck={false}
                         placeholder="Select cells using the cursor or enter directly"
                         value={rangeTxt}
@@ -64,12 +62,10 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                     {invalid && rangeTxt && <p className="text-xs text-destructive">{validity.tooltip}</p>}
                 </div>
             ) : (
-                // A value display, not a text box: tabIndex -1 keeps it out of Radix
-                // FocusScope's tabbable candidates, which would otherwise take the dialog's
-                // opening focus and render it focus-ringed with its value selected.
+                // A value display, not a text box. Out of the tab order, Radix doesn't give it the opening focus, which
+                // would draw it with a ring and its value selected.
                 <Input
                     aria-label="Cell range"
-                    className="h-8"
                     readOnly
                     tabIndex={-1}
                     placeholder="Select a range of cells"
@@ -77,10 +73,10 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                 />
             )}
             <DialogFooter>
-                <Button variant="outline" size="sm" onClick={onCancel}>
+                <Button variant="outline" onClick={onCancel}>
                     Cancel
                 </Button>
-                <Button size="sm" disabled={invalid} onClick={() => onConfirm(rangeTxt)}>
+                <Button disabled={invalid} onClick={() => onConfirm(rangeTxt)}>
                     OK
                 </Button>
             </DialogFooter>

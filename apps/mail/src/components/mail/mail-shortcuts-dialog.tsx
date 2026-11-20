@@ -93,7 +93,7 @@ export function MailShortcutsDialog({ open, onOpenChange, enabled }: MailShortcu
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             {/* flex + max-h so the header stays put and the groups scroll when they don't fit the viewport. */}
-            <DialogContent size="lg" className="flex max-h-[85vh] flex-col">
+            <DialogContent className="flex max-h-[85vh] flex-col">
                 <DialogHeader>
                     <DialogTitle>Keyboard shortcuts</DialogTitle>
                     <DialogDescription>Keyboard shortcuts to move around Mail without the mouse.</DialogDescription>

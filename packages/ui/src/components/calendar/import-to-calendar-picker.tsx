@@ -45,7 +45,6 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
             }}
             title="Import to Calendar"
             description={`Pick the calendar ${fileName ? `“${fileName}”` : 'this file'} lands in.`}
-            size="sm"
         >
             {source && <ImportToCalendarForm source={source} fileName={fileName} />}
         </FormDialog>

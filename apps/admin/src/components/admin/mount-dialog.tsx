@@ -14,7 +14,7 @@ type MountDialogProps = ComponentProps<typeof MountForm> & {
 
 export function MountDialog({ open, onOpenChange, title, ...formProps }: MountDialogProps) {
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title={title} size="sm">
+        <FormDialog open={open} onOpenChange={onOpenChange} title={title}>
             <MountForm {...formProps} />
         </FormDialog>
     );

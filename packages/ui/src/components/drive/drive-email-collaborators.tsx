@@ -26,7 +26,7 @@ const SUBJECT_LIMIT = 200;
 
 export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title="Email collaborators" size="sm">
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Email collaborators">
             <EmailCollaboratorsBody path={path} />
         </FormDialog>
     );

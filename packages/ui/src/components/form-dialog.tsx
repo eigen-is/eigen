@@ -1,4 +1,4 @@
-// A dialog around a small form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
+// A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
 // description, and FormDialogForm the fields and the Cancel and submit footer. Enter in a field submits, every way to
 // close waits for a running submit, and a failure or a false result keeps the dialog open. The caller keeps the field
 // state in a child that mounts with the dialog, so every opening starts clean. FormDialog alone is also a titled shell
@@ -16,6 +16,7 @@ type FormDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     description?: string;
+    // Wide for a form with a box to type in. One with only choices, such as radios or a select, is sm.
     size?: ComponentProps<typeof DialogContent>['size'];
     onOpenAutoFocus?: (event: Event) => void;
     onCloseAutoFocus?: (event: Event) => void;

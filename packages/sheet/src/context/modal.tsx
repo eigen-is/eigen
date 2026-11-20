@@ -156,6 +156,7 @@ function NonModalShell({
         >
             <DialogContent
                 ref={measure}
+                size="sm"
                 aria-describedby={undefined}
                 showCloseButton={false}
                 // A press on the grid, and the focus that moves there with it, picks a range. Neither may close the

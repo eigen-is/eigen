@@ -528,7 +528,7 @@ export function EmailDraft({
             <FileDropOverlay visible={isDragging} label="Drop files to attach" icon={Paperclip} />
             {alertState && (
                 <Dialog open onOpenChange={() => setAlertState(null)}>
-                    <DialogContent>
+                    <DialogContent size="sm">
                         <DialogHeader>
                             <DialogTitle>{alertState.title}</DialogTitle>
                             <DialogDescription>{alertState.message}</DialogDescription>

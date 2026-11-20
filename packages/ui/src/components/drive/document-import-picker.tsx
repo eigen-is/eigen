@@ -91,7 +91,6 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
                             ? `${source.name} replaces this whole document: its text, headers and footers, and page setup. ${VERSION_NOTE}`
                             : source.name
                     }
-                    size="sm"
                 >
                     <ImportModeForm target={target} onImport={(mode) => runImport(source, mode)} />
                 </FormDialog>

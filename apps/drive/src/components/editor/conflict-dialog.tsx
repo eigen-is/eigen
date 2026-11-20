@@ -1,3 +1,6 @@
+// Asks what to do when a save finds the file changed on the server since the editor opened it: overwrite it, reload
+// the server's version or download the user's own. The text editors, such as the markdown editor, open it on a save.
+
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -19,7 +22,7 @@ type ConflictDialogProps = {
 export function ConflictDialog({ open, onOpenChange, onOverwrite, onReload, onDownload }: ConflictDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
+            <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>File conflict</DialogTitle>
                     <DialogDescription>

@@ -20,7 +20,7 @@ type NoteCardDialogProps = {
 export function NoteCardDialog({ open, onOpenChange, title, actions, children }: NoteCardDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg" showCloseButton={false} className="flex flex-col gap-0 p-0">
+            <DialogContent showCloseButton={false} className="flex flex-col gap-0 p-0">
                 <DialogTitle className="sr-only">{title}</DialogTitle>
                 <DialogDescription className="sr-only">Card details, attachments and replies.</DialogDescription>
                 {/* The same bar as a Column's toolbar, so the card reads the same in a dialog as in a pane. */}

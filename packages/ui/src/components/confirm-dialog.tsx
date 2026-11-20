@@ -35,7 +35,7 @@ export function ConfirmDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
+            <DialogContent size="sm" onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>

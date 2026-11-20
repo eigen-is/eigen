@@ -216,7 +216,7 @@ export function CardForm({
                     )}
                 </div>
             </div>
-            <DialogFooter className="pt-2">
+            <DialogFooter>
                 <div className="mr-auto flex items-center gap-2">
                     {allowAttachments && (
                         <>

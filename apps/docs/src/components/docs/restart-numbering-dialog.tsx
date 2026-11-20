@@ -21,7 +21,6 @@ export function RestartNumberingDialog({ editor, open, onOpenChange, onCloseAuto
             open={open}
             onOpenChange={onOpenChange}
             title="Restart numbering"
-            size="sm"
             onCloseAutoFocus={onCloseAutoFocus}
         >
             <RestartNumberingForm editor={editor} />

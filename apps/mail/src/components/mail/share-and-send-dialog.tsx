@@ -1,3 +1,6 @@
+// Asks before a draft goes out with links to documents some recipients can't open. The draft opens it on Send and
+// can give those recipients view access first, or send as it is. Notes under the list name what Send can't share.
+
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -63,9 +66,8 @@ export function ShareAndSendDialog({
     const primaryRef = useRef<HTMLButtonElement>(null);
 
     const hasGrants = grants.length > 0;
-    // The lead line names the union of needing recipients. When the per-document sets differ it
-    // overstates some grants, so a closing line qualifies it — lead, list, and closer read as one
-    // sentence. Only missing access is ever granted, so the qualifier is simply the truth.
+    // The lead line names every recipient who needs access. When the documents need different ones, a closing line
+    // says only missing access is granted, so the sentence stays true.
     const sharedSet = hasGrants && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));
     const allRecipients = [...new Set(grants.flatMap((g) => g.recipients))];
 
@@ -96,6 +98,7 @@ export function ShareAndSendDialog({
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
+                size="sm"
                 onOpenAutoFocus={(e) => {
                     e.preventDefault();
                     primaryRef.current?.focus();

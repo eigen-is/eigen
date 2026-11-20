@@ -43,9 +43,13 @@ On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` rende
 
 A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarItem`), because opening an item in a list adds it to the URL's search, and a match on the search would unselect a filter such as **All stickies** the moment a board is picked. A fullscreen view with only the topbar, such as `RequestAccessView`, calls `setSidebarHidden(true)` from `useLayout()` and restores it on unmount.
 
-## A dialog is a question or a page, so it has two widths
+## A dialog with a box to type in is wide, so it has two widths
 
-**`DialogContent` takes `size="sm"` (448px, the default) or `size="lg"` (672px), and nothing in between.** A question or a short form is `sm`, such as a confirm, Rename or a few fields: narrow keeps the question near its buttons. A page in a box is `lg`, such as a card with its thread, an event, a list of people or a picker. A middle width makes every new dialog a judgment call, and widths multiply one call at a time, so a form that feels cramped at `sm` gets a two-column layout inside, not a third size.
+**`DialogContent` takes `size="lg"` (672px, the default) or `size="sm"` (448px), and nothing in between.** A dialog with a box you type in is `lg`: a text, number or email input, a chip or search box, or a rich-text field, such as Rename, Add label or Data validation. A dialog with only buttons, radios, selects, checkboxes or a color is `sm`, such as a confirm, Custom sort, Slides' Page setup or the calendar's "This event / following / all" choice. A page in a box is `lg` whatever it holds: a picker (file, location, import, the palette, New chat) or a card with its thread. The Sheets range picker is `sm` because it floats over the grid it picks from, and About and the upload progress box are `sm` status boxes. `ConfirmDialog` passes `sm` itself, and `FormDialog` is `lg` unless its caller passes `size="sm"`. A middle width makes every new dialog a judgment call, so a form that feels cramped gets a two-column layout inside, not a third size.
+
+**A wide dialog's footer has a line above it and stays in view.** `DialogFooter` in an `lg` dialog runs edge to edge under a top border and sticks to the bottom of the box while the body scrolls; the header has no line under it. A narrow dialog has no lines. The content box says its width as `data-size`, and the footer reads it through the `group/dialog` variant, so no caller passes a class for it. Content that should run edge to edge too, such as a picker's browser, takes `-mx-6` against the box's padding.
+
+**There is one footer.** Its right side holds Cancel and the main button. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, pushed there with `mr-auto`, as `FormDialogForm`'s `footerStart` does. On a phone the buttons stack, the main one on top.
 
 ## A dialog never grows to fit what a user typed
 

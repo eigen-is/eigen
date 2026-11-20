@@ -36,8 +36,8 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 open={open}
                 onOpenChange={onOpenChange}
                 title="Shared calendar settings"
-                description={`${sharedCalendar.calendarName} — ${sharedCalendar.permission} access`}
                 size="sm"
+                description={`${sharedCalendar.calendarName} — ${sharedCalendar.permission} access`}
             >
                 <SharedCalendarConfigForm
                     ownerId={ownerId}

@@ -46,7 +46,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size="lg" className="flex flex-col p-0 gap-0 max-w-[90vw]">
+            <DialogContent className="flex flex-col max-w-[90vw]">
                 <DriveLocationPickerBody
                     key={place}
                     {...body}
@@ -106,64 +106,62 @@ function DriveLocationPickerBody({
     return (
         <div
             className={cn(
-                'flex flex-col min-h-0',
+                'flex flex-col gap-4 min-h-0',
                 expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
             )}
         >
-            <DialogHeader className="px-6 py-4 border-b">
+            <DialogHeader>
                 <DialogTitle>{resolvedTitle}</DialogTitle>
                 <DialogDescription className="sr-only">
                     Pick the folder in your Drive where this goes.
                 </DialogDescription>
             </DialogHeader>
 
-            {hasName && (
-                <div className="px-6 pt-4 pb-2">
-                    <Label htmlFor="picker-name" className="text-sm text-muted-foreground">
-                        {resolvedNameLabel}
-                    </Label>
-                    <Input
-                        id="picker-name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="mt-1.5"
-                        autoFocus
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && name.trim()) {
-                                e.preventDefault();
-                                handleSubmit();
-                            }
-                        }}
-                    />
-                </div>
-            )}
+            {/* Edge to edge, so the folder browser's line spans the dialog. */}
+            <div className="-mx-6 flex min-h-0 flex-1 flex-col">
+                {hasName && (
+                    <div className="px-6 pb-2">
+                        <Label htmlFor="picker-name" className="text-sm text-muted-foreground">
+                            {resolvedNameLabel}
+                        </Label>
+                        <Input
+                            id="picker-name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="mt-1.5"
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && name.trim()) {
+                                    e.preventDefault();
+                                    handleSubmit();
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+                <DriveLocationField
+                    value={location}
+                    onChange={setLocation}
+                    expanded={expanded}
+                    onExpandedChange={setExpanded}
+                    collapsible={mode !== 'save-as'}
+                />
+            </div>
 
-            <DriveLocationField
-                value={location}
-                onChange={setLocation}
-                expanded={expanded}
-                onExpandedChange={setExpanded}
-                collapsible={mode !== 'save-as'}
-            />
-
-            <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
-                {onDownloadInstead ? (
-                    <Button variant="outline" onClick={onDownloadInstead} disabled={pending}>
+            <DialogFooter>
+                {onDownloadInstead && (
+                    <Button variant="outline" className="mr-auto" onClick={onDownloadInstead} disabled={pending}>
                         <Download className="h-4 w-4 mr-2" />
                         Download instead
                     </Button>
-                ) : (
-                    <div />
                 )}
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={onCancel} disabled={pending}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
-                        {pending && <EigenLoader className="text-current" />}
-                        {resolvedConfirmLabel}
-                    </Button>
-                </div>
+                <Button variant="outline" onClick={onCancel} disabled={pending}>
+                    Cancel
+                </Button>
+                <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
+                    {pending && <EigenLoader className="text-current" />}
+                    {resolvedConfirmLabel}
+                </Button>
             </DialogFooter>
         </div>
     );

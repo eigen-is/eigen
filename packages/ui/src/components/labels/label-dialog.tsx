@@ -48,7 +48,6 @@ export function LabelDialog({
                 onOpenChange={onOpenChange}
                 title={selectedLabel ? 'Edit label' : 'Add label'}
                 description={selectedLabel ? 'Make changes to your label here.' : 'Add a new label to your collection.'}
-                size="sm"
             >
                 <LabelForm
                     selectedLabel={selectedLabel}

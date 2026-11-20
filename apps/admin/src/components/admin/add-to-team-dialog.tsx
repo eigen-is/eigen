@@ -23,7 +23,7 @@ type AddToTeamDialogProps = {
 export function AddToTeamDialog({ open, onOpenChange, users, organizationId }: AddToTeamDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
+            <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Add to team</DialogTitle>
                     <DialogDescription>

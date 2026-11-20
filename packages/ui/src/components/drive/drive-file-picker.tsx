@@ -34,8 +34,8 @@ type DriveFilePickerProps = {
 export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...body }: DriveFilePickerProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg" className="flex flex-col p-0 gap-0 max-w-[90vw] h-[520px] max-h-[85vh]">
-                <DialogHeader className="px-6 py-4 border-b">
+            <DialogContent className="flex flex-col max-w-[90vw] h-[520px] max-h-[85vh]">
+                <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
@@ -77,7 +77,7 @@ function DriveFilePickerBody({
 
     return (
         <>
-            <div className="flex-1 overflow-hidden">
+            <div className="-mx-6 min-h-0 flex-1 overflow-hidden">
                 <DriveBrowser
                     value={location}
                     onChange={setLocation}
@@ -92,23 +92,19 @@ function DriveFilePickerBody({
                 />
             </div>
 
-            <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
-                {onUploadFromDevice ? (
-                    <Button variant="outline" onClick={onUploadFromDevice}>
+            <DialogFooter>
+                {onUploadFromDevice && (
+                    <Button variant="outline" className="mr-auto" onClick={onUploadFromDevice}>
                         <Upload className="h-4 w-4 mr-2" />
                         Upload from device
                     </Button>
-                ) : (
-                    <div />
                 )}
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
-                        {submitLabel}
-                    </Button>
-                </div>
+                <Button variant="outline" onClick={onClose}>
+                    Cancel
+                </Button>
+                <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
+                    {submitLabel}
+                </Button>
             </DialogFooter>
         </>
     );
