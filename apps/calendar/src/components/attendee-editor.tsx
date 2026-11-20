@@ -7,6 +7,7 @@ import type { Attendee } from '@workspace/lib/types/calendar';
 import { Badge } from '@workspace/ui/components/badge';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
+import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserItem } from '@workspace/ui/components/user';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
@@ -33,6 +34,9 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
 
     return (
         <div className="space-y-2">
+            <Label htmlFor="attendee-input" className="sr-only">
+                Guests
+            </Label>
             <ContactAddRow
                 id="attendee-input"
                 value={contactInput.value}

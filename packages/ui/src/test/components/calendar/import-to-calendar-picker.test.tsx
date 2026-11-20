@@ -204,11 +204,12 @@ async function open() {
     };
 }
 
-test('the dialog names the file and offers a calendar, with a name field only for a new one', async () => {
+test('the dialog names the file and offers a calendar under Add to calendar, with a name field only for a new one', async () => {
     const { chooseCalendar, cleanup, dialog, trigger } = await open();
     expect(dialog().querySelector('h2')?.textContent).toBe('Import to Calendar');
     expect(dialog().textContent).toContain('Pick the calendar “Autumn market.ics” lands in.');
     expect(trigger().textContent).toContain('Home');
+    expect(dialog().querySelector(`label[for="${trigger().id}"]`)?.textContent).toBe('Add to calendar');
     expect(dialog().querySelector('input')).toBeNull();
 
     await chooseCalendar('New calendar');

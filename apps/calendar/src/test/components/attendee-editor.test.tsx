@@ -1,5 +1,6 @@
 // A guest's Remove button shows to a mouse user on the row's hover only, and Tab reaches it and shows it. A guest added
-// by address takes their name from the user's contacts, and an address nobody knows is stored with no name at all.
+// by address, in the field a screen reader names Guests, takes their name from the user's contacts, and an address
+// nobody knows is stored with no name at all.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -51,7 +52,7 @@ test("a guest's Remove button shows on the row's hover only, and Tab reaches and
     expectKeyboardReveal(remove);
 });
 
-// Types an address into the guest field and presses its + button, and answers the guest list the editor hands back.
+// Types an address into the field labelled Guests and presses its + button, and answers the guest list the editor hands back.
 async function addGuest(typed: string): Promise<Attendee[]> {
     let added: Attendee[] = [];
     await renderInDocument(
@@ -62,7 +63,8 @@ async function addGuest(typed: string): Promise<Attendee[]> {
             },
         }),
     );
-    const input = document.querySelector<HTMLInputElement>('#attendee-input');
+    const label = [...document.querySelectorAll('label')].find((each) => each.textContent === 'Guests');
+    const input = document.querySelector<HTMLInputElement>(`input#${label?.htmlFor}`);
     const add = document.querySelector<HTMLButtonElement>('button[aria-label="Add"]');
     if (!input || !add) throw new Error('the editor drew no guest field');
     await act(async () => {

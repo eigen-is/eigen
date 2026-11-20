@@ -111,7 +111,6 @@ function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDia
                 calendarOptions={calendarOptions}
                 recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
                 timezone={viewerTimeZone()}
-                allDayId="all-day"
                 attendeesSection={
                     <div className="flex items-start gap-3">
                         <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />

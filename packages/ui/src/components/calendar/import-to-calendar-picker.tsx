@@ -109,24 +109,27 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                 />
             ) : (
                 <>
-                    <Select value={target} onValueChange={setChosenTarget} disabled={!calendars}>
-                        <SelectTrigger className="w-full">
-                            <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectLabel>My calendars</SelectLabel>
-                                {ownTargets.map(renderTarget)}
-                            </SelectGroup>
-                            {teamTargets.length > 0 && (
+                    <Field>
+                        <FieldLabel htmlFor="import-calendar-target">Add to calendar</FieldLabel>
+                        <Select value={target} onValueChange={setChosenTarget} disabled={!calendars}>
+                            <SelectTrigger id="import-calendar-target" className="w-full">
+                                <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
+                            </SelectTrigger>
+                            <SelectContent>
                                 <SelectGroup>
-                                    <SelectLabel>Team calendars</SelectLabel>
-                                    {teamTargets.map(renderTarget)}
+                                    <SelectLabel>My calendars</SelectLabel>
+                                    {ownTargets.map(renderTarget)}
                                 </SelectGroup>
-                            )}
-                            <SelectItem value={NEW_CALENDAR}>New calendar</SelectItem>
-                        </SelectContent>
-                    </Select>
+                                {teamTargets.length > 0 && (
+                                    <SelectGroup>
+                                        <SelectLabel>Team calendars</SelectLabel>
+                                        {teamTargets.map(renderTarget)}
+                                    </SelectGroup>
+                                )}
+                                <SelectItem value={NEW_CALENDAR}>New calendar</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </Field>
 
                     {isNew && (
                         <Field>

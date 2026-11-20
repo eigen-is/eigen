@@ -39,7 +39,6 @@ type EventFormFieldsProps = {
     calendarOptions: CalendarOption[];
     recurrenceStartDate: Date;
     timezone: string;
-    allDayId: string;
     attendeesSection: ReactNode;
     // An invitation's details belong to the organizer: updateEvent's linked-event guard drops them anyway.
     detailsDisabled?: boolean;
@@ -69,7 +68,6 @@ export function EventFormFields({
     calendarOptions,
     recurrenceStartDate,
     timezone,
-    allDayId,
     attendeesSection,
     detailsDisabled,
 }: EventFormFieldsProps) {
@@ -181,7 +179,7 @@ export function EventFormFields({
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center gap-2">
                             <Checkbox
-                                id={allDayId}
+                                id={`${id}-all-day`}
                                 checked={allDay}
                                 disabled={detailsDisabled}
                                 onCheckedChange={(checked) => {
@@ -197,7 +195,7 @@ export function EventFormFields({
                                     }
                                 }}
                             />
-                            <Label htmlFor={allDayId}>All day</Label>
+                            <Label htmlFor={`${id}-all-day`}>All day</Label>
                         </div>
                         <RecurrencePicker
                             value={rruleString}

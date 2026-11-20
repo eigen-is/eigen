@@ -27,6 +27,7 @@ import {
 } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
+import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -143,7 +144,8 @@ export function StickiesBoard({
     useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen);
 
     const { isMobile } = useLayout();
-    const [editColumnId, setEditColumnId] = useState<string | null>(null);
+    const columnSettings = useDialogValue<string>();
+    const editColumnId = columnSettings.value;
     // The board shows resolved cards too by default, and clearing the filter returns to that.
     const commentFilter = useCommentFilter({ status: 'all' });
     const currentUserEmail = user?.email ?? '';
@@ -201,7 +203,7 @@ export function StickiesBoard({
         setAddOpen(true);
     }, []);
 
-    const handleEditColumn = useCallback((columnId: string) => setEditColumnId(columnId), []);
+    const handleEditColumn = columnSettings.openDialog;
 
     const { handleContextMenu, openAt: openCardContextMenuAt } = cardContextMenu;
     const handleCardContextMenu = useCallback(
@@ -400,8 +402,8 @@ export function StickiesBoard({
                                     {editColumnId && (
                                         <ColumnSettingsDialog
                                             key={editColumnId}
-                                            isOpen={!!editColumnId}
-                                            onClose={() => setEditColumnId(null)}
+                                            isOpen={columnSettings.open}
+                                            onClose={() => columnSettings.setOpen(false)}
                                             columnId={editColumnId}
                                             columnTitle={board.columns[editColumnId]?.title ?? ''}
                                             cardCount={board.columns[editColumnId]?.taskIds.length ?? 0}

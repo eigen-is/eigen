@@ -3,7 +3,7 @@
 
 import { useResetUserPassword } from '@workspace/lib/admin';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
-import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldContent, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
@@ -41,20 +41,18 @@ function ResetPasswordForm({ userId }: { userId: string }) {
                 await resetPassword.mutateAsync({ userId, password });
             }}
         >
-            <FieldGroup>
-                <Field>
-                    <FieldLabel htmlFor="new-password">New password</FieldLabel>
-                    <FieldContent>
-                        <Input
-                            id="new-password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            minLength={MIN_PASSWORD_LENGTH}
-                            required
-                        />
-                    </FieldContent>
-                </Field>
-            </FieldGroup>
+            <Field>
+                <FieldLabel htmlFor="new-password">New password</FieldLabel>
+                <FieldContent>
+                    <Input
+                        id="new-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={MIN_PASSWORD_LENGTH}
+                        required
+                    />
+                </FieldContent>
+            </Field>
         </FormDialogForm>
     );
 }
