@@ -190,3 +190,11 @@ test("the label header's pencil saves its label, and a failed save stays open", 
     expect(updateLabel).toHaveBeenCalledTimes(2);
     expect(dialogTitled('Edit label')).toBeUndefined();
 });
+
+test('the color swatch sits inside the name field, which its label names', async () => {
+    await open(urgent);
+    expect(
+        nameField().closest('[data-slot="input-group"]')?.querySelector('button[aria-label="Color"]'),
+    ).not.toBeNull();
+    expect(document.querySelector<HTMLLabelElement>(`label[for="${nameField().id}"]`)?.textContent).toBe('Label name');
+});

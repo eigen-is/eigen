@@ -241,3 +241,13 @@ test('Share with team sits in the footer after the trash, as in the Share dialog
         [...(footer?.querySelectorAll('button') ?? [])].map((b) => b.textContent || b.getAttribute('aria-label')),
     ).toEqual(['Delete calendar', 'Share with team', 'Cancel', 'Save']);
 });
+
+test('the color swatch sits inside the name field, which its label names', async () => {
+    await open(calendar({}));
+    expect(
+        nameField().closest('[data-slot="input-group"]')?.querySelector('button[aria-label="Color"]'),
+    ).not.toBeNull();
+    expect(document.querySelector<HTMLLabelElement>(`label[for="${nameField().id}"]`)?.textContent).toBe(
+        'Calendar name',
+    );
+});

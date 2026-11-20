@@ -1,17 +1,19 @@
 // A square swatch of the current color that opens a ColorPicker in a popover, for a dialog that picks one color, such
-// as a label's or a calendar's. It owns its open state and closes after a pick, so a caller wires only `value` and
-// `onChange`. A toolbar uses ColorPickerButton instead.
+// as a label's, where a smaller one sits inside the name field. It owns its open state and closes after a pick, so a
+// caller wires only `value` and `onChange`. A toolbar uses ColorPickerButton instead.
 
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
 import { ColorPicker } from './color-picker';
 
 type ColorPickerSwatchProps = {
     value: string;
     onChange: (color: string) => void;
+    className?: string;
 };
 
-export function ColorPickerSwatch({ value, onChange }: ColorPickerSwatchProps) {
+export function ColorPickerSwatch({ value, onChange, className }: ColorPickerSwatchProps) {
     const [open, setOpen] = useState(false);
 
     return (
@@ -20,7 +22,7 @@ export function ColorPickerSwatch({ value, onChange }: ColorPickerSwatchProps) {
                 <button
                     type="button"
                     aria-label="Color"
-                    className="h-9 w-9 rounded-md border border-input shrink-0"
+                    className={cn('size-9 shrink-0 rounded-md border border-input', className)}
                     style={{ backgroundColor: value }}
                 />
             </PopoverTrigger>

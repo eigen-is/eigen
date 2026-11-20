@@ -30,7 +30,7 @@ Calendars that other people have shared with you appear under **Shared with me**
 Each calendar has a **⋮** button on the right that appears when you hover over it. Click it, then click **Edit calendar** to open the **Edit calendar** dialog. From there you can:
 
 - Change the calendar's name in the **Calendar name** field.
-- Pick a new color by clicking the color swatch on the left.
+- Pick a new color by clicking the color swatch at the start of the **Calendar name** field.
 
 Click **Save** when you are done. **Save** stays grayed out while the name is empty.
 

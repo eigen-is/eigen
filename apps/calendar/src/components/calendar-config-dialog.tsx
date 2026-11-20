@@ -2,35 +2,21 @@
 // with. It also deletes the calendar. Save waits for a name that is more than spaces, and the name is saved trimmed.
 // The sidebar opens it.
 
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@workspace/lib/calendar';
 import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 import { CalendarShareEditor, ShareWithTeamButton } from './calendar-share-editor';
-
-const calendarFormSchema = z.object({
-    name: z
-        .string()
-        .trim()
-        .min(1, 'Calendar name is required.')
-        .max(CALENDAR_NAME_MAX_LENGTH, 'Calendar name is too long.'),
-    color: z.string().min(1, 'Color is required.'),
-});
-
-type CalendarFormValues = z.infer<typeof calendarFormSchema>;
 
 type CalendarConfigDialogProps = {
     open: boolean;
@@ -96,83 +82,58 @@ function CalendarConfigForm({
     calendarCount: number;
     onDelete: () => void;
 }) {
+    const [name, setName] = useState(calendar?.name ?? '');
+    const [color, setColor] = useState(
+        calendar?.color ?? EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+    );
     const [shares, setShares] = useState<CalendarShare[] | null>(calendar?.shares ?? null);
 
     const createCalendar = useCreateCalendar(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
 
-    const form = useForm<CalendarFormValues>({
-        resolver: zodResolver(calendarFormSchema),
-        defaultValues: calendar
-            ? { name: calendar.name, color: calendar.color }
-            : {
-                  name: '',
-                  color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
-              },
-    });
-    const name = form.watch('name');
-
     return (
-        <Form {...form}>
-            <FormDialogForm
-                canSubmit={name.trim() !== ''}
-                submitLabel="Save"
-                // A failed check resolves without saving, and returning false keeps its messages in view.
-                onSubmit={async () => {
-                    let saved = false;
-                    await form.handleSubmit(async (data) => {
-                        if (calendar) await updateCalendar.mutateAsync({ id: calendar.id, ...data, shares });
-                        else await createCalendar.mutateAsync(data);
-                        saved = true;
-                    })();
-                    if (!saved) return false;
-                }}
-                footerStart={
-                    calendar && (
-                        <>
-                            {!calendar.isDefault && (
-                                <TooltipButton icon={Trash2} tooltipText="Delete calendar" onClick={onDelete} />
-                            )}
-                            <ShareWithTeamButton shares={shares} onChange={setShares} />
-                        </>
-                    )
-                }
-            >
-                <div className="flex gap-2">
-                    <FormField
-                        control={form.control}
-                        name="color"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel className="invisible">Color</FormLabel>
-                                <FormControl>
-                                    <ColorPickerSwatch value={field.value} onChange={field.onChange} />
-                                </FormControl>
-                            </FormItem>
-                        )}
-                    />
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field, fieldState }) => (
-                            <FormItem className="flex-1">
-                                <FormLabel>Calendar name</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="Enter calendar name" autoFocus {...field} />
-                                </FormControl>
-                                <FormMessage>{fieldState.error?.message}</FormMessage>
-                            </FormItem>
-                        )}
-                    />
-                </div>
-
-                {calendar && (
+        <FormDialogForm
+            canSubmit={name.trim() !== ''}
+            submitLabel="Save"
+            onSubmit={async () => {
+                const data = { name: name.trim(), color };
+                if (calendar) await updateCalendar.mutateAsync({ id: calendar.id, ...data, shares });
+                else await createCalendar.mutateAsync(data);
+            }}
+            footerStart={
+                calendar && (
                     <>
-                        <Separator />
-                        <CalendarShareEditor shares={shares} onChange={setShares} />
+                        {!calendar.isDefault && (
+                            <TooltipButton icon={Trash2} tooltipText="Delete calendar" onClick={onDelete} />
+                        )}
+                        <ShareWithTeamButton shares={shares} onChange={setShares} />
                     </>
-                )}
-            </FormDialogForm>
-        </Form>
+                )
+            }
+        >
+            <Field>
+                <FieldLabel htmlFor="calendar-name">Calendar name</FieldLabel>
+                <InputGroup>
+                    <InputGroupAddon>
+                        <ColorPickerSwatch value={color} onChange={setColor} className="size-6 rounded-sm" />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                        id="calendar-name"
+                        placeholder="Enter calendar name"
+                        autoFocus
+                        maxLength={CALENDAR_NAME_MAX_LENGTH}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                    />
+                </InputGroup>
+            </Field>
+
+            {calendar && (
+                <>
+                    <Separator />
+                    <CalendarShareEditor shares={shares} onChange={setShares} />
+                </>
+            )}
+        </FormDialogForm>
     );
 }

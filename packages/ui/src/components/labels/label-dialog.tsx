@@ -1,33 +1,23 @@
 // The dialog that adds or edits a label: its name and color, and deleting it after a confirmation. Save waits for a
 // name that is more than spaces, and the name is saved trimmed. Contacts opens it from its label list.
 
-import { zodResolver } from '@hookform/resolvers/zod';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media/color-picker-swatch';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-
-const labelFormSchema = z.object({
-    name: z.string().trim().min(1, 'Label name is required.'),
-    color: z.string().min(1, 'Color is required.'),
-});
-
-export type LabelFormValues = z.infer<typeof labelFormSchema>;
 
 type LabelDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     selectedLabel: Label | null;
     // Rejects when the save fails, which keeps the dialog open.
-    onSubmit: (data: LabelFormValues) => Promise<unknown>;
+    onSubmit: (data: Omit<Label, 'id'>) => Promise<unknown>;
     onDelete: () => void | Promise<void>;
     labelCount?: number;
 };
@@ -85,69 +75,39 @@ function LabelForm({
 }: {
     selectedLabel: Label | null;
     labelCount: number;
-    onSubmit: (data: LabelFormValues) => Promise<unknown>;
+    onSubmit: (data: Omit<Label, 'id'>) => Promise<unknown>;
     onDelete: () => void;
 }) {
-    const form = useForm<LabelFormValues>({
-        resolver: zodResolver(labelFormSchema),
-        defaultValues: selectedLabel
-            ? { name: selectedLabel.name, color: selectedLabel.color }
-            : { name: '', color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value },
-    });
-    const name = form.watch('name');
+    const [name, setName] = useState(selectedLabel?.name ?? '');
+    const [color, setColor] = useState(
+        selectedLabel?.color ?? EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+    );
 
     return (
-        <Form {...form}>
-            <FormDialogForm
-                canSubmit={name.trim() !== ''}
-                submitLabel="Save"
-                // A failed check resolves without calling onSubmit, and returning false keeps its messages in view.
-                onSubmit={async () => {
-                    let saved = false;
-                    await form.handleSubmit(async (data) => {
-                        await onSubmit(data);
-                        saved = true;
-                    })();
-                    if (!saved) return false;
-                }}
-                footerStart={
-                    selectedLabel && <TooltipButton icon={Trash2} tooltipText="Delete label" onClick={onDelete} />
-                }
-            >
-                <div className="flex gap-2">
-                    <FormField
-                        control={form.control}
-                        name="color"
-                        render={({ field, fieldState }) => (
-                            <FormItem>
-                                <FormLabel className="invisible">Color</FormLabel>
-                                <FormControl>
-                                    <ColorPickerSwatch value={field.value} onChange={field.onChange} />
-                                </FormControl>
-                                <FormMessage>{fieldState.error?.message}</FormMessage>
-                            </FormItem>
-                        )}
+        <FormDialogForm
+            canSubmit={name.trim() !== ''}
+            submitLabel="Save"
+            onSubmit={async () => {
+                await onSubmit({ name: name.trim(), color });
+            }}
+            footerStart={selectedLabel && <TooltipButton icon={Trash2} tooltipText="Delete label" onClick={onDelete} />}
+        >
+            <Field>
+                <FieldLabel htmlFor="label-name">Label name</FieldLabel>
+                <InputGroup>
+                    <InputGroupAddon>
+                        <ColorPickerSwatch value={color} onChange={setColor} className="size-6 rounded-sm" />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                        id="label-name"
+                        placeholder="Enter label name"
+                        autoFocus
+                        maxLength={LABEL_NAME_MAX_LENGTH}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
                     />
-                    <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field, fieldState }) => (
-                            <FormItem className="flex-1">
-                                <FormLabel>Label name</FormLabel>
-                                <FormControl>
-                                    <Input
-                                        placeholder="Enter label name"
-                                        autoFocus
-                                        maxLength={LABEL_NAME_MAX_LENGTH}
-                                        {...field}
-                                    />
-                                </FormControl>
-                                <FormMessage>{fieldState.error?.message}</FormMessage>
-                            </FormItem>
-                        )}
-                    />
-                </div>
-            </FormDialogForm>
-        </Form>
+                </InputGroup>
+            </Field>
+        </FormDialogForm>
     );
 }
