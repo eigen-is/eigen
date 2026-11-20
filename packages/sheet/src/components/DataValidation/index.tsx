@@ -9,8 +9,9 @@ import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { Table } from 'lucide-react';
+import { Table, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -75,13 +76,13 @@ const HINT_TOGGLES = [
     { value: 'hintShow', label: 'Show prompt when the cell is selected' },
 ] as const;
 
-// What OK and Delete validation say when the range names no cells.
+// What OK and Remove validation say when the range names no cells.
 const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
 // The draft's text fields, each typed into an input.
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 
-// Why OK or Delete validation refused the draft: its range, or the values its condition compares against.
+// Why OK or Remove validation refused the draft: its range, or the values its condition compares against.
 type Problem = { field: 'range' | 'value'; message: string };
 
 // `draft` is the rule as the user left it when the range picker took this dialog's place.
@@ -144,7 +145,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
         });
     };
 
-    const deleteValidation = () => {
+    const removeValidation = () => {
         const target = rangeOrRefuse();
         if (!target) return;
         setContext((ctx) => {
@@ -158,11 +159,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
             <FormDialogForm
                 submitLabel="OK"
                 onSubmit={apply}
-                footerStart={
-                    <Button variant="outline" onClick={deleteValidation}>
-                        Delete validation
-                    </Button>
-                }
+                footerStart={<TooltipButton icon={Trash2} tooltipText="Remove validation" onClick={removeValidation} />}
             >
                 <div className="text-sm space-y-4 select-none">
                     <div>

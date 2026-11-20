@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-11-11
+updated: 2026-11-20
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -74,9 +74,9 @@ Without **Prohibit input when input data is invalid**, a value that fails the ru
 
 1. Select the cells whose rule you want to remove.
 2. Open **Data → Data validation**.
-3. Click **Delete validation**.
+3. Click the trash icon (**Remove validation**) in the bottom-left corner.
 
-The rule is removed from those cells.
+The rule is removed from those cells. Press **Ctrl+Z** (Mac: **⌘Z**) to bring it back.
 
 ## Rules when you paste or insert
 
