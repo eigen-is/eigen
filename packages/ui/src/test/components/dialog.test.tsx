@@ -8,7 +8,7 @@ import { renderInDocument } from '../render-in-document';
 installHappyDom();
 
 const { act, createElement, useState } = await import('react');
-const { Dialog, DialogContent, DialogDescription, DialogTitle } = await import('../../components/dialog');
+const { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } = await import('../../components/dialog');
 
 let unmount = async () => {};
 afterEach(async () => {
@@ -29,6 +29,24 @@ test('the description breaks long words', async () => {
         ),
     ));
     expect(document.querySelector('[data-slot="dialog-description"]')?.classList.contains('break-words')).toBe(true);
+});
+
+test('a dialog is wide unless it asks to be narrow, and its footer sits in the wide box', async () => {
+    const content = (size?: 'sm') =>
+        createElement(
+            Dialog,
+            { open: true },
+            createElement(
+                DialogContent,
+                { size, 'aria-describedby': undefined },
+                createElement(DialogTitle, null, size ?? 'wide'),
+                createElement(DialogFooter, null, 'Footer'),
+            ),
+        );
+    ({ unmount } = await renderInDocument(createElement('div', null, content(), content('sm'))));
+    const boxes = [...document.querySelectorAll('[data-slot="dialog-content"]')];
+    expect(boxes.map((box) => box.getAttribute('data-size'))).toEqual(['lg', 'sm']);
+    expect(boxes[0]?.querySelector('[data-slot="dialog-footer"]')?.textContent).toBe('Footer');
 });
 
 const dialog = (title: string, onOpenChange: (open: boolean) => void, children?: ReactNode, open = true) =>

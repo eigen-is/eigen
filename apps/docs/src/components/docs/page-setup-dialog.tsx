@@ -71,13 +71,7 @@ export function PageSetupDialog({
     onTextWidthChange,
 }: PageSetupDialogProps) {
     return (
-        <FormDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title="Page setup"
-            size="lg"
-            onCloseAutoFocus={onCloseAutoFocus}
-        >
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Page setup" onCloseAutoFocus={onCloseAutoFocus}>
             <PageSetupForm
                 setup={setup}
                 canWrite={canWrite}

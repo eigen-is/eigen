@@ -34,13 +34,7 @@ export function CustomSpacingDialog({
     onCloseAutoFocus,
 }: CustomSpacingDialogProps) {
     return (
-        <FormDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title="Custom spacing"
-            size="sm"
-            onCloseAutoFocus={onCloseAutoFocus}
-        >
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Custom spacing" onCloseAutoFocus={onCloseAutoFocus}>
             <CustomSpacingForm editor={editor} normal={normal} />
         </FormDialog>
     );

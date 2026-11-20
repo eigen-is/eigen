@@ -51,7 +51,6 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                 onOpenChange={onOpenChange}
                 title={calendar ? 'Edit calendar' : 'New calendar'}
                 description={calendar ? 'Edit calendar settings and sharing.' : 'Create a new calendar.'}
-                size="lg"
             >
                 <CalendarConfigForm
                     ownerId={ownerId}

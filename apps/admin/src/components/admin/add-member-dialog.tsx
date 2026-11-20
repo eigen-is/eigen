@@ -33,7 +33,7 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
                 if (!v) setSearch('');
             }}
         >
-            <DialogContent size="sm">
+            <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Add member to team</DialogTitle>
                     <DialogDescription className="sr-only">

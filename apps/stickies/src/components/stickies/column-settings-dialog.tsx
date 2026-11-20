@@ -74,7 +74,7 @@ export function ColumnSettingsDialog({
 
     return (
         <>
-            <FormDialog open={isOpen} onOpenChange={onClose} title="Column settings" size="sm">
+            <FormDialog open={isOpen} onOpenChange={onClose} title="Column settings">
                 <FormDialogForm
                     canSubmit={title.trim() !== ''}
                     submitLabel="Save changes"

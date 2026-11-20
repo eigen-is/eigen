@@ -50,7 +50,6 @@ export function IndentationOptionsDialog({
             open={open}
             onOpenChange={onOpenChange}
             title="Indentation options"
-            size="sm"
             onCloseAutoFocus={onCloseAutoFocus}
         >
             <IndentationOptionsForm editor={editor} normal={normal} />

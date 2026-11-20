@@ -14,7 +14,7 @@ type AddColumnDialogProps = {
 
 export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialogProps) {
     return (
-        <FormDialog open={isOpen} onOpenChange={onClose} title="Add column" size="sm">
+        <FormDialog open={isOpen} onOpenChange={onClose} title="Add column">
             <AddColumnForm onAddColumn={onAddColumn} />
         </FormDialog>
     );

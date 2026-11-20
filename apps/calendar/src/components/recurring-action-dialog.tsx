@@ -26,7 +26,7 @@ const ACTION_LABELS: Record<RecurringAction, string> = {
 
 export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, options }: RecurringActionDialogProps) {
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title={title}>
+        <FormDialog open={open} onOpenChange={onOpenChange} title={title} size="sm">
             <RecurringActionForm title={title} onConfirm={onConfirm} options={options ?? RECURRING_ACTIONS} />
         </FormDialog>
     );

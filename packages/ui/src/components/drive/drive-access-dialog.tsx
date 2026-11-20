@@ -79,12 +79,7 @@ function ShareDialog({
     const readOnly = isGuest || mayNotWrite || (path.sharingRestricted && !isEffectiveOwner);
 
     return (
-        <FormDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title={`Share '${stripEigenExtension(path.name)}'`}
-            size="lg"
-        >
+        <FormDialog open={open} onOpenChange={onOpenChange} title={`Share '${stripEigenExtension(path.name)}'`}>
             {readOnly ? (
                 // Close is the only button, so nothing submits.
                 <FormDialogForm readOnly submitLabel="Save" onSubmit={() => {}}>

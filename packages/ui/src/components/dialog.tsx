@@ -1,6 +1,7 @@
 // The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
-// description and footer parts that dialogs across the apps put inside it. Radix stacks the open layers, so Escape
-// and a click outside close only the top one. A closing dialog gives the focus back to what had it as it opened.
+// description and footer parts that dialogs across the apps put inside it. A wide dialog's footer keeps a line above
+// it and stays in view while the body scrolls. Radix stacks the open layers, so Escape and a click outside close only
+// the top one. A closing dialog gives the focus back to what had it as it opened.
 
 import { Button } from '@workspace/ui/components/button';
 import { useFocusReturn } from '@workspace/ui/hooks/use-focus-return';
@@ -31,8 +32,8 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
     );
 }
 
-// Two widths, so a new dialog only asks whether it is a question or a page: sm for a confirm or a short form, lg for
-// what a user reads or picks from, such as a card, an event or a file picker.
+// Two widths, so a new dialog only asks whether it has a box to type in: lg if it does, and for a page such as a card
+// or a file picker; sm for a confirm or a form of choices only, such as radios or a select.
 type DialogSize = 'sm' | 'lg';
 
 const dialogSizeMap: Record<DialogSize, string> = {
@@ -65,7 +66,7 @@ function OpenDialogContent({
     className,
     children,
     showCloseButton = true,
-    size = 'sm',
+    size = 'lg',
     onEscapeKeyDown,
     onCloseAutoFocus,
     ref,
@@ -86,12 +87,11 @@ function OpenDialogContent({
         <DialogPrimitive.Content
             ref={composedRef}
             data-slot="dialog-content"
+            data-size={size}
             className={cn(
-                // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
-                // caller that sets its own height overrides max-h and overflow. The single column may shrink
-                // below its content: an auto column would grow to fit a very long title and push the footer's
-                // buttons out of the dialog.
-                'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+                // A caller that sets its own height overrides max-h and overflow. The one column may shrink below its
+                // content, or a very long title would widen it and push the footer's buttons out of the dialog.
+                'group/dialog fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
                 dialogSizeMap[size],
                 className,
             )}
@@ -138,7 +138,10 @@ function DialogFooter({
         <div
             data-slot="dialog-footer"
             className={cn(
+                // A wide dialog's footer runs edge to edge under its line and sticks to the bottom of the scrolling
+                // content, so the negative margins cancel the content's padding.
                 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
+                'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:-mb-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
                 className,
             )}
             {...props}
