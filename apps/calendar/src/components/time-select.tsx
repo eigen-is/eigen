@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 const TIME_SLOTS = Array.from({ length: 24 * 4 }, (_, i) => minutesToTime(i * 15));
 
 type TimeSelectProps = {
+    id?: string;
     value: string;
     onChange: (value: string, dayOffset: number) => void;
     referenceTime?: string;
@@ -18,7 +19,7 @@ type TimeSelectProps = {
     disabled?: boolean;
 };
 
-export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }: TimeSelectProps) {
+export function TimeSelect({ id, value, onChange, referenceTime, minTime, disabled }: TimeSelectProps) {
     const [open, setOpen] = useState(false);
     const [inputValue, setInputValue] = useState(value);
     const listRef = useRef<HTMLDivElement>(null);
@@ -80,6 +81,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
             <PopoverTrigger asChild>
                 <div className="relative">
                     <Input
+                        id={id}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onBlur={commitInput}
