@@ -2,7 +2,7 @@
 // toolbar. The new team joins the list, where the admin opens it to add members and drives.
 
 import { useCreateTeam } from '@workspace/lib/admin';
-import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldContent, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
@@ -35,20 +35,12 @@ function CreateTeamForm({ organizationId }: { organizationId?: string }) {
                 await createTeam.mutateAsync(trimmed);
             }}
         >
-            <FieldGroup>
-                <Field>
-                    <FieldLabel htmlFor="team-name">Team name</FieldLabel>
-                    <FieldContent>
-                        <Input
-                            id="team-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            autoFocus
-                            required
-                        />
-                    </FieldContent>
-                </Field>
-            </FieldGroup>
+            <Field>
+                <FieldLabel htmlFor="team-name">Team name</FieldLabel>
+                <FieldContent>
+                    <Input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+                </FieldContent>
+            </Field>
         </FormDialogForm>
     );
 }

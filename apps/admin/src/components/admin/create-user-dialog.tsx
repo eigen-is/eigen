@@ -5,7 +5,7 @@ import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { OrgRole } from '@workspace/lib/types/admin';
 import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
-import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldContent, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
@@ -53,65 +53,63 @@ function CreateUserForm() {
                 });
             }}
         >
-            <FieldGroup>
-                <Field>
-                    <FieldLabel htmlFor="name">Name</FieldLabel>
-                    <FieldContent>
-                        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
-                    </FieldContent>
-                </Field>
+            <Field>
+                <FieldLabel htmlFor="name">Name</FieldLabel>
+                <FieldContent>
+                    <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                </FieldContent>
+            </Field>
 
-                <Field>
-                    <FieldLabel htmlFor="username">Username</FieldLabel>
-                    <FieldContent>
-                        <InputGroup>
-                            <InputGroupInput
-                                id="username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                required
-                            />
-                            <InputGroupAddon align="inline-end">
-                                <InputGroupText>@{config?.mailDomain}</InputGroupText>
-                            </InputGroupAddon>
-                        </InputGroup>
-                        {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
-                    </FieldContent>
-                </Field>
-
-                <Field>
-                    <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <FieldContent>
-                        <Input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            minLength={MIN_PASSWORD_LENGTH}
+            <Field>
+                <FieldLabel htmlFor="username">Username</FieldLabel>
+                <FieldContent>
+                    <InputGroup>
+                        <InputGroupInput
+                            id="username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
                             required
                         />
-                    </FieldContent>
-                </Field>
+                        <InputGroupAddon align="inline-end">
+                            <InputGroupText>@{config?.mailDomain}</InputGroupText>
+                        </InputGroupAddon>
+                    </InputGroup>
+                    {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
+                </FieldContent>
+            </Field>
 
-                <Field>
-                    <FieldLabel htmlFor="role">Role</FieldLabel>
-                    <FieldContent>
-                        <Select
-                            value={role}
-                            // The two items below are the whole of what this can hand back.
-                            onValueChange={(value) => setRole(value === 'admin' ? 'admin' : 'member')}
-                        >
-                            <SelectTrigger id="role">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="member">Member</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </FieldContent>
-                </Field>
-            </FieldGroup>
+            <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldContent>
+                    <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        minLength={MIN_PASSWORD_LENGTH}
+                        required
+                    />
+                </FieldContent>
+            </Field>
+
+            <Field>
+                <FieldLabel htmlFor="role">Role</FieldLabel>
+                <FieldContent>
+                    <Select
+                        value={role}
+                        // The two items below are the whole of what this can hand back.
+                        onValueChange={(value) => setRole(value === 'admin' ? 'admin' : 'member')}
+                    >
+                        <SelectTrigger id="role">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="member">Member</SelectItem>
+                            <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </FieldContent>
+            </Field>
         </FormDialogForm>
     );
 }

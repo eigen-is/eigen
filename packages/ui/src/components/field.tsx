@@ -1,5 +1,5 @@
-// shadcn's Field: a form field's label, control, description and error laid out together, and field sets that group
-// them, such as the fields of Admin's new user dialog or a Stickies column's settings.
+// shadcn's Field: a form field's label, control, description and error laid out together, such as each field of
+// Admin's new user dialog, and field sets that group them, such as the margins in Docs' page setup.
 
 import { Label } from '@workspace/ui/components/label';
 
