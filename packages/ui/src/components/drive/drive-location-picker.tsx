@@ -46,7 +46,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="flex flex-col max-w-[90vw]">
+            <DialogContent className="flex flex-col">
                 <DriveLocationPickerBody
                     key={place}
                     {...body}

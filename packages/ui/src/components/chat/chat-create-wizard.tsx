@@ -227,7 +227,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex flex-col max-w-[90vw] h-[620px] max-h-[85vh]">
+            <DialogContent className="flex flex-col h-[620px] max-h-[85vh]">
                 <DialogHeader>
                     <DialogTitle>New chat</DialogTitle>
                     <DialogDescription className="sr-only">

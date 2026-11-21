@@ -34,7 +34,7 @@ type DriveFilePickerProps = {
 export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...body }: DriveFilePickerProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex flex-col max-w-[90vw] h-[520px] max-h-[85vh]">
+            <DialogContent className="flex flex-col h-[520px] max-h-[85vh]">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
