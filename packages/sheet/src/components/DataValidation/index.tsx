@@ -330,25 +330,23 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                         {problemMessage('value')}
                     </Field>
 
-                    <div className="space-y-2">
-                        {HINT_TOGGLES.map(({ value, label }) => (
-                            <Field orientation="horizontal" key={value}>
-                                <Checkbox
-                                    id={`${id}-${value}`}
-                                    checked={draft[value]}
-                                    onCheckedChange={() => update({ [value]: !draft[value] })}
-                                />
-                                <FieldLabel htmlFor={`${id}-${value}`}>{label}</FieldLabel>
-                            </Field>
-                        ))}
-                        {draft.hintShow && (
-                            <Input
-                                className="h-8"
-                                placeholder="Enter the prompt shown when the cell is selected"
-                                {...textField('hintValue', 'Prompt')}
+                    {HINT_TOGGLES.map(({ value, label }) => (
+                        <Field orientation="horizontal" key={value}>
+                            <Checkbox
+                                id={`${id}-${value}`}
+                                checked={draft[value]}
+                                onCheckedChange={() => update({ [value]: !draft[value] })}
                             />
-                        )}
-                    </div>
+                            <FieldLabel htmlFor={`${id}-${value}`}>{label}</FieldLabel>
+                        </Field>
+                    ))}
+                    {draft.hintShow && (
+                        <Input
+                            className="h-8"
+                            placeholder="Enter the prompt shown when the cell is selected"
+                            {...textField('hintValue', 'Prompt')}
+                        />
+                    )}
                 </div>
             </FormDialogForm>
         </FormDialog>
