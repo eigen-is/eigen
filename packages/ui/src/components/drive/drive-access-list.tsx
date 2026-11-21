@@ -60,7 +60,7 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
                 </CollapsibleUserList>
             </div>
             <div className="shrink-0 pt-4">
-                <h3 className="eigen-section-label mb-2">General access</h3>
+                <h4 className="text-sm font-medium mb-2">General access</h4>
                 <GeneralAccess
                     visibility={visibility}
                     icon={
