@@ -107,7 +107,7 @@ async function cancelDialogOf(id: DriveActionId, items: DrivePath[]) {
 test('the delete dialog keeps its count and its text while it closes', async () => {
     const dialog = await cancelDialogOf('trash', files);
     expect(dialog?.querySelector('h2')?.textContent).toBe('Move 3 items to trash');
-    expect(dialog?.querySelector('p')?.textContent).toStartWith('This will move 3 items to trash.');
+    expect(dialog?.querySelector('p')?.textContent).toStartWith('This will move 3 items to the trash.');
 });
 
 test('after a partial failure the delete dialog asks about the failed item, again and while it closes', async () => {
