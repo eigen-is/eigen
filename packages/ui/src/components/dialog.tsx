@@ -174,7 +174,7 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
     return (
         <DialogPrimitive.Description
             data-slot="dialog-description"
-            className={cn('text-sm text-muted-foreground break-words', className)}
+            className={cn('text-sm text-muted-foreground text-pretty break-words', className)}
             {...props}
         />
     );
