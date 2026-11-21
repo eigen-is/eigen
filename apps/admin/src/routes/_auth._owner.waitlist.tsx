@@ -54,11 +54,9 @@ function WaitlistRoute() {
     const resend = useResendWaitlistInvite();
     const remove = useDeleteWaitlistEntry();
 
+    const query = searchQuery.toLowerCase();
     const filtered = entries.filter(
-        (e) =>
-            !searchQuery ||
-            e.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            e.notes.toLowerCase().includes(searchQuery.toLowerCase()),
+        (e) => e.email.toLowerCase().includes(query) || e.notes.toLowerCase().includes(query),
     );
     const selected = entries.find((e) => e.id === entryId);
     const isPending = accept.isPending || reject.isPending || resend.isPending || remove.isPending;
@@ -212,11 +210,9 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
     const statusVariant =
         entry.status === 'pending'
             ? 'secondary'
-            : entry.status === 'invited'
+            : entry.status === 'invited' || entry.status === 'registered'
               ? 'default'
-              : entry.status === 'registered'
-                ? 'default'
-                : 'destructive';
+              : 'destructive';
 
     return (
         <div className="app-gutter space-y-6">

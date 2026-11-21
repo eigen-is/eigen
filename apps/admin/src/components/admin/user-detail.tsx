@@ -23,10 +23,6 @@ import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 import { UserTeamsSection } from './user-teams-section';
 
-function canManagePasswordAndBackups(user: AdminUserRow, myId: string | undefined): boolean {
-    return user.role !== 'owner' || user.id === myId;
-}
-
 type UserDetailToolbarProps = {
     user: AdminUserRow;
     // A guest signs in with an emailed code, so there is no password to reset.
@@ -187,4 +183,8 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
             )}
         </div>
     );
+}
+
+function canManagePasswordAndBackups(user: AdminUserRow, myId: string | undefined): boolean {
+    return user.role !== 'owner' || user.id === myId;
 }
