@@ -35,23 +35,6 @@ export const Route = createFileRoute('/_auth/trash')({
 
 const TRASHED: DriveListDate = { label: 'Trashed', of: (item) => item.trashedAt };
 
-function TrashToolbar({ canEmpty, onEmptyTrash }: { canEmpty: boolean; onEmptyTrash: () => void }) {
-    return (
-        <div className="flex items-center justify-between w-full">
-            <ToolbarTitle>Trash</ToolbarTitle>
-            <div className="flex items-center gap-1">
-                <DriveViewControls dateLabel={TRASHED.label} />
-                {canEmpty && (
-                    <Button variant="outline" size="sm" onClick={onEmptyTrash}>
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Empty trash
-                    </Button>
-                )}
-            </div>
-        </div>
-    );
-}
-
 function TrashRoute() {
     const { user } = Route.useRouteContext();
 
@@ -173,5 +156,22 @@ function TrashRoute() {
                 />
             )}
         </>
+    );
+}
+
+function TrashToolbar({ canEmpty, onEmptyTrash }: { canEmpty: boolean; onEmptyTrash: () => void }) {
+    return (
+        <div className="flex items-center justify-between w-full">
+            <ToolbarTitle>Trash</ToolbarTitle>
+            <div className="flex items-center gap-1">
+                <DriveViewControls dateLabel={TRASHED.label} />
+                {canEmpty && (
+                    <Button variant="outline" size="sm" onClick={onEmptyTrash}>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Empty trash
+                    </Button>
+                )}
+            </div>
+        </div>
     );
 }

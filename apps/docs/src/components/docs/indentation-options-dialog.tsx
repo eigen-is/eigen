@@ -81,11 +81,12 @@ function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: No
     // An untouched field keeps the stored length, not its rounding.
     const length = (key: 'left' | 'right' | 'by') => (text[key] === cm(initial[key]) ? initial[key] : pt(text[key]));
     const left = length('left');
+    const right = length('right');
     const by = special === 'none' ? 0 : length('by');
-    const valid = [left, length('right'), by].every((value) => value >= 0);
+    const valid = [left, right, by].every((value) => value >= 0);
     const candidate = readParagraphFormat({
         indentLeft: left,
-        indentRight: length('right'),
+        indentRight: right,
         indentFirstLine: special === 'hanging' ? -by : by,
     });
 
