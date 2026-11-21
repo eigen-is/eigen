@@ -2,10 +2,10 @@
 // pieces, and a question before the pieces overwrite cells to the right of the column.
 
 import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
-import { useContext, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { cellValue } from '../../engine/format';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
@@ -22,6 +22,7 @@ const SEPARATORS = [
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
+    const id = useId();
     const { showConfirm } = useDialog();
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const [otherValue, setOtherValue] = useState('');
@@ -77,38 +78,46 @@ export function SplitColumn() {
     return (
         <FormDialog {...dialogProps} title="Split text">
             <FormDialogForm submitLabel="OK" onSubmit={split}>
-                <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
-                    <div>Separators</div>
-                    <div className="border p-1.5 my-1.5 space-y-1 text-sm">
-                        {SEPARATORS.map(({ id, label }) => (
-                            <Label key={id} className="flex items-center gap-1.5">
-                                <Checkbox checked={selected.has(id)} onCheckedChange={(c) => toggle(id, c === true)} />
-                                {label}
-                            </Label>
+                <FieldSet>
+                    <FieldLegend variant="label">Separators</FieldLegend>
+                    <FieldGroup data-slot="checkbox-group">
+                        {SEPARATORS.map(({ id: separator, label }) => (
+                            <Field orientation="horizontal" key={separator}>
+                                <Checkbox
+                                    id={`${id}-${separator}`}
+                                    checked={selected.has(separator)}
+                                    onCheckedChange={(c) => toggle(separator, c === true)}
+                                />
+                                <FieldLabel htmlFor={`${id}-${separator}`}>{label}</FieldLabel>
+                            </Field>
                         ))}
-                        <Label className="flex items-center gap-1.5">
+                        <Field orientation="horizontal" className="w-fit">
                             <Checkbox
+                                id={`${id}-other`}
                                 checked={selected.has('other')}
                                 onCheckedChange={(c) => toggle('other', c === true)}
                             />
-                            Other
+                            <FieldLabel htmlFor={`${id}-other`}>Other</FieldLabel>
                             <Input
-                                className="ml-1.5 w-20"
+                                className="w-20"
                                 aria-label="Other separator"
                                 value={otherValue}
                                 onChange={(e) => setOtherValue(e.target.value)}
                             />
-                        </Label>
-                        <Label className="flex items-center gap-1.5">
+                        </Field>
+                        <Field orientation="horizontal">
                             <Checkbox
+                                id={`${id}-splitsimple`}
                                 checked={selected.has('splitsimple')}
                                 onCheckedChange={(c) => toggle('splitsimple', c === true)}
                             />
-                            Treat consecutive separators as one
-                        </Label>
-                    </div>
-                    <div className="text-sm mt-6">Preview</div>
-                    <div className="border p-1.5 my-1.5 h-[100px] overflow-y-auto">
+                            <FieldLabel htmlFor={`${id}-splitsimple`}>Treat consecutive separators as one</FieldLabel>
+                        </Field>
+                    </FieldGroup>
+                </FieldSet>
+                <Field>
+                    <FieldTitle>Preview</FieldTitle>
+                    <div className="border p-1.5 h-[100px] overflow-y-auto select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
                         <table>
                             <tbody>
                                 {Array.from(pieces.entries(), ([rowIndex, row]) => (
@@ -123,7 +132,7 @@ export function SplitColumn() {
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </Field>
             </FormDialogForm>
         </FormDialog>
     );

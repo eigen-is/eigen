@@ -77,7 +77,8 @@ function DriveFilePickerBody({
 
     return (
         <>
-            <div className="-mx-6 min-h-0 flex-1 overflow-hidden">
+            {/* Edge to edge from sm up. A phone keeps the padding, so the drive select above the folders stays inset. */}
+            <div className="min-h-0 flex-1 overflow-hidden sm:-mx-6">
                 <DriveBrowser
                     value={location}
                     onChange={setLocation}

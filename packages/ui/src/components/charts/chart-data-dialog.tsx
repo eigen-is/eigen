@@ -72,7 +72,7 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
     const readOnly = unknown || exceedsInlineGridLimits(spec.data);
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent showCloseButton={false}>
+            <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
