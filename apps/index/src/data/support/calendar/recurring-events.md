@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, repeat]
 related: [calendar/create-event]
 order: 80
-updated: 2026-11-15
+updated: 2026-11-21
 ---
 
 A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the occurrences automatically. You can later edit or delete a single occurrence, all future ones from a given date, or the whole series.
@@ -56,11 +56,13 @@ If you remove every guest from that one occurrence, it has no guests, and the gu
 ## Remove an occurrence or cancel the whole series
 
 1. Click the occurrence you want to delete.
-2. Click the bin icon in the detail panel.
+2. Click the trash icon in the detail panel.
 3. Confirm the deletion scope:
 
    - **This event**: removes this occurrence only.
    - **This and following events**: removes this occurrence and all that come after it.
    - **All events in series**: deletes every occurrence of the recurring event.
+
+   An occurrence you changed on its own offers only **This event** and **All events in series**.
 
 4. Click **OK**.
