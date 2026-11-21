@@ -89,9 +89,8 @@ export function S3ConfigCard({
         }
     };
 
-    // What the bucket says right now. A check that never got as far as the bucket settings leaves both fields out,
-    // which reads the same as unreadable. A harden result carries the state read back after the change, so it wins.
-    // It wins per field, because it can measure one half and say nothing about the other.
+    // A harden result carries the state read back after the change, so it wins, per field, because it can measure one
+    // half and say nothing about the other. A check that never reached the bucket settings reads as unknown.
     const versioning = harden?.versioning ?? result?.versioning ?? 'unknown';
     const lifecycle = harden?.lifecycle ?? result?.lifecycle ?? 'unknown';
     // Opened from the all-green state, the dialog is a retention change and not the first pass.

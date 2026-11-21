@@ -70,10 +70,8 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
     // A team calendar is never the default: the file is the viewer's own until they say otherwise.
     const defaultCalendarId = calendars?.find((cal) => cal.isDefault)?.id ?? calendars?.[0]?.id;
     const defaultTarget = defaultCalendarId ? `${ownerId}/${defaultCalendarId}` : NEW_CALENDAR;
-    // Until the user picks one, the target follows the default, so a later fetch never overwrites a choice. While the
-    // calendars load there is none, and the Select shows its placeholder. A later fetch can also drop the chosen
-    // calendar, such as a team calendar the viewer may no longer write in. Then nothing is chosen until the user picks
-    // again, rather than a quiet switch to another calendar.
+    // Until the user picks, the target follows the default, so a later fetch never overwrites a choice. A choice a later
+    // fetch drops leaves nothing chosen, rather than a quiet switch to another calendar.
     const [chosenTarget, setChosenTarget] = useState<string>();
     const picked = chosenTarget ?? (calendars ? defaultTarget : '');
     const chosen = options.find((option) => targetValue(option) === picked);

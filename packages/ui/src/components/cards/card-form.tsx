@@ -24,32 +24,28 @@ import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { ColorPicker } from '../media/color-picker';
 
 type CardFormProps = {
-    // 'edit' emits a minimal diff (only changed fields), so an unchanged save is a
-    // no-op Yjs update. 'create' always emits a concrete color + trimmed title so a
-    // brand-new card never persists an empty title or a missing (uncolored) color.
+    // Edit hands on only the changed fields, so an unchanged save writes nothing. Create always hands on a trimmed
+    // title and a color, so a new card is never untitled or uncolored.
     mode?: 'create' | 'edit';
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
-    // Attachment staging is purely local — Files/DrivePaths are handed to onSave as
-    // drafts; the host resolves them (upload/copy) at save time. Cancel touches nothing.
     allowAttachments?: boolean;
     initialAttachments?: ChatAttachment[];
-    // Assignee staging renders only when both members and currentUserEmail are provided.
+    // The assignee row shows only with both members and currentUserEmail.
     members?: EffectiveMember[];
     currentUserEmail?: string;
     initialAssignee?: string | null;
     onSave: (
         patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
-        // undefined = untouched; the host skips the assignment PATCH.
+        // Undefined when untouched, so the host skips the assignment.
         assignee?: string | null,
     ) => void | Promise<void>;
     onCancel: () => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
-    // When set, renders a DialogHeader/DialogTitle atop the form (dialog use). Omit
-    // for in-place edit, where the host dialog already owns the title.
+    // A title above the form. A host that has its own, such as the card dialog, omits it.
     dialogTitle?: string;
     placeholderTitle?: string;
     placeholderDescription?: string;
@@ -81,11 +77,8 @@ export function CardForm({
     const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    // Capture the canonical TipTap-emitted form of the seeded description on
-    // first mount. Old plain-text descriptions get wrapped in <p>...</p> by
-    // TipTap; without this, a "Save" with no edits would write the
-    // canonicalised HTML back, marking the card dirty for no reason. Mirrors
-    // the mail compose pattern (apps/mail/.../use-draft.ts).
+    // The editor rewrites a plain-text description as HTML as it loads. A save with no edits compares against that
+    // form, or it would write the rewrite back.
     const canonicalInitialDescription = useRef(initialDescription);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
@@ -96,17 +89,12 @@ export function CardForm({
         e.preventDefault();
         if (!title.trim()) return;
         const patch: CardFormPatch = {};
-        // Edit mode seeds drafts with the existing ChatAttachment objects, so identity
-        // compare detects any removal/addition without a deep equality pass.
+        // Edit mode seeds the drafts with the card's own attachments, so comparing by identity finds any change.
         const draftsChanged =
             drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
         let attachments: CardAttachmentDraft[] | undefined;
-        // undefined = untouched assignee; the host skips the assignment PATCH.
         let assigneeArg: string | null | undefined;
         if (mode === 'create') {
-            // A new card must carry concrete values: a trimmed title and the
-            // seeded color (which the user may never touch). The diff below would
-            // drop an untouched color, leaving the card uncolored.
             patch.title = title.trim();
             patch.description = description;
             patch.color = color;
@@ -123,9 +111,8 @@ export function CardForm({
         try {
             await onSave(patch, attachments, assigneeArg);
         } catch (error) {
-            // Mutation failures are already toasted by their hook — swallow them and leave the form
-            // open so the user can retry. Anything else (a Yjs write, an anchor callback) is silent
-            // otherwise, so it must surface.
+            // A mutation's failure is toasted already, so the form stays open for a retry. Anything else, such as a
+            // Yjs write, has no toast and must surface.
             if (!wasToasted(error)) throw error;
         } finally {
             setIsSubmitting(false);
@@ -177,10 +164,8 @@ export function CardForm({
                     items={drafts}
                     onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
                 />
-                {/* min-w-0: as a grid item this row's min-content width would otherwise widen the
-                    whole track past the dialog (clipping every field's right edge). flex-wrap drops
-                    the Assignee onto its own line at phone widths so all 8 swatches and the full
-                    assignee button stay visible; on desktop it stays one line, unchanged. */}
+                {/* min-w-0 keeps this row from widening the grid past the dialog, and on a phone the assignee wraps
+                    to its own line. */}
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                     <div className="flex shrink-0 items-center gap-2">
                         <Label>Color</Label>
