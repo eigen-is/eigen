@@ -216,28 +216,33 @@ export function CardForm({
                     )}
                 </div>
             </div>
-            <DialogFooter>
-                <div className="mr-auto flex items-center gap-2">
-                    {allowAttachments && (
-                        <>
-                            <TooltipButton
-                                icon={Paperclip}
-                                tooltipText="Add attachment"
-                                onClick={() => setPickerOpen(true)}
-                                type="button"
-                            />
-                            <DrivePickerWithUpload
-                                open={pickerOpen}
-                                onOpenChange={setPickerOpen}
-                                multiSelect
-                                multiple
-                                onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
-                                onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
-                            />
-                        </>
-                    )}
-                    {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} type="button" />}
-                </div>
+            <DialogFooter
+                start={
+                    <>
+                        {allowAttachments && (
+                            <>
+                                <TooltipButton
+                                    icon={Paperclip}
+                                    tooltipText="Add attachment"
+                                    onClick={() => setPickerOpen(true)}
+                                    type="button"
+                                />
+                                <DrivePickerWithUpload
+                                    open={pickerOpen}
+                                    onOpenChange={setPickerOpen}
+                                    multiSelect
+                                    multiple
+                                    onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
+                                    onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
+                                />
+                            </>
+                        )}
+                        {onDelete && (
+                            <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} type="button" />
+                        )}
+                    </>
+                }
+            >
                 <Button type="button" variant="outline" onClick={onCancel}>
                     Cancel
                 </Button>

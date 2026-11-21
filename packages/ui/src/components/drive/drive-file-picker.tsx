@@ -11,7 +11,6 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
-    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -93,21 +92,22 @@ function DriveFilePickerBody({
                 />
             </div>
 
-            <DialogFooter>
-                {onUploadFromDevice && (
-                    <Button variant="outline" className="mr-auto" onClick={onUploadFromDevice}>
-                        <Upload />
-                        Upload from device
-                    </Button>
-                )}
-                <DialogActions>
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
-                        {submitLabel}
-                    </Button>
-                </DialogActions>
+            <DialogFooter
+                start={
+                    onUploadFromDevice && (
+                        <Button variant="outline" onClick={onUploadFromDevice}>
+                            <Upload />
+                            Upload from device
+                        </Button>
+                    )
+                }
+            >
+                <Button variant="outline" onClick={onClose}>
+                    Cancel
+                </Button>
+                <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
+                    {submitLabel}
+                </Button>
             </DialogFooter>
         </>
     );

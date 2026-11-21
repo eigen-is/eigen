@@ -9,15 +9,7 @@ import { createContext, useContext } from 'react';
 import type { DialogAction } from '../hooks/use-dialog-pending';
 import { useDialogPending } from '../hooks/use-dialog-pending';
 import { Button } from './button';
-import {
-    Dialog,
-    DialogActions,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from './dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 
 type FormDialogProps = {
     open: boolean;
@@ -113,20 +105,21 @@ export function FormDialogForm({
             {readOnly ? (
                 <DialogFooter showCloseButton />
             ) : (
-                <DialogFooter>
-                    {footerStart && (
-                        <fieldset disabled={pending} className="mr-auto flex gap-2">
-                            {footerStart}
-                        </fieldset>
-                    )}
-                    <DialogActions>
-                        <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={!canSubmit || pending}>
-                            {submitLabel}
-                        </Button>
-                    </DialogActions>
+                <DialogFooter
+                    start={
+                        footerStart && (
+                            <fieldset disabled={pending} className="flex gap-2">
+                                {footerStart}
+                            </fieldset>
+                        )
+                    }
+                >
+                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" disabled={!canSubmit || pending}>
+                        {submitLabel}
+                    </Button>
                 </DialogFooter>
             )}
         </form>

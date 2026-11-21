@@ -124,39 +124,38 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
 
 function DialogFooter({
     className,
+    start,
     showCloseButton = false,
     children,
     ...props
 }: React.ComponentProps<'div'> & {
+    // Tools about the item at the left, such as attach or delete.
+    start?: React.ReactNode;
     showCloseButton?: boolean;
 }) {
     return (
         <div
             data-slot="dialog-footer"
             className={cn(
-                // One row at every width that wraps when it doesn't fit. A wide dialog's footer runs edge to edge under
-                // its line and sticks to the bottom of the scrolling content. No negative bottom margin: a sticky box
-                // that overhangs its parent is pushed back up inside it.
-                'flex flex-wrap justify-end gap-2 [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
+                // A row too wide for the box moves the right-hand buttons to the next line as one group. Text buttons
+                // are at least 80px wide, and icon buttons stay square.
+                'flex flex-wrap items-center gap-2 [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
                 'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
                 className,
             )}
             {...props}
         >
-            {children}
-            {showCloseButton && (
-                <DialogPrimitive.Close asChild>
-                    <Button variant="outline">Close</Button>
-                </DialogPrimitive.Close>
-            )}
+            {start}
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
+                {children}
+                {showCloseButton && (
+                    <DialogPrimitive.Close asChild>
+                        <Button variant="outline">Close</Button>
+                    </DialogPrimitive.Close>
+                )}
+            </div>
         </div>
     );
-}
-
-// The buttons at the right of a footer that also has tools at its left, so a footer too narrow for one row wraps
-// them to the next line together instead of splitting Cancel from the main button.
-function DialogActions({ className, ...props }: React.ComponentProps<'div'>) {
-    return <div data-slot="dialog-actions" className={cn('flex flex-wrap justify-end gap-2', className)} {...props} />;
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
@@ -180,4 +179,4 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
     );
 }
 
-export { Dialog, DialogActions, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };
+export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };

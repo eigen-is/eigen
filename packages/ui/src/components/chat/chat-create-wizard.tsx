@@ -19,7 +19,6 @@ import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
-    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -411,13 +410,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                     </div>
                 )}
 
-                <DialogFooter>
-                    {step === 1 ? (
-                        <>
-                            {myTeams && myTeams.length > 0 && (
+                <DialogFooter
+                    start={
+                        step === 1 ? (
+                            myTeams &&
+                            myTeams.length > 0 && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="mr-auto">
+                                        <Button variant="outline">
                                             <Users />
                                             Team chat
                                         </Button>
@@ -441,26 +441,10 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
-                            )}
-                            <DialogActions>
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
-                                </Button>
-                                {hasMatches && (
-                                    <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
-                                        Create new chat
-                                    </Button>
-                                )}
-                                <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
-                                    Let's chat
-                                </Button>
-                            </DialogActions>
-                        </>
-                    ) : (
-                        <>
+                            )
+                        ) : (
                             <Button
                                 variant="outline"
-                                className="mr-auto"
                                 onClick={() => {
                                     setCreateError(null);
                                     setStep(1);
@@ -468,15 +452,27 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             >
                                 Back
                             </Button>
-                            <DialogActions>
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
+                        )
+                    }
+                >
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Cancel
+                    </Button>
+                    {step === 1 ? (
+                        <>
+                            {hasMatches && (
+                                <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
+                                    Create new chat
                                 </Button>
-                                <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
-                                    Let's chat
-                                </Button>
-                            </DialogActions>
+                            )}
+                            <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
+                                Let's chat
+                            </Button>
                         </>
+                    ) : (
+                        <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
+                            Let's chat
+                        </Button>
                     )}
                 </DialogFooter>
             </DialogContent>

@@ -248,41 +248,44 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         )}
                     </div>
 
-                    <DialogFooter>
-                        {(canEdit || canExport) && (
-                            <div className="flex gap-1 mr-auto">
-                                {canEdit && (
-                                    <>
+                    <DialogFooter
+                        start={
+                            (canEdit || canExport) && (
+                                <div className="flex gap-1">
+                                    {canEdit && (
+                                        <>
+                                            <TooltipButton
+                                                icon={Pencil}
+                                                tooltipText="Edit event"
+                                                onClick={() => {
+                                                    setEditMount((mount) => mount + 1);
+                                                    setEditOpen(true);
+                                                }}
+                                            />
+                                            <TooltipButton
+                                                icon={Trash2}
+                                                tooltipText="Delete event"
+                                                onClick={handleDeleteClick}
+                                            />
+                                        </>
+                                    )}
+                                    {canExport && (
                                         <TooltipButton
-                                            icon={Pencil}
-                                            tooltipText="Edit event"
-                                            onClick={() => {
-                                                setEditMount((mount) => mount + 1);
-                                                setEditOpen(true);
-                                            }}
+                                            icon={Download}
+                                            tooltipText="Export event"
+                                            disabled={isExporting}
+                                            // An occurrence is drawn from its series, so the series is what leaves.
+                                            onClick={() =>
+                                                void exportCalendar(eventOwnerId, event.calendarId, [
+                                                    event.parentEventId || event.id,
+                                                ])
+                                            }
                                         />
-                                        <TooltipButton
-                                            icon={Trash2}
-                                            tooltipText="Delete event"
-                                            onClick={handleDeleteClick}
-                                        />
-                                    </>
-                                )}
-                                {canExport && (
-                                    <TooltipButton
-                                        icon={Download}
-                                        tooltipText="Export event"
-                                        disabled={isExporting}
-                                        // An occurrence is drawn from its series, so the series is what leaves.
-                                        onClick={() =>
-                                            void exportCalendar(eventOwnerId, event.calendarId, [
-                                                event.parentEventId || event.id,
-                                            ])
-                                        }
-                                    />
-                                )}
-                            </div>
-                        )}
+                                    )}
+                                </div>
+                            )
+                        }
+                    >
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
                             Close
                         </Button>
