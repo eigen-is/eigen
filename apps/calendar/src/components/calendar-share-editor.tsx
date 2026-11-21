@@ -108,8 +108,8 @@ export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorPro
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                    <Users className="h-4 w-4" />
+                <Button variant="outline">
+                    <Users />
                     Share with team
                 </Button>
             </DropdownMenuTrigger>
@@ -122,7 +122,7 @@ export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorPro
                         }
                         disabled={currentShares.some((s) => s.targetId === teamOwnerId(team.id))}
                     >
-                        <Users className="h-4 w-4" />
+                        <Users />
                         {team.name}
                     </DropdownMenuItem>
                 ))}
