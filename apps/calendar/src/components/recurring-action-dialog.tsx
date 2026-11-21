@@ -10,18 +10,18 @@ const RECURRING_ACTIONS = ['this', 'this-and-following', 'all'] as const;
 
 export type RecurringAction = (typeof RECURRING_ACTIONS)[number];
 
+const ACTION_LABELS: Record<RecurringAction, string> = {
+    this: 'This event',
+    'this-and-following': 'This and following events',
+    all: 'All events in series',
+};
+
 type RecurringActionDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;
     onConfirm: (action: RecurringAction) => void | Promise<void>;
     options?: readonly RecurringAction[];
-};
-
-const ACTION_LABELS: Record<RecurringAction, string> = {
-    this: 'This event',
-    'this-and-following': 'This and following events',
-    all: 'All events in series',
 };
 
 export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, options }: RecurringActionDialogProps) {
