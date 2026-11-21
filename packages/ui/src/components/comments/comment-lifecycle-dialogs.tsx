@@ -96,7 +96,7 @@ export function CommentLifecycleDialogs({
                 open={!!deleteCardId}
                 onOpenChange={(open) => !open && setDeleteCardId(null)}
                 noun={noun}
-                onDelete={() => {
+                onConfirm={() => {
                     if (deleteCardId) onDelete(deleteCardId);
                     // In a host that keeps a deleted card, the dialog would stay open on the deleted state.
                     setOpenCardId(null);
@@ -106,20 +106,18 @@ export function CommentLifecycleDialogs({
     );
 }
 
-type DeleteCommentDialogProps = Pick<ConfirmDialogProps, 'open' | 'onOpenChange' | 'onCloseAutoFocus'> & {
-    onDelete: ConfirmDialogProps['onConfirm'];
+type DeleteCommentDialogProps = Pick<ConfirmDialogProps, 'open' | 'onOpenChange' | 'onConfirm' | 'onCloseAutoFocus'> & {
     noun?: string;
 };
 
 // The ask before a comment and its replies go, in the words every editor uses. A host that opens it from a menu of
 // its own, such as a sheet's cell menu, mounts it there and says where the focus goes as it closes.
-export function DeleteCommentDialog({ noun = 'comment', onDelete, ...props }: DeleteCommentDialogProps) {
+export function DeleteCommentDialog({ noun = 'comment', ...props }: DeleteCommentDialogProps) {
     return (
         <ConfirmDialog
             {...props}
             title={`Delete ${noun}`}
             description={`This deletes the ${noun} and its replies.`}
-            onConfirm={onDelete}
             confirmText="Delete"
             destructive
         />
