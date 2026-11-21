@@ -122,7 +122,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
                 await updateEvent.mutateAsync({
-                    id: event.parentEventId || event.id,
+                    id: event.id,
                     calendarId: event.calendarId,
                     etag: event.etag,
                     rrule: truncated,
