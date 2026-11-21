@@ -19,6 +19,7 @@ import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
+    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -416,8 +417,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             {myTeams && myTeams.length > 0 && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="mr-auto gap-2">
-                                            <Users className="h-4 w-4" />
+                                        <Button variant="outline" className="mr-auto">
+                                            <Users />
                                             Team chat
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -441,17 +442,19 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             )}
-                            <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                Cancel
-                            </Button>
-                            {hasMatches && (
-                                <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
-                                    Create new chat
+                            <DialogActions>
+                                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                                    Cancel
                                 </Button>
-                            )}
-                            <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
-                                Let's chat
-                            </Button>
+                                {hasMatches && (
+                                    <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
+                                        Create new chat
+                                    </Button>
+                                )}
+                                <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
+                                    Let's chat
+                                </Button>
+                            </DialogActions>
                         </>
                     ) : (
                         <>
@@ -465,12 +468,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             >
                                 Back
                             </Button>
-                            <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                Cancel
-                            </Button>
-                            <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
-                                Let's chat
-                            </Button>
+                            <DialogActions>
+                                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                                    Cancel
+                                </Button>
+                                <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
+                                    Let's chat
+                                </Button>
+                            </DialogActions>
                         </>
                     )}
                 </DialogFooter>

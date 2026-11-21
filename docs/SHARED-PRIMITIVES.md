@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2382 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2383 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (329)
+## Components (330)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -114,6 +114,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CopyInput` | `@workspace/ui/components/copy-input` | packages/ui/src/components/copy-input.tsx |
 | `CountBadge` | `@workspace/ui/components/count-badge` | packages/ui/src/components/count-badge.tsx |
 | `Dialog` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
+| `DialogActions` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogContent` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogDescription` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogFooter` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |

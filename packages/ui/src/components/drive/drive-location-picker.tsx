@@ -9,6 +9,7 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
+    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -148,17 +149,19 @@ function DriveLocationPickerBody({
             <DialogFooter>
                 {onDownloadInstead && (
                     <Button variant="outline" className="mr-auto" onClick={onDownloadInstead} disabled={pending}>
-                        <Download className="h-4 w-4 mr-2" />
+                        <Download />
                         Download instead
                     </Button>
                 )}
-                <Button variant="outline" onClick={onCancel} disabled={pending}>
-                    Cancel
-                </Button>
-                <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
-                    {pending && <EigenLoader className="text-current" />}
-                    {resolvedConfirmLabel}
-                </Button>
+                <DialogActions>
+                    <Button variant="outline" onClick={onCancel} disabled={pending}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
+                        {pending && <EigenLoader className="text-current" />}
+                        {resolvedConfirmLabel}
+                    </Button>
+                </DialogActions>
             </DialogFooter>
         </div>
     );
