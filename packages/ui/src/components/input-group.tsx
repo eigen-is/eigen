@@ -64,6 +64,8 @@ function InputGroupAddon({
             data-align={align}
             className={cn(inputGroupAddonVariants({ align }), className)}
             onClick={(e) => {
+                // React bubbles a click inside a portal, such as a swatch's popover, here too.
+                if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return;
                 if (e.target instanceof Element && e.target.closest('button')) return;
                 e.currentTarget.parentElement?.querySelector('input')?.focus();
             }}

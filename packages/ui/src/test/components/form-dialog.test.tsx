@@ -209,11 +209,11 @@ test('the corner X is shown and closes the dialog', async () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('footerStart sits first in the footer, pushed to the left', async () => {
+test('footerStart sits first in the footer, and Cancel and Save wrap together at the right', async () => {
     await render({ footerStart: createElement('button', { type: 'button' }, 'Delete') });
-    const start = dialog()?.querySelector('[data-slot="dialog-footer"]')?.firstElementChild;
-    expect(start?.textContent).toBe('Delete');
-    expect(start?.classList.contains('mr-auto')).toBe(true);
+    const footer = dialog()?.querySelector('[data-slot="dialog-footer"]');
+    expect(footer?.firstElementChild?.textContent).toBe('Delete');
+    expect(footer?.lastElementChild?.textContent).toBe('CancelSave');
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Delete', 'Cancel', 'Save']);
 });
 

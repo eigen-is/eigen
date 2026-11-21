@@ -19,7 +19,6 @@ import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
-    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -32,8 +31,8 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -228,7 +227,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex flex-col max-w-[90vw] h-[620px] max-h-[85vh]">
+            <DialogContent className="flex flex-col h-[620px] max-h-[85vh]">
                 <DialogHeader>
                     <DialogTitle>New chat</DialogTitle>
                     <DialogDescription className="sr-only">
@@ -338,10 +337,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                     </div>
                 ) : (
                     <div className="-mx-6 flex flex-1 flex-col min-h-0">
-                        <div className="shrink-0 px-6 pb-2">
-                            <Label htmlFor="chat-wizard-name" className="text-sm text-muted-foreground">
-                                Name
-                            </Label>
+                        <Field className="shrink-0 px-6 pb-2">
+                            <FieldLabel htmlFor="chat-wizard-name">Name</FieldLabel>
                             <Input
                                 id="chat-wizard-name"
                                 value={name}
@@ -349,7 +346,6 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     setNameDirty(true);
                                     setName(e.target.value);
                                 }}
-                                className="mt-1.5"
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
@@ -357,19 +353,19 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     }
                                 }}
                             />
-                            {createError && <p className="mt-1.5 text-sm text-destructive">{createError}</p>}
-                        </div>
+                            {createError && <FieldError>{createError}</FieldError>}
+                        </Field>
 
                         {teamMode ? (
-                            <div className="shrink-0 px-6 pb-2">
-                                <Label className="text-sm text-muted-foreground">Location</Label>
-                                <InfoBlock className="mt-1.5 w-full justify-start gap-2 text-sm">
+                            <Field className="shrink-0 px-6 pb-2">
+                                <FieldLabel>Location</FieldLabel>
+                                <InfoBlock className="w-full justify-start gap-2 text-sm">
                                     <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
                                     <span className="text-xs">
                                         {selectedTeam.name} team drive › {CHATS_FOLDER_NAME}
                                     </span>
                                 </InfoBlock>
-                            </div>
+                            </Field>
                         ) : locationTouched ? (
                             <DriveLocationField
                                 value={location}
@@ -379,9 +375,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                 ownMountsOnly
                             />
                         ) : (
-                            <div className="shrink-0 px-6 pb-2">
-                                <Label className="text-sm text-muted-foreground">Location</Label>
-                                <InfoBlock className="relative mt-1.5 w-full gap-1.5 text-sm hover:bg-muted">
+                            <Field className="shrink-0 px-6 pb-2">
+                                <FieldLabel>Location</FieldLabel>
+                                <InfoBlock className="relative w-full gap-1.5 text-sm hover:bg-muted">
                                     <span className="text-xs">My Drive › {CHATS_FOLDER_NAME}</span>
                                     <button
                                         type="button"
@@ -400,7 +396,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                                     </button>
                                 </InfoBlock>
-                            </div>
+                            </Field>
                         )}
 
                         <p className="shrink-0 px-6 pb-2 text-xs text-muted-foreground">
@@ -411,13 +407,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                     </div>
                 )}
 
-                <DialogFooter>
-                    {step === 1 ? (
-                        <>
-                            {myTeams && myTeams.length > 0 && (
+                <DialogFooter
+                    start={
+                        step === 1 ? (
+                            myTeams &&
+                            myTeams.length > 0 && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="mr-auto">
+                                        <Button variant="outline">
                                             <Users />
                                             Team chat
                                         </Button>
@@ -441,26 +438,10 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
-                            )}
-                            <DialogActions>
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
-                                </Button>
-                                {hasMatches && (
-                                    <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
-                                        Create new chat
-                                    </Button>
-                                )}
-                                <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
-                                    Let's chat
-                                </Button>
-                            </DialogActions>
-                        </>
-                    ) : (
-                        <>
+                            )
+                        ) : (
                             <Button
                                 variant="outline"
-                                className="mr-auto"
                                 onClick={() => {
                                     setCreateError(null);
                                     setStep(1);
@@ -468,15 +449,27 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             >
                                 Back
                             </Button>
-                            <DialogActions>
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                                    Cancel
+                        )
+                    }
+                >
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Cancel
+                    </Button>
+                    {step === 1 ? (
+                        <>
+                            {hasMatches && (
+                                <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
+                                    Create new chat
                                 </Button>
-                                <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
-                                    Let's chat
-                                </Button>
-                            </DialogActions>
+                            )}
+                            <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
+                                Let's chat
+                            </Button>
                         </>
+                    ) : (
+                        <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
+                            Let's chat
+                        </Button>
                     )}
                 </DialogFooter>
             </DialogContent>

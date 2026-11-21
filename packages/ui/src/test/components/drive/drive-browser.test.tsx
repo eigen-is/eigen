@@ -137,6 +137,8 @@ function FolderPickerHost({ defaults, open = true }: { defaults: Defaults; open?
         open,
         onOpenChange: () => {},
         mode: 'folder',
+        title: 'Move to',
+        confirmLabel: 'Select',
         onConfirm,
         ...current,
     });

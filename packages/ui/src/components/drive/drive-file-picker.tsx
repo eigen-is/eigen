@@ -11,7 +11,6 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
-    DialogActions,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -35,7 +34,7 @@ type DriveFilePickerProps = {
 export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...body }: DriveFilePickerProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex flex-col max-w-[90vw] h-[520px] max-h-[85vh]">
+            <DialogContent className="flex flex-col h-[520px] max-h-[85vh]">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
@@ -93,21 +92,22 @@ function DriveFilePickerBody({
                 />
             </div>
 
-            <DialogFooter>
-                {onUploadFromDevice && (
-                    <Button variant="outline" className="mr-auto" onClick={onUploadFromDevice}>
-                        <Upload />
-                        Upload from device
-                    </Button>
-                )}
-                <DialogActions>
-                    <Button variant="outline" onClick={onClose}>
-                        Cancel
-                    </Button>
-                    <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
-                        {submitLabel}
-                    </Button>
-                </DialogActions>
+            <DialogFooter
+                start={
+                    onUploadFromDevice && (
+                        <Button variant="outline" onClick={onUploadFromDevice}>
+                            <Upload />
+                            Upload from device
+                        </Button>
+                    )
+                }
+            >
+                <Button variant="outline" onClick={onClose}>
+                    Cancel
+                </Button>
+                <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
+                    {submitLabel}
+                </Button>
             </DialogFooter>
         </>
     );

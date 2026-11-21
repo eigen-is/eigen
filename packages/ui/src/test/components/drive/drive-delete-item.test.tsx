@@ -1,14 +1,16 @@
-// Moving one of your own items to trash asks in a red confirm that names it. When Move to trash gets only part of a
+// Moving one of your own items to trash asks in a red confirm that names it, and so does one in someone else's drive,
+// saying only its owner can restore it. One shared with you directly is removed from your view instead. When Move to trash gets only part of a
 // selection through, the dialog stays open, the after-delete step runs for the ones that went, and the failures go to
 // the dialog's owner, which narrows it to them.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const session = { user: { id: 'user-1' } };
+const session = { user: { id: 'user-1', email: 'me@example.com' } };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
@@ -77,4 +79,35 @@ test('one item of your own asks to move it to trash by name', async () => {
     );
     const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Move to trash');
     expect(confirm?.getAttribute('data-variant')).toBe('destructive');
+});
+
+// The dialog's title and its sentence, for the one item it was opened with.
+async function askAbout(path: DrivePath) {
+    ({ unmount } = await renderInDocument(
+        createElement(DriveDeleteItem, { paths: [path], open: true, onOpenChange: () => {} }),
+    ));
+    const dialog = document.querySelector('[role="dialog"]');
+    return [dialog?.querySelector('h2')?.textContent, dialog?.querySelector('p')?.innerHTML];
+}
+
+test('one item shared with you asks to remove it from your view', async () => {
+    const shared = drivePath({
+        id: 'shared',
+        name: 'plan.txt',
+        mimeType: 'text/plain',
+        ownerId: 'user-2',
+        acl: [{ id: 'me@example.com', read: true, write: false }],
+    });
+    expect(await askAbout(shared)).toEqual([
+        'Remove shared item',
+        'Remove <strong>plan.txt</strong>? This item is shared with you. Removing it only takes away your access, and the owner can share it again.',
+    ]);
+});
+
+test('one item in someone else’s drive says it goes to their trash', async () => {
+    const theirs = drivePath({ id: 'theirs', name: 'plan.txt', mimeType: 'text/plain', ownerId: 'user-2' });
+    expect(await askAbout(theirs)).toEqual([
+        'Move to trash',
+        'Move <strong>plan.txt</strong> to the trash? This item is in someone else’s drive. It goes to their trash, and only they can restore it.',
+    ]);
 });

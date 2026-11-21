@@ -4,7 +4,7 @@
 
 import { useBreadcrumb, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
-import { Label } from '@workspace/ui/components/label';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
 import { useState } from 'react';
@@ -23,8 +23,6 @@ type DriveLocationFieldProps = {
     onChange: (value: DriveLocationValue) => void;
     expanded: boolean;
     onExpandedChange: (expanded: boolean) => void;
-    // False shows the browser alone, with no Location bar, for a picker that is always open, such as Save as.
-    collapsible?: boolean;
     // Shows only the user's own drive, without team or shared mounts.
     ownMountsOnly?: boolean;
 };
@@ -34,7 +32,6 @@ export function DriveLocationField({
     onChange,
     expanded,
     onExpandedChange,
-    collapsible = true,
     ownMountsOnly,
 }: DriveLocationFieldProps) {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -44,57 +41,51 @@ export function DriveLocationField({
 
     return (
         <>
-            {collapsible && (
-                <div className="px-6 pb-2">
-                    <Label className="text-sm text-muted-foreground">Location</Label>
-                    {/* Collapsed, the toggle's hit area stretches over the whole bar. Open, it shrinks to its own box,
-                        so the crumbs before it stay clickable. */}
-                    <InfoBlock className="relative mt-1.5 w-full gap-1.5 text-sm hover:bg-muted">
-                        <div className="flex-1 min-w-0">
-                            <DriveBreadcrumb
-                                paths={breadcrumbPaths}
-                                mountLabel={mountLabel}
-                                onNavigate={
-                                    expanded
-                                        ? (path) => onChange({ ownerId: path.ownerId, mountId, folderId: path.id })
-                                        : undefined
-                                }
-                                itemClassName="text-xs"
+            <Field className="px-6 pb-2">
+                <FieldLabel>Location</FieldLabel>
+                {/* Collapsed, the toggle's hit area stretches over the whole bar. Open, it shrinks to its own box,
+                    so the crumbs before it stay clickable. */}
+                <InfoBlock className="relative w-full gap-1.5 text-sm hover:bg-muted">
+                    <div className="flex-1 min-w-0">
+                        <DriveBreadcrumb
+                            paths={breadcrumbPaths}
+                            mountLabel={mountLabel}
+                            onNavigate={
+                                expanded
+                                    ? (path) => onChange({ ownerId: path.ownerId, mountId, folderId: path.id })
+                                    : undefined
+                            }
+                            itemClassName="text-xs"
+                        />
+                    </div>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {expanded && (
+                            <TooltipButton
+                                icon={FolderPlus}
+                                tooltipText="New folder"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => setCreateFolderOpen(true)}
                             />
-                        </div>
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                            {expanded && (
-                                <TooltipButton
-                                    icon={FolderPlus}
-                                    tooltipText="New folder"
-                                    variant="ghost"
-                                    className="h-7 w-7"
-                                    onClick={() => setCreateFolderOpen(true)}
-                                />
-                            )}
-                            <button
-                                type="button"
-                                aria-label="Change location"
-                                aria-expanded={expanded}
+                        )}
+                        <button
+                            type="button"
+                            aria-label="Change location"
+                            aria-expanded={expanded}
+                            className={cn(STRETCHED_TRIGGER_CLASS, 'flex items-center gap-0.5', expanded && 'relative')}
+                            onClick={() => onExpandedChange(!expanded)}
+                        >
+                            {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
+                            <ChevronDown
                                 className={cn(
-                                    STRETCHED_TRIGGER_CLASS,
-                                    'flex items-center gap-0.5',
-                                    expanded && 'relative',
+                                    'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                                    expanded && 'rotate-180',
                                 )}
-                                onClick={() => onExpandedChange(!expanded)}
-                            >
-                                {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
-                                <ChevronDown
-                                    className={cn(
-                                        'h-4 w-4 text-muted-foreground transition-transform duration-200',
-                                        expanded && 'rotate-180',
-                                    )}
-                                />
-                            </button>
-                        </div>
-                    </InfoBlock>
-                </div>
-            )}
+                            />
+                        </button>
+                    </div>
+                </InfoBlock>
+            </Field>
 
             {expanded && (
                 <div className="flex-1 overflow-hidden border-t px-6 pb-2 pt-2">

@@ -8,7 +8,7 @@ import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { ColorPickerSwatch } from '@workspace/ui/components/media/color-picker-swatch';
+import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 

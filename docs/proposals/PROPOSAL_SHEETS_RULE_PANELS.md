@@ -31,7 +31,7 @@ This proposal moves the two rule editors of Sheets, conditional formatting and d
 
 **Conditional formatting is two dialogs and a menu.** Format → Conditional formatting (`components/MenuBar/conditional-formatting-menu.tsx`) lists 13 rule types in two submenus, 12 color scale and 6 data bar presets, **Manage rules** and **Delete rule → Delete sheet rules**. A rule type opens `ConditionRules` (`components/ConditionFormat/ConditionRules.tsx`), which adds one rule over the selection: the dialog has no range field. A preset adds its rule at once. `ManageRules` (`ManageRules.tsx`) lists the current sheet's rules with a swatch, a description and the range, and deletes one by its index. It can't edit, add or reorder.
 
-**Data validation is one dialog and no list.** Data → Data validation opens `DataValidation` (`components/DataValidation/index.tsx`) on the focus cell's rule. It has a range field, eight rule types, and **Delete validation** for the range. Its grid buttons close it and open `CellRangeDialog` (`components/CellRangeDialog/index.tsx`) in the non-modal shell, whose OK or Cancel opens `DataValidation` again with the draft (`pickRange`). Nothing lists a sheet's validation rules.
+**Data validation is one dialog and no list.** Data → Data validation opens `DataValidation` (`components/DataValidation/index.tsx`) on the focus cell's rule. It has a range field, eight rule types, and a trash icon, **Remove validation**, for the range. Its grid buttons close it and open `CellRangeDialog` (`components/CellRangeDialog/index.tsx`) in the non-modal shell, whose OK or Cancel opens `DataValidation` again with the draft (`pickRange`). Nothing lists a sheet's validation rules.
 
 **The two rule kinds are stored differently.** `Sheet.conditionalFormatRules` is an ordered array with no ids (`packages/lib/src/sheets/types.ts`): the order is the priority. `deleteSheetRule` splices by index, and a carry writes a changed rule by its index ([SHEETS.md](../SHEETS.md#position-bound-properties-live-beside-the-cell)). The first rule on a sheet writes the whole list, so two rules added at once can lose one ([SHEETS-TODO.md](../SHEETS-TODO.md#sync-and-undo)). Adding or removing a rule changes the list's length, which makes it a structural undo entry that any peer batch drops ([SHEETS.md](../SHEETS.md#undo-is-per-tab-and-a-peers-batch-ends-your-structural-steps)). `Sheet.dataValidations` is a map from an id to a rule and its ranges, written one key at a time ([SHEETS.md](../SHEETS.md#a-validation-rule-is-stored-once-over-its-ranges)). Where rules overlap, as an xlsx file allows, the highest id wins (`compareValidationIds`).
 
@@ -49,7 +49,7 @@ Google's own split is the guide: a sidebar for things that are a list the user k
 | Custom number, date and currency formats | `FormatDialogs` | Stay dialogs | A pick from a list for the selected cells. Google keeps these as dialogs too |
 | Insert function | `InsertFunctionDialog` | Stays a dialog | A search and a pick that ends in the cell editor |
 | Link | `LinkEditDialog`, with `CellRangeDialog` for a cell-range link | Stays a dialog | One link on one cell, opened from its card. It keeps the range picker's `link` variant |
-| Notices and confirms | `showNotice` | Stay dialogs | They block on purpose |
+| Yes or no questions | `showConfirm` | Stay dialogs | They block on purpose. A refusal is a toast already |
 
 Find and replace is the find bar already, not a dialog. The chart panel is a panel already.
 
@@ -105,7 +105,7 @@ Conditional formats list in priority order. Reordering by drag waits for the key
 The editor takes the list's place in the panel, with a back arrow to the list, **Done** and **Cancel**. It reuses the fields of `ConditionRules` and `DataValidation`. Their `FormDialog` wrappers go, and the bodies are restacked for 256px.
 
 - **Conditional format.** A range field, which the dialog never had because it used the selection. A rule type select over `RULE_COPY`'s 13 types, in place of the two submenus. Then the value fields and the two `ColorChoice` rows as they are.
-- **Validation.** The dialog's fields in the dialog's order: range, type, condition, values, the two toggles. **Delete validation** is the row's delete button.
+- **Validation.** The dialog's fields in the dialog's order: range, type, condition, values, the two toggles. **Remove validation** is the row's delete button.
 - **Editing an existing conditional format is new.** It needs a function that reads a stored rule back into the form's draft (`ConditionRulesProps`). Three kinds don't map back: the conditions only an import writes (`greaterThanOrEqual`, `lessThanOrEqual`, `notEqual`, `notBetween`), a `formula` rule, which is also what a value typed with `=` is stored as ([SHEETS.md](../SHEETS.md#a-dialog-value-typed-with--is-stored-as-a-formula-rule)), and a color scale or data bar. For these the editor shows the condition as text and edits the range and, for the first two, the colors. Making them fully editable is a later row.
 - **The editor closes back to the list** when the tab changes or a peer deletes the rule it holds.
 

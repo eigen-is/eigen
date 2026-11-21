@@ -8,10 +8,11 @@ import { useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { DialogFooter } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/drive/drive-access-list-edit';
 import { DriveEmailCollaborators } from '@workspace/ui/components/drive/drive-email-collaborators';
-import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { useState } from 'react';
 
 export type DriveAccessDialogProps = {
@@ -81,13 +82,13 @@ function ShareDialog({
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title={`Share '${stripEigenExtension(path.name)}'`}>
             {readOnly ? (
-                // Close is the only button, so nothing submits.
-                <FormDialogForm readOnly submitLabel="Save" onSubmit={() => {}}>
+                <>
                     <p className="text-sm text-muted-foreground">
                         {mayNotWrite ? 'You can view who has access.' : 'Sharing is restricted by the owner.'}
                     </p>
                     <DriveAccessList path={path} scrollable className="max-h-[60vh]" />
-                </FormDialogForm>
+                    <DialogFooter showCloseButton />
+                </>
             ) : (
                 <DriveAccessListEdit
                     path={path}
