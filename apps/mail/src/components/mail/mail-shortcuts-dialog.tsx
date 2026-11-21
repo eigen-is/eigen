@@ -84,8 +84,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
 type MailShortcutsDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    // Whether the keyboard layer is actually active (the opt-in space setting). When off, the
-    // sheet is still reachable from the toolbar, so it says so rather than implying the keys work.
+    // The keys are an opt-in setting, and the toolbar opens this list either way.
     enabled: boolean;
 };
 

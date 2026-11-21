@@ -29,28 +29,11 @@ type ShareAndSendDialogProps = {
     onOpenChange: (open: boolean) => void;
     // Empty when nothing is grantable: the dialog is then a notes-only send confirm.
     grants: ShareGrant[];
-    // Muted informational lines: unshareable refs, chat refs, and the Bcc exclusion.
+    // Muted lines about what Send can't share, such as a chat link or the Bcc recipients.
     notes: string[];
     onShareAndSend: () => Promise<void>;
     onSendWithoutAccess: () => Promise<void>;
 };
-
-function joinList(items: string[]): string {
-    if (items.length <= 1) return items[0] ?? '';
-    if (items.length === 2) return `${items[0]} and ${items[1]}`;
-    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
-}
-
-// Collapse long recipient lists to a count past five so a large Cc set stays one short line.
-function formatRecipients(emails: string[]): string {
-    return emails.length > 5 ? `${emails.length} recipients` : joinList(emails);
-}
-
-function sameRecipients(a: string[], b: string[]): boolean {
-    if (a.length !== b.length) return false;
-    const other = new Set(b);
-    return a.every((email) => other.has(email));
-}
 
 export function ShareAndSendDialog({
     open,
@@ -61,8 +44,8 @@ export function ShareAndSendDialog({
     onSendWithoutAccess,
 }: ShareAndSendDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
-    // Every footer send action dispatches; focus the recommended primary so a keyboard user's reflexive
-    // Enter shares rather than sending without access (Radix would otherwise focus the first tabbable).
+    // Radix would focus Cancel, the first button, so the dialog focuses the primary instead: a reflexive Enter
+    // shares rather than sending without access.
     const primaryRef = useRef<HTMLButtonElement>(null);
 
     const hasGrants = grants.length > 0;
@@ -136,4 +119,21 @@ export function ShareAndSendDialog({
             </DialogContent>
         </Dialog>
     );
+}
+
+function joinList(items: string[]): string {
+    if (items.length <= 1) return items[0] ?? '';
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+// Past five recipients a count, so a large Cc stays one short line.
+function formatRecipients(emails: string[]): string {
+    return emails.length > 5 ? `${emails.length} recipients` : joinList(emails);
+}
+
+function sameRecipients(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const other = new Set(b);
+    return a.every((email) => other.has(email));
 }
