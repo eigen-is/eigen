@@ -3,6 +3,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
+import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -14,7 +15,6 @@ import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { CALENDAR_PERMISSION_LABELS } from './calendar-share-editor';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
