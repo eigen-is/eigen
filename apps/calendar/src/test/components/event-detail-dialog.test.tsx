@@ -148,3 +148,11 @@ test('deleting this and following occurrences of an invitation declines them and
     });
     expect(deleteEvent.mutateAsync).not.toHaveBeenCalled();
 });
+
+test('deleting a changed occurrence offers no this and following, as it has no rule to cut', async () => {
+    await open({ ...dentist, id: 'e1-override', parentEventId: 'e1', recurrenceDate: '2026-10-09' });
+    await click('Delete event');
+    expect(dialogTitles()).toEqual(['Delete recurring event']);
+    const options = [...document.querySelectorAll('[role="dialog"] [role="radio"]')].map((radio) => radio.id);
+    expect(options).toEqual(['recurring-this', 'recurring-all']);
+});
