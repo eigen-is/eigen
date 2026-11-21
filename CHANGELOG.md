@@ -11,10 +11,19 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Changed
 
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
+- **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row
+- **Delete in settings dialogs** — a trash icon at the bottom left deletes a label in Contacts, a calendar in Calendar and a column in Stickies, and removes data validation in Sheets
+- **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
+- **Messages in Sheets** — a refusal, such as a blocked paste, shows in the corner instead of a box you have to close
 
 ### Fixed
 
 - **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
+- **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
+- **Shared calendars** — settings and the people list name access as Can edit, Can view or Free/busy
+- **Manage rules in Sheets** — opening it no longer puts the focus on a delete button, so Enter can't remove a rule by accident
+- **Labels in Contacts** — deleting the label you are looking at takes you back to all contacts
+- **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 
 ### Security
 
