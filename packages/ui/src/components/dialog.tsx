@@ -33,18 +33,17 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
     );
 }
 
-// Two widths, so a new dialog only asks whether it has a box to type in: lg if it does, and for a page such as a card
-// or a file picker; sm for a confirm or a form of choices only, such as radios or a select.
+// Two widths: wide unless the dialog is small and has nothing to type in, such as a confirm. A dialog with a lot of
+// content, such as a card or a file picker, is wide. A wide dialog's footer brings its own bottom padding.
 type DialogSize = 'sm' | 'lg';
 
 const dialogSizeMap: Record<DialogSize, string> = {
     sm: 'sm:max-w-md',
-    lg: 'sm:max-w-2xl',
+    lg: 'sm:max-w-2xl has-[[data-slot=dialog-footer]]:pb-0',
 };
 
-// A field that closes something of its own on Escape: a combobox with its list open, or a field that marks itself,
-// such as the light editor's link field. Radix hears Escape on the document before the field does, so the dialog has
-// to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
+// A field that closes something of its own on Escape, such as a combobox with its list open. Radix hears Escape on the
+// document first, so the dialog leaves the key alone. cmdk's input is always expanded, because its list is the dialog.
 const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
 
 type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -90,10 +89,8 @@ function OpenDialogContent({
             data-slot="dialog-content"
             data-size={size}
             className={cn(
-                // A caller that sets its own height overrides max-h and overflow. The one column may shrink below its
-                // content, or a very long title would widen it and push the footer's buttons out of the dialog. A wide
-                // dialog's footer brings its own bottom padding. A nested dialog portals out, so :has sees only this one.
-                'group/dialog data-[size=lg]:has-[[data-slot=dialog-footer]]:pb-0 fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+                // The one column may shrink below its content, or a long title would push the footer's buttons out.
+                'group/dialog fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
                 dialogSizeMap[size],
                 className,
             )}

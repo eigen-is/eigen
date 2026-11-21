@@ -16,7 +16,7 @@ type FormDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     description?: string;
-    // Wide for a form with a box to type in. One with only choices, such as radios or a select, is sm.
+    // Wide unless the form is small and has nothing to type in, such as the calendar's recurring choice.
     size?: ComponentProps<typeof DialogContent>['size'];
     onOpenAutoFocus?: (event: Event) => void;
     onCloseAutoFocus?: (event: Event) => void;
