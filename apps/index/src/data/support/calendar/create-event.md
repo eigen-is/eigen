@@ -52,7 +52,7 @@ Choose the option that matches what you want, then click **OK**.
 ## Delete an event
 
 1. Click the event to open its detail panel.
-2. Click the bin icon in the bottom-left corner.
+2. Click the trash icon in the bottom-left corner.
 3. Confirm the deletion. For recurring events, Calendar asks the same scope question as when editing: you can remove this occurrence, this and following, or the whole series.
 
 If the event changed elsewhere since it last loaded, the deletion is refused and a message says so. The event reloads, so check it and confirm again.

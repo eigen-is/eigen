@@ -47,4 +47,4 @@ Above the buttons in **Landing page**, the **Show install section** switch adds 
 
 ## Change or remove a button
 
-Open **Settings** again and scroll to **Landing page**. Edit either box to change a button's text or address. To take one away, click the bin icon at the end of its row. Click **Save** when you are done.
+Open **Settings** again and scroll to **Landing page**. Edit either box to change a button's text or address. To take one away, click the trash icon at the end of its row. Click **Save** when you are done.

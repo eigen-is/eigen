@@ -22,9 +22,9 @@ The form is divided into three sections.
 
 **Contact information**
 
-- **Email addresses**: one empty field is shown by default. Click **Add** to include more addresses. You can remove any extra address with the bin icon.
+- **Email addresses**: one empty field is shown by default. Click **Add** to include more addresses. You can remove any extra address with the trash icon.
 - **Phone numbers**: works the same way as email. Click **Add** to include more numbers.
-- **Addresses**: fill in **Street**, **City**, **State**, **Postal code**, and **Country**. Click **Add** to add a second address. Each extra address block has a bin icon to remove it.
+- **Addresses**: fill in **Street**, **City**, **State**, **Postal code**, and **Country**. Click **Add** to add a second address. Each extra address block has a trash icon to remove it.
 
 **Additional information**
 

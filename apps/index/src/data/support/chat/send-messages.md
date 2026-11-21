@@ -39,7 +39,7 @@ You can also press the **up arrow** key in an empty message box to start editing
 You can only delete messages you sent yourself.
 
 1. Hover over the message. A small action bar appears in the top-right corner of it. You can also right-click the message, or press and hold it on a phone, and choose **Delete** from the menu.
-2. Click the bin icon (**Delete**).
+2. Click the trash icon (**Delete**).
 3. A confirmation dialog appears. Click **Delete** to confirm.
 
 Deleted messages, and the files attached to them, are removed permanently and cannot be recovered.

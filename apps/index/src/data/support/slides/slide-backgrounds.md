@@ -53,7 +53,7 @@ Applying to all slides is a deliberate step, so dragging a color never changes t
 
 ## Remove a background
 
-To return a slide to plain white, click the no fill button (the crossed-out circle) at the start of the **Background** row. To remove an image but keep a background type set, click the bin icon next to **Replace**.
+To return a slide to plain white, click the no fill button (the crossed-out circle) at the start of the **Background** row. To remove an image but keep a background type set, click the trash icon next to **Replace**.
 
 To clear the background from several slides at once, remove it on one slide, then choose the range in **Apply to** and click **Apply**.
 
