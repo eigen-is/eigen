@@ -156,7 +156,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                 )}
 
                 <FieldSet>
-                    <FieldLegend variant="label">Set as:</FieldLegend>
+                    <FieldLegend variant="label">Set as</FieldLegend>
                     <div className="rounded-md border p-3 space-y-3">
                         <ColorChoice
                             id="checkTextColor"
