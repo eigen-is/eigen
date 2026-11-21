@@ -1,7 +1,8 @@
 // The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
-// description and footer parts that dialogs across the apps put inside it. A wide dialog's footer keeps a line above
-// it and stays in view while the body scrolls. Radix stacks the open layers, so Escape and a click outside close only
-// the top one. A closing dialog gives the focus back to what had it as it opened.
+// description and footer parts that dialogs across the apps put inside it. The footer is one row at every width, tools
+// at the left and buttons at the right, and a wide dialog's keeps a line above it and stays in view while the body
+// scrolls. Radix stacks the open layers, so Escape and a click outside close only the top one. A closing dialog gives
+// the focus back to what had it as it opened.
 
 import { Button } from '@workspace/ui/components/button';
 import { useFocusReturn } from '@workspace/ui/hooks/use-focus-return';
@@ -133,12 +134,10 @@ function DialogFooter({
         <div
             data-slot="dialog-footer"
             className={cn(
-                // A wide dialog's footer runs edge to edge under its line and sticks to the bottom of the scrolling
-                // content. No negative bottom margin: a sticky box that overhangs its parent is pushed back up inside it.
-                // On a phone the left slot's mr-auto would shrink it in the stack: it spans the width instead, its icons
-                // stay a row at the start, and a text button in it fills the row like Cancel.
-                'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
-                'max-sm:*:mr-0 max-sm:[&>*>[data-slot=button]:not([data-size^=icon])]:flex-1',
+                // One row at every width that wraps when it doesn't fit. A wide dialog's footer runs edge to edge under
+                // its line and sticks to the bottom of the scrolling content. No negative bottom margin: a sticky box
+                // that overhangs its parent is pushed back up inside it.
+                'flex flex-wrap justify-end gap-2 [&_[data-slot=button]:not([data-size^=icon])]:min-w-20',
                 'group-data-[size=lg]/dialog:sticky group-data-[size=lg]/dialog:bottom-0 group-data-[size=lg]/dialog:-mx-6 group-data-[size=lg]/dialog:px-6 group-data-[size=lg]/dialog:py-4 group-data-[size=lg]/dialog:border-t group-data-[size=lg]/dialog:bg-background',
                 className,
             )}
@@ -152,6 +151,12 @@ function DialogFooter({
             )}
         </div>
     );
+}
+
+// The buttons at the right of a footer that also has tools at its left, so a footer too narrow for one row wraps
+// them to the next line together instead of splitting Cancel from the main button.
+function DialogActions({ className, ...props }: React.ComponentProps<'div'>) {
+    return <div data-slot="dialog-actions" className={cn('flex flex-wrap justify-end gap-2', className)} {...props} />;
 }
 
 function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
@@ -175,4 +180,4 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
     );
 }
 
-export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };
+export { Dialog, DialogActions, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };
