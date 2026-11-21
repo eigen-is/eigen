@@ -324,8 +324,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     <DropdownMenuTrigger asChild>
                         <span
                             className="ml-0.5 inline-flex text-muted-foreground hover:text-foreground"
-                            // Select this tab before opening its menu (like the right-click path), so
-                            // color and every other action target this sheet, not the active one.
+                            // Select this tab before its menu opens, so every action targets this sheet.
                             onClick={(e) => {
                                 e.stopPropagation();
                                 selectSheet();
