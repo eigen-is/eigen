@@ -77,9 +77,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     });
 
     useEffect(() => {
-        if (prefillEmail) {
-            contactInput.setValue(prefillEmail);
-        }
+        if (prefillEmail) contactInput.setValue(prefillEmail);
     }, [prefillEmail, contactInput.setValue]);
 
     const handleAddTeam = (teamId: string) => {
@@ -91,18 +89,9 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
 
     const handlePermissionChange = (id: string, permission: string) => {
         setDirectListOverride((prev) =>
-            (prev ?? baseDirectList).map((item) => {
-                if (item.id === id) {
-                    if (permission === 'remove') {
-                        return { ...item, read: false, write: false };
-                    } else if (permission === 'editor') {
-                        return { ...item, read: true, write: true };
-                    } else if (permission === 'viewer') {
-                        return { ...item, read: true, write: false };
-                    }
-                }
-                return item;
-            }),
+            (prev ?? baseDirectList).map((item) =>
+                item.id === id ? { ...item, read: permission !== 'remove', write: permission === 'editor' } : item,
+            ),
         );
         setHasChanges(true);
     };
@@ -159,8 +148,8 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                 myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="gap-2">
-                                <Users className="h-4 w-4" />
+                            <Button variant="outline">
+                                <Users />
                                 Share with team
                             </Button>
                         </DropdownMenuTrigger>

@@ -32,7 +32,6 @@ type DriveLocationPickerProps = {
     onConfirm: (location: DriveLocationValue & { name?: string }) => void | Promise<void>;
     onDownloadInstead?: () => void;
     title: string;
-    defaultName?: string;
     defaultOwnerId?: string;
     defaultMountId?: string;
     defaultFolderId?: string;
@@ -59,13 +58,12 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     );
 }
 
-// Mounted with the dialog's content, so each opening starts from the host's name and place.
+// Mounted with the dialog's content, so each opening starts empty at the host's place.
 function DriveLocationPickerBody({
     mode,
     onConfirm,
     onDownloadInstead,
     title,
-    defaultName = '',
     defaultOwnerId,
     defaultMountId = DEFAULT_MOUNT_ID,
     defaultFolderId = '',
@@ -80,7 +78,7 @@ function DriveLocationPickerBody({
     onCancel: () => void;
 }) {
     const { user } = useAuth();
-    const [name, setName] = useState(defaultName);
+    const [name, setName] = useState('');
     const [expanded, setExpanded] = useState(mode !== 'create');
     const [location, setLocation] = useState<DriveLocationValue>({
         ownerId: defaultOwnerId || user?.id || '',
