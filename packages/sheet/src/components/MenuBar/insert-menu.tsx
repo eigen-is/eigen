@@ -22,7 +22,6 @@ import {
     Sigma,
 } from 'lucide-react';
 import { useContext } from 'react';
-import { toast } from 'sonner';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
 import { useDialog } from '../../hooks/useDialog';
@@ -118,7 +117,7 @@ export function InsertMenu() {
                 onClick={() =>
                     setContext((draftCtx) => {
                         const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
-                        if (refusal) toast.error(CHART_RANGE_REFUSALS[refusal]);
+                        if (refusal) draftCtx.warning = CHART_RANGE_REFUSALS[refusal];
                     })
                 }
             >

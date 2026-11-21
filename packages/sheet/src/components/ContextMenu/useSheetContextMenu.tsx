@@ -27,7 +27,6 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import { toast } from 'sonner';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
@@ -52,11 +51,150 @@ import {
 } from '../../state';
 import { ResizeDialog } from '../ResizeDialog';
 
+export type SheetMenuArea = 'cell' | 'row' | 'column';
+
+// The state layer names the right-click areas by the surface clicked, and the menus by the axis.
+const STATE_AREA = { cell: 'cell', row: 'rowHeader', column: 'columnHeader' } as const;
+
+// One menu per area, reused for every right click in it. The onContextMenu it returns selects what was clicked and
+// opens the shared ContextMenuAnchor at the pointer.
+export function useSheetContextMenu(area: SheetMenuArea) {
+    const { context, setContext, refs } = useContext(WorkbookContext);
+    const contextMenu = useContextMenu<boolean>();
+    const refocusCellEditor = useCellEditorRefocus();
+    const { allowEdit } = context;
+    const openMenu = contextMenu.handleContextMenu;
+    const openMenuAt = contextMenu.openAt;
+
+    const onContextMenu = useCallback(
+        (e: React.MouseEvent) => {
+            if (!allowEdit) return;
+            setContext((d) => {
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, e.nativeEvent, cellArea, STATE_AREA[area]);
+            });
+            openMenu(e, true);
+        },
+        [allowEdit, setContext, refs.cellArea, area, openMenu],
+    );
+
+    // A long press on touch selects and opens the same way, at a point on screen.
+    const openAtPoint = useCallback(
+        (x: number, y: number) => {
+            if (!allowEdit) return;
+            setContext((d) => {
+                const cellArea = refs.cellArea.current;
+                if (cellArea) handleContextMenu(d, { clientX: x, clientY: y }, cellArea, STATE_AREA[area]);
+            });
+            openMenuAt(true, x, y);
+        },
+        [allowEdit, setContext, refs.cellArea, area, openMenuAt],
+    );
+
+    return {
+        onContextMenu,
+        openAtPoint,
+        anchor: (
+            <ContextMenuAnchor contextMenu={contextMenu} onCloseAutoFocus={refocusCellEditor}>
+                {area === 'cell' && <CellMenu />}
+                {area === 'row' && <RowMenu />}
+                {area === 'column' && <ColumnMenu />}
+            </ContextMenuAnchor>
+        ),
+    };
+}
+
+function CellMenu() {
+    return (
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
+                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
+                    <DropdownMenuSeparator />
+                    <LinkItem />
+                    <ImageItem />
+                    <TickBoxItem />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear contents" />
+                    <CreateFilterItem />
+                    <SortItem ascending label="Sort range A → Z" />
+                    <SortItem ascending={false} label="Sort range Z → A" />
+                </>
+            }
+            collaborate={<CommentItems part="rows" />}
+            destructive={
+                <>
+                    <DeleteItem type="row" label="Delete row" />
+                    <DeleteItem type="column" label="Delete column" />
+                    <CommentItems part="delete" />
+                </>
+            }
+        />
+    );
+}
+
+function RowMenu() {
+    return (
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
+                    <InsertItem type="row" direction="rightbottom" label="Insert 1 row below" />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear row" />
+                    <HideItem type="row" label="Hide row" />
+                    <ShowHiddenItem type="row" label="Show hidden rows" />
+                    <ResizeItem type="row" label="Resize the row" />
+                    <DropdownMenuSeparator />
+                    <CreateFilterItem />
+                </>
+            }
+            destructive={<DeleteItem type="row" label="Delete row" />}
+        />
+    );
+}
+
+function ColumnMenu() {
+    return (
+        <MenuSections
+            clipboard={<ClipboardItems />}
+            create={
+                <>
+                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
+                    <InsertItem type="column" direction="rightbottom" label="Insert 1 column to the right" />
+                </>
+            }
+            organize={
+                <>
+                    <ClearItem label="Clear column" />
+                    <HideItem type="column" label="Hide column" />
+                    <ShowHiddenItem type="column" label="Show hidden columns" />
+                    <ResizeItem type="column" label="Resize the column" />
+                    <DropdownMenuSeparator />
+                    <CreateFilterItem />
+                    <SortItem ascending label="Sort column A → Z" />
+                    <SortItem ascending={false} label="Sort column Z → A" />
+                </>
+            }
+            destructive={<DeleteItem type="column" label="Delete column" />}
+        />
+    );
+}
+
 type RowColType = 'row' | 'column';
 
 // The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
 function ClipboardItems() {
-    const { context, setContext, pasteClipboard } = useContext(WorkbookContext);
+    const { setContext, pasteClipboard } = useContext(WorkbookContext);
     return (
         <ClipboardMenuItems
             onCut={() =>
@@ -65,16 +203,16 @@ function ClipboardItems() {
                     flushPendingCopy();
                 })
             }
-            onCopy={() => {
-                if ((context.selections?.length ?? 0) > 1) {
-                    toast.error(ONE_AREA_ONLY);
-                    return;
-                }
+            onCopy={() =>
                 setContext((d) => {
+                    if ((d.selections?.length ?? 0) > 1) {
+                        d.warning = ONE_AREA_ONLY;
+                        return;
+                    }
                     handleCopy(d);
                     flushPendingCopy();
-                });
-            }}
+                })
+            }
             onPaste={() => pasteFromClipboard(pasteClipboard)}
         />
     );
@@ -266,9 +404,9 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
     const { context, refs } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = refs.hooks.current;
-    const last = context.selections?.[context.selections.length - 1];
-    const row = last ? (last.row_focus ?? last.row[0]) : 0;
-    const col = last ? (last.column_focus ?? last.column[0]) : 0;
+    const last = context.selections?.at(-1);
+    const row = last?.row_focus ?? last?.row[0] ?? 0;
+    const col = last?.column_focus ?? last?.column[0] ?? 0;
     const cell = getFlowdata(context)?.[row]?.[col];
     const hasComment = (cell?.commentCardIds?.length ?? 0) > 0;
     const info = hasComment ? getCommentInfo?.(row, col) : null;
@@ -288,143 +426,4 @@ function CommentItems({ part }: { part: 'rows' | 'delete' }) {
             part={part}
         />
     );
-}
-
-function CellMenu() {
-    return (
-        <MenuSections
-            clipboard={<ClipboardItems />}
-            create={
-                <>
-                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
-                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
-                    <DropdownMenuSeparator />
-                    <LinkItem />
-                    <ImageItem />
-                    <TickBoxItem />
-                </>
-            }
-            organize={
-                <>
-                    <ClearItem label="Clear contents" />
-                    <CreateFilterItem />
-                    <SortItem ascending label="Sort range A → Z" />
-                    <SortItem ascending={false} label="Sort range Z → A" />
-                </>
-            }
-            collaborate={<CommentItems part="rows" />}
-            destructive={
-                <>
-                    <DeleteItem type="row" label="Delete row" />
-                    <DeleteItem type="column" label="Delete column" />
-                    <CommentItems part="delete" />
-                </>
-            }
-        />
-    );
-}
-
-function RowMenu() {
-    return (
-        <MenuSections
-            clipboard={<ClipboardItems />}
-            create={
-                <>
-                    <InsertItem type="row" direction="lefttop" label="Insert 1 row above" />
-                    <InsertItem type="row" direction="rightbottom" label="Insert 1 row below" />
-                </>
-            }
-            organize={
-                <>
-                    <ClearItem label="Clear row" />
-                    <HideItem type="row" label="Hide row" />
-                    <ShowHiddenItem type="row" label="Show hidden rows" />
-                    <ResizeItem type="row" label="Resize the row" />
-                    <DropdownMenuSeparator />
-                    <CreateFilterItem />
-                </>
-            }
-            destructive={<DeleteItem type="row" label="Delete row" />}
-        />
-    );
-}
-
-function ColumnMenu() {
-    return (
-        <MenuSections
-            clipboard={<ClipboardItems />}
-            create={
-                <>
-                    <InsertItem type="column" direction="lefttop" label="Insert 1 column to the left" />
-                    <InsertItem type="column" direction="rightbottom" label="Insert 1 column to the right" />
-                </>
-            }
-            organize={
-                <>
-                    <ClearItem label="Clear column" />
-                    <HideItem type="column" label="Hide column" />
-                    <ShowHiddenItem type="column" label="Show hidden columns" />
-                    <ResizeItem type="column" label="Resize the column" />
-                    <DropdownMenuSeparator />
-                    <CreateFilterItem />
-                    <SortItem ascending label="Sort column A → Z" />
-                    <SortItem ascending={false} label="Sort column Z → A" />
-                </>
-            }
-            destructive={<DeleteItem type="column" label="Delete column" />}
-        />
-    );
-}
-
-export type SheetMenuArea = 'cell' | 'row' | 'column';
-
-// The state layer names the right-click areas by the surface clicked, and the menus by the axis.
-const STATE_AREA = { cell: 'cell', row: 'rowHeader', column: 'columnHeader' } as const;
-
-// One menu per area, reused for every right click in it. The onContextMenu it returns selects what was clicked and
-// opens the shared ContextMenuAnchor at the pointer.
-export function useSheetContextMenu(area: SheetMenuArea) {
-    const { context, setContext, refs } = useContext(WorkbookContext);
-    const contextMenu = useContextMenu<boolean>();
-    const refocusCellEditor = useCellEditorRefocus();
-    const { allowEdit } = context;
-    const openMenu = contextMenu.handleContextMenu;
-    const openMenuAt = contextMenu.openAt;
-
-    const onContextMenu = useCallback(
-        (e: React.MouseEvent) => {
-            if (!allowEdit) return;
-            setContext((d) => {
-                const cellArea = refs.cellArea.current;
-                if (cellArea) handleContextMenu(d, e.nativeEvent, cellArea, STATE_AREA[area]);
-            });
-            openMenu(e, true);
-        },
-        [allowEdit, setContext, refs.cellArea, area, openMenu],
-    );
-
-    // A long press on touch selects and opens the same way, at a point on screen.
-    const openAtPoint = useCallback(
-        (x: number, y: number) => {
-            if (!allowEdit) return;
-            setContext((d) => {
-                const cellArea = refs.cellArea.current;
-                if (cellArea) handleContextMenu(d, { clientX: x, clientY: y }, cellArea, STATE_AREA[area]);
-            });
-            openMenuAt(true, x, y);
-        },
-        [allowEdit, setContext, refs.cellArea, area, openMenuAt],
-    );
-
-    return {
-        onContextMenu,
-        openAtPoint,
-        anchor: (
-            <ContextMenuAnchor contextMenu={contextMenu} onCloseAutoFocus={refocusCellEditor}>
-                {area === 'cell' && <CellMenu />}
-                {area === 'row' && <RowMenu />}
-                {area === 'column' && <ColumnMenu />}
-            </ContextMenuAnchor>
-        ),
-    };
 }
