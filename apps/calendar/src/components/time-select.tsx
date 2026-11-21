@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 const TIME_SLOTS = Array.from({ length: 24 * 4 }, (_, i) => minutesToTime(i * 15));
 
 type TimeSelectProps = {
-    id?: string;
+    id: string;
     value: string;
     onChange: (value: string, dayOffset: number) => void;
     referenceTime?: string;

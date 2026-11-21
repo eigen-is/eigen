@@ -196,7 +196,7 @@ export function useMailActions() {
     };
 
     // On a failure, `keepFailed` narrows the dialog to the emails worth another try and the first failure is rethrown. Its
-    // mutation already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
+    // mutation already toasted it, so the dialog shows no second message.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();

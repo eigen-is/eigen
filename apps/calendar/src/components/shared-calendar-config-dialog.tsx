@@ -9,7 +9,7 @@ import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldContent, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
@@ -46,7 +46,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 />
             </FormDialog>
 
-            {/* Stacked on the open form, so a cancelled remove leaves the color as the user left it. */}
+            {/* Stacked on the open form, so a canceled remove leaves the color as the user left it. */}
             <ConfirmDialog
                 open={showRemoveConfirmation}
                 onOpenChange={setShowRemoveConfirmation}

@@ -61,7 +61,7 @@ function ContactsRoute() {
     const deleteTargets = deleteDialog.value;
 
     const handleConfirmDelete = async (targets: Contact[]) => {
-        // allSettled, not all (matching onToggleLabel): one 412 mid-batch must not reject the whole run and
+        // allSettled, not all: one 412 mid-batch must not reject the whole run and
         // skip the navigate, leaving the dialog stuck open.
         await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
         navigate({
