@@ -1,7 +1,7 @@
 // Moving one of your own items to trash asks in a red confirm that names it, and so does one in someone else's drive,
-// saying only its owner can restore it. One shared with you directly is removed from your view instead. When Move to trash gets only part of a
-// selection through, the dialog stays open, the after-delete step runs for the ones that went, and the failures go to
-// the dialog's owner, which narrows it to them.
+// saying only its owner can restore it. One shared with you directly is removed from your view instead. When Move to
+// trash gets only part of a selection through, the dialog stays open, the after-delete step runs for the ones that
+// went, and the failures go to the dialog's owner, which narrows it to them.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';

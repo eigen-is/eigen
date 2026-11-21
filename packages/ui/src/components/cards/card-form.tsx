@@ -30,6 +30,7 @@ type CardFormProps = {
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
+    // Attachments are only staged: the host uploads or copies them on save, and Cancel touches nothing.
     allowAttachments?: boolean;
     initialAttachments?: ChatAttachment[];
     // The assignee row shows only with both members and currentUserEmail.
