@@ -303,6 +303,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
                 onConfirm={handleRecurringDelete}
+                // A changed occurrence of our own has no rule to cut. An invitation's goes to the series on the server.
+                options={isException && !isLinkedEvent ? ['this', 'all'] : undefined}
             />
 
             <RecurringActionDialog
