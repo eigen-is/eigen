@@ -397,7 +397,7 @@ function TickBoxItem() {
 
 // A dialog of the sheet's slot, which outlives the menu and hands the focus back to the grid as it closes.
 function DeleteCommentAsk({ onDelete }: { onDelete: () => void }) {
-    return <DeleteCommentDialog {...useDialogProps()} onDelete={onDelete} />;
+    return <DeleteCommentDialog {...useDialogProps()} onConfirm={onDelete} />;
 }
 
 function CommentItems({ part }: { part: 'rows' | 'delete' }) {
