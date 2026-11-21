@@ -20,7 +20,8 @@ type NoteCardDialogProps = {
 export function NoteCardDialog({ open, onOpenChange, title, actions, children }: NoteCardDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent showCloseButton={false} className="flex flex-col gap-0 p-0">
+            {/* The gutter takes the 24px every dialog pads with, so the edit form's footer runs exactly edge to edge. */}
+            <DialogContent showCloseButton={false} className="flex flex-col gap-0 p-0 [--app-gutter-x:1.5rem]">
                 <DialogTitle className="sr-only">{title}</DialogTitle>
                 <DialogDescription className="sr-only">Card details, attachments and replies.</DialogDescription>
                 {/* The same bar as a Column's toolbar, so the card reads the same in a dialog as in a pane. */}
