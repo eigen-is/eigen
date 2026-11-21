@@ -96,7 +96,7 @@ function DriveFilePickerBody({
             <DialogFooter>
                 {onUploadFromDevice && (
                     <Button variant="outline" className="mr-auto" onClick={onUploadFromDevice}>
-                        <Upload className="h-4 w-4 mr-2" />
+                        <Upload />
                         Upload from device
                     </Button>
                 )}

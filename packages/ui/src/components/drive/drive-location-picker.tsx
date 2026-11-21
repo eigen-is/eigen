@@ -149,7 +149,7 @@ function DriveLocationPickerBody({
             <DialogFooter>
                 {onDownloadInstead && (
                     <Button variant="outline" className="mr-auto" onClick={onDownloadInstead} disabled={pending}>
-                        <Download className="h-4 w-4 mr-2" />
+                        <Download />
                         Download instead
                     </Button>
                 )}

@@ -417,8 +417,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             {myTeams && myTeams.length > 0 && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" className="mr-auto gap-2">
-                                            <Users className="h-4 w-4" />
+                                        <Button variant="outline" className="mr-auto">
+                                            <Users />
                                             Team chat
                                         </Button>
                                     </DropdownMenuTrigger>
