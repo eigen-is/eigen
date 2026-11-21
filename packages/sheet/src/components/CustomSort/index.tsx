@@ -70,7 +70,7 @@ export function CustomSort({ selection }: { selection: Selection }) {
                             Sort by
                         </FieldLabel>
                         <Select value={sortColumn} onValueChange={setSortColumn}>
-                            <SelectTrigger id="custom-sort-column" size="sm" className="w-full">
+                            <SelectTrigger id="custom-sort-column" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

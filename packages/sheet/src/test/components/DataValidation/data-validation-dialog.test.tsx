@@ -247,7 +247,7 @@ test('each label names its control', async () => {
         const label = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === text);
         return label && document.getElementById(label.getAttribute('for') ?? '');
     };
-    expect(target('Cell range')?.getAttribute('aria-label')).toBe('Cell range');
+    expect(target('Cell range')?.hasAttribute('aria-label')).toBe(false);
     expect(target('Validation condition')?.getAttribute('role')).toBe('combobox');
     for (const text of ['Allow multiple selection', 'Prohibit input when input data is invalid']) {
         expect(target(text)?.getAttribute('role')).toBe('checkbox');

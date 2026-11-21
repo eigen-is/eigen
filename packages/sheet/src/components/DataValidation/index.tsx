@@ -3,12 +3,12 @@
 // range. A refused range or value keeps it open with the reason under the field. A grid button hands its place to the
 // cell-range picker, which opens this dialog again with the draft and the picked range or list source.
 
-import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@workspace/ui/components/input-group';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Table, Trash2 } from 'lucide-react';
 import type React from 'react';
@@ -78,7 +78,6 @@ const HINT_TOGGLES = [
 // What OK and Remove validation say when the range names no cells.
 const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
-// The draft's text fields, each typed into an input.
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 
 // Why OK or Remove validation refused the draft: its range, or the values its condition compares against.
@@ -100,7 +99,8 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
         setProblem(undefined);
     };
 
-    const textField = (field: TextField, label: string) => ({
+    // A field a label element names passes no `label`.
+    const textField = (field: TextField, label?: string) => ({
         'aria-label': label,
         'aria-describedby': problem?.field === (field === 'rangeTxt' ? 'range' : 'value') ? problemId : undefined,
         value: draft[field],
@@ -157,199 +157,173 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
                 onSubmit={apply}
                 footerStart={<TooltipButton icon={Trash2} tooltipText="Remove validation" onClick={removeValidation} />}
             >
-                <div className="text-sm space-y-4 select-none">
-                    <Field>
-                        <FieldLabel htmlFor={`${id}-range`}>Cell range</FieldLabel>
-                        <div className="flex h-8 rounded-md border border-input overflow-hidden">
-                            <Input
-                                id={`${id}-range`}
-                                className="flex-1 border-none rounded-none h-full"
-                                spellCheck={false}
-                                {...textField('rangeTxt', 'Cell range')}
+                <Field>
+                    <FieldLabel htmlFor={`${id}-range`}>Cell range</FieldLabel>
+                    <RangeInput
+                        id={`${id}-range`}
+                        pickLabel="Select cell range"
+                        onPick={() => pickRange('rangeTxt')}
+                        {...textField('rangeTxt')}
+                    />
+                    {problemMessage('range')}
+                </Field>
+
+                <Field>
+                    <FieldLabel htmlFor={`${id}-type`}>Validation condition</FieldLabel>
+                    <Select
+                        value={draft.type}
+                        onValueChange={(value) => {
+                            const picked = VALIDATION_TYPES.find((type) => type.value === value);
+                            if (!picked) return;
+                            // A tick box arrives usable: the same TRUE/FALSE pair Insert → Tick box writes, so the
+                            // two routes to a checkbox rule agree.
+                            const isCheckbox = picked.value === 'checkbox';
+                            update({
+                                type: picked.value,
+                                type2: picked.condition,
+                                value1: isCheckbox ? CHECKBOX_CHECKED_VALUE : '',
+                                value2: isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '',
+                            });
+                        }}
+                    >
+                        <SelectTrigger id={`${id}-type`} className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {VALIDATION_TYPES.map((type) => (
+                                <SelectItem value={type.value} key={type.value}>
+                                    {type.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {draft.type === 'dropdown' && (
+                        <>
+                            <RangeInput
+                                placeholder="Enter the options, separated by commas, such as 1,2,3,4,5"
+                                pickLabel="Select options from a range"
+                                onPick={() => pickRange('value1')}
+                                {...textField('value1', 'Options')}
                             />
-                            <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                className="rounded-none"
-                                aria-label="Select cell range"
-                                onClick={() => pickRange('rangeTxt')}
-                            >
-                                <Table />
-                            </Button>
-                        </div>
-                        {problemMessage('range')}
-                    </Field>
-
-                    <Field>
-                        <FieldLabel htmlFor={`${id}-type`}>Validation condition</FieldLabel>
-                        <Select
-                            value={draft.type}
-                            onValueChange={(value) => {
-                                const picked = VALIDATION_TYPES.find((type) => type.value === value);
-                                if (!picked) return;
-                                // A tick box arrives usable: the same TRUE/FALSE pair Insert → Tick box writes, so the
-                                // two routes to a checkbox rule agree.
-                                const isCheckbox = picked.value === 'checkbox';
-                                update({
-                                    type: picked.value,
-                                    type2: picked.condition,
-                                    value1: isCheckbox ? CHECKBOX_CHECKED_VALUE : '',
-                                    value2: isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '',
-                                });
-                            }}
-                        >
-                            <SelectTrigger id={`${id}-type`} size="sm" className="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {VALIDATION_TYPES.map((type) => (
-                                    <SelectItem value={type.value} key={type.value}>
-                                        {type.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        {draft.type === 'dropdown' && (
-                            <div className="space-y-2">
-                                <div className="flex h-8 rounded-md border border-input overflow-hidden">
-                                    <Input
-                                        className="flex-1 border-none rounded-none h-full"
-                                        spellCheck={false}
-                                        placeholder="Enter the options, separated by commas, such as 1,2,3,4,5"
-                                        {...textField('value1', 'Options')}
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        className="rounded-none"
-                                        aria-label="Select options from a range"
-                                        onClick={() => pickRange('value1')}
-                                    >
-                                        <Table />
-                                    </Button>
-                                </div>
-                                <Field orientation="horizontal">
-                                    <Checkbox
-                                        id={`${id}-multiple`}
-                                        checked={draft.type2 === 'true'}
-                                        onCheckedChange={(checked) => update({ type2: `${checked}` })}
-                                    />
-                                    <FieldLabel htmlFor={`${id}-multiple`}>Allow multiple selection</FieldLabel>
-                                </Field>
-                            </div>
-                        )}
-
-                        {draft.type === 'checkbox' && (
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm shrink-0">Selected</span>
-                                    <Input
-                                        className="h-8"
-                                        placeholder="Enter a value"
-                                        {...textField('value1', 'Selected')}
-                                    />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm shrink-0">Not selected</span>
-                                    <Input
-                                        className="h-8"
-                                        placeholder="Enter a value"
-                                        {...textField('value2', 'Not selected')}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {(draft.type === 'number' ||
-                            draft.type === 'number_integer' ||
-                            draft.type === 'number_decimal' ||
-                            draft.type === 'text_length') && (
-                            <div className="space-y-2">
-                                <ConditionSelect
-                                    value={draft.type2}
-                                    conditions={NUMBER_CONDITIONS}
-                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                            <Field orientation="horizontal">
+                                <Checkbox
+                                    id={`${id}-multiple`}
+                                    checked={draft.type2 === 'true'}
+                                    onCheckedChange={(checked) => update({ type2: `${checked}` })}
                                 />
-                                {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
-                                    <div className="flex items-center gap-2">
-                                        <Input
-                                            type="number"
-                                            className="h-8"
-                                            placeholder="1"
-                                            {...textField('value1', 'Value 1')}
-                                        />
-                                        <span className="text-sm">-</span>
-                                        <Input
-                                            type="number"
-                                            className="h-8"
-                                            placeholder="100"
-                                            {...textField('value2', 'Value 2')}
-                                        />
-                                    </div>
-                                ) : (
-                                    <Input
-                                        type="number"
-                                        className="h-8"
-                                        placeholder="Numeric value, such as 10"
-                                        {...textField('value1', 'Value')}
-                                    />
-                                )}
-                            </div>
-                        )}
-
-                        {draft.type === 'text_content' && (
-                            <div className="space-y-2">
-                                <ConditionSelect
-                                    value={draft.type2}
-                                    conditions={TEXT_CONTENT_CONDITIONS}
-                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
-                                />
-                                <Input className="h-8" placeholder="Enter the text" {...textField('value1', 'Text')} />
-                            </div>
-                        )}
-
-                        {draft.type === 'date' && (
-                            <div className="space-y-2">
-                                <ConditionSelect
-                                    value={draft.type2}
-                                    conditions={DATE_CONDITIONS}
-                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
-                                />
-                                {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
-                                    <div className="flex items-center gap-2">
-                                        <Input type="date" className="h-8" {...textField('value1', 'Date 1')} />
-                                        <span className="text-sm">-</span>
-                                        <Input type="date" className="h-8" {...textField('value2', 'Date 2')} />
-                                    </div>
-                                ) : (
-                                    <Input type="date" className="h-8" {...textField('value1', 'Date')} />
-                                )}
-                            </div>
-                        )}
-                        {problemMessage('value')}
-                    </Field>
-
-                    {HINT_TOGGLES.map(({ value, label }) => (
-                        <Field orientation="horizontal" key={value}>
-                            <Checkbox
-                                id={`${id}-${value}`}
-                                checked={draft[value]}
-                                onCheckedChange={() => update({ [value]: !draft[value] })}
-                            />
-                            <FieldLabel htmlFor={`${id}-${value}`}>{label}</FieldLabel>
-                        </Field>
-                    ))}
-                    {draft.hintShow && (
-                        <Input
-                            className="h-8"
-                            placeholder="Enter the prompt shown when the cell is selected"
-                            {...textField('hintValue', 'Prompt')}
-                        />
+                                <FieldLabel htmlFor={`${id}-multiple`}>Allow multiple selection</FieldLabel>
+                            </Field>
+                        </>
                     )}
-                </div>
+
+                    {draft.type === 'checkbox' && (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm shrink-0">Selected</span>
+                                <Input placeholder="Enter a value" {...textField('value1', 'Selected')} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm shrink-0">Not selected</span>
+                                <Input placeholder="Enter a value" {...textField('value2', 'Not selected')} />
+                            </div>
+                        </>
+                    )}
+
+                    {(draft.type === 'number' ||
+                        draft.type === 'number_integer' ||
+                        draft.type === 'number_decimal' ||
+                        draft.type === 'text_length') && (
+                        <>
+                            <ConditionSelect
+                                value={draft.type2}
+                                conditions={NUMBER_CONDITIONS}
+                                onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                            />
+                            {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
+                                <div className="flex items-center gap-2">
+                                    <Input type="number" placeholder="1" {...textField('value1', 'Value 1')} />
+                                    <span className="text-sm">-</span>
+                                    <Input type="number" placeholder="100" {...textField('value2', 'Value 2')} />
+                                </div>
+                            ) : (
+                                <Input
+                                    type="number"
+                                    placeholder="Numeric value, such as 10"
+                                    {...textField('value1', 'Value')}
+                                />
+                            )}
+                        </>
+                    )}
+
+                    {draft.type === 'text_content' && (
+                        <>
+                            <ConditionSelect
+                                value={draft.type2}
+                                conditions={TEXT_CONTENT_CONDITIONS}
+                                onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                            />
+                            <Input placeholder="Enter the text" {...textField('value1', 'Text')} />
+                        </>
+                    )}
+
+                    {draft.type === 'date' && (
+                        <>
+                            <ConditionSelect
+                                value={draft.type2}
+                                conditions={DATE_CONDITIONS}
+                                onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                            />
+                            {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
+                                <div className="flex items-center gap-2">
+                                    <Input type="date" {...textField('value1', 'Date 1')} />
+                                    <span className="text-sm">-</span>
+                                    <Input type="date" {...textField('value2', 'Date 2')} />
+                                </div>
+                            ) : (
+                                <Input type="date" {...textField('value1', 'Date')} />
+                            )}
+                        </>
+                    )}
+                    {problemMessage('value')}
+                </Field>
+
+                {HINT_TOGGLES.map(({ value, label }) => (
+                    <Field orientation="horizontal" key={value}>
+                        <Checkbox
+                            id={`${id}-${value}`}
+                            checked={draft[value]}
+                            onCheckedChange={() => update({ [value]: !draft[value] })}
+                        />
+                        <FieldLabel htmlFor={`${id}-${value}`}>{label}</FieldLabel>
+                    </Field>
+                ))}
+                {draft.hintShow && (
+                    <Input
+                        placeholder="Enter the prompt shown when the cell is selected"
+                        {...textField('hintValue', 'Prompt')}
+                    />
+                )}
             </FormDialogForm>
         </FormDialog>
+    );
+}
+
+// A range typed in, with a button that hands the dialog's place to the cell-range picker.
+function RangeInput({
+    pickLabel,
+    onPick,
+    ...input
+}: React.ComponentProps<'input'> & { pickLabel: string; onPick: () => void }) {
+    return (
+        <InputGroup>
+            <InputGroupInput spellCheck={false} {...input} />
+            <InputGroupAddon align="inline-end">
+                <InputGroupButton size="icon-xs" aria-label={pickLabel} onClick={onPick}>
+                    <Table />
+                </InputGroupButton>
+            </InputGroupAddon>
+        </InputGroup>
     );
 }
 
@@ -364,7 +338,7 @@ function ConditionSelect({
 }) {
     return (
         <Select value={value} onValueChange={onChange}>
-            <SelectTrigger size="sm" className="w-full">
+            <SelectTrigger className="w-full">
                 <SelectValue />
             </SelectTrigger>
             <SelectContent>

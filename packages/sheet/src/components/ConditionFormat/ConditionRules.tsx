@@ -19,8 +19,7 @@ import { useDialogProps } from '../../hooks/useDialog';
 import type { ConditionRulesProps, ConditionRuleType } from '../../state';
 import { addConditionRule, conditionRuleError } from '../../state';
 
-// Each rule's name and description, shared by the Format menu, this dialog and Manage rules. A label such as "Equal to"
-// keeps its last word, because Manage rules puts the rule's value after it.
+// A label such as "Equal to" keeps its last word, because Manage rules puts the rule's value after it.
 export const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
     greaterThan: { label: 'Greater than', description: 'Format cells greater than' },
     lessThan: { label: 'Less than', description: 'Format cells less than' },
@@ -124,7 +123,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                         )}
                         {type === 'duplicateValue' && (
                             <Select value={rule.repeatValue} onValueChange={(repeatValue) => edit({ repeatValue })}>
-                                <SelectTrigger size="sm" aria-label="Type of value">
+                                <SelectTrigger aria-label="Type of value">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
