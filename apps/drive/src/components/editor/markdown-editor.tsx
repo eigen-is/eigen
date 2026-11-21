@@ -238,6 +238,7 @@ export function MarkdownEditor({
                     title="Discard changes?"
                     description="You have unsaved changes. Discard them?"
                     confirmText="Discard"
+                    destructive
                     onConfirm={handleDiscardConfirm}
                 />
             </Column>
