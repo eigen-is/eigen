@@ -4,10 +4,10 @@
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { orderedRules } from '@workspace/lib/sheets';
-import { Button } from '@workspace/ui/components/button';
 import { DialogFooter } from '@workspace/ui/components/dialog';
 import { FormDialog } from '@workspace/ui/components/form-dialog';
-import { X } from 'lucide-react';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { Trash2 } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { rangeToA1 } from '../../engine/a1-notation';
@@ -54,15 +54,12 @@ export function ManageRules() {
                                     {rule.ranges.map((range) => rangeToA1(range)).join(', ')}
                                 </div>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Delete rule"
+                            <TooltipButton
+                                icon={Trash2}
+                                tooltipText="Delete rule"
                                 className="h-7 w-7 shrink-0"
                                 onClick={() => setContext((ctx) => deleteSheetRule(ctx, id))}
-                            >
-                                <X className="h-3.5 w-3.5" />
-                            </Button>
+                            />
                         </div>
                     ))}
                 </div>
