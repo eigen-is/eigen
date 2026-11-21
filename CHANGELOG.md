@@ -20,7 +20,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
 - **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
-- **Shared calendars** — settings and the people list name access as Can edit, Can view or Free/busy
+- **Calendar access words** — calendar sharing, shared calendar settings and an admin's team settings name access as Can edit, Can view or Free/busy
 - **Manage rules in Sheets** — opening it no longer puts the focus on a delete button, so Enter can't remove a rule by accident
 - **Labels in Contacts** — deleting the label you are looking at takes you back to all contacts
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
