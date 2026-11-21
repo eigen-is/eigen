@@ -18,7 +18,7 @@ const { ColumnSettingsDialog } = await import('../../../components/stickies/colu
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const onClose = mock(() => {});
+const onOpenChange = mock((_open: boolean) => {});
 
 const titleField = () => {
     const field = document.getElementById(
@@ -45,9 +45,9 @@ const button = (label: string) =>
     footerButtons().find((b) => (b.textContent || b.getAttribute('aria-label')) === label);
 
 async function openAddColumn() {
-    onClose.mockClear();
+    onOpenChange.mockClear();
     const onAddColumn = mock((_title: string) => {});
-    ({ unmount } = await renderInDocument(createElement(AddColumnDialog, { isOpen: true, onClose, onAddColumn })));
+    ({ unmount } = await renderInDocument(createElement(AddColumnDialog, { open: true, onOpenChange, onAddColumn })));
     return onAddColumn;
 }
 
@@ -56,7 +56,7 @@ test('Add column: Enter in Title adds the trimmed title and closes', async () =>
     await typeTitle('  Doing ');
     await enter();
     expect(onAddColumn.mock.calls).toEqual([['Doing']]);
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('Add column: a blank title keeps Add column off, and Enter adds nothing', async () => {
@@ -65,7 +65,7 @@ test('Add column: a blank title keeps Add column off, and Enter adds nothing', a
     expect(button('Add column')?.disabled).toBe(true);
     await enter();
     expect(onAddColumn).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('Add column starts empty again after a Cancel', async () => {
@@ -73,7 +73,7 @@ test('Add column starts empty again after a Cancel', async () => {
     function Board() {
         const [open, setIsOpen] = useState(true);
         setOpen = setIsOpen;
-        return createElement(AddColumnDialog, { isOpen: open, onClose: () => setIsOpen(false), onAddColumn() {} });
+        return createElement(AddColumnDialog, { open, onOpenChange: setIsOpen, onAddColumn() {} });
     }
     ({ unmount } = await renderInDocument(createElement(Board)));
     await typeTitle('Doing');
@@ -98,11 +98,11 @@ function boardDoc() {
 }
 
 async function openColumnSettings(doc: Y.Doc) {
-    onClose.mockClear();
+    onOpenChange.mockClear();
     ({ unmount } = await renderInDocument(
         createElement(ColumnSettingsDialog, {
-            isOpen: true,
-            onClose,
+            open: true,
+            onOpenChange,
             columnId: 'c1',
             columnTitle: 'To do',
             cardCount: 1,
@@ -124,7 +124,7 @@ test('Column settings: Enter in Title saves the trimmed title into the column an
     await typeTitle(' Done  ');
     await enter();
     expect(columnTitle(doc)).toBe('Done');
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('Column settings: a blank title keeps Save changes off, and Enter saves nothing', async () => {
@@ -134,7 +134,7 @@ test('Column settings: a blank title keeps Save changes off, and Enter saves not
     expect(button('Save changes')?.disabled).toBe(true);
     await enter();
     expect(columnTitle(doc)).toBe('To do');
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('Column settings: Delete column asks first, then removes the column and its card', async () => {
@@ -157,7 +157,7 @@ test('Column settings: Delete column asks first, then removes the column and its
     expect(doc.getMap('columns').has('c1')).toBe(false);
     expect(doc.getMap('tasks').has('t1')).toBe(false);
     expect(doc.getArray('columnOrder').toArray()).toEqual([]);
-    expect(onClose).toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
 // Column settings as the board holds it: mounted once opened, open or not, and reading the column from the document.
@@ -175,8 +175,8 @@ async function renderBoardColumnSettings(doc: Y.Doc) {
             return () => doc.off('update', rerender);
         }, []);
         return createElement(ColumnSettingsDialog, {
-            isOpen: open,
-            onClose: () => setIsOpen(false),
+            open,
+            onOpenChange: setIsOpen,
             columnId: 'c1',
             columnTitle: columnTitle(doc) ?? '',
             cardCount: taskIds instanceof Y.Array ? taskIds.length : 0,

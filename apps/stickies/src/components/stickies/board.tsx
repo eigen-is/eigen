@@ -111,7 +111,6 @@ export function StickiesBoard({
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
-        // A hit whose card was deleted from the board opens as deleted, and an unknown chat name opens nothing.
         reveal: openChat,
     };
 
@@ -203,8 +202,6 @@ export function StickiesBoard({
         setAddOpen(true);
     }, []);
 
-    const handleEditColumn = columnSettings.openDialog;
-
     const { handleContextMenu, openAt: openCardContextMenuAt } = cardContextMenu;
     const handleCardContextMenu = useCallback(
         (e: React.MouseEvent, card: CommentCard) => {
@@ -265,7 +262,7 @@ export function StickiesBoard({
                     unreadChatNames={unreadChatNames}
                     canWrite={canWrite}
                     onAddCard={handleAddCard}
-                    onEditColumn={handleEditColumn}
+                    onEditColumn={columnSettings.openDialog}
                     isMobile={isMobile}
                 />
             );
@@ -303,7 +300,6 @@ export function StickiesBoard({
                                     filter={commentFilter}
                                     members={members}
                                     currentUserEmail={currentUserEmail}
-                                    // The panel only renders off mobile, so the toggle is offered only there.
                                     onToggleActivityPanel={
                                         !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
                                     }
@@ -355,7 +351,7 @@ export function StickiesBoard({
                                                             unreadChatNames={unreadChatNames}
                                                             canWrite={canWrite}
                                                             onAddCard={handleAddCard}
-                                                            onEditColumn={handleEditColumn}
+                                                            onEditColumn={columnSettings.openDialog}
                                                             onCardOpen={setOpenCardId}
                                                             onCardContextMenu={
                                                                 canWrite ? handleCardContextMenu : undefined
@@ -394,16 +390,16 @@ export function StickiesBoard({
                                     />
 
                                     <AddColumnDialog
-                                        isOpen={isAddColumnDialogOpen}
-                                        onClose={() => setIsAddColumnDialogOpen(false)}
+                                        open={isAddColumnDialogOpen}
+                                        onOpenChange={setIsAddColumnDialogOpen}
                                         onAddColumn={handleAddColumn}
                                     />
 
                                     {editColumnId && (
                                         <ColumnSettingsDialog
                                             key={editColumnId}
-                                            isOpen={columnSettings.open}
-                                            onClose={() => columnSettings.setOpen(false)}
+                                            open={columnSettings.open}
+                                            onOpenChange={columnSettings.setOpen}
                                             columnId={editColumnId}
                                             columnTitle={board.columns[editColumnId]?.title ?? ''}
                                             cardCount={board.columns[editColumnId]?.taskIds.length ?? 0}
