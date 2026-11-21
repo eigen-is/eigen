@@ -11,7 +11,7 @@ import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { Trash2 } from 'lucide-react';
@@ -42,7 +42,7 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
                 />
             </FormDialog>
 
-            {/* Stacked on the open form, so a cancelled delete leaves its edits in place. */}
+            {/* Stacked on the open form, so a canceled delete leaves its edits in place. */}
             <ConfirmDialog
                 open={showDeleteConfirmation}
                 onOpenChange={setShowDeleteConfirmation}

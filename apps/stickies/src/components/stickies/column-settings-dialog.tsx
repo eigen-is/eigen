@@ -6,15 +6,15 @@ import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
 
 type ColumnSettingsDialogProps = {
-    isOpen: boolean;
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     columnId: string;
     columnTitle: string;
     cardCount: number;
@@ -24,8 +24,8 @@ type ColumnSettingsDialogProps = {
 };
 
 export function ColumnSettingsDialog({
-    isOpen,
-    onClose,
+    open,
+    onOpenChange,
     columnId,
     columnTitle,
     cardCount,
@@ -63,12 +63,12 @@ export function ColumnSettingsDialog({
         });
         undoManager?.stopCapturing();
 
-        onClose();
+        onOpenChange(false);
     };
 
     return (
         <>
-            <FormDialog open={isOpen} onOpenChange={onClose} title="Column settings">
+            <FormDialog open={open} onOpenChange={onOpenChange} title="Column settings">
                 <ColumnSettingsForm
                     columnId={columnId}
                     columnTitle={columnTitle}

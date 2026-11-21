@@ -964,7 +964,7 @@ export function deleteSelectedCellText(ctx: Context): FormulaCell[] {
 
         for (const { row, column } of selection) {
             if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) {
-                ctx.warnDialog = 'Cannot perform this operation on partially merged cells';
+                ctx.warning = 'Cannot perform this operation on partially merged cells';
                 return changed;
             }
         }

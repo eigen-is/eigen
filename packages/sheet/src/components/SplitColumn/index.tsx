@@ -93,7 +93,7 @@ export function SplitColumn() {
                             />
                             Other
                             <Input
-                                className="ml-1.5 h-7 w-[80px]"
+                                className="ml-1.5 w-20"
                                 aria-label="Other separator"
                                 value={otherValue}
                                 onChange={(e) => setOtherValue(e.target.value)}

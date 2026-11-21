@@ -169,7 +169,7 @@ describe('hidden rows and columns under the selection', () => {
             ctx.sheets[0].data = new Array(rows).fill(new Array(columns).fill(null));
             tryInsertRowCol(ctx, { type, index: 0, count: 1, direction: 'lefttop', id: ctx.currentSheetId });
             expect(ctx.sheets[0].data).toHaveLength(rows);
-            return ctx.warnDialog;
+            return ctx.warning;
         };
         expect(refused(MAX_SHEET_ROW_COUNT, 1, 'row')).toBe('10000 row limit exceeded');
         expect(refused(1, MAX_SHEET_COLUMN_COUNT, 'column')).toBe('1000 column limit exceeded');
@@ -182,7 +182,7 @@ describe('hidden rows and columns under the selection', () => {
             const two = hiddenSheet([...at(0, 0), ...at(1, 1)]);
             const before = two.sheets[0].config?.rowhidden;
             write(two, 'row');
-            expect(two.warnDialog).toBe(ONE_AREA_ONLY);
+            expect(two.warning).toBe(ONE_AREA_ONLY);
             expect(two.sheets[0].config?.rowhidden).toEqual(before);
         }
     });

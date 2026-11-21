@@ -21,7 +21,7 @@ type CellRangeDialogProps = {
 
 export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRangeDialogProps) {
     const { context } = useContext(WorkbookContext);
-    const [rangeTxt, setRangeTxt] = useState<string>(value);
+    const [rangeTxt, setRangeTxt] = useState(value);
     const isLink = variant === 'link';
 
     // Only a typed range can be malformed, never one picked on the grid.

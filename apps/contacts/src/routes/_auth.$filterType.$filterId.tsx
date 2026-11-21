@@ -60,10 +60,7 @@ function ContactsRoute() {
     const deleteDialog = useDialogValue<Contact[]>();
     const deleteTargets = deleteDialog.value;
 
-    const handleConfirmDelete = async (targets: Contact[]) => {
-        // allSettled, not all (matching onToggleLabel): one 412 mid-batch must not reject the whole run and
-        // skip the navigate, leaving the dialog stuck open.
-        await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
+    const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
@@ -71,12 +68,11 @@ function ContactsRoute() {
         });
     };
 
-    const handleBackToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: {},
-        });
+    const handleConfirmDelete = async (targets: Contact[]) => {
+        // allSettled, not all: one 412 mid-batch must not reject the whole run and
+        // skip the navigate, leaving the dialog stuck open.
+        await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
+        handleBackToList();
     };
 
     const handleRowClick = (id: string) => {
@@ -88,16 +84,17 @@ function ContactsRoute() {
     };
 
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
-        const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
+        const allHaveLabel = selectedContacts.every((c) => (c.labels ?? []).includes(labelId));
         await Promise.allSettled(
             selectedContacts.map((c) => {
-                const currentLabels = c.labels || [];
+                const currentLabels = c.labels ?? [];
                 if (allHaveLabel) {
                     return updateContactMutation.mutateAsync({
                         ...c,
                         labels: currentLabels.filter((id) => id !== labelId),
                     });
-                } else if (!currentLabels.includes(labelId)) {
+                }
+                if (!currentLabels.includes(labelId)) {
                     return updateContactMutation.mutateAsync({ ...c, labels: [...currentLabels, labelId] });
                 }
                 return Promise.resolve();

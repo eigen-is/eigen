@@ -27,21 +27,8 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
-// The composer has no image node, so a quote carries text and links only.
-function formatEmailQuote(email: Email): string {
-    const from = email.from?.value[0];
-    // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
-    // and email.text is plain text, escaped here, so both are safe to embed in the blockquote.
-    const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
-    return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, new Date(email.date), content);
-}
-
-function replySubject(subject: string): string {
-    return subject.startsWith('RE:') ? subject : `RE: ${subject}`;
-}
-
-// Single-slot undo (Gmail-style): only the most recent reversible action is remembered. `done` is a
-// one-shot latch so the same action can't be reversed twice (e.g. `z` then clicking its still-visible toast).
+// Undo has one slot, as in Gmail: only the latest reversible action is kept. `done` stops one action from being
+// reversed twice, such as by `z` and then its toast's Undo.
 type Undoable = { done?: boolean } & (
     | { kind: 'move'; items: { emailId: string; from: string }[]; to: string }
     | { kind: 'read'; items: { emailId: string; prevIsRead: boolean }[] }
@@ -93,8 +80,7 @@ export function useMailActions() {
         toast.success('Undone');
     };
 
-    // `z` key: reverse whatever is currently in the single slot. Consumes the slot up front; no-op
-    // when empty. Keeps the "latest action" semantics.
+    // The `z` key empties the slot before it reverses what was in it.
     const undoLast = async () => {
         const action = lastAction.current;
         if (!action) return;
@@ -196,7 +182,7 @@ export function useMailActions() {
     };
 
     // On a failure, `keepFailed` narrows the dialog to the emails worth another try and the first failure is rethrown. Its
-    // mutation already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
+    // mutation already toasted it, so the dialog shows no second message.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
@@ -442,4 +428,17 @@ export function useMailActions() {
         imagesLoadedFor,
         loadRemoteImages: setImagesLoadedFor,
     };
+}
+
+// The composer has no image node, so a quote carries text and links only.
+function formatEmailQuote(email: Email): string {
+    const from = email.from?.value[0];
+    // The server sanitizes the HTML when it parses the message, and the plain text is escaped here, so both are
+    // safe in the blockquote.
+    const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
+    return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, new Date(email.date), content);
+}
+
+function replySubject(subject: string): string {
+    return subject.startsWith('RE:') ? subject : `RE: ${subject}`;
 }

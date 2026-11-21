@@ -25,7 +25,7 @@ The **Sharing** section is below the calendar name and color.
 4. To change what they can do, click the dropdown next to their name and choose one of:
    - **Can edit**: they can create, change, and delete events on this calendar.
    - **Can view**: they can see all event details but cannot make changes.
-   - **Free/Busy**: they can see only when you are busy or free, without any event titles or details.
+   - **Free/busy**: they can see only when you are busy or free, without any event titles or details.
 5. Click **Save**.
 
 The person you added will see the calendar under **Shared with me** in their own Calendar sidebar.

@@ -26,11 +26,10 @@ export function clampToViewport(
     point: ViewportPoint,
     size: { width: number; height: number },
     viewport: { width: number; height: number },
-    margin: number = VIEWPORT_MARGIN,
 ): ViewportPoint {
     return {
-        left: Math.max(margin, Math.min(point.left, viewport.width - size.width - margin)),
-        top: Math.max(margin, Math.min(point.top, viewport.height - size.height - margin)),
+        left: Math.max(VIEWPORT_MARGIN, Math.min(point.left, viewport.width - size.width - VIEWPORT_MARGIN)),
+        top: Math.max(VIEWPORT_MARGIN, Math.min(point.top, viewport.height - size.height - VIEWPORT_MARGIN)),
     };
 }
 
@@ -68,13 +67,13 @@ type ModalContextType = {
     pickerOpen: boolean;
 };
 
-const ModalContext = React.createContext<ModalContextType>({
+export const ModalContext = React.createContext<ModalContextType>({
     showModal: () => {},
     showNonModal: () => {},
     pickerOpen: false,
 });
 
-function ModalProvider({ children }: { children?: React.ReactNode }) {
+export function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [state, setState] = useState<ModalState | null>(null);
     const lastId = useRef(0);
 
@@ -173,5 +172,3 @@ function NonModalShell({
         </Dialog>
     );
 }
-
-export { ModalContext, ModalProvider };

@@ -325,7 +325,7 @@ function clearCoveredMerges(ctx: Context, d: CellMatrix, top: number, bottom: nu
 // The sheet's size grows too, because a reader builds the grid at the stored size.
 function roomFor(ctx: Context, top: number, bottom: number, left: number, right: number): CellMatrix | undefined {
     if (hasPartMC(ctx, top, bottom, left, right)) {
-        ctx.warnDialog = PART_MERGE_REFUSAL;
+        ctx.warning = PART_MERGE_REFUSAL;
         return undefined;
     }
     const sheet = getSheet(ctx);
@@ -337,17 +337,17 @@ function roomFor(ctx: Context, top: number, bottom: number, left: number, right:
     if (rowsToAdd <= 0 && columnsToAdd <= 0) return data;
 
     if (bottom >= MAX_SHEET_ROW_COUNT) {
-        ctx.warnDialog = `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`;
+        ctx.warning = `This action would increase the number of rows in the workbook above the limit of ${MAX_SHEET_ROW_COUNT}.`;
         return undefined;
     }
     if (right >= MAX_SHEET_COLUMN_COUNT) {
-        ctx.warnDialog = `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`;
+        ctx.warning = `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`;
         return undefined;
     }
     // An imported sheet may be taller or wider than those limits, so a paste within them can still pass the bound on
     // the grid a reader may build. Peers skip a size past it, and a sheet stored past it fails every later open.
     if (!sheetFitsGrid({ row: Math.max(data.length, bottom + 1), column: Math.max(data[0].length, right + 1) })) {
-        ctx.warnDialog = `This action would increase the number of cells in the workbook above the limit of ${MAX_GRID_SLOTS.toLocaleString('en-US')}.`;
+        ctx.warning = `This action would increase the number of cells in the workbook above the limit of ${MAX_GRID_SLOTS.toLocaleString('en-US')}.`;
         return undefined;
     }
 

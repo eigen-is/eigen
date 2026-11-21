@@ -132,7 +132,7 @@ test('a refused value keeps the dialog open, says why, and keeps what was typed 
     expect(problemOf(dialog.field('Value 2'))).toBe('The value 2 cannot be less than the value 1');
     expect(dialog.field('Value 2').value).toBe('0');
     expect(rules(dialog)).toEqual({ v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER } });
-    expect(dialog.context().warnDialog).toBeUndefined();
+    expect(dialog.context().warning).toBeUndefined();
     await dialog.type('Value 2', '20');
     expect(problemOf(dialog.field('Value 2'))).toBeUndefined();
 });
@@ -247,7 +247,7 @@ test('each label names its control', async () => {
         const label = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === text);
         return label && document.getElementById(label.getAttribute('for') ?? '');
     };
-    expect(target('Cell range')?.getAttribute('aria-label')).toBe('Cell range');
+    expect(target('Cell range')?.hasAttribute('aria-label')).toBe(false);
     expect(target('Validation condition')?.getAttribute('role')).toBe('combobox');
     for (const text of ['Allow multiple selection', 'Prohibit input when input data is invalid']) {
         expect(target(text)?.getAttribute('role')).toBe('checkbox');

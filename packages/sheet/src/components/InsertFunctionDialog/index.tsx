@@ -52,8 +52,7 @@ export function InsertFunctionDialog() {
             const last = ctx.selections?.at(-1);
             const r = last?.row_focus ?? last?.row[0] ?? 0;
             const c = last?.column_focus ?? last?.column[0] ?? 0;
-            const html = `${functionCallHtml(name)}`;
-            openCellEditor(ctx, r, c, { html, caret: name.length + 2 });
+            openCellEditor(ctx, r, c, { html: functionCallHtml(name), caret: name.length + 2 });
             ctx.functionHint = name;
             ctx.functionCandidates = [];
             if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {

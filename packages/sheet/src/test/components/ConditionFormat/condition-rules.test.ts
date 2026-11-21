@@ -96,7 +96,7 @@ test('a refused value stays open with the reason under the field and the typed v
     expect(dialog.field('Value').getAttribute('aria-describedby')).toBe(reason?.id ?? null);
     expect(dialog.field('Value').getAttribute('aria-invalid')).toBe('true');
     expect(rules(dialog.context())).toEqual([]);
-    expect(dialog.context().warnDialog).toBeUndefined();
+    expect(dialog.context().warning).toBeUndefined();
 
     await dialog.type('Value', '=A1:B2');
     await act(async () => pressEnter(dialog.field('Value')));

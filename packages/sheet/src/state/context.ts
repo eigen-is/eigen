@@ -57,9 +57,8 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    // A notice for the overlay to show, such as why an edit was refused. A write sets it, and the
-    // overlay opens the notice and clears it.
-    warnDialog?: string;
+    // A notice for the overlay to toast, such as why an edit was refused. The overlay clears it once shown.
+    warning?: string;
     validationListOpen?: boolean;
 
     filterContextMenu?: {
@@ -171,7 +170,7 @@ export function defaultContext(refs: RefValues): Context {
         devicePixelRatio: globalThis.devicePixelRatio,
 
         currentSheetId: '',
-        warnDialog: undefined,
+        warning: undefined,
 
         validationListOpen: false,
 

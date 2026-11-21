@@ -42,17 +42,6 @@ import { SwitchRow } from './switch-row';
 
 type Backups = ServerSettings['backups'];
 
-// The owner picks an hour of their own day, listed in its order; the schedule runs on UTC.
-function scheduleHours(): { hourUtc: number; label: string }[] {
-    const hours = Array.from({ length: 24 }, (_, hourUtc) => {
-        const at = new Date();
-        at.setUTCHours(hourUtc, 0, 0, 0);
-        return { hourUtc, at, label: `${formatTime(at)} (${String(hourUtc).padStart(2, '0')}:00 UTC)` };
-    });
-    const minuteOfDay = (at: Date) => at.getHours() * 60 + at.getMinutes();
-    return hours.sort((a, b) => minuteOfDay(a.at) - minuteOfDay(b.at));
-}
-
 type ServerBackupSectionProps = {
     value: Backups;
     onChange: (patch: DeepPartial<Backups>) => void;
@@ -285,6 +274,17 @@ export function ServerBackupSection({
             )}
         </SettingsSection>
     );
+}
+
+// The owner picks an hour of their own day, listed in its order; the schedule runs on UTC.
+function scheduleHours(): { hourUtc: number; label: string }[] {
+    const hours = Array.from({ length: 24 }, (_, hourUtc) => {
+        const at = new Date();
+        at.setUTCHours(hourUtc, 0, 0, 0);
+        return { hourUtc, at, label: `${formatTime(at)} (${String(hourUtc).padStart(2, '0')}:00 UTC)` };
+    });
+    const minuteOfDay = (at: Date) => at.getHours() * 60 + at.getMinutes();
+    return hours.sort((a, b) => minuteOfDay(a.at) - minuteOfDay(b.at));
 }
 
 // A count the route takes from 1 to BACKUP_KEEP_MAX, clamped as it is typed.

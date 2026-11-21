@@ -18,6 +18,10 @@ import { CenteredToolbar, DocumentShareCluster, ToolbarTitle } from '@workspace/
 import { UserAvatar } from '@workspace/ui/components/user';
 import { useRef, useState } from 'react';
 
+export const Route = createFileRoute('/_auth/$ownerId/$mountId/$chatId')({
+    component: ChatView,
+});
+
 function ChatView() {
     const { chatId } = Route.useParams();
     return <ChatRoomView key={chatId} />;
@@ -141,7 +145,3 @@ function ChatRoomView() {
         </>
     );
 }
-
-export const Route = createFileRoute('/_auth/$ownerId/$mountId/$chatId')({
-    component: ChatView,
-});

@@ -232,7 +232,6 @@ function MailRoute() {
     const isSending = actions.isSendPending || preparingSend;
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!mailId || mode === 'compose';
-    const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
     const listToolbar = (
         <EmailListToolbar
@@ -243,7 +242,7 @@ function MailRoute() {
         />
     );
 
-    const detailToolbar = isDraft ? (
+    const detailToolbar = isComposing ? (
         <EmailDraftToolbar
             onDelete={() => isEmailDraft(selectedEmail) && handleDeleteEmail(selectedEmail)}
             onAttach={() => setFilePickerOpen(true)}
@@ -332,7 +331,7 @@ function MailRoute() {
                     {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
                     {showDetail && (
                         <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
-                            {isDraft ? (
+                            {isComposing ? (
                                 <EmailDraft
                                     // A compose session stays mounted across auto-save's URL update. An open
                                     // draft keys on its id, because the editor reads its content on mount only.

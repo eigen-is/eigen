@@ -52,8 +52,8 @@ test('Hide hides a sheet while another one is shown', async () => {
 test('Hide on the last shown sheet warns and keeps the sheet', async () => {
     const dialog = await openTabMenu([sheet('a', 'Only')]);
     expect(dialog.context().sheets[0]?.hide).toBeUndefined();
-    expect(dialog.context().warnDialog).toContain('To hide this sheet');
-    expect(dialog.context().warnDialog).not.toContain('delete');
+    expect(dialog.context().warning).toContain('To hide this sheet');
+    expect(dialog.context().warning).not.toContain('delete');
 });
 
 test('an empty name shows an error toast with the reason and keeps the old name', async () => {
@@ -117,6 +117,6 @@ test('a delete confirmed after a peer deleted the other sheet refuses with the r
     });
     await dialog.click('Delete');
     expect(dialog.context().sheets.map((s) => s.id)).toEqual(['a']);
-    expect(dialog.context().warnDialog).toContain('To delete this sheet');
+    expect(dialog.context().warning).toContain('To delete this sheet');
     expect(dialog.dialogs()).toHaveLength(0);
 });

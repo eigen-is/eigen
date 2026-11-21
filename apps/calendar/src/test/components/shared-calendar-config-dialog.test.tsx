@@ -126,7 +126,7 @@ test('it names the calendar and the access in the share words, and lists the own
 
 test('free/busy access reads as the share editor says it', async () => {
     await open(shared({ permission: 'free-busy' }));
-    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Free/Busy');
+    expect(settings()?.querySelector('[data-slot="dialog-description"]')?.textContent).toBe('Team — Free/busy');
 });
 
 test("Save with the owner's color stores none, and the dialog closes", async () => {

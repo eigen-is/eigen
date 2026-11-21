@@ -331,7 +331,7 @@ describe('a range with a row an active filter hides', () => {
     test('a cut is refused with a notice, and writes neither the sheet nor the clipboard', () => {
         consumePendingCopy();
         const { next, ops } = author(makeCtx({ filtered: true }), handleCut);
-        expect(next.warnDialog).toBe(MOVE_REFUSAL);
+        expect(next.warning).toBe(MOVE_REFUSAL);
         expect(next.copyState).toBeUndefined();
         expect(consumePendingCopy()).toBeNull();
         expect(ops).toEqual([]);
@@ -340,7 +340,7 @@ describe('a range with a row an active filter hides', () => {
     test('a move is refused with a notice, and the cells stay', () => {
         const ctx = makeCtx({ filtered: true });
         move(ctx);
-        expect(ctx.warnDialog).toBe(MOVE_REFUSAL);
+        expect(ctx.warning).toBe(MOVE_REFUSAL);
         expect(sheet(ctx).data?.[1][1]?.v).toBe('r1c1');
         expect(sheet(ctx).data?.[6][6]).toBeNull();
     });
@@ -349,7 +349,7 @@ describe('a range with a row an active filter hides', () => {
         const ctx = makeCtx({ filtered: true });
         ctx.selections = [{ row: [2, 3], column: [0, 3], row_focus: 2, column_focus: 0 }];
         editInPlace(ctx, (draft) => paste(draft, true));
-        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.warning).toBeUndefined();
         expect(sheet(ctx).data?.[6][6]?.v).toBe('r2c0');
         expect(sheet(ctx).data?.[2][1]).toBeNull();
     });
@@ -363,7 +363,7 @@ describe('a range with a row an active filter hides', () => {
         const ctx = makeCtx({ filtered: true });
         mergeColumnA(ctx, first, last);
         handleCopy(ctx);
-        expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+        expect(ctx.warning).toBe(MERGE_REFUSAL);
         expect(ctx.copyState).toBeUndefined();
         expect(consumePendingCopy()).toBeNull();
     });
@@ -372,7 +372,7 @@ describe('a range with a row an active filter hides', () => {
         const ctx = makeCtx({ filtered: true });
         mergeColumnA(ctx, 0, 2);
         paint(ctx);
-        expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+        expect(ctx.warning).toBe(MERGE_REFUSAL);
         expect(sheet(ctx).data?.[6][6]).toBeNull();
     });
 
@@ -381,7 +381,7 @@ describe('a range with a row an active filter hides', () => {
         mergeColumnA(ctx, 0, 2);
         ctx.selections = [{ row: [0, 3], column: [1, 3], row_focus: 0, column_focus: 1 }];
         handleCopy(ctx);
-        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.warning).toBeUndefined();
         expect(ctx.copyState).toBeDefined();
     });
 
@@ -410,7 +410,7 @@ describe('a range with a row an active filter hides', () => {
                 draft.selections = destination();
                 pasteCopy(draft);
             });
-            expect(ctx.warnDialog).toBe(MOVE_REFUSAL);
+            expect(ctx.warning).toBe(MOVE_REFUSAL);
             expect(sheet(ctx).data?.[1][1]?.v).toBe('r1c1');
             expect(sheet(ctx).data?.[6][6]).toBeNull();
         });
@@ -424,7 +424,7 @@ describe('a range with a row an active filter hides', () => {
                 draft.selections = destination();
                 pasteCopy(draft);
             });
-            expect(ctx.warnDialog).toBe(MERGE_REFUSAL);
+            expect(ctx.warning).toBe(MERGE_REFUSAL);
             expect(sheet(ctx).data?.[6][6]).toBeNull();
         });
     });
@@ -432,7 +432,7 @@ describe('a range with a row an active filter hides', () => {
     describe('only what is filter-hidden counts', () => {
         const cutWhole = (ctx: Context) => {
             editInPlace(ctx, (draft) => paste(draft, true));
-            expect(ctx.warnDialog).toBeUndefined();
+            expect(ctx.warning).toBeUndefined();
             expectValuesWhole(ctx);
             expectSourceCleared(ctx);
         };
@@ -460,7 +460,7 @@ describe('a range with a row an active filter hides', () => {
                 '\tr3c1\tr3c2\tr3c3',
             ]);
             editInPlace(ctx, (draft) => paste(draft, true));
-            expect(ctx.warnDialog).toBeUndefined();
+            expect(ctx.warning).toBeUndefined();
             expect(sheet(ctx).data?.[6][6]?.v).toBe('r2c0');
         });
     });
@@ -725,7 +725,7 @@ describe('a carried rule lands as ranges', () => {
             const base = capCtx({ v });
             const { next, ops } = paste(base, area(rows - 1, 2));
             expect(next.sheets[0].data?.[0]?.[2]?.v).toBe('a');
-            expect(next.warnDialog).toBeUndefined();
+            expect(next.warning).toBeUndefined();
             expect(next.sheets[0].dataValidations).toEqual({ v });
             expectEveryReaderAgrees(base, next, ops);
         });

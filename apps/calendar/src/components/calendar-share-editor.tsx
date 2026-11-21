@@ -2,6 +2,7 @@
 // Share with team. Each change only edits the dialog's list of shares, which Save sends with the name and color.
 
 import { useAuth } from '@workspace/lib/auth';
+import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
@@ -24,14 +25,6 @@ import {
 } from '@workspace/ui/components/select';
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
-
-// The words for each access level, in the editor's menu and wherever a share is named, such as a shared calendar's
-// settings.
-export const CALENDAR_PERMISSION_LABELS: Record<CalendarShare['permission'], string> = {
-    write: 'Can edit',
-    read: 'Can view',
-    'free-busy': 'Free/Busy',
-};
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -106,7 +99,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
     );
 }
 
-// The footer's Share with team: a menu of the user's teams, each added as a viewer. It shows only for someone in a team.
+// The footer's Share with team: a menu of the user's teams, each added as a viewer.
 export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorProps) {
     const { data: myTeams } = useMyTeams();
     if (!myTeams || myTeams.length === 0) return null;

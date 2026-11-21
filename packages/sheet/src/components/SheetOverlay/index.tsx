@@ -259,12 +259,12 @@ export const SheetOverlay: React.FC = () => {
 
     // The field is cleared once shown, so the same refusal again warns again.
     useEffect(() => {
-        if (!context.warnDialog) return;
-        toast.error(context.warnDialog);
+        if (!context.warning) return;
+        toast.error(context.warning);
         setContext((ctx) => {
-            ctx.warnDialog = undefined;
+            ctx.warning = undefined;
         });
-    }, [context.warnDialog, setContext]);
+    }, [context.warning, setContext]);
 
     // Keyed on scrollRequest, not on the scrollLeft and scrollTop mirror: syncScroll updates that on every recipe,
     // which would rewind a scroll in progress.

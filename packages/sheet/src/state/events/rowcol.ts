@@ -15,7 +15,7 @@ export function tryInsertRowCol(
         insertRowCol(ctx, op, changeSelection);
     } catch (e) {
         if (!(e instanceof RowColError)) throw e;
-        ctx.warnDialog = e.message;
+        ctx.warning = e.message;
     }
 }
 
@@ -25,7 +25,7 @@ export function tryDeleteRowCol(ctx: Context, op: { type: 'row' | 'column'; star
     const data = ctx.sheets[index].data;
     const total = op.type === 'row' ? (data?.length ?? 0) : (data?.[0]?.length ?? 0);
     if (total <= op.end - op.start + 1) {
-        ctx.warnDialog = op.type === 'row' ? 'Cannot delete all rows' : 'Cannot delete all columns';
+        ctx.warning = op.type === 'row' ? 'Cannot delete all rows' : 'Cannot delete all columns';
         return;
     }
     deleteRowCol(ctx, op);

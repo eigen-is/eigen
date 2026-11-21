@@ -43,25 +43,6 @@ import { useDraft } from './hooks/use-draft';
 import type { ShareGrant } from './share-and-send-dialog';
 import { ShareAndSendDialog } from './share-and-send-dialog';
 
-// Recipients as the server will see them at send, minus the sender, so this preview's grant set matches what it grants.
-// `bcc` holds the lowercased addresses that resolved as Bcc-only, which the server never grants.
-function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): { all: string[]; bcc: Set<string> } {
-    const own = ownEmail?.toLowerCase();
-    const all: string[] = [];
-    const bcc = new Set<string>();
-    for (const { address, field } of canonicalRecipients(draft)) {
-        const key = address.toLowerCase();
-        if (key === own) continue;
-        all.push(address);
-        if (field === 'bcc') bcc.add(key);
-    }
-    return { all, bcc };
-}
-
-function focusBodyEditor(root: HTMLElement) {
-    root.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
-}
-
 export function EmailDraftToolbar({
     onDelete,
     onAttach,
@@ -86,6 +67,12 @@ export function EmailDraftToolbar({
         </Toolbar>
     );
 }
+
+const RECIPIENT_FIELDS = [
+    { field: 'to', label: 'To:' },
+    { field: 'cc', label: 'Cc:' },
+    { field: 'bcc', label: 'Bcc:' },
+] as const;
 
 type EmailDraftProps = {
     email: EmailDraftType | null;
@@ -195,8 +182,8 @@ export function EmailDraft({
     };
 
     const handleDriveAttach = async (paths: DrivePath[]) => {
-        // Both attach paths (picker and initialDriveAttachments) pass through here, so the reference
-        // cap is enforced here too: past it the draft schema 422s every save and the draft is lost.
+        // Every Drive attach comes through here, so the reference cap holds here: past it the draft schema refuses
+        // every save and the draft is lost.
         const fresh = paths.filter((p) => isContainerType(p.type) && !state.driveReferences.some((r) => r.id === p.id));
         const room = Math.max(0, MAX_SEND_REFERENCES - state.driveReferences.length);
         if (fresh.length > room) {
@@ -425,48 +412,22 @@ export function EmailDraft({
                 }}
             >
                 <div className="space-y-1 app-gutter-x py-2 shrink-0">
-                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
-                        <label htmlFor="to" className="text-sm text-muted-foreground">
-                            To:
-                        </label>
-                        <ContactAutosuggest
-                            initialValue={state.to}
-                            onChange={(val) => setField('to', val)}
-                            appendMode
-                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                            disabled={isSending}
-                            autoComplete="off"
-                            id="to"
-                        />
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
-                        <label htmlFor="cc" className="text-sm text-muted-foreground">
-                            Cc:
-                        </label>
-                        <ContactAutosuggest
-                            initialValue={state.cc}
-                            onChange={(val) => setField('cc', val)}
-                            appendMode
-                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                            disabled={isSending}
-                            autoComplete="off"
-                            id="cc"
-                        />
-                    </div>
-                    <div className="grid grid-cols-[4rem_1fr] items-center border-b">
-                        <label htmlFor="bcc" className="text-sm text-muted-foreground">
-                            Bcc:
-                        </label>
-                        <ContactAutosuggest
-                            initialValue={state.bcc}
-                            onChange={(val) => setField('bcc', val)}
-                            appendMode
-                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                            disabled={isSending}
-                            autoComplete="off"
-                            id="bcc"
-                        />
-                    </div>
+                    {RECIPIENT_FIELDS.map(({ field, label }) => (
+                        <div key={field} className="grid grid-cols-[4rem_1fr] items-center border-b">
+                            <label htmlFor={field} className="text-sm text-muted-foreground">
+                                {label}
+                            </label>
+                            <ContactAutosuggest
+                                initialValue={state[field]}
+                                onChange={(val) => setField(field, val)}
+                                appendMode
+                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                                disabled={isSending}
+                                autoComplete="off"
+                                id={field}
+                            />
+                        </div>
+                    ))}
                     <div className="grid grid-cols-[4rem_1fr] items-center border-b">
                         <label htmlFor="from" className="text-sm text-muted-foreground">
                             From:
@@ -569,4 +530,23 @@ export function EmailDraft({
             )}
         </div>
     );
+}
+
+// Recipients as the server will see them at send, minus the sender, so this preview's grant set matches what it grants.
+// `bcc` holds the lowercased addresses that resolved as Bcc-only, which the server never grants.
+function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): { all: string[]; bcc: Set<string> } {
+    const own = ownEmail?.toLowerCase();
+    const all: string[] = [];
+    const bcc = new Set<string>();
+    for (const { address, field } of canonicalRecipients(draft)) {
+        const key = address.toLowerCase();
+        if (key === own) continue;
+        all.push(address);
+        if (field === 'bcc') bcc.add(key);
+    }
+    return { all, bcc };
+}
+
+function focusBodyEditor(root: HTMLElement) {
+    root.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
 }

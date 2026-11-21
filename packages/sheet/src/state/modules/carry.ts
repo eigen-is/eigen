@@ -43,7 +43,7 @@ export function carriedLines(ctx: Context, sheetId: string, ranges: readonly Sin
         }
     }
     if (filtered.size > 0 && straddlesFiltered(sheet, filtered, ranges)) {
-        ctx.warnDialog = FILTERED_MERGE_REFUSAL;
+        ctx.warning = FILTERED_MERGE_REFUSAL;
         return undefined;
     }
     const rows = new Set<number>();
@@ -75,7 +75,7 @@ function straddlesFiltered(sheet: Sheet, filtered: ReadonlySet<number>, ranges: 
 export function movedLines(ctx: Context, sheetId: string, range: SingleRange): CarriedLines | undefined {
     const lines = carriedLines(ctx, sheetId, [range]);
     if (lines?.rows.length === range.row[1] - range.row[0] + 1) return lines;
-    ctx.warnDialog = FILTERED_MOVE_REFUSAL;
+    ctx.warning = FILTERED_MOVE_REFUSAL;
     return undefined;
 }
 

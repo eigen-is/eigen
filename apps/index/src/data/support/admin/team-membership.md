@@ -14,7 +14,7 @@ A team is a named group of members on your Eigen server. When you share somethin
 
 When an admin creates a team, the team can have three things:
 
-- **A team calendar.** A shared calendar that team members can see, and optionally edit. The admin sets the level of access: **Free/Busy** (members can only see when the team is busy), **Read** (members can see all events), or **Write** (members can add and edit events).
+- **A team calendar.** A shared calendar that team members can see, and optionally edit. The admin sets the level of access: **Can edit** (members can add and edit events), **Can view** (members can see all events), or **Free/busy** (members can only see when the team is busy).
 - **A team Drive.** One or more shared storage areas that the team owns. When a team Drive has storage configured, it appears in the sidebar of Drive and the other file apps under **Team drives**. Every team member can browse and work in it.
 - **Quota overrides.** The admin can set storage limits for mail, contacts, and calendars (combined) and for Drive that are higher than the server defaults. If a member belongs to several teams with different overrides, the most permissive limit wins.
 

@@ -3,18 +3,18 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
+import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Field, FieldContent, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { CALENDAR_PERMISSION_LABELS } from './calendar-share-editor';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
@@ -46,7 +46,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 />
             </FormDialog>
 
-            {/* Stacked on the open form, so a cancelled remove leaves the color as the user left it. */}
+            {/* Stacked on the open form, so a canceled remove leaves the color as the user left it. */}
             <ConfirmDialog
                 open={showRemoveConfirmation}
                 onOpenChange={setShowRemoveConfirmation}

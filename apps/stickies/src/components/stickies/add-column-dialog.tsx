@@ -7,14 +7,14 @@ import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 
 type AddColumnDialogProps = {
-    isOpen: boolean;
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     onAddColumn: (title: string) => void;
 };
 
-export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialogProps) {
+export function AddColumnDialog({ open, onOpenChange, onAddColumn }: AddColumnDialogProps) {
     return (
-        <FormDialog open={isOpen} onOpenChange={onClose} title="Add column">
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Add column">
             <AddColumnForm onAddColumn={onAddColumn} />
         </FormDialog>
     );

@@ -18,12 +18,12 @@ import { TeamMembersSection } from './team-members-section';
 import { TeamMountsSection } from './team-mounts-section';
 import { TeamSettingsSection } from './team-settings-section';
 
-type TeamDetailToolbarProps = {
+type TeamDetailProps = {
     team: OrgTeam;
     organizationId?: string;
 };
 
-export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarProps) {
+export function TeamDetailToolbar({ team, organizationId }: TeamDetailProps) {
     const [showDelete, setShowDelete] = useState(false);
     const removeTeam = useRemoveTeam(organizationId);
     const navigate = useNavigate();
@@ -58,11 +58,6 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
         </div>
     );
 }
-
-type TeamDetailProps = {
-    team: OrgTeam;
-    organizationId?: string;
-};
 
 export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: config } = usePublicConfig();

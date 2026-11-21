@@ -15,7 +15,7 @@ export function hideSheet(ctx: Context, sheetId: string) {
     if (index == null) return;
     const refusal = lastShownSheetRefusal(ctx, sheetId, 'hide');
     if (refusal) {
-        ctx.warnDialog = refusal;
+        ctx.warning = refusal;
         return;
     }
     ctx.sheets[index].hide = 1;

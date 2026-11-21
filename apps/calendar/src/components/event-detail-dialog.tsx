@@ -73,7 +73,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     if (!event) return null;
 
-    const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
@@ -83,7 +82,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const attendees = event.data?.attendees ?? [];
     const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
 
-    const handleDelete = async (action: RecurringAction) => {
+    const handleRecurringDelete = async (action: RecurringAction) => {
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
             if (action === 'all') {
@@ -106,7 +105,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     etag: event.etag,
                     status: 'cancelled',
                 });
-            } else if (isRecurring) {
+            } else {
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
                     title: event.title,
@@ -118,8 +117,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     status: 'cancelled',
                     etag: event.etag,
                 });
-            } else {
-                await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId, etag: event.etag });
             }
         } else if (action === 'this-and-following') {
             if (event.rrule) {
@@ -147,13 +144,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         onOpenChange(false);
     };
 
-    const handleDeleteClick = () => {
-        if (isPartOfSeries) {
-            setShowRecurringDeleteDialog(true);
-        } else {
-            setShowDeleteDialog(true);
-        }
-    };
+    const handleDeleteClick = () => (isPartOfSeries ? setShowRecurringDeleteDialog(true) : setShowDeleteDialog(true));
 
     const handleRsvpScopeConfirm = (action: RecurringAction) => {
         if (!pendingRsvpStatus) return;
@@ -311,7 +302,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 open={showRecurringDeleteDialog}
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
-                onConfirm={handleDelete}
+                onConfirm={handleRecurringDelete}
             />
 
             <RecurringActionDialog

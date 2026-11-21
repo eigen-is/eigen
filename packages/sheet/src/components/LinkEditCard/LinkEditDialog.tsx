@@ -6,10 +6,9 @@ import type { CellLinkType } from '@workspace/lib/sheets';
 import { isCellLinkType } from '@workspace/lib/sheets';
 import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@workspace/ui/components/input-group';
 import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { cn } from '@workspace/ui/lib/utils';
 import { Grid3x3 } from 'lucide-react';
 import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -115,7 +114,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                             setLinkType(value);
                         }}
                     >
-                        <SelectTrigger id="link-type" size="sm" className="w-full">
+                        <SelectTrigger id="link-type" className="w-full">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -131,24 +130,25 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 {linkType === 'cellrange' && (
                     <Field>
                         <FieldLabel htmlFor="link-cell">Cell range</FieldLabel>
-                        <div className="relative">
-                            <Input
+                        <InputGroup>
+                            <InputGroupInput
                                 id="link-cell"
+                                aria-invalid={validity.tooltip !== ''}
                                 aria-describedby={validity.tooltip ? refusalId : undefined}
-                                className={cn('pr-9', validity.tooltip && 'border-destructive')}
-                                spellCheck="false"
+                                spellCheck={false}
                                 value={linkAddress}
                                 onChange={(e) => setLinkAddress(e.target.value)}
                             />
-                            <button
-                                type="button"
-                                aria-label="Select cell range"
-                                className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                                onClick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
-                            >
-                                <Grid3x3 className="size-4" aria-hidden="true" />
-                            </button>
-                        </div>
+                            <InputGroupAddon align="inline-end">
+                                <InputGroupButton
+                                    size="icon-xs"
+                                    aria-label="Select cell range"
+                                    onClick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
+                                >
+                                    <Grid3x3 />
+                                </InputGroupButton>
+                            </InputGroupAddon>
+                        </InputGroup>
                         {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
                     </Field>
                 )}
@@ -162,7 +162,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                 setLinkAddress(value);
                             }}
                         >
-                            <SelectTrigger id="link-sheet" size="sm" className="w-full">
+                            <SelectTrigger id="link-sheet" className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

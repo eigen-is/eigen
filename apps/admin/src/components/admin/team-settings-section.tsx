@@ -4,10 +4,13 @@
 
 import { useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
+import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { useHomeDataLabel } from '@workspace/lib/public';
 import { useRemoveTeamAvatar, useTeamSettings, useUpdateTeamSettings, useUploadTeamAvatar } from '@workspace/lib/team';
 import type { OrgTeam } from '@workspace/lib/types/admin';
+import type { CalendarShare } from '@workspace/lib/types/calendar';
+import { CALENDAR_SHARE_PERMISSIONS } from '@workspace/lib/types/calendar';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Button } from '@workspace/ui/components/button';
@@ -20,15 +23,6 @@ import { Switch } from '@workspace/ui/components/switch';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
-
-// What a team's members may do with the team calendar. 'read' is the absence of a share row rather
-// than one of the two permissions the API takes, so it lives only here.
-const CALENDAR_ACCESS = [
-    { value: 'free-busy', label: 'Free/Busy' },
-    { value: 'read', label: 'Read' },
-    { value: 'write', label: 'Write' },
-] as const;
-type CalendarAccess = (typeof CALENDAR_ACCESS)[number]['value'];
 
 type TeamSettingsSectionProps = {
     team: OrgTeam;
@@ -44,7 +38,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
-    const [draftCalPermission, setDraftCalPermission] = useState<CalendarAccess>('read');
+    const [draftCalPermission, setDraftCalPermission] = useState<CalendarShare['permission']>('read');
     const [draftNotifyMembers, setDraftNotifyMembers] = useState(true);
     const [draftHomeDataMax, setDraftHomeDataMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
@@ -90,6 +84,7 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
         if (name && name !== team.name) updateTeam.mutate({ teamId: team.id, name });
         if (defaultCal && draftCalEnabled) {
             const existingShares = (defaultCal.shares ?? []).filter((s) => s.targetId !== ownerId);
+            // Members read their team's calendar without a share row, so Can view drops the team's row.
             const shares =
                 draftCalPermission === 'read'
                     ? existingShares.length > 0
@@ -160,7 +155,8 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                     value={draftCalPermission}
                                     onValueChange={(value) =>
                                         setDraftCalPermission(
-                                            CALENDAR_ACCESS.find((option) => option.value === value)?.value ?? 'read',
+                                            CALENDAR_SHARE_PERMISSIONS.find((permission) => permission === value) ??
+                                                'read',
                                         )
                                     }
                                 >
@@ -168,9 +164,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {CALENDAR_ACCESS.map((option) => (
-                                            <SelectItem key={option.value} value={option.value}>
-                                                {option.label}
+                                        {Object.entries(CALENDAR_PERMISSION_LABELS).map(([permission, label]) => (
+                                            <SelectItem key={permission} value={permission}>
+                                                {label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -236,7 +232,9 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                     <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Calendar</span>
                         <span className="text-sm">
-                            {calendarEnabled ? `Enabled (${calendarPermission})` : 'Disabled'}
+                            {calendarEnabled
+                                ? `Enabled (${CALENDAR_PERMISSION_LABELS[calendarPermission]})`
+                                : 'Disabled'}
                         </span>
                     </div>
                     <div className="flex items-center justify-between">

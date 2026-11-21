@@ -15,7 +15,6 @@ import { concat, debounce, omit, union, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { WorkbookContext } from '../../context';
 import type { Context, FilterColor, FilterConditionName, FilterDate, FilterValue } from '../../state';
 import {
@@ -260,7 +259,7 @@ export const FilterMenu: React.FC = () => {
             if (col == null) return;
             setContext((draftCtx) => {
                 const errMsg = sortFilterRange(draftCtx, startRow, startCol, endRow, endCol, col, asc);
-                if (errMsg != null) toast.error(errMsg);
+                if (errMsg != null) draftCtx.warning = errMsg;
             });
         },
         [col, setContext, startRow, startCol, endRow, endCol],
