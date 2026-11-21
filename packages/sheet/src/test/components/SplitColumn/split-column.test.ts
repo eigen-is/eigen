@@ -27,8 +27,8 @@ const openSplitText = (data: (Cell | null)[][]) =>
 
 const tick = (label: string) =>
     act(async () => {
-        const row = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === label);
-        row?.querySelector<HTMLElement>('[role="checkbox"]')?.click();
+        const name = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === label);
+        document.getElementById(name?.getAttribute('for') ?? '')?.click();
     });
 
 const preview = () =>
