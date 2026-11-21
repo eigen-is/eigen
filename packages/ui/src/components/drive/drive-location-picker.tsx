@@ -1,6 +1,6 @@
-// The dialog that picks a Drive folder, and a name where the mode asks one, for a new file, a save-as or a folder
-// pick. Hosts such as Save to Drive and a new Eigen document open it; it can offer a download instead. Confirm waits
-// for a folder: a picker opened with none confirms its drive's root, once that has loaded.
+// The dialog that picks a Drive folder, and in create mode a name, such as for a new folder, a new Eigen document, a
+// copy or move, or Save to Drive, which can offer a download instead. Confirm waits for a folder: a picker opened with
+// none confirms its drive's root, once that has loaded.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useResolvedDriveLocation } from '@workspace/lib/drive';
@@ -28,16 +28,16 @@ import { DriveLocationField } from './drive-location-field';
 type DriveLocationPickerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    mode: 'create' | 'save-as' | 'folder';
+    mode: 'create' | 'folder';
     onConfirm: (location: DriveLocationValue & { name?: string }) => void | Promise<void>;
     onDownloadInstead?: () => void;
-    title?: string;
+    title: string;
     defaultName?: string;
     defaultOwnerId?: string;
     defaultMountId?: string;
     defaultFolderId?: string;
     nameLabel?: string;
-    confirmLabel?: string;
+    confirmLabel: string;
 };
 
 export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
@@ -69,7 +69,7 @@ function DriveLocationPickerBody({
     defaultOwnerId,
     defaultMountId = DEFAULT_MOUNT_ID,
     defaultFolderId = '',
-    nameLabel,
+    nameLabel = 'Name',
     confirmLabel,
     pending,
     run,
@@ -89,19 +89,13 @@ function DriveLocationPickerBody({
     });
     const destination = useResolvedDriveLocation(location);
 
-    const hasName = mode === 'create' || mode === 'save-as';
+    const hasName = mode === 'create';
     const canConfirm = !!destination.folderId && (!hasName || !!name.trim());
 
     const handleSubmit = () => {
         if (!canConfirm) return;
         return run(() => onConfirm({ ...destination, name: hasName ? name.trim() : undefined }));
     };
-
-    const resolvedTitle =
-        title ?? (mode === 'create' ? 'New item' : mode === 'save-as' ? 'Save to Drive' : 'Choose destination');
-    const resolvedConfirmLabel =
-        confirmLabel ?? (mode === 'create' ? 'Create' : mode === 'save-as' ? 'Save here' : 'Select');
-    const resolvedNameLabel = nameLabel ?? (mode === 'save-as' ? 'Save as' : 'Name');
 
     return (
         <div
@@ -111,7 +105,7 @@ function DriveLocationPickerBody({
             )}
         >
             <DialogHeader>
-                <DialogTitle>{resolvedTitle}</DialogTitle>
+                <DialogTitle>{title}</DialogTitle>
                 <DialogDescription className="sr-only">
                     Pick the folder in your Drive where this goes.
                 </DialogDescription>
@@ -121,7 +115,7 @@ function DriveLocationPickerBody({
             <div className="-mx-6 flex min-h-0 flex-1 flex-col">
                 {hasName && (
                     <Field className="px-6 pb-2">
-                        <FieldLabel htmlFor="picker-name">{resolvedNameLabel}</FieldLabel>
+                        <FieldLabel htmlFor="picker-name">{nameLabel}</FieldLabel>
                         <Input
                             id="picker-name"
                             value={name}
@@ -141,7 +135,6 @@ function DriveLocationPickerBody({
                     onChange={setLocation}
                     expanded={expanded}
                     onExpandedChange={setExpanded}
-                    collapsible={mode !== 'save-as'}
                 />
             </div>
 
@@ -160,7 +153,7 @@ function DriveLocationPickerBody({
                 </Button>
                 <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
                     {pending && <EigenLoader className="text-current" />}
-                    {resolvedConfirmLabel}
+                    {confirmLabel}
                 </Button>
             </DialogFooter>
         </div>

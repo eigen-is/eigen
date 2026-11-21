@@ -34,6 +34,8 @@ async function createFailingWith(status: number) {
             open: true,
             onOpenChange,
             mode: 'create',
+            title: 'New folder',
+            confirmLabel: 'Create',
             onConfirm,
             defaultFolderId: 'folder',
         }),
