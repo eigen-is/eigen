@@ -10,7 +10,7 @@ describe('state/modules/cell — updateCell under a prohibiting rule', () => {
         const input = document.createElement('div');
         input.innerText = text;
         updateCell(ctx, 0, 0, input);
-        return { warned: ctx.warnDialog, written: data[0][0] };
+        return { warned: ctx.warning, written: data[0][0] };
     }
     const rule = (type: string, type2: string, value1: string): DataValidationRule => ({
         type,

@@ -116,14 +116,14 @@ export function onCellsMoveEnd(
     if (row[0] === last.row[0] && column[0] === last.column[0]) return;
 
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        ctx.warnDialog = PART_MERGE_REFUSAL;
+        ctx.warning = PART_MERGE_REFUSAL;
         return;
     }
     const lines = movedLines(ctx, ctx.currentSheetId, last);
     if (!lines) return;
 
     if (hasPartMC(ctx, row[0], row[1], column[0], column[1])) {
-        ctx.warnDialog = PART_MERGE_REFUSAL;
+        ctx.warning = PART_MERGE_REFUSAL;
         return;
     }
 

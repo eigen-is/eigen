@@ -160,7 +160,7 @@ function onMergeHead(selection: Selection, data: CellMatrix): Selection {
 // The selection a hide or a show acts on. More than one gets the notice instead.
 function soleSelection(ctx: Context) {
     if ((ctx.selections?.length ?? 0) > 1) {
-        ctx.warnDialog = ONE_AREA_ONLY;
+        ctx.warning = ONE_AREA_ONLY;
         return undefined;
     }
     return ctx.selections?.[0];

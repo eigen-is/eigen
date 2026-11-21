@@ -251,7 +251,7 @@ function refusal(draft: ConditionRulesProps): string | undefined {
     const error = conditionRuleError(ctx, draft);
     addConditionRule(ctx, draft);
     expect(savedRules(ctx)).toHaveLength(error ? 0 : 1);
-    expect(ctx.warnDialog).toBeUndefined();
+    expect(ctx.warning).toBeUndefined();
     return error;
 }
 

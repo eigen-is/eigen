@@ -165,11 +165,11 @@ describe('leaving a sheet that goes away', () => {
         const ctx = tabOrderContext();
         hideSheet(ctx, 'b');
         hideSheet(ctx, 'd');
-        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.warning).toBeUndefined();
         hideSheet(ctx, 'a');
-        expect(ctx.warnDialog).toContain('To hide this sheet');
+        expect(ctx.warning).toContain('To hide this sheet');
         deleteSheet(ctx, 'a');
-        expect(ctx.warnDialog).toContain('To delete this sheet');
+        expect(ctx.warning).toContain('To delete this sheet');
         expect(ctx.sheets.map((sheet) => [sheet.id, sheet.hide])).toEqual([
             ['a', undefined],
             ['b', 1],

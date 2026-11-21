@@ -133,7 +133,7 @@ export function deleteSheet(ctx: Context, id: string) {
     if (index == null) return;
     const refusal = lastShownSheetRefusal(ctx, id, 'delete');
     if (refusal) {
-        ctx.warnDialog = refusal;
+        ctx.warning = refusal;
         return;
     }
     const order = sheetOrder(ctx.sheets[index]);

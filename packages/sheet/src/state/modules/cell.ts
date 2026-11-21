@@ -480,7 +480,7 @@ export function updateCell(
     const rule = validationAt(sheet.dataValidations, r, c);
     if (rule?.prohibitInput && !inputPassesRule(ctx, rule, flowdata[r][c], inputText)) {
         cancelNormalSelected(ctx);
-        ctx.warnDialog = describeValidationRule(rule, 'invalid');
+        ctx.warning = describeValidationRule(rule, 'invalid');
         return;
     }
 

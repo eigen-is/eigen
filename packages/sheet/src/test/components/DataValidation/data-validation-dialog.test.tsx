@@ -132,7 +132,7 @@ test('a refused value keeps the dialog open, says why, and keeps what was typed 
     expect(problemOf(dialog.field('Value 2'))).toBe('The value 2 cannot be less than the value 1');
     expect(dialog.field('Value 2').value).toBe('0');
     expect(rules(dialog)).toEqual({ v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER } });
-    expect(dialog.context().warnDialog).toBeUndefined();
+    expect(dialog.context().warning).toBeUndefined();
     await dialog.type('Value 2', '20');
     expect(problemOf(dialog.field('Value 2'))).toBeUndefined();
 });

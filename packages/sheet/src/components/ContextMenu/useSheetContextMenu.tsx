@@ -122,7 +122,7 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
         const op: SetContextOptions['deleteRowColOp'] = { type, start, end, id: context.currentSheetId };
         setContext(
             (d) => {
-                if ((d.selections?.length ?? 0) > 1) d.warnDialog = ONE_AREA_ONLY;
+                if ((d.selections?.length ?? 0) > 1) d.warning = ONE_AREA_ONLY;
                 else tryDeleteRowCol(d, op);
             },
             { deleteRowColOp: op },

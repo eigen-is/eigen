@@ -256,7 +256,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (cutByPeer?.[kind]) {
                         setContextWithProduce(
                             (draft) => {
-                                draft.warnDialog = CUT_BY_PEER_NOTICE[kind];
+                                draft.warning = CUT_BY_PEER_NOTICE[kind];
                             },
                             { noHistory: true },
                         );

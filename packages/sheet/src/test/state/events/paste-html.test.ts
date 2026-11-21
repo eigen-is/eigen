@@ -556,7 +556,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(d[1][0]).toBeNull();
         expect(d[2][0]).toBeNull();
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
-        expect(ctx.warnDialog).toBe('Cannot perform this operation on merged cells');
+        expect(ctx.warning).toBe('Cannot perform this operation on merged cells');
     });
 
     it('replaces a merge it covers whole, as a paste of this tab does', () => {
@@ -572,7 +572,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(ctx.sheets[0].config!.merge).toEqual({});
         expect([d[0][0]?.v, d[0][1]?.v, d[1][0]?.v, d[1][1]?.v]).toEqual(['a', 'b', 'c', 'd']);
         expect(d[1][1]?.mc).toBeUndefined();
-        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.warning).toBeUndefined();
     });
 
     // HTML ends a span at the table's edge, so a merge does too.
@@ -612,7 +612,7 @@ describe('a refused paste writes nothing', () => {
             pasteHtml(draft, table);
         });
         expect(filterPatch(patches)).toEqual([]);
-        expect(next.warnDialog).toBe(limit);
+        expect(next.warning).toBe(limit);
     });
 
     it('text past the column limit says so and writes nothing', () => {
@@ -622,7 +622,7 @@ describe('a refused paste writes nothing', () => {
             handlePaste(draft, clipboardWith({ text: '9\t8' }));
         });
         expect(filterPatch(patches)).toEqual([]);
-        expect(next.warnDialog).toBe(
+        expect(next.warning).toBe(
             `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
         );
     });
@@ -636,7 +636,7 @@ describe('a refused paste writes nothing', () => {
         ctx.sheets[0].data = new Array(rows).fill(row);
         ctx.selections = single(rows - 1, 0);
         handlePaste(ctx, clipboardWith({ text: '9\n8' }));
-        expect(ctx.warnDialog).toBe(
+        expect(ctx.warning).toBe(
             'This action would increase the number of cells in the workbook above the limit of 110,000,000.',
         );
         expect(ctx.sheets[0].data).toHaveLength(rows);
@@ -645,9 +645,9 @@ describe('a refused paste writes nothing', () => {
 
         ctx.sheets[0].data = new Array(rows - 1).fill(row);
         ctx.selections = single(rows - 2, 0);
-        ctx.warnDialog = undefined;
+        ctx.warning = undefined;
         handlePaste(ctx, clipboardWith({ text: '9\n8' }));
-        expect(ctx.warnDialog).toBeUndefined();
+        expect(ctx.warning).toBeUndefined();
         expect(pick(ctx.sheets[0], ['row', 'column'])).toEqual({ row: rows, column: REFERENCE_COLUMN_COUNT });
     });
 
@@ -660,7 +660,7 @@ describe('a refused paste writes nothing', () => {
                 pasteHtml(draft, '<table data-copy-id="own"></table>');
             });
             expect(filterPatch(patches)).toEqual([]);
-            expect(next.warnDialog).toBe(limit);
+            expect(next.warning).toBe(limit);
         });
     }
 
