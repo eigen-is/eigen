@@ -69,7 +69,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     const contactInput = useContactInput((contact) => {
         if (directList.some((item) => item.id.toLowerCase() === contact.email)) return false;
         setDirectListOverride((prevList) => [
-            ...(prevList || baseDirectList),
+            ...(prevList ?? baseDirectList),
             { id: contact.email, read: true, write: true, owner: false },
         ]);
         setHasChanges(true);
@@ -85,13 +85,13 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     const handleAddTeam = (teamId: string) => {
         const id = teamOwnerId(teamId);
         if (directList.some((item) => item.id === id)) return;
-        setDirectListOverride((prev) => [...(prev || baseDirectList), { id, read: true, write: true, owner: false }]);
+        setDirectListOverride((prev) => [...(prev ?? baseDirectList), { id, read: true, write: true, owner: false }]);
         setHasChanges(true);
     };
 
     const handlePermissionChange = (id: string, permission: string) => {
         setDirectListOverride((prev) =>
-            (prev || baseDirectList).map((item) => {
+            (prev ?? baseDirectList).map((item) => {
                 if (item.id === id) {
                     if (permission === 'remove') {
                         return { ...item, read: false, write: false };
@@ -117,8 +117,6 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
         setHasChanges(true);
     };
 
-    // The server merges what it gets onto the current ACL, so a dialog opened a while ago can't revert an entry
-    // another sharer added since.
     const handleSave = async () => {
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
         const add: DriveACL[] = [];
@@ -326,8 +324,6 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                     </label>
                 )}
             </div>
-
-            <Separator />
         </FormDialogForm>
     );
 }
