@@ -4,7 +4,7 @@
 
 import { useBreadcrumb, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
-import { Label } from '@workspace/ui/components/label';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
 import { useState } from 'react';
@@ -41,11 +41,11 @@ export function DriveLocationField({
 
     return (
         <>
-            <div className="px-6 pb-2">
-                <Label className="text-sm text-muted-foreground">Location</Label>
+            <Field className="px-6 pb-2">
+                <FieldLabel>Location</FieldLabel>
                 {/* Collapsed, the toggle's hit area stretches over the whole bar. Open, it shrinks to its own box,
                     so the crumbs before it stay clickable. */}
-                <InfoBlock className="relative mt-1.5 w-full gap-1.5 text-sm hover:bg-muted">
+                <InfoBlock className="relative w-full gap-1.5 text-sm hover:bg-muted">
                     <div className="flex-1 min-w-0">
                         <DriveBreadcrumb
                             paths={breadcrumbPaths}
@@ -85,7 +85,7 @@ export function DriveLocationField({
                         </button>
                     </div>
                 </InfoBlock>
-            </div>
+            </Field>
 
             {expanded && (
                 <div className="flex-1 overflow-hidden border-t px-6 pb-2 pt-2">
