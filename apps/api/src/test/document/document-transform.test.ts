@@ -94,6 +94,7 @@ import {
     driveGetList,
     drivePost,
     driveUpload,
+    eventually,
     getTestContext,
     NO_MEDIA,
     TEST_PNG_BYTES,
@@ -203,19 +204,23 @@ describe('document transform (eigensheets preview)', () => {
         );
     }
 
-    // updatedAt has second granularity — a same-second touch keeps the same cache
-    // stamp and the "new version" would be served as current. Touch until the
-    // stamp actually moves.
+    // updatedAt has second granularity, so a same-second touch would keep the cache stamp and the "new version" would be
+    // served as current: the touch moves it a whole second on.
     async function bumpUpdatedAt(pathId: string): Promise<void> {
         const home = await getHome(ctx.alice.user.id);
         const before = (await home.drive.resolveFile(mountId, pathId)).path.updatedAt.getTime();
-        for (let i = 0; i < 30; i++) {
-            await home.drive.touchUpdatedAt(mountId, pathId, new Date());
-            const now = (await home.drive.resolveFile(mountId, pathId)).path.updatedAt.getTime();
-            if (now !== before) return;
-            await Bun.sleep(100);
-        }
-        throw new Error('updatedAt never advanced');
+        await home.drive.touchUpdatedAt(mountId, pathId, new Date(before + 1000));
+    }
+
+    // A transform spawns a child, so its background job gets a longer budget than eventually's default.
+    const TRANSFORM_SETTLE_MS = 4_000;
+
+    function backgroundPreviewRun(runSpy: ReturnType<typeof spyOn<typeof documentTransformRunner, 'run'>>) {
+        return eventually(
+            async () => callsOfKind(runSpy, 'preview')[0],
+            'the background regeneration',
+            TRANSFORM_SETTLE_MS,
+        );
     }
 
     test('Worker preview equals the same pipeline run on the main thread', async () => {
@@ -374,7 +379,13 @@ describe('document transform (eigensheets preview)', () => {
         expect(first.status).toBe(200);
         await bumpUpdatedAt(sheetsPath.id);
 
-        const runSpy = spyOn(documentTransformRunner, 'run');
+        // The regeneration is held until all three have answered, so none can find it already landed.
+        const real = documentTransformRunner.run.bind(documentTransformRunner);
+        const regeneration = Promise.withResolvers<void>();
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            if (request.kind === 'preview') await regeneration.promise;
+            return real(request, opts);
+        });
         try {
             // Three tiles of one stale document arrive together: all served stale, and the
             // in-flight map folds them into ONE background regeneration.
@@ -390,20 +401,24 @@ describe('document transform (eigensheets preview)', () => {
 
             // The regeneration is enqueued off the response path, so wait for it rather than
             // asserting on how many ticks the capture takes before the runner sees the job.
-            for (let i = 0; i < 80 && callsOfKind(runSpy, 'preview').length === 0; i++) await Bun.sleep(50);
-            expect(callsOfKind(runSpy, 'preview')[0][1].priority).toBe('background');
+            const [, opts] = await backgroundPreviewRun(runSpy);
+            expect(opts.priority).toBe('background');
+            regeneration.resolve();
 
             // It converges: a later request serves the fresh current version.
-            let fresh = await previewRequest(sheetsPath.id);
-            for (let i = 0; i < 80 && fresh.headers.get('cache-control') === 'no-store'; i++) {
-                await Bun.sleep(50);
-                fresh = await previewRequest(sheetsPath.id);
-            }
+            const fresh = await eventually(
+                async () => {
+                    const res = await previewRequest(sheetsPath.id);
+                    return res.headers.get('cache-control') === 'no-store' ? undefined : res;
+                },
+                'the regenerated preview',
+                TRANSFORM_SETTLE_MS,
+            );
             expect(fresh.status).toBe(200);
-            expect(fresh.headers.get('cache-control')).not.toBe('no-store');
             // Exactly one — not "at least one" — once everything has settled.
             expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
         } finally {
+            regeneration.resolve();
             runSpy.mockRestore();
         }
     }, 60_000);
@@ -430,7 +445,7 @@ describe('document transform (eigensheets preview)', () => {
         try {
             const stale = await previewRequest(sheetsPath.id);
             expect(stale.headers.get('cache-control')).toBe('no-store');
-            for (let i = 0; i < 80 && callsOfKind(runSpy, 'preview').length === 0; i++) await Bun.sleep(50);
+            await backgroundPreviewRun(runSpy);
 
             // The previous version is gone (as after a prune), so nothing is left to serve stale.
             for (const name of await fs.promises.readdir(mount.previewsDir)) {
@@ -466,9 +481,11 @@ describe('document transform (eigensheets preview)', () => {
             expect(stale.status).toBe(200);
             expect(stale.headers.get('cache-control')).toBe('no-store');
             // Wait for the failure itself, or a late regeneration makes the assertion below vacuous.
-            const failed = () => errorSpy.mock.calls.some(([line]) => String(line).includes('Failed to generate'));
-            for (let i = 0; i < 80 && !failed(); i++) await Bun.sleep(50);
-            expect(failed()).toBe(true);
+            await eventually(
+                async () => errorSpy.mock.calls.find(([line]) => String(line).includes('Failed to generate')),
+                'the failed regeneration',
+                TRANSFORM_SETTLE_MS,
+            );
 
             // Still served (from the prior version), no corrupt current entry.
             const again = await previewRequest(sheetsPath.id);

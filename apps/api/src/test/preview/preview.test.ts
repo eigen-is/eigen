@@ -5,6 +5,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants/preview';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
 import sharp from 'sharp';
@@ -32,7 +33,7 @@ import {
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { createTestMountConfig, overwriteFile, seedFile } from '../mount-test-helpers';
-import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
+import { authedRequest, driveGet, drivePost, driveUpload, eventually, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
     let token: string;
@@ -419,9 +420,11 @@ describe('a written preview', () => {
         writeFileSync(join(mount.previewsDir, other), '{}');
 
         expect((await getTextPreview(mount, path))?.value.body).toContain('current');
-        const ofPath = () => readdirSync(mount.previewsDir).filter((name) => name.startsWith(`${path.id}-`));
-        for (let i = 0; i < 40 && ofPath().length > 1; i++) await Bun.sleep(25);
-        expect(ofPath()).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
+        const kept = await eventually(async () => {
+            const ofPath = readdirSync(mount.previewsDir).filter((name) => name.startsWith(`${path.id}-`));
+            return ofPath.length === 1 ? ofPath : undefined;
+        }, 'the prune of older versions');
+        expect(kept).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
         expect(readdirSync(mount.previewsDir)).toContain(other);
     });
 });
@@ -450,6 +453,14 @@ async function previewMount(name: string, fileName: string, mimeType: string, by
     if (!root) throw new Error('no root folder');
     const fileId = await seedFile(mount, root.id, fileName, mimeType, bytes.length, bytes);
     return { mount, path: await mount.getActivePath(fileId) };
+}
+
+// A background regeneration lands a moment after the stale answer, so the current version is polled for.
+function regeneratedTextPreview(mount: Mount, drivePath: DrivePath) {
+    return eventually(async () => {
+        const served = await getTextPreview(mount, drivePath);
+        return served?.stale === false ? served : undefined;
+    }, 'the regenerated text preview');
 }
 
 describe('getTextPreview (stale-while-revalidate)', () => {
@@ -484,13 +495,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         expect(stale?.value.body).toContain('version one');
 
         // Background regeneration lands the fresh version; subsequent requests return it as current.
-        let fresh = await getTextPreview(mount, edited);
-        for (let i = 0; i < 40 && fresh?.stale !== false; i++) {
-            await Bun.sleep(25);
-            fresh = await getTextPreview(mount, edited);
-        }
-        expect(fresh?.stale).toBe(false);
-        expect(fresh?.value.body).toContain('version two');
+        expect((await regeneratedTextPreview(mount, edited)).value.body).toContain('version two');
     });
 
     test('a body a previous renderer version cached is never served stale', async () => {
@@ -635,20 +640,25 @@ describe('one generation per preview', () => {
         await overwriteFile(mount, path.id, Buffer.from('version two'));
         const edited = { ...path, updatedAt: new Date(2000) };
 
-        const readBytes = spyOn(mount, 'readBytes');
+        // The regeneration is held until both requests have answered: a text body regenerates in a few milliseconds, so
+        // either request could otherwise find the other's already written when it checks the cache again.
+        const realReadBytes = mount.readBytes.bind(mount);
+        const regeneration = Promise.withResolvers<void>();
+        const readBytes = spyOn(mount, 'readBytes').mockImplementation(async (pathId, limit) => {
+            await regeneration.promise;
+            return realReadBytes(pathId, limit);
+        });
         try {
-            // The second request gets the new body instead when the first one's regeneration finished while it looked.
-            const [first] = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
-            expect(first?.stale).toBe(true);
-            expect(first?.value.body).toContain('version one');
-            let fresh = await getTextPreview(mount, edited);
-            for (let i = 0; i < 40 && fresh?.stale !== false; i++) {
-                await Bun.sleep(25);
-                fresh = await getTextPreview(mount, edited);
+            const served = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
+            for (const stale of served) {
+                expect(stale?.stale).toBe(true);
+                expect(stale?.value.body).toContain('version one');
             }
-            expect(fresh?.value.body).toContain('version two');
+            regeneration.resolve();
+            expect((await regeneratedTextPreview(mount, edited)).value.body).toContain('version two');
             expect(readBytes).toHaveBeenCalledTimes(1);
         } finally {
+            regeneration.resolve();
             readBytes.mockRestore();
         }
     });
@@ -748,9 +758,10 @@ describe('a failed preview', () => {
         try {
             const v2 = { ...path, updatedAt: new Date(2000) };
             expect((await getVCardPreview(mount, v2))?.stale).toBe(true);
-            for (let i = 0; i < 40 && !readdirSync(mount.previewsDir).some((n) => n.endsWith('.failed')); i++) {
-                await Bun.sleep(25);
-            }
+            await eventually(
+                async () => readdirSync(mount.previewsDir).find((name) => name.endsWith('.failed')),
+                'the failure marker',
+            );
             const again = await getVCardPreview(mount, v2);
             expect(again?.stale).toBe(true);
             expect(again?.value.cards[0].contact.firstName).toBe('Jane');

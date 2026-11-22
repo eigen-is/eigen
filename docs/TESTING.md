@@ -40,6 +40,7 @@ Setup is lazy: the setup wizard runs once per file, when a test first awaits `en
 
 - A unit test that needs a setup side effect (the mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`, never counting on another file having booted the server.
 - `await collectSSE(userId)` resolves once the Home is open and the listener attached. Never sleep before the action you observe.
+- Background work (a fan-out, a preview regenerated while a stale one is served) is awaited with `eventually(read, what, timeoutMs)` (`setup.ts`), never a `for … Bun.sleep` loop. A test that asserts what callers see while the work runs holds it first: a `spyOn` on the step it calls awaits a `Promise.withResolvers` gate, released after the assertions. A fast job, such as a text preview, otherwise lands between two requests' cache checks, and the test fails on a loaded CI runner.
 - A suite that sets `process.env` keys calls `restoreEnvAfterEach(keys)` (`env-test-helpers.ts`): `process.env` survives into the worker's next file.
 - Assertions count only what the test created: a Home has data before the test writes any (the user's own card and default labels, from `Contacts.init`), and other tests add users, so `users.length === 3` breaks.
 

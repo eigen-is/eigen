@@ -270,10 +270,16 @@ export function findOrFail<T>(arr: T[], pred: (t: T) => boolean, msg?: string): 
     return result;
 }
 
-// A cross-home fan-out (an invitation, a share) lands a moment after the call that triggered it
-// answers: the receiving Home writes its own file. Poll for what it promises rather than reading once.
-export async function eventually<T>(read: () => Promise<T | undefined>, what = 'the expected state'): Promise<T> {
-    for (let attempt = 0; attempt < 100; attempt++) {
+// A cross-home fan-out (an invitation, a share) lands a moment after the call that triggered it answers: the receiving
+// Home writes its own file. So does background work, such as a preview regeneration served stale. Poll for what it
+// promises rather than reading once or sleeping a guess; work that spawns a child (a document transform) gets a longer
+// budget.
+export async function eventually<T>(
+    read: () => Promise<T | undefined>,
+    what = 'the expected state',
+    timeoutMs = 2_000,
+): Promise<T> {
+    for (let attempt = 0; attempt < timeoutMs / 20; attempt++) {
         const found = await read();
         if (found !== undefined) return found;
         await new Promise((resolve) => setTimeout(resolve, 20));
