@@ -115,16 +115,21 @@ export default class MailDB {
     }
 
     public getEmailsCount(mailbox: string) {
-        return this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).get()!
-            .count;
+        const [row] = this.db
+            .select({ count: count() })
+            .from(schema.emails)
+            .where(eq(schema.emails.mailbox, mailbox))
+            .all();
+        return row.count;
     }
 
     public getEmailsCountUnread(mailbox: string) {
-        return this.db
+        const [row] = this.db
             .select({ count: count() })
             .from(schema.emails)
             .where(and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.isRead, false)))
-            .get()!.count;
+            .all();
+        return row.count;
     }
 
     public getEmail(id: string) {
