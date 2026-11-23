@@ -1,11 +1,12 @@
-// A mail sync broadcasts one mail:received per message, so during a burst the handler refetches the mailbox
-// list (the unread counts) once, while each message list it touched still refetches at once.
-import { describe, expect, test } from 'bun:test';
+// A mail sync broadcasts one mail:received per message, so during a burst the handler refetches the message
+// lists, the search results and the unread counts once, after the burst.
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { emailKeys, mailboxKeys } from '../../../core/mail/hooks/keys';
 import { handleMailSSEvent } from '../../../core/mail/sse-handlers';
+import { searchKeys } from '../../../core/search';
 
 // Record every queryKey passed to invalidateQueries. Recipe: the drive sse-handlers test.
 function trackingClient(): { queryClient: QueryClient; touched: readonly unknown[][] } {
@@ -24,13 +25,20 @@ function countKey(touched: readonly unknown[][], expected: readonly unknown[]): 
     return touched.filter((key) => JSON.stringify(key) === wanted).length;
 }
 
-// The debounce is a trailing timer; the mailbox refetch lands after one window, not before it.
-async function settle(): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 400));
+// The debounce is a trailing timer; the refetch lands after one window, not before it.
+function settle(): void {
+    jest.advanceTimersByTime(400);
 }
 
+beforeEach(() => {
+    jest.useFakeTimers();
+});
+afterEach(() => {
+    jest.useRealTimers();
+});
+
 describe('handleMailSSEvent — burst', () => {
-    test('50 received messages refetch the mailbox list once', async () => {
+    test('50 received messages refetch the message lists, the search and the unread counts once', () => {
         const owner = 'owner-burst';
         const { queryClient, touched } = trackingClient();
 
@@ -39,14 +47,15 @@ describe('handleMailSSEvent — burst', () => {
             handleMailSSEvent(event, queryClient, owner);
         }
 
-        expect(countKey(touched, emailKeys.list(owner, MAILBOX_INBOX))).toBe(50);
-        expect(countKey(touched, mailboxKeys.lists(owner))).toBe(0);
+        expect(touched).toEqual([]);
 
-        await settle();
+        settle();
+        expect(countKey(touched, emailKeys.lists(owner))).toBe(1);
+        expect(countKey(touched, searchKeys.owner(owner))).toBe(1);
         expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);
     });
 
-    test('mixed mail events share the one debounced mailbox refetch', async () => {
+    test('mixed mail events share the one debounced mailbox refetch', () => {
         const owner = 'owner-mixed';
         const { queryClient, touched } = trackingClient();
         const types = [
@@ -63,20 +72,20 @@ describe('handleMailSSEvent — burst', () => {
         }
         expect(countKey(touched, mailboxKeys.lists(owner))).toBe(0);
 
-        await settle();
+        settle();
         expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);
     });
 });
 
 // A sync that finds a flag changed on disk, such as a message read in another mail app, sends mail:flags-changed
 // and never mail:read-changed, so the unread counts must follow that event too.
-test('a flags change refetches the mailbox list with its unread counts', async () => {
+test('a flags change refetches the mailbox list with its unread counts', () => {
     const owner = 'owner-flags';
     const { queryClient, touched } = trackingClient();
 
     const event = { type: SSEventType.MAIL_FLAGS_CHANGED, mail: { messageId: 'msg-1', mailbox: MAILBOX_INBOX } };
     handleMailSSEvent(event, queryClient, owner);
 
-    await settle();
+    settle();
     expect(countKey(touched, mailboxKeys.lists(owner))).toBe(1);
 });

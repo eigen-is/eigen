@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { AppError, getErrorMessage, isRefusal } from '../../core/api-error';
+import { AppError, appErrorFrom, getErrorMessage, isRefusal } from '../../core/api-error';
 
 describe('AppError messages', () => {
     test('reads the message a body carries', () => {
@@ -126,6 +126,27 @@ describe('AppError messages', () => {
         const error = new AppError({ error: null, status: 418 });
 
         expect(getErrorMessage(error)).toBe('Request failed (418)');
+    });
+});
+
+// A plain fetch has no Eden to read its error body, such as an import's upload of a file's raw bytes.
+describe('appErrorFrom a fetch response', () => {
+    test("a refused request's JSON body reads as the server's message", async () => {
+        const body = JSON.stringify({ message: 'You can only view this document' });
+        const response = new Response(body, { status: 403, headers: { 'content-type': 'application/json' } });
+
+        const error = await appErrorFrom(response);
+
+        expect(error).toBeInstanceOf(AppError);
+        expect(error.status).toBe(403);
+        expect(error.message).toBe('You can only view this document');
+    });
+
+    test('a plain-text body reads as its text', async () => {
+        const error = await appErrorFrom(new Response('A file with that name exists', { status: 409 }));
+
+        expect(error.status).toBe(409);
+        expect(error.message).toBe('A file with that name exists');
     });
 });
 
