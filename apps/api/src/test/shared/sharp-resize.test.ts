@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import sharp from 'sharp';
-import { sharpResize } from '../../lib/shared/sharp-resize';
+import { INTERLACED_PNG_MAX_PIXELS, sharpResize } from '../../lib/shared/sharp-resize';
 import type { WorkerInput } from '../../lib/shared/thumbnail-worker';
 import { cpuClock } from '../cpu-time';
 
@@ -134,6 +134,25 @@ describe('sharpResize of a large source', () => {
         expect(result?.hasAlpha).toBe(false);
         expect(resized).toBeLessThan(resize * 1.6);
     }, 30_000);
+});
+
+// Sharp decodes an interlaced PNG whole, so past the limit it makes no picture; a plain PNG of that size streams.
+describe('sharpResize of an interlaced PNG', () => {
+    const side = Math.ceil(Math.sqrt(INTERLACED_PNG_MAX_PIXELS)) + 1;
+    const large = () => sharp({ create: { width: side, height: side, channels: 3, background: '#2563eb' } });
+
+    test('past the limit gets no picture, where a plain PNG or a progressive JPEG does', async () => {
+        const widthOf = async (source: Buffer) => (await sharpResize(source, AS_JPEG))?.width;
+        expect(await widthOf(await large().png({ progressive: true, compressionLevel: 1 }).toBuffer())).toBeUndefined();
+        expect(await widthOf(await large().png({ compressionLevel: 1 }).toBuffer())).toBe(side);
+        expect(await widthOf(await large().jpeg({ progressive: true }).toBuffer())).toBe(side);
+    }, 30_000);
+
+    test('within the limit gets a picture', async () => {
+        const small = await rgba().png({ progressive: true }).toBuffer();
+        expect((await sharp(small).metadata()).isProgressive).toBe(true);
+        expect((await sharpResize(small, AS_JPEG))?.width).toBe(64);
+    });
 });
 
 // A Drive thumbnail is a still, so a grid of GIFs doesn't play; every other WebP, such as the screen preview or an
