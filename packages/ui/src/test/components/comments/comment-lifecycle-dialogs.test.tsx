@@ -93,7 +93,7 @@ async function mountBoard() {
     addCard(doc);
     const onCardDialogClose = mock(() => {});
     const onDelete = mock((_cardId: string) => {});
-    const handle: { setOpenCardId?: (cardId: string | null) => void } = {};
+    const handle: { setOpenCardId?: (cardId: string | null) => void; requestDelete?: (cardId: string) => void } = {};
     function Harness() {
         const lifecycle = useCommentLifecycle({
             ownerId: 'owner-1',
@@ -107,6 +107,7 @@ async function mountBoard() {
             ready: true,
         });
         handle.setOpenCardId = lifecycle.setOpenCardId;
+        handle.requestDelete = lifecycle.requestDelete;
         const commentContextMenu = useContextMenu<CommentContextMenuItem>();
         return createElement(CommentLifecycleDialogs, {
             lifecycle,
@@ -124,7 +125,7 @@ async function mountBoard() {
     });
     unmount = async () => act(() => root.unmount());
     await act(async () => handle.setOpenCardId?.('card-1'));
-    return { doc, onCardDialogClose, onDelete };
+    return { doc, onCardDialogClose, onDelete, handle };
 }
 
 test("a peer's delete closes the dialog as the user's close does, and an undo doesn't reopen it", async () => {
@@ -181,4 +182,13 @@ test('cancelling keeps the card and leaves its dialog open, and the menu asks th
     expect(onDelete).not.toHaveBeenCalled();
     expect(seen.open).toBe(true);
     expect(confirmDialog()).toBeNull();
+});
+
+test("a host's own menu asks in the same dialog, through the bundle's requestDelete", async () => {
+    const { onDelete, handle } = await mountBoard();
+    await act(async () => handle.requestDelete?.('card-1'));
+    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+
+    await act(async () => dialogButton('Delete').click());
+    expect(onDelete).toHaveBeenCalledWith('card-1');
 });

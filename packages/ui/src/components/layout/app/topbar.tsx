@@ -120,11 +120,10 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     );
 }
 
-function AccountMenu({ rootRoute }: TopbarProps) {
+function AccountMenu({ rootRoute, isGuest }: TopbarProps & { isGuest: boolean }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
-    const isGuest = useIsGuest();
     const { theme, setTheme } = useTheme();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
@@ -283,7 +282,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 <div className="flex items-center justify-end gap-1 app-gutter-x">
                     {isMobile && auth.isAuthenticated && <CommandPaletteTrigger />}
                     <NotificationBell />
-                    <AccountMenu rootRoute={rootRoute} />
+                    <AccountMenu rootRoute={rootRoute} isGuest={isGuest} />
                     {!auth.isAuthenticated && !auth.isLoading && <LoginButton />}
                 </div>
             </div>

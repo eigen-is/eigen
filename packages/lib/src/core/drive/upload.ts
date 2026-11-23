@@ -5,7 +5,7 @@
 
 import { getDriveFileUploadUrl } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { AppError } from '../api-error';
+import { appErrorFromBody } from '../api-error';
 import { reviveTimestamp } from '../revive-timestamp';
 
 export type UploadOptions = { onProgress?: (percent: number) => void; signal?: AbortSignal };
@@ -29,10 +29,7 @@ export function uploadFiles(
         };
         xhr.onload = () => {
             if (xhr.status < 200 || xhr.status >= 300) {
-                // An ApiError answers plain text and a rejected schema answers JSON, and AppError reads either.
-                const isJson = xhr.getResponseHeader('content-type')?.includes('application/json');
-                const value: unknown = isJson ? JSON.parse(xhr.responseText) : xhr.responseText;
-                reject(new AppError({ status: xhr.status, error: { status: xhr.status, value } }));
+                reject(appErrorFromBody(xhr.status, xhr.getResponseHeader('content-type'), xhr.responseText));
                 return;
             }
             const paths: DrivePath[] = JSON.parse(xhr.responseText, reviveTimestamp);

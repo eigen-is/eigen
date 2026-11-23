@@ -99,12 +99,23 @@ describe('API date parsing', () => {
         expect(response.data?.map((calendar) => String(calendar.createdAt))).toEqual(shapes);
     });
 
-    test('a key that only ends in "at" or "date" is no timestamp key', async () => {
-        serve({ path: { id: 'p1', details: { format: TIMESTAMP, update: TIMESTAMP, datetime: TIMESTAMP } } });
+    test('a key that only ends in "at" or "date" is no timestamp key, and "at" itself is one', async () => {
+        const details = { format: TIMESTAMP, update: TIMESTAMP, datetime: TIMESTAMP };
+        serve({ path: { id: 'p1', details: { ...details, at: TIMESTAMP } } });
 
         const response = await api.collab({ ownerId: 'owner-1' })({ mountId: 'm1' })({ pathId: 'p1' }).info.get();
 
-        expect(response.data?.path?.details).toEqual({ format: TIMESTAMP, update: TIMESTAMP, datetime: TIMESTAMP });
+        expect(response.data?.path?.details).toEqual({ ...details, at: new Date(TIMESTAMP) });
+    });
+
+    test('a year past 9999 revives from the expanded form toJSON writes', async () => {
+        const written = new Date(Date.UTC(10000, 0, 1)).toJSON();
+        serve([{ id: 'calendar-1', createdAt: written }]);
+
+        const response = await api.calendar({ ownerId: 'owner-1' }).calendars.get();
+
+        expect(written).toBe('+010000-01-01T00:00:00.000Z');
+        expect(response.data?.[0]?.createdAt).toEqual(new Date(written));
     });
 
     test('timestamps revive at any depth, in arrays and objects', async () => {

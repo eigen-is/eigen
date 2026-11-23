@@ -1,8 +1,8 @@
 // The comment bundle every editor that shows comments shares, such as docs and stickies: the cards in the Y.Doc, the
-// server's index rows, create, update, resolve and assign, the open card, the ?chat= and ?card= landings, and the rule
-// that says a comment is deleted. Each editor keeps only what its anchor decides: where a card anchors on create and
-// delete, and which cards it uses (its active set). The editor wraps the side effects of opening a card, such as
-// Slides selecting the element's slide, around the `setOpenCardId` this returns.
+// server's index rows, create, update, resolve and assign, the open card, the card a delete is asked for, the ?chat=
+// and ?card= landings, and the rule that says a comment is deleted. Each editor keeps only what its anchor decides:
+// where a card anchors on create and delete, and which cards it uses (its active set). The editor wraps the side
+// effects of opening a card, such as Slides selecting the element's slide, around the `setOpenCardId` this returns.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCallback, useState } from 'react';
@@ -43,6 +43,8 @@ type CommentLifecycle = {
     openCardForEdit: (cardId: string) => void;
     openCardEditing: boolean;
     setOpenCardEditing: (editing: boolean) => void;
+    deleteCardId: string | null;
+    requestDelete: (cardId: string | null) => void;
 };
 
 // A host passes `ready` once its cards have synced and its active set is computed. Until then a landing waits instead
@@ -79,6 +81,7 @@ export function useCommentLifecycle({
     const [open, setOpen] = useState<OpenComment | null>(null);
     // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
     const [editCardId, setEditCardId] = useState<string | null>(null);
+    const [deleteCardId, requestDelete] = useState<string | null>(null);
 
     const { user } = useAuth();
     const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, pathId);
@@ -141,5 +144,7 @@ export function useCommentLifecycle({
         },
         openCardEditing: !!openCard && openCard.id === editCardId,
         setOpenCardEditing: (editing: boolean) => setEditCardId(editing ? (openCard?.id ?? null) : null),
+        deleteCardId,
+        requestDelete,
     };
 }
