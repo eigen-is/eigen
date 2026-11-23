@@ -139,6 +139,26 @@ describe('carousel', () => {
         expect(lightbox()).toBeNull();
     });
 
+    test('a click during the glide stops it and gives the strip its snapping back', async () => {
+        const { strip } = await renderCarousel();
+        // The glide's frames never come, so the click lands mid-glide.
+        const frames = spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 1);
+        const pointer = (type: string, clientX: number) =>
+            act(async () => {
+                strip.dispatchEvent(
+                    new PointerEvent(type, { pointerType: 'mouse', button: 0, clientX, bubbles: true }),
+                );
+            });
+        await pointer('pointerdown', 500);
+        await pointer('pointermove', 400);
+        await pointer('pointerup', 400);
+        expect(strip.hasAttribute('data-dragging')).toBe(true);
+        await pointer('pointerdown', 400);
+        await pointer('pointerup', 400);
+        expect(strip.hasAttribute('data-dragging')).toBe(false);
+        frames.mockRestore();
+    });
+
     test('a dot scrolls to its slide', async () => {
         const { strip, dots } = await renderCarousel();
         await act(async () => dots[2]?.click());

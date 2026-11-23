@@ -28,9 +28,11 @@ export function useDragScroll(settle?: Settle): DragScroll {
     const frame = useRef(0);
     const [dragging, setDragging] = useState(false);
 
+    // A press during a glide stops it where it is.
     const onPointerDown = (e: PointerEvent<HTMLElement>) => {
         if (e.pointerType !== 'mouse' || e.button !== 0) return;
         cancelAnimationFrame(frame.current);
+        setDragging(false);
         press.current = { x: e.clientX, left: e.currentTarget.scrollLeft, moved: false };
     };
     const onPointerMove = (e: PointerEvent<HTMLElement>) => {
