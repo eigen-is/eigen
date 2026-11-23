@@ -57,6 +57,13 @@ function readString(source: Record<string, unknown>, key: string): string | unde
     return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
 }
 
+// A plain fetch has no Eden to read its error body. An ApiError answers plain text and a rejected schema answers JSON.
+export async function appErrorFrom(response: Response): Promise<AppError> {
+    const isJson = response.headers.get('content-type')?.includes('application/json');
+    const value: unknown = isJson ? await response.json() : await response.text();
+    return new AppError({ status: response.status, error: { status: response.status, value } });
+}
+
 // The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"
 // (503) is worth another go, while a file the parser refuses fails the same way every time.
 export function retryWhenTransformBusy(failureCount: number, error: unknown): boolean {

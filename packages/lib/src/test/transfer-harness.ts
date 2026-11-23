@@ -17,8 +17,9 @@ const g = globalThis as any;
 export const toasts: string[] = [];
 export const fetchCalls: { url: string; body: BodyInit | null | undefined }[] = [];
 
-// The JSON the recorded fetch answers with: an import route's counts, or the bytes step's body.
-export const served: { importResponse: unknown } = { importResponse: null };
+// The JSON the recorded fetch answers with, and its status: an import route's counts, the bytes step's body, or a
+// refusal's message.
+export const served: { importResponse: unknown; status: number } = { importResponse: null, status: 200 };
 
 // Copies taken before the file mocks anything. mock.module rewrites a loaded module in place, so only a copy restores.
 const realAuthContextModule = { ...(await import('../core/auth/auth-context')) };
@@ -44,7 +45,10 @@ export function installTransferHarness(): void {
 
     g.fetch = async (url: string, init?: RequestInit) => {
         fetchCalls.push({ url, body: init?.body });
-        return new Response(JSON.stringify(served.importResponse), { status: 200 });
+        return new Response(JSON.stringify(served.importResponse), {
+            status: served.status,
+            headers: { 'content-type': 'application/json' },
+        });
     };
 
     afterAll(() => {
