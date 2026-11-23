@@ -1,11 +1,12 @@
 // The Delete key runs the listing's delete row and no other destructive row, and the menu key opens the menu at the
-// row or tile under the cursor. A folder is a drop target only where the view can move items.
+// row or tile under the cursor. A folder is a drop target only where the view can move items, and a drop moves the
+// dragged items in one batch.
 import { expect, test } from 'bun:test';
 import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
 import { Trash2 } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
+import type { DragEvent, KeyboardEvent } from 'react';
 import type { DriveActionRunner } from '../../../components/drive/drive-action-runner';
 import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
 import { drivePath } from '../../drive-path';
@@ -94,6 +95,31 @@ test('Delete and Backspace run the row that shows the delete key, even after ano
 test('a folder is a drop target only where the view can move', () => {
     expect(render(runner([]).actions).isValidFolderDrop(folder)).toBe(false);
     expect(render(runner([], () => {}).actions).isValidFolderDrop(folder)).toBe(true);
+});
+
+test('a drop of several items onto a folder moves them in one batch', async () => {
+    const moves: [string[], string][] = [];
+    const { actions } = runner([], (paths, targetItemId) => moves.push([paths.map(({ id }) => id), targetItemId]));
+    const dragged = ['a', 'b', 'c'].map((id) =>
+        drivePath({ id, name: `${id}.txt`, type: 'file', mimeType: 'text/plain' }),
+    );
+    const seen: { controller: ReturnType<typeof useDriveItemController> | null } = { controller: null };
+    function Listing() {
+        seen.controller = useDriveItemController({
+            items: [folder, ...dragged],
+            containerRef: createRef<HTMLElement>(),
+            selection: { ...selection, isSelected: () => true, selectedItems: dragged, selectedCount: 3 },
+            actions,
+        });
+        return null;
+    }
+    const { unmount } = await renderInDocument(createElement(Listing));
+    const dataTransfer = { setData: () => {}, setDragImage: () => {}, effectAllowed: 'none' };
+    const event = { dataTransfer, preventDefault: () => {} } as unknown as DragEvent;
+    await act(async () => seen.controller?.drag.getDragProps(dragged[0]).onDragStart(event));
+    await act(async () => seen.controller?.getDropProps(folder).onDrop(event));
+    expect(moves).toEqual([[['a', 'b', 'c'], folder.id]]);
+    await unmount();
 });
 
 const FILES = ['a', 'b', 'c', 'd'].map((id) =>

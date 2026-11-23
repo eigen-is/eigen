@@ -154,9 +154,7 @@ export function useDriveItemController({
         onDrop: (e: DragEvent) => {
             e.preventDefault();
             setDragOverItemId(null);
-            if (isValidFolderDrop(item)) {
-                for (const dragged of drag.draggedItems) actions?.onMove?.(dragged, item.id);
-            }
+            if (isValidFolderDrop(item)) actions?.onMove?.(drag.draggedItems, item.id);
         },
     });
 
