@@ -66,7 +66,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 There is no write variant: a visitor can't write because no code asks.
 
-`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with these methods only: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile`, `downloadFile`, `readRange`, `getCollabDocument`, `canRead`, `canWrite`, `holdHome` and `withHomeHeld`. Each runs the rule first, so `getPath` refuses a chat row too. `canRead` and `canWrite` take and ignore the user argument, the `_user` convention `shared-drive.ts` documents, and `canWrite` answers false, also for a child a member could write. So the three drives share their signatures and a route needs no `instanceof`. What it hands out is trimmed in one place:
+`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with only the reads its routes call: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile` and `canRead`, and `getCollabDocument` with unit 3. Each runs the rule first, so `getPath` refuses a chat row too. `canRead(mountId, pathId)` takes no user and answers a boolean, and there is no `canWrite`: a visitor never writes, so the three routes that report rights answer `canWrite: false` themselves. The read methods share their signatures with the other two drives, so a route needs no `instanceof`. `resolveFile` hands the route the owner's own row, because it feeds the preview cache, which every caller shares, and never an answer. What a visitor is handed is trimmed in one place:
 
 - Every `DrivePath` has `acl: null`.
 - A breadcrumb starts at the public path, and that path has `parentId: null`, wherever it is returned. So a visitor never learns the id of a private folder above a public item. A child inside a public folder keeps its `parentId`, which names a folder the visitor may read.
@@ -74,20 +74,20 @@ There is no write variant: a visitor can't write because no code asks.
 
 `sharedChainHead` (`packages/lib/src/types/drive.ts`) tells a cut chain by `parentId !== null`, so a visitor's chain reads as starting at a root. That is what the breadcrumb needs, since its Shared with me lookup needs a user. Its comment changes, its code does not.
 
-**The answers.** `createHome` (`lib/home/get-home.ts`) answers 404 for an unknown owner and 400 for a malformed one before any `LinkDrive` exists; owner ids are not secret. Past that, every refusal of `LinkDrive` is the same 403: a path that does not exist, one that is not public, one in the trash, and the switch off.
+**The answers.** `createHome` (`lib/home/get-home.ts`) answers 404 for an unknown owner and 400 for a malformed one before any `LinkDrive` exists; owner ids are not secret. Past that, every refusal of `LinkDrive` is the same 403: a path that does not exist, one that is not public, one in the trash, and the switch off. An unknown mount id keeps `Drive.getMount`'s 404, since mount ids are not secret either. The permissions route answers `canRead: false` instead of a 403, as it does for a signed-in user.
 
 ## A visitor is no user
 
 A visitor is not a `User`: a stand-in like `makeSyntheticUser` would flow into `getSharedDrive` (which hands out the raw `Drive` when the owner id equals the user id), `getMemberships`, `recordOpened`, the awareness check and every `actor` argument. A visitor has no Home, so `home-relay.ts` never comes into it: the request opens only the Home its URL names.
 
-`routes/auth.ts` gets a second macro beside `auth`:
+`routes/auth.ts` gets `linkAuth` beside `auth`. It is built on a small macro of its own, `optionalAuth`, which resolves the user or null, because in Elysia a macro's hook sees only what a macro it builds on resolved. No route names `optionalAuth` itself, and a test holds that:
 
 | Macro | Resolves | Without a session |
 |---|---|---|
 | `auth: true`, unchanged | `user: User`, `session` | 401 |
 | `linkAuth: true`, new | `user: User \| null`, `session` or null | Goes on |
 
-A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it writes the one line `user ? await getSharedDrive(ownerId, user) : await getLinkDrive(ownerId)` (`lib/drive/get-drive.ts`) and can call only the methods all three drives have. There is no per-path choice between the two: a login decides.
+A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it writes the one line `user ? await getSharedDrive(ownerId, user) : await getLinkDrive(ownerId)` (`lib/drive/get-drive.ts`) and can call only the methods all three drives have. The routes that report rights (4, 13 and the socket) branch on the user instead, because a member's `canRead` takes a `User`. There is no per-path choice between the two: a login decides.
 
 For a request without a user the macro also sets two headers after the handler, on `set.headers` and on a returned `Response`: `X-Robots-Tag: noindex` and `Cache-Control: no-store`. Today previews and thumbnails answer `private, max-age=86400`, `serveFile` answers `private, no-cache`, and the JSON routes set nothing.
 
@@ -100,15 +100,15 @@ Thirteen reads and the socket. Each resolves the path id in its own URL through 
 | 1 | `GET /drive/:ownerId/:mountId/path/:pathId` | `routes/drive.ts` | `getPath` |
 | 2 | `GET /drive/:ownerId/:mountId/folder/:pathId` | `routes/drive.ts` | `getFolderContents` |
 | 3 | `GET /drive/:ownerId/:mountId/path/:pathId/breadcrumb` | `routes/drive.ts` | `breadCrumb` |
-| 4 | `GET /drive/:ownerId/:mountId/path/:pathId/permissions` | `routes/drive-sharing.ts` | `canRead`, `canWrite` |
+| 4 | `GET /drive/:ownerId/:mountId/path/:pathId/permissions` | `routes/drive-sharing.ts` | `canRead`; `canWrite` is false |
 | 5 | `GET /drive/:ownerId/:mountId/file/:pathId/download` | `routes/drive.ts` | `resolveFile`, with ranges |
 | 6 | `GET /drive/:ownerId/:mountId/file/:pathId/embed/:fileName` | `routes/drive-content.ts` | `resolveFile`, with ranges |
 | 7–11 | `GET …/file/:pathId/preview`, `text-preview`, `vcard-preview`, `eml-preview`, `ics-preview` | `routes/drive-content.ts` | `resolveFile` |
 | 12 | `GET /drive/:ownerId/:mountId/thumb/:fileName` | `routes/drive-content.ts` | `resolveFile` |
-| 13 | `GET /collab/:ownerId/:mountId/:pathId/info` | `routes/collab.ts` | `canRead`, `canWrite`, `getPath`, `getFolderContents` |
+| 13 | `GET /collab/:ownerId/:mountId/:pathId/info` | `routes/collab.ts` | `canRead`, `getPath`, `getFolderContents`; `canWrite` is false |
 | | `WS /ws/collab/:ownerId/:mountId/:pathId` | `routes/collab.ts` | `canRead`, `getCollabDocument` |
 
-Everything else stays closed, by saying `auth: true`: the export route, effective members, the ACL route, `GET …/history`, the version list, every chat route with its messages, the comment index (`/collab/…/comments` and `/comments/search`), notifications, SSE, search, recent, shared with me, watches, request access, email collaborators, mounts, the root folder, the inline editor's content and every write. One test walks the app's route table and holds it against the list above, so a new route is closed until someone adds it there.
+Everything else stays closed, by saying `auth: true`: the export route, effective members, the ACL route, `GET …/history`, the version list, every chat route with its messages, the comment index (`/collab/…/comments` and `/comments/search`), notifications, SSE, search, recent, shared with me, watches, request access, email collaborators, mounts, the root folder, the inline editor's content and every write. Two tests hold that against the list above, so a new route is closed until someone adds it there: one walks the app's route table and expects a 401 without a login, or the 422 of a route that validates its input first, and one reads the route files and expects `linkAuth: true` on exactly the listed routes.
 
 Why no cookie: a visitor's request has nothing to carry. An `<img>`, a media request and the socket are plain requests to the item's URL.
 
@@ -195,7 +195,7 @@ No sweep and no cleanup: a link is one value in one row.
 
 ## Where the design bends
 
-1. **Not an option on `auth`, a second macro.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`.
+1. **Not an option on `auth`, a second macro, and a third under it.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`. `linkAuth` needs `optionalAuth` below it to read the user in its header hook.
 2. **A visitor's sync step 2 is dropped, not a reason to close.** The review asked to close on any update. y-websocket answers the server's sync step 1 with a step 2 of its own, so closing on it would close every visitor. The frame cap and the single step 1 bound the socket instead.
 3. **Print for a visitor is the editor's own print**, which only Docs has today ([ROADMAP.md](../ROADMAP.md), P2).
 
@@ -206,6 +206,7 @@ No sweep and no cleanup: a link is one value in one row.
 - **Ids are in logs.** Caddy's access log, the `[slow]` line in `app.ts` and `[collab] open path=` in `routes/collab.ts` hold path ids, which now open a public item.
 - **A guest account reads more than a visitor.** With open guest sign-up anyone can make one and then read the member list and the comment threads of a public item, as `public-read` allows today. Accepted.
 - **Any request without a login opens the Home its URL names** on every opt-in route, and a visitor's socket holds a document open. Only the per-IP limit in `app.ts` stands in front. Accepted for this version.
+- **A public SVG shows the pictures beside it.** An SVG's preview builds in the media files it names in its own folder, for every reader, and a visitor gets that same preview. So a public SVG in a private folder shows those neighbours to anyone with the link. Accepted: one preview per file.
 - **A public file can be hotlinked** from another site. The inline routes already sandbox scriptable types (`scriptableInlineHeaders`).
 - **Up to 15 s.** After a link is closed an open document still receives edits until the next keepalive, as after any revoke.
 
