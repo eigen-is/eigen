@@ -1,7 +1,6 @@
-// The drive read hooks, rendered against a stubbed transport. What this pins is the treaty choice:
-// useVCardPreview reads a route that serves contact birthdays, and a Date here reaches
-// ContactDetailCard's formatDateOnly, which splits a string; useEmlPreview reads a route whose `date`
-// is an ISO string the payload type declares as one.
+// The drive read hooks, rendered against a stubbed transport. The preview hooks pin what the treaty makes of a
+// payload: a contact's birthday reaches ContactDetailCard's formatDateOnly, which splits a string, an .ics bound
+// and a title stay strings too, and only an .eml's `date` is a Date.
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { installHappyDom } from '../../../happy-dom';
@@ -12,7 +11,7 @@ installHappyDom();
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
 
-// The real Eden client, so the reviver the hook reads through is the one under test.
+// The real treaty, so the reviver the hook reads through is the one under test.
 const emlPayload = {
     subject: 'Engine notes',
     from: { value: [{ name: 'Ada Lovelace', address: 'ada@example.com' }], text: 'ada@example.com' },
@@ -125,13 +124,12 @@ describe('useVCardPreview', () => {
 });
 
 describe('useEmlPreview', () => {
-    test('serves the message date as the ISO string it is, never a Date', async () => {
+    test('serves the message date as a Date', async () => {
         const { useEmlPreview } = await import('../../../../core/drive/hooks/reads');
         const result = await settled(() => useEmlPreview('owner-1', 'm1', 'p1', new Date(1), 1024));
 
-        const date: string | null | undefined = result.data?.date;
-        expect(date).toBe('2026-08-15T10:30:00.000Z');
-        expect(date).not.toBeInstanceOf(Date);
+        const date: Date | null | undefined = result.data?.date;
+        expect(date).toEqual(new Date('2026-08-15T10:30:00.000Z'));
         expect(result.data?.subject).toBe('Engine notes');
     });
 });

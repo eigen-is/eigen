@@ -6,6 +6,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { collectHomeObjects, deleteBucketObjects } from '../../lib/backup/safety-copy';
+import { getAvatarsDir } from '../../lib/config/paths';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -90,14 +91,16 @@ describe('Delete user', () => {
     test('admin can fully delete a user', async () => {
         const homePath = join(TEST_DATA_DIR, 'home', deleteTarget.id);
         expect(existsSync(homePath)).toBe(true);
+        const avatarPath = join(getAvatarsDir(), `${deleteTarget.id}.webp`);
+        writeFileSync(avatarPath, TEST_PNG_BYTES);
 
         const deleteRes = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${deleteTarget.id}`, {
             method: 'DELETE',
         });
         expect(deleteRes.status).toBe(200);
 
-        // Home directory is gone
         expect(existsSync(homePath)).toBe(false);
+        expect(existsSync(avatarPath)).toBe(false);
 
         // Deleted user can no longer authenticate
         const authRes = await authedRequest(deleteTarget.sessionToken, `/home/${deleteTarget.id}/size`);

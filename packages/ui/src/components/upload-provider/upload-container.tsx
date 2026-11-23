@@ -17,14 +17,13 @@ export function UploadContainer({ uploads, onCancel }: UploadContainerProps) {
             {uploads.map((upload) => (
                 <Card
                     key={upload.id}
-                    className={cn(
-                        'overflow-hidden transition-all duration-300 ease-in-out',
-                        'animate-in slide-in-from-bottom-5',
-                    )}
+                    className="overflow-hidden transition-all duration-300 ease-in-out animate-in slide-in-from-bottom-5"
                 >
                     <CardContent className="p-3">
                         <div className="flex justify-between items-center mb-2">
-                            <p className="text-sm font-medium truncate mr-2">Uploading {upload.filename}</p>
+                            <p className="text-sm font-medium truncate mr-2">
+                                {upload.status === 'error' ? upload.filename : `Uploading ${upload.filename}`}
+                            </p>
                             {upload.cancelFn && (
                                 <button
                                     onClick={() => onCancel(upload)}

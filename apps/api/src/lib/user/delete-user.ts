@@ -1,5 +1,5 @@
 // Deleting a user. teardownUserData removes what Eigen keeps for an account outside better-auth's user row, such
-// as the home folder, its bucket objects, the share registry rows and the org memberships. better-auth's
+// as the home folder, its bucket objects, the avatar, the share registry rows and the org memberships. better-auth's
 // user.delete.before hook runs it, so every way to delete an account tears down the same data once, whoever
 // starts it, such as an admin or the inactive-guest sweep.
 
@@ -10,15 +10,17 @@ import { ApiError } from '../core';
 import { deleteHomeData } from '../home/delete-home';
 import { removeEntriesForTarget, removeEntriesFromSource } from '../share/registry';
 import { isGuest } from './guest';
+import { writeAvatar } from './profile';
 import type { User } from './user';
 import { getUserById } from './user';
 
 // Every better-auth deletion passes the user.delete.before hook while the user row still exists, so the hook runs
 // this. A throw here stops better-auth from deleting the row.
 export async function teardownUserData(user: User): Promise<void> {
-    // 1. The home folder, the safety copies a restore left beside it and their bucket objects.
+    // 1. The home folder, the safety copies a restore left beside it, their bucket objects and the avatar.
     const homePath = isGuest(user) ? getGuestHomePath(user.id) : getUserHomePath(user.id);
     await deleteHomeData(user.id, homePath);
+    await writeAvatar(user.id, null);
 
     // 2. The share registry. Entries from this user always go. Entries addressed to a guest stay, so a guest who
     //    signs in again with a new code gets the same shares back.

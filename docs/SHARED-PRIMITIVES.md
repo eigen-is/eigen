@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2384 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2381 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1171,7 +1171,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1249)
+## Utilities & constants (1246)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1244,7 +1244,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `contactsApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `DAV_HOST` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `driveApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `emlPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getAdminAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getBackupArtifactUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getBackupUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1293,11 +1292,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getSupportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getVectorAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `homeApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `icsPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `mailApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `mailEmlPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `mailIcsPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `mailVCardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `notificationApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1309,8 +1304,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `setupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `spaceApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `teamApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
-| `vcardPreviewRoute` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `appErrorFrom` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `appErrorFromBody` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isRefusal` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isStaleWrite` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
@@ -1825,6 +1821,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serverBackupNotUploadedTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `serverBackupWarningsTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `shareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
+| `reviveTimestamp` | `@workspace/lib/revive-timestamp` | packages/lib/src/core/revive-timestamp.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
 | `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `BORDER_SIDE_CSS` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -2017,6 +2014,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `isSafeFileName` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `isStringList` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
@@ -2165,7 +2163,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `isTextBox` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `isTextual` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

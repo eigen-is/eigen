@@ -5,6 +5,7 @@
 import type { Database } from 'bun:sqlite';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import { isSafeFileName } from '@workspace/lib/validation';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
@@ -15,7 +16,7 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { CONTAINER_COMMENTS_DB, CONTAINER_DATA_DB, isContainerDatabase } from '../mount/container-dbs';
-import { isReservedName, isUsableName, trashStorageKey } from '../mount/names';
+import { isReservedName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { isVersionsName } from '../versioning/versions-folder';
@@ -115,11 +116,11 @@ function hasUnusablePart(row: MountPathRow): boolean {
     const flatFolder = row.type !== 'file' && row.file === '';
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
     return (
-        !isUsableName(row.id) ||
-        !isUsableName(row.name) ||
+        !isSafeFileName(row.id) ||
+        !isSafeFileName(row.name) ||
         isReservedName(row.name) ||
         isReservedName(row.file) ||
-        (!flatFolder && !trashKey && !isUsableName(row.file))
+        (!flatFolder && !trashKey && !isSafeFileName(row.file))
     );
 }
 

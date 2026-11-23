@@ -3,6 +3,7 @@
 
 import { toast } from 'sonner';
 import type { ImportCountsResult } from '../types/transfer';
+import { appErrorFrom } from './api-error';
 
 // What a file's unreadable members are called, spelled once for the import toast and for the counted
 // line a quick look of the same file ends on.
@@ -32,7 +33,7 @@ export async function postImportBytes<R>(url: string, contentType: string, file:
         body: file,
         credentials: 'include',
     });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw await appErrorFrom(response);
     return await response.json();
 }
 
@@ -40,7 +41,7 @@ export async function postImportBytes<R>(url: string, contentType: string, file:
 // from the download URL to the import route.
 export async function fetchImportBlob(url: string): Promise<Blob> {
     const response = await fetch(url, { credentials: 'include' });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw await appErrorFrom(response);
     return await response.blob();
 }
 

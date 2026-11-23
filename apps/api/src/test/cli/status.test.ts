@@ -76,7 +76,7 @@ describe('the Backup row', () => {
     const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR_MS);
     const archive = (reason: BackupReason, at: Date) => ({
         name: buildServerArchiveName(reason, 'full', at),
-        createdAt: at.toISOString(),
+        createdAt: at,
     });
     let backup: ControlStatus['backup'];
     let setupCopies: ControlStatus['setupCopies'] = [];
@@ -120,7 +120,7 @@ describe('the Backup row', () => {
 
     test('is followed by a row for each copy of users3.db a setup left, which says how to delete it', async () => {
         const name = `users3.backup-${hoursAgo(3).getTime()}.db`;
-        setupCopies = [{ name, createdAt: hoursAgo(3).toISOString() }];
+        setupCopies = [{ name, createdAt: hoursAgo(3) }];
         backup = {
             scheduleEnabled: false,
             newest: null,
@@ -173,7 +173,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodAt: hoursAgo(3).toISOString(),
+            newestGoodAt: hoursAgo(3),
             running: [],
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
@@ -187,7 +187,7 @@ describe('the Backup row', () => {
             scheduledFailure: { ...failed, error: 'no room' },
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodAt: hoursAgo(1).toISOString(),
+            newestGoodAt: hoursAgo(1),
             running: [],
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
@@ -201,7 +201,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
             warned: null,
-            newestGoodAt: hoursAgo(5).toISOString(),
+            newestGoodAt: hoursAgo(5),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
@@ -215,7 +215,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: { ...warned, error: 'Alice, Team Blue' },
-            newestGoodAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
@@ -229,7 +229,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...night, error: 'bucket refused' },
             warned: { ...night, error: 'Alice' },
-            newestGoodAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${night.name} not uploaded, 5h ago: bucket refused`);
@@ -242,7 +242,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodAt: hoursAgo(49).toISOString(),
+            newestGoodAt: hoursAgo(49),
             running: [],
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(

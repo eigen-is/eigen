@@ -1,6 +1,6 @@
 // Handles the mail events from the stream, which always concern the signed-in user's own mail. Each
-// refetches the message list it touched and, as needed, the unread counts, the home size and the search
-// results.
+// refetches the message list it touched, and a burst of received mail every list once. As needed it also
+// refetches the unread counts, the home size and the search results.
 
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -19,8 +19,11 @@ import {
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
 // A sync sends one mail:received per message, so the unread counts refetch once per burst, and every
-// 1.5 s while a long sync goes on. The message lists still refetch at once.
+// 1.5 s while a long sync goes on.
 const invalidateMailboxesSoon = debouncePerOwner(invalidateMailboxes, 250, 1500);
+
+// So do the message lists, the home size and the search a sync touches.
+const invalidateReceivedSoon = debouncePerOwner(invalidateMailReceived, 250, 1500);
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     if (!('mail' in event)) return;
@@ -28,10 +31,8 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
-            invalidateMailReceived(queryClient, userId, mailbox);
+            invalidateReceivedSoon(queryClient, userId);
             invalidateMailboxesSoon(queryClient, userId);
-            invalidateHomeSize(queryClient, userId);
-            invalidateSearchOwner(queryClient, userId);
             break;
 
         // In the four cases below, the echo of this tab's own optimistic change skips the list refetch,

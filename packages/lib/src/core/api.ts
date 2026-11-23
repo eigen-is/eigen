@@ -16,6 +16,7 @@ import {
 } from '../types/drive';
 import type { DocumentImportOptions } from '../types/drive-convert';
 import { isImageMime, isInlineEditable } from '../types/file-kinds';
+import { reviveTimestamp } from './revive-timestamp';
 
 // A relative VITE_API_HOST (e.g. "/eigen") gets prefixed with window.location.origin at module load, so the same bundle
 // works on the public domain, a LAN IP or a tunnel. The WebSocket and SSE helpers need it absolute.
@@ -41,38 +42,11 @@ export const api = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
     },
-});
-
-// The one treaty without date revival: Eden's reviver also matches a bare "1990-01-01", and a date-only string turned
-// into a Date shifts the day by timezone. Every route serving one reads through here.
-const plainApi = treaty<app>(API_HOST, {
-    fetch: {
-        credentials: 'include',
-    },
     parseDate: false,
+    onResponse: parseJsonReply,
 });
 
-export const contactsApi = plainApi.contacts;
-// A key to one door: the vcard-preview route serves cards with bare YYYY-MM-DD birthdays, so it reads
-// through the no-revival treaty, and reaching it by hand keeps every other drive route on `driveApi`.
-export const vcardPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
-    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['vcard-preview'];
-// The mail part beside it serves the same cards with the same bare birthdays, so it reads through the
-// same no-revival treaty.
-export const mailVCardPreviewRoute = (ownerId: string, messageId: string, index: number) =>
-    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.vcard;
-// The .eml preview pair rides the same treaty for the same reason: its `date` is an ISO instant declared
-// as a string, and Eden's reviver would hand the renderer a Date the type does not admit.
-export const emlPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
-    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['eml-preview'];
-export const mailEmlPreviewRoute = (ownerId: string, messageId: string, index: number) =>
-    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.eml;
-// The .ics pair too: an all-day event's `start` is a bare YYYY-MM-DD, and an event titled after a date
-// is a string the card prints — Eden's reviver would hand the card a Date for either.
-export const icsPreviewRoute = (ownerId: string, mountId: string, pathId: string) =>
-    plainApi.drive({ ownerId })({ mountId }).file({ pathId })['ics-preview'];
-export const mailIcsPreviewRoute = (ownerId: string, messageId: string, index: number) =>
-    plainApi.mail({ ownerId }).message({ id: messageId }).attachment({ index }).preview.ics;
+export const contactsApi = api.contacts;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;
@@ -89,6 +63,17 @@ export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
 export const backupApi = api.admin.backup;
 export const serverBackupApi = api.admin['server-backup'];
+
+// Eden would make a Date of any string that reads as one, a title included, so JSON is parsed here instead. Eden
+// takes a hook's answer as the data before it looks at the status, so a refusal is left for Eden to read.
+async function parseJsonReply(copy: Response): Promise<unknown> {
+    if (copy.ok && copy.headers.get('content-type')?.split(';')[0] === 'application/json') {
+        return JSON.parse(await copy.text(), reviveTimestamp);
+    }
+    // Eden hands over a clone, which would buffer the body beside the original until someone reads or cancels it.
+    copy.body?.cancel().catch(() => {});
+    return undefined;
+}
 
 // Unset is a same-origin relative link, what production serves.
 const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
@@ -217,8 +202,7 @@ export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: str
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/preview${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string, updatedAt?: Date) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
-// Cache-busted thumbnail for image/video items — shared by grid tiles and the preview panel.
-// Trashed items get none: the thumb route rejects paths in trash (getActivePath).
+// Trashed items get none: the thumb route rejects paths in trash.
 export const getDriveItemThumbnail = (path: DrivePath): { showThumbnail: boolean; thumbnailUrl?: string } => {
     const hasVisual = isImageMime(path.mimeType) || path.mimeType.startsWith('video/');
     const thumbnailUrl =
@@ -253,7 +237,7 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
     return undefined;
 }
 
-// Same tab always. See LAYOUT.md § Buttons navigate here, links in content open a new tab.
+// Same tab always: a button navigates here, and only a link in content opens a new tab.
 export function openDocument(path: DriveItemRef) {
     const url = getDriveItemUrl(path);
     if (!url) {

@@ -104,7 +104,7 @@ export class Contacts {
         this.cardsBytes = this.db
             .select({ total: sql<number>`COALESCE(SUM(${cardBytes}), 0)` })
             .from(schema.contacts)
-            .get()!.total;
+            .all()[0].total;
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
 
         // Each seed is guarded independently, so a crash between them doesn't skip a later one forever.
@@ -194,7 +194,7 @@ export class Contacts {
             .set({ ctag: sql`${schema.book.ctag} + 1` })
             .where(eq(schema.book.id, 1))
             .run();
-        return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).get()!.ctag;
+        return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).all()[0].ctag;
     }
 
     private tombstone(tx: Tx, uri: string, ctag: number): void {
@@ -242,11 +242,11 @@ export class Contacts {
     // Callers hold the write lock, have run their own guards, and announce the deletion once they let go of it.
     public async purgeCard(row: PurgedCard): Promise<void> {
         const removed = this.db.transaction((tx) => {
-            const size = tx
+            const [{ size }] = tx
                 .select({ size: cardBytes })
                 .from(schema.contacts)
                 .where(eq(schema.contacts.id, row.id))
-                .get()!.size;
+                .all();
             const ctag = this.bumpCtag(tx);
             tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
             this.tombstone(tx, row.uri, ctag);

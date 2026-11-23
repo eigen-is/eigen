@@ -101,7 +101,7 @@ test('a drop the server refuses leaves no unhandled rejection', async () => {
         const runner = await renderRunner();
         // As a drop does, which keeps nothing onMove returns.
         await act(async () => {
-            runner.onMove?.(sharedDoc, 'folder-1');
+            runner.onMove?.([sharedDoc], 'folder-1');
         });
         // The refusal settles the mutation a few ticks after the response, and an unhandled one is reported a tick later.
         await act(() => new Promise((resolve) => setTimeout(resolve, 20)));

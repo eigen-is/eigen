@@ -295,7 +295,7 @@ export function useKeyboardListNavigation<T>({
 
     // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
     // the keydown, and on Windows only once the key comes up. A keydown's preventDefault doesn't stop it. When the
-    // row's menu holds the focus by then, ContextMenuAnchor cancels it. When the list or a row's button still does, it
+    // row's menu holds the focus by then, DropdownMenuContent cancels it. When the list or a row's button still does, it
     // lands here and opens the same row's menu, so neither the browser's menu nor the menu of the page behind the list,
     // such as Drive's New menu, opens. A screen reader's contextmenu with no key before it opens the row's menu here
     // too. The listener sits on the list itself, so it stops the event before React's handlers on the rows and around

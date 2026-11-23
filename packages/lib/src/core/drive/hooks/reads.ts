@@ -4,7 +4,7 @@
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { driveApi, emlPreviewRoute, icsPreviewRoute, vcardPreviewRoute } from '@workspace/lib/api';
+import { driveApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -249,10 +249,9 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
     return useQuery({
         queryKey: driveKeys.vcardPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            // A card's birthday is a date-only string, which driveApi's reviver would turn into a Date.
-            const response = await vcardPreviewRoute(ownerId, mountId, pathId).get({
-                query: { updatedAt: updatedAt.toISOString() },
-            });
+            const response = await driveApi({ ownerId })({ mountId })
+                .file({ pathId })
+                ['vcard-preview'].get({ query: { updatedAt: updatedAt.toISOString() } });
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -267,9 +266,9 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
     return useQuery({
         queryKey: driveKeys.emlPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            const response = await emlPreviewRoute(ownerId, mountId, pathId).get({
-                query: { updatedAt: updatedAt.toISOString() },
-            });
+            const response = await driveApi({ ownerId })({ mountId })
+                .file({ pathId })
+                ['eml-preview'].get({ query: { updatedAt: updatedAt.toISOString() } });
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -284,9 +283,9 @@ export function useIcsPreview(ownerId: string, mountId: string, pathId: string, 
     return useQuery({
         queryKey: driveKeys.icsPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            const response = await icsPreviewRoute(ownerId, mountId, pathId).get({
-                query: { updatedAt: updatedAt.toISOString() },
-            });
+            const response = await driveApi({ ownerId })({ mountId })
+                .file({ pathId })
+                ['ics-preview'].get({ query: { updatedAt: updatedAt.toISOString() } });
             if (response.error) throw new AppError(response);
             return response.data;
         },

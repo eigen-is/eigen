@@ -1,5 +1,11 @@
+// A video's thumbnail source: ffprobe reads its width, height and duration, and ffmpeg grabs one frame as a JPEG,
+// which the thumbnail Worker then resizes like any image. Each call is killed at a deadline the Worker sets before
+// its own end, and none starts after it. Without ffmpeg on the host a video simply gets no thumbnail.
+
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { isRecord } from '@workspace/lib/guards';
+import { parseJson } from '@workspace/lib/validation';
 
 export type VideoFrameResult = {
     data: Buffer;
@@ -7,6 +13,32 @@ export type VideoFrameResult = {
     height: number;
     duration: number;
 };
+
+export async function extractVideoFrame(
+    localPath: string,
+    tmpDir: string,
+    pathId: string,
+    deadline: number,
+): Promise<VideoFrameResult | null> {
+    if (!(await isFfmpegAvailable())) return null;
+
+    const probed = await probe(localPath, deadline);
+    if (!probed) return null;
+
+    const outPath = path.join(tmpDir, `${pathId}-video-frame.jpg`);
+    try {
+        let ok = await extractFrame(localPath, outPath, 1, deadline);
+        if (!ok) ok = await extractFrame(localPath, outPath, 0, deadline);
+        if (!ok) return null;
+
+        const data = await fs.readFile(outPath);
+        return { data, ...probed };
+    } finally {
+        try {
+            await fs.unlink(outPath);
+        } catch {}
+    }
+}
 
 let cachedAvailable: boolean | null = null;
 
@@ -24,22 +56,8 @@ export async function isFfmpegAvailable(): Promise<boolean> {
     return cachedAvailable;
 }
 
-const SUBPROC_TIMEOUT_MS = 20_000;
-
-async function runWithTimeout(argv: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'pipe', timeout: SUBPROC_TIMEOUT_MS });
-    const [exitCode, stdout, stderr] = await Promise.all([
-        proc.exited,
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-    ]);
-    return { exitCode, stdout, stderr };
-}
-
-type ProbeResult = { width: number; height: number; duration: number };
-
-async function probe(localPath: string): Promise<ProbeResult | null> {
-    const { exitCode, stdout } = await runWithTimeout([
+async function probe(localPath: string, deadline: number): Promise<Omit<VideoFrameResult, 'data'> | null> {
+    const run = await runBefore(deadline, [
         'ffprobe',
         '-v',
         'error',
@@ -57,25 +75,25 @@ async function probe(localPath: string): Promise<ProbeResult | null> {
         'json',
         localPath,
     ]);
-    if (exitCode !== 0) return null;
-    try {
-        const parsed = JSON.parse(stdout) as {
-            streams?: { width?: number; height?: number }[];
-            format?: { duration?: string };
-        };
-        const stream = parsed.streams?.[0];
-        const durationStr = parsed.format?.duration;
-        if (!stream?.width || !stream.height || !durationStr) return null;
-        const duration = Number(durationStr);
-        if (!Number.isFinite(duration) || duration <= 0) return null;
-        return { width: stream.width, height: stream.height, duration };
-    } catch {
-        return null;
-    }
+    if (run?.exitCode !== 0) return null;
+    const parsed = parseJson(run.stdout);
+    if (!isRecord(parsed) || !Array.isArray(parsed['streams']) || !isRecord(parsed['format'])) return null;
+    const stream: unknown = parsed['streams'][0];
+    if (!isRecord(stream)) return null;
+    const { width, height } = stream;
+    const duration = Number(parsed['format']['duration']);
+    if (typeof width !== 'number' || typeof height !== 'number' || !width || !height) return null;
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    return { width, height, duration };
 }
 
-async function extractFrame(localPath: string, outPath: string, seekSeconds: number): Promise<boolean> {
-    const { exitCode } = await runWithTimeout([
+async function extractFrame(
+    localPath: string,
+    outPath: string,
+    seekSeconds: number,
+    deadline: number,
+): Promise<boolean> {
+    const run = await runBefore(deadline, [
         'ffmpeg',
         // Same protocol pin as probe(): keep -i local, before the input.
         '-protocol_whitelist',
@@ -93,7 +111,7 @@ async function extractFrame(localPath: string, outPath: string, seekSeconds: num
         '-y',
         outPath,
     ]);
-    if (exitCode !== 0) return false;
+    if (run?.exitCode !== 0) return false;
     try {
         const stat = await fs.stat(outPath);
         return stat.size > 0;
@@ -102,27 +120,12 @@ async function extractFrame(localPath: string, outPath: string, seekSeconds: num
     }
 }
 
-export async function extractVideoFrame(
-    localPath: string,
-    tmpDir: string,
-    pathId: string,
-): Promise<VideoFrameResult | null> {
-    if (!(await isFfmpegAvailable())) return null;
-
-    const probed = await probe(localPath);
-    if (!probed) return null;
-
-    const outPath = path.join(tmpDir, `${pathId}-video-frame.jpg`);
-    try {
-        let ok = await extractFrame(localPath, outPath, 1);
-        if (!ok) ok = await extractFrame(localPath, outPath, 0);
-        if (!ok) return null;
-
-        const data = await fs.readFile(outPath);
-        return { data, width: probed.width, height: probed.height, duration: probed.duration };
-    } finally {
-        try {
-            await fs.unlink(outPath);
-        } catch {}
-    }
+// The call's timer lives in the Worker, which terminate() stops without stopping the child, so `deadline`, a
+// Date.now() time, falls before the Worker's end. Null when it has passed: Bun reads a timeout of 0 as none.
+async function runBefore(deadline: number, argv: string[]): Promise<{ exitCode: number; stdout: string } | null> {
+    const left = deadline - Date.now();
+    if (left <= 0) return null;
+    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'ignore', timeout: left, killSignal: 'SIGKILL' });
+    const [exitCode, stdout] = await Promise.all([proc.exited, new Response(proc.stdout).text()]);
+    return { exitCode, stdout };
 }

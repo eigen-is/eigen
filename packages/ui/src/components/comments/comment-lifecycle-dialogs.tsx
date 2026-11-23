@@ -7,7 +7,7 @@ import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { CardDialog } from '../cards/card-dialog';
 import type { ConfirmDialogProps } from '../confirm-dialog';
 import { ConfirmDialog } from '../confirm-dialog';
@@ -45,10 +45,11 @@ export function CommentLifecycleDialogs({
         setOpenCardId,
         resolveComment,
         assignComment,
+        deleteCardId,
+        requestDelete,
     } = lifecycle;
     const { user } = useAuth();
     const shown = !!openCard || !!openEntry;
-    const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
     // A peer's delete can take the open comment away, which hides the dialog without a close. So every close runs
     // here, once the dialog is gone, and the open state clears too: an undo that brings the card back stays closed.
@@ -81,7 +82,7 @@ export function CommentLifecycleDialogs({
                 onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
                 onResolve={(chatName, next, title) => resolveComment.mutate({ chatName, status: next, title })}
                 onAssign={(chatName, assignee, title) => assignComment.mutate({ chatName, assignee, title })}
-                onDelete={setDeleteCardId}
+                onDelete={requestDelete}
             />
 
             <CommentContextMenu
@@ -89,12 +90,12 @@ export function CommentLifecycleDialogs({
                 lifecycle={lifecycle}
                 canWrite={canWrite}
                 noun={noun}
-                onDelete={setDeleteCardId}
+                onDelete={requestDelete}
             />
 
             <DeleteCommentDialog
                 open={!!deleteCardId}
-                onOpenChange={(open) => !open && setDeleteCardId(null)}
+                onOpenChange={(open) => !open && requestDelete(null)}
                 noun={noun}
                 onConfirm={() => {
                     if (deleteCardId) onDelete(deleteCardId);

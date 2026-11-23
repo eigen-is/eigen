@@ -69,7 +69,7 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
     return archives;
 }
 
-type ArchiveLine = { name: string; createdAt: string; error: string | null };
+type ArchiveLine = { name: string; createdAt: Date; error: string | null };
 
 // What the Backup row is judged on. `newest` is the newest archive or refused attempt of any
 // reason, its state null when its record does not read.
@@ -83,7 +83,7 @@ export type ServerBackupStatus = {
     scheduledNotUploaded: ArchiveLine | null;
     // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
     warned: ArchiveLine | null;
-    newestGoodAt: string | null;
+    newestGoodAt: Date | null;
     // The server backup and the uploads that run now, from the job list: what ./eigen waits for before a stop.
     running: { kind: ServerJobKind; archive: string }[];
 };
@@ -116,7 +116,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
                       .join(', '),
               )
             : null,
-        newestGoodAt: good?.createdAt.toISOString() ?? null,
+        newestGoodAt: good?.createdAt ?? null,
         running: jobs.flatMap(({ kind, state, artifact }) =>
             state === 'running' && isServerJob(kind) && artifact ? [{ kind, archive: artifact }] : [],
         ),
@@ -129,7 +129,7 @@ function isGood(record: ServerArchiveSidecar | null): boolean {
 }
 
 function archiveLine({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
-    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
+    return { name, createdAt, error: error ?? null };
 }
 
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night

@@ -12,7 +12,7 @@ import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { DatabaseConfig, SchemaType } from '../src/lib/core/managed-database';
 import { openLocalDatabase } from '../src/lib/core/managed-database';
 import type { Home } from '../src/lib/home/home';
-import type MailDB from '../src/lib/mail/maildb';
+import type { MailDB } from '../src/lib/mail/maildb';
 import { MaildirStore } from '../src/lib/mail/maildir-store';
 import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../src/lib/mail/mailutils';
 

@@ -21,7 +21,7 @@ import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem } from '../core'
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
-import MailDB, { readMailIndexSize } from './maildb';
+import { MailDB, readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,

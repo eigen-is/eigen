@@ -7,6 +7,10 @@ import sharp from 'sharp';
 import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput } from './thumbnail-worker';
 
+const MAX_SIDE = 32_000;
+// Sharp can't stream an interlaced PNG and holds the whole picture while it resizes one, so a larger one gets none.
+export const INTERLACED_PNG_MAX_PIXELS = 40_000_000;
+
 export async function sharpResize(
     source: Buffer | string,
     options: WorkerInput['options'],
@@ -24,7 +28,9 @@ export async function sharpResize(
         const width = rotated ? metadata.pageHeight || metadata.height : metadata.width;
         const height = rotated ? metadata.width : metadata.pageHeight || metadata.height;
 
-        if (width > 32000 || height > 32000) return null;
+        if (width > MAX_SIDE || height > MAX_SIDE) return null;
+        if (metadata.format === 'png' && metadata.isProgressive && width * height > INTERLACED_PNG_MAX_PIXELS)
+            return null;
 
         const resized = image.rotate().resize(options.maxSize, options.maxSize, {
             fit: options.fit,

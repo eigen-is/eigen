@@ -42,7 +42,7 @@ export async function getBook(contacts: Contacts): Promise<CardBook> {
         .select({ ctag: schema.book.ctag, syncGen: schema.book.syncGen })
         .from(schema.book)
         .where(eq(schema.book.id, 1))
-        .get()!;
+        .all()[0];
 }
 
 // DAV serves the whole book, so group cards are included even though the app's list hides them.

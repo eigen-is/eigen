@@ -20,11 +20,13 @@ const INSERT: DocumentImportOptions = { mode: 'insert', afterFrameId: 'fr 1' };
 
 async function importFrom(
     source: 'device' | 'drive',
-    result: ImportResult | { summary: unknown },
+    result: ImportResult | { summary: unknown } | { message: string },
+    status = 200,
 ): Promise<{ toasts: string[]; invalidated: readonly unknown[][] }> {
     const { act } = await import('react');
     const { useImportDocument, useImportFromDrive } = await import('../../../../core/drive/hooks/use-import-document');
     served.importResponse = result;
+    served.status = status;
     const { queryClient, invalidated } = trackingClient();
     const { latest, unmount } = await renderHook(
         () => ({ device: useImportDocument(OWNER, 'm1'), drive: useImportFromDrive(OWNER, 'm1') }),
@@ -70,6 +72,14 @@ describe('Import… of a pptx', () => {
             'error: Unexpected response from the import',
         ]);
     });
+});
+
+// A document the user may only view answers 403 with a JSON body, which the toast reads, never shows raw.
+test.each(['device', 'drive'] as const)("a refused import from the %s toasts the server's message", async (source) => {
+    toasts.length = 0;
+    expect((await importFrom(source, { message: 'You can only view this document' }, 403)).toasts).toEqual([
+        'error: You can only view this document',
+    ]);
 });
 
 describe('the import mode', () => {

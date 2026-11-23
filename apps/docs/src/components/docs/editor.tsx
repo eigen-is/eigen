@@ -731,7 +731,7 @@ const TiptapEditor = ({
             lifecycle={lifecycle}
             item={item.comment}
             canWrite={canWrite}
-            onDelete={removeCommentMarks}
+            onDelete={lifecycle.requestDelete}
             part="delete"
         />
     );

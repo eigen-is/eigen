@@ -327,13 +327,13 @@ describe('owner-only settings', () => {
 
         test('reads an issued certificate in data/certs', async () => {
             const status = await statusWith('edge,mail', 'issued-2036.crt');
-            expect(status.certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect(String(status.certExpiresAt)).toBe('2036-12-31T23:59:59.000Z');
             expect(status.certSelfSigned).toBe(false);
         });
 
         test("marks the mail server's self-signed stand-in", async () => {
             const status = await statusWith('edge,mail', 'expires-2036.crt');
-            expect(status.certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect(String(status.certExpiresAt)).toBe('2036-12-31T23:59:59.000Z');
             expect(status.certSelfSigned).toBe(true);
         });
 

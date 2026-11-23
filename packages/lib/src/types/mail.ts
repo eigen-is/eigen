@@ -16,8 +16,7 @@ export type AddressObject = {
     text: string;
 };
 
-// A text/calendar attachment summarized at message-read time by the API's canonical ical.js
-// parser (summarizeCalendarInvite). Dates are real Dates on the FE via Eden's reviver.
+// A text/calendar attachment, summarized by the API when the message is read.
 export type CalendarInvite = {
     method: ImipMethod;
     uid: string;

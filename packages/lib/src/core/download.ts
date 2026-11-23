@@ -4,7 +4,7 @@
 import { useCallback, useState } from 'react';
 import type { DrivePath } from '../types/drive';
 import { getDriveDownloadUrl } from './api';
-import { AppError, onMutationError } from './api-error';
+import { appErrorFrom, onMutationError } from './api-error';
 
 export function downloadBlob(blob: Blob, filename: string): void {
     const objectUrl = URL.createObjectURL(blob);
@@ -31,10 +31,7 @@ export function useFileDownload(): {
         setIsDownloading(true);
         try {
             const response = await fetch(url, { ...init, credentials: 'include' });
-            if (!response.ok) {
-                const value = await response.text();
-                throw new AppError({ status: response.status, error: { status: response.status, value } });
-            }
+            if (!response.ok) throw await appErrorFrom(response);
             const blob = await response.blob();
             downloadBlob(blob, filenameFromDisposition(response.headers.get('Content-Disposition'), fallbackName));
             return response.headers;

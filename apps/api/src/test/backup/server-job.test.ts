@@ -287,7 +287,7 @@ describe('Server backup job', () => {
                 expect(status.warned?.name).toBe(basename(archivePath));
                 expect(status.warned?.error).toBe('Warned');
                 // A warned Full is no good one: the newest good Full stays where it was.
-                expect(status.newestGoodAt).toBe(goodBefore);
+                expect(status.newestGoodAt).toEqual(goodBefore);
             } finally {
                 await deleteUserCompletely(damaged.id, null);
             }

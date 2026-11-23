@@ -32,7 +32,7 @@ describe('the copies of users3.db a setup keeps', () => {
         const [first, second, third] = [1, 2, 3].map((hour) => new Date(Date.UTC(2026, 9, 28, hour)));
         const names = [second, third, first].map((at) => buildSetupCopyName(at));
         expect(listIn([...names, 'users3.db'])).toEqual(
-            [third, second, first].map((at) => ({ name: buildSetupCopyName(at), createdAt: at.toISOString() })),
+            [third, second, first].map((at) => ({ name: buildSetupCopyName(at), createdAt: at })),
         );
     });
 
@@ -40,8 +40,6 @@ describe('the copies of users3.db a setup keeps', () => {
         const at = new Date('2026-10-28T10:00:00Z');
         const odd = 'users3.backup-99999999999999999.db';
         expect(parseSetupCopyName(odd)).toBeNull();
-        expect(listIn([odd, buildSetupCopyName(at)])).toEqual([
-            { name: buildSetupCopyName(at), createdAt: at.toISOString() },
-        ]);
+        expect(listIn([odd, buildSetupCopyName(at)])).toEqual([{ name: buildSetupCopyName(at), createdAt: at }]);
     });
 });

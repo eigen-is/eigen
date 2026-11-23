@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/api';
 import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive-convert';
 import { toast } from 'sonner';
-import { onMutationError } from '../../api-error';
+import { appErrorFrom, onMutationError } from '../../api-error';
 import { invalidateVersions } from '../../versioning/hooks/keys';
 import { invalidatePath } from './keys';
 
@@ -14,7 +14,7 @@ import { invalidatePath } from './keys';
 // with no slides it says that nothing came over. The open document shows neither. A plain fetch has no Eden type, so
 // the shape is checked here.
 async function importResultOf(response: Response): Promise<ImportResult> {
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw await appErrorFrom(response);
     const body: unknown = await response.json();
     const summary = typeof body === 'object' && body !== null && 'summary' in body ? body.summary : undefined;
     if (summary !== null && typeof summary !== 'string') throw new Error('Unexpected response from the import');

@@ -275,7 +275,7 @@ function resetAuthDatabase(): void {
 
     // Rows here are normally what a failed attempt left, but setupCompleted lives in another file: if that file was
     // lost while users3.db survived, they are real accounts, so the wipe keeps a copy first.
-    const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
+    const [{ n: existingUsers }] = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').all();
     if (existingUsers > 0) {
         const backupPath = getServerDataPath(buildSetupCopyName(new Date()));
         // Its password hashes and sessions are for the API's user alone, as in users3.db.

@@ -3,8 +3,7 @@
 // from the message can select a module or path. Format-specific modules load via dynamic import, so a doc preview never
 // evaluates the sheet engine and a deck export never loads lowlight.
 
-// The leaf module, not the vector barrel, so a doc export's child loads no canvas code.
-import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
+import { isSafeFileName } from '@workspace/lib/validation';
 import type * as Y from 'yjs';
 import { sanitizeMedia } from '../media';
 import { peakRss } from './peak-rss';
@@ -89,7 +88,7 @@ const MAX_MEDIA_NAMES = 10_000;
 // path, a control character) is document data a peer wrote, and never leaves.
 function mediaLoader(jobId: number): ExportMediaLoader {
     return async (names) => {
-        const mediaNames = [...names].filter(isSafeMediaName).slice(0, MAX_MEDIA_NAMES);
+        const mediaNames = [...names].filter(isSafeFileName).slice(0, MAX_MEDIA_NAMES);
         if (mediaNames.length === 0) return [];
         const media = await new Promise<ExportMedia[]>((resolve) => {
             onMediaReply = resolve;

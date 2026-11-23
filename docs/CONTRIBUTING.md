@@ -106,7 +106,7 @@ How `check` works, and how to run one test file: [TESTING.md](TESTING.md).
 
 ### When something is strange
 
-- **A commit of part of a file.** Each commit runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up) and stages them again, whole, so a part staged with `git add -p` is lost. To commit part of a file, first make the file on disk match what you want to commit.
+- **A commit of part of a file.** Each commit runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up) and stages its fixes. A file staged in part with `git add -p` is skipped, unchecked and unfixed, so run `bun run lint` before such a commit.
 - **An error about a duplicate class after a dependency change.** `bun install` sometimes keeps old links and bundles two copies of one package. Run `rm -rf node_modules apps/*/node_modules packages/*/node_modules && bun install`.
 - **A new import from `packages/lib` or `packages/ui` answers 500.** Vite reads the packages' import paths only at start: stop the dev servers, run `rm -rf node_modules/.vite`, and start them again.
 - **A new Tailwind value such as `h-[3px]` doesn't apply.** Restart the dev server before you look for a bug in the component.

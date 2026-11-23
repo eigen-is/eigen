@@ -27,7 +27,7 @@ describe('video-thumbnail', () => {
 
     test('extractVideoFrame returns dims + duration + JPEG buffer from 2s fixture', async () => {
         if (!ffmpegAvailable) return;
-        const result = await extractVideoFrame(TINY, TMP_DIR, 'tiny-pathid');
+        const result = await extractVideoFrame(TINY, TMP_DIR, 'tiny-pathid', Date.now() + 20_000);
         expect(result).not.toBeNull();
         expect(result!.width).toBe(160);
         expect(result!.height).toBe(120);
@@ -39,7 +39,7 @@ describe('video-thumbnail', () => {
 
     test('extractVideoFrame falls back to -ss 0 for sub-second video', async () => {
         if (!ffmpegAvailable) return;
-        const result = await extractVideoFrame(VERY_SHORT, TMP_DIR, 'short-pathid');
+        const result = await extractVideoFrame(VERY_SHORT, TMP_DIR, 'short-pathid', Date.now() + 20_000);
         expect(result).not.toBeNull();
         expect(result!.width).toBe(160);
         expect(result!.height).toBe(120);
@@ -51,13 +51,33 @@ describe('video-thumbnail', () => {
         if (!ffmpegAvailable) return;
         const garbage = path.join(TMP_DIR, 'garbage.bin');
         fs.writeFileSync(garbage, Buffer.from('not a video at all'));
-        const result = await extractVideoFrame(garbage, TMP_DIR, 'garbage-pathid');
+        const result = await extractVideoFrame(garbage, TMP_DIR, 'garbage-pathid', Date.now() + 20_000);
         expect(result).toBeNull();
     });
 
     test('extractVideoFrame returns null for missing file', async () => {
         if (!ffmpegAvailable) return;
-        const result = await extractVideoFrame('/does/not/exist.mp4', TMP_DIR, 'missing-pathid');
+        const result = await extractVideoFrame('/does/not/exist.mp4', TMP_DIR, 'missing-pathid', Date.now() + 20_000);
         expect(result).toBeNull();
+    });
+
+    // terminate() stops the thumbnail Worker and the timers that kill ffprobe and ffmpeg, not the processes, so their
+    // calls must end by a deadline of their own before the Worker's.
+    test('a hung ffprobe is killed at the deadline', async () => {
+        if (!ffmpegAvailable) return;
+        // Opening a FIFO nobody writes to blocks ffprobe until it is killed.
+        const fifo = path.join(TMP_DIR, 'hung.mp4');
+        Bun.spawnSync(['mkfifo', fifo]);
+        const started = Date.now();
+        const result = await extractVideoFrame(fifo, TMP_DIR, 'hung-pathid', started + 1000);
+
+        expect(result).toBeNull();
+        expect(Date.now() - started).toBeLessThan(3000);
+        expect(Bun.spawnSync(['pgrep', '-f', fifo]).stdout.toString()).toBe('');
+    }, 10_000);
+
+    test('a deadline already passed gets no frame, even from a good video', async () => {
+        if (!ffmpegAvailable) return;
+        expect(await extractVideoFrame(TINY, TMP_DIR, 'late-pathid', Date.now() - 1)).toBeNull();
     });
 });

@@ -52,7 +52,7 @@ export type DriveActionRunner = {
     // Does nothing for a row the items don't offer. Download as… names its format.
     run: (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => void;
     // A drag onto a folder row, absent where the view can't move.
-    onMove?: (path: DrivePath, targetItemId: string) => void;
+    onMove?: (paths: readonly DrivePath[], targetItemId: string) => void;
     onCreateFolder?: () => void;
     onCreateEigenDoc: Partial<Record<EigenDocType, () => void>>;
     onUploadFile?: () => void;
@@ -190,7 +190,7 @@ export function useDriveActionRunner({
         actionsFor,
         run,
         onMove: capabilities.canMove
-            ? (path, targetItemId) => movePathsMutation.mutate({ paths: [path], targetParentId: targetItemId })
+            ? (paths, targetItemId) => movePathsMutation.mutate({ paths, targetParentId: targetItemId })
             : undefined,
         onCreateFolder: capabilities.canCreateFolder ? () => createDialog.openDialog('folder') : undefined,
         onCreateEigenDoc,
