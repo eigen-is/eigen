@@ -1,8 +1,8 @@
 // The Drive HTTP routes that read or rewrite what is inside a file, such as its previews and thumbnail,
 // an export to another format, a conversion into an Eigen document and an import into an open document.
-// Each resolves the file through getSharedDrive, which checks the access, and the previews and the thumbnail
-// through getLinkDrive for a visitor without a login. The long jobs among them switch off the server's idle
-// timeout, because they send nothing while they wait and run.
+// Each resolves the file through getSharedDrive, which checks the access, and the previews, the thumbnail and
+// an embedded file through getLinkDrive for a visitor without a login. The long jobs among them switch off the
+// server's idle timeout, because they send nothing while they wait and run.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DocumentImportOptions, DriveImportSource, ImportResult } from '@workspace/lib/types/drive-convert';
