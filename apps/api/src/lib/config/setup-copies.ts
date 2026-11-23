@@ -5,7 +5,7 @@
 import * as fs from 'node:fs';
 import { getServerDataPath } from './paths';
 
-export type SetupCopy = { name: string; createdAt: string };
+export type SetupCopy = { name: string; createdAt: Date };
 
 const SETUP_COPY_NAME = /^users3\.backup-(\d+)\.db$/;
 
@@ -13,8 +13,8 @@ export function buildSetupCopyName(at: Date): string {
     return `users3.backup-${at.getTime()}.db`;
 }
 
-// The time in a copy's name, or null for any other name. A time past what a Date holds is null too: toISOString()
-// would throw on it, and one odd file would fail the whole status.
+// The time in a copy's name, or null for any other name. A time past what a Date holds is null too: it would list
+// a copy with no time at all.
 export function parseSetupCopyName(name: string): Date | null {
     const ms = SETUP_COPY_NAME.exec(name)?.[1];
     const at = new Date(Number(ms));
@@ -30,5 +30,5 @@ export function listSetupCopies(): SetupCopy[] {
             return at ? [{ name, at }] : [];
         })
         .sort((a, b) => b.at.getTime() - a.at.getTime())
-        .map(({ name, at }) => ({ name, createdAt: at.toISOString() }));
+        .map(({ name, at }) => ({ name, createdAt: at }));
 }

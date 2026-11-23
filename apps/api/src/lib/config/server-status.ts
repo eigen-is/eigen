@@ -16,14 +16,14 @@ import { listSetupCopies } from './setup-copies';
 export type ControlStatus = {
     version: string;
     commit: string | null;
-    builtAt: string | null;
+    builtAt: Date | null;
     setupRequired: boolean;
     mailEnabled: boolean;
     relayHost: string | null;
     domain: string;
     diskFree: number;
     diskTotal: number;
-    certExpiresAt: string | null;
+    certExpiresAt: Date | null;
     certSelfSigned: boolean;
     bundledCaddy: boolean;
     backup: ServerBackupStatus;
@@ -34,11 +34,11 @@ export async function getServerStatus(): Promise<ControlStatus> {
     const config = getPublicConfig();
     const disk = fs.statfsSync(getDataRoot());
     // Caddy's export-certs.sh copies its Let's Encrypt certificate here; without one, Dovecot writes a self-signed stand-in.
-    let certExpiresAt: string | null = null;
+    let certExpiresAt: Date | null = null;
     let certSelfSigned = false;
     try {
         const cert = new X509Certificate(fs.readFileSync(path.join(getDataRoot(), CERTS_DIR, CERT_FILES.cert)));
-        certExpiresAt = new Date(cert.validTo).toISOString();
+        certExpiresAt = new Date(cert.validTo);
         certSelfSigned = cert.issuer === cert.subject;
     } catch {
         // No certificate, or a file that is not one: the report says none rather than failing whole.
@@ -46,7 +46,7 @@ export async function getServerStatus(): Promise<ControlStatus> {
     return {
         version: config.version,
         commit: config.commit ?? null,
-        builtAt: config.builtAt?.toISOString() ?? null,
+        builtAt: config.builtAt ?? null,
         setupRequired: isSetupRequired(),
         mailEnabled: isMailEnabled(),
         relayHost: isMailEnabled() ? null : (getRelayHost() ?? null),

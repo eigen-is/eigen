@@ -596,7 +596,11 @@ describe('Upload of server archives', () => {
                 expect(await notUploaded()).toBeNull();
 
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                expect(await notUploaded()).toEqual({ name, createdAt: '2026-09-01T02:00:00.000Z', error: null });
+                expect(await notUploaded()).toEqual({
+                    name,
+                    createdAt: new Date('2026-09-01T02:00:00.000Z'),
+                    error: null,
+                });
 
                 const gate = Promise.withResolvers<void>();
                 const real = upload.uploadServerArchive;
