@@ -4,8 +4,9 @@
 // at an end and is the one whose video plays. An autoplay carousel steps on by itself until the reader moves it. A
 // click on a slide or its corner button, or Enter on the strip, opens the slide in the page's lightbox.
 
+import { useDragScroll } from '@workspace/ui/hooks/use-drag-scroll';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { MediaCarouselData } from '../../scripts/lib/content-types';
 import type { OpenLightbox } from './media-lightbox';
@@ -13,16 +14,18 @@ import { ExpandButton } from './media-lightbox';
 import { LoopingVideo, loopingVideoItem } from './media-video';
 
 const AUTOPLAY_MS = 7000;
-// How far the mouse moves before a press on the strip is a drag rather than a click, and how long the strip then
-// glides to its slide.
-const DRAG_THRESHOLD_PX = 5;
-const GLIDE_MS = 400;
 
 export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarouselData & { onOpen: OpenLightbox }) {
     const carousel = useRef<HTMLElement>(null);
     const strip = useRef<HTMLDivElement>(null);
     const [current, setCurrent] = useState(0);
-    const drag = useCarouselDrag();
+    // A mouse drag lets go onto the next slide in its direction.
+    const drag = useDragScroll((scroller, towardEnd) => {
+        const { pitch } = stripPosition(scroller);
+        const offset = scroller.scrollLeft / pitch;
+        const slide = towardEnd ? Math.ceil(offset) : Math.floor(offset);
+        return Math.min(scroller.children.length - 1, Math.max(0, slide)) * pitch;
+    });
 
     // It waits while the reader points at it or is inside it. It remembers the slide it scrolled to, so a strip on
     // any other slide is the reader's doing, and it stops for good.
@@ -82,7 +85,7 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
                                     onClick={() => open(i)}
                                 />
                             ) : (
-                                <img src={src} alt={caption.text} draggable={false} onClick={() => open(i)} />
+                                <img src={src} alt={caption.text} onClick={() => open(i)} />
                             )}
                             <ExpandButton onClick={() => open(i)} />
                         </div>
@@ -128,64 +131,6 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
             {caption && <figcaption dangerouslySetInnerHTML={{ __html: caption.html }} />}
         </figure>
     );
-}
-
-// A mouse drags the strip as a finger swipes it. Snapping is off while the strip follows the pointer, and on release
-// it glides to the next slide in the drag's direction. Touch and pen scroll the strip natively.
-function useCarouselDrag() {
-    const press = useRef<{ x: number; left: number; moved: boolean } | null>(null);
-    const frame = useRef(0);
-    const [dragging, setDragging] = useState(false);
-
-    const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-        if (e.pointerType !== 'mouse' || e.button !== 0) return;
-        cancelAnimationFrame(frame.current);
-        press.current = { x: e.clientX, left: e.currentTarget.scrollLeft, moved: false };
-    };
-    const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-        const at = press.current;
-        if (!at) return;
-        const dx = e.clientX - at.x;
-        if (!at.moved) {
-            if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
-            at.moved = true;
-            e.currentTarget.setPointerCapture(e.pointerId);
-            setDragging(true);
-        }
-        e.currentTarget.scrollLeft = at.left - dx;
-    };
-    const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
-        const at = press.current;
-        if (!at?.moved) {
-            press.current = null;
-            return;
-        }
-        const scroller = e.currentTarget;
-        const { pitch } = stripPosition(scroller);
-        const offset = scroller.scrollLeft / pitch;
-        const slide = e.clientX < at.x ? Math.ceil(offset) : Math.floor(offset);
-        const from = scroller.scrollLeft;
-        const to = Math.min(scroller.children.length - 1, Math.max(0, slide)) * pitch;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const start = performance.now();
-        const step = (now: number) => {
-            const t = reduceMotion ? 1 : Math.min(1, (now - start) / GLIDE_MS);
-            scroller.scrollLeft = from + (to - from) * (1 - (1 - t) ** 3);
-            if (t < 1) frame.current = requestAnimationFrame(step);
-            else setDragging(false);
-        };
-        frame.current = requestAnimationFrame(step);
-    };
-    // The click that ends a drag is no click on a slide.
-    const onClickCapture = (e: MouseEvent) => {
-        if (!press.current?.moved) return;
-        press.current = null;
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const handlers = { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onClickCapture };
-    return { dragging, handlers };
 }
 
 // The slides of a strip lie one pitch apart, so its scroll offset over the pitch is the slide in view.

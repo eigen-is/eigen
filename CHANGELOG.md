@@ -15,6 +15,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Delete in settings dialogs** — a trash icon at the bottom left deletes a label in Contacts, a calendar in Calendar and a column in Stickies, and removes data validation in Sheets
 - **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
 - **Messages in Sheets** — a refusal, such as a blocked paste, shows in the corner instead of a box you have to close
+- **Rows of attachments** — in Stickies, Chat and Mail, a row of files too long to fit scrolls when you drag it with the mouse, or with an arrow button at each end that hides more
 
 ### Fixed
 
