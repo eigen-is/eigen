@@ -1,6 +1,11 @@
+// The sign-in page every app shows a visitor with no session: a member signs in with username and password, a guest
+// asks for a one-time code by email and types it in. The password form goes through useAuth; the guest form posts to
+// the public guest sign-in routes itself, and a refusal shows the server's own sentence.
+
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
 import { API_HOST, getDemoEnterUrl } from '@workspace/lib/api';
+import { appErrorFrom } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -135,7 +140,7 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                 body: JSON.stringify({ email }),
             });
             if (!res.ok) {
-                setError((await res.text()) || 'Failed to send code');
+                setError((await appErrorFrom(res)).message);
                 return;
             }
             setStep('otp');
@@ -156,9 +161,8 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                 credentials: 'include',
                 body: JSON.stringify({ email, otp }),
             });
-            const data = await res.json();
             if (!res.ok) {
-                setError(data.message ?? 'Verification failed');
+                setError((await appErrorFrom(res)).message);
                 return;
             }
             window.location.reload();
