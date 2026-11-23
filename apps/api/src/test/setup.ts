@@ -316,6 +316,27 @@ export function countLoopTurns(): { read: () => number; stop: () => void } {
     };
 }
 
+// The longest wait between two event-loop turns so far, the one still open included, from a setImmediate chain.
+export function longestLoopGap(): { read: () => number; stop: () => void } {
+    let longest = 0;
+    let lastTurnAt = performance.now();
+    let running = true;
+    const turn = () => {
+        if (!running) return;
+        const now = performance.now();
+        longest = Math.max(longest, now - lastTurnAt);
+        lastTurnAt = now;
+        setImmediate(turn);
+    };
+    setImmediate(turn);
+    return {
+        read: () => Math.max(longest, performance.now() - lastTurnAt),
+        stop: () => {
+            running = false;
+        },
+    };
+}
+
 export function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
     return `/drive/${ownerId}/${mountId}/${parts.join('/')}`;
 }

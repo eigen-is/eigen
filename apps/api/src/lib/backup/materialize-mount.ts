@@ -28,8 +28,9 @@ type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> 
 // A check that could not run, such as one that met a lock, is another error.
 export class UnopenableDatabaseError extends ApiError {}
 
-// How many databases a check opens before it gives the event loop back, here and in verifyFolder.
-export const DATABASES_PER_YIELD = 50;
+// How long the database checks, here and in verifyFolder, hold the event loop before they give it back: half the
+// 100 ms of loop delay the document transforms are held to.
+export const CHECK_TURN_MS = 50;
 // How many files materializeMount puts in place in one transaction before it gives the event loop back.
 const FILES_PER_BATCH = 500;
 
@@ -134,8 +135,9 @@ export function homeDatabasesIn(homeDir: string, mountIds: readonly string[]): V
 // SQLite's verdict plus the schema stamp: a newer server's database passes quick_check but fails ManagedDatabase.
 // It opens the files directly, since a safety copy is no home and a rollback runs outside the API.
 export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
-    for (const [index, { filePath, config }] of targets.entries()) {
-        if (index > 0 && index % DATABASES_PER_YIELD === 0) await eventLoopTurn();
+    const pause = checkTurns();
+    for (const { filePath, config } of targets) {
+        await pause();
         if (!fs.existsSync(filePath)) continue;
         // One open for both reads, so a writer is waited out once.
         const verdict = readToJudge(filePath, (db) => {
@@ -147,6 +149,16 @@ export async function checkDatabases(targets: readonly VersionedDatabase[]): Pro
             throw new UnopenableDatabaseError(500, `${filePath} did not survive the restore: ${verdict}`);
         }
     }
+}
+
+// Awaited before each check, it gives the event loop a turn once CHECK_TURN_MS have passed since the last one.
+export function checkTurns(): () => Promise<void> {
+    let turnAt = performance.now();
+    return async () => {
+        if (performance.now() - turnAt < CHECK_TURN_MS) return;
+        await eventLoopTurn();
+        turnAt = performance.now();
+    };
 }
 
 // Why a database is newer than this build can open, or null. Verify and the checks above ask here.

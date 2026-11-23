@@ -36,6 +36,7 @@ import {
 } from '../../lib/backup/archive';
 import { listArtifacts, writeSidecar } from '../../lib/backup/artifacts';
 import { runArtifactVerify } from '../../lib/backup/jobs';
+import { CHECK_TURN_MS } from '../../lib/backup/materialize-mount';
 import {
     ARCHIVE_MANIFEST_FILE,
     buildHomeFolderName,
@@ -53,8 +54,10 @@ import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-se
 import { DIRECTORY_TYPEFLAG, FILE_TYPEFLAG, headerChunks } from '../../lib/backup/tar';
 import { verifyFolder } from '../../lib/backup/verify';
 import { readServerArchive } from '../../lib/backup/verify-server-archive';
+import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { ManagedDatabase } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
@@ -65,6 +68,7 @@ import {
     drivePost,
     driveUpload,
     getTestContext,
+    longestLoopGap,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
@@ -1109,11 +1113,11 @@ describe('The unpack', () => {
     );
 });
 
-// A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
-// so other requests run between every few databases.
+// A home can hold tens of thousands of databases, and each quick_check and Yjs decode blocks the thread. A restore and
+// every backup verify in the API, so other requests run between them.
 describe('verifyFolder', () => {
-    test('lets other work run while it checks the databases', async () => {
-        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
+    function verifyFixture(prefix: string): string {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, prefix));
         const manifest: BackupManifest = {
             formatVersion: 1,
             kind: 'user',
@@ -1128,7 +1132,12 @@ describe('verifyFolder', () => {
             entries: [],
         };
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
-        for (let index = 0; index < 120; index++) {
+        return folder;
+    }
+
+    test('gives the event loop a turn once the database checks have held it for the budget', async () => {
+        const folder = verifyFixture('verify-yield-');
+        for (let index = 0; index < 5; index++) {
             mkdirSync(join(folder, 'home', 'mounts', `m${index}`), { recursive: true });
             new Database(join(folder, 'home', 'mounts', `m${index}`, 'metadata.db')).close();
         }
@@ -1136,13 +1145,85 @@ describe('verifyFolder', () => {
         const turnsAt: number[] = [];
         try {
             await verifyFolder(folder, (step) => {
-                if (step === 'verify databases') turnsAt.push(turns.read());
+                if (step !== 'verify databases') return;
+                turnsAt.push(turns.read());
+                // Each check stands in for one that takes the whole budget, however fast the machine is.
+                Bun.sleepSync(CHECK_TURN_MS);
             });
         } finally {
             turns.stop();
             rmSync(folder, { recursive: true, force: true });
         }
-        expect(turnsAt).toHaveLength(120);
-        expect(turnsAt.at(-1)).toBeGreaterThan(turnsAt[0]);
+        expect(turnsAt).toHaveLength(5);
+        for (let index = 1; index < turnsAt.length; index++) expect(turnsAt[index]).toBeGreaterThan(turnsAt[index - 1]);
     });
+
+    test(
+        'gives the event loop a turn after every document it decodes',
+        async () => {
+            const documents = 10;
+            const folder = verifyFixture('verify-documents-');
+            const mountDir = join(folder, 'home', 'mounts', 'm');
+            mkdirSync(mountDir, { recursive: true });
+            const metadata = new Database(join(mountDir, 'metadata.db'));
+            metadata.run(
+                'CREATE TABLE paths (id TEXT PRIMARY KEY, file TEXT NOT NULL, name TEXT NOT NULL, type TEXT NOT NULL, parentId TEXT, trashedFrom TEXT, size INTEGER, hash TEXT)',
+            );
+            const addRow = metadata.prepare(
+                'INSERT INTO paths (id, file, name, type, parentId) VALUES (?, ?, ?, ?, ?)',
+            );
+            addRow.run('root', '', '', 'folder', null);
+            for (let index = 0; index < documents; index++) {
+                addRow.run(`doc${index}`, '', `doc${index}`, 'doc', 'root');
+                addRow.run(`data${index}`, '', 'data.db', 'file', `doc${index}`);
+            }
+            metadata.close();
+
+            // Six thousand one-character edits, each its own update row, so every decode applies them one by one.
+            const source = join(folder, 'source.db');
+            const managed = new ManagedDatabase(COLLAB_DB_CONFIG, source);
+            await managed.open(0);
+            await managed.close({ skipFinalSnapshot: true });
+            const doc = new Y.Doc();
+            const updates: Uint8Array[] = [];
+            doc.on('update', (update: Uint8Array) => updates.push(update));
+            const text = doc.getText('body');
+            for (let index = 0; index < 6_000; index++) text.insert((index * 7919) % (text.length + 1), 'a');
+            const raw = new Database(source);
+            const addUpdate = raw.prepare('INSERT INTO doc_updates (updateData) VALUES (?)');
+            raw.transaction(() => {
+                for (const update of updates) addUpdate.run(update);
+            })();
+            // One file to copy, with no -wal beside it.
+            raw.run('PRAGMA journal_mode = DELETE');
+            raw.close();
+            for (let index = 0; index < documents; index++) {
+                mkdirSync(join(mountDir, 'data', `doc${index}`), { recursive: true });
+                fs.copyFileSync(source, join(mountDir, 'data', `doc${index}`, 'data.db'));
+            }
+            rmSync(source);
+
+            const turns = countLoopTurns();
+            const gap = longestLoopGap();
+            const turnsAt: number[] = [];
+            const startedAt = performance.now();
+            try {
+                await verifyFolder(folder, (step) => {
+                    if (step === 'verify documents') turnsAt.push(turns.read());
+                });
+            } finally {
+                turns.stop();
+                gap.stop();
+                rmSync(folder, { recursive: true, force: true });
+            }
+            const elapsed = performance.now() - startedAt;
+            expect(turnsAt).toHaveLength(documents);
+            for (let index = 1; index < turnsAt.length; index++) {
+                expect(turnsAt[index]).toBeGreaterThan(turnsAt[index - 1]);
+            }
+            // Relative, so a loaded machine fails nothing: no pause holds a large part of the whole run.
+            expect(Math.round(gap.read())).toBeLessThan(Math.round(elapsed / 2));
+        },
+        PACK_TIMEOUT_MS,
+    );
 });
