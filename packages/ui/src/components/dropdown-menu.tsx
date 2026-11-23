@@ -23,6 +23,7 @@ import {
     useRef,
     useState,
 } from 'react';
+import { isKeyboardContextMenu } from './context-menu/use-context-menu';
 
 // After a drill-in transition, which row takes focus: the opened page's back row
 // ('back', on push) or the sub-trigger a pop returned to ('trigger', on pop).
@@ -204,6 +205,7 @@ function DropdownMenuContent({
     children,
     onInteractOutside,
     onCloseAutoFocus,
+    onContextMenu,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
     const triggerFocus = useContext(TriggerFocusContext);
@@ -233,6 +235,12 @@ function DropdownMenuContent({
                     // menu left the page, as Drive's does, gives it up.
                     if (handFocusReturnTo(trigger, !byPointer)) return;
                     trigger.focus(byPointer ? { focusVisible: false } : undefined);
+                }}
+                // On Windows the menu key sends its contextmenu as the key comes up, onto the row with the focus, and
+                // the browser's own menu would open over this one. A right-click in the menu still opens the browser's.
+                onContextMenu={(event) => {
+                    onContextMenu?.(event);
+                    if (isKeyboardContextMenu(event.nativeEvent)) event.preventDefault();
                 }}
                 className={cn(
                     'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',

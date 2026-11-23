@@ -5,7 +5,6 @@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { isKeyboardContextMenu } from './use-context-menu';
 
 type ContextMenuAnchorProps = {
     contextMenu: {
@@ -52,13 +51,7 @@ export function ContextMenuAnchor({ contextMenu, children, className, onCloseAut
                 onKeyDown={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
-                onContextMenu={(e) => {
-                    e.stopPropagation();
-                    // On Windows the menu key sends its contextmenu as the key comes up, when the menu the key opened
-                    // holds the focus. Without this the browser's own menu would open over ours. A right-click in the
-                    // menu still opens the browser's.
-                    if (isKeyboardContextMenu(e.nativeEvent)) e.preventDefault();
-                }}
+                onContextMenu={(e) => e.stopPropagation()}
                 onCloseAutoFocus={(e) => {
                     if (onCloseAutoFocus) {
                         onCloseAutoFocus(e);
