@@ -1496,6 +1496,36 @@ test.each([
     expect(cardDialogText()).toContain('Check this');
 });
 
+// The image's menu asks before it deletes a comment, as a card's own menu does.
+test("Delete comment on an image's menu asks first: Cancel keeps the comment, Delete takes it off", async () => {
+    writeFigure();
+    const paragraph = doc.getXmlFragment('default').get(0);
+    const figure = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
+    if (!(figure instanceof Y.XmlElement)) throw new Error('no figure');
+    figure.setAttribute('commentCardId', 'c1');
+    writeCard();
+    await render(WRITER);
+    const deleteComment = async () => {
+        await act(async () =>
+            bodyView()
+                ?.querySelector('.figure')
+                ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })),
+        );
+        await pick('Delete comment');
+    };
+
+    await deleteComment();
+    expect(cardDialogText()).toContain('This deletes the comment and its replies');
+    expect(figure.getAttribute('commentCardId')).toBe('c1');
+    await act(async () => button('Cancel')?.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(figure.getAttribute('commentCardId')).toBe('c1');
+
+    await deleteComment();
+    await act(async () => button('Delete')?.click());
+    await waitUntil(() => !figure.getAttribute('commentCardId'), 'the comment to go');
+});
+
 // An equation in a paragraph of its own, at the start of the body.
 function writeEquation() {
     const paragraph = new Y.XmlElement('paragraph');
