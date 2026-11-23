@@ -24,7 +24,7 @@ export function avatarFileName(ownerId: string): string {
 }
 
 // The picture lands by a rename, so the avatar route and a backup read it whole.
-async function writeAvatar(ownerId: string, avatarWebP: Buffer | null): Promise<void> {
+export async function writeAvatar(ownerId: string, avatarWebP: Buffer | null): Promise<void> {
     const avatars = new LocalFilesystem(getAvatarsDir());
     if (avatarWebP) await avatars.writeAtomic(avatarFileName(ownerId), avatarWebP);
     else await avatars.delete(avatarFileName(ownerId));
