@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { reviveTimestamp } from '@workspace/lib/revive-timestamp';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
@@ -51,7 +52,7 @@ function post(path: string, body: unknown): Promise<Response> {
 async function getStatus(): Promise<ControlStatus> {
     const res = await controlRouter.handle(new Request('http://eigen/status'));
     expect(res.status).toBe(200);
-    return res.json();
+    return JSON.parse(await res.text(), reviveTimestamp);
 }
 
 // Online commands, run while beforeAll's control socket is up.
@@ -137,7 +138,7 @@ describe('GET /status', () => {
         mkdirSync(certs, { recursive: true });
         copyFileSync(FIXTURE_CERT, join(certs, 'cert.pem'));
         try {
-            expect((await getStatus()).certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect((await getStatus()).certExpiresAt).toEqual(new Date('2036-12-31T23:59:59.000Z'));
         } finally {
             rmSync(certs, { recursive: true });
         }
@@ -704,13 +705,14 @@ describe('the server backup on the control socket', () => {
                 error: 'no room',
             });
             const name = failed.slice(failed.lastIndexOf('/') + 1);
+            const failedAt = new Date('2026-09-02T02:00:00.000Z');
             expect((await getStatus()).backup).toEqual({
                 scheduleEnabled: false,
-                newest: { name, createdAt: '2026-09-02T02:00:00.000Z', state: 'failed', bytes: null, error: 'no room' },
-                scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
+                newest: { name, createdAt: failedAt, state: 'failed', bytes: null, error: 'no room' },
+                scheduledFailure: { name, createdAt: failedAt, error: 'no room' },
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodAt: '2026-09-01T02:00:00.000Z',
+                newestGoodAt: new Date('2026-09-01T02:00:00.000Z'),
                 running: [],
             });
         });
@@ -721,7 +723,7 @@ describe('the server backup on the control socket', () => {
             const archivePath = writeRecord('scheduled', at, { state: 'done', manifest });
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
-            expect(backup.warned).toEqual({ name, createdAt: at, error: 'alice' });
+            expect(backup.warned).toEqual({ name, createdAt: new Date(at), error: 'alice' });
             expect(backup.newestGoodAt).toBeNull();
         });
 
@@ -733,7 +735,7 @@ describe('the server backup on the control socket', () => {
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.scheduledFailure).toBeNull();
-            expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: at, error: 'bucket refused' });
+            expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: new Date(at), error: 'bucket refused' });
 
             writeRecord('scheduled', at, {
                 state: 'done',

@@ -44,12 +44,6 @@ function onEventWriteError(queryClient: QueryClient, ownerId: string) {
         onEtagWriteError(error, STALE_WRITE_TOAST, () => invalidateEventList(queryClient, ownerId));
 }
 
-// Eden's reviver makes a UTC-midnight Date of a bare YYYY-MM-DD, for a year of 19xx or 20xx only, and a range read
-// needs its timestamps revived. So what the type promises holds only from here on, whichever of the two arrived.
-function withOccurrenceDay(event: CalendarEventOccurrence): CalendarEventOccurrence {
-    return { ...event, occurrenceDate: occurrenceDateToString(new Date(event.occurrenceDate)) };
-}
-
 export function useCalendars(ownerId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.calendarList(ownerId),
@@ -113,7 +107,7 @@ export function useEvents(ownerId: string, from: number, to: number) {
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
             if (response.error) throw new AppError(response);
-            return response.data.map(withOccurrenceDay);
+            return response.data;
         },
         staleTime: STALE_TIME.TWO_MINUTES,
         enabled: !!ownerId && from > 0 && to > 0,
@@ -260,7 +254,7 @@ export function useAllSharedCalendarEvents(
                     .get();
                 if (response.error) throw new AppError(response);
                 return response.data.map((item): CalendarEventOccurrence => {
-                    if ('etag' in item) return withOccurrenceDay(item);
+                    if ('etag' in item) return item;
                     return {
                         id: '',
                         calendarId: sc.calendarId,

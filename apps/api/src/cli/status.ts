@@ -7,6 +7,7 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
+import { reviveTimestamp } from '@workspace/lib/revive-timestamp';
 import { PRE_RESTORE_SUFFIX, parseServerArchiveNames } from '@workspace/lib/validation';
 import { getBuildCommit } from '../lib/config/env';
 import type { ControlStatus } from '../lib/config/server-status';
@@ -77,7 +78,7 @@ export async function status(flags: StatusFlags): Promise<void> {
         printReport(flags, services, null);
         ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
     }
-    printReport(flags, services, await res.json());
+    printReport(flags, services, JSON.parse(await res.text(), reviveTimestamp));
 }
 
 // One line, such as "the server backup <archive> and the upload of <archive>", that the launcher puts in its wait.
@@ -87,7 +88,10 @@ async function printRunning(): Promise<void> {
     const res = await callControl('/status', ui.fail, { signal: AbortSignal.timeout(RUNNING_TIMEOUT_MS) });
     if (!res.ok) ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
     // The timeout also covers reading the answer, which an API that stalls mid-answer never finishes.
-    const status: ControlStatus | null = await res.json().catch(() => null);
+    const status: ControlStatus | null = await res
+        .text()
+        .then((text) => JSON.parse(text, reviveTimestamp))
+        .catch(() => null);
     if (!status) return ui.fail('Eigen is not answering.', 'Run ./eigen logs eigen-api to see what it is doing.');
     const running = status.backup.running.map(({ kind, archive }) =>
         kind === 'upload' ? `the upload of ${archive}` : `the server backup ${archive}`,
@@ -162,7 +166,7 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
             ),
         );
         if (api.certExpiresAt) {
-            const days = Math.floor((new Date(api.certExpiresAt).getTime() - Date.now()) / DAY_MS);
+            const days = Math.floor((api.certExpiresAt.getTime() - Date.now()) / DAY_MS);
             const until = formatDate(api.certExpiresAt);
             data.push(
                 days < 0
@@ -270,7 +274,7 @@ function backupRow({
     if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
     if (newest.state === 'running') parts.push('running');
     if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
-    const stale = scheduleEnabled && (!newestGoodAt || Date.now() - new Date(newestGoodAt).getTime() > 2 * DAY_MS);
+    const stale = scheduleEnabled && (!newestGoodAt || Date.now() - newestGoodAt.getTime() > 2 * DAY_MS);
     return {
         level: stale || newest.state === 'failed' ? 'warn' : 'ok',
         label: 'Backup',

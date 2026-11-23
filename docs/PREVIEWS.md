@@ -113,7 +113,7 @@ Search follows the same split. A `.vcf` indexes the names in its cards and an `.
 
 ## The typed payloads share one client path
 
-The client reads all six routes through `plainApi` (`packages/lib/src/core/api.ts`). Eden's default reviver would turn a bare `YYYY-MM-DD` birthday, an ISO `date` or an all-day `start` into a `Date` the type does not admit. `PreviewPane` (`packages/ui/src/components/drive/preview-pane.tsx`) is the box all three draw into, with the too-large, loading and unreadable states they share. A query that is still disabled, because the owner is unknown until auth settles, shows the loader and not an error.
+The client reads all six routes through `driveApi` and `mailApi` like any other. A bare `YYYY-MM-DD` birthday and an event's `start` and `end` stay strings, and only the `.eml`'s `date` arrives as a `Date`. `PreviewPane` (`packages/ui/src/components/drive/preview-pane.tsx`) is the box all three draw into, with the too-large, loading and unreadable states they share. A query that is still disabled, because the owner is unknown until auth settles, shows the loader and not an error.
 
 `dropped` means the same in all three payloads: what the parser could not read. What a payload merely does not list is `total - dropped - listed`, which the surface derives. The counted lines under the cards, "and N more" and "N could not be read", come from `remainingLine` and `unreadableLine` in `packages/lib/src/core/transfer.ts`.
 

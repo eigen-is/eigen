@@ -25,8 +25,7 @@ type MessageViewProps = {
     to?: AddressField;
     cc?: AddressField;
     bcc?: AddressField;
-    // A stored message dates as a Date, a served preview as the ISO string its payload declares.
-    date?: Date | string | null | undefined;
+    date?: Date | null | undefined;
     html?: string | null | undefined;
     // What the parser derived from a text-only body; a preview carries none, so its `text` shows as text.
     textAsHtml?: string | null | undefined;

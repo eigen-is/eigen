@@ -80,7 +80,7 @@ Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-pattern
 - **Eden Treaty**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`, typed from the Elysia routes
 - **Errors are handled in hooks**, never app components: every `useMutation` has an `onError` using `onMutationError` from `api-error.ts`; apps add no `try/catch` + `toast.error()` ([NOTIFICATIONS.md](NOTIFICATIONS.md))
 - **Invalidation**: export `invalidateFoo(queryClient, ...)` beside the query keys; apps call it, never `useQueryClient` + `invalidateQueries()`
-- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), shared types that say `Date`; Eden's reviver restores it. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in API tests and a raw `fetch` + `res.json()` skip the reviver, so revive there. The reviver also turns a bare `YYYY-MM-DD` into a `Date`, so date-only payloads go through `plainApi`; one that also carries timestamps, such as a calendar occurrence, puts its date back in the read hook
+- **Timestamps are `Date` end to end**: an `INTEGER` column of Unix seconds with Drizzle `mode: 'timestamp'`, routes that return `Date` (never `.toISOString()`), shared types that say `Date`. The treaty's `reviveTimestamp` makes a `Date` only of a string in `toJSON`'s exact shape under a key that ends in `At` or `Time` or is `at` or `date`: name every `Date` field so, and a title or a bare `YYYY-MM-DD` stays a string. A path-param time bound stays `t.Numeric()`. `assertJson<T>` in API tests and a raw `fetch` + `res.json()` skip the reviver, so revive there
 
 ## Self-Review Checklist
 

@@ -27,6 +27,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Labels in Contacts** — deleting the label you are looking at takes you back to all contacts
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
+- **Names that read as a date** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
 
 ### Security
 

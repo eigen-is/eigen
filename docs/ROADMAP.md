@@ -20,7 +20,6 @@ The page holds only open work: when work ships, its row or its done part goes in
 
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
-| **A title or message that reads as a date comes back as a `Date`** | `api` in `packages/lib/src/core/api.ts` revives every string that looks like a date, so an event titled `2026-10-09` arrives as a `Date` where its type says `string`. `withOccurrenceDay` and `plainApi` work around it. | S–M | No | Revive only the fields the types say are dates. Needs a short design: the reviver sees no field names. |
 | **The zombie media sweep can remove a peer's upload** | `useZombieMediaSweep` (`packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts`) removes every `pending:` placeholder still present 60 s after the tab opened, so a peer's slow upload loses its placeholder for everyone. | S | No | Owner (8 Nov 2026): waits for F10 of the sheets audit, which stores no `pending:` name, so the sweep goes. |
 | **E2E multi-user collab test suite** ([proposal](proposals/PROPOSAL_E2E_COLLAB_TESTING.md)) | Not started. | M | No | Playwright, several concurrent clients, CI, retries=0. Phase 1: four Docs tests on one shared convergence primitive. |
 

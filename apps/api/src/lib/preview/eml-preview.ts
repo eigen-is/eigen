@@ -9,6 +9,7 @@ import {
     sheetText,
     stripRemoteRefs,
 } from '@workspace/lib/mail/remote-content';
+import { reviveTimestamp } from '@workspace/lib/revive-timestamp';
 import type { ParsedMail } from '@workspace/lib/types/mail';
 import { isListedFile } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
@@ -21,10 +22,10 @@ import { parseMail } from '../mail/mail-parser';
 // copies an inlined `cid:` image once per reference, so the builder is where the payload is bounded.
 export const EML_PREVIEW_MAX_ATTACHMENTS = 50;
 export const EML_PREVIEW_MAX_HTML_BYTES = 2 * 1024 * 1024;
-// A character count, like the parser's own body ceilings (mail-parser/html.ts).
+// A character count, like the parser's own body ceilings.
 export const EML_PREVIEW_MAX_TEXT_CHARS = 1024 * 1024;
 
-export const parseEmlPreview = (body: string): EmlPreview => JSON.parse(body);
+export const parseEmlPreview = (body: string): EmlPreview => JSON.parse(body, reviveTimestamp);
 
 // On top of what renders: what a click or a reader of the source follows.
 const REF_ATTRS = [...FETCHING_ATTRS, 'action', 'formaction', 'ping', 'cite', 'longdesc', 'usemap'];
@@ -58,9 +59,8 @@ function restrictNode(node: Element): void {
     }
 }
 
-// The reader's config (mail-parse.ts) plus an allowlist inside the sanitizer's own DOM: a regex over
-// serialized HTML would void DOMPurify's output guarantee. The hooks are scoped to this synchronous call
-// (add → sanitize → remove) because they are global to the instance.
+// The reader's config plus an allowlist inside the sanitizer's own DOM, since a regex over serialized HTML would void
+// DOMPurify's guarantee. Its hooks are global to the instance, so they live only for this one synchronous call.
 function sanitizeEmlHtml(html: string): string {
     DOMPurify.addHook('afterSanitizeAttributes', restrictNode);
     DOMPurify.addHook('uponSanitizeElement', (node, data) => {
@@ -89,7 +89,7 @@ export function buildEmlPreviewPayload(data: ArrayBuffer): EmlPreview {
         from: parsed.from ?? null,
         to: parsed.to ?? null,
         cc: parsed.cc ?? null,
-        date: parsed.date?.toISOString() ?? null,
+        date: parsed.date ?? null,
         html: parsed.html === null ? null : boundedHtml(parsed.html),
         text: parsed.text?.slice(0, EML_PREVIEW_MAX_TEXT_CHARS) ?? null,
         attachments: files

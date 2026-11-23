@@ -6,11 +6,9 @@
 import { getDriveFileUploadUrl } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { AppError } from '../api-error';
+import { reviveTimestamp } from '../revive-timestamp';
 
 export type UploadOptions = { onProgress?: (percent: number) => void; signal?: AbortSignal };
-
-// XHR has no Eden reviver, so the reply's timestamps come back as strings until this revives each, as Eden does.
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 export function uploadFiles(
     ownerId: string,
@@ -37,9 +35,7 @@ export function uploadFiles(
                 reject(new AppError({ status: xhr.status, error: { status: xhr.status, value } }));
                 return;
             }
-            const paths: DrivePath[] = JSON.parse(xhr.responseText, (_key, value) =>
-                typeof value === 'string' && ISO_TIMESTAMP.test(value) ? new Date(value) : value,
-            );
+            const paths: DrivePath[] = JSON.parse(xhr.responseText, reviveTimestamp);
             resolve(paths);
         };
         xhr.onerror = () => reject(new Error('Upload failed: the server could not be reached'));
