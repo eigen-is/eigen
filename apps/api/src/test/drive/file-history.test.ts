@@ -555,9 +555,9 @@ describe('Drive history recording', () => {
         // Root folder copy records 'copied'
         const res = await authedRequest(aliceToken, `/drive/${aliceOwnerId}/${aliceMountId}/path/${copied.id}/history`);
         const events = (await res.json()) as FileEvent[];
-        expect(events.some((e) => e.eventType === 'copied')).toBe(true);
+        expect(events.find((e) => e.pathId === copied.id && e.eventType === 'copied')?.details).toBeNull();
 
-        // Descendant in the copied folder also records 'copied' with sourcePathId = the source child's id
+        // Descendant in the copied folder also records 'copied', and no event names the source it came from
         const copiedChildren = await driveGet<{ id: string; name: string }[]>(
             aliceToken,
             aliceOwnerId,
@@ -574,7 +574,9 @@ describe('Drive history recording', () => {
         const childEvents = (await childHistoryRes.json()) as FileEvent[];
         const childCopied = childEvents.filter((e) => e.eventType === 'copied');
         expect(childCopied).toHaveLength(1);
-        expect((childCopied[0].details as { sourcePathId: string }).sourcePathId).toBe(sourceChild.id);
+        expect(childCopied[0].details).toBeNull();
+        expect(JSON.stringify([...events, ...childEvents])).not.toContain(sourceChild.id);
+        expect(JSON.stringify([...events, ...childEvents])).not.toContain(folder.id);
     });
 
     test('folder history endpoint includes descendant events', async () => {
