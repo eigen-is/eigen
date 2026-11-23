@@ -126,14 +126,14 @@ export type ServerArchiveSidecar = {
 };
 
 // Read off its name and sidecar, never out of the archive. `bytes` is null for an attempt refused before it wrote one,
-// `record` for a sidecar that is missing or does not read.
+// `record` for a sidecar that is missing or does not read. Of the sidecar's manifest the list carries the homes alone.
 export type ServerArchive = {
     name: string;
     level: BackupLevel;
     reason: BackupReason;
     createdAt: Date;
     bytes: number | null;
-    record: ServerArchiveSidecar | null;
+    record: (Omit<ServerArchiveSidecar, 'manifest'> & { manifest?: Pick<ServerArchiveManifest, 'homes'> }) | null;
 };
 
 // Full + S3 is offered only while `hasS3Mounts`.

@@ -96,6 +96,8 @@ describe('Server backup routes', () => {
             expect(archive.record?.state).toBe('done');
             expect(archive.record?.verify?.status).toBe('verified');
             expect(archive.record?.manifest?.homes.length).toBeGreaterThan(0);
+            // The list carries the manifest's homes alone: the archive's members and its date stay in the record on disk.
+            expect(Object.keys(archive.record?.manifest ?? {})).toEqual(['homes']);
         },
         JOB_TIMEOUT_MS,
     );

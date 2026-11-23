@@ -57,13 +57,14 @@ function listServerArchiveRecords() {
 export async function listServerArchives(): Promise<ServerArchive[]> {
     const archives: ServerArchive[] = [];
     for (const { name, level, reason, at, archivePath } of listServerArchiveRecords()) {
+        const sidecar = await readServerSidecar(archivePath);
         archives.push({
             name,
             level,
             reason,
             createdAt: at,
             bytes: fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null,
-            record: await readServerSidecar(archivePath),
+            record: sidecar && { ...sidecar, manifest: sidecar.manifest && { homes: sidecar.manifest.homes } },
         });
     }
     return archives;
@@ -124,7 +125,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
 }
 
 // A job that ended done on an archive that restores every home whole.
-function isGood(record: ServerArchiveSidecar | null): boolean {
+function isGood(record: ServerArchive['record']): boolean {
     return record?.state === 'done' && isCompleteArchive(record.manifest);
 }
 
