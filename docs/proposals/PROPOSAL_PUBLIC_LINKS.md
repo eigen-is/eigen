@@ -1,23 +1,22 @@
 # Proposal: Public links
 
-This proposal lets a user share a file, a folder or a collab document with anyone who has the link. The visitor needs no account and no emailed code: opening the link opens the item. A link is view-only, a visitor may download what they see, and the owner can add a password, turn the link off or reset it. Users ask for this again and again: today the only way to reach someone outside the server is a guest, and a guest needs an email address and a code for every sign-in.
+This proposal lets a user share a file, a folder or a collab document with anyone who has its link. The visitor needs no account and no emailed code: opening the link opens the item, view-only, and a visitor may download what they see. Users ask for this again and again: today the only way to reach someone outside the server is a guest, and a guest needs an email address and a code for every sign-in.
 
-**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row in P1. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md). No expiry date, no edit links and no view counter in this phase.
+**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row in P1. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md). No password, no expiry date, no edit links and no view counter in this version.
 
-> **TLDR:** A link is one more entry in the path's access list: `link_<id>`, read only. It is not a user. There is no account, no session and no row anywhere else, so there is nothing to clean up. Opening the link's URL trades the key in the URL for a cookie, the pass, which only says "this browser may view this one path". A small set of read routes and the collab socket accept a pass. Every other route keeps asking for a signed-in user, so it refuses a visitor without anyone having to remember to. The server checks the pass against the entry on every request, so removing or changing the entry ends every visitor at once. Nothing stored is secret: the key and the pass are computed from the entry with the server's secret.
+> **TLDR:** "Anyone with the link" is a third choice of **General access**, beside **Restricted** and **Anyone signed in**. It is one more value of the path's `visibility`, and nothing else is stored. The link is the item's ordinary URL, the one in the address bar, as with Google. A handful of read routes and the collab socket answer a request that has no login when the path, or a folder above it, has that value. Every other route keeps asking for a signed-in user, so it refuses a visitor without anyone having to remember to. There is no link account, no key, no cookie and no new route. Choosing another General access closes the link at once.
 
 The whole design in one table:
 
 | Concern | The one place | What it does |
 |---|---|---|
-| The link exists | A `link_…` entry in the path's `acl` | On, off, reset and the password are all that one string |
-| Who may write it | `Drive.setLink` | The only writer. The ACL route refuses a delta that names a link |
-| Key and pass | `lib/drive/link-pass.ts` | Computes both from the entry, reads and sets the cookie |
-| What a pass opens | `canReadByLink` in `lib/drive/acl.ts` | The linked path and what is below it, never a write |
+| The link is on | `visibility: 'link'` on the path | One column, so a path is exactly one of restricted, signed-in or link |
+| What it opens | `canReadByLink` in `lib/drive/acl.ts` | The path and what is below it, by an allow-list of types, never a write |
 | What a visitor is handed | `LinkDrive` | A read-only wrapper: a few reads, every `acl` emptied |
-| Which routes listen | The `linkAuth` macro | Thirteen read routes and the collab socket opt in |
+| Which routes listen | The `linkAuth` macro | Fourteen read routes and the collab socket opt in |
 | No presence | `CollabDocument` | A connection without a user is outside awareness |
-| The visitor's screen | `LinkView` in `packages/ui` | An `/s/` route per app, the editor read-only inside it |
+| The visitor's screen | The item's own route | It renders without a login when the server says "via link" |
+| The switch | `sharing.publicLinks` | A boolean in server settings |
 
 ## The problem
 
@@ -27,253 +26,231 @@ The whole design in one table:
 
 ## Why not a guest account
 
-The first design made a link a `role: 'guest'` user with a reserved address and a real session. It is dropped. A session opens everything a guest reaches: better-auth's own `/auth/*` routes, about seventy routes with no `requireNonGuest`, chat notifications, the bell. Keeping a link account out of all of that is a denylist, and a denylist is a place to forget. This design turns it around: a visitor has no session, so a route has to opt in before it answers one.
+The first design made a link a `role: 'guest'` user with a reserved address and a real session. It is dropped. A session opens everything a guest reaches: better-auth's own `/auth/*` routes, every route without `requireNonGuest`, chat notifications, the bell. Keeping a link account out of all of that is a denylist, and a denylist is a place to forget. Here a visitor has no session, so a route has to opt in before it answers one.
 
-## The entry
+## Three candidates, and why one URL wins
 
-A link is a `DriveACL` entry (`packages/lib/src/types/drive-access.ts`) with an id of its own kind. The type and the `acl` JSON column (`apps/api/src/lib/mount/schema.ts`) keep their shape:
+| | Key and pass | One URL plus a key | **One URL** |
+|---|---|---|---|
+| The link | `/<app>/s/…#<key>`, a second URL per item | The ordinary URL plus `#<key>` | The ordinary URL |
+| Stored | A `link_<nonce>` ACL entry | The same entry | A `visibility` value |
+| Mechanisms on top of the shared ones | Entry kind, key, pass cookie, entry route, a link writer, `/s/` routes | Entry kind, key, pass cookie, entry route | None |
+| New routes | 1 without a login, plus the key's way to the dialog | The same | 0 |
+| Reset link | Yes | Yes | No |
+| Who can open a public item | Whoever was given the link | Whoever was given the link with its key | Whoever knows the item's URL |
 
-```json
-[{ "id": "ann@example.com", "read": true, "write": true }, { "id": "link_5f2c…e1", "read": true, "write": false }]
-```
+The shared ones are the rule, `LinkDrive`, the macro, the opt-in list and the collab change. One URL needs nothing else, and it is what the owner asked for: the link people already share is the public link.
 
-| Link | Entry id |
+**Is a path id a good enough secret?** Yes for guessing, no for keeping. `Mount` makes every path id with `crypto.randomUUID()` (`apps/api/src/lib/mount/mount.ts`): a version 4 UUID, 122 random bits. The owner id is a 32-character better-auth id or `team_<id>`, and the mount id of a personal drive is the constant `'default'`, so the path id is the secret. Nobody guesses it. But Eigen does not hide ids from people with access nearby: every `DrivePath` carries its `parentId`, and `SharedDrive.ancestorIds` hands a reader the ids of the whole chain. The list below says what that costs.
+
+**What the owner gives up:**
+
+- **No Reset link.** A URL that leaked is closed by choosing another General access, and choosing "Anyone with the link" again brings the same URL back. A fresh URL means a copy of the item. Google has no reset either.
+- **A public folder is open to everyone who can already see something in it**, because they know its id. Someone given one file in it can open the rest while the folder is public.
+- **A former member keeps a working URL** while the item is public. They had access, and the item is public by the owner's choice.
+
+If one of these is not acceptable, the middle column is the fallback: the same URL shape and a key behind `#`, at the price of the entry kind, the cookie and one unauthenticated route.
+
+## The value
+
+`DriveVisibility` (`packages/lib/src/types/drive-access.ts`) gains `'link'`. It is stored in the `visibility` TEXT column that exists (`apps/api/src/lib/mount/schema.ts`), so there is no migration, and the one-of-three rule needs no code: one column holds one value.
+
+| Choice in the dialog | `visibility` | A signed-in user who is not a member | No login |
+|---|---|---|---|
+| Restricted | `private` | No access | No access |
+| Anyone signed in with the link | `public-read`, `public-write` | Reads or edits, as today | No access |
+| Anyone with the link | `link` | The visitor view | The visitor view |
+
+**It travels on the existing ACL route.** `PUT /drive/:ownerId/:mountId/path/:pathId/acl` already takes `visibility`, the dialog already sends it on Save through `useUpdateACL`, and `SharedDrive.updateACLDelta` already checks write and `sharingRestricted`. So an editor may publish a link under the same rule as any sharing change, and no new route or hook is needed. The copy-link icon copies `getDriveShareUrl(path)` as it does today.
+
+**One place refuses it.** `Drive.updateACLDelta` answers 403 for `'link'` when `sharing.publicLinks` is off, and 400 on a chat, on a path inside a document, and on anything that is not a file, a folder or a collab document. The mount root is refused already. It reads the path with `getActivePath`, which checks only the path's own `trashedAt`; the rule below checks the whole chain, so a value saved under a trashed folder opens nothing.
+
+**`'link'` grants a signed-in user nothing.** `grantsPublicRead` stays as it is, so `canFromAncestors` treats `'link'` like `private`. Otherwise anyone with a guest account would read the comment threads and the access list of every public item. The other readers of `visibility`:
+
+| Reader | With `'link'` |
 |---|---|
-| Without a password | `link_<nonce>`, the nonce 32 random hex characters |
-| With a password | `link_<nonce>.<check>`, the check an HMAC of the nonce and the password |
+| `checkAccessForEmails` (`lib/drive/sharing.ts`) | Reports no read for a non-member, which is right: they would get the visitor view |
+| `findChatsByMembers` (`lib/chat/find-by-members.ts`) | Skips a non-private chat. A chat can't be `'link'` |
+| `drive-actions.ts`, **Email collaborators** | Shows the row on a public item with no members, where it mails nobody. Harmless |
+| `DriveShareSummary`, `DriveAccessList`, `DriveAccessListEdit` | Name the third state. The dialog unit changes them |
 
-A path has at most one link entry. A **reset** writes a new nonce. A password that is added, changed or removed writes a new check or drops it. So every change to a link changes the id, and nothing else has to be stored: no revoke value, no hash column.
+## What a link opens
 
-Three helpers in `drive-access.ts` are the one fact about the kind: the `LINK_ACL_PREFIX` constant, `findLinkEntry(acl)` and `linkHasPassword(entry)`. The API and the share dialog both import them.
+`canReadByLink(chain, enabled)` sits beside `canFromAncestors` in `acl.ts` and is the whole visitor rule. It is pure: the caller passes the setting in. It takes the path's breadcrumb and answers the index of the public path in the chain, or nothing:
 
-**The entry is inert for every signed-in user.** `matchesACL` matches only what `parseOwnerId` calls a user or a team, and `link_…` parses as `invalid`, so no account ever gets access through it. `resolveACLUserIds` skips it the same way, so nothing is pushed or written to the share registry. Two existing lines need a change, both in the first unit:
+1. `enabled` is true.
+2. No path in the chain is in the trash (`isTrashedChain`).
+3. Some path in the chain has `visibility: 'link'`. So a folder's link covers what is below it, and nothing beside or above it.
+4. The allow-list: from the public path down, every step is a folder, and the last may also be a file or a collab document (`isCollabType`). Past a collab document the chain may only go on into its `media/` folder and a file in it. Anything else is refused: a chat, a document's `data.db`, `comments.db`, comment threads and versions, and any path type added later.
 
-- `Drive.updateACLDelta` runs `validateACLEntries` on the merged ACL, which would refuse every later change on a path that has a link. It validates the delta's `add` and `remove` ids instead. That is also how a client is refused: a delta that names a `link_…` id is a 400.
-- `resolveACLToEmails` (`apps/api/src/lib/drive/acl-propagation.ts`) treats every id that is not a team as an email address. It takes users only, or a link would show as a member and be mailed.
+There is no write variant: a visitor can't write because no code asks.
 
-**One method writes it.** `Drive.setLink(mountId, pathId, { enabled, password?, reset? }, actor)` runs in the same `runInOrder('acl:<mount>:<path>')` chain as `updateACLDelta`, so a link change and a people change on one path can't undo each other. It reads the path with `getActivePath`, so a path in the trash is a 404. It refuses the mount root, a path inside a document and a standalone chat, and follows the `sharing.publicLinks` setting. It emits `DRIVE_ACL_UPDATED` and pushes to no home, since a link has no recipient. `SharedDrive.setLink` is its wrapper with the checks `SharedDrive.updateACLDelta` makes: write on the path, then `sharingRestricted`. The route refuses a guest with `requireNonGuest`.
-
-## Key and pass
-
-Both are HMAC-SHA256 values over the server's auth secret, built the way `signInWithScopedPassword` (`apps/api/src/lib/auth/guest-auth.ts`) builds its scoped password: `new Bun.CryptoHasher('sha256', auth.options.secret)`. No new package. One file, `apps/api/src/lib/drive/link-pass.ts`, holds them:
-
-| Value | Computed from | Changes on |
-|---|---|---|
-| Key, in the URL | owner, mount, path and the nonce | A reset |
-| Check, in the entry id | the nonce and the password | A reset or a password change |
-| Pass, in the cookie | owner, mount, path and the whole entry id | Any change to the link |
-
-So a password that is added later keeps the URL people already have, and everyone who got in before it is out.
-
-The pass is a cookie named `eigen_link_<pathId>`, `HttpOnly`, `Secure`, `SameSite=Lax`, with a 30-day `Max-Age`. It holds nothing but the HMAC: no payload to parse and no expiry inside. Several links are several cookies, and they sit beside a login's session cookie without touching it. The server never trusts the cookie alone: on every request it recomputes the pass from the entry the path holds now and compares in constant time. An entry that is gone or changed means the cookie matches nothing.
-
-## What a pass opens
-
-`canReadByLink(chain, passes)` sits beside `canFromAncestors` in `acl.ts` and is the whole visitor rule. It takes the path's breadcrumb and the request's pass cookies and answers the index of the link's path in the chain, or nothing:
-
-1. No folder in the chain is in the trash (`isTrashedChain`).
-2. Some path in the chain has a link entry, and the cookie named after that path equals its pass. So a folder's link covers everything below it, and a pass for X opens no sibling of X: a sibling's chain doesn't hold X.
-3. Inside a collab document the chain may go on only into its `media/` folder. That keeps out `data.db`, `comments.db`, the comment threads in `chat/` and the version snapshots. Inside a chat it goes nowhere.
-4. `sharing.publicLinks` is not `'off'`, and under `'password'` the entry has a check.
-
-It never looks at `visibility`, and there is no write variant: a pass can't write because no code asks.
-
-`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` the way `SharedDrive` does, by composition, with these methods only: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile`, `downloadFile`, `readRange`, `getCollabDocument`, `canRead`, `holdHome` and `withHomeHeld`. Each runs the rule first. Every `DrivePath` it returns has `acl: null`, a breadcrumb starts at the link's path, and a folder listing leaves out what rule 3 closes and every chat. That is the one place a visitor's answers are trimmed.
+`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with these methods only: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile`, `downloadFile`, `readRange`, `getCollabDocument`, `canRead`, `canWrite`, `holdHome` and `withHomeHeld`. Each runs the rule first, so `getPath` refuses a chat row too. Every refusal is the same 403, for a path that does not exist and one that is not public. Every `DrivePath` it returns has `acl: null`, a breadcrumb starts at the public path, and a folder listing holds only what the rule admits. `canRead` and `canWrite` take and ignore the user argument, the `_user` convention `shared-drive.ts` documents, and `canWrite` answers false. So the three drives share their signatures and a route needs no `instanceof`.
 
 ## The principal is no user
 
-A visitor is "no user, plus the request's pass cookies". It is not a `User`. `User` is better-auth's session user (`apps/api/src/lib/user/user.ts`), and `makeSyntheticUser` shows what a stand-in costs: a fake id that flows into `getSharedDrive` (which hands out the raw `Drive` when the owner id equals the user id), `getMemberships`, `recordOpened`, the awareness check and every `actor` argument. A visitor has no Home, so `home-relay.ts` never comes into it: the request opens only the Home its URL names.
+A visitor is "no user". It is not a `User`: a stand-in like `makeSyntheticUser` would flow into `getSharedDrive` (which hands out the raw `Drive` when the owner id equals the user id), `getMemberships`, `recordOpened`, the awareness check and every `actor` argument. A visitor has no Home, so `home-relay.ts` never comes into it: the request opens only the Home its URL names.
 
 `routes/auth.ts` gets a second macro beside `auth`:
 
 | Macro | Resolves | Without a session |
 |---|---|---|
 | `auth: true`, unchanged | `user: User`, `session` | 401 |
-| `linkAuth: true`, new | `user: User \| null`, `session`, `passes` | 401 unless a pass cookie is there |
+| `linkAuth: true`, new | `user: User \| null`, `session` or null | Goes on, as a visitor |
 
-A route fails closed in two ways. A route nobody touched still says `auth: true` and never reads a pass. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take: it must call `getReadDrive(ownerId, mountId, pathId, reader)` in `lib/drive/get-drive.ts`, which returns `Drive | SharedDrive | LinkDrive`. A route can only call what all three have, the trick that already keeps unwrapped `Drive` methods off the routes. The two routes that ask `canRead` and `canWrite`, the info route and the socket, tell a `LinkDrive` apart with `instanceof`.
-
-`getReadDrive` is where a login and a pass meet: a signed-in user who can read the path gets their own drive as today, and anyone else gets a `LinkDrive`. So a pass never narrows what an owner sees in their own editor.
+A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take: it calls `getReadDrive(ownerId, mountId, pathId, user)` in `lib/drive/get-drive.ts`. That answers the drive and `viaLink`: a user who can read the path themselves gets their own drive as today, and everyone else gets a `LinkDrive`. A handler can call only the methods all three drives have.
 
 ## The routes that opt in
 
-Each resolves its path through `LinkDrive`, so each runs the rule on the path id in its own URL.
+Each resolves its path through `getReadDrive`, so each runs the rule on the path id in its own URL.
 
 | Route | File | Reads through |
 |---|---|---|
-| `GET /collab/:ownerId/:mountId/:pathId/info` | `routes/collab.ts` | `canRead`, `getPath`, `getFolderContents`; `canWrite` is false |
-| `WS /ws/collab/:ownerId/:mountId/:pathId` | `routes/collab.ts` | `canRead`, `getCollabDocument` |
 | `GET /drive/:ownerId/:mountId/path/:pathId` | `routes/drive.ts` | `getPath` |
 | `GET /drive/:ownerId/:mountId/folder/:pathId` | `routes/drive.ts` | `getFolderContents` |
 | `GET /drive/:ownerId/:mountId/path/:pathId/breadcrumb` | `routes/drive.ts` | `breadCrumb` |
+| `GET /drive/:ownerId/:mountId/path/:pathId/permissions` | `routes/drive-sharing.ts` | `canRead`, `canWrite`; gains `viaLink` |
 | `GET /drive/:ownerId/:mountId/file/:pathId/download` | `routes/drive.ts` | `resolveFile`, with ranges |
 | `GET /drive/:ownerId/:mountId/file/:pathId/embed/:fileName` | `routes/drive-content.ts` | `resolveFile`, with ranges |
 | `GET …/file/:pathId/preview`, `text-preview`, `vcard-preview`, `eml-preview`, `ics-preview` | `routes/drive-content.ts` | `resolveFile` |
 | `GET /drive/:ownerId/:mountId/thumb/:fileName` | `routes/drive-content.ts` | `resolveFile` |
+| `GET /collab/:ownerId/:mountId/:pathId/info` | `routes/collab.ts` | `canRead`, `canWrite`, `getPath`, `getFolderContents`; gains `viaLink` |
+| `WS /ws/collab/:ownerId/:mountId/:pathId` | `routes/collab.ts` | `canRead`, `getCollabDocument` |
 | `GET /drive/:ownerId/:mountId/file/:pathId/export/:format` | `routes/drive-content.ts` | `resolveFile`; Download and Print of a document |
 
-Everything else stays closed to a pass, by saying `auth: true`: effective members, the ACL and the link routes, `GET …/history`, the version list, every chat route with its messages, the comment index (`/collab/…/comments` and `/comments/search`), notifications, SSE, search, recent, shared with me, watches, request access, email collaborators, mounts, the root folder, the inline editor's content and every write. One test walks the app's route table and holds it against the list above, so a new route is closed until someone adds it there.
+Everything else stays closed, by saying `auth: true`: effective members, the ACL route, `GET …/history`, the version list, every chat route with its messages, the comment index (`/collab/…/comments` and `/comments/search`), notifications, SSE, search, recent, shared with me, watches, request access, email collaborators, mounts, the root folder, the inline editor's content and every write. One test walks the app's route table and holds it against the list above, so a new route is closed until someone adds it there.
 
-A document refers to its pictures by name in its own `media/` folder ([MEDIA-REFERENCES.md](../MEDIA-REFERENCES.md)), which the link covers. A file attached by id that lives outside the linked path does not open for a visitor. That is accepted.
+Why no cookie and no entry route: a visitor's request needs nothing to carry. An `<img>`, a media request and the socket are plain requests to the item's URL, so there is no credential to thread into them and none to leak through `Referer`. The file routes already answer `Cache-Control: private`. The macro adds `X-Robots-Tag: noindex` for a request without a user, and Caddy sets it on the app pages.
+
+A document refers to its pictures by name in its own `media/` folder ([MEDIA-REFERENCES.md](../MEDIA-REFERENCES.md)), which the link covers. A file attached by id that lives outside the public path does not open for a visitor. That is accepted.
 
 ## Collab
 
-- **Read-only.** The route passes `canWrite: false` for a `LinkDrive`, and `CollabDocument.handleMessage` already drops a reader's sync step 2 and updates.
-- **No awareness, either way.** `CollabDocument.subscribe` takes `User | null`, and a visitor subscribes as `null`. Inbound awareness is dropped by the check that is already there (`if (!user) return`). Two sends learn the same rule: `sendSyncStep1` skips the awareness states, and the awareness `update` handler sends only to connections with a user. A visitor sees no cursors and no names, and nobody sees a visitor.
-- **A turn-off closes open sockets within 15 s.** The keepalive's `checkAccess` asks `LinkDrive.canRead` again, which reads the entry as it is now. A reset, a password change, a trash, a move out of the linked folder and the setting all close the socket with 4403 the same way, with no hook of their own. The tab reloads, and the reload enters again or shows that the link is gone.
-- **`recordOpened` is skipped.** A visitor has no Recent page.
+- **Read-only.** `canWrite` is false, and `CollabDocument.handleMessage` already drops a reader's sync step 2 and updates.
+- **No awareness, either way.** `CollabDocument.subscribe` takes `User | null`, and a `viaLink` socket subscribes as `null`, signed in or not. Inbound awareness is dropped by the check that is there (`if (!user) return`). Two sends learn the same rule: `sendSyncStep1` skips the awareness states, and the awareness `update` handler sends only to connections with a user.
+- **`recordOpened` is skipped** for a `viaLink` socket.
+- **The keepalive.** `checkAccess` in `routes/collab.ts` is built on `ws.data.session.id` and `getSessionUser`. That stays for a socket that opened as a user. A `viaLink` socket has no session to check, so every 15 s it asks only `LinkDrive.canRead` for its path again:
 
-## The way in
-
-A link is the item's place in its app, like every Eigen URL, with the key after the `#`:
-
-```
-https://<host>/<app>/s/<ownerId>/<mountId>/<pathId>#<key>
-```
-
-The app is the document's own (docs, sheets, slides, vector, stickies) or Drive for a file or a folder. No lookup table is needed: the URL names the Home, the mount and the path. The part after `#` never reaches a server log or a `Referer` header.
-
-One route lets a visitor in: `POST /p/link/:ownerId/:mountId/:pathId` with `{ key, password? }`, in a new `routes/link.ts` beside the demo's entry route.
-
-| Case | Answer |
+| What happened | The next tick |
 |---|---|
-| Unknown owner, mount or path, no link, wrong key, in the trash, setting off | 404, one identical body |
-| Right key, the link has a password, none sent and no valid pass yet | 401 "password required" |
-| Right key, wrong password | 403, and one count on the limiter |
-| Right key, and the password if there is one | 204 with the pass cookie |
+| Another General access is saved | No path in the chain is `'link'`: close 4403 |
+| `sharing.publicLinks` is turned off | The rule's `enabled` is false: close 4403 |
+| The path or a folder above it is trashed | `isTrashedChain`: close 4403. The trash itself closes the document first ([SOFT-DELETE.md](../SOFT-DELETE.md)) |
+| The path is moved out of a public folder | Its chain no longer holds the folder: close 4403 |
 
-The password prompt only shows to someone who holds the key. A reload sends the key again, and a browser that already holds a valid pass is not asked for the password twice. A `WindowLimiter` keyed by the path counts wrong passwords only: ten a minute per link, checked before the HMAC. The dialog asks for at least `MIN_PASSWORD_LENGTH` characters. The entry answer and every answer to a reader without a user carry `X-Robots-Tag: noindex`, set in the macro, and Caddy sets it on the `/s/` pages.
-
-The frontend needs no "who am I" route. The page posts the key, then loads the item through the ordinary hooks, and a 401 or 403 there means the link does not work.
-
-The Admin setting `sharing.publicLinks` is a new key in `ServerSettings` (`packages/lib/src/types/settings.ts`, defaults in `apps/api/src/lib/config/server-settings.ts`), edited on the **Guest access** page through `useServerSettings`. `/p/config` gains a `publicLinks` field so the share dialog knows it.
-
-| Value | New links | Existing links |
-|---|---|---|
-| `'on'`, the default | With or without a password | Work |
-| `'password'` | Need a password | Those with a password work, the others answer 404 until they get one |
-| `'off'` | Refused, the dialog hides the control | All answer 404. The entries stay, so turning it back on brings them back |
+A socket keeps the kind it opened with. A member who is removed from a public document gets 4403 on their own check, the tab reloads, and the reload opens as a visitor.
 
 ## The frontend
 
 What the apps do today, read from the code:
 
 - `AuthProvider` (`packages/lib/src/core/auth/auth-context.tsx`) reads `authClient.getSession()` once and holds `user: AuthUser | null`.
-- Every app's `_auth.tsx` is `createAuthRouteOptions()` (`packages/ui/src/components/layout/pages/auth-route.tsx`): no user means a redirect to `/login`, and child routes get a user that is always there. Every editor route sits under it, such as Docs' `_auth.doc.$ownerId.$mountId.$pathId.tsx`.
-- `createEigenAppRouter` and `mountEigenApp` put the router inside `EigenApp`, so a route outside `_auth` still has every provider. Each app's `/login` is such a route.
-- The shell already has a signed-out state. `Topbar` draws the logo and a **Log in** button and no app switcher, palette, bell or account menu, and `EigenDocRoot` and Drive's root route give no sidebar without a user.
-- `EigenDocEditorRoute` loads `useCollabDocumentInfo` and hands the editor `path`, `canWrite` and the media folder. Editors take `user: AuthUser | null` from `useAuth()`.
-- `useIsGuest` narrows the frontend in a few shared seams: `useDriveActionsFor`, `useFileActions`, `FileMenu`, the topbar.
+- Every app's `_auth.tsx` is `createAuthRouteOptions()` (`packages/ui/src/components/layout/pages/auth-route.tsx`): no user means a redirect to `/login`, and child routes get a user in their context. `_auth` is a layout without a URL segment.
+- The five editor routes (`_auth.doc.…`, `_auth.sheet.…`, `_auth.slide.…`, `_auth.vector.…`, `_auth.board.…`) never read that context user. Each renders `EigenDocEditorRoute`, which loads `useCollabDocumentInfo` and shows `RequestAccessView` when the answer is no read. The editors take `user: AuthUser | null` from `useAuth()`.
+- Drive's folder route (`_auth.fs.…`) reads the context user once, and asks `useCanWriteFolder`, which calls the permissions route. A plain file's link today is the Shared with me page with the file selected (`getDriveShareUrl`), on `_auth.shared.$to.tsx`.
+- The shell has a signed-out state: `Topbar` draws the logo and a **Log in** button and no app switcher, palette, bell or account menu, and `EigenDocRoot` and Drive's root route give no sidebar without a user.
 
-The smallest change is additive. Nothing under `_auth` moves:
+The smallest change, with no new route and no second URL:
 
-- **One route per app, outside `_auth`:** `s.$ownerId.$mountId.$pathId.tsx` in docs, sheets, slides, vector, stickies and drive. Each renders `LinkView` around the component its editor route already renders. Drive's shows a folder through `DriveLayout` with `browseCapabilities(false)`, and a file in the preview.
-- **`LinkView`** (`packages/ui/src/components/layout/app/link-view.tsx`) is the visitor shell. It posts the key through `useEnterLink`, shows the password form or "This link doesn't work", and then renders its children with `canWrite` false inside `LinkVisitorProvider`. The frame around it is the signed-out `AppShell` as it is, plus the document's name in the top bar.
-- **`useIsLinkVisitor()`** (`packages/lib/src/core/drive/hooks/use-link-visitor.ts`) answers "I am a link visitor". It reads that provider, so it is true on an `/s/` route and nowhere else, whoever is signed in.
-- **Five shared seams read it**, each of which has a guest case today or serves every app: `useCommentLifecycle` runs no comment or member query and returns no threads; `useDriveActionsFor` and `useFileActions` keep Open and Download; `FileMenu` keeps Download and Print; `EigenDocEditorRoute` shows "This link doesn't work" in place of `RequestAccessView` and mounts no share dialog. Each document app's root route also counts `/s/` as full screen, as it does its editor route.
-- **Links inside a linked folder** go through one `getLinkViewUrl(path)` beside `getDriveItemUrl` in `packages/lib/src/core/api.ts`. They carry no key: the folder's pass already covers the item.
+- **Seven route files leave `_auth`**: the five editor routes and Drive's `fs` and `shared.$to`. The URLs stay the same. Each app's root route and the file itself name the new route id, and Drive's two take their user from `useAuth()`.
+- **`RequestAccessView` sends a signed-out caller to `/login`** with the way back, which is what the guard did for these routes. So a private item behaves as today.
+- **The server says who is a visitor.** The info and permissions answers carry `viaLink`. `EigenDocEditorRoute` and Drive's two routes put it in `LinkVisitorProvider` (`packages/lib/src/core/drive/link-visitor.tsx`, in lib because ui imports lib and never the reverse), and `useIsLinkVisitor()` (`packages/lib/src/core/drive/hooks/use-link-visitor.ts`) reads it.
+- **Four shared seams read the hook**, each with a guest case today or shared by every app: `useCommentLifecycle` shows the cards and runs no thread, index or member query; `useDriveActionsFor` and `useFileActions` keep Open and Download; `FileMenu` keeps Download and Print. `EigenDocEditorRoute` mounts no share dialog for a visitor, and the top bar shows the document's name.
 
-A signed-in user who opens a link sees the same visitor view. If they can read the item themselves the server answers as them, and if not it answers from the pass. Their own editor URL is unchanged.
+Who sees what on the one URL:
 
-A visitor gets no event stream, so an open folder does not update by itself. An open document does, through its socket.
+| Caller | Sees |
+|---|---|
+| A member, signed in | The full app, as today |
+| Signed in, not a member | The visitor view: the server answers through `LinkDrive` |
+| No login, public item | The visitor view |
+| No login, private item | The login page, as today |
+
+Against the six `/s/` routes of the key design this is seven renames and one changed view, and it drops the key page, the second URL builder and the entry hook.
+
+A visitor gets no event stream, so an open folder does not update by itself. An open document does, through its socket. A visitor who opens a lone file gets the Shared with me page with an empty list and the file open beside it.
 
 ## What a visitor sees
 
-Visitors see the item as it is. That includes the owner's name and avatar (`/p/users` and `/p/avatar` are public, and the owner id is in the URL) and the comment markers in a document with their authors' addresses, because a comment card lives in the Y.Doc with `creator` set to an email (`use-create-comment-card.ts`). On a stickies board the cards are the board. Visitors do not see the access list, the comment threads, the history, the versions or who is online. The dialog says so.
-
-## Lifecycle
-
-| Event | What happens | Left to clean up |
-|---|---|---|
-| Turn on | `setLink` adds the entry | |
-| Turn off | The entry goes. Every pass and the URL stop matching, sockets close within 15 s | Nothing |
-| Reset | New nonce: a new URL, the old one and every pass are dead | Nothing |
-| Add or change the password | New check: the URL stays, every pass is dead | Nothing |
-| Remove the password | The check goes: the URL stays, a visitor's tab reloads once and is let in | Nothing |
-| Trash | Rule 1 closes it. The `acl` column survives the trash ([SOFT-DELETE.md](../SOFT-DELETE.md)) | Nothing |
-| Restore | The same URL works again | Nothing |
-| Move | A move stays in its mount and keeps the row, so the URL holds. A path moved out of a linked folder leaves its reach | Nothing |
-| Copy | A copy is written with `acl: null`, so it has no link | Nothing |
-| Delete for good | The row is gone, the URL answers 404 | Nothing |
-| Owner or team deleted | The Home is gone, the URL answers 404 | Nothing |
-
-No sweep and no cleanup: a link is a string in one row. A browser keeps a dead cookie until its 30 days are over, which opens nothing.
+Visitors see the item as it is stored. In a document that includes its comment cards: title, description, attachments, the author's address and the time, because a card lives in the Y.Doc (`writeCardToDoc`). On a stickies board the cards are the board. They also see the owner's name and avatar, since `/p/users` and `/p/avatar` are public and the owner id is in the URL. Visitors do not see the replies under a comment, the access list, the history, the versions or who is online. [ROADMAP.md](../ROADMAP.md) has a P2 row for the card's author and content in the document.
 
 ## The share dialog
 
-Owners and editors who may share get a public link control in `DriveAccessListEdit`. In words: a way to turn the link on and off, **Copy link**, **Reset link**, and **Require a password** with a password field, off unless the owner turns it on. Under it one sentence: "Anyone with the link can view and download this without signing in. They see the document as it is, with its owner's name and the authors of its comments, but not the comment threads, the history or who has access." The link entry is left out of the people list. The control shows only on a file, a folder or a collab document.
+**General access** in `DriveAccessListEdit` becomes one control with three choices, Google's way: **Restricted**, **Anyone signed in with the link** (with its **Can view** or **Can edit**), and **Anyone with the link**, which is view only. There is no separate section and no switch. The choice waits for **Save** like every other change in the dialog, and is hidden when `sharing.publicLinks` is off, which `/p/config` tells the dialog. Under the third choice one sentence: "Anyone with the link can view and download this without signing in. They also see its comments and who wrote them, but not the replies, the history or who has access." The choice shows only on a file, a folder or a collab document. The read-only `DriveAccessList` and `DriveShareSummary` name the third state.
 
-**The placement is OPEN, the owner's choice once there are screenshots:**
+The Admin app's **Guest access** page gets one checkbox, **Allow public links**, saved through `useServerSettings`. Off, no new link can be made and every existing one is closed. The values stay stored, so turning it on again opens them.
 
-- **(a)** A separate **Public link** section with a switch, below **General access**.
-- **(b)** Google's way: a third choice **Anyone with the link** in the General access control, with **Require a password** and **Reset link** under it.
+## Lifecycle
 
-Both draw the same entry. (a) maps one to one onto what is stored. (b) needs a rule for what `visibility` becomes when the third choice is picked, since the link and "anyone signed in" are stored apart.
+| Event | What happens |
+|---|---|
+| Choose "Anyone with the link" and save | The value is written, the URL is open |
+| Choose anything else and save | Closed with the save. Open sockets close within 15 s |
+| Trash | Closed. Restore opens the same URL again |
+| Move | A move stays in its mount and keeps the row, so the URL holds. A path moved out of a public folder is closed |
+| Copy | A copy gets a new row with the default `private` |
+| Delete for good, owner or team deleted | The row or the Home is gone |
 
-The hooks are `usePublicLink` and `useSetPublicLink` beside `useUpdateACL` in `packages/lib/src/core/drive/hooks/sharing.ts`. The dialog holds no query of its own.
+No sweep and no cleanup: a link is one value in one row.
+
+## Later
+
+- **A password** does not fit as it stands. A visitor would have to prove they know it on every request, which means the cookie and the entry route this design leaves out, and a stored check beside the value. The `visibility` value stays.
+- **Reset link** is the middle candidate: a key behind `#` on the same URL.
 
 ## Where the design bends
 
-1. **Readers do receive the link entry.** The brief was that no reader ever receives the password hash or the revoke value. Here every reader of the path sees `link_<nonce>.<check>` in `DrivePath.acl`, and it is worthless: the key, the pass and a password guess all need the server's secret. Hiding it instead has two honest forms. A column of its own is a migration. A strip in `Mount.toDrivePath` makes every writer of `acl` responsible for putting the hidden entry back. Both add a place to forget, to protect a value that opens nothing.
-2. **The password check is a keyed HMAC, not better-auth's scrypt hash.** A scrypt hash can be attacked offline by whoever reads it, so it would have to be hidden (see 1). The HMAC can't without the secret, and whoever has the secret reads the files directly. Guessing is online only, behind the limiter.
-3. **Not an option on `auth`, a second macro.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`. The `:ownerId` gate in `scripts/check-standards.ts` looks for `auth: true`, so its pattern learns `linkAuth` in the same unit.
-4. **A login and a pass need one fallback.** "A signed-in user who can't read it gets the pass" is a second path in `getReadDrive`. Without it a signed-in user opening someone's public link would get a 403 and be told to use a private window.
-5. **Visitor is a route, not a session.** That costs a second URL per item (`/s/`). Serving visitors on the ordinary editor URLs would be nicer, and means moving every editor route out of `_auth` and making each page work without the guard's user: larger, and it touches what works.
-6. **The password is about a fifth of this.** Dropping it would remove the check in the id, the 401 and 403 answers, the limiter, the password form, the `'password'` setting value and half the dialog control. A link would be one random string.
+1. **No Reset link**, though the dialog ruling named one. It needs a stored key, and the key needs the cookie and the entry route.
+2. **The secret is the path id, which Eigen does not hide** from people with access at or under the item (`parentId`, `ancestorIds`). The three costs are under "What the owner gives up".
+3. **Not an option on `auth`, a second macro.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`.
+4. **One fallback in `getReadDrive`:** a signed-in user who can't read the path gets the `LinkDrive`. Without it a signed-in non-member would be refused an item an anonymous browser can open.
+5. **A lone plain file has no page of its own.** Its URL today is the Shared with me page, so that is what a visitor gets, with an empty list. A file page is later work.
 
 ## Risks, and what is accepted
 
-- **A link without a password is a bearer token.** Whoever has the URL is in. That is the feature. **Reset link** kills a leaked URL, and a server can force passwords.
-- **Every link depends on the server's secret.** A server that comes back with another secret has no working link URL, as it has no working session.
-- **The entry route opens the owner's Home for an unauthenticated caller**, as the request-access route does for any signed-in one. An unknown owner is a quick 404, and the app's global rate limit stands in front.
-- **An anonymous visitor can queue exports.** The transform queue bounds them ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)). A per-IP limit on a visitor's exports is the measure if it is abused. Not built.
-- **Wrong passwords from many addresses can fill a link's limiter** and keep new visitors out of that link for a minute at a time. Visitors who hold a pass are not affected.
-- **Pass cookies add up.** Each visited link is about 100 bytes in every request for 30 days. Someone who opens hundreds of links on one server can hit the header limit. Accepted.
-- **Up to 15 s.** After a turn-off an open document still receives edits until the next keepalive, as after any revoke.
-- **Left out:** a history row for link on, off and reset (needs a new event type), an expiry date, a view counter, edit links, "view but no download".
+- **The URL is a bearer token**, and URLs travel: browser history, chat previews, forwarded mails, and Caddy's access log, which holds the path id of every request.
+- **Only choosing another General access closes a link, and nothing makes a new one.** Choosing it again, a restore from the trash, turning the setting off and on, or a backup restore from when it was public all bring the same URL back.
+- **Any request without a login opens the Home its URL names** on every opt-in route, and a visitor's socket holds a document open. Only the per-IP limit in `app.ts` stands in front. Accepted for this version.
+- **An anonymous visitor can queue exports.** The transform queue bounds them ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)).
+- **A public file can be hotlinked** from another site. The inline routes already sandbox scriptable types (`scriptableInlineHeaders`).
+- **Up to 15 s.** After a link is closed an open document still receives edits until the next keepalive, as after any revoke.
+- **The demo server** lets anyone upload. Turn the setting off there.
 
-**What breaks.** Nothing stored changes shape, and no existing data is touched. On a rollback to an older build, links stop working, a path that holds a link entry refuses every sharing change with "Invalid ACL entry" until the entry is removed, and the entry shows as a member address in the old access list.
+**What breaks.** No existing data changes. `'link'` is a new stored value. On a rollback to an older build a public path is closed, since that build's check does not know the value, and its share dialog shows the path as signed-in view and can't save it until another General access is chosen.
 
 ## The work
 
-In build order. No link can be made before unit 6 and no pass before unit 7, so nothing that merges earlier can expose anything. Tests live in `<workspace>/src/test/` and are written red first.
+Files and folders first, then documents. Until unit 6 the ACL route's schema refuses `'link'`, so no client can make a public path and nothing that merges earlier can expose anything; for the same reason no half-built dialog ever shows one. Tests live in `<workspace>/src/test/`, written red first, and before unit 6 they write the value through `Drive.updateACLDelta`.
 
 | # | Unit | Files | Size | Risk seam | Tests |
 |---|---|---|---|---|---|
-| 1 | The entry kind, inert | `packages/lib/src/types/drive-access.ts`, `Drive.updateACLDelta`, `acl-propagation.ts` | S | ACL check, persisted format | `test/acl/link-entry.test.ts`: a stored link entry gives no user read or write, is no effective member, gets no mail and no registry row; a delta naming a link is a 400; a people delta keeps the entry |
-| 2 | The setting | `types/settings.ts`, `server-settings.ts`, `routes/settings.ts`, `/p/config`, `apps/admin` **Guest access** | S | No | The three values save and load; `/p/config` carries it |
-| 3 | Pass, rule and `LinkDrive` | `lib/drive/link-pass.ts`, `acl.ts`, `link-drive.ts`, `get-drive.ts` | M | ACL check | `test/acl/link-rule.test.ts`: the path, a descendant, a sibling, the parent, the trash, inside a document only `media/`, a chat, each setting value, a pass of an old id; `LinkDrive` empties every `acl`, cuts the breadcrumb, filters a listing |
-| 4 | Collab without awareness | `lib/collab/collab-document.ts` | S | No | `test/collab/collab-link-visitor.test.ts`: a `null` connection gets no awareness at sync or after, its awareness and its updates are dropped, document updates reach it |
-| 5 | `linkAuth` and the opt-in routes | `routes/auth.ts`, `collab.ts`, `drive.ts`, `drive-content.ts`, `scripts/check-standards.ts` | M | Routes that serve bytes without a login | `test/acl/link-routes.test.ts`, with an entry written through the mount and a pass from the exported function: each opt-in route serves the path and refuses a sibling; every other route in the route table answers 401; the socket closes within one tick of a changed entry; no Recent row |
-| 6 | `setLink` and its routes | `drive.ts`, `shared-drive.ts`, `routes/drive-sharing.ts` | M | ACL write, a lock, persisted format | `test/acl/link-write.test.ts`: reader, guest and restricted editor refused; root, chat, inside a document refused; trash 404; each setting value; a second turn-on changes nothing; reset changes the key; a password change keeps the key and kills the pass; a link change and a people change at once both land |
-| 7 | The entry route | `routes/link.ts` | S | A route for an unauthenticated visitor | `test/acl/link-enter.test.ts`: the four answers; unknown, off, trashed and wrong key are byte-identical; only wrong passwords count; `noindex`; end to end from key to file bytes |
-| 8 | The visitor view | `packages/lib/src/core/drive/`, `packages/ui/src/components/layout/app/link-view.tsx`, the five seams, an `s.` route in six apps, Caddy | L | No | Hook and component tests in `packages/lib/src/test` and `packages/ui/src/test`; a browser check per app, signed out and signed in ([verify-in-browser](../../.claude/skills/verify-in-browser/SKILL.md)) |
-| 9 | The share dialog control | `drive-access-list-edit.tsx`, `drive-access-list.tsx`, `hooks/sharing.ts` | M | No | Dialog tests for on, off, reset, password, each setting value; the entry is not in the people list |
-| 10 | Docs | ACL.md (a Public links section), GUEST-ACCESS.md and COLLAB.md (a pointer each), ARCHITECTURE.md, SERVER-SETTINGS.md, a help-center article, CHANGELOG | S | No | |
+| 1 | The value, the setting, the rule | `types/drive-access.ts`, `types/settings.ts`, `server-settings.ts`, `routes/settings.ts`, `acl.ts`, `Drive.updateACLDelta` | S | ACL check, a stored value | `test/acl/link-rule.test.ts`: the path, a descendant, a sibling, the parent, the trash, the setting, each allowed and refused type, inside a document only `media/`; `'link'` gives a signed-in non-member nothing; the refusals of `updateACLDelta` |
+| 2 | Files and folders without a login | `link-drive.ts`, `get-drive.ts`, `routes/auth.ts`, `drive.ts`, `drive-content.ts`, `drive-sharing.ts`, `scripts/check-standards.ts` | M | ACL check, routes that serve bytes without a login | `test/acl/link-routes.test.ts`: each opt-in route serves a public path and answers 403 for a sibling and an unknown id; every other route in the route table answers 401; `LinkDrive` empties every `acl`, cuts the breadcrumb, filters a listing; a member is served as before |
+| 3 | Documents without a login | `collab-document.ts`, `routes/collab.ts`, the export route | M | `CollabDocument.subscribe` and its broadcast, bytes without a login | `test/collab/collab-link-visitor.test.ts`: a `null` connection gets no awareness at sync or after, its awareness and updates are dropped, document updates reach it; each row of the keepalive table closes within one tick; no Recent row |
+| 4 | Drive's visitor view | `RequestAccessView`, `link-visitor.tsx`, `use-link-visitor.ts`, `useDriveActionsFor`, `useFileActions`, Drive's `fs` and `shared.$to` routes | M | Seams every app shares, a route that leaves the guard | Hook and component tests; signed out on a private item still lands on login; a browser check signed in and out |
+| 5 | The editors' visitor view | Five editor routes and root routes, `EigenDocEditorRoute`, `useCommentLifecycle`, `FileMenu`, `topbar.tsx` | M | Seams every app shares, routes that leave the guard | The same, per app ([verify-in-browser](../../.claude/skills/verify-in-browser/SKILL.md)) |
+| 6 | The dialog and the Admin checkbox | The ACL route's schema, `/p/config`, `drive-access-list-edit.tsx`, `drive-access-list.tsx`, `drive-share-summary.tsx`, `apps/admin` **Guest access**, Caddy | M | The unit that opens it | Dialog tests for the three choices and the setting; the route accepts `'link'` from an editor and refuses it under `sharingRestricted`; end to end from Save to file bytes without a login |
+| 7 | Docs | ACL.md, COLLAB.md, GUEST-ACCESS.md, ARCHITECTURE.md, SERVER-SETTINGS.md, a help-center article, CHANGELOG | S | No | |
 
-Unit 8 starts by walking Drive's detail pane and quick look without a user. The document editors' path is read through; that part of Drive is not. What it finds are queries that answer 401, never a leak.
+Unit 2 changes the `:ownerId` gate in `scripts/check-standards.ts`: it matches `auth: true` case-sensitively, so a `linkAuth` route would slip past it. Unit 4 starts by walking Drive's detail pane and quick look without a user; what it finds there are queries that answer 401, never a leak. The total is L.
 
 ## Needs the owner's yes
 
-Each is asked as its own question right before it is built.
+No new route, no migration, no package. Each of these is a change to what an existing route takes or answers, asked right before it is built:
 
-| Route | Why nothing existing serves |
+| Route | Change |
 |---|---|
-| `POST /p/link/:ownerId/:mountId/:pathId` | The one unauthenticated way in. No existing route may set a pass |
-| `PUT /drive/:ownerId/:mountId/path/:pathId/link` | The link has one writer of its own, so the ACL route can refuse every delta that names a link |
-| `GET /drive/:ownerId/:mountId/path/:pathId/link` | Answers the key to someone who may share, for **Copy link**. The key is computed on the server and is in no `DrivePath` |
-
-No migration: no new schema version and no new column. No package. Three existing routes gain a field or an option and are not new: `/p/config` (`publicLinks`), the settings save (`sharing`), and the opt-in routes (`linkAuth`).
+| `PUT /drive/:ownerId/:mountId/path/:pathId/acl` | The body's `visibility` takes `'link'` |
+| `GET /collab/:ownerId/:mountId/:pathId/info` | The answer gains `viaLink` |
+| `GET /drive/:ownerId/:mountId/path/:pathId/permissions` | The answer gains `viaLink` |
+| `GET /p/config` | The answer gains `publicLinks` |
+| The settings save in `routes/settings.ts` | The body takes `sharing.publicLinks` |
+| The fourteen read routes and the socket | They answer without a login, through `linkAuth` |
 
 ## Open questions
 
-1. **Dialog placement, (a) or (b)?** Recommended: (a), one switch for one entry. Decide on screenshots.
-2. **Default of `sharing.publicLinks`?** Recommended: `'on'`, which is what users ask for.
-3. **Does eigen.is force passwords?** Recommended: no, `'on'`. Set `'off'` on the demo server, where anyone can upload.
-4. **Pass lifetime?** Recommended: a 30-day cookie and no expiry on the server. A reset or a password change is the revoke.
-5. **A cap on links per user?** Recommended: none. A link costs no row, no Home and no sweep.
-6. **May readers see the link entry (bend 1)?** Recommended: yes. Say no and the hidden form needs a migration or a strip seam.
-7. **Keep the password in phase 1 (bend 6)?** Recommended: yes, it is ruled. Dropping it is the one cut that shrinks the design.
-8. **A signed-in user on a link sees the visitor view. Fine?** Recommended: yes. Their own URL still opens the editor.
-9. **A history row when a link is turned on, off or reset?** Recommended: later, with its event type.
-10. **A ROADMAP row, not this feature: comment cards store their author's email in the document.** Recommended: add it to P2. It is why "a visitor sees no addresses" can't be promised.
+1. **No Reset link, and the item's own URL as the secret. Accepted?** Recommended: yes, it is the one-URL wish and the smallest design. If not, the middle candidate.
+2. **Default of `sharing.publicLinks`?** Recommended: on, and on for eigen.is. Off on the demo server.
+3. **A signed-in non-member, a guest included, gets the visitor view on a public item. Fine?** Recommended: yes.
+4. **A lone file opens on the Shared with me page for a visitor. Enough for now?** Recommended: yes, with a file page as a later row.
+5. **The words of the three choices.** Recommended: Restricted, Anyone signed in with the link, Anyone with the link. Decide on screenshots.
