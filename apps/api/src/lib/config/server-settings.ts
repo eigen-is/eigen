@@ -9,6 +9,7 @@ import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
+import { isDemo } from './env';
 import { getServerDataPath, SERVER_FILES } from './paths';
 
 // A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
@@ -99,6 +100,11 @@ export function getMaxUploadSize(): number {
 
 export function getS3Config(): S3Config | undefined {
     return getServerSettings().defaults.mount.s3Config;
+}
+
+// Never on a demo server, where anyone can upload.
+export function arePublicLinksEnabled(): boolean {
+    return getServerSettings().sharing.publicLinks && !isDemo();
 }
 
 await settingsStore.load();

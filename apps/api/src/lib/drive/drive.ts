@@ -44,8 +44,7 @@ import { validateACLEntries } from '@workspace/lib/validation';
 import { ChatRoom } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
-import { isDemo } from '../config/env';
-import { getServerSettings } from '../config/server-settings';
+import { arePublicLinksEnabled } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
@@ -871,7 +870,7 @@ export class Drive {
             const ancestors = await mount.getBreadcrumb(pathId);
             // The share dialog sends the visibility on every Save, so a link saved while the switch was on still saves.
             if (visibility === 'link' && item.visibility !== 'link') {
-                if (!getServerSettings().sharing.publicLinks || isDemo()) {
+                if (!arePublicLinksEnabled()) {
                     throw new ApiError(403, 'Public links are turned off on this server');
                 }
                 const linkable =
