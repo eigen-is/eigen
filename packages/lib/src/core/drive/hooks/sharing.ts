@@ -2,18 +2,20 @@
 // reading who may open it, such as the viewer's own permissions, its effective members and the shared lists.
 // Sharing UI such as the Share dialog calls them; checkPathAccess is the mail composer's one-off probe at send.
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
-import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { useAuth } from '../../auth';
 import { driveKeys, invalidateAclUpdated, invalidateViewerLists } from './keys';
 
-export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
+// The path names its own owner and mount, so one instance shares an item from any drive.
+export function useUpdateACL() {
     const queryClient = useQueryClient();
+    const { user } = useAuth();
     return useMutation({
         mutationFn: async ({
             path,
@@ -28,21 +30,16 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             visibility?: DriveVisibility;
             sharingRestricted?: boolean;
         }) => {
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId: path.id }).acl.put({
-                add,
-                remove,
-                visibility,
-                sharingRestricted,
-            });
+            const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                .path({ pathId: path.id })
+                .acl.put({ add, remove, visibility, sharingRestricted });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => {
             invalidateAclUpdated(queryClient, variables.path);
             // A sharer other than the owner, such as an editor, has lists of their own.
-            if (currentUserId && currentUserId !== ownerId) {
-                invalidateViewerLists(queryClient, currentUserId);
-            }
+            if (user && user.id !== variables.path.ownerId) invalidateViewerLists(queryClient, user.id);
             toast.success('Sharing updated');
         },
         onError: onMutationError,
@@ -78,13 +75,14 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
 export function useCheckPermissions(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.permissions(ownerId, mountId, pathId || ''),
-        queryFn: async () => {
-            if (!pathId) return { canRead: false, canWrite: false };
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        enabled: !!pathId && !!ownerId && !!mountId,
+        queryFn:
+            pathId && ownerId && mountId
+                ? async () => {
+                      const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
+                      if (response.error) throw new AppError(response);
+                      return response.data;
+                  }
+                : skipToken,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
@@ -93,13 +91,16 @@ export function useCheckPermissions(ownerId: string, mountId: string, pathId: st
 export function useEffectiveMembers(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.effectiveMembers(ownerId, mountId, pathId || ''),
-        queryFn: async () => {
-            if (!pathId) return [];
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['effective-members'].get();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        enabled: !!pathId && !!ownerId && !!mountId,
+        queryFn:
+            pathId && ownerId && mountId
+                ? async () => {
+                      const response = await driveApi({ ownerId })({ mountId })
+                          .path({ pathId })
+                          ['effective-members'].get();
+                      if (response.error) throw new AppError(response);
+                      return response.data;
+                  }
+                : skipToken,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
