@@ -108,8 +108,7 @@ export async function startServerBackup({
     return job;
 }
 
-// What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
-// without Eden's reviver. `bytes` is null until the archive is renamed into place.
+// What ./eigen backup follows over the control socket. `bytes` is null until the archive is renamed into place.
 export type ControlBackupJob = Pick<
     BackupJob,
     'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId' | 'warnings'
