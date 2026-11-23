@@ -202,6 +202,7 @@ No sweep and no cleanup: a link is one value in one row.
 ## Risks, and what is accepted
 
 - **The URL is a bearer token, and only choosing another General access closes it.** URLs travel: browser history, chat previews, forwarded mails. Choosing the link again, a restore from the trash, turning the setting off and on, or a backup restore from when it was public all open the same URL.
+- **A move tells a shared folder's readers the id of the folder on the other side.** A file moved between a private folder and a shared one carries the private folder's id in its history line and its live event, as every path carries its `parentId`. Those readers can open that folder once it is public. Accepted.
 - **Ids are in logs.** Caddy's access log, the `[slow]` line in `app.ts` and `[collab] open path=` in `routes/collab.ts` hold path ids, which now open a public item.
 - **A guest account reads more than a visitor.** With open guest sign-up anyone can make one and then read the member list and the comment threads of a public item, as `public-read` allows today. Accepted.
 - **Any request without a login opens the Home its URL names** on every opt-in route, and a visitor's socket holds a document open. Only the per-IP limit in `app.ts` stands in front. Accepted for this version.
@@ -226,7 +227,7 @@ Files and folders first, then documents. **The setting is the gate.** Unit 1 add
 
 Three notes on the units:
 
-- **Unit 1 ends with a named check**, reported before unit 2 starts: does a path id reach someone without read access through search results, stored notification rows, file-history events, the shared-with-me and recent lists after access was removed, or mentions and links inside documents? The id is the secret now, and these were not traced.
+- **Unit 1 ends with a named check**, reported before unit 2 starts: does a path id reach someone without read access through search results, stored notification rows, file-history events, the shared-with-me and recent lists after access was removed, or mentions and links inside documents? The id is the secret now, and these were not traced. The check found one leak, closed in its own commit: a copy's `copied` history event stored the original's owner, mount and path id, which any reader of the copy could read. It also found the move case under Risks.
 - **Unit 2 changes the `:ownerId` gate** in `scripts/check-standards.ts`: it matches `auth: true` case-sensitively, so a `linkAuth` route would slip past it.
 - **Unit 4 starts by walking Drive's detail pane and quick look without a user.** What it finds there are queries that answer 401, never a leak.
 
