@@ -26,17 +26,7 @@ export type WorkerInput = {
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat; still?: boolean };
 };
 
-export type WorkerOutput =
-    | {
-          ok: true;
-          data: ArrayBuffer;
-          width: number;
-          height: number;
-          hasAlpha: boolean;
-          frameCount: number;
-          duration?: number;
-      }
-    | { ok: false };
+export type WorkerOutput = ({ ok: true; data: ArrayBuffer } & Omit<ImageResult, 'data'>) | { ok: false };
 
 export type ImageResult = ImageDimensions & {
     data: Buffer;
@@ -59,16 +49,7 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
             : await processImage(event.data, deadline);
         if (result) {
             const data = new Uint8Array(result.data).buffer;
-            const payload: WorkerOutput = {
-                ok: true,
-                data,
-                width: result.width,
-                height: result.height,
-                hasAlpha: result.hasAlpha,
-                frameCount: result.frameCount,
-                ...(result.duration !== undefined && { duration: result.duration }),
-            };
-            postMessage(payload, [data]);
+            postMessage({ ...result, ok: true, data } satisfies WorkerOutput, [data]);
         } else {
             postMessage({ ok: false } satisfies WorkerOutput);
         }

@@ -4,6 +4,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { isRecord } from '@workspace/lib/guards';
+import { parseJson } from '@workspace/lib/validation';
 
 export type VideoFrameResult = {
     data: Buffer;
@@ -54,9 +56,7 @@ export async function isFfmpegAvailable(): Promise<boolean> {
     return cachedAvailable;
 }
 
-type ProbeResult = { width: number; height: number; duration: number };
-
-async function probe(localPath: string, deadline: number): Promise<ProbeResult | null> {
+async function probe(localPath: string, deadline: number): Promise<Omit<VideoFrameResult, 'data'> | null> {
     const run = await runBefore(deadline, [
         'ffprobe',
         '-v',
@@ -76,20 +76,15 @@ async function probe(localPath: string, deadline: number): Promise<ProbeResult |
         localPath,
     ]);
     if (run?.exitCode !== 0) return null;
-    try {
-        const parsed = JSON.parse(run.stdout) as {
-            streams?: { width?: number; height?: number }[];
-            format?: { duration?: string };
-        };
-        const stream = parsed.streams?.[0];
-        const durationStr = parsed.format?.duration;
-        if (!stream?.width || !stream.height || !durationStr) return null;
-        const duration = Number(durationStr);
-        if (!Number.isFinite(duration) || duration <= 0) return null;
-        return { width: stream.width, height: stream.height, duration };
-    } catch {
-        return null;
-    }
+    const parsed = parseJson(run.stdout);
+    if (!isRecord(parsed) || !Array.isArray(parsed['streams']) || !isRecord(parsed['format'])) return null;
+    const stream: unknown = parsed['streams'][0];
+    if (!isRecord(stream)) return null;
+    const { width, height } = stream;
+    const duration = Number(parsed['format']['duration']);
+    if (typeof width !== 'number' || typeof height !== 'number' || !width || !height) return null;
+    if (!Number.isFinite(duration) || duration <= 0) return null;
+    return { width, height, duration };
 }
 
 async function extractFrame(
