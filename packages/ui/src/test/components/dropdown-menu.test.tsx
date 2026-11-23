@@ -1,6 +1,7 @@
 // A choice is a submenu whose rows check the current option, and a toggle a row checked when on: both draw the same
 // check, a choice's rows read as menuitemradio and a toggle's as menuitemcheckbox.
 import { afterEach, expect, mock, test } from 'bun:test';
+import { contextMenuEvent } from '../context-menu-event';
 import { recordFocus } from '../focus-calls';
 import { installHappyDom } from '../happy-dom';
 import { checkRows, clickRow, menuRows, openSubmenu, renderOpenMenu } from '../menu-rows';
@@ -320,4 +321,24 @@ test('a menu beside a list that takes the focus from the body gives its trigger 
         ['dialog', 'pointer', 'trigger'],
         ['dialog', 'Enter', 'trigger'],
     ]);
+});
+
+// On Windows the menu key, or Shift+F10, sends a contextmenu as the key comes up, onto the row with the focus. An
+// ordinary dropdown cancels it, so the browser's own menu doesn't open over it; a right-click in it keeps the browser's.
+test('a key’s contextmenu inside a dropdown opens no browser menu, and a pointer’s and the caller’s handler stay', async () => {
+    const received: string[] = [];
+    await renderKebab({ open: true }, { onContextMenu: (event: { type: string }) => received.push(event.type) });
+    const row = document.querySelector<HTMLElement>('[role="menuitem"]');
+    if (!row) throw new Error('no menu row');
+    row.focus();
+    const sent = (['chrome-key', 'right-click'] as const).map((source) => {
+        const event = contextMenuEvent(source);
+        row.dispatchEvent(event);
+        return [source, event.defaultPrevented];
+    });
+    expect(sent).toEqual([
+        ['chrome-key', true],
+        ['right-click', false],
+    ]);
+    expect(received).toEqual(['contextmenu', 'contextmenu']);
 });
