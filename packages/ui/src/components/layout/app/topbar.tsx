@@ -60,46 +60,6 @@ type TopbarProps = {
 
 const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Vector', 'Sheets', 'Chat']);
 
-function LogoutDialog({
-    open,
-    onOpenChange,
-    onLogout,
-}: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onLogout: () => void;
-}) {
-    return (
-        <ConfirmDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title="Log out?"
-            description="Logging out will end your current session. You will be logged out of your account and will need to log in again to continue."
-            cancelText="Go back"
-            confirmText="Log out"
-            onConfirm={onLogout}
-        />
-    );
-}
-
-function useLogout(rootRoute: TopbarProps['rootRoute']) {
-    const router = useRouter();
-    const navigate = rootRoute.useNavigate();
-    const auth = useAuth();
-    const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-
-    const handleLogout = () => {
-        auth.logout().then(() => {
-            router.invalidate().finally(() => {
-                navigate({ to: '/' });
-                setLogoutDialogOpen(false);
-            });
-        });
-    };
-
-    return { logoutDialogOpen, setLogoutDialogOpen, handleLogout };
-}
-
 function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     const { appName } = useLayout();
     const isAdmin = useIsAdmin();
@@ -160,65 +120,37 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
     );
 }
 
-function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
+function AccountMenu({ rootRoute }: TopbarProps) {
+    const router = useRouter();
+    const navigate = rootRoute.useNavigate();
     const auth = useAuth();
-    const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
-    const [aboutOpen, setAboutOpen] = useState(false);
-
-    if (!auth.isAuthenticated) return null;
-
-    return (
-        <>
-            <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
-            <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
-                        <UserAvatar
-                            name={auth.user?.name}
-                            email={auth.user?.email}
-                            userId={auth.user?.email}
-                            size="sm"
-                        />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuLabel className="font-normal">
-                        <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                        <a href={getSupportUrl()}>
-                            <LifeBuoy />
-                            Support
-                        </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setAboutOpen(true)}>
-                        <EigenLogo />
-                        About Eigen
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
-                        <LogOut />
-                        Log out
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </>
-    );
-}
-
-function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
-    const auth = useAuth();
-    const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
+    const isGuest = useIsGuest();
     const { theme, setTheme } = useTheme();
+    const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
 
     if (!auth.isAuthenticated) return null;
 
+    const handleLogout = () => {
+        auth.logout().then(() => {
+            router.invalidate().finally(() => {
+                navigate({ to: '/' });
+                setLogoutDialogOpen(false);
+            });
+        });
+    };
+
     return (
         <>
-            <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
+            <ConfirmDialog
+                open={logoutDialogOpen}
+                onOpenChange={setLogoutDialogOpen}
+                title="Log out?"
+                description="Logging out will end your current session. You will be logged out of your account and will need to log in again to continue."
+                cancelText="Go back"
+                confirmText="Log out"
+                onConfirm={handleLogout}
+            />
             <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -236,30 +168,34 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                        <a href={getSpaceProfileUrl()}>
-                            <UserRound />
-                            Profile
-                        </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                        <a href={getSpacePasswordUrl()}>
-                            <Settings />
-                            Settings
-                        </a>
-                    </DropdownMenuItem>
-                    <ChoiceMenuSub
-                        trigger={
-                            <>
-                                <Palette />
-                                Theme
-                            </>
-                        }
-                        value={theme}
-                        options={THEMES}
-                        onChange={setTheme}
-                    />
-                    <DropdownMenuSeparator />
+                    {!isGuest && (
+                        <>
+                            <DropdownMenuItem asChild>
+                                <a href={getSpaceProfileUrl()}>
+                                    <UserRound />
+                                    Profile
+                                </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <a href={getSpacePasswordUrl()}>
+                                    <Settings />
+                                    Settings
+                                </a>
+                            </DropdownMenuItem>
+                            <ChoiceMenuSub
+                                trigger={
+                                    <>
+                                        <Palette />
+                                        Theme
+                                    </>
+                                }
+                                value={theme}
+                                options={THEMES}
+                                onChange={setTheme}
+                            />
+                            <DropdownMenuSeparator />
+                        </>
+                    )}
                     <DropdownMenuItem asChild>
                         <a href={getSupportUrl()}>
                             <LifeBuoy />
@@ -347,7 +283,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 <div className="flex items-center justify-end gap-1 app-gutter-x">
                     {isMobile && auth.isAuthenticated && <CommandPaletteTrigger />}
                     <NotificationBell />
-                    {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
+                    <AccountMenu rootRoute={rootRoute} />
                     {!auth.isAuthenticated && !auth.isLoading && <LoginButton />}
                 </div>
             </div>
