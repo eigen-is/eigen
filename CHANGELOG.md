@@ -26,6 +26,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Manage rules in Sheets** — opening it no longer puts the focus on a delete button, so Enter can't remove a rule by accident
 - **Labels in Contacts** — deleting the label you are looking at takes you back to all contacts
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
+- **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 
 ### Security
 

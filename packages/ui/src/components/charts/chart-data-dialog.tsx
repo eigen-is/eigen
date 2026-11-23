@@ -175,6 +175,9 @@ function EditableGrid({
     const scroller = useRef<HTMLDivElement>(null);
     const input = useRef<HTMLInputElement>(null);
     const dragging = useRef(false);
+    // Which way the next selection scrolls into view, set by the key that moves it. A click scrolls nothing:
+    // a header's selection ends at the grid's far edge.
+    const reveal = useRef<{ row: boolean; column: boolean } | null>(null);
 
     const { rows } = grid;
     const shown = shownSize(grid, reach);
@@ -182,18 +185,24 @@ function EditableGrid({
     const range = rangeOf(selection);
     const invalid = rows.some((row) => !row.cells.every(isNumberText));
 
-    // The active cell scrolls into view below the header strip and right of the row numbers.
+    // The moved end scrolls into view below the header strip and right of the row numbers.
     useLayoutEffect(() => {
         const el = scroller.current;
-        if (!el) return;
-        const x = columnLeft(selection.focus.column);
-        const y = rowTop(selection.focus.row);
-        if (x - SHEET_ROW_HEADER_WIDTH < el.scrollLeft) el.scrollLeft = x - SHEET_ROW_HEADER_WIDTH;
-        else if (x + SHEET_DEFAULT_COL_WIDTH > el.scrollLeft + el.clientWidth)
-            el.scrollLeft = x + SHEET_DEFAULT_COL_WIDTH - el.clientWidth;
-        if (y - SHEET_COLUMN_HEADER_HEIGHT < el.scrollTop) el.scrollTop = y - SHEET_COLUMN_HEADER_HEIGHT;
-        else if (y + SHEET_DEFAULT_ROW_HEIGHT > el.scrollTop + el.clientHeight)
-            el.scrollTop = y + SHEET_DEFAULT_ROW_HEIGHT - el.clientHeight;
+        const axes = reveal.current;
+        reveal.current = null;
+        if (!el || !axes) return;
+        if (axes.column) {
+            const x = columnLeft(selection.focus.column);
+            if (x - SHEET_ROW_HEADER_WIDTH < el.scrollLeft) el.scrollLeft = x - SHEET_ROW_HEADER_WIDTH;
+            else if (x + SHEET_DEFAULT_COL_WIDTH > el.scrollLeft + el.clientWidth)
+                el.scrollLeft = x + SHEET_DEFAULT_COL_WIDTH - el.clientWidth;
+        }
+        if (axes.row) {
+            const y = rowTop(selection.focus.row);
+            if (y - SHEET_COLUMN_HEADER_HEIGHT < el.scrollTop) el.scrollTop = y - SHEET_COLUMN_HEADER_HEIGHT;
+            else if (y + SHEET_DEFAULT_ROW_HEIGHT > el.scrollTop + el.clientHeight)
+                el.scrollTop = y + SHEET_DEFAULT_ROW_HEIGHT - el.clientHeight;
+        }
     }, [selection.focus]);
 
     const growReach = () => {
@@ -222,8 +231,10 @@ function EditableGrid({
         setEditing(null);
         setSelection({ anchor: clamped, focus: clamped });
     };
-    const commitAndMove = (rowDelta: number, columnDelta: number) =>
+    const commitAndMove = (rowDelta: number, columnDelta: number) => {
+        reveal.current = { row: true, column: true };
         selectCell(committed(), { row: active.row + rowDelta, column: active.column + columnDelta });
+    };
     const extend = (focus: CellRef) =>
         setSelection({
             anchor: active,
@@ -254,8 +265,11 @@ function EditableGrid({
         }
         if (e.metaKey || e.ctrlKey || e.altKey) return;
         if (arrow) {
-            if (e.shiftKey) extend({ row: selection.focus.row + arrow[0], column: selection.focus.column + arrow[1] });
-            else commitAndMove(...arrow);
+            if (e.shiftKey) {
+                // Shift scrolls only the way it extends: after a row header, its far end is the last column.
+                reveal.current = { row: arrow[0] !== 0, column: arrow[1] !== 0 };
+                extend({ row: selection.focus.row + arrow[0], column: selection.focus.column + arrow[1] });
+            } else commitAndMove(...arrow);
         } else if (e.key === 'Tab') {
             // Past the grid's edge Tab leaves it, so the keyboard reaches Save.
             const column = active.column + (e.shiftKey ? -1 : 1);

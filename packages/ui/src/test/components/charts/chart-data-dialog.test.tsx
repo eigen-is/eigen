@@ -512,6 +512,29 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         expect((await dialog.save()).data.series.map((series) => series.name)).toEqual(['Period 2']);
     });
 
+    test('a header or the corner selects without scrolling; a key scrolls only the way it moves', async () => {
+        const dialog = await open(scores());
+        const view = dialog.dialog().querySelector('[role="grid"]')?.parentElement;
+        if (!view) throw new Error('the grid has no scroller');
+        // happy-dom lays nothing out: a view three columns wide and three rows high.
+        const layout = { clientWidth: 300, clientHeight: 80, scrollLeft: 0, scrollTop: 0 };
+        for (const [name, value] of Object.entries(layout))
+            Object.defineProperty(view, name, { configurable: true, value, writable: true });
+        await dialog.mouseDown(dialog.rowHeader('3'));
+        expect([view.scrollLeft, view.scrollTop]).toEqual([0, 0]);
+        for (let i = 0; i < 12; i++) await dialog.key('ArrowDown', { shiftKey: true });
+        expect(view.scrollLeft).toBe(0);
+        expect(view.scrollTop).toBeGreaterThan(0);
+        const scrollTop = view.scrollTop;
+        await dialog.mouseDown(dialog.columnHeader('C'));
+        const corner = dialog.dialog().querySelector<HTMLElement>('[role="row"][aria-rowindex="1"] > :first-child');
+        await dialog.mouseDown(corner ?? undefined);
+        expect([view.scrollLeft, view.scrollTop]).toEqual([0, scrollTop]);
+        await dialog.select(1, 1);
+        for (let i = 0; i < 3; i++) await dialog.key('ArrowRight');
+        expect(view.scrollLeft).toBeGreaterThan(0);
+    });
+
     test('⌘C copies the selection as TSV and an HTML table', async () => {
         const dialog = await open(scores());
         await dialog.select(0, 0);
