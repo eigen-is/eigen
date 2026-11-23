@@ -42,6 +42,7 @@ import {
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
+    DeleteCommentDialog,
     PanelColumn,
 } from '@workspace/ui/components/comments';
 import {
@@ -215,6 +216,7 @@ const TiptapEditor = ({
     const media = useDocMedia(path);
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
+    const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
     const { isMobile } = useLayout();
     const {
         panel,
@@ -731,7 +733,7 @@ const TiptapEditor = ({
             lifecycle={lifecycle}
             item={item.comment}
             canWrite={canWrite}
-            onDelete={removeCommentMarks}
+            onDelete={setDeleteCardId}
             part="delete"
         />
     );
@@ -1095,6 +1097,14 @@ const TiptapEditor = ({
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={removeCommentMarks}
+            />
+
+            <DeleteCommentDialog
+                open={!!deleteCardId}
+                onOpenChange={(open) => !open && setDeleteCardId(null)}
+                onConfirm={() => {
+                    if (deleteCardId) removeCommentMarks(deleteCardId);
+                }}
             />
 
             <ContextMenuAnchor contextMenu={figureContextMenu}>
