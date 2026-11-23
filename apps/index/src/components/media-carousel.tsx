@@ -19,13 +19,7 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
     const carousel = useRef<HTMLElement>(null);
     const strip = useRef<HTMLDivElement>(null);
     const [current, setCurrent] = useState(0);
-    // A mouse drag lets go onto the next slide in its direction.
-    const drag = useDragScroll((scroller, towardEnd) => {
-        const { pitch } = stripPosition(scroller);
-        const offset = scroller.scrollLeft / pitch;
-        const slide = towardEnd ? Math.ceil(offset) : Math.floor(offset);
-        return Math.min(scroller.children.length - 1, Math.max(0, slide)) * pitch;
-    });
+    const drag = useDragScroll();
 
     // It waits while the reader points at it or is inside it. It remembers the slide it scrolled to, so a strip on
     // any other slide is the reader's doing, and it stops for good.

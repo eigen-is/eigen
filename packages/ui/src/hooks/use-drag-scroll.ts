@@ -1,7 +1,7 @@
 // A mouse drags a sideways scroller the way a finger swipes it, for strips such as the site's carousel and a row of
 // attachment chips. Touch and pen keep their native scroll. The host spreads `handlers` on the scroller and, while
-// `dragging`, turns off snapping and text selection. A host that snaps passes `settle`, the scroll offset to glide
-// to on release, and stays `dragging` until the strip lands there.
+// `dragging`, turns off snapping and text selection. On release the strip glides on to the next item that snaps at its
+// start, in the drag's direction, and stays `dragging` until it lands where its CSS snap holds it.
 
 import type { DragEvent, HTMLAttributes, MouseEvent, PointerEvent } from 'react';
 import { useRef, useState } from 'react';
@@ -9,9 +9,6 @@ import { useRef, useState } from 'react';
 // How far the mouse moves before a press is a drag rather than a click, and how long the release glide takes.
 const DRAG_THRESHOLD_PX = 5;
 const GLIDE_MS = 400;
-
-// `towardEnd` is the drag's direction: true when the content moved left, toward the strip's later items.
-type Settle = (scroller: HTMLElement, towardEnd: boolean) => number;
 
 type DragScroll = {
     dragging: boolean;
@@ -23,7 +20,7 @@ type DragScroll = {
     >;
 };
 
-export function useDragScroll(settle?: Settle): DragScroll {
+export function useDragScroll(): DragScroll {
     const press = useRef<{ x: number; left: number; moved: boolean } | null>(null);
     const frame = useRef(0);
     const [dragging, setDragging] = useState(false);
@@ -54,10 +51,9 @@ export function useDragScroll(settle?: Settle): DragScroll {
             press.current = null;
             return;
         }
-        if (!settle) return setDragging(false);
         const scroller = e.currentTarget;
         const from = scroller.scrollLeft;
-        const to = settle(scroller, e.clientX < at.x);
+        const to = nextSnap(scroller, e.clientX < at.x);
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const start = performance.now();
         const step = (now: number) => {
@@ -86,4 +82,16 @@ export function useDragScroll(settle?: Settle): DragScroll {
         onDragStart,
     };
     return { dragging, handlers };
+}
+
+// The first item snaps at the strip's start, so each item's offset from it is where the strip lands on that item. The
+// last few can't reach the start, and land where the strip ends.
+function nextSnap(scroller: HTMLElement, towardEnd: boolean): number {
+    const items = Array.from(scroller.querySelectorAll<HTMLElement>('*')).filter(
+        (el) => getComputedStyle(el).scrollSnapAlign === 'start',
+    );
+    const end = scroller.scrollWidth - scroller.clientWidth;
+    const stops = items.map((item) => Math.min(end, item.offsetLeft - items[0].offsetLeft));
+    const left = scroller.scrollLeft;
+    return (towardEnd ? stops.find((stop) => stop >= left) : stops.findLast((stop) => stop <= left)) ?? left;
 }

@@ -40,17 +40,21 @@ async function renderVideo() {
     return video;
 }
 
-// A carousel from the real build, three images unless the test writes its own. happy-dom lays nothing out, so each
-// slide gets its place 600px apart.
+// A carousel from the real build, three images unless the test writes its own. happy-dom lays nothing out and loads no
+// CSS, so each slide gets its place 600px apart and its snap, and the strip a 600px window.
 async function renderCarousel(markdown = '::: carousel\n![a](/a.webp)\n![b](/b.webp)\n![c](/c.webp)\n:::') {
     const { container } = await renderInDocument(<ArticleContent body={renderMarkdown(markdown)} />);
-    for (const [i, slide] of container.querySelectorAll('.media-carousel-slide').entries()) {
+    const slides = container.querySelectorAll<HTMLElement>('.media-carousel-slide');
+    for (const [i, slide] of slides.entries()) {
         Object.defineProperty(slide, 'offsetLeft', { value: i * 600 });
+        slide.style.scrollSnapAlign = 'start';
     }
     const strip = container.querySelector('.media-carousel-strip');
     const prev = container.querySelector<HTMLButtonElement>('.media-carousel-prev');
     const next = container.querySelector<HTMLButtonElement>('.media-carousel-next');
     if (!strip || !prev || !next) throw new Error('No carousel rendered');
+    Object.defineProperty(strip, 'clientWidth', { value: 600 });
+    Object.defineProperty(strip, 'scrollWidth', { value: slides.length * 600 });
     const dots = Array.from(container.querySelectorAll<HTMLButtonElement>('.media-carousel-dot'));
     const scrollTo = (left: number) =>
         act(async () => {

@@ -39,9 +39,7 @@ export function AttachmentStrip({ children, className, ...props }: ComponentProp
 
     const step = (direction: 1 | -1) => {
         const el = scrollerRef.current;
-        if (!el) return;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        el.scrollBy({ left: direction * el.clientWidth * STEP_FRACTION, behavior: reduceMotion ? 'auto' : 'smooth' });
+        el?.scrollBy({ left: direction * el.clientWidth * STEP_FRACTION });
     };
 
     const mask = edgeMask(edges.start, edges.end);
@@ -53,11 +51,11 @@ export function AttachmentStrip({ children, className, ...props }: ComponentProp
                     ref={scrollerRef}
                     onScroll={measure}
                     data-dragging={drag.dragging || undefined}
-                    className="overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] data-dragging:cursor-grabbing data-dragging:select-none data-dragging:**:cursor-grabbing"
+                    className="snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] motion-safe:scroll-smooth data-dragging:cursor-grabbing data-dragging:snap-none data-dragging:scroll-auto data-dragging:select-none data-dragging:**:cursor-grabbing"
                     style={{ maskImage: mask, WebkitMaskImage: mask }}
                     {...drag.handlers}
                 >
-                    <div ref={rowRef} className="flex w-max items-center gap-2">
+                    <div ref={rowRef} className="flex w-max items-center gap-2 *:snap-start">
                         {children}
                     </div>
                 </div>
