@@ -28,6 +28,15 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
+- **Refused imports and downloads** — when Eigen refuses an import or a download in Calendar, Contacts, Mail, Docs, Sheets or Slides, the message gives its reason instead of raw code
+- **Deleting a comment in Docs** — **Delete comment** in the menu of an image, chart, text box, table or equation asks first, as every other comment menu does
+- **Dragging several items in Drive** — dropping them onto a folder moves them together, and when some fail one message says how many and why, as **Move to** does
+- **Failed uploads** — the card of an upload that failed shows the file's name, no longer "Uploading" it
+- **Menus on Windows** — the Menu key or Shift+F10 inside an open menu no longer opens the browser's own menu on top of it
+- **New mail in Mail** — a sync that brings in many messages refreshes the open list once, not once per message
+- **Thumbnails on the server** — an interlaced PNG over 40 megapixels gets no thumbnail or preview and is left out of exports, instead of taking gigabytes of memory. A video whose thumbnail stalls leaves no process running
+- **Deleting a user** — also deletes their profile picture from the server
+- **Backups and restores** — Eigen keeps answering requests while a backup, verify or restore checks a large account, instead of pausing while it reads the documents
 
 ### Security
 
