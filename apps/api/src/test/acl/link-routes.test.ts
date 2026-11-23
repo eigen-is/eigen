@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eigenMediaHref } from '@workspace/lib/vector';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import {
     app,
@@ -42,9 +45,21 @@ const LINK_ROUTES = [
     { route: '/drive/:ownerId/:mountId/file/:pathId/eml-preview', reads: 'eml', bytes: false },
     { route: '/drive/:ownerId/:mountId/file/:pathId/ics-preview', reads: 'ics', bytes: false },
     { route: '/drive/:ownerId/:mountId/thumb/:fileName', reads: 'image', bytes: true },
+    { route: '/drive/:ownerId/:mountId/path/:pathId/permissions', reads: 'text', bytes: false },
 ] as const;
 
 type Reads = (typeof LINK_ROUTES)[number]['reads'];
+
+// The one link route that answers what a visitor may do, so it refuses with a 200 that says no.
+const PERMISSIONS_ROUTE = LINK_ROUTES[11].route;
+
+async function expectRefused(route: string, res: Response): Promise<void> {
+    if (route === PERMISSIONS_ROUTE) {
+        expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false });
+    } else {
+        expect(res.status).toBe(403);
+    }
+}
 
 // Routes that answer without a login by design: the public surface, first-run setup, the guest's code, what the
 // server's own mail and proxy call, better-auth's mount and the app's own two.
@@ -63,6 +78,7 @@ describe('files and folders without a login', () => {
     let loneFile: DrivePath;
     let siblingFile: DrivePath;
     let siblingFolder: DrivePath;
+    let svgs: DrivePath[];
     let inFolder: Record<Reads, DrivePath>;
 
     function withPublicLinks(on: boolean): Promise<void> {
@@ -121,6 +137,12 @@ describe('files and folders without a login', () => {
         siblingFolder = await drivePost(token, aliceId, mountId, `folder/${privateParent.id}`, {
             folderName: 'Sibling Folder',
         });
+        await upload(privateParent.id, 'sibling.png', 'image/png', TEST_PNG_BYTES);
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('sibling.png')}"/></svg>`;
+        svgs = [
+            await upload(privateParent.id, 'pic.svg', 'image/svg+xml', svg),
+            await upload(privateParent.id, 'pic-2.svg', 'image/svg+xml', svg),
+        ];
 
         // The thumbnail is made in the background.
         await eventually(async () => {
@@ -133,6 +155,7 @@ describe('files and folders without a login', () => {
         const charlie = { id: ctx.charlie.user.email, read: true, write: false };
         await putACL(folder.id, { visibility: 'link', add: [charlie] });
         await putACL(loneFile.id, { visibility: 'link', add: [charlie] });
+        for (const { id } of svgs) await putACL(id, { visibility: 'link' });
     });
 
     afterAll(async () => {
@@ -150,16 +173,16 @@ describe('files and folders without a login', () => {
                 if (bytes) expect(await visitor.bytes()).toEqual(await owner.bytes());
             });
 
-            test(`${route} answers 403 for a sibling of the public path`, async () => {
-                expect((await visit(urlOf(route, siblingOf(reads).id))).status).toBe(403);
+            test(`${route} refuses a sibling of the public path`, async () => {
+                await expectRefused(route, await visit(urlOf(route, siblingOf(reads).id)));
             });
 
-            test(`${route} answers 403 for an unknown id`, async () => {
-                expect((await visit(urlOf(route, crypto.randomUUID()))).status).toBe(403);
+            test(`${route} refuses an unknown id`, async () => {
+                await expectRefused(route, await visit(urlOf(route, crypto.randomUUID())));
             });
 
-            test(`${route} answers 403 for the folder above the public path`, async () => {
-                expect((await visit(urlOf(route, privateParent.id))).status).toBe(403);
+            test(`${route} refuses the folder above the public path`, async () => {
+                await expectRefused(route, await visit(urlOf(route, privateParent.id)));
             });
 
             test(`${route} tells a visitor's browser and a crawler to keep nothing`, async () => {
@@ -178,10 +201,10 @@ describe('files and folders without a login', () => {
                 }
             });
 
-            test(`${route} answers 403 while public links are off`, async () => {
+            test(`${route} refuses while public links are off`, async () => {
                 await withPublicLinks(false);
                 try {
-                    expect((await visit(urlOf(route, inFolder[reads].id))).status).toBe(403);
+                    await expectRefused(route, await visit(urlOf(route, inFolder[reads].id)));
                 } finally {
                     await withPublicLinks(true);
                 }
@@ -207,11 +230,33 @@ describe('files and folders without a login', () => {
             expect(res.headers.get('cache-control')).toBe('no-store');
         });
 
-        test('on a demo server every route answers 403', async () => {
+        test('the permissions of a public path say it reads and does not write', async () => {
+            for (const head of [folder, loneFile, deep]) {
+                const res = await visit(urlOf(PERMISSIONS_ROUTE, head.id));
+                expect(await assertJson(res)).toEqual({ canRead: true, canWrite: false });
+            }
+        });
+
+        // The preview cache is one copy for every caller, so the visitor gets the member's: the sibling it names inlined.
+        test('a public svg previews as its owner sees it, whoever asks first', async () => {
+            const png = `data:image/png;base64,${Buffer.from(TEST_PNG_BYTES).toString('base64')}`;
+            for (const [index, { id }] of svgs.entries()) {
+                const url = urlOf(LINK_ROUTES[5].route, id);
+                const ownerFirst = index === 0;
+                const first = ownerFirst ? await authedRequest(ctx.alice.user.sessionToken, url) : await visit(url);
+                const second = ownerFirst ? await visit(url) : await authedRequest(ctx.alice.user.sessionToken, url);
+                const [visitor, owner] = ownerFirst ? [second, first] : [first, second];
+                const body = await visitor.text();
+                expect(body).toBe(await owner.text());
+                expect(body).toContain(png);
+            }
+        });
+
+        test('on a demo server every route refuses', async () => {
             process.env['EIGEN_DEMO'] = '1';
             try {
                 for (const { route, reads } of LINK_ROUTES) {
-                    expect((await visit(urlOf(route, inFolder[reads].id))).status).toBe(403);
+                    await expectRefused(route, await visit(urlOf(route, inFolder[reads].id)));
                 }
             } finally {
                 delete process.env['EIGEN_DEMO'];
@@ -324,6 +369,27 @@ describe('files and folders without a login', () => {
             expect(sibling.status).toBe(403);
         });
 
+        test('the permissions route answers a member and a non-member as before', async () => {
+            const permissions = (token: string, pathId: string) =>
+                authedRequest(token, urlOf(PERMISSIONS_ROUTE, pathId)).then((res) => assertJson(res));
+            expect(await permissions(ctx.alice.user.sessionToken, folder.id)).toEqual({
+                canRead: true,
+                canWrite: true,
+            });
+            expect(await permissions(ctx.charlie.user.sessionToken, folder.id)).toEqual({
+                canRead: true,
+                canWrite: false,
+            });
+            expect(await permissions(ctx.bob.user.sessionToken, loneFile.id)).toEqual({
+                canRead: true,
+                canWrite: false,
+            });
+            expect(await permissions(ctx.bob.user.sessionToken, siblingFile.id)).toEqual({
+                canRead: false,
+                canWrite: false,
+            });
+        });
+
         test('a login that no longer holds answers as a visitor', async () => {
             const res = await authedRequest('not-a-session', urlOf(LINK_ROUTES[0].route, loneFile.id));
             expect(res.status).toBe(200);
@@ -355,16 +421,33 @@ describe('files and folders without a login', () => {
             expect(served).toEqual([]);
             expect([...found].sort()).toEqual([...linkRoutes].sort());
         });
+
+        // The walk above can't tell a refused body or query from a refused login, so the route files say who opts in.
+        test('the routes that say linkAuth are the list, and none says optionalAuth', () => {
+            const dir = join(import.meta.dir, '../../routes');
+            const linkAuth: string[] = [];
+            for (const file of readdirSync(dir).filter((name) => name.endsWith('.ts'))) {
+                const text = readFileSync(join(dir, file), 'utf8');
+                for (const chunk of text
+                    .split(/(?=\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"]\/)/)
+                    .slice(1)) {
+                    expect(chunk).not.toMatch(/optionalAuth:\s*true/);
+                    const route = /['"](\/[^'"]*)['"]/.exec(chunk)?.[1];
+                    if (route !== undefined && /linkAuth:\s*true/.test(chunk)) linkAuth.push(route);
+                }
+            }
+            expect(linkAuth.sort()).toEqual(LINK_ROUTES.map(({ route }) => route).sort());
+        });
     });
 
     describe('the trash', () => {
-        test('a public path in the trash, or under a trashed folder, answers 403', async () => {
+        test('a public path in the trash, or under a trashed folder, is refused', async () => {
             const token = ctx.alice.user.sessionToken;
             expect((await visit(urlOf(LINK_ROUTES[0].route, loneFile.id))).status).toBe(200);
             await driveDelete(token, aliceId, mountId, `path/${loneFile.id}`);
             await driveDelete(token, aliceId, mountId, `path/${folder.id}`);
             for (const { route, reads } of LINK_ROUTES) {
-                expect((await visit(urlOf(route, inFolder[reads].id))).status).toBe(403);
+                await expectRefused(route, await visit(urlOf(route, inFolder[reads].id)));
             }
             expect((await visit(urlOf(LINK_ROUTES[0].route, loneFile.id))).status).toBe(403);
             expect((await visit(urlOf(LINK_ROUTES[3].route, loneFile.id))).status).toBe(403);

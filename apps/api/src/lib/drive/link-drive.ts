@@ -1,7 +1,8 @@
 // LinkDrive is how a visitor without a login reaches a Drive: only the reads a route answers without a user, such as
-// a folder listing or a download. Each runs the link rule on the path's breadcrumb first and answers the same 403
-// for every refusal, so a visitor can't tell a private path from one that does not exist. What it hands out is
-// trimmed, so no answer names a private folder above the public path or who else has access.
+// a folder listing or a download. Each runs the link rule on the path's breadcrumb first and refuses every path alike,
+// with a 403 or canRead's false, so a visitor can't tell a private path from one that does not exist. An answer is
+// trimmed, so it names no private folder above the public path and no one else with access, while the file handed to
+// the code that serves it stays whole, so a visitor gets the same preview as a member.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { arePublicLinksEnabled } from '../config/server-settings';
@@ -23,22 +24,24 @@ export class LinkDrive {
         this.drive = home.drive;
     }
 
-    // The chain from the public path down. Every other read starts here, so this is where the rule runs.
-    public async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
-        const chain = await this.drive.breadCrumb(mountId, pathId);
-        const publicPath = canReadByLink(chain, arePublicLinksEnabled());
-        if (publicPath === null) throw new ApiError(403, 'No read permission');
-        return chain.slice(publicPath).map((path, index) => trimmed(path, index === 0));
+    public async canRead(mountId: string, pathId: string): Promise<boolean> {
+        return (await this.publicChain(mountId, pathId)) !== null;
     }
 
-    public async getPath(mountId: string, pathId: string): Promise<DrivePath> {
-        return (await this.resolveFile(mountId, pathId)).path;
+    // Every other read starts here, so this is where a refusal is thrown.
+    public async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
+        const chain = await this.publicChain(mountId, pathId);
+        if (chain === null) throw new ApiError(403, 'No read permission');
+        return chain.map((path, index) => trimmed(path, index === 0));
+    }
+
+    public async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
+        return (await this.breadCrumb(mountId, pathId)).at(-1) ?? null;
     }
 
     public async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
-        const crumbs = await this.breadCrumb(mountId, pathId);
-        const { mount, path } = await this.drive.resolveFile(mountId, pathId);
-        return { mount, path: trimmed(path, crumbs.length === 1) };
+        await this.breadCrumb(mountId, pathId);
+        return this.drive.resolveFile(mountId, pathId);
     }
 
     public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
@@ -47,5 +50,12 @@ export class LinkDrive {
         return children
             .filter((child) => canReadByLink([...crumbs, child], arePublicLinksEnabled()) !== null)
             .map((child) => trimmed(child, false));
+    }
+
+    // The chain from the public path down, or null where the link rule refuses the path.
+    private async publicChain(mountId: string, pathId: string): Promise<DrivePath[] | null> {
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const publicPath = canReadByLink(chain, arePublicLinksEnabled());
+        return publicPath === null ? null : chain.slice(publicPath);
     }
 }
