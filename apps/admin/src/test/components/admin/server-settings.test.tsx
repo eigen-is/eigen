@@ -43,6 +43,7 @@ const SETTINGS: ServerSettings = {
             keep: 30,
         },
     },
+    sharing: { publicLinks: false },
 };
 const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
 

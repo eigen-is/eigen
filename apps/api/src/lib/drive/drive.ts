@@ -16,6 +16,7 @@ import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
+    isCollabType,
     isContainerType,
     isDocumentType,
     withEigenExtension,
@@ -43,6 +44,8 @@ import { validateACLEntries } from '@workspace/lib/validation';
 import { ChatRoom } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
+import { isDemo } from '../config/env';
+import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
@@ -866,6 +869,17 @@ export class Drive {
                 throw new ApiError(403, 'Cannot update ACL for root folder');
             }
             const ancestors = await mount.getBreadcrumb(pathId);
+            // The share dialog sends the visibility on every Save, so a link saved while the switch was on still saves.
+            if (visibility === 'link' && item.visibility !== 'link') {
+                if (!getServerSettings().sharing.publicLinks || isDemo()) {
+                    throw new ApiError(403, 'Public links are turned off on this server');
+                }
+                const linkable =
+                    item.type === DRIVE_TYPE_FOLDER || item.type === DRIVE_TYPE_FILE || isCollabType(item.type);
+                if (!linkable || isInsideDocument(ancestors)) {
+                    throw new ApiError(400, 'This item cannot have a public link');
+                }
+            }
 
             const acl = mergeACLDelta(item.acl, delta);
             const aclError = validateACLEntries(acl);
@@ -944,7 +958,7 @@ export class Drive {
         return emailCollaborators(this, mountId, pathId, subject, message, sendCopyToSelf, sender);
     }
 
-    // The outermost document at or above the path, or null when there is none, such as for a chat on its own.
+    // The document at or above the path, or null when there is none, such as for a chat on its own.
     public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         return findContainerFromAncestors(await this.getMount(mountId).getBreadcrumb(pathId));
     }

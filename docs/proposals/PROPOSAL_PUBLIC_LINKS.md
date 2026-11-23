@@ -51,7 +51,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 **It travels on the existing ACL route.** `PUT /drive/:ownerId/:mountId/path/:pathId/acl` already takes `visibility`, the dialog already sends it on Save through `useUpdateACL`, and `SharedDrive.updateACLDelta` already checks write and `sharingRestricted`. So an editor may publish under the same rule as any sharing change, and no new route or hook is needed. The copy-link icon copies `getDriveShareUrl(path)` as it does today.
 
-**One place refuses it.** `Drive.updateACLDelta` answers 403 for `'link'` while public links are off, and 400 on a chat, on a path inside a document, and on anything that is not a file, a folder or a collab document. The mount root is refused already. It reads the path with `getActivePath`, which checks only the path's own `trashedAt`; the rule below checks the whole chain, so a value saved under a trashed folder opens nothing.
+**One place refuses it.** `Drive.updateACLDelta` refuses a path that becomes `'link'`: 403 while public links are off, and 400 on a chat, on a path inside a document, and on anything that is not a file, a folder or a collab document. A path that already is `'link'` saves as before, so it can be shared further or closed while public links are off. The mount root is refused already. It reads the path with `getActivePath`, which checks only the path's own `trashedAt`; the rule below checks the whole chain, so a value saved under a trashed folder opens nothing.
 
 **The switch.** `sharing.publicLinks` is a boolean in `ServerSettings` (`packages/lib/src/types/settings.ts`), on by default. "On" for the code is `getServerSettings().sharing.publicLinks && !isDemo()` (`lib/config/env.ts`), since anyone can upload to a demo server. Off, no link can be saved and every existing one is closed. The values stay stored, so turning it on opens them again.
 
@@ -240,6 +240,7 @@ No new route, no migration, no package. Each of these changes what an existing r
 |---|---|
 | `PUT /drive/:ownerId/:mountId/path/:pathId/acl` | The body's `visibility` takes `'link'` |
 | The settings save in `routes/settings.ts` | The body takes `sharing.publicLinks` |
+| `GET /settings/server` and the settings save's answer | They gain `sharing.publicLinks`, with the type, in unit 1 |
 | `GET /p/config` | The answer gains `publicLinks` |
 | The thirteen read routes and the socket | They answer without a login, through `linkAuth` |
 

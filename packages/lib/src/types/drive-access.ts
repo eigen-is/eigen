@@ -15,7 +15,8 @@ export type DriveACLDelta = {
     remove?: string[];
 };
 
-export type DriveVisibility = 'private' | 'public-read' | 'public-write';
+// 'link' opens the path to anyone with its URL, signed in or not; a signed-in user reads it as 'public-read'.
+export type DriveVisibility = 'private' | 'public-read' | 'public-write' | 'link';
 
 export type InviteResult = {
     alreadyHasAccess: boolean;

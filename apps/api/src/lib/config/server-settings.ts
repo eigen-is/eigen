@@ -69,6 +69,9 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
         relaySendsAsUsers: false,
     },
     backups: DEFAULT_BACKUPS,
+    sharing: {
+        publicLinks: false,
+    },
 });
 
 export function getServerSettings(): ServerSettings {
