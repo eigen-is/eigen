@@ -29,6 +29,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
 - **Refused imports and downloads** — when Eigen refuses an import or a download in Calendar, Contacts, Mail, Docs, Sheets or Slides, the message gives its reason instead of raw code
+- **Guest sign-in** — when a guest's code is wrong or can't be sent, the sign-in page says why instead of showing raw code or only "Verification failed"
 - **Deleting a comment in Docs** — **Delete comment** in the menu of an image, chart, text box, table or equation asks first, as every other comment menu does
 - **Dragging several items in Drive** — dropping them onto a folder moves them together, and when some fail one message says how many and why, as **Move to** does
 - **Failed uploads** — the card of an upload that failed shows the file's name, no longer "Uploading" it
