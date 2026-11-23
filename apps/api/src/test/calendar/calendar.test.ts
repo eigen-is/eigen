@@ -12,6 +12,7 @@ import type { Notification } from '@workspace/lib/types/notification';
 import * as schema from '../../lib/calendar/schema';
 import { getHome } from '../../lib/home';
 import { clearHomeRestoring, markHomeRestoring } from '../../lib/home/get-home';
+import * as users from '../../lib/user';
 import {
     CALENDAR_TEST_ROOT,
     defaultCalendarId,
@@ -1138,6 +1139,49 @@ describe('Calendar', () => {
             );
             const removed = findOrFail(notifs, (n) => n.type === 'calendar-unshare' && n.body === 'Deleted Shared Cal');
             expect(removed.title).toBe(`${ctx.alice.user.name} removed your access`);
+        });
+
+        test('a share target whose lookup throws fails no delete, and the other targets still hear of it', async () => {
+            const asAlice = (path: string, init: RequestInit) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars${path}`, init);
+            const cal = await assertJson<CalendarItem>(
+                await asAlice('', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Half Reachable Cal' }),
+                }),
+            );
+            const shares = [
+                { targetId: ctx.charlie.user.email, permission: 'read' },
+                { targetId: ctx.bob.user.email, permission: 'read' },
+            ];
+            const shareRes = await asAlice(`/${cal.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ shares }),
+            });
+            expect(shareRes.status).toBe(200);
+
+            const getUserByEmail = users.getUserByEmail;
+            const lookup = spyOn(users, 'getUserByEmail').mockImplementation(async (email) => {
+                if (email === ctx.charlie.user.email) throw new Error('auth database unreadable');
+                return getUserByEmail(email);
+            });
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            let res: Response;
+            try {
+                res = await asAlice(`/${cal.id}`, { method: 'DELETE' });
+                expect(errors).toHaveBeenCalledWith('Failed to propagate calendar share:', expect.any(Error));
+            } finally {
+                lookup.mockRestore();
+                errors.mockRestore();
+            }
+
+            expect(res.status).toBe(200);
+            const notifs = await assertJson<Notification[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
+            );
+            findOrFail(notifs, (n) => n.type === 'calendar-unshare' && n.body === 'Half Reachable Cal');
         });
 
         test('an unshare that never reached Bob leaves his list at the next sync Alice answers', async () => {

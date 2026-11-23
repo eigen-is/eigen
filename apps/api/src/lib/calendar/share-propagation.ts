@@ -40,21 +40,25 @@ export async function propagateCalendarShare(
     const allShares = [...(oldShares ?? []), ...(calendar.shares ?? [])];
     const targets = new Map<string, string>();
 
+    // The change is already stored, so a target that fails is logged and the others still hear of it.
     for (const share of allShares) {
-        const parsed = parseOwnerId(share.targetId);
-        if (parsed.type === 'user') {
-            const user = await getUserByEmail(share.targetId);
-            if (user) {
-                targets.set(user.id, user.email);
-            } else {
-                await addRegistryEntry(ownerHome.user.id, share.targetId);
+        try {
+            const parsed = parseOwnerId(share.targetId);
+            if (parsed.type === 'user') {
+                const user = await getUserByEmail(share.targetId);
+                if (user) {
+                    targets.set(user.id, user.email);
+                } else {
+                    await addRegistryEntry(ownerHome.user.id, share.targetId);
+                }
+            } else if (parsed.type === 'team') {
+                await addRegistryEntry(ownerHome.user.id, teamOwnerId(parsed.id));
+                for (const member of await getTeamMembers(parsed.id)) {
+                    targets.set(member.user.id, member.user.email);
+                }
             }
-        } else if (parsed.type === 'team') {
-            await addRegistryEntry(ownerHome.user.id, teamOwnerId(parsed.id));
-            const members = await getTeamMembers(parsed.id);
-            for (const member of members) {
-                targets.set(member.user.id, member.user.email);
-            }
+        } catch (error) {
+            console.error('Failed to propagate calendar share:', error);
         }
     }
 
