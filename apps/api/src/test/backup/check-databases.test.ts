@@ -2,9 +2,9 @@ import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHECK_TURN_MS, checkDatabases, UnopenableDatabaseError } from '../../lib/backup/materialize-mount';
+import { checkDatabases, UnopenableDatabaseError } from '../../lib/backup/materialize-mount';
 import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
-import { TEST_DATA_DIR } from '../setup';
+import { countLoopTurns, TEST_DATA_DIR } from '../setup';
 import { holdLock } from './backup-test-helpers';
 
 // The database check a restore and a rollback end on reads files another process may be writing, such as the live
@@ -68,17 +68,18 @@ describe('checkDatabases', () => {
         expect(await lock.exited).toBe(0);
     }, 30_000);
 
-    test('lets other work run once a check has held the event loop for the budget', async () => {
-        const busy = stampedDatabase('slow.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
-        const current = stampedDatabase('many.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
-        // The first check waits out the writer, so it outlasts the budget however fast the machine is.
-        const lock = await holdLock(busy, CHECK_TURN_MS * 4);
-        let served = false;
-        setImmediate(() => {
-            served = true;
-        });
-        await checkDatabases([busy, current].map((filePath) => ({ filePath, config: SHARE_REGISTRY_DB_CONFIG })));
-        expect(served).toBe(true);
-        expect(await lock.exited).toBe(0);
+    test('gives the event loop a turn between every two databases it checks', async () => {
+        const names = ['first.db', 'second.db', 'third.db', 'fourth.db'];
+        const targets = names.map((name) => ({
+            filePath: stampedDatabase(name, SHARE_REGISTRY_DB_CONFIG.currentVersion),
+            config: SHARE_REGISTRY_DB_CONFIG,
+        }));
+        const turns = countLoopTurns();
+        try {
+            await checkDatabases(targets);
+        } finally {
+            turns.stop();
+        }
+        expect(turns.read()).toBeGreaterThanOrEqual(names.length - 1);
     });
 });

@@ -26,7 +26,7 @@ import {
     readMountPathRows,
 } from './archive-layout';
 import { describeError } from './errors';
-import { checkTurns, newerSchema } from './materialize-mount';
+import { newerSchema } from './materialize-mount';
 import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, archiveServerPath } from './paths';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
@@ -86,9 +86,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     // Stage 2, structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
     const databases = listArchiveDatabases(dir, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
-    const pause = checkTurns();
     for (const [index, database] of databases.entries()) {
-        await pause();
+        await eventLoopTurn();
         const abs = path.join(dir, database.path);
         if (fs.existsSync(abs)) {
             try {
