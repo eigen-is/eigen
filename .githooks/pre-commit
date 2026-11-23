@@ -1,5 +1,7 @@
 #!/bin/sh
-# Auto-fix lint + format on staged files before committing
-bunx --bun @biomejs/biome check --staged --write --no-errors-on-unmatched --colors=off
-# Re-stage any files that biome fixed
-git update-index --again
+# Lint and format the fully staged files, then stage Biome's fixes. A file with unstaged changes is skipped,
+# unchecked: Biome reads the file on disk, so fixing it would stage the hunks left out of this commit.
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -vxF "$(git diff --name-only)")
+[ -n "$files" ] || exit 0
+echo "$files" | tr '\n' '\0' | xargs -0 bunx --bun @biomejs/biome check --write --no-errors-on-unmatched --colors=off
+echo "$files" | tr '\n' '\0' | xargs -0 git add --
