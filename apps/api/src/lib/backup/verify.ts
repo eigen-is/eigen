@@ -26,7 +26,7 @@ import {
     readMountPathRows,
 } from './archive-layout';
 import { describeError } from './errors';
-import { DATABASES_PER_YIELD, newerSchema } from './materialize-mount';
+import { checkTurns, newerSchema } from './materialize-mount';
 import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, archiveServerPath } from './paths';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
@@ -86,9 +86,9 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
     // Stage 2, structure: SQLite's own verdict on every database the archive owns. A file already
     // reported missing by stage 1 is skipped rather than reported twice.
     const databases = listArchiveDatabases(dir, new Map(manifest.entries.map((entry) => [entry.path, entry])), fail);
+    const pause = checkTurns();
     for (const [index, database] of databases.entries()) {
-        // Each check blocks the thread, and a restore runs this in the API.
-        if (index > 0 && index % DATABASES_PER_YIELD === 0) await eventLoopTurn();
+        await pause();
         const abs = path.join(dir, database.path);
         if (fs.existsSync(abs)) {
             try {
@@ -136,6 +136,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
             fail(`${target.path}: the Yjs state could not be read (${describeError(error)})`);
         }
         onProgress?.('verify documents', index + 1, targets.length);
+        // A decode blocks the thread, and the backups and restores run this in the API.
+        await eventLoopTurn();
     }
 
     const failed = failures.lines();

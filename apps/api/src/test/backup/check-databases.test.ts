@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkDatabases, UnopenableDatabaseError } from '../../lib/backup/materialize-mount';
+import { CHECK_TURN_MS, checkDatabases, UnopenableDatabaseError } from '../../lib/backup/materialize-mount';
 import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
 import { TEST_DATA_DIR } from '../setup';
 import { holdLock } from './backup-test-helpers';
@@ -68,14 +68,17 @@ describe('checkDatabases', () => {
         expect(await lock.exited).toBe(0);
     }, 30_000);
 
-    test('lets other work run between databases, so the API serves while it checks a large home', async () => {
+    test('lets other work run once a check has held the event loop for the budget', async () => {
+        const busy = stampedDatabase('slow.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
         const current = stampedDatabase('many.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
-        const targets = Array.from({ length: 120 }, () => ({ filePath: current, config: SHARE_REGISTRY_DB_CONFIG }));
+        // The first check waits out the writer, so it outlasts the budget however fast the machine is.
+        const lock = await holdLock(busy, CHECK_TURN_MS * 4);
         let served = false;
         setImmediate(() => {
             served = true;
         });
-        await checkDatabases(targets);
+        await checkDatabases([busy, current].map((filePath) => ({ filePath, config: SHARE_REGISTRY_DB_CONFIG })));
         expect(served).toBe(true);
+        expect(await lock.exited).toBe(0);
     });
 });
