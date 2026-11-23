@@ -45,18 +45,18 @@ export type ImageResult = ImageDimensions & {
     duration?: number;
 };
 
-// Terminating this Worker at THUMBNAIL_TIMEOUT_SECONDS leaves its exiftool process running, so exiftool's deadline
-// is this much earlier, with time left to resize the preview it found.
-const EXIFTOOL_SPARE_MS = 5_000;
+// Terminating this Worker at THUMBNAIL_TIMEOUT_SECONDS leaves a child such as exiftool or ffmpeg running, so their
+// calls share a deadline this much earlier, with time left to resize what they found.
+const SUBPROCESS_SPARE_MS = 5_000;
 
 declare var self: Worker;
 
 self.onmessage = async (event: MessageEvent<WorkerInput>) => {
-    const exiftoolDeadline = Date.now() + THUMBNAIL_TIMEOUT_SECONDS * 1000 - EXIFTOOL_SPARE_MS;
+    const deadline = Date.now() + THUMBNAIL_TIMEOUT_SECONDS * 1000 - SUBPROCESS_SPARE_MS;
     try {
         const result = event.data.mimeType.startsWith('video/')
-            ? await processVideo(event.data)
-            : await processImage(event.data, exiftoolDeadline);
+            ? await processVideo(event.data, deadline)
+            : await processImage(event.data, deadline);
         if (result) {
             const data = new Uint8Array(result.data).buffer;
             const payload: WorkerOutput = {
@@ -80,10 +80,10 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
 
 // ffmpeg reads a video from a path, so a video arriving as bytes gets no thumbnail. An upload always hands over the
 // path of its temp file.
-async function processVideo(input: WorkerInput): Promise<ImageResult | null> {
+async function processVideo(input: WorkerInput, deadline: number): Promise<ImageResult | null> {
     if (typeof input.source !== 'string') return null;
 
-    const frame = await extractVideoFrame(input.source, input.tmpDir, input.pathId);
+    const frame = await extractVideoFrame(input.source, input.tmpDir, input.pathId, deadline);
     if (!frame) return null;
 
     const resized = await sharpResize(frame.data, input.options);
