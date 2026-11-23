@@ -84,24 +84,23 @@ function canFromAncestors(
     return false;
 }
 
-// What a visitor without a login may read: the index of the highest path in the chain with a link, or null. From that
-// path down only folders, ending at most in a file or a collab document, which opens only as far as a file in media/.
+// What a visitor without a login may read: the index of the highest path with a link, or null. The chain is folders,
+// then at most a file, or a collab document and at most its media/ and a file in it. The link is at or above that end.
 export function canReadByLink(chain: readonly DrivePath[], enabled: boolean): number | null {
     const head = chain.findIndex((path) => path.visibility === 'link');
     if (!enabled || head < 0 || isTrashedChain(chain)) return null;
-    const below = chain.slice(head);
-    const at = below.findIndex((path) => isCollabType(path.type));
-    const [outside, inside] = at < 0 ? [below, []] : [below.slice(0, at), below.slice(at + 1)];
-    const admitted =
-        outside.every(
-            (path, i) => path.type === DRIVE_TYPE_FOLDER || (path.type === DRIVE_TYPE_FILE && i === below.length - 1),
-        ) &&
-        inside.every((path, i) =>
-            i === 0
-                ? path.type === DRIVE_TYPE_FOLDER && path.name === CONTAINER_MEDIA_FOLDER
-                : i === 1 && path.type === DRIVE_TYPE_FILE,
-        );
-    return admitted ? head : null;
+    const end = chain.findIndex((path) => path.type !== DRIVE_TYPE_FOLDER);
+    if (end < 0) return head;
+    if (head > end) return null;
+    const [item, media, file, ...deeper] = chain.slice(end);
+    const endsInFile = item?.type === DRIVE_TYPE_FILE && media === undefined;
+    const endsInDocument =
+        item !== undefined &&
+        isCollabType(item.type) &&
+        (media === undefined || (media.type === DRIVE_TYPE_FOLDER && media.name === CONTAINER_MEDIA_FOLDER)) &&
+        (file === undefined || file.type === DRIVE_TYPE_FILE) &&
+        deeper.length === 0;
+    return endsInFile || endsInDocument ? head : null;
 }
 
 export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {

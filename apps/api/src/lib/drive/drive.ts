@@ -869,14 +869,15 @@ export class Drive {
                 throw new ApiError(403, 'Cannot update ACL for root folder');
             }
             const ancestors = await mount.getBreadcrumb(pathId);
-            if (visibility === 'link') {
+            // The share dialog sends the visibility on every Save, so a link saved while the switch was on still saves.
+            if (visibility === 'link' && item.visibility !== 'link') {
                 if (!getServerSettings().sharing.publicLinks || isDemo()) {
                     throw new ApiError(403, 'Public links are turned off on this server');
                 }
                 const linkable =
                     item.type === DRIVE_TYPE_FOLDER || item.type === DRIVE_TYPE_FILE || isCollabType(item.type);
                 if (!linkable || isInsideDocument(ancestors)) {
-                    throw new ApiError(400, 'Only a file, a folder or a document can have a public link');
+                    throw new ApiError(400, 'This item cannot have a public link');
                 }
             }
 

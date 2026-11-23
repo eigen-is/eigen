@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
-import type { DriveVisibility } from '@workspace/lib/types/drive-access';
+import type { DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { canReadByLink } from '../../lib/drive/acl';
 import { getHome } from '../../lib/home';
 import {
+    assertJson,
     authedRequest,
     driveGet,
     driveGetList,
@@ -110,6 +111,13 @@ describe('canReadByLink', () => {
         expect(canReadByLink(chain, true)).toBeNull();
     });
 
+    test('nothing at all goes on below a file under a public folder', () => {
+        for (const type of ['folder', 'file', 'chat', ...COLLAB_TYPES] as const) {
+            const chain = chainOf({ type: 'folder', ...LINK }, { type: 'file' }, { type });
+            expect(canReadByLink(chain, true)).toBeNull();
+        }
+    });
+
     describe('inside a collab document', () => {
         for (const document of COLLAB_TYPES) {
             test(`${document}: its media/ folder and a file in it are admitted`, () => {
@@ -142,6 +150,23 @@ describe('canReadByLink', () => {
             ];
             for (const chain of refused) expect(canReadByLink(chain, true)).toBeNull();
         });
+
+        test('a link on a part of a private document opens nothing', () => {
+            const doc = { type: 'doc' } as const;
+            const refused = [
+                chainOf(doc, { type: 'file', name: 'data.db', ...LINK }),
+                chainOf(doc, { type: 'folder', name: 'chat', ...LINK }),
+                chainOf(doc, { type: 'folder', name: 'chat', ...LINK }, { type: 'chat' }),
+                chainOf({ type: 'folder' }, doc, { type: 'folder', name: 'versions', ...LINK }, { type: 'file' }),
+            ];
+            for (const chain of refused) expect(canReadByLink(chain, true)).toBeNull();
+        });
+
+        test("a link on a private document's media/ folder alone opens nothing", () => {
+            const media = { type: 'folder', name: 'media', ...LINK } as const;
+            expect(canReadByLink(chainOf({ type: 'doc' }, media), true)).toBeNull();
+            expect(canReadByLink(chainOf({ type: 'doc' }, media, { type: 'file' }), true)).toBeNull();
+        });
     });
 });
 
@@ -156,12 +181,20 @@ describe("visibility 'link'", () => {
     let chat: DrivePath;
     let docChatFolder: DrivePath;
 
-    function putVisibility(token: string, pathId: string, visibility: DriveVisibility): Promise<Response> {
+    function putACL(token: string, pathId: string, body: object): Promise<Response> {
         return authedRequest(token, `/drive/${ctx.alice.user.id}/${mountId}/path/${pathId}/acl`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ visibility }),
+            body: JSON.stringify(body),
         });
+    }
+
+    function putVisibility(token: string, pathId: string, visibility: DriveVisibility): Promise<Response> {
+        return putACL(token, pathId, { visibility });
+    }
+
+    async function storedVisibility(pathId: string): Promise<DriveVisibility> {
+        return (await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${pathId}`)).visibility;
     }
 
     function alicePuts(pathId: string, visibility: DriveVisibility): Promise<Response> {
@@ -236,6 +269,12 @@ describe("visibility 'link'", () => {
             expect((await alicePuts(docChatFolder.id, 'link')).status).toBe(400);
         });
 
+        test('a 400 says the item cannot have a public link', async () => {
+            for (const path of [chat, docChatFolder]) {
+                expect(await (await alicePuts(path.id, 'link')).text()).toBe('This item cannot have a public link');
+            }
+        });
+
         test('a file, a folder and a collab document save it', async () => {
             for (const path of [file, folder, doc]) {
                 expect((await alicePuts(path.id, 'link')).status).toBe(200);
@@ -247,6 +286,20 @@ describe("visibility 'link'", () => {
                 );
                 expect(stored.visibility).toBe('link');
             }
+        });
+
+        test('an address without an ACL entry can read a public path', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/path/${file.id}/access-check`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emails: ['stranger-link@example.com'] }),
+                },
+            );
+            const { recipients } = await assertJson<DriveAccessCheckResult>(res);
+            expect(recipients.map((r) => r.hasReadAccess)).toEqual([true]);
         });
 
         test('the stored chain of a child admits it under the public folder', async () => {
@@ -277,6 +330,40 @@ describe("visibility 'link'", () => {
             );
             expect(write.status).toBe(403);
             expect((await putVisibility(ctx.bob.user.sessionToken, folder.id, 'private')).status).toBe(403);
+        });
+    });
+
+    describe('after public links are turned off', () => {
+        let kept: DrivePath;
+        let other: DrivePath;
+
+        beforeAll(async () => {
+            const token = ctx.alice.user.sessionToken;
+            const aliceId = ctx.alice.user.id;
+            const root = await driveGet(token, aliceId, mountId, 'root');
+            kept = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: 'Kept Link' });
+            other = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: 'Never Linked' });
+            await withPublicLinks(true);
+            expect((await alicePuts(kept.id, 'link')).status).toBe(200);
+            await withPublicLinks(false);
+        });
+
+        test('the owner still shares a stored link, with or without sending it again', async () => {
+            const reader = { id: ctx.bob.user.email, read: true, write: false };
+            const token = ctx.alice.user.sessionToken;
+            expect((await putACL(token, kept.id, { add: [reader] })).status).toBe(200);
+            expect((await putACL(token, kept.id, { remove: [reader.id], visibility: 'link' })).status).toBe(200);
+            expect(await storedVisibility(kept.id)).toBe('link');
+        });
+
+        test('another path still cannot get a link', async () => {
+            expect((await alicePuts(other.id, 'link')).status).toBe(403);
+            expect(await storedVisibility(other.id)).toBe('private');
+        });
+
+        test('a stored link can always be closed', async () => {
+            expect((await alicePuts(kept.id, 'private')).status).toBe(200);
+            expect(await storedVisibility(kept.id)).toBe('private');
         });
     });
 });
