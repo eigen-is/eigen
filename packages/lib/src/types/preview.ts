@@ -28,7 +28,7 @@ export type EmlPreview = {
     from: AddressObject | null;
     to: AddressObject | AddressObject[] | null;
     cc: AddressObject | AddressObject[] | null;
-    date: string | null;
+    date: Date | null;
     html: string | null;
     text: string | null;
     attachments: Pick<Attachment, 'filename' | 'contentType' | 'size'>[];

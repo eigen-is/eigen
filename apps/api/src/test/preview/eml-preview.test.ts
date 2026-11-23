@@ -82,7 +82,7 @@ describe('buildEmlPreviewPayload', () => {
         expect(payload.from?.value[0]?.address).toBe('sender@external.com');
         expect(addressesOf(payload.to)).toEqual(['alice@example.com', 'bob@example.com']);
         expect(addressesOf(payload.cc)).toEqual(['carol@example.com']);
-        expect(payload.date).toBe('2026-08-15T10:30:00.000Z');
+        expect(payload.date).toEqual(new Date('2026-08-15T10:30:00.000Z'));
         expect(payload.text).toContain('The numbers are in.');
         expect(payload.attachments).toEqual([]);
         expect(payload.remainingAttachments).toBe(0);

@@ -49,6 +49,7 @@
     "./html": "./src/core/html.ts",
     "./html-dom": "./src/core/html-dom.ts",
     "./mailbox-icons": "./src/core/mailbox-icons.ts",
+    "./revive-timestamp": "./src/core/revive-timestamp.ts",
     "./transfer": "./src/core/transfer.ts",
     "./use-debounced-value": "./src/core/use-debounced-value.ts",
     "./use-held-etag": "./src/core/use-held-etag.ts",

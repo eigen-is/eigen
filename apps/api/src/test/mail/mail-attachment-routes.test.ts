@@ -633,7 +633,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
 
             expect(preview.subject).toBe('Engine notes');
             expect(preview.from?.value[0]?.address).toBe('ada@external.com');
-            expect(preview.date).toBe('2026-08-15T10:30:00.000Z');
+            expect(String(preview.date)).toBe('2026-08-15T10:30:00.000Z');
             expect(preview.html).toContain('weaves patterns');
             expect(preview.html).not.toContain('tracker.example');
         });

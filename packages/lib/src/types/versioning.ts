@@ -1,5 +1,6 @@
-// Eden Treaty's reviver converts ISO strings to Date at runtime — type as
-// Date, not string, per project_date_wire_convention.
+// One kept version of a document, as the version history lists it. The versioning routes return it and the
+// versioning hooks read it.
+
 export type Snapshot = {
     id: string;
     name: string;

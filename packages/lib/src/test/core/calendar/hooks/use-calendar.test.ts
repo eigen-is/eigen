@@ -58,7 +58,7 @@ describe('useIsInvitationFromOthers', () => {
     });
 });
 
-// A zone behind UTC, where a day read off a revived UTC midnight with local getters comes out one early.
+// A zone behind UTC, where a day made into a Date and read with local getters would come out one early.
 describe('the occurrence date a read hook hands out', () => {
     const originalTz = process.env.TZ;
     beforeEach(() => {
@@ -98,7 +98,6 @@ describe('the occurrence date a read hook hands out', () => {
         return first;
     }
 
-    // The reviver takes a year of 19xx or 20xx and leaves any other as it came, so the hooks answer both alike.
     for (const day of ['2026-10-09', '2100-01-01', '0500-03-07']) {
         test(`the owner's own range keeps ${day} as written`, async () => {
             const event = await firstOccurrence(day, () => useEvents(OWNER, 1, 2));

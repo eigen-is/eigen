@@ -91,8 +91,8 @@ const changeElsewhere = (title: string) => changeFieldsElsewhere({ title });
 const invited = (...attendees: [email: string, status: Attendee['status']][]) => ({
     attendees: attendees.map(([email, status]) => ({ email, status, role: 'required' as const })),
 });
-// The list a client reads: a fresh copy each time, as a refetch's JSON is, with the bare occurrence date a Date because
-// Eden's reviver makes one of it. A truncated series no longer has this occurrence.
+// The list a client reads: a fresh copy each time, as a refetch's JSON is. A truncated series no longer has this
+// occurrence.
 const eventList = () =>
     server.event.rrule?.includes('UNTIL')
         ? []
@@ -100,7 +100,6 @@ const eventList = () =>
               {
                   ...server.event,
                   startTime: new Date(server.event.startTime),
-                  occurrenceDate: new Date(server.event.occurrenceDate),
               },
           ];
 
