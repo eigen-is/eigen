@@ -1,6 +1,10 @@
+// The query keys of mail's messages and mailboxes, and the invalidations that name what each change makes
+// stale. The mail hooks call them after a mutation, and the event stream when another tab or a sync changed mail.
+
 import type { QueryClient } from '@tanstack/react-query';
-import { MAILBOX_DRAFTS, MAILBOX_INBOX, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_DRAFTS, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
 import { invalidateHomeSize } from '../../home';
+import { invalidateSearchOwner } from '../../search';
 
 export const emailKeys = {
     all: ['emails'] as const,
@@ -32,21 +36,22 @@ export const mailboxKeys = {
     lists: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'list'] as const,
 };
 
-// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
 export function invalidateMailboxes(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: mailboxKeys.lists(ownerId) });
 }
 
-export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string): void {
-    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
+// Received mail spans mailboxes, so every list of the owner goes stale, which costs nothing extra: only a list on
+// screen refetches. Its bytes count toward the home's size.
+export function invalidateMailReceived(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: emailKeys.lists(ownerId) });
+    invalidateHomeSize(queryClient, ownerId);
+    invalidateSearchOwner(queryClient, ownerId);
 }
 
-// An imported message lands unread in the inbox, so the open list and the unread counts both refresh, and
-// its bytes are metered against the home the way a saved draft's are.
+// An imported message lands unread, so the unread counts refresh too.
 export function invalidateMailImported(queryClient: QueryClient, ownerId: string): void {
-    invalidateMailReceived(queryClient, ownerId, MAILBOX_INBOX);
+    invalidateMailReceived(queryClient, ownerId);
     invalidateMailboxes(queryClient, ownerId);
-    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateMailDeleted(

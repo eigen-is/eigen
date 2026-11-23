@@ -9,12 +9,12 @@ import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateHomeSize } from '../home';
 import { invalidateSearchOwner } from '../search';
 import {
-    emailKeys,
     invalidateDraftUpdated,
     invalidateMailboxes,
     invalidateMailDeleted,
     invalidateMailMessageChanged,
     invalidateMailMoved,
+    invalidateMailReceived,
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
@@ -22,17 +22,8 @@ import { consumeRecentMailMutation } from './hooks/use-emails';
 // 1.5 s while a long sync goes on.
 const invalidateMailboxesSoon = debouncePerOwner(invalidateMailboxes, 250, 1500);
 
-// So do the message lists, the home size and the search a sync touches. The burst spans mailboxes, so it
-// refetches every list of the owner, which costs nothing extra: only a list on screen refetches.
-const invalidateReceivedSoon = debouncePerOwner(
-    (queryClient, ownerId) => {
-        queryClient.invalidateQueries({ queryKey: emailKeys.lists(ownerId) });
-        invalidateHomeSize(queryClient, ownerId);
-        invalidateSearchOwner(queryClient, ownerId);
-    },
-    250,
-    1500,
-);
+// So do the message lists, the home size and the search a sync touches.
+const invalidateReceivedSoon = debouncePerOwner(invalidateMailReceived, 250, 1500);
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     if (!('mail' in event)) return;

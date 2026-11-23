@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import { homeKeys } from '../../../../core/home/hooks/keys';
 import {
     emailKeys,
@@ -8,6 +7,7 @@ import {
     invalidateMailImported,
     mailboxKeys,
 } from '../../../../core/mail/hooks/keys';
+import { searchKeys } from '../../../../core/search';
 import { invalidatedBy } from '../../../invalidation';
 
 const OWNER = 'owner-1';
@@ -30,11 +30,12 @@ describe('emailKeys.previews', () => {
 // An imported message is bytes the home is charged for, the way a saved draft is — Home.size() counts
 // the maildir. Nothing else on this branch changes what the counter sees.
 describe('invalidateMailImported', () => {
-    test('refreshes the inbox, the unread counts and the home size', () => {
+    test('refreshes the lists, the unread counts, the home size and the search', () => {
         const keys = invalidatedBy((queryClient) => invalidateMailImported(queryClient, OWNER));
 
-        expect(keys).toContainEqual([...emailKeys.list(OWNER, MAILBOX_INBOX)]);
+        expect(keys).toContainEqual([...emailKeys.lists(OWNER)]);
         expect(keys).toContainEqual([...mailboxKeys.lists(OWNER)]);
         expect(keys).toContainEqual([...homeKeys.size(OWNER)]);
+        expect(keys).toContainEqual([...searchKeys.owner(OWNER)]);
     });
 });
