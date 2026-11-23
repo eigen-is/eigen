@@ -42,7 +42,7 @@ function cutPreview(row: typeof schema.emails.$inferSelect): EmailSummary {
         : row;
 }
 
-export default class MailDB {
+export class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
