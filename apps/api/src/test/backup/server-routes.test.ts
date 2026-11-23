@@ -14,14 +14,17 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import type { TestContext, TestUser } from '../setup';
-import { authedRequest, createTestUser, getTestContext } from '../setup';
+import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
 import { holdCaptures, removeServerRecords, serverRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
 
 // A Full job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
 
 describe('Server backup routes', () => {
+    // Its own backups folder, so the exact lists below see no archive another file left behind.
+    const backupsDir = join(TEST_DATA_DIR, 'backups-server-routes');
     let ctx: TestContext;
+    let previousBackupsDir: string | undefined;
     let admin: TestUser;
     let adminApi: ReturnType<typeof treaty<App>>;
     let send: ReturnType<typeof spyOn<typeof homeRelay, 'pushToHomes'>>;
@@ -33,6 +36,8 @@ describe('Server backup routes', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
+        previousBackupsDir = process.env['EIGEN_BACKUPS_DIR'];
+        process.env['EIGEN_BACKUPS_DIR'] = backupsDir;
         // A user who never signed in has no home folder, and the job skips a row without one.
         await getHome(ctx.alice.user.id);
         admin = await createTestUser('ada-server-backup@test.eigen.is', 'testpassword123', 'Ada Admin');
@@ -48,6 +53,9 @@ describe('Server backup routes', () => {
     afterAll(async () => {
         send.mockRestore();
         await getAuthDrizzleDb().update(memberSchema).set({ role: 'member' }).where(membership(admin.id));
+        if (previousBackupsDir === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
+        else process.env['EIGEN_BACKUPS_DIR'] = previousBackupsDir;
+        rmSync(backupsDir, { recursive: true, force: true });
     });
 
     test('an admin who is not the owner, and a member, are refused every one of them', async () => {
