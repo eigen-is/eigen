@@ -2,7 +2,7 @@
 // backend derives from a name. Mount checks every new row with them, and a backup restore reads archived
 // paths tables with them while the API runs, so no import here opens anything.
 
-import { CONTROL_CHARS } from '@workspace/lib/validation';
+import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
 import { ApiError } from '../core/errors';
 
 // On a `local` mount the trash is the folder `.trash`, so every name the disk folds onto it would be that folder. The
@@ -28,15 +28,8 @@ export const MAX_NAME_BYTES = 255;
 // event loop, so a deeper tree would hold the API.
 export const MAX_FOLDER_DEPTH = 256;
 
-// Answers without throwing, since a row from an uploaded archive was never held to validateName. Control bytes are
-// refused because a name creatable via the API must stay reachable over WebDAV (RFC 4918) and archivable.
-export function isUsableName(name: string): boolean {
-    if (!name || name === '.' || name === '..') return false;
-    return !(name.includes('/') || name.includes('\\') || CONTROL_CHARS.test(name));
-}
-
 export function validateName(name: string): string {
-    if (!isUsableName(name)) {
+    if (!isSafeMediaName(name)) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
     // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.
