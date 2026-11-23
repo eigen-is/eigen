@@ -9,13 +9,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveACL, DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { useAuth } from '../../auth';
 import { driveKeys, invalidateAclUpdated, invalidateViewerLists } from './keys';
 
 // The path names its own owner and mount, so one instance shares an item from any drive.
-export function useUpdateACL() {
+export function useUpdateACL(viewerId: string) {
     const queryClient = useQueryClient();
-    const { user } = useAuth();
     return useMutation({
         mutationFn: async ({
             path,
@@ -39,7 +37,7 @@ export function useUpdateACL() {
         onSuccess: (_data, variables) => {
             invalidateAclUpdated(queryClient, variables.path);
             // A sharer other than the owner, such as an editor, has lists of their own.
-            if (user && user.id !== variables.path.ownerId) invalidateViewerLists(queryClient, user.id);
+            if (viewerId !== variables.path.ownerId) invalidateViewerLists(queryClient, viewerId);
             toast.success('Sharing updated');
         },
         onError: onMutationError,
@@ -108,15 +106,16 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
     return useQuery({
         queryKey: driveKeys.shared(ownerId, to),
-        queryFn: async () => {
-            const response =
-                to === 'by-me'
-                    ? await driveApi({ ownerId }).shared['by-me'].get()
-                    : await driveApi({ ownerId }).shared['with-me'].get();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        enabled: !!ownerId,
+        queryFn: ownerId
+            ? async () => {
+                  const response =
+                      to === 'by-me'
+                          ? await driveApi({ ownerId }).shared['by-me'].get()
+                          : await driveApi({ ownerId }).shared['with-me'].get();
+                  if (response.error) throw new AppError(response);
+                  return response.data;
+              }
+            : skipToken,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }

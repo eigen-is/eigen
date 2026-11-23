@@ -57,7 +57,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
     const { user } = useAuth();
-    const updateACL = useUpdateACL();
+    const updateACL = useUpdateACL(user?.id ?? '');
 
     const excludeEmails = useMemo(() => {
         const emails = [...directList, ...inheritedList].map((item) => item.id);

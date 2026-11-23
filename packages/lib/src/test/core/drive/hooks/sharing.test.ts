@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { driveKeys } from '../../../../core/drive/hooks/keys';
 import type { DrivePath } from '../../../../types/drive';
 import { renderHook } from '../../../render-hook';
-import { hasKey, installTransferHarness, OWNER, trackingClient } from '../../../transfer-harness';
+import { hasKey, installTransferHarness, trackingClient } from '../../../transfer-harness';
 
 installTransferHarness();
 
@@ -13,6 +13,8 @@ installTransferHarness();
 const g = globalThis as any;
 
 const TEAM = 'e5f6a7b8';
+// Not the harness's signed-in user: the hook takes the viewer from its caller.
+const VIEWER = 'f6a7b8c9';
 
 const path = (ownerId: string): DrivePath => ({
     id: 'doc',
@@ -55,7 +57,7 @@ async function updateACL(target: DrivePath): Promise<readonly unknown[][]> {
     const { act } = await import('react');
     const { useUpdateACL } = await import('../../../../core/drive/hooks/sharing');
     const { queryClient, invalidated } = trackingClient();
-    const { latest, unmount } = await renderHook(() => useUpdateACL(), queryClient);
+    const { latest, unmount } = await renderHook(() => useUpdateACL(VIEWER), queryClient);
     await act(async () => {
         await latest.mutateAsync({
             path: target,
@@ -82,12 +84,12 @@ describe('useUpdateACL', () => {
     test("refreshes the path's permissions, and the sharer's own lists when the path is someone else's", async () => {
         const invalidated = await updateACL(path(TEAM));
         expect(hasKey(invalidated, driveKeys.permissions(TEAM, 'm2', 'doc'))).toBe(true);
-        expect(hasKey(invalidated, driveKeys.recent(OWNER))).toBe(true);
+        expect(hasKey(invalidated, driveKeys.recent(VIEWER))).toBe(true);
     });
 
     test("the owner's own share leaves the viewer lists alone", async () => {
-        const invalidated = await updateACL(path(OWNER));
-        expect(hasKey(invalidated, driveKeys.recent(OWNER))).toBe(false);
+        const invalidated = await updateACL(path(VIEWER));
+        expect(hasKey(invalidated, driveKeys.recent(VIEWER))).toBe(false);
     });
 });
 
