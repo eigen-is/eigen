@@ -38,12 +38,11 @@ export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-
 const atUri = (uri: string) => eq(schema.contacts.uri, normalizeResourceUri(uri));
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
-    const [book] = contacts.db
+    return contacts.db
         .select({ ctag: schema.book.ctag, syncGen: schema.book.syncGen })
         .from(schema.book)
         .where(eq(schema.book.id, 1))
-        .all();
-    return book;
+        .all()[0];
 }
 
 // DAV serves the whole book, so group cards are included even though the app's list hides them.

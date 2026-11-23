@@ -26,9 +26,8 @@ export function listSetupCopies(): SetupCopy[] {
     return fs
         .readdirSync(getServerDataPath())
         .flatMap((name) => {
-            const at = parseSetupCopyName(name);
-            return at ? [{ name, at }] : [];
+            const createdAt = parseSetupCopyName(name);
+            return createdAt ? [{ name, createdAt }] : [];
         })
-        .sort((a, b) => b.at.getTime() - a.at.getTime())
-        .map(({ name, at }) => ({ name, createdAt: at }));
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }

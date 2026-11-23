@@ -15,7 +15,7 @@ import type { DatabaseConfig, SchemaType } from '../src/lib/core/managed-databas
 import { openLocalDatabase } from '../src/lib/core/managed-database';
 import type { Home } from '../src/lib/home/home';
 import { parseEml } from '../src/lib/mail/mail-parse';
-import MailDB from '../src/lib/mail/maildb';
+import { MailDB } from '../src/lib/mail/maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,

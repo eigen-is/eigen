@@ -7,8 +7,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
-import { BACKUP_OWNER_ID, buildBackupStamp } from '@workspace/lib/validation';
-import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
+import { BACKUP_OWNER_ID, buildBackupStamp, isSafeFileName } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import type { HashedArchiveMember } from './archive';
@@ -79,7 +78,7 @@ export async function stageServerArchive(
         const folder = INSTALL_FOLDERS.find((candidate) => name.startsWith(`${candidate.dir}/`));
         if (!folder) continue;
         const file = name.slice(folder.dir.length + 1);
-        if (!(folder.names ? folder.names.includes(file) : isSafeMediaName(file))) {
+        if (!(folder.names ? folder.names.includes(file) : isSafeFileName(file))) {
             throw new ApiError(400, `${name} is not a ${folder.what} file`);
         }
         const target = path.join(context.dataDir, folder.dir, file);

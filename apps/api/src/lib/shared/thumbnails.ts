@@ -76,14 +76,8 @@ export async function generateImagePreview(
                         resolve(null);
                         return;
                     }
-                    resolve({
-                        data: Buffer.from(event.data.data),
-                        width: event.data.width,
-                        height: event.data.height,
-                        hasAlpha: event.data.hasAlpha,
-                        frameCount: event.data.frameCount,
-                        ...(event.data.duration !== undefined && { duration: event.data.duration }),
-                    });
+                    const { ok: _ok, data, ...rest } = event.data;
+                    resolve({ ...rest, data: Buffer.from(data) });
                 };
 
                 worker.onerror = (err) => {

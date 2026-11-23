@@ -8,8 +8,8 @@ import { ERROR_LITERALS, GRID_COLUMNS, GRID_ROWS, LAST_SERIAL, MAX_STORED_LENGTH
 import { exceedsChartSpecBytes } from '../charts/limits';
 import { isHexColor, parseRgb } from '../constants/colors';
 import { isRecord } from '../core/guards';
+import { isSafeFileName } from '../validation/text';
 import { isValidFractionalIndex } from '../vector/fractional-index';
-import { isSafeMediaName } from '../vector/media-refs';
 import { STROKE_STYLES } from '../vector/types';
 import { BORDER_STYLES } from './borders';
 import {
@@ -646,7 +646,7 @@ const FIELDS: { readonly [T in Exclude<keyof Records, 'conditionalFormat' | 'cha
         order: [isOrderKey, true],
         rule: [(value) => isOf(value, RULE), true],
     },
-    image: { ...FLOATING, mediaName: [(value) => isShort(value) && isSafeMediaName(value), true] },
+    image: { ...FLOATING, mediaName: [(value) => isShort(value) && isSafeFileName(value), true] },
 };
 
 // How a record op's `set` is read for each type: as a whole record, or as a change of some of its fields.

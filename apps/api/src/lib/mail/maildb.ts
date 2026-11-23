@@ -42,7 +42,7 @@ function cutPreview(row: typeof schema.emails.$inferSelect): EmailSummary {
         : row;
 }
 
-export default class MailDB {
+export class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
@@ -115,21 +115,16 @@ export default class MailDB {
     }
 
     public getEmailsCount(mailbox: string) {
-        const [row] = this.db
-            .select({ count: count() })
-            .from(schema.emails)
-            .where(eq(schema.emails.mailbox, mailbox))
-            .all();
-        return row.count;
+        return this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all()[0]
+            .count;
     }
 
     public getEmailsCountUnread(mailbox: string) {
-        const [row] = this.db
+        return this.db
             .select({ count: count() })
             .from(schema.emails)
             .where(and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.isRead, false)))
-            .all();
-        return row.count;
+            .all()[0].count;
     }
 
     public getEmail(id: string) {

@@ -36,7 +36,6 @@ import {
 } from '../../lib/backup/archive';
 import { listArtifacts, writeSidecar } from '../../lib/backup/artifacts';
 import { runArtifactVerify } from '../../lib/backup/jobs';
-import { CHECK_TURN_MS } from '../../lib/backup/materialize-mount';
 import {
     ARCHIVE_MANIFEST_FILE,
     buildHomeFolderName,
@@ -1135,7 +1134,7 @@ describe('verifyFolder', () => {
         return folder;
     }
 
-    test('gives the event loop a turn once the database checks have held it for the budget', async () => {
+    test('gives the event loop a turn between every two databases it checks', async () => {
         const folder = verifyFixture('verify-yield-');
         for (let index = 0; index < 5; index++) {
             mkdirSync(join(folder, 'home', 'mounts', `m${index}`), { recursive: true });
@@ -1145,10 +1144,7 @@ describe('verifyFolder', () => {
         const turnsAt: number[] = [];
         try {
             await verifyFolder(folder, (step) => {
-                if (step !== 'verify databases') return;
-                turnsAt.push(turns.read());
-                // Each check stands in for one that takes the whole budget, however fast the machine is.
-                Bun.sleepSync(CHECK_TURN_MS);
+                if (step === 'verify databases') turnsAt.push(turns.read());
             });
         } finally {
             turns.stop();

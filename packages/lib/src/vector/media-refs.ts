@@ -3,7 +3,7 @@
 // holds none of the characters escapeXml rewrites, since `'` is encoded too, so the stored SVG keeps it verbatim and
 // every rewrite here is an exact string replace, never a parse.
 
-import { CONTROL_CHARS } from '../validation/text';
+import { isSafeFileName } from '../validation/text';
 
 export const EIGEN_MEDIA_SCHEME = 'eigen-media:';
 
@@ -12,13 +12,6 @@ const REF_SCAN = /eigen-media:[^\s"'<>]*/g;
 
 export function eigenMediaHref(name: string): string {
     return EIGEN_MEDIA_SCHEME + encodeURIComponent(name).replace(/'/g, '%27');
-}
-
-// A media name is looked up beside the document, so a slash, a control character or the name of a folder or its
-// parent could reach outside it.
-export function isSafeMediaName(name: string): boolean {
-    if (name === '' || name === '.' || name === '..') return false;
-    return !name.includes('/') && !name.includes('\\') && !CONTROL_CHARS.test(name);
 }
 
 // The distinct safe media names an SVG references, in first-seen order.
@@ -44,7 +37,7 @@ function parseEigenMediaHref(href: string): string | null {
     } catch {
         return null;
     }
-    return isSafeMediaName(name) ? name : null;
+    return isSafeFileName(name) ? name : null;
 }
 
 // Renames refs in one pass, so a swap such as a→b with b→a applies once and doesn't compose.
