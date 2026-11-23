@@ -6,7 +6,7 @@
 
 import { isHexColor } from '../constants/colors';
 import type { BackgroundFill, Fill, FillPaint } from '../types/background';
-import { isSafeMediaName } from './media-refs';
+import { isSafeFileName } from '../validation/text';
 import { normalizeAngle, round4 } from './outline';
 import type { FillStyle } from './types';
 import { DEFAULT_FILL_STYLE, FILL_STYLES, prop } from './types';
@@ -77,7 +77,7 @@ export function parseBackgroundFill(value: string): BackgroundFill | null {
     if (prop(raw, 'type') === 'image') {
         const mediaName = prop(raw, 'mediaName');
         const fit = prop(raw, 'fit');
-        if (typeof mediaName !== 'string' || !isSafeMediaName(mediaName)) return null;
+        if (typeof mediaName !== 'string' || !isSafeFileName(mediaName)) return null;
         if (fit !== 'cover' && fit !== 'contain') return null;
         return { type: 'image', mediaName, fit };
     }

@@ -2,7 +2,7 @@
 // backend derives from a name. Mount checks every new row with them, and a backup restore reads archived
 // paths tables with them while the API runs, so no import here opens anything.
 
-import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
+import { isSafeFileName } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 
 // On a `local` mount the trash is the folder `.trash`, so every name the disk folds onto it would be that folder. The
@@ -29,7 +29,7 @@ export const MAX_NAME_BYTES = 255;
 export const MAX_FOLDER_DEPTH = 256;
 
 export function validateName(name: string): string {
-    if (!isSafeMediaName(name)) {
+    if (!isSafeFileName(name)) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
     // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.

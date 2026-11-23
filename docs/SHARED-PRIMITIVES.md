@@ -2013,6 +2013,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `isSafeFileName` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `isStringList` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
@@ -2161,7 +2162,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `isTextBox` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `isTextual` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

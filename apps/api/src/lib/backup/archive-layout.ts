@@ -5,7 +5,7 @@
 import type { Database } from 'bun:sqlite';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
-import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
+import { isSafeFileName } from '@workspace/lib/validation';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
@@ -116,11 +116,11 @@ function hasUnusablePart(row: MountPathRow): boolean {
     const flatFolder = row.type !== 'file' && row.file === '';
     const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
     return (
-        !isSafeMediaName(row.id) ||
-        !isSafeMediaName(row.name) ||
+        !isSafeFileName(row.id) ||
+        !isSafeFileName(row.name) ||
         isReservedName(row.name) ||
         isReservedName(row.file) ||
-        (!flatFolder && !trashKey && !isSafeMediaName(row.file))
+        (!flatFolder && !trashKey && !isSafeFileName(row.file))
     );
 }
 

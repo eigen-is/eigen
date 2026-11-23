@@ -41,6 +41,6 @@ export {
     RESTART_MESSAGE_PATTERN,
     RESTART_NOTICE_EXPIRY_MS,
 } from './restart';
-export { CONTROL_CHARS, NO_CONTROL_PATTERN } from './text';
+export { CONTROL_CHARS, isSafeFileName, NO_CONTROL_PATTERN } from './text';
 export { ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';
 export { resolveWebLink, webLinkHref } from './web-link';

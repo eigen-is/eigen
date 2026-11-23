@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { NO_CONTROL_PATTERN } from '@workspace/lib/validation';
-import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
+import { isSafeFileName, NO_CONTROL_PATTERN } from '@workspace/lib/validation';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import { foldName, isReservedName, validateName } from '../../lib/mount/names';
 
@@ -11,7 +10,7 @@ describe('names refuse what the backup refuses', () => {
 
     test.each(['a\x00b', 'a\x01b', 'a\x1fb', 'a\x7fb'])('refuses %j', (name) => {
         expect(noControl.test(name)).toBe(false);
-        expect(isSafeMediaName(name)).toBe(false);
+        expect(isSafeFileName(name)).toBe(false);
         expect(() => validateName(name)).toThrow('Invalid file or folder name');
     });
 
