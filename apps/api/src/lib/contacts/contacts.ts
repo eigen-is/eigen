@@ -101,11 +101,10 @@ export class Contacts {
         this.db.insert(schema.book).values({ id: 1, syncGen: newSyncGen() }).onConflictDoNothing().run();
 
         // Seeded once here, then moved by delta at each commit and purge.
-        const [cards] = this.db
+        this.cardsBytes = this.db
             .select({ total: sql<number>`COALESCE(SUM(${cardBytes}), 0)` })
             .from(schema.contacts)
-            .all();
-        this.cardsBytes = cards.total;
+            .all()[0].total;
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
 
         // Each seed is guarded independently, so a crash between them doesn't skip a later one forever.
@@ -195,8 +194,7 @@ export class Contacts {
             .set({ ctag: sql`${schema.book.ctag} + 1` })
             .where(eq(schema.book.id, 1))
             .run();
-        const [book] = tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).all();
-        return book.ctag;
+        return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).all()[0].ctag;
     }
 
     private tombstone(tx: Tx, uri: string, ctag: number): void {
