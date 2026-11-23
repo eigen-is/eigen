@@ -5,7 +5,7 @@ description: Use before any edit to a `.ts` or `.tsx` source file, however small
 
 # Source file
 
-A developer who has never seen the file reads it top to bottom and understands it: a short header says what it is and where it sits, and the code is the simplest that works, with few comments. The rules are [CODE-STANDARDS.md § Code Style](../../../docs/CODE-STANDARDS.md#code-style); this is how to apply them.
+A developer who has never seen the file reads it top to bottom and understands it: a short header says what it is and where it sits, and the code is the simplest that works, with few comments. The rules are [CODE-STANDARDS.md](../../../docs/CODE-STANDARDS.md); this is how to apply them. Read it whole before the first edit, not after: it is short, and its Typing rules (explicit hook return types) and Self-Review Checklist (reuse `Button`, `cn()`) are not repeated here.
 
 The shape: a header comment of two to five `//` lines, a blank line, the imports (each on one line), then the code, members grouped as fields, constructor, getters, lifecycle, the rest.
 
