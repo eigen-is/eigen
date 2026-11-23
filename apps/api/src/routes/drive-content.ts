@@ -1,7 +1,8 @@
 // The Drive HTTP routes that read or rewrite what is inside a file, such as its previews and thumbnail,
 // an export to another format, a conversion into an Eigen document and an import into an open document.
-// Each resolves the file through getSharedDrive, which checks the access. The long jobs among them switch
-// off the server's idle timeout, because they send nothing while they wait and run.
+// Each resolves the file through getSharedDrive, which checks the access, and the previews and the thumbnail
+// through getLinkDrive for a visitor without a login. The long jobs among them switch off the server's idle
+// timeout, because they send nothing while they wait and run.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DocumentImportOptions, DriveImportSource, ImportResult } from '@workspace/lib/types/drive-convert';
@@ -19,7 +20,7 @@ import {
     scriptableInlineHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
-import { getSharedDrive, readImportSourceBytes } from '../lib/drive';
+import { getLinkDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -175,16 +176,16 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, request, user }): Promise<Response> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return serveFile(mount, path, 'inline', request.headers.get('range'), request.headers.get('if-none-match'));
         },
-        { auth: true },
+        { linkAuth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/preview',
         async ({ params, user, set }): Promise<Buffer | undefined> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
             const result = await getScreenPreview(mount, path, embedUrl);
@@ -200,56 +201,56 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             Object.assign(set.headers, scriptableInlineHeaders(result.contentType));
             return result.data;
         },
-        { auth: true },
+        { linkAuth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return answerPreview(request, set, path, TEXT_FORMAT, () => getTextPreview(mount, path));
         },
         // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
         // an old URL would serve old content after an inline edit.
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // A .vcf answers with its contact cards instead of a body, and the preview draws them.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, request, user, set }): Promise<VCardPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, VCARD_FORMAT, () => getVCardPreview(mount, path));
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // An .eml answers with the message it holds: its headers, its sanitized body and its parts.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
         async ({ params, request, user, set }): Promise<EmlPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, EML_FORMAT, () => getEmlPreview(mount, path));
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // An .ics answers with the events it holds, and the preview draws them as cards.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
         async ({ params, request, user, set }): Promise<IcsPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, ICS_FORMAT, () => getIcsPreview(mount, path));
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     .get(
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }): Promise<BunFile> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
             const pathId = params.fileName.split('.')[0];
             const { mount } = await drive.resolveFile(params.mountId, pathId);
             const file = await getThumbnail(mount.thumbsDir, pathId);
@@ -258,5 +259,5 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             set.headers['Content-Type'] = 'image/webp';
             return file;
         },
-        { auth: true },
+        { linkAuth: true },
     );

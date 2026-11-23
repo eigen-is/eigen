@@ -295,9 +295,9 @@ const METRICS: readonly Metric[] = [
             let hits = 0;
             for (const chunk of text.split(new RegExp(`(?=${ROUTE_START.source})`)).slice(1)) {
                 const route = /['"](\/[^'"]*)['"]/.exec(chunk)?.[1];
-                // `auth: true` is this route's own option object; an unauthenticated route (LMTP
-                // delivery, guest OTP) answers to no Home and is skipped. Comments don't count.
-                if (route === undefined || !/auth:\s*true/.test(stripNoise(chunk))) continue;
+                // `auth: true` or `linkAuth: true`, hence the `i`, is this route's own option object; a route without
+                // one (LMTP delivery, guest OTP) answers to no Home and is skipped. Comments don't count.
+                if (route === undefined || !/auth:\s*true/i.test(stripNoise(chunk))) continue;
                 if (route.replace(TRANSPORT_PREFIX, '').split('/')[2] !== ':ownerId') hits++;
             }
             return hits;
