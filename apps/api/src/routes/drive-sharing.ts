@@ -44,7 +44,12 @@ const clientFileEventBody = t.Union([
 const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
 void _clientFileEventBodyMatchesType;
 
-const visibilitySchema = t.Union([t.Literal('private'), t.Literal('public-read'), t.Literal('public-write')]);
+const visibilitySchema = t.Union([
+    t.Literal('private'),
+    t.Literal('public-read'),
+    t.Literal('public-write'),
+    t.Literal('link'),
+]);
 const _visibilitySchemaMatchesType: TypesEqual<Static<typeof visibilitySchema>, DriveVisibility> = true;
 void _visibilitySchemaMatchesType;
 

@@ -1,6 +1,7 @@
-// Who may read or write a Drive path, decided from the chain of folders above it, and what else that chain says,
-// such as whether the path is in the trash or inside a document. Every access check reads it, such as SharedDrive's
-// before a call it passes on. The helpers that merge, normalize and trim an ACL before Drive saves it live here too.
+// Who may read or write a Drive path, signed in or by its link, decided from the chain of folders above it, and what
+// else that chain says, such as whether the path is in the trash or inside a document. Every access check reads it,
+// such as SharedDrive's before a call it passes on. The helpers that merge, normalize and trim an ACL before Drive
+// saves it live here too.
 
 import { CONTAINER_CHAT_FOLDER, CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
@@ -18,7 +19,7 @@ import { ApiError } from '../core';
 import type { Memberships, User } from '../user';
 
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
-    return visibility === 'public-read' || visibility === 'public-write';
+    return visibility === 'public-read' || visibility === 'public-write' || visibility === 'link';
 }
 
 // Whether the path, or a folder above it, is in the trash. A path in the trash is the owner's alone until
@@ -81,6 +82,26 @@ function canFromAncestors(
     }
 
     return false;
+}
+
+// What a visitor without a login may read: the index of the highest path in the chain with a link, or null. From that
+// path down only folders, ending at most in a file or a collab document, which opens only as far as a file in media/.
+export function canReadByLink(chain: readonly DrivePath[], enabled: boolean): number | null {
+    const head = chain.findIndex((path) => path.visibility === 'link');
+    if (!enabled || head < 0 || isTrashedChain(chain)) return null;
+    const below = chain.slice(head);
+    const at = below.findIndex((path) => isCollabType(path.type));
+    const [outside, inside] = at < 0 ? [below, []] : [below.slice(0, at), below.slice(at + 1)];
+    const admitted =
+        outside.every(
+            (path, i) => path.type === DRIVE_TYPE_FOLDER || (path.type === DRIVE_TYPE_FILE && i === below.length - 1),
+        ) &&
+        inside.every((path, i) =>
+            i === 0
+                ? path.type === DRIVE_TYPE_FOLDER && path.name === CONTAINER_MEDIA_FOLDER
+                : i === 1 && path.type === DRIVE_TYPE_FILE,
+        );
+    return admitted ? head : null;
 }
 
 export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {

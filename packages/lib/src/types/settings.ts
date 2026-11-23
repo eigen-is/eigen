@@ -187,6 +187,10 @@ export type ServerSettings = {
         // The private bucket archives go to; `keep` is its own count there.
         upload: { enabled: boolean; s3: S3Config; keep: number };
     };
+    sharing: {
+        // Whether a path may be opened by anyone with its link. A demo server never allows it.
+        publicLinks: boolean;
+    };
 };
 
 // What a save answers: the settings, a notice the owner must read once about what they just saved, and
