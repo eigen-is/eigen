@@ -8,7 +8,7 @@ import { dateFormatter, formatMonth, formatTime, isToday } from '@workspace/lib/
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { cn } from '@workspace/ui/lib/utils';
-import { eventPillStateClasses } from './calendar-utils';
+import { eventSurfaceClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -69,7 +69,11 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                                 type="button"
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded px-2 py-1.5 text-left text-sm',
-                                                    eventPillStateClasses('dot', freeBusy, inviteStatus),
+                                                    eventSurfaceClasses('dot', {
+                                                        past: event.endTime <= new Date(),
+                                                        freeBusy,
+                                                        inviteStatus,
+                                                    }),
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                             >
