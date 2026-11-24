@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2392 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2404 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -699,7 +699,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (468)
+## Types (470)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -718,6 +718,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `CalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `LaneBar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `TimedBlock` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `ChatRoomState` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1172,7 +1174,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1256)
+## Utilities & constants (1266)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1325,9 +1327,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `gradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `linearize` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
+| `allocateLanes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `CALENDAR_VIEW_LABELS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `CALENDAR_VIEW_MODES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `calendarEventLink` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `eventDaySpan` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1336,17 +1340,25 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getInviteStatus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
+| `inAllDayLane` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `isCalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `layoutTimedEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `localToUtc` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `monthWeekLayout` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `movedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseDayKey` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `rescheduleScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `resizedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `seriesEditFromOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `slotAt` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `SNAP_MINUTES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `stepFocus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
