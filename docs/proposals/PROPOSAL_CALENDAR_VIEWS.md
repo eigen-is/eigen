@@ -130,16 +130,20 @@ Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest
 
 1. Default view: week on a desktop, 3 days on a phone.
 2. Dragging one occurrence of a series to another day offers only "This event", because moving the series start leaves `BYDAY` on the old weekday. Another time on the same day keeps this / following / all.
-3. Keyboard shortcuts are on by default, as in Google, and off while a dialog is open.
+3. Keyboard shortcuts are on by default, as in Google, and off while a dialog, a menu or the view select is open.
 4. A pending invitation is a dashed outline in the event's color; a declined one is faded and struck through.
-5. One tint for every color surface: a card on the board, an open card and a calendar event look the same. Its strength, between 0.25 and 0.5, is picked from U3's screenshots.
+5. One color surface for cards and events. In light mode it fills with the color family's pale tone lightened toward white, 0.25 for a tile (a card on the board, an event) and 0.5 for an open card; in dark mode it is a faint wash of the color with a 2px stripe, as a mail list row.
 6. The mini month goes in the sidebar (U10). If it is built on shadcn's `Calendar`, that adds `react-day-picker` with `date-fns`, a new package, asked right before U10.
-
 7. The views show once per screen size, as Google does: on a computer the toolbar's select, on a phone the sidebar's links (so back-to-sidebar works as in other apps); the phone's ⋮ menu has no view list.
+8. The mini month sits at the sidebar's foot, the sidebar's full width.
+9. Recent files is a sidebar row in Drive and the file apps only, not in Mail, Chat, Calendar or Contacts.
+10. A new event starts an hour long everywhere, as in Google: Create event, the `c` key and a click on the time grid.
+11. A drag that saves an event with guests asks before mailing them an update.
+12. A drop saves through a host bound to the event's owner, as Edit event does.
 
 Taken unless the owner says otherwise: 3 days is fixed (not 2 to 7), the schedule shows 28 days a step, drag on touch is a ROADMAP row.
 
 ## Found on the way
 
-- The Monday rule lives in lib's range functions, `WEEKDAY_HEADERS` and the toolbar's title; U2 makes it one constant.
+- The Monday rule lives in lib's range functions, the month's weekday headers and the toolbar's title; U2 makes it one constant.
 - A notification for an all-day invitation carries only its start time, so west of UTC its link lands on the day before. Accepted as rare: fixing it changes the stored tag.

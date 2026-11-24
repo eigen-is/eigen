@@ -8,7 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Open recent** — in Docs, Sheets, Slides, Stickies and Vector, File › Open recent lists up to eight of your newest files of that kind, from Drive's Recent files
 - **Link previews** — a link to the public site in Slack, LinkedIn or X shows a picture: the eigen wordmark over the apps, or on an About page that app's own screen
-- **Day, 3-day and schedule views in Calendar** — the sidebar lists **Day**, **3 days**, **Week**, **Month** and **Schedule**, a list of the next four weeks' events, day by day. Day, 3 days and Week draw events as blocks on an hour grid, side by side where they overlap, with a line at the current time. Month draws a trip as one bar across its days, shows titles on a phone, and fits as many events as a day has room for. Click an empty time to start a new event there, an hour long, or drag over a range with a mouse to pick its start and end. Drag an event with a mouse to another time or day, or its bottom edge to change when it ends. Calendar opens on a week on a computer and on 3 days on a phone
+- **Day, 3-day and schedule views in Calendar** — the toolbar's view menu on a computer, and the sidebar on a phone, offers **Day**, **3 days**, **Week**, **Month** and **Schedule**, a list of the next four weeks' events, day by day. Day, 3 days and Week draw events as blocks on an hour grid, side by side where they overlap, with a line at the current time. Month draws a trip as one bar across its days, shows titles on a phone, and fits as many events as a day has room for. Click an empty time to start a new event there, an hour long, or drag over a range with a mouse to pick its start and end. Drag an event with a mouse to another time or day, or its bottom edge to change when it ends. Calendar opens on a week on a computer and on 3 days on a phone
 - **Keyboard shortcuts in Calendar** — as in Google Calendar: **t** for today, **j** and **k** or the arrows to step, **d**, **x**, **w**, **m** and **a** for the views, and **c** for a new event
 
 ### Changed
@@ -16,18 +16,20 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 - **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row
 - **Delete in settings dialogs** — a trash icon at the bottom left deletes a label in Contacts, a calendar in Calendar and a column in Stickies, and removes data validation in Sheets
-- **Calendar's sidebar** — the small month sits at the bottom under a line, as wide as the sidebar, and stays in view while a long list of calendars scrolls. The Recent files row is gone from Calendar
+- **Calendar's sidebar** — the small month sits at the bottom under a line, as wide as the sidebar, and stays in view while a long list of calendars scrolls
 - **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
 - **Messages in Sheets** — a refusal, such as a blocked paste, shows in the corner instead of a box you have to close
 - **Rows of attachments** — in Stickies, Chat and Mail, a row of files too long to fit scrolls when you drag it with the mouse, or with an arrow button at each end that hides more
 - **Recent files** — the row is in the sidebars of Drive, Docs, Sheets, Slides, Stickies and Vector only, no longer in Mail, Chat, Calendar and Contacts
 - **Cards in Stickies** — the items on a board are called cards in every button, menu, notification, activity row and help article, such as **Add card** and **Delete card**
+- **New events in Calendar** — start an hour long, as in Google Calendar, from **Create event** and the **c** key too
 - **Event colors in Calendar** — in light mode, events are lighter, the same shade as a Stickies card of that color
 
 ### Fixed
 
 - **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
 - **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
+- **This and following events in Calendar** — changing them no longer shows an earlier edited date twice
 - **Deleting a changed occurrence in Calendar** — no longer offers **This and following events**, which closed the dialog without deleting anything
 - **Calendar access words** — calendar sharing, shared calendar settings and an admin's team settings name access as Can edit, Can view or Free/busy
 - **Switching views in Calendar** — keeps the day you were looking at, so Month to Week from November no longer lands on the last week of October. Old bookmarks of a Calendar view no longer open
