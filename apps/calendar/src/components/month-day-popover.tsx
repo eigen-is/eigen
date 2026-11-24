@@ -2,42 +2,28 @@
 // as Google Calendar does. Picking an event closes the list and opens the event's detail as a click in the day does.
 
 import { formatDayMonth } from '@workspace/lib/date';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
-import { EventChip } from './event-chip';
+import type { EventSurfaceProps } from './event-chip';
+import { EventChip, MORE_BUTTON } from './event-chip';
 
-type MonthDayPopoverProps = {
+type MonthDayPopoverProps = EventSurfaceProps & {
     day: Date;
     events: readonly CalendarEventOccurrence[];
     hiddenCount: number;
-    calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
-    onEventClick: (event: CalendarEventOccurrence, e: React.MouseEvent) => void;
     style: CSSProperties;
 };
 
-export function MonthDayPopover({
-    day,
-    events,
-    hiddenCount,
-    calendars,
-    sharedCalendars,
-    onEventClick,
-    style,
-}: MonthDayPopoverProps) {
+export function MonthDayPopover({ day, events, hiddenCount, style, onClick, ...surfaceProps }: MonthDayPopoverProps) {
     const [open, setOpen] = useState(false);
 
     // Modal, so the page takes no pointer events while the list is open and a click on another day only closes it.
     return (
         <Popover open={open} onOpenChange={setOpen} modal>
             <PopoverTrigger asChild>
-                <button
-                    type="button"
-                    className="mx-0.5 truncate rounded px-1 text-left text-xs font-medium leading-5 text-muted-foreground hover:bg-accent"
-                    style={style}
-                >
+                <button type="button" className={MORE_BUTTON} style={style}>
                     {`${hiddenCount} more`}
                 </button>
             </PopoverTrigger>
@@ -50,11 +36,10 @@ export function MonthDayPopover({
                         <EventChip
                             key={`${event.id}-${event.occurrenceDate}-${idx}`}
                             event={event}
-                            calendars={calendars}
-                            sharedCalendars={sharedCalendars}
+                            {...surfaceProps}
                             onClick={(clicked, e) => {
                                 setOpen(false);
-                                onEventClick(clicked, e);
+                                onClick(clicked, e);
                             }}
                             className="w-full"
                         />

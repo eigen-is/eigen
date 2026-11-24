@@ -1,6 +1,7 @@
 // Small helpers the Calendar app's views and event dialogs share, such as the color and state an event draws in and
 // the classes that state lays over its color surface, which occurrence a refetched list holds for one on screen, whose
-// Home an event is saved in, an event's start and end from the form's fields, and the key a picker names a calendar by.
+// Home an event is saved in, the day cell under a dragging pointer, an event's start and end from the form's fields,
+// and the key a picker names a calendar by.
 
 import { getCalendarColor, getInviteStatus, isFreeBusyEvent, isSeriesOccurrence } from '@workspace/lib/calendar';
 import type {
@@ -24,7 +25,7 @@ type EventSurfaceState = {
 export function eventState(
     event: CalendarEventOccurrence,
     calendars: readonly CalendarItem[],
-    sharedCalendars: readonly SharedCalendar[] | undefined,
+    sharedCalendars: readonly SharedCalendar[],
     viewerEmail: string | undefined,
 ): EventSurfaceState & { color: string } {
     const freeBusy = isFreeBusyEvent(event);
@@ -78,6 +79,12 @@ export function eventOwnerId(
 // A finger scrolls the views and its tap opens the event, so only the primary button of a mouse or pen drags.
 export function isDragPointer(e: React.PointerEvent): boolean {
     return (e.pointerType === 'mouse' || e.pointerType === 'pen') && e.button === 0;
+}
+
+// Which of `count` equal cells along one axis a pointer is over, from the cells' start and size in client pixels;
+// a pointer past either end stays on the cell there.
+export function cellAt(start: number, size: number, pointer: number, count: number): number {
+    return Math.min(count - 1, Math.max(0, Math.floor(((pointer - start) / size) * count)));
 }
 
 // All-day bounds are midnight UTC with an exclusive end, so the last day counts one past it.

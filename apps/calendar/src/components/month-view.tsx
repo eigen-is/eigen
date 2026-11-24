@@ -8,34 +8,33 @@ import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';
 import {
     allocateLanes,
-    getEventsForDay,
+    dayEvents,
     monthWeekLayout,
     movedTimes,
     toLocalDateString,
     viewDays,
-    WEEKDAY_HEADERS,
+    weekdayHeader,
 } from '@workspace/lib/calendar';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
-import { usePointerDrag } from '@workspace/ui/hooks/use-pointer-drag';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo, useRef, useState } from 'react';
-import { isDragPointer } from './calendar-utils';
+import { cellAt, isDragPointer } from './calendar-utils';
 import { EventBar, LaneGhost } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
-import { useSwallowedClick } from './hooks/use-swallowed-click';
+import { useViewDrag } from './hooks/use-view-drag';
 import { MonthDayPopover } from './month-day-popover';
 
 type MonthViewProps = {
     focus: Date;
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
-    onDayClick?: (date: Date) => void;
+    sharedCalendars: readonly SharedCalendar[];
+    onDayClick: (date: Date) => void;
     initialEventId?: string;
 };
 
@@ -56,10 +55,9 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
     const [rowRef, rowSize] = useElementSize<HTMLDivElement>();
     const lanes = Math.max(1, Math.floor((rowSize.height - DATE_ROW) / (LANE + GAP)));
     const weeksRef = useRef<HTMLDivElement>(null);
-    const startPointerDrag = usePointerDrag();
     // The dragged event at the days it would land on.
     const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
-    const { swallowNextClick, rootProps } = useSwallowedClick();
+    const { runDrag, rootProps } = useViewDrag();
 
     const weeks = useMemo(() => {
         const days = viewDays('month', focus);
@@ -72,22 +70,14 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
         const grid = weeksRef.current;
         if (!isDragPointer(e) || !canDrag(event) || !grid) return;
         const pressed = dayAt(grid, weeks.length, e.clientX, e.clientY);
-        let moved: EventTimes | null = null;
-        startPointerDrag(e, {
+        let moved: EventTimes = event;
+        runDrag(e, {
             move: (me) => {
                 moved = movedTimes(event, dayAt(grid, weeks.length, me.clientX, me.clientY) - pressed, 0);
                 setGhost({ ...event, ...moved });
             },
-            end: () => {
-                setGhost(null);
-                if (!moved) return;
-                swallowNextClick();
-                drop(event, moved);
-            },
-            cancel: () => {
-                setGhost(null);
-                swallowNextClick();
-            },
+            land: () => drop(event, moved),
+            stop: () => setGhost(null),
         });
     };
 
@@ -95,7 +85,7 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
         <>
             <div className="flex flex-col h-full" {...rootProps}>
                 <div className="grid grid-cols-7 border-b">
-                    {WEEKDAY_HEADERS.map((day) => (
+                    {weeks[0].map(weekdayHeader).map((day) => (
                         <div
                             key={day}
                             className="text-center text-xs font-medium text-muted-foreground py-2 border-r last:border-r-0"
@@ -130,7 +120,7 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
                                                 'border-r last:border-r-0 p-1 cursor-pointer hover:bg-accent/30 transition-colors',
                                                 !isCurrentMonth && 'bg-muted/30',
                                             )}
-                                            onClick={(e) => e.target === e.currentTarget && onDayClick?.(day)}
+                                            onClick={(e) => e.target === e.currentTarget && onDayClick(day)}
                                         >
                                             <Link
                                                 to="/view/$mode/$date"
@@ -167,11 +157,9 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
                                                 <MonthDayPopover
                                                     key={toLocalDateString(week[idx])}
                                                     day={week[idx]}
-                                                    events={dayList(shownEvents, week[idx])}
+                                                    events={dayEvents(shownEvents, week[idx])}
                                                     hiddenCount={count}
-                                                    calendars={calendars}
-                                                    sharedCalendars={sharedCalendars}
-                                                    onEventClick={handleEventClick}
+                                                    {...surfaceProps}
                                                     style={{ gridRow: lanes, gridColumn: idx + 1 }}
                                                 />
                                             ),
@@ -193,12 +181,5 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
 // The day under a pointer, counted from the grid's first day: its rows share the height and each holds seven days.
 function dayAt(grid: Element, rows: number, clientX: number, clientY: number): number {
     const { left, top, width, height } = grid.getBoundingClientRect();
-    const cell = (offset: number, count: number) => Math.min(count - 1, Math.max(0, Math.floor(offset * count)));
-    return cell((clientY - top) / height, rows) * 7 + cell((clientX - left) / width, 7);
-}
-
-function dayList(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
-    const dayEvents = getEventsForDay(events, day);
-    const timed = dayEvents.filter((e) => !e.allDay).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-    return [...dayEvents.filter((e) => e.allDay), ...timed];
+    return cellAt(top, height, clientY, rows) * 7 + cellAt(left, width, clientX, 7);
 }

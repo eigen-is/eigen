@@ -10,7 +10,7 @@ import {
     viewRange,
     viewTitle,
     WEEK_STARTS_ON,
-    WEEKDAY_HEADERS,
+    weekdayHeader,
 } from '../../../core/calendar/calendar-view';
 
 // The views lay days out with local Date getters, like the browser, so the DST weeks need a zone that has them.
@@ -199,9 +199,17 @@ describe('viewTitle', () => {
     });
 });
 
-describe('WEEKDAY_HEADERS', () => {
-    test('start on Monday', () => {
-        expect(WEEKDAY_HEADERS).toEqual(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']);
+describe('weekdayHeader', () => {
+    test("a week's headers start on Monday", () => {
+        expect(viewDays('week', new Date(2026, 0, 1)).map(weekdayHeader)).toEqual([
+            'MON',
+            'TUE',
+            'WED',
+            'THU',
+            'FRI',
+            'SAT',
+            'SUN',
+        ]);
     });
 });
 

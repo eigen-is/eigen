@@ -3,13 +3,13 @@
 // event's detail dialog, as a chip in the month grid does; the route around it picks the days and fetches the events.
 
 import { useAuth } from '@workspace/lib/auth';
-import { getEventsForDay } from '@workspace/lib/calendar';
-import { indicatorColor } from '@workspace/lib/constants/colors';
+import { dayEvents } from '@workspace/lib/calendar';
 import { dateFormatter, formatMonth, formatTime, isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { cn } from '@workspace/ui/lib/utils';
 import { eventState, eventSurfaceClasses } from './calendar-utils';
+import { EventDot } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -17,7 +17,7 @@ type ScheduleViewProps = {
     days: readonly Date[];
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
+    sharedCalendars: readonly SharedCalendar[];
     initialEventId?: string;
 };
 
@@ -31,13 +31,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
     });
 
     const scheduled = days
-        .map((day) => {
-            const dayEvents = getEventsForDay(events, day);
-            const timed = dayEvents
-                .filter((e) => !e.allDay)
-                .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-            return { day, events: [...dayEvents.filter((e) => e.allDay), ...timed] };
-        })
+        .map((day) => ({ day, events: dayEvents(events, day) }))
         .filter((entry) => entry.events.length > 0);
 
     return (
@@ -46,7 +40,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                 <EmptyState message="Nothing planned" />
             ) : (
                 <div className="h-full overflow-auto">
-                    {scheduled.map(({ day, events: dayEvents }) => (
+                    {scheduled.map(({ day, events: listed }) => (
                         <section key={day.getTime()} className="flex gap-4 border-b px-4 py-2">
                             <h3 className="flex w-28 shrink-0 items-center gap-2 self-start text-xs font-medium uppercase text-muted-foreground">
                                 <span
@@ -60,7 +54,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                 {`${formatMonth(day, 'short')}, ${dateFormatter({ weekday: 'short' }).format(day)}`}
                             </h3>
                             <ul className="min-w-0 flex-1">
-                                {dayEvents.map((event, idx) => {
+                                {listed.map((event, idx) => {
                                     const state = eventState(event, calendars, sharedCalendars, user?.email);
                                     return (
                                         <li key={`${event.id}-${event.occurrenceDate}-${idx}`}>
@@ -72,14 +66,10 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                             >
-                                                <span
-                                                    className={cn(
-                                                        'h-2.5 w-2.5 shrink-0 rounded-full',
-                                                        state.inviteStatus === 'pending'
-                                                            ? 'ring-1 ring-current'
-                                                            : 'bg-current',
-                                                    )}
-                                                    style={{ color: indicatorColor(state.color) }}
+                                                <EventDot
+                                                    color={state.color}
+                                                    pending={state.inviteStatus === 'pending'}
+                                                    className="h-2.5 w-2.5"
                                                 />
                                                 <span className="w-28 shrink-0 text-muted-foreground tabular-nums">
                                                     {event.allDay

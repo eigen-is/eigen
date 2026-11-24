@@ -8,6 +8,7 @@ import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';
 import {
     allocateLanes,
+    defaultCalendar,
     eventDaySpan,
     inAllDayLane,
     layoutTimedEvents,
@@ -23,25 +24,24 @@ import { DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { formatTime } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
-import { usePointerDrag } from '@workspace/ui/hooks/use-pointer-drag';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { isDragPointer } from './calendar-utils';
+import { cellAt, isDragPointer } from './calendar-utils';
 import type { NewEventTimes } from './create-event-dialog';
-import { EventBar, LaneGhost } from './event-chip';
+import { EventBar, LaneGhost, MORE_BUTTON } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
-import { useSwallowedClick } from './hooks/use-swallowed-click';
-import { atMinutes, DraftBlock, HOUR_HEIGHT, TimedEventBlock } from './time-grid-block';
+import { useViewDrag } from './hooks/use-view-drag';
+import { atMinutes, DraftBlock, HOUR_HEIGHT, minutesToPx, TimedEventBlock } from './time-grid-block';
 
 type TimeGridProps = {
     days: readonly Date[];
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
+    sharedCalendars: readonly SharedCalendar[];
     initialEventId?: string;
     onCreateEvent: (times: NewEventTimes) => void;
 };
@@ -72,12 +72,11 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const scrollerRef = useRef<HTMLDivElement>(null);
     const allDayLaneRef = useRef<HTMLDivElement>(null);
     const hoursRef = useRef<HTMLDivElement>(null);
-    const startPointerDrag = usePointerDrag();
     const [draft, setDraft] = useState<Draft | null>(null);
     // The dragged event at the times it would land on.
     const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
     const nudgeFrameRef = useRef(0);
-    const { swallowNextClick, rootProps } = useSwallowedClick();
+    const { runDrag: runViewDrag, rootProps } = useViewDrag();
 
     // Ticks on the minute, and at once when the tab shows again, since a hidden tab's timers run late.
     useEffect(() => {
@@ -105,14 +104,14 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const bars = allDayExpanded ? allocateLanes(allDayEvents, days) : collapsedLanes.bars;
     const blocks = layoutTimedEvents(shownEvents, days);
     const ghostBar = ghost && inAllDayLane(ghost) ? allocateLanes([ghost], days)[0] : undefined;
-    const ghostBlocks = ghost && !inAllDayLane(ghost) ? layoutTimedEvents([ghost], days) : undefined;
+    const ghostBlocks = ghost ? layoutTimedEvents([ghost], days) : undefined;
 
     const todayKey = toLocalDateString(now);
     const todayIndex = days.findIndex((day) => toLocalDateString(day) === todayKey);
-    const nowTop = ((now.getHours() * 60 + now.getMinutes()) * HOUR_HEIGHT) / 60;
+    const nowTop = minutesToPx(now.getHours() * 60 + now.getMinutes());
     const columns = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` };
     const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
-    const draftColor = (calendars.find((c) => c.isDefault) ?? calendars[0])?.color ?? DEFAULT_CALENDAR_COLOR;
+    const draftColor = defaultCalendar(calendars)?.color ?? DEFAULT_CALENDAR_COLOR;
 
     const createTimed = (dayIdx: number, top: number, bottom: number) =>
         onCreateEvent({ start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false });
@@ -122,7 +121,6 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const runDrag = (e: React.PointerEvent<HTMLElement>, { follow, land, scrolls }: DragSteps) => {
         let lastX = e.clientX;
         let lastY = e.clientY;
-        let travelled = false;
         // Runs a frame at a time for as long as the pointer near an edge still scrolls the grid.
         const nudge = () => {
             nudgeFrameRef.current = 0;
@@ -140,29 +138,19 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
             follow(lastX, lastY);
             nudgeFrameRef.current = requestAnimationFrame(nudge);
         };
-        const stop = () => {
-            cancelAnimationFrame(nudgeFrameRef.current);
-            nudgeFrameRef.current = 0;
-            setDraft(null);
-            setGhost(null);
-        };
-        startPointerDrag(e, {
+        runViewDrag(e, {
             move: (me) => {
                 lastX = me.clientX;
                 lastY = me.clientY;
-                travelled = true;
                 follow(lastX, lastY);
                 if (scrolls && nudgeFrameRef.current === 0) nudge();
             },
-            end: () => {
-                stop();
-                if (!travelled) return;
-                swallowNextClick();
-                land();
-            },
-            cancel: () => {
-                stop();
-                swallowNextClick();
+            land,
+            stop: () => {
+                cancelAnimationFrame(nudgeFrameRef.current);
+                nudgeFrameRef.current = 0;
+                setDraft(null);
+                setGhost(null);
             },
         });
     };
@@ -291,7 +279,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                         <button
                                             key={toLocalDateString(days[idx])}
                                             type="button"
-                                            className="mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent"
+                                            className={MORE_BUTTON}
                                             style={{ gridRow: MAX_ALL_DAY_LANES, gridColumn: idx + 1 }}
                                             onClick={() => setAllDayExpanded(true)}
                                         >
@@ -411,7 +399,7 @@ function minutesAt(column: Element, clientY: number): number {
 // The day under a pointer, of the `count` equal columns an element holds.
 function dayAt(element: Element, clientX: number, count: number): number {
     const { left, width } = element.getBoundingClientRect();
-    return Math.min(count - 1, Math.max(0, Math.floor(((clientX - left) / width) * count)));
+    return cellAt(left, width, clientX, count);
 }
 
 function isOnEvent(target: EventTarget): boolean {

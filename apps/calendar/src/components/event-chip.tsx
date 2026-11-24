@@ -2,6 +2,7 @@
 // as a past event dimmed; the time grid's blocks are one. EventBar spans an event across its days in a row of lanes,
 // such as a month week. EventChip is one day's event, a timed one as a dot, its time and its title. LaneGhost is the
 // event a drag carries over a lane. A click hands the event to the view's detail dialog, and a press may start a drag.
+// The "N more" of a full day shares the classes here too.
 
 import { useAuth } from '@workspace/lib/auth';
 import type { LaneBar } from '@workspace/lib/calendar';
@@ -15,7 +16,7 @@ import { eventState, eventSurfaceClasses } from './calendar-utils';
 
 export type EventSurfaceProps = {
     calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
+    sharedCalendars: readonly SharedCalendar[];
     onClick: (event: CalendarEventOccurrence, e: React.MouseEvent) => void;
     onDragStart?: (event: CalendarEventOccurrence, e: React.PointerEvent<HTMLElement>) => void;
 };
@@ -27,7 +28,12 @@ type PlacedEventProps = EventSurfaceProps & {
 };
 
 // Dark mode draws a 2px color stripe at the left edge, so the text starts further in.
-const BAR = 'truncate rounded px-1.5 py-0.5 font-medium dark:pl-2';
+export const STRIPE_INSET = 'dark:pl-2';
+
+export const MORE_BUTTON =
+    'mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium leading-5 text-muted-foreground hover:bg-accent';
+
+const BAR = cn('truncate rounded px-1.5 py-0.5 font-medium', STRIPE_INSET);
 
 export function EventSurface({
     event,
@@ -84,27 +90,12 @@ export function EventBar({ bar, ...surfaceProps }: { bar: LaneBar } & EventSurfa
 }
 
 // A narrow chip, such as a month day on a phone, drops the time so the title still shows.
-export function EventChip({
-    event,
-    calendars,
-    sharedCalendars,
-    onClick,
-    onDragStart,
-    className,
-    style,
-}: PlacedEventProps) {
+export function EventChip({ className, ...props }: PlacedEventProps) {
     const { user } = useAuth();
+    const { event, calendars, sharedCalendars, onClick, onDragStart, style } = props;
     if (inAllDayLane(event)) {
         return (
-            <EventSurface
-                event={event}
-                calendars={calendars}
-                sharedCalendars={sharedCalendars}
-                onClick={onClick}
-                onDragStart={onDragStart}
-                className={cn(BAR, className)}
-                style={style}
-            >
+            <EventSurface {...props} className={cn(BAR, className)}>
                 {event.title}
             </EventSurface>
         );
@@ -123,18 +114,22 @@ export function EventChip({
             onPointerDown={onDragStart && ((e) => onDragStart(event, e))}
             title={event.title}
         >
-            <span
-                className={cn(
-                    'h-1.5 w-1.5 shrink-0 rounded-full',
-                    state.inviteStatus === 'pending' ? 'ring-1 ring-current' : 'bg-current',
-                )}
-                style={{ color: indicatorColor(state.color) }}
-            />
+            <EventDot color={state.color} pending={state.inviteStatus === 'pending'} className="h-1.5 w-1.5" />
             <span className="shrink-0 text-muted-foreground tabular-nums @max-[6rem]:hidden">
                 {formatEventTime(event)}
             </span>
             <span className="truncate">{event.title}</span>
         </button>
+    );
+}
+
+// A pending invitation is a ring, not yet a filled dot.
+export function EventDot({ color, pending, className }: { color: string; pending: boolean; className: string }) {
+    return (
+        <span
+            className={cn('shrink-0 rounded-full', pending ? 'ring-1 ring-current' : 'bg-current', className)}
+            style={{ color: indicatorColor(color) }}
+        />
     );
 }
 

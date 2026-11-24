@@ -163,7 +163,7 @@ function Page({ month }: { month: boolean }) {
     const events = [...data, freeBusy];
     const props = { events, calendars: [work], sharedCalendars: [busyShare] };
     return month
-        ? createElement(MonthView, { focus: OCTOBER, ...props })
+        ? createElement(MonthView, { focus: OCTOBER, ...props, onDayClick: () => {} })
         : createElement(TimeGrid, { days: WEEK, ...props, onCreateEvent: () => {} });
 }
 

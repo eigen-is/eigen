@@ -4,6 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import {
+    defaultCalendar,
     toLocalDateString,
     useCalendarOptions,
     useCalendars,
@@ -28,29 +29,18 @@ type CreateEventDialogProps = {
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
     initial?: NewEventTimes;
-    defaultCalendarId?: string;
 };
 
-export function CreateEventDialog({
-    open,
-    onOpenChange,
-    defaultDate,
-    initial,
-    defaultCalendarId,
-}: CreateEventDialogProps) {
+export function CreateEventDialog({ open, onOpenChange, defaultDate, initial }: CreateEventDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title="New event">
-            <CreateEventForm defaultDate={defaultDate} initial={initial} defaultCalendarId={defaultCalendarId} />
+            <CreateEventForm defaultDate={defaultDate} initial={initial} />
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts empty at its own times.
-function CreateEventForm({
-    defaultDate,
-    initial,
-    defaultCalendarId,
-}: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
+function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars = [] } = useCalendars(ownerId);
@@ -77,7 +67,7 @@ function CreateEventForm({
     const [attendees, setAttendees] = useState<Attendee[]>([]);
 
     // Until the user picks one, the default calendar follows the list, which may still be loading.
-    const defaultCal = defaultCalendarId ? calendarOptions.find((c) => c.id === defaultCalendarId) : calendarOptions[0];
+    const defaultCal = calendarOptions.find((c) => c.id === defaultCalendar(calendars)?.id);
     const selectedCalKey = pickedCalKey ?? (defaultCal ? calendarKey(defaultCal) : '');
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId ?? ownerId);
