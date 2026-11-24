@@ -32,8 +32,8 @@ type UseDragAndDropProps = {
     ) => Promise<CommentCard | undefined>;
     onRecordEvent?: (
         event:
-            | { eventType: 'sticky-moved'; details: FileEventDetailsMap['sticky-moved'] }
-            | { eventType: 'sticky-added'; details: FileEventDetailsMap['sticky-added'] },
+            | { eventType: 'card-moved'; details: FileEventDetailsMap['card-moved'] }
+            | { eventType: 'card-added'; details: FileEventDetailsMap['card-added'] },
     ) => void;
 };
 
@@ -136,7 +136,7 @@ export const useDragAndDrop = ({
                         // A copy shows in the file's history, as a card added through the dialog does.
                         if (created) {
                             onRecordEvent?.({
-                                eventType: 'sticky-added',
+                                eventType: 'card-added',
                                 details: {
                                     card: source.title,
                                     toColumn: board.columns[destColumnId]?.title ?? '',
@@ -194,7 +194,7 @@ export const useDragAndDrop = ({
         undoManager?.stopCapturing();
         if (movedToColumnId) {
             onRecordEvent?.({
-                eventType: 'sticky-moved',
+                eventType: 'card-moved',
                 details: {
                     card: cards[activeId]?.title ?? '',
                     toColumn: board.columns[movedToColumnId]?.title ?? '',

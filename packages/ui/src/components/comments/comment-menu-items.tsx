@@ -1,5 +1,6 @@
-// The rows of a comment's or a sticky's menu: view, edit, color, assign, resolve or reopen, and delete, or Add when
-// nothing has a comment yet. A card's own menu draws them alone; a host's menu, such as a cell's, draws them in its groups.
+// The rows of a comment's or a board card's menu: view, edit, color, assign, resolve or reopen, and delete, or Add
+// when nothing has a comment yet. A card's own menu draws them alone; a host's menu, such as a cell's, draws them in
+// its groups.
 
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -15,7 +16,7 @@ export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | 
 type CommentMenuItemsProps = {
     item: CommentContextMenuItem | null;
     // Noun in user-visible labels: "Edit {noun}", "{Noun} color", "Delete {noun}".
-    // Defaults to "comment"; stickies passes "sticky".
+    // Defaults to "comment"; a Stickies board passes "card".
     noun?: string;
     onAddComment?: () => void;
     onOpen?: (cardId: string) => void;

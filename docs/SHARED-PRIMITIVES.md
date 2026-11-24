@@ -11,7 +11,7 @@ Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's que
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (329)
+## Components (328)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -54,6 +54,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `CardTile` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-tile.tsx |
 | `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChartSections` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-sections.tsx |
@@ -84,6 +85,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
 | `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
+| `CommentCardTile` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-card-tile.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
 | `CommentHoverCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-hover-card.tsx |
@@ -91,7 +93,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
-| `CommentNoteCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-note-card.tsx |
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
@@ -260,8 +261,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NavigationMenuLink` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuList` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuTrigger` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
-| `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
-| `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `Popover` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
@@ -1178,7 +1177,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1271)
+## Utilities & constants (1272)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1353,6 +1352,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `layoutTimedEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `localToUtc` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `MIN_BLOCK_MINUTES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `monthWeekLayout` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `movedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |

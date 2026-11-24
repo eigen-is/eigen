@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, cards, filter, assignee]
 related: [stickies/get-started, stickies/assign-and-resolve-cards]
 order: 90
-updated: 2026-09-13
+updated: 2026-11-24
 ---
 
 A busy board is hard to read. The **Filter** menu in the toolbar narrows it down to the cards you care about: the ones assigned to a particular person, the ones in a certain color, or the ones that are still open. Filtering changes what you see, not the board itself, so nobody else's view changes.
@@ -20,7 +20,7 @@ The list holds everyone the board is shared with. See [Assign and resolve cards]
 
 ## Filter by color
 
-The **Filter** menu has a **Color** submenu listing every sticky color. Click a color to switch it on, and a tick appears beside it. Click more colors to add them, and the board shows cards in any of the colors you have ticked. The menu stays open while you pick, so you can choose several in one go.
+The **Filter** menu has a **Color** submenu listing every card color. Click a color to switch it on, and a tick appears beside it. Click more colors to add them, and the board shows cards in any of the colors you have ticked. The menu stays open while you pick, so you can choose several in one go.
 
 The middle of the toolbar shows the same colors as a row of swatches. Click a swatch to switch that color on or off. The row needs a wide window, so on a narrow one use the **Filter** menu instead.
 

@@ -1,6 +1,6 @@
-// The form that adds or edits a comment card or a sticky: title, description, attachments, color and assignee. It only
-// stages them; the host saves them on submit and uploads the attachments, and Cancel touches nothing. Editing can
-// offer Delete, which the host confirms.
+// The form that adds or edits a card, a comment's or a board's: title, description, attachments, color and
+// assignee. It only stages them; the host saves them on submit and uploads the attachments, and Cancel touches
+// nothing. Editing can offer Delete, which the host confirms.
 
 import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';

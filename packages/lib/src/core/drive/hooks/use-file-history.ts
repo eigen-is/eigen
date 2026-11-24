@@ -1,3 +1,8 @@
+// A Drive item's history as the client reads and adds to it. useFileHistory lists the events on an item, or under a
+// folder, for a timeline such as the editors' Activity panel or Drive's details. useRecordHistory posts the few events
+// only the client sees, such as a card moved on a Stickies board. A live event refreshes the lists through
+// invalidateFileHistory.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
@@ -7,13 +12,13 @@ import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
 
-// RECORD CLIENT-EMITTED HISTORY EVENT (the sticky-* card events)
+// The route refuses a longer detail, so the hook clips a card's title and column to fit.
 export function useRecordHistory(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (input: ClientFileEventInput) => {
             const clip = (text: string) => text.slice(0, CARD_TITLE_MAX_LENGTH);
             const event: ClientFileEventInput =
-                input.eventType === 'sticky-removed'
+                input.eventType === 'card-removed'
                     ? { ...input, details: { ...input.details, card: clip(input.details.card) } }
                     : {
                           ...input,
@@ -31,9 +36,7 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// GET FILE HISTORY — file: direct events; folder: descendant events included.
-// limit is part of the queryKey: drive detail (default 5) and the editors'
-// activity panel (50) cache independently.
+// limit is part of the key, so Drive's details (5) and the Activity panel (50) cache apart.
 export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
     return useQuery({
         queryKey: driveKeys.fileHistory(ownerId, mountId, pathId, limit),

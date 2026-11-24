@@ -1,6 +1,7 @@
 export { ActivityPanel } from './activity-panel';
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
+export { CommentCardTile } from './comment-card-tile';
 export { CommentContextMenu } from './comment-context-menu';
 export { CommentFilterMenuItems } from './comment-filter-menu-items';
 export { FilterSummary } from './comment-filter-summary';
@@ -9,7 +10,6 @@ export { CommentIndicator } from './comment-indicator';
 export { CommentLifecycleDialogs, DeleteCommentDialog } from './comment-lifecycle-dialogs';
 export { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
-export { CommentNoteCard } from './comment-note-card';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
 export { CreatedByMeta } from './created-by-meta';

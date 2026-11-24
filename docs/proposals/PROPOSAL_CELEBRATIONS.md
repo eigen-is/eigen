@@ -1,14 +1,14 @@
 # Proposal: Celebrations
 
-This proposal adds a small surprise when you finish something in Eigen: a burst of confetti or a cheering stick figure when you tick the last box of a sticky's checklist.
+This proposal adds a small surprise when you finish something in Eigen: a burst of confetti or a cheering stick figure when you tick the last box of a card's checklist.
 
 **Status:** Phase 1 is built: `useCelebrate`, the confetti burst, the setting and the checklist trigger ([STICKIES.md](../STICKIES.md#ticking-the-last-box-of-a-checklist-celebrates-now-and-then)). Phases 2 to 4 are not started. The empty states and the new triggers were added on 2026-11-01.
 
-> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in `NoteCardDialog`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti, and the same figures sit in the apps' empty states, which is where a new user meets them first. One personal setting turns the celebrations off. No package, no new route, no migration.
+> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a card's task list, in `CardBody`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti, and the same figures sit in the apps' empty states, which is where a new user meets them first. One personal setting turns the celebrations off. No package, no new route, no migration.
 
 ## Why
 
-A sticky card already shows a progress bar and a `3/5` count for its task list (`NoteCard`, `packages/ui/src/components/notes/note-card.tsx`). You watch it fill up, and then nothing happens when it's full. A small reward at that moment makes Eigen feel a bit warmer than an admin tool, and it costs an afternoon.
+A board card already shows a progress bar and a `3/5` count for its task list (`CardTile`, `packages/ui/src/components/cards/card-tile.tsx`). You watch it fill up, and then nothing happens when it's full. A small reward at that moment makes Eigen feel a bit warmer than an admin tool, and it costs an afternoon.
 
 The apps that do this well (Asana's flying unicorn, Apple's activity rings, Things' checkbox) share a few habits. The reward lands on the click that earned it. It is rare enough to stay a surprise. And it is easy to switch off. The ones that go wrong (Duolingo's streak guilt) turn it into points and pressure. This proposal copies the first group and avoids the second.
 
@@ -37,11 +37,11 @@ The apps that do this well (Asana's flying unicorn, Apple's activity rings, Thin
 
 A burst is a fixed, full-viewport `<canvas>` with `pointer-events: none`, appended to `document.body`. About 80 particles spray up from the top of `origin` and fall under gravity for about 1.5 seconds. Then the canvas removes itself. A second burst while one is running is dropped. It is about 60 lines of our own code. `canvas-confetti` would do the same, but a new package needs its own approval, and this is small enough to write.
 
-### The first trigger: a sticky's checklist
+### The first trigger: a card's checklist
 
-`NoteCardDialog` (`packages/ui/src/components/notes/note-card-dialog.tsx`) toggles a task-list checkbox in `handleDescriptionClick` and passes the new HTML to `onDescriptionChange`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input)`. The confetti comes out of the box you just ticked.
+`CardBody` (`packages/ui/src/components/cards/card-body.tsx`) toggles a task-list checkbox in `handleDescriptionClick` and passes the new HTML to `onDescriptionChange`. That is where it fires: if the click checked a box, and the list now has at least two items and all of them are checked, call `celebrate(input)`. The confetti comes out of the box you just ticked.
 
-`countTaskItems` (`packages/lib/src/core/html.ts`) counts checked and total items for both `NoteCard` and the dialog. `NoteCardDialog` also serves `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`), so cards outside the Stickies app get the same behavior.
+`countTaskItems` (`packages/lib/src/core/html.ts`) counts checked and total items for both `CardTile` and the dialog. `CardDialog` (`packages/ui/src/components/cards/card-dialog.tsx`) renders `CardBody`, so cards outside the Stickies app get the same behavior.
 
 A checklist with one item is a toggle, not a list, so it doesn't count.
 
@@ -71,7 +71,7 @@ Each follows the rules: your own action, in your tab.
 
 - **Setup is done.** The first sign-in of the admin who ran `./eigen setup` shows a figure cutting a ribbon. Once ever, and always, since it can only happen once: a `UserSettings` flag remembers it, through the existing settings route.
 - **The last open comment is resolved.** Resolving a thread that leaves the document with no open threads: a figure dusting off their hands. One in three.
-- **The board is done.** A sticky moved into the last column that leaves the other columns empty. One in three.
+- **The board is done.** A card moved into the last column that leaves the other columns empty. One in three.
 
 ### The setting
 
@@ -88,7 +88,7 @@ It is on by default. A delight that's off by default is never found.
 
 | | Phase | Delivers | Size |
 |---|---|---|---|
-| **1** | `useCelebrate`, the burst, the setting, the sticky checklist trigger (built) | Confetti on a finished checklist | S |
+| **1** | `useCelebrate`, the burst, the setting, the card checklist trigger (built) | Confetti on a finished checklist | S |
 | **2** | Stick figures in the empty states | Needs clipart Phase 2 and the four calm poses | S |
 | **3** | Stick figure celebrations and the three triggers under More triggers | Needs Phase 2's figures | S–M |
 | **4** | Docs word goal | Goal, progress ring, celebration | S–M |

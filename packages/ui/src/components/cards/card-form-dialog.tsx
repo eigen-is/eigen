@@ -1,6 +1,7 @@
-// The dialog that adds a comment card or a sticky: the card form under the host's title, such as "Add comment" in docs
-// or a new sticky on a board. It is as wide as the dialog an existing card opens into, so a card looks the same being
-// made as being read. The host saves the card; the dialog closes once that resolves.
+// The dialog that adds a card, to a document as a comment or to a board's column: the card form under the host's
+// title, such as "Add comment" in docs or "Add card" on a board. It is as wide as the dialog an existing card opens
+// into, so a card looks the same being made as being read. The host saves the card; the dialog closes once that
+// resolves.
 
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';

@@ -5,7 +5,7 @@
 import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
 import type { DrivePathType } from './drive';
-import { stripEigenExtension } from './drive';
+import { DRIVE_TYPE_STICKIES, stripEigenExtension } from './drive';
 import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from './owner';
 
 export type FileEventDetailsMap = {
@@ -17,10 +17,10 @@ export type FileEventDetailsMap = {
     'version-restored': { versionName: string };
     // A row may lack chatName, and then its link opens the document.
     commented: { preview: string; chatName?: string };
-    'sticky-added': { card: string; toColumn: string; cardId: string };
-    'sticky-moved': { card: string; toColumn: string; cardId: string };
-    'sticky-removed': { card: string; cardId: string };
-    // card is the card's title, named as in the sticky events.
+    'card-added': { card: string; toColumn: string; cardId: string };
+    'card-moved': { card: string; toColumn: string; cardId: string };
+    'card-removed': { card: string; cardId: string };
+    // card is the card's title, named as in the card events.
     assigned: { assignee: string; card?: string; chatName?: string };
     resolved: { card?: string; chatName?: string };
     reopened: { card?: string; chatName?: string };
@@ -40,7 +40,7 @@ export const CARD_TITLE_MAX_LENGTH = 200;
 
 // Only a card event names something a person can read, so a structural change, such as a slide added or a sheet row
 // inserted, shows as the plain 'edited'.
-type ClientFileEventType = Extract<FileEventType, 'sticky-added' | 'sticky-moved' | 'sticky-removed'>;
+type ClientFileEventType = Extract<FileEventType, 'card-added' | 'card-moved' | 'card-removed'>;
 
 // What a writer records: details are required exactly when the event type has them.
 export type FileEventRecord = {
@@ -96,12 +96,12 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     'version-restored': 'restored a version',
     'versions-deleted': 'deleted the version history',
     commented: 'commented',
-    'sticky-added': 'added a card',
-    'sticky-moved': 'moved a card',
-    'sticky-removed': 'removed a card',
-    assigned: 'assigned a comment',
-    resolved: 'resolved a comment',
-    reopened: 'reopened a comment',
+    'card-added': 'added a card',
+    'card-moved': 'moved a card',
+    'card-removed': 'removed a card',
+    assigned: 'assigned',
+    resolved: 'resolved',
+    reopened: 'reopened',
 };
 
 // A stored row can hold a type this build doesn't know. It reads as 'edited', so every FileEvent has a known type
@@ -135,6 +135,8 @@ export function describeFileEvent(
     const name = stripEigenExtension(event.pathName);
     const container = ctx === 'container';
     const details = event.details;
+    // A comment on a Stickies board is one of its cards.
+    const comment = event.pathType === DRIVE_TYPE_STICKIES ? 'a card' : 'a comment';
 
     switch (event.eventType) {
         case 'renamed': {
@@ -181,7 +183,7 @@ export function describeFileEvent(
                 primary: d ? `“${formatChatPreview(d.preview, opts)}”` : undefined,
             };
         }
-        case 'sticky-added': {
+        case 'card-added': {
             const d = details && 'toColumn' in details ? details : null;
             return {
                 action: container ? `added a card to "${name}"` : d ? `added a card to ${d.toColumn}` : 'added a card',
@@ -189,14 +191,14 @@ export function describeFileEvent(
                 secondary: container && d ? `in ${d.toColumn}` : undefined,
             };
         }
-        case 'sticky-moved': {
+        case 'card-moved': {
             const d = details && 'toColumn' in details ? details : null;
             return {
                 action: container ? `moved a card in "${name}"` : 'moved a card',
                 primary: d ? `${d.card} → ${d.toColumn}` : undefined,
             };
         }
-        case 'sticky-removed': {
+        case 'card-removed': {
             const d = details && 'card' in details ? details : null;
             return {
                 action: container ? `removed a card from "${name}"` : 'removed a card',
@@ -211,7 +213,7 @@ export function describeFileEvent(
                     : (opts?.resolveName?.(d.assignee) ?? d.assignee.split('@')[0])
                 : undefined;
             return {
-                action: container ? `assigned a comment in "${name}"` : 'assigned a comment',
+                action: container ? `assigned ${comment} in "${name}"` : `assigned ${comment}`,
                 primary: d?.card ?? (who ? `to ${who}` : undefined),
                 secondary: d?.card && who ? `to ${who}` : undefined,
             };
@@ -219,10 +221,9 @@ export function describeFileEvent(
         case 'resolved':
         case 'reopened': {
             const d = details && 'chatName' in details ? details : null;
+            const action = `${FILE_EVENT_PHRASES[event.eventType]} ${comment}`;
             return {
-                action: container
-                    ? `${FILE_EVENT_PHRASES[event.eventType]} in "${name}"`
-                    : FILE_EVENT_PHRASES[event.eventType],
+                action: container ? `${action} in "${name}"` : action,
                 primary: d && 'card' in d ? d.card : undefined,
             };
         }

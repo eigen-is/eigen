@@ -1,5 +1,5 @@
-// The Assign to submenu of a comment or a sticky: "Me", Unassigned, then the members who can read the document. The
-// comment menu draws it.
+// The Assign to submenu of a comment or a board's card: "Me", Unassigned, then the members who can read the
+// document. The comment menu draws it.
 
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';

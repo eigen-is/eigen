@@ -7,7 +7,7 @@ import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
 // The schema every mount's metadata.db is migrated to.
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
@@ -268,6 +268,16 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) =>
                 // A restore stages plain files too, which the queue must not check for a SQLite header.
                 db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),
+        },
+        {
+            // The item on a Stickies board is called a card, so its events are too. No reader knows the old names.
+            version: 9,
+            up: (db) =>
+                db.exec(`
+                UPDATE file_events SET eventType = 'card-added' WHERE eventType = 'sticky-added';
+                UPDATE file_events SET eventType = 'card-moved' WHERE eventType = 'sticky-moved';
+                UPDATE file_events SET eventType = 'card-removed' WHERE eventType = 'sticky-removed';
+            `),
         },
     ],
 };

@@ -72,7 +72,6 @@
     "./components/mail": "./src/components/mail/index.ts",
     "./components/media": "./src/components/media/index.ts",
     "./components/mount": "./src/components/mount/index.ts",
-    "./components/notes": "./src/components/notes/index.ts",
     "./components/preview-provider": "./src/components/preview-provider/index.ts",
     "./components/properties-panel": "./src/components/properties-panel/index.ts",
     "./components/search": "./src/components/search/index.ts",

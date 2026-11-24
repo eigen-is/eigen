@@ -27,9 +27,9 @@ import { ContextMenuAnchor } from '../context-menu';
 import { Dialog, DialogContent, DialogTitle } from '../dialog';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
-import { NoteCardActions } from '../notes/note-card-actions';
-import { NoteCardContent } from '../notes/note-card-content';
-import { NoteCardDialog } from '../notes/note-card-dialog';
+import { CardBody } from './card-body';
+import { CardDialogActions } from './card-dialog-actions';
+import { CardDialogFrame } from './card-dialog-frame';
 import { CardForm } from './card-form';
 
 type CardDialogProps = {
@@ -206,7 +206,7 @@ export function CardDialog({
         ) : undefined;
 
     const content = (
-        <NoteCardContent
+        <CardBody
             title={card.title}
             description={card.description}
             meta={meta}
@@ -260,13 +260,13 @@ export function CardDialog({
     }
 
     return (
-        <NoteCardDialog
+        <CardDialogFrame
             open={open}
             onOpenChange={handleOpenChange}
             title={card.title}
             actions={
                 !editForm && (
-                    <NoteCardActions
+                    <CardDialogActions
                         copyLinkUrl={copyLinkUrl}
                         onEdit={canEdit ? () => onEditingChange(true) : undefined}
                         {...action}
@@ -275,6 +275,6 @@ export function CardDialog({
             }
         >
             {body}
-        </NoteCardDialog>
+        </CardDialogFrame>
     );
 }

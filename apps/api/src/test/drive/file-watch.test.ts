@@ -683,77 +683,77 @@ describe('File events: collab edits, client posts, comments', () => {
     });
 
     describe('client-posted history events', () => {
-        const stickyMoved = {
-            eventType: 'sticky-moved',
+        const cardMoved = {
+            eventType: 'card-moved',
             details: { card: 'Buy milk', toColumn: 'Done', cardId: 'card-1' },
         };
 
-        test('a writer can post a sticky-moved event with details', async () => {
-            const board = await createDoc('ClientSticky', 'stickies');
-            const res = await postClientEvent(aliceToken, board.id, stickyMoved);
+        test('a writer can post a card-moved event with details', async () => {
+            const board = await createDoc('ClientBoard', 'stickies');
+            const res = await postClientEvent(aliceToken, board.id, cardMoved);
             expect(res.status).toBe(200);
             expect(await res.json()).toEqual({ success: true });
 
-            const moved = (await history(board.id)).find((e) => e.eventType === 'sticky-moved');
+            const moved = (await history(board.id)).find((e) => e.eventType === 'card-moved');
             expect(moved).toBeDefined();
-            expect(moved!.details).toEqual(stickyMoved.details);
+            expect(moved!.details).toEqual(cardMoved.details);
             expect(moved!.actorEmail).toBe(ctx.alice.user.email);
         });
 
         test('a read-only collaborator cannot post client events', async () => {
-            const board = await createDoc('ClientStickyRO', 'stickies');
+            const board = await createDoc('ClientBoardRO', 'stickies');
             await shareWith(board.id, ctx.bob.user.email);
-            const res = await postClientEvent(bobToken, board.id, stickyMoved);
+            const res = await postClientEvent(bobToken, board.id, cardMoved);
             expect(res.status).toBe(403);
         });
 
         test('server-only event types are rejected by the route schema', async () => {
-            const board = await createDoc('ClientStickyServerOnly', 'stickies');
+            const board = await createDoc('ClientBoardServerOnly', 'stickies');
             const res = await postClientEvent(aliceToken, board.id, { eventType: 'created', details: {} });
             expect(res.status).toBe(422);
         });
 
         test('identical client events within the dedupe window record one row', async () => {
-            const board = await createDoc('ClientStickyDedupe', 'stickies');
-            await postClientEvent(aliceToken, board.id, stickyMoved);
-            await postClientEvent(aliceToken, board.id, stickyMoved);
-            const moved = (await history(board.id)).filter((e) => e.eventType === 'sticky-moved');
+            const board = await createDoc('ClientBoardDedupe', 'stickies');
+            await postClientEvent(aliceToken, board.id, cardMoved);
+            await postClientEvent(aliceToken, board.id, cardMoved);
+            const moved = (await history(board.id)).filter((e) => e.eventType === 'card-moved');
             expect(moved).toHaveLength(1);
         });
 
-        test('a writer can post a sticky-added event with the card title', async () => {
-            const board = await createDoc('ClientStickyAdd', 'stickies');
+        test('a writer can post a card-added event with the card title', async () => {
+            const board = await createDoc('ClientBoardAdd', 'stickies');
             const details = { card: 'Write tests', toColumn: 'Todo', cardId: 'card-2' };
-            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-added', details });
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'card-added', details });
             expect(res.status).toBe(200);
-            const added = (await history(board.id)).find((e) => e.eventType === 'sticky-added');
+            const added = (await history(board.id)).find((e) => e.eventType === 'card-added');
             expect(added?.details).toEqual(details);
         });
 
-        test('sticky-removed is accepted and recorded with the card title', async () => {
+        test('card-removed is accepted and recorded with the card title', async () => {
             const board = await createDoc('ClientVocab', 'stickies');
             const details = { card: 'Old card', cardId: 'card-3' };
-            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-removed', details });
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'card-removed', details });
             expect(res.status).toBe(200);
             const recorded = await history(board.id);
-            expect(recorded.find((e) => e.eventType === 'sticky-removed')?.details).toEqual(details);
+            expect(recorded.find((e) => e.eventType === 'card-removed')?.details).toEqual(details);
         });
 
         test('details longer than an activity row shows are rejected by the route', async () => {
-            const board = await createDoc('ClientStickyLong', 'stickies');
+            const board = await createDoc('ClientBoardLong', 'stickies');
             const long = 'x'.repeat(CARD_TITLE_MAX_LENGTH + 1);
             for (const details of [
-                { ...stickyMoved.details, card: long },
-                { ...stickyMoved.details, toColumn: long },
-                { ...stickyMoved.details, cardId: long },
+                { ...cardMoved.details, card: long },
+                { ...cardMoved.details, toColumn: long },
+                { ...cardMoved.details, cardId: long },
             ]) {
-                const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-moved', details });
+                const res = await postClientEvent(aliceToken, board.id, { eventType: 'card-moved', details });
                 expect(res.status).toBe(422);
             }
-            const fits = { ...stickyMoved.details, card: 'x'.repeat(CARD_TITLE_MAX_LENGTH) };
-            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-moved', details: fits });
+            const fits = { ...cardMoved.details, card: 'x'.repeat(CARD_TITLE_MAX_LENGTH) };
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'card-moved', details: fits });
             expect(res.status).toBe(200);
-            expect((await history(board.id)).filter((e) => e.eventType === 'sticky-moved')).toHaveLength(1);
+            expect((await history(board.id)).filter((e) => e.eventType === 'card-moved')).toHaveLength(1);
         });
 
         test('deferred semantic types (slide-reordered, sheet-rows-inserted) are rejected by the route', async () => {
