@@ -1,8 +1,8 @@
-// A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
+// A card as it sits on a board or in a list, such as the comments pane: its cover image, title, a preview of the
 // description, how far its checklist is done, and a muted footer with an unread dot, replies, attachments and
 // the assignee, whose avatar gets a ring in the app's color on an open card assigned to the viewer. A deleted
-// comment keeps the uncolored frame and only its title. The caller handles a click, usually by opening
-// NoteCardDialog.
+// comment keeps the uncolored frame and only its title. The caller handles a click, usually by opening the card
+// dialog.
 
 import { useAuth } from '@workspace/lib/auth';
 import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
@@ -16,7 +16,7 @@ import { MemberAvatar } from '../comments/member-avatar';
 import { Progress } from '../progress';
 import { UnreadDot } from '../unread-dot';
 
-type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
+type CardTileProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
     description?: string;
     color?: string | null;
@@ -30,7 +30,7 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     ref?: React.Ref<HTMLDivElement>;
 };
 
-export function NoteCard({
+export function CardTile({
     title,
     description,
     color,
@@ -47,7 +47,7 @@ export function NoteCard({
     style,
     ref,
     ...rest
-}: NoteCardProps) {
+}: CardTileProps) {
     const { user } = useAuth();
     const { checked, total } = countTaskItems(description ?? '');
     const frameColor = deleted ? null : color;

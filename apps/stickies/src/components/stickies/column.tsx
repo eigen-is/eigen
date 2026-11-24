@@ -10,7 +10,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import type { CardPeer } from './hooks/use-stickies-presence';
-import { SortableNoteCard } from './sortable-note-card';
+import { SortableCard } from './sortable-card';
 import type { ColumnItem } from './types';
 
 type ColumnProps = {
@@ -128,7 +128,7 @@ export const Column = memo(function Column({
                             {cards.map((card) => {
                                 const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
                                 return (
-                                    <SortableNoteCard
+                                    <SortableCard
                                         key={card.id}
                                         card={card}
                                         replyCount={entry?.messageCount}

@@ -52,8 +52,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardHeader` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardTitle` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
+| `CardDialogFrame` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog-frame.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `CardTile` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-tile.tsx |
 | `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChartSections` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-sections.tsx |
@@ -84,6 +86,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
 | `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
+| `CommentCardTile` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-card-tile.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
 | `CommentHoverCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-hover-card.tsx |
@@ -91,7 +94,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
-| `CommentNoteCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-note-card.tsx |
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
@@ -260,8 +262,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NavigationMenuLink` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuList` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuTrigger` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
-| `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
-| `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `Popover` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |

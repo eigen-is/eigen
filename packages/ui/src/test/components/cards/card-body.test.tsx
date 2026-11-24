@@ -18,8 +18,8 @@ mock.module('@workspace/lib/space', () => ({
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const confetti = await import('../../../components/celebrate/confetti-burst');
-const { NoteCardActions } = await import('../../../components/notes/note-card-actions');
-const { NoteCardContent } = await import('../../../components/notes/note-card-content');
+const { CardDialogActions } = await import('../../../components/cards/card-dialog-actions');
+const { CardBody } = await import('../../../components/cards/card-body');
 
 const burst = spyOn(confetti, 'burstConfetti').mockImplementation(() => {});
 const roll = spyOn(Math, 'random').mockReturnValue(0);
@@ -41,7 +41,7 @@ function render(open: boolean, description: string) {
     act(() =>
         root.render(
             open
-                ? createElement(NoteCardContent, {
+                ? createElement(CardBody, {
                       title: 'Shed',
                       description,
                       canWrite: true,
@@ -137,6 +137,6 @@ test('the setting off does not celebrate', () => {
 });
 
 test("the card's actions are named buttons", () => {
-    act(() => root.render(createElement(NoteCardActions, { onEdit: () => {} })));
+    act(() => root.render(createElement(CardDialogActions, { onEdit: () => {} })));
     expect(document.querySelector('button[aria-label="Edit"]')).not.toBeNull();
 });

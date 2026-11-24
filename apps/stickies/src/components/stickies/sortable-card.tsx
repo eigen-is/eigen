@@ -1,4 +1,4 @@
-// One card on a Stickies board as a draggable item: the NoteCard with its replies, status, assignee and unread
+// One card on a Stickies board as a draggable item: the CardTile with its replies, status, assignee and unread
 // dot, wired to dnd-kit so it can be dragged, opened with a click that didn't move, or long-pressed for its menu
 // on touch. A peer working on the card outlines it in their color and shows their name.
 
@@ -6,14 +6,14 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
+import { CardTile } from '@workspace/ui/components/cards';
 import { PresenceLabel } from '@workspace/ui/components/collab';
-import { NoteCard } from '@workspace/ui/components/notes';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useCallback, useRef } from 'react';
 import type { CardPeer } from './hooks/use-stickies-presence';
 
-type SortableNoteCardProps = {
+type SortableCardProps = {
     card: CommentCard;
     replyCount?: number;
     unread: boolean;
@@ -28,7 +28,7 @@ type SortableNoteCardProps = {
     onLongPress?: (card: CommentCard, x: number, y: number) => void;
 };
 
-export const SortableNoteCard = memo(function SortableNoteCard({
+export const SortableCard = memo(function SortableCard({
     card,
     replyCount,
     unread,
@@ -40,7 +40,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     onOpen,
     onContextMenu,
     onLongPress,
-}: SortableNoteCardProps) {
+}: SortableCardProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
         data: { type: 'task', task: card },
@@ -48,8 +48,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     });
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
 
-    // Compose dnd-kit's node ref with a stable data-attribute so the search controller can
-    // scroll-to + flash this card by its match id (NoteCard's typed props stay clean).
+    // The search controller finds the card by this attribute to scroll to and flash it.
     const setRef = useCallback(
         (node: HTMLDivElement | null) => {
             setNodeRef(node);
@@ -86,7 +85,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
         // The peer's name sits inside the card's corner, as the column's scroll container would clip it above
         // the top card. The wrapper anchors it, so the drag transform stays on the node dnd-kit measures.
         <div className="relative">
-            <NoteCard
+            <CardTile
                 ref={setRef}
                 title={card.title}
                 description={card.description}

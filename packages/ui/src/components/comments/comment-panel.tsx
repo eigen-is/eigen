@@ -13,8 +13,8 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { PropertiesPanel } from '../properties-panel';
+import { CommentCardTile } from './comment-card-tile';
 import { FilterSummary } from './comment-filter-summary';
-import { CommentNoteCard } from './comment-note-card';
 
 type CommentPanelProps = {
     cards: Readonly<Record<string, CommentCard>>;
@@ -86,7 +86,7 @@ export function CommentPanel({
                             const prefix = titlePrefixes?.get(card.id);
                             const title = card.title || 'Comment';
                             return (
-                                <CommentNoteCard
+                                <CommentCardTile
                                     key={card.id}
                                     card={card}
                                     entry={entry}

@@ -1,7 +1,7 @@
-// A sticky or comment card as it reads when opened: its title and description on a block in the card's color, its
-// attachments and a meta line, such as who created it. A reader with write access can tick the boxes of a task list in
-// the description without opening the editor, and ticking the last box of a list now and then celebrates. It is the
-// lead of the card's thread, so it scrolls with the replies in any host, such as the card dialog.
+// A card as it reads when opened: its title and description on a block in the card's color, its attachments and a
+// meta line, such as who created it. A reader with write access can tick the boxes of a task list in the description
+// without opening the editor, and ticking the last box of a list now and then celebrates. It is the lead of the
+// card's thread, so it scrolls with the replies in any host, such as the card dialog.
 
 import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import { useCelebrate } from '../celebrate/use-celebrate';
 
-type NoteCardContentProps = {
+type CardBodyProps = {
     title: string;
     description?: string;
     color?: string | null;
@@ -21,7 +21,7 @@ type NoteCardContentProps = {
     meta?: ReactNode;
 };
 
-export function NoteCardContent({
+export function CardBody({
     title,
     description,
     color,
@@ -29,7 +29,7 @@ export function NoteCardContent({
     onDescriptionChange,
     attachments,
     meta,
-}: NoteCardContentProps) {
+}: CardBodyProps) {
     const celebrate = useCelebrate();
     // One roll per opening, so re-ticking the last box can't farm it. The refs die with the card, which also disarms a
     // tick whose save never came back.

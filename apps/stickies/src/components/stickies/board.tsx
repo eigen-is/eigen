@@ -16,7 +16,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentLifecycleDialogs, CommentNoteCard, PanelColumn } from '@workspace/ui/components/comments';
+import { CommentCardTile, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     CollabDocumentGate,
@@ -242,7 +242,7 @@ export function StickiesBoard({
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem;
             return (
-                <CommentNoteCard
+                <CommentCardTile
                     card={card}
                     entry={entryOf(card)}
                     title={card.title}

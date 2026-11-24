@@ -7,7 +7,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentHover } from '@workspace/lib/types/comments';
 import { useEffect, useMemo, useRef } from 'react';
 import { Popover, PopoverAnchor, PopoverContent } from '../popover';
-import { CommentNoteCard } from './comment-note-card';
+import { CommentCardTile } from './comment-card-tile';
 
 export function CommentHoverCard({
     hover,
@@ -89,7 +89,7 @@ export function CommentHoverCard({
                         // rather than also cancelling an edit or closing the find bar.
                         onEscapeKeyDown={(event) => event.stopPropagation()}
                     >
-                        <CommentNoteCard
+                        <CommentCardTile
                             card={card}
                             entry={entries.find((entry) => entry.chatName === card.chatName)}
                             title={card.title || 'Comment'}
