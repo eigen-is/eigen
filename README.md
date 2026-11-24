@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/e6153819-1d7c-4029-aa0c-39928aaf8049
 
 ## Why
 
-The name Eigen, is Dutch and German for "own". Given the power large tech companies hold over our data, I think a self-hosted European alternative is needed. [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/) tells how it started. The help center has [a tour of the apps](https://eigen.is/support/getting-started/about-eigen).
+The name Eigen is Dutch and German for "own". Given the power large tech companies hold over our data, I think a self-hosted European alternative is needed. [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/) tells how it started. The [About pages](https://eigen.is/about) give a tour of the apps.
 
 <table>
   <tr>
@@ -35,7 +35,7 @@ The name Eigen, is Dutch and German for "own". Given the power large tech compan
   </tr>
 </table>
 
-## Why not Nextcloud? 
+## Why not Nextcloud?
 
 Nextcloud is mature and has a large ecosystem. If you need something proven today, it is the safer choice. Eigen is one codebase: the apps share one API and one login, and several people can edit a doc, sheet, deck, drawing or board at the same time without a separate office server. It runs from one compose file on SQLite, with no PHP, MySQL or Redis.
 

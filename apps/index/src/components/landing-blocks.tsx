@@ -1,7 +1,7 @@
 // What Eigen stands for, as three short blocks along the bottom of the landing page and on the About overview, each a
 // plain sentence over tags that name the protocols or formats behind it, taken from the apps the block names.
-// Under them on the landing page, when the server's admin turned it on, a small line installs Eigen, with a button to
-// copy it.
+// Under them on the landing page, when the server's admin turned it on, the two lines that install Eigen, with a
+// button to copy them.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { Badge } from '@workspace/ui/components/badge';
@@ -12,7 +12,7 @@ import { Copy } from 'lucide-react';
 import type { Principle } from '../content/about-apps';
 import { appPrinciples } from '../content/about-apps';
 
-const INSTALL_COMMAND = 'curl -fsSL https://eigen.is/install | sh';
+const INSTALL_COMMAND = 'mkdir -p /opt/eigen && cd /opt/eigen\ncurl -fsSL https://eigen.is/install | sh';
 
 const BLOCKS: { principle: Principle; text: string; apps: readonly (keyof typeof appPrinciples)[] }[] = [
     {
@@ -42,7 +42,7 @@ export function LandingBlocks({ showInstall }: LandingBlocksProps) {
             <PrincipleBlocks />
             {showInstall && (
                 <div className="mt-4 flex items-center justify-end gap-2 text-xs text-muted-foreground">
-                    <span className="shrink-0">Install in one line</span>
+                    <span className="shrink-0">Install in two lines</span>
                     <CodeBlock size="sm" className="w-auto min-w-0">
                         <CodeBlockContent>{INSTALL_COMMAND}</CodeBlockContent>
                     </CodeBlock>
