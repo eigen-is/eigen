@@ -4,7 +4,8 @@
 // the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
 // the sidebar's views keep the day, an unknown view or day is not found, and the start page picks the view for the
 // device. The schedule lists only the days with events, opens an event's detail on a click, and says when the days are
-// empty.
+// empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
+// multi-day all-day events as one bar, and the current time only while today is in view.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -468,4 +469,117 @@ test('the start page opens today without a date, and on a phone 3 days', async (
     } finally {
         happyDOM.setViewport({ width: 1440, height: 900 });
     }
+});
+
+// The time grid's date links, one per day column, in order; the sidebar's Day link is not one.
+const dayLinks = (container: HTMLElement) =>
+    [...container.querySelectorAll('a[href^="/view/day/"]')]
+        .filter((a) => a.textContent !== 'Day')
+        .map((a) => [a.getAttribute('href'), a.textContent]);
+
+test('a week is seven day columns, each date linking to its day view', async () => {
+    const { container } = await open('/view/week/2026-10-14');
+    expect(dayLinks(container)).toEqual([
+        ['/view/day/2026-10-12', 'MON12'],
+        ['/view/day/2026-10-13', 'TUE13'],
+        ['/view/day/2026-10-14', 'WED14'],
+        ['/view/day/2026-10-15', 'THU15'],
+        ['/view/day/2026-10-16', 'FRI16'],
+        ['/view/day/2026-10-17', 'SAT17'],
+        ['/view/day/2026-10-18', 'SUN18'],
+    ]);
+});
+
+test('a day is one column and 3 days are three', async () => {
+    const day = await open('/view/day/2026-10-13');
+    expect(dayLinks(day.container).map(([href]) => href)).toEqual(['/view/day/2026-10-13']);
+    await unmount();
+    const three = await open('/view/3day/2026-10-13');
+    expect(dayLinks(three.container).map(([href]) => href)).toEqual([
+        '/view/day/2026-10-13',
+        '/view/day/2026-10-14',
+        '/view/day/2026-10-15',
+    ]);
+});
+
+test('a timed event is a block at its minutes, with its title, time and place', async () => {
+    ownEvents.data = [
+        event({
+            title: 'Planning',
+            startTime: at(13, 9),
+            endTime: new Date(2026, 9, 13, 10, 30),
+            location: 'Room 4',
+        }),
+    ];
+    const { container } = await open('/view/day/2026-10-13');
+    const block = pill(container, 'Planning');
+    expect(block?.textContent).toBe('Planning09:00 – 10:30Room 4');
+    expect(block?.getAttribute('style')).toContain('top: 432px; height: 72px;');
+});
+
+test('a short block puts its title and start on one line', async () => {
+    ownEvents.data = [event({ title: 'Call', startTime: at(13, 9), endTime: new Date(2026, 9, 13, 9, 30) })];
+    const { container } = await open('/view/day/2026-10-13');
+    expect(pill(container, 'Call')?.textContent).toBe('Call, 09:00');
+});
+
+test('an all-day event over three days is one bar across them', async () => {
+    ownEvents.data = [
+        event({
+            title: 'Retreat',
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 13)),
+            endTime: new Date(Date.UTC(2026, 9, 16)),
+        }),
+    ];
+    const { container } = await open('/view/week/2026-10-14');
+    const bars = container.querySelectorAll('[title="Retreat"]');
+    expect(bars.length).toBe(1);
+    expect(bars[0]?.getAttribute('style')).toContain('grid-column: 2 / span 3');
+});
+
+test('the all-day lane shows three rows and counts the rest, until "N more" opens them all', async () => {
+    ownEvents.data = ['Ada', 'Bo', 'Cy', 'Di'].map((title) =>
+        event({
+            title,
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 13)),
+            endTime: new Date(Date.UTC(2026, 9, 14)),
+        }),
+    );
+    const { container } = await open('/view/day/2026-10-13');
+    expect(pill(container, 'Di')).toBeNull();
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === '1 more'));
+    expect(pill(container, 'Di')).not.toBeNull();
+});
+
+test("a click on a block opens the event's detail", async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+    const { container } = await open('/view/day/2026-10-13');
+    await click(pill(container, 'Review'));
+    expect(dialogTitle()).toBe('Review');
+});
+
+test('a declined invitation is struck through', async () => {
+    ownEvents.data = [
+        event({
+            title: 'Offsite',
+            startTime: at(13, 11),
+            data: {
+                organizer: { email: 'boss@test.eigen.is' },
+                attendees: [{ email: 'me@test.eigen.is', status: 'declined', role: 'required' }],
+            },
+        }),
+    ];
+    const { container } = await open('/view/day/2026-10-13');
+    expect(pill(container, 'Offsite')?.classList.contains('line-through')).toBe(true);
+});
+
+test('the current time shows only while today is in view', async () => {
+    setSystemTime(new Date(2026, 9, 14, 14, 19));
+    const thisWeek = await open('/view/week/2026-10-13');
+    expect(thisWeek.container.textContent).toContain('14:19');
+    await unmount();
+    const nextWeek = await open('/view/week/2026-10-20');
+    expect(nextWeek.container.textContent).not.toContain('14:19');
 });

@@ -1,6 +1,6 @@
 // The calendar's main page: the signed-in user's own and shared events over the days one view shows, such as a week
 // or a month. The URL names the view's mode and its focused local day, so switching mode keeps the day, and an
-// unknown mode or day is the not-found page. A click on a day opens the new-event dialog for that day, and
+// unknown mode or day is the not-found page. A click on a month day opens the new-event dialog for that day, and
 // `?eventId=` opens that event's details.
 
 import { createFileRoute, notFound } from '@tanstack/react-router';
@@ -20,7 +20,7 @@ import { CalendarToolbar } from '../components/calendar-toolbar';
 import { CreateEventDialog } from '../components/create-event-dialog';
 import { MonthView } from '../components/month-view';
 import { ScheduleView } from '../components/schedule-view';
-import { WeekView } from '../components/week-view';
+import { TimeGrid } from '../components/time-grid';
 
 export const Route = createFileRoute('/_auth/view/$mode/$date')({
     beforeLoad: ({ params }) => {
@@ -45,6 +45,7 @@ function CalendarView() {
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
 
+    const days = useMemo(() => viewDays(mode, focus), [mode, focus]);
     const { from, to } = viewRange(mode, focus);
     const { data: ownEvents = [], isLoading } = useEvents(ownerId, from, to);
     const { data: sharedEvents = [] } = useAllSharedCalendarEvents(sharedCalendars, from, to);
@@ -59,7 +60,7 @@ function CalendarView() {
         setCreateEventOpen(true);
     };
 
-    const defaultCalendarId = calendars.find((c) => c.isDefault)?.id || calendars[0]?.id;
+    const defaultCalendarId = calendars.find((c) => c.isDefault)?.id ?? calendars[0]?.id;
 
     return (
         <ColumnLayout>
@@ -84,19 +85,18 @@ function CalendarView() {
                             />
                         ) : mode === 'schedule' ? (
                             <ScheduleView
-                                days={viewDays(mode, focus)}
+                                days={days}
                                 events={allEvents}
                                 calendars={calendars}
                                 sharedCalendars={sharedCalendars}
                                 initialEventId={eventId}
                             />
                         ) : (
-                            <WeekView
-                                days={viewDays(mode, focus)}
+                            <TimeGrid
+                                days={days}
                                 events={allEvents}
                                 calendars={calendars}
                                 sharedCalendars={sharedCalendars}
-                                onDayClick={handleDayClick}
                                 initialEventId={eventId}
                             />
                         )}

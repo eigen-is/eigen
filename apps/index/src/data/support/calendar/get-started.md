@@ -19,7 +19,7 @@ The screen has two parts: the sidebar on the left, with **Create event** at the 
 
 ## The views
 
-Calendar opens in the **Week** view on a computer and in the **3 days** view on a phone. The week view shows seven columns, Monday to Sunday, with events listed in time order inside each column. All-day events appear at the top of the column. Today's date is highlighted with a filled circle.
+Calendar opens in the **Week** view on a computer and in the **3 days** view on a phone. The week view shows seven columns, Monday to Sunday, with the hours of the day running down the side. Each event is a block as long as it lasts, and all-day events sit in a strip above the hours. Today's date is highlighted with a filled circle.
 
 To switch, click **Day**, **3 days**, **Week**, **Month** or **Schedule** in the sidebar, or pick one from the dropdown in the top-right corner of the toolbar. In the **Month** view each cell in the grid is a day, and your events appear inside it. See [Switch views and navigate dates](/support/calendar/views) for more.
 

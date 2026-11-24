@@ -22,6 +22,14 @@ The schedule view starts on that day too and shows the next four weeks as a list
 ![A week in the week view](/data/about/media/calendar-still-week.webp)
 :::
 
+## Read the day, 3-day and week views
+
+These views show the hours of the day down the left side, with a column for each day. Each event is a block that starts and ends at its times, so you can see how long it lasts and where the gaps are. A block shows the title, then the time, then the place, as far as its height allows; a short block shows the title and start time on one line. Events at the same time sit side by side. Click an event to see its details.
+
+All-day events, and events that last 24 hours or more, sit in a strip above the hours, as one bar across the days they cover. When more than three overlap, the strip counts the rest on each day: click the count, such as **2 more**, or the **Show all** arrow on the left, to see them all.
+
+A line marks the current time across today's column, with the time in the hour column beside it. The view opens an hour before the current time when today is in it, and at 07:00 otherwise. Weekends are slightly shaded. Click a date at the top of a column to open that day on its own.
+
 ## Move to the next or previous period
 
 Use the arrow buttons in the toolbar to step through time:
@@ -43,4 +51,4 @@ On a phone, **Today** and the view picker fold into the **⋮** button (**View o
 
 ## Create an event by clicking a day
 
-In every view, you can click any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In the month view, you can click any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
