@@ -964,7 +964,9 @@ describe('Occurrence edits of an invited series', () => {
         expect(res.status).toBe(200);
 
         const date = findOrFail((await bobStored(series.uid)).overrides, (e) => e.recurrenceDate === target);
-        expect(date).toMatchObject({ title: series.title, ...slotOf(target), data: { reminders } });
+        expect(date).toMatchObject({ title: series.title, data: { reminders } });
+        // toMatchObject would pass any Date against any other, so the slot is compared on its own.
+        expect({ startTime: date.startTime, endTime: date.endTime }).toEqual(slotOf(target));
         expect(date.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
     });
 

@@ -312,14 +312,17 @@ test('a click on a day opens New event there, and Save creates it in the default
     expect(input).toMatchObject({
         calendarId: 'work',
         title: 'Dentist',
-        startTime: new Date(2026, 9, 9, 10, 15),
-        endTime: new Date(2026, 9, 9, 11, 15),
         allDay: false,
         description: null,
         location: null,
         rrule: null,
         timezone: realCalendar.viewerTimeZone(),
         data: undefined,
+    });
+    // toMatchObject would pass any Date against any other, so the times are compared on their own.
+    expect({ startTime: input?.startTime, endTime: input?.endTime }).toEqual({
+        startTime: new Date(2026, 9, 9, 10, 15),
+        endTime: new Date(2026, 9, 9, 11, 15),
     });
     expect(dialogTitle()).toBeUndefined();
 });
