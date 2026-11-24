@@ -7,8 +7,7 @@ import type { Stack } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 
 export async function openFestivalWeek(page: Page, stack: Stack): Promise<void> {
-    await page.goto(stack.appUrl('calendar'));
-    await page.getByRole('link', { name: 'Week', exact: true }).dispatchEvent('click');
+    await openView(page, stack, 'Week');
     const festival = page.getByText('Tuimel Festival weekend').first();
     for (let week = 0; week < 8 && !(await festival.isVisible()); week++) {
         await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
@@ -17,8 +16,7 @@ export async function openFestivalWeek(page: Page, stack: Stack): Promise<void> 
 }
 
 export async function openFestivalMonth(page: Page, stack: Stack, title: string): Promise<Locator> {
-    await page.goto(stack.appUrl('calendar'));
-    await page.getByRole('link', { name: 'Month', exact: true }).dispatchEvent('click');
+    await openView(page, stack, 'Month');
     const event = page.getByText(title).first();
     for (let month = 0; month < 3; month++) {
         // The wait gives the first month time to load its events before the calendar steps on from it.
@@ -31,4 +29,11 @@ export async function openFestivalMonth(page: Page, stack: Stack, title: string)
         await Bun.sleep(800);
     }
     throw new Error(`${title} is not in the calendar's next three months`);
+}
+
+// On a computer the view is picked in the toolbar's select; the sidebar has no view links.
+async function openView(page: Page, stack: Stack, view: 'Week' | 'Month'): Promise<void> {
+    await page.goto(stack.appUrl('calendar'));
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: view, exact: true }).click();
 }

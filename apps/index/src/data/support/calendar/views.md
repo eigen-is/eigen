@@ -12,7 +12,7 @@ Calendar opens in the week view on a computer and in the 3-day view on a phone. 
 
 ## Switch views
 
-Click **Day**, **3 days**, **Week**, **Month** or **Schedule** in the sidebar. The view you are in is highlighted. You can also pick a view from the dropdown on the right side of the toolbar.
+On a computer, pick **Day**, **3 days**, **Week**, **Month** or **Schedule** from the dropdown on the right side of the toolbar. On a phone, tap one in the sidebar, where the view you are in is highlighted.
 
 The view changes immediately and stays on the day you were looking at. If you are looking at 18 June in the month view, switching to the week view shows the week of 18 June. The 3-day view starts on that day and shows the two days after it.
 
@@ -55,7 +55,7 @@ Click **Today** in the toolbar to return to today in the view you are in.
 
 Today's date is always highlighted with a filled circle, so you can spot it at a glance.
 
-On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the toolbar. Tap a view in the sidebar to go back to the calendar.
+On a phone, **Today** folds into the **⋮** button (**View options**) on the right of the toolbar.
 
 ## Create an event by clicking the grid
 

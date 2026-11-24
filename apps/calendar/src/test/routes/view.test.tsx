@@ -2,9 +2,9 @@
 // count of the rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
 // cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
 // the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
-// the sidebar's views keep the day, an unknown view or day is not found, and the start page picks the view for the
-// device. The schedule lists only the days with events, opens an event's detail on a click, and says when the days are
-// empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
+// a computer picks the view in the toolbar and a phone in the sidebar, both keeping the day, an unknown view or day is
+// not found, and the start page picks the view for the device. The schedule lists only the days with events, opens an
+// event's detail on a click, and says when the days are empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
 // multi-day all-day events as one bar, and the current time only while today is in view.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
@@ -355,26 +355,53 @@ test("a calendar's options button shows on the row's hover only, and Tab reaches
 // The sidebar's link to a view, by its label.
 const viewLink = (label: string) =>
     [...document.querySelectorAll<HTMLAnchorElement>('a[href^="/view/"]')].find((a) => a.textContent === label);
+const VIEW_LABELS = ['Day', '3 days', 'Week', 'Month', 'Schedule'];
 
-test('switching month to week from the sidebar keeps the focused day, and marks the view it is on', async () => {
+async function onPhone(run: () => Promise<void>) {
+    happyDOM.setViewport({ width: 390, height: 844 });
+    try {
+        await run();
+    } finally {
+        happyDOM.setViewport({ width: 1440, height: 900 });
+    }
+}
+
+test("on a computer the toolbar's select switches the view and keeps the day, and the sidebar has no view links", async () => {
     const { container, path } = await open('/view/month/2026-11-04');
-    expect(
-        ['Day', '3 days', 'Week', 'Month', 'Schedule'].map((label) => viewLink(label)?.getAttribute('href')),
-    ).toEqual([
-        '/view/day/2026-11-04',
-        '/view/3day/2026-11-04',
-        '/view/week/2026-11-04',
-        '/view/month/2026-11-04',
-        '/view/schedule/2026-11-04',
-    ]);
-    expect(viewLink('Month')?.getAttribute('data-status')).toBe('active');
+    expect(VIEW_LABELS.filter((label) => viewLink(label))).toEqual([]);
 
-    await click(viewLink('Week'));
+    await click(document.querySelector('[data-slot="select-trigger"]'));
+    const options = [...document.querySelectorAll('[role="option"]')];
+    expect(options.map((option) => option.textContent)).toEqual(VIEW_LABELS);
+
+    await click(options.find((option) => option.textContent === 'Week'));
     expect(path()).toBe('/view/week/2026-11-04');
     expect(container.textContent).toContain('2 – 8 Nov 2026');
-    expect(viewLink('Week')?.getAttribute('data-status')).toBe('active');
-    expect(viewLink('Month')?.getAttribute('data-status')).toBeNull();
 });
+
+test("on a phone the sidebar's views keep the focused day and mark the view, and the menu holds Today alone", () =>
+    onPhone(async () => {
+        const { path } = await open('/view/month/2026-11-04');
+        expect(VIEW_LABELS.map((label) => viewLink(label)?.getAttribute('href'))).toEqual([
+            '/view/day/2026-11-04',
+            '/view/3day/2026-11-04',
+            '/view/week/2026-11-04',
+            '/view/month/2026-11-04',
+            '/view/schedule/2026-11-04',
+        ]);
+        expect(viewLink('Month')?.getAttribute('data-status')).toBe('active');
+
+        await click(document.querySelector('button[aria-label="View options"]'));
+        expect(
+            [...document.querySelectorAll('[role="menu"] [role^="menuitem"]')].map((item) => item.textContent),
+        ).toEqual(['Today']);
+        expect(document.querySelector('[data-slot="select-trigger"]')).toBeNull();
+
+        await click(viewLink('Week'));
+        expect(path()).toBe('/view/week/2026-11-04');
+        expect(viewLink('Week')?.getAttribute('data-status')).toBe('active');
+        expect(viewLink('Month')?.getAttribute('data-status')).toBeNull();
+    }));
 
 test('3 days show the focused day and the two after it, and step by three', async () => {
     ownEvents.data = [
@@ -472,20 +499,15 @@ test('the start page opens a week on the linked day, and the event it names', as
 
 test('the start page opens today without a date, and on a phone 3 days', async () => {
     setSystemTime(new Date(2026, 10, 24, 9));
-    happyDOM.setViewport({ width: 390, height: 844 });
-    try {
+    await onPhone(async () => {
         const { path } = await open('/');
         expect(path()).toBe('/view/3day/2026-11-24');
-    } finally {
-        happyDOM.setViewport({ width: 1440, height: 900 });
-    }
+    });
 });
 
-// The time grid's date links, one per day column, in order; the sidebar's Day link is not one.
+// The time grid's date links, one per day column, in order.
 const dayLinks = (container: HTMLElement) =>
-    [...container.querySelectorAll('a[href^="/view/day/"]')]
-        .filter((a) => a.textContent !== 'Day')
-        .map((a) => [a.getAttribute('href'), a.textContent]);
+    [...container.querySelectorAll('a[href^="/view/day/"]')].map((a) => [a.getAttribute('href'), a.textContent]);
 
 test('a week is seven day columns, each date linking to its day view', async () => {
     const { container } = await open('/view/week/2026-10-14');

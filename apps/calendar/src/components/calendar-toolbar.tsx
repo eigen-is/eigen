@@ -1,6 +1,6 @@
 // The toolbar above Calendar's views: Today, previous and next, the title with the view's days, and the view choice.
-// On a phone, Today and the views fold into a kebab menu. The URL holds the view and its focused day, so each control
-// navigates to a new one, and switching the view keeps the day.
+// On a phone, Today folds into a kebab menu and the sidebar picks the view. The URL holds the view and its focused
+// day, so each control navigates to a new one, and switching the view keeps the day.
 
 import { useNavigate } from '@tanstack/react-router';
 import type { CalendarViewMode } from '@workspace/lib/calendar';
@@ -13,13 +13,7 @@ import {
     viewTitle,
 } from '@workspace/lib/calendar';
 import { Button } from '@workspace/ui/components/button';
-import {
-    ChoiceMenuItems,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app';
 import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -69,34 +63,26 @@ export function CalendarToolbar({ mode, focus }: CalendarToolbarProps) {
                     <KebabTrigger title="View options" />
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={showToday}>Today</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ChoiceMenuItems
-                            value={mode}
-                            options={VIEW_OPTIONS}
-                            onChange={(nextMode) => show(nextMode, focus)}
-                        />
                     </DropdownMenuContent>
                 </DropdownMenu>
             ) : (
-                <div className="flex items-center gap-2">
-                    <Select
-                        value={mode}
-                        onValueChange={(value) => {
-                            if (isCalendarViewMode(value)) show(value, focus);
-                        }}
-                    >
-                        <SelectTrigger className="w-28 h-8">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {VIEW_OPTIONS.map(({ value, label }) => (
-                                <SelectItem key={value} value={value}>
-                                    {label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                <Select
+                    value={mode}
+                    onValueChange={(value) => {
+                        if (isCalendarViewMode(value)) show(value, focus);
+                    }}
+                >
+                    <SelectTrigger className="w-28 h-8">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {VIEW_OPTIONS.map(({ value, label }) => (
+                            <SelectItem key={value} value={value}>
+                                {label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             )}
         </Toolbar>
     );

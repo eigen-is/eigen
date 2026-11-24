@@ -1,6 +1,6 @@
-// Calendar's sidebar: the Create event button, a link per view that keeps the focused day, the link to Drive's
-// Recent files, and the calendar lists (the user's own, those shared with them, and their teams'), each with a
-// checkbox that shows or hides its events.
+// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer
+// picks the view in the toolbar), the link to Drive's Recent files, and the calendar lists (the user's own, those
+// shared with them, and their teams'), each with a checkbox that shows or hides its events.
 
 import { useParams } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -27,6 +27,7 @@ import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
+import { useLayout } from '@workspace/ui/components/layout/app';
 import {
     RecentFilesSidebarItem,
     SidebarBody,
@@ -164,6 +165,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const importCalendar = useImportCalendar();
     const importFromDevice = useImportCalendarFromDevice();
     const isGuest = useIsGuest();
+    const { isMobile } = useLayout();
     // Outside a view, such as on the not-found page, the views open on today.
     const { date } = useParams({ strict: false });
     const focusKey = date !== undefined && parseDayKey(date) ? date : toLocalDateString(new Date());
@@ -219,21 +221,23 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     onClick={() => setCreateEventOpen(true)}
                 />
 
-                <SidebarSection condensed={condensed}>
-                    {CALENDAR_VIEW_MODES.map((mode) => {
-                        const Icon = VIEW_ICONS[mode];
-                        return (
-                            <SidebarItem
-                                key={mode}
-                                icon={<Icon className="h-4 w-4" />}
-                                label={CALENDAR_VIEW_LABELS[mode]}
-                                to="/view/$mode/$date"
-                                params={{ mode, date: focusKey }}
-                                condensed={condensed}
-                            />
-                        );
-                    })}
-                </SidebarSection>
+                {isMobile && (
+                    <SidebarSection condensed={condensed}>
+                        {CALENDAR_VIEW_MODES.map((mode) => {
+                            const Icon = VIEW_ICONS[mode];
+                            return (
+                                <SidebarItem
+                                    key={mode}
+                                    icon={<Icon className="h-4 w-4" />}
+                                    label={CALENDAR_VIEW_LABELS[mode]}
+                                    to="/view/$mode/$date"
+                                    params={{ mode, date: focusKey }}
+                                    condensed={condensed}
+                                />
+                            );
+                        })}
+                    </SidebarSection>
+                )}
 
                 {!isGuest && (
                     <SidebarSection condensed={condensed}>
