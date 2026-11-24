@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2381 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2390 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -716,7 +716,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Span` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
-| `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `ChatRoomState` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1171,7 +1171,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1246)
+## Utilities & constants (1255)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1324,17 +1324,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `gradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `linearize` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
+| `CALENDAR_VIEW_LABELS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `CALENDAR_VIEW_MODES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `calendarEventLink` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getCalendarColor` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getDaysInRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getEventsForDay` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getInviteStatus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
+| `isCalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1342,13 +1343,20 @@ rather than inlining `queryClient.invalidateQueries`.
 | `localToUtc` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `parseDayKey` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `seriesEditFromOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `stepFocus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `utcToLocal` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `viewDays` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `viewRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `viewTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `WEEK_STARTS_ON` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `weekdayHeader` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `applyChartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `BAR_GROUP_WIDTH` | `@workspace/lib/charts` | packages/lib/src/charts/scales.ts |
 | `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
@@ -1795,6 +1803,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripRemoteRefs` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
+| `MOBILE_MEDIA_QUERY` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `accessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarInviteTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |

@@ -166,6 +166,12 @@ The web dialogs hold a timed event as a date and an `hh:mm` per end, so a defaul
 
 `timezone` is nullable: only the web dialogs always set one. So `formatEventWhen` takes the fallback zone as a required argument. The browser passes `viewerTimeZone()`, the zone the grid draws in, so the detail dialog names the slot the grid shows. Invitation mail has no viewer and must not borrow the server's zone, so it renders a zone-less event in UTC and says so.
 
+## A view's URL names its mode and a local day
+
+The web app's page is `/view/$mode/$date`: a mode (`day`, `3day`, `week`, `month`) and the focused local day as `YYYY-MM-DD`. Every range the grid draws or fetches is derived from the two in `calendar-view.ts`, and weeks start on `WEEK_STARTS_ON`. The URL holds a day and not the range, so switching mode keeps the day; with a range, Month to Week from November landed on 26 October, since the month's focus was its 1st, a Sunday. Days step through the `Date` constructor, never by adding 24 hours, so a DST week keeps seven calendar days. An unknown mode or day is the not-found page, and old `/view/month/<from>/<to>` links are too.
+
+A link from another app, such as Mail's View in Calendar or a notification, goes to `/?date=…&eventId=…` through `calendarEventLink` and names no view, so the start page picks one for the device: a week on a desktop, 3 days on a phone, read from the shared phone breakpoint when the redirect runs.
+
 ## Sharing is pushed, and team calendars are off by default
 
 A share grants `free-busy` (time blocks only), `read` or `write`. When shares change, `share-propagation.ts` writes the calendar into each named recipient's `shared_calendars` ([ACL.md § Share Propagation](ACL.md#share-propagation)). A `free-busy` reader gets blocks with cancelled occurrences left out, so their existence doesn't leak.

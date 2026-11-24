@@ -53,7 +53,7 @@ The targets live in two functions: `resolveNotificationLink` (`packages/lib/src/
 
 - A card or comment event deep-links into its document with `?card=` or `?chat=`. A removed card links to the board only, since the card is gone.
 - An `acl-changed` row and an access request open the share dialog (`?sharePathId=`). An access request also fills in the requester's email.
-- A calendar invite opens the month of its occurrence with `?eventId=`, taking the start time from the tag.
+- A calendar invite opens Calendar's default view on the day of its occurrence with `?eventId=` (`calendarEventLink`), taking the start time from the tag.
 - A panel row for a trashed or deleted item, an unshare and an admin alert link nowhere.
 
 A panel row resolves its target from the event alone, without fetching the item, so an older row for an item since trashed or purged still points at it. Checking would cost a fetch per row.

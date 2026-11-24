@@ -1,69 +1,12 @@
-// Pure calendar helpers the Calendar app, its cards and the API share: the month and week ranges, the events of one
-// day, time zones and an instant's wall time in one, how an event's time and recurrence read, and invitations. It also
-// turns an edit of one occurrence into the change saved on the whole series, and cuts a series at a date.
+// Pure calendar helpers the Calendar app, its cards and the API share: the events of one day, time zones and an
+// instant's wall time in one, how an event's time and recurrence read, and invitations. It also turns an edit of one
+// occurrence into the change saved on the whole series, and cuts a series at a date.
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
 import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
-
-export type ViewMode = 'month' | 'week';
-
-export function getMonthRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-
-    const firstOfMonth = new Date(year, month, 1);
-    const lastOfMonth = new Date(year, month + 1, 0);
-
-    const startDay = firstOfMonth.getDay();
-    const startDate = new Date(firstOfMonth);
-    startDate.setDate(startDate.getDate() - (startDay === 0 ? 6 : startDay - 1));
-
-    const endDay = lastOfMonth.getDay();
-    const endDate = new Date(lastOfMonth);
-    if (endDay !== 0) {
-        endDate.setDate(endDate.getDate() + (7 - endDay));
-    }
-
-    const from = Math.floor(
-        new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000,
-    );
-    const to = Math.floor(
-        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
-    );
-
-    return { from, to, startDate, endDate };
-}
-
-export function getWeekRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? 6 : day - 1;
-    const startDate = new Date(d);
-    startDate.setDate(d.getDate() - diff);
-    startDate.setHours(0, 0, 0, 0);
-
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 6);
-    endDate.setHours(23, 59, 59, 999);
-
-    const from = Math.floor(startDate.getTime() / 1000);
-    const to = Math.floor(endDate.getTime() / 1000);
-
-    return { from, to, startDate, endDate };
-}
-
-export function getDaysInRange(startDate: Date, endDate: Date): Date[] {
-    const days: Date[] = [];
-    const current = new Date(startDate);
-    while (current <= endDate) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-    }
-    return days;
-}
 
 export function getEventsForDay(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
     return events.filter((e) => {
@@ -79,7 +22,8 @@ export function getEventsForDay(events: readonly CalendarEventOccurrence[], day:
     });
 }
 
-// The local day, for `<input type="date">`; occurrenceDateToString gives the UTC day that wire values carry.
+// The local day as YYYY-MM-DD, for `<input type="date">` and a view's URL; occurrenceDateToString gives the UTC day
+// that wire values carry.
 export function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -237,8 +181,6 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
     if (attendee.status === 'pending') return 'pending';
     return null;
 }
-
-export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export function occurrenceDateToString(value: Date): string {
     const pad = (n: number, width: number) => String(n).padStart(width, '0');

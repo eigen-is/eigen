@@ -8,6 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Open recent** — in Docs, Sheets, Slides, Stickies and Vector, File › Open recent lists up to eight of your newest files of that kind, from Drive's Recent files
 - **Link previews** — a link to the public site in Slack, LinkedIn or X shows a picture: the eigen wordmark over the apps, or on an About page that app's own screen
+- **Day and 3-day views in Calendar** — the sidebar lists **Day**, **3 days**, **Week** and **Month**. Calendar opens on a week on a computer and on 3 days on a phone
 
 ### Changed
 
@@ -24,6 +25,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
 - **Deleting a changed occurrence in Calendar** — no longer offers **This and following events**, which closed the dialog without deleting anything
 - **Calendar access words** — calendar sharing, shared calendar settings and an admin's team settings name access as Can edit, Can view or Free/busy
+- **Switching views in Calendar** — keeps the day you were looking at, so Month to Week from November no longer lands on the last week of October. Old bookmarks of a Calendar view no longer open
 - **Manage rules in Sheets** — opening it no longer puts the focus on a delete button, so Enter can't remove a rule by accident
 - **Labels in Contacts** — deleting the label you are looking at takes you back to all contacts
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0

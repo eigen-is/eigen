@@ -8,7 +8,7 @@ import { VIEWPORT } from '../lib/scene';
 
 export async function openFestivalWeek(page: Page, stack: Stack): Promise<void> {
     await page.goto(stack.appUrl('calendar'));
-    await page.getByText('View week').dispatchEvent('click');
+    await page.getByRole('link', { name: 'Week', exact: true }).dispatchEvent('click');
     const festival = page.getByText('Tuimel Festival weekend').first();
     for (let week = 0; week < 8 && !(await festival.isVisible()); week++) {
         await page.locator('button:has(.lucide-chevron-right)').dispatchEvent('click');
@@ -18,6 +18,7 @@ export async function openFestivalWeek(page: Page, stack: Stack): Promise<void> 
 
 export async function openFestivalMonth(page: Page, stack: Stack, title: string): Promise<Locator> {
     await page.goto(stack.appUrl('calendar'));
+    await page.getByRole('link', { name: 'Month', exact: true }).dispatchEvent('click');
     const event = page.getByText(title).first();
     for (let month = 0; month < 3; month++) {
         // The wait gives the first month time to load its events before the calendar steps on from it.

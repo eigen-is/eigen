@@ -1,7 +1,9 @@
 // The month view draws the visible calendars' events and the shared ones, four to a day with a count of the
 // rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
 // cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
-// the view, and a calendar's options button in the sidebar shows on hover only.
+// the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
+// the sidebar's views keep the day, an unknown view or day is not found, and the start page picks the view for the
+// device.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -14,7 +16,8 @@ import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 // A desktop window, so the toolbar shows its buttons rather than a kebab.
-installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
+const { happyDOM } = installHappyDom();
+happyDOM.setViewport({ width: 1440, height: 900 });
 
 const created = new Date('2026-10-01T00:00:00Z');
 const calendar = (id: string, name: string, visible: boolean): CalendarItem => ({
@@ -123,18 +126,22 @@ beforeEach(() => {
     createOwners.length = 0;
 });
 
-const october = realCalendar.getMonthRange(new Date(2026, 9, 15));
+const OCTOBER = '/view/month/2026-10-15';
 
-async function open(search = '') {
+async function open(url = OCTOBER) {
     const router = createRouter({
         routeTree,
-        history: createMemoryHistory({ initialEntries: [`/view/month/${october.from}/${october.to}${search}`] }),
+        history: createMemoryHistory({ initialEntries: [url] }),
         context: { auth },
     });
     await router.load();
     const rendered = await renderInDocument(createElement(RouterProvider, { router }));
     unmount = rendered.unmount;
-    return { container: rendered.container, path: () => router.state.location.pathname };
+    return {
+        container: rendered.container,
+        path: () => router.state.location.pathname,
+        search: () => router.state.location.search,
+    };
 }
 
 const click = (element: Element | null | undefined) =>
@@ -212,18 +219,17 @@ test('the previous and next buttons are named for the view', async () => {
     ]);
 });
 
-test("the next button moves to the next month's range", async () => {
+test('the next button moves to the same day of the next month', async () => {
     const { container, path } = await open();
     await click(container.querySelector('button[aria-label="Next month"]'));
-    const november = realCalendar.getMonthRange(new Date(2026, 10, 15));
-    expect(path()).toBe(`/view/month/${november.from}/${november.to}`);
+    expect(path()).toBe('/view/month/2026-11-15');
 });
 
 test("a deep link opens the event it names, by its organizer's id too", async () => {
     ownEvents.data = [
         event({ title: 'Review', startTime: at(22, 14), data: { organizerEventId: 'organizer-event-1' } }),
     ];
-    await open('?eventId=organizer-event-1');
+    await open(`${OCTOBER}?eventId=organizer-event-1`);
     expect(dialogTitle()).toBe('Review');
 });
 
@@ -332,4 +338,85 @@ test("a calendar's options button shows on the row's hover only, and Tab reaches
     const kebab = document.querySelector('button[aria-label="Calendar options"]');
     if (!kebab) throw new Error('the calendar row has no options button');
     expectKeyboardReveal(kebab);
+});
+
+// The sidebar's link to a view, by its label.
+const viewLink = (label: string) =>
+    [...document.querySelectorAll<HTMLAnchorElement>('a[href^="/view/"]')].find((a) => a.textContent === label);
+
+test('switching month to week from the sidebar keeps the focused day, and marks the view it is on', async () => {
+    const { container, path } = await open('/view/month/2026-11-04');
+    expect(['Day', '3 days', 'Week', 'Month'].map((label) => viewLink(label)?.getAttribute('href'))).toEqual([
+        '/view/day/2026-11-04',
+        '/view/3day/2026-11-04',
+        '/view/week/2026-11-04',
+        '/view/month/2026-11-04',
+    ]);
+    expect(viewLink('Month')?.getAttribute('data-status')).toBe('active');
+
+    await click(viewLink('Week'));
+    expect(path()).toBe('/view/week/2026-11-04');
+    expect(container.textContent).toContain('2 – 8 Nov 2026');
+    expect(viewLink('Week')?.getAttribute('data-status')).toBe('active');
+    expect(viewLink('Month')?.getAttribute('data-status')).toBeNull();
+});
+
+test('3 days show the focused day and the two after it, and step by three', async () => {
+    ownEvents.data = [
+        event({ title: 'Before', startTime: at(12, 9) }),
+        event({ title: 'First', startTime: at(13, 9) }),
+        event({ title: 'Last', startTime: at(15, 9) }),
+        event({ title: 'After', startTime: at(16, 9) }),
+    ];
+    const { container, path } = await open('/view/3day/2026-10-13');
+    expect(container.textContent).toContain('13 – 15 Oct 2026');
+    expect(['Before', 'First', 'Last', 'After'].map((name) => !!pill(container, name))).toEqual([
+        false,
+        true,
+        true,
+        false,
+    ]);
+    await click(container.querySelector('button[aria-label="Next 3 days"]'));
+    expect(path()).toBe('/view/3day/2026-10-16');
+});
+
+test('a day shows that day alone', async () => {
+    ownEvents.data = [
+        event({ title: 'Today', startTime: at(13, 9) }),
+        event({ title: 'Tomorrow', startTime: at(14, 9) }),
+    ];
+    const { container } = await open('/view/day/2026-10-13');
+    expect(container.textContent).toContain('Tuesday, 13 Oct 2026');
+    expect([!!pill(container, 'Today'), !!pill(container, 'Tomorrow')]).toEqual([true, false]);
+});
+
+test.each([
+    ['an unknown mode', '/view/year/2026-11-24'],
+    ['an impossible day', '/view/week/2026-02-30'],
+    ['an old timestamp range', '/view/month/1793487600/1797116399'],
+])('%s is the not-found page', async (_, url) => {
+    const { container } = await open(url);
+    expect(container.textContent).toContain('Not Found');
+    expect(container.querySelector('button[aria-label^="Next"]')).toBeNull();
+});
+
+test('the start page opens a week on the linked day, and the event it names', async () => {
+    ownEvents.data = [
+        event({ title: 'Review', startTime: at(22, 14), data: { organizerEventId: 'organizer-event-1' } }),
+    ];
+    const { path, search } = await open('/?date=2026-10-22&eventId=organizer-event-1');
+    expect(path()).toBe('/view/week/2026-10-22');
+    expect(search()).toEqual({ eventId: 'organizer-event-1' });
+    expect(dialogTitle()).toBe('Review');
+});
+
+test('the start page opens today without a date, and on a phone 3 days', async () => {
+    setSystemTime(new Date(2026, 10, 24, 9));
+    happyDOM.setViewport({ width: 390, height: 844 });
+    try {
+        const { path } = await open('/');
+        expect(path()).toBe('/view/3day/2026-11-24');
+    } finally {
+        happyDOM.setViewport({ width: 1440, height: 900 });
+    }
 });

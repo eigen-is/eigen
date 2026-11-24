@@ -1,29 +1,26 @@
-// The Calendar app's week: seven day columns, each with its all-day events as pills in their calendar's color, then
-// its timed events as a dot, the time, the title and the place. A click on an event opens its detail dialog and a
-// click on a day creates an event there; the route around it fetches the events.
+// The Calendar app's day, 3-day and week views: a column per day, each with its all-day events as pills in their
+// calendar's color, then its timed events as a dot, the time, the title and the place. A click on an event opens its
+// detail dialog and a click on a day creates an event there; the route around it picks the days and fetches the events.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
     formatEventTime,
     getCalendarColor,
-    getDaysInRange,
     getEventsForDay,
     getInviteStatus,
-    getWeekRange,
     isFreeBusyEvent,
-    WEEKDAY_HEADERS,
+    weekdayHeader,
 } from '@workspace/lib/calendar';
 import { readableTextColor } from '@workspace/lib/constants/colors';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useMemo } from 'react';
 import { eventPillStateClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
 type WeekViewProps = {
-    currentDate: Date;
+    days: readonly Date[];
     events: CalendarEventOccurrence[];
     calendars: CalendarItem[];
     sharedCalendars?: SharedCalendar[];
@@ -31,14 +28,7 @@ type WeekViewProps = {
     initialEventId?: string;
 };
 
-export function WeekView({
-    currentDate,
-    events,
-    calendars,
-    sharedCalendars,
-    onDayClick,
-    initialEventId,
-}: WeekViewProps) {
+export function WeekView({ days, events, calendars, sharedCalendars, onDayClick, initialEventId }: WeekViewProps) {
     const { user } = useAuth();
     const { handleEventClick, detailDialogProps } = useEventDetailState({
         events,
@@ -47,18 +37,17 @@ export function WeekView({
         initialEventId,
     });
 
-    const { startDate, endDate } = useMemo(() => getWeekRange(currentDate), [currentDate]);
-    const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
+    const columns = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` };
 
     return (
         <>
             <div className="flex flex-col h-full">
-                <div className="grid grid-cols-7 border-b">
+                <div className="grid border-b" style={columns}>
                     {days.map((day, idx) => {
                         const today = isToday(day);
                         return (
                             <div key={idx} className="text-center py-2 border-r last:border-r-0">
-                                <div className="text-xs font-medium text-muted-foreground">{WEEKDAY_HEADERS[idx]}</div>
+                                <div className="text-xs font-medium text-muted-foreground">{weekdayHeader(day)}</div>
                                 <div
                                     className={cn(
                                         'text-lg font-medium mt-0.5 w-8 h-8 flex items-center justify-center rounded-full mx-auto',
@@ -72,7 +61,7 @@ export function WeekView({
                     })}
                 </div>
 
-                <div className="flex-1 grid grid-cols-7 overflow-auto">
+                <div className="flex-1 grid overflow-auto" style={columns}>
                     {days.map((day, dayIdx) => {
                         const dayEvents = getEventsForDay(events, day);
                         const allDayEvents = dayEvents.filter((e) => e.allDay);

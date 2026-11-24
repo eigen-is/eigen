@@ -1,20 +1,20 @@
 ---
 title: "Switch views and navigate dates"
-description: "Choose between month and week view, move forward or backward through time, and jump back to today."
+description: "Choose a day, 3-day, week or month view, move forward or backward through time, and jump back to today."
 type: how-to
-tags: [calendar, navigation, month, week]
+tags: [calendar, navigation, day, week, month]
 related: [calendar/get-started, calendar/create-event]
 order: 20
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
-Calendar opens in month view by default. You can switch to week view for a closer look at a single week, and use the navigation controls in the toolbar to move between periods.
+Calendar opens in the week view on a computer and in the 3-day view on a phone. You can switch to a single day, 3 days, a week or a whole month, and use the navigation controls in the toolbar to move between periods.
 
-## Switch between month and week view
+## Switch views
 
-In the toolbar at the top of the page, find the dropdown on the right side. It shows the current view, either **Month** or **Week**. Click it and choose the other option to switch.
+Click **Day**, **3 days**, **Week** or **Month** in the sidebar. The view you are in is highlighted. You can also pick a view from the dropdown on the right side of the toolbar.
 
-The view changes immediately, staying on the same point in time. If you are looking at June in month view, switching to week view shows the week that contains your current date in June.
+The view changes immediately and stays on the day you were looking at. If you are looking at 18 June in the month view, switching to the week view shows the week of 18 June. The 3-day view starts on that day and shows the two days after it.
 
 ::: grid columns="1"
 ![A week in the week view](/data/about/media/calendar-still-week.webp)
@@ -24,21 +24,21 @@ The view changes immediately, staying on the same point in time. If you are look
 
 Use the arrow buttons in the toolbar to step through time:
 
-- The **left arrow** moves back one month (in month view) or one week (in week view).
+- The **left arrow** moves back by the length of the view: one day, 3 days, one week or one month.
 - The **right arrow** moves forward by the same amount.
 
-The title next to the arrows updates to show where you are. In month view it reads something like **June 2026**. In week view it shows the date range, for example **2 – 8 Jun 2026**.
+In the month view the arrows keep the day of the month, so 31 January steps to 28 February.
+
+The title next to the arrows updates to show where you are. In the month view it reads something like **June 2026**. In the day view it shows the date, for example **Tuesday, 2 Jun 2026**. In the week and 3-day views it shows the date range, for example **1 – 7 Jun 2026**.
 
 ## Jump to today
 
-Click **Today** in the toolbar to return to the current period. In month view this brings you back to the current month. In week view it brings you back to the current week.
+Click **Today** in the toolbar to return to today in the view you are in.
 
-Today's date is always highlighted with a filled circle in both views, so you can spot it at a glance.
+Today's date is always highlighted with a filled circle, so you can spot it at a glance.
 
-The sidebar has **View month** and **View week** as well. Both switch to that view and jump to the current month or week, wherever in time you were looking.
-
-On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the toolbar.
+On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the toolbar. Tap a view in the sidebar to go back to the calendar.
 
 ## Create an event by clicking a day
 
-In both views, you can click any day cell to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In every view, you can click any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.

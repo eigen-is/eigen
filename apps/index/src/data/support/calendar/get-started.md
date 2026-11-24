@@ -1,38 +1,36 @@
 ---
 title: "Get started with Calendar"
-description: "Find your way around Calendar: the month and week views, how to move between dates, and how to create your first event."
+description: "Find your way around Calendar: the day, 3-day, week and month views, how to move between dates, and how to create your first event."
 type: overview
 category: Basics
 tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
 Calendar is where you keep your schedule in Eigen. You create events, invite other people, and see your team's calendars and the ones others share with you beside your own.
 
-The screen has two parts: the sidebar on the left, with **Create event** at the top and your calendars below it, and the month or week grid on the right.
+The screen has two parts: the sidebar on the left, with **Create event** at the top and your calendars below it, and the grid on the right.
 
 ::: video src="/data/about/media/calendar-hero" caption="An event opened on its guests and their answers, then a team's calendar hidden and shown again."
 :::
 
-## The two views
+## The views
 
-Calendar opens in the **Month** view. Each cell in the grid is a day, and your events appear inside it. Today's date is highlighted with a filled circle.
+Calendar opens in the **Week** view on a computer and in the **3 days** view on a phone. The week view shows seven columns, Monday to Sunday, with events listed in time order inside each column. All-day events appear at the top of the column. Today's date is highlighted with a filled circle.
 
-To switch to the week grid, open the dropdown in the top-right corner of the toolbar and pick **Week**. The week view shows seven columns, one per day, with events listed in time order inside each column. All-day events appear at the top of the column.
-
-The dropdown remembers your choice as you navigate.
+To switch, click **Day**, **3 days**, **Week** or **Month** in the sidebar, or pick one from the dropdown in the top-right corner of the toolbar. In the **Month** view each cell in the grid is a day, and your events appear inside it. See [Switch views and navigate dates](/support/calendar/views) for more.
 
 ## Navigate between dates
 
 The toolbar at the top has three controls for moving around:
 
 - Click **Today** to jump back to the current date.
-- Click the left or right chevron buttons to move one month (or one week) backwards or forwards.
+- Click the left or right chevron buttons to move one view's length backwards or forwards: a day, 3 days, a week or a month.
 
-The title in the toolbar updates to show the period you're looking at: a month name and year in the month view, or the date range of the week in the week view.
+The title in the toolbar updates to show the period you're looking at: a month name and year in the month view, the date in the day view, or the range of dates in the other views.
 
 ## Your calendars
 

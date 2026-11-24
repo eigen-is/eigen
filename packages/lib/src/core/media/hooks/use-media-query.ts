@@ -1,4 +1,10 @@
+// React hooks over CSS media queries, such as whether the window is phone-sized or the pointer is a finger. Layout
+// and components across the apps read them, and code outside React that needs the phone breakpoint, such as a route's
+// redirect, reads its query from here so the breakpoint is written once.
+
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
+
+export const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
 
 // Prerender-safe media query hook. `getServerSnapshot` returns false (desktop default) so a build-time render and the
 // first client render agree — no hydration mismatch. On the client `getSnapshot` reads the real value synchronously,
@@ -21,7 +27,7 @@ export function useMediaQuery(query: string): boolean {
 }
 
 export function useIsMobile(): boolean {
-    return useMediaQuery('(max-width: 768px)');
+    return useMediaQuery(MOBILE_MEDIA_QUERY);
 }
 
 export function useIsTablet(): boolean {

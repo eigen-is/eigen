@@ -92,7 +92,7 @@ afterEach(async () => {
 
 async function openMore() {
     ({ unmount } = await renderInDocument(
-        createElement(MonthView, { currentDate: new Date(2026, 9, 1), events, calendars: [work], onDayClick }),
+        createElement(MonthView, { focus: new Date(2026, 9, 1), events, calendars: [work], onDayClick }),
     ));
     await act(async () => {
         const more = [...document.querySelectorAll<HTMLElement>('body *')].find(

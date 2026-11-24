@@ -2,7 +2,7 @@
 // then an "N more" that lists them all. A click on an event opens its detail dialog and a click on a day creates an
 // event there; the route around it fetches the events.
 
-import { getDaysInRange, getEventsForDay, getMonthRange, WEEKDAY_HEADERS } from '@workspace/lib/calendar';
+import { getEventsForDay, viewDays, WEEKDAY_HEADERS } from '@workspace/lib/calendar';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
@@ -13,7 +13,7 @@ import { useEventDetailState } from './hooks/use-event-detail-state';
 import { MonthDayPopover } from './month-day-popover';
 
 type MonthViewProps = {
-    currentDate: Date;
+    focus: Date;
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
     sharedCalendars?: readonly SharedCalendar[];
@@ -23,14 +23,7 @@ type MonthViewProps = {
 
 const MAX_VISIBLE_EVENTS = 4;
 
-export function MonthView({
-    currentDate,
-    events,
-    calendars,
-    sharedCalendars,
-    onDayClick,
-    initialEventId,
-}: MonthViewProps) {
+export function MonthView({ focus, events, calendars, sharedCalendars, onDayClick, initialEventId }: MonthViewProps) {
     const { handleEventClick, detailDialogProps } = useEventDetailState({
         events,
         calendars,
@@ -38,9 +31,8 @@ export function MonthView({
         initialEventId,
     });
 
-    const { startDate, endDate } = useMemo(() => getMonthRange(currentDate), [currentDate]);
-    const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
-    const currentMonth = currentDate.getMonth();
+    const days = useMemo(() => viewDays('month', focus), [focus]);
+    const currentMonth = focus.getMonth();
 
     const weeks: Date[][] = [];
     for (let i = 0; i < days.length; i += 7) {
