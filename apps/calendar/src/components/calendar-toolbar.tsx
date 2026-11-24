@@ -1,116 +1,99 @@
-// The toolbar above Calendar's month and week views: Today, previous and next, the title with the month or the
-// week's dates, and the view choice. On a phone, Today and the views fold into a kebab menu. The view route owns
-// the date and the mode and passes in the handlers that change them.
+// The toolbar above Calendar's views: Today, previous and next, the title with the view's days, and the view choice.
+// On a phone, Today folds into a kebab menu and the sidebar picks the view. The URL holds the view and its focused
+// day, so each control navigates to a new one, and switching the view keeps the day. It also binds Google's keys for
+// the same moves, and c for New event, while no dialog or menu is open.
 
-import type { ViewMode } from '@workspace/lib/calendar';
-import { formatMonth } from '@workspace/lib/date';
-import { Button } from '@workspace/ui/components/button';
+import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
-    ChoiceMenuItems,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-} from '@workspace/ui/components/dropdown-menu';
+    CALENDAR_VIEW_LABELS,
+    CALENDAR_VIEW_MODES,
+    isCalendarViewMode,
+    stepFocus,
+    useCalendarShortcuts,
+    viewTitle,
+} from '@workspace/lib/calendar';
+import { Button } from '@workspace/ui/components/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app';
 import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useDialogOpen, useMenuOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useShowView } from './hooks/use-show-view';
 
-const VIEW_MODES: { value: ViewMode; label: string }[] = [
-    { value: 'month', label: 'Month' },
-    { value: 'week', label: 'Week' },
-];
+const VIEW_OPTIONS = CALENDAR_VIEW_MODES.map((value) => ({ value, label: CALENDAR_VIEW_LABELS[value] }));
 
 type CalendarToolbarProps = {
-    currentDate: Date;
-    viewMode: ViewMode;
-    onViewModeChange: (mode: ViewMode) => void;
-    onToday: () => void;
-    onPrev: () => void;
-    onNext: () => void;
+    mode: CalendarViewMode;
+    focus: Date;
+    onCreateEvent: () => void;
 };
 
-function formatTitle(date: Date, viewMode: ViewMode): string {
-    if (viewMode === 'month') {
-        return `${formatMonth(date, 'long')} ${date.getFullYear()}`;
-    }
-    const startOfWeek = new Date(date);
-    const day = startOfWeek.getDay();
-    const diff = day === 0 ? 6 : day - 1;
-    startOfWeek.setDate(startOfWeek.getDate() - diff);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-    const startMonth = formatMonth(startOfWeek, 'short');
-    const endMonth = formatMonth(endOfWeek, 'short');
-    const startYear = startOfWeek.getFullYear();
-    const endYear = endOfWeek.getFullYear();
-
-    if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
-        return `${startOfWeek.getDate()} – ${endOfWeek.getDate()} ${startMonth} ${endYear}`;
-    }
-    if (startYear !== endYear) {
-        return `${startOfWeek.getDate()} ${startMonth} ${startYear} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
-    }
-    return `${startOfWeek.getDate()} ${startMonth} – ${endOfWeek.getDate()} ${endMonth} ${endYear}`;
-}
-
-export function CalendarToolbar({
-    currentDate,
-    viewMode,
-    onViewModeChange,
-    onToday,
-    onPrev,
-    onNext,
-}: CalendarToolbarProps) {
+export function CalendarToolbar({ mode, focus, onCreateEvent }: CalendarToolbarProps) {
     const { isMobile } = useLayout();
+    const show = useShowView();
+    // Today is read at the press, so a tab left open past midnight doesn't go to yesterday.
+    const showToday = () => show(mode, new Date());
+    const step = CALENDAR_VIEW_LABELS[mode].toLowerCase();
+    const dialogOpen = useDialogOpen();
+    const menuOpen = useMenuOpen();
+    useCalendarShortcuts({
+        mode,
+        focus,
+        show,
+        showToday,
+        create: onCreateEvent,
+        enabled: !dialogOpen && !menuOpen,
+    });
 
     return (
         <Toolbar>
             <div className="flex items-center gap-2">
                 {!isMobile && (
-                    <Button variant="outline" size="sm" onClick={onToday}>
+                    <Button variant="outline" size="sm" onClick={showToday}>
                         Today
                     </Button>
                 )}
                 <div className="flex items-center">
-                    <TooltipButton icon={ChevronLeft} tooltipText={`Previous ${viewMode}`} onClick={onPrev} />
-                    <TooltipButton icon={ChevronRight} tooltipText={`Next ${viewMode}`} onClick={onNext} />
+                    <TooltipButton
+                        icon={ChevronLeft}
+                        tooltipText={`Previous ${step}`}
+                        onClick={() => show(mode, stepFocus(mode, focus, -1))}
+                    />
+                    <TooltipButton
+                        icon={ChevronRight}
+                        tooltipText={`Next ${step}`}
+                        onClick={() => show(mode, stepFocus(mode, focus, 1))}
+                    />
                 </div>
-                <ToolbarTitle className="text-lg">{formatTitle(currentDate, viewMode)}</ToolbarTitle>
+                <ToolbarTitle className="text-lg">{viewTitle(mode, focus)}</ToolbarTitle>
             </div>
 
             {isMobile ? (
                 <DropdownMenu>
                     <KebabTrigger title="View options" />
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={onToday}>Today</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <ChoiceMenuItems value={viewMode} options={VIEW_MODES} onChange={onViewModeChange} />
+                        <DropdownMenuItem onClick={showToday}>Today</DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             ) : (
-                <div className="flex items-center gap-2">
-                    <Select
-                        value={viewMode}
-                        onValueChange={(v) => {
-                            const mode = VIEW_MODES.find(({ value }) => value === v);
-                            if (mode) onViewModeChange(mode.value);
-                        }}
-                    >
-                        <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {VIEW_MODES.map(({ value, label }) => (
-                                <SelectItem key={value} value={value}>
-                                    {label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                <Select
+                    value={mode}
+                    onValueChange={(value) => {
+                        if (isCalendarViewMode(value)) show(value, focus);
+                    }}
+                >
+                    <SelectTrigger className="w-28 h-8">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {VIEW_OPTIONS.map(({ value, label }) => (
+                            <SelectItem key={value} value={value}>
+                                {label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             )}
         </Toolbar>
     );

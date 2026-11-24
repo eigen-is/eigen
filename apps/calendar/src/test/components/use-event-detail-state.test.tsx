@@ -1,12 +1,20 @@
 // The dialog gets the clicked occurrence as the current list has it, so a refetch reaches what it shows and the etag it
 // writes with. A series occurrence stays itself through a new override, a lone event through a move to another day, and
 // one no longer in the list stays on screen as clicked.
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
+
+const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
+// A copy, because mock.module rewrites a loaded module's exports in place, and afterAll puts the original back.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
+afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
+});
 
 const { act, createElement, useState } = await import('react');
 const { useEventDetailState } = await import('../../components/hooks/use-event-detail-state');

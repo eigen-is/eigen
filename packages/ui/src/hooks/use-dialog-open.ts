@@ -4,18 +4,14 @@
 
 import { useSyncExternalStore } from 'react';
 
-// Is a modal open? Every one carries role="dialog", such as a Radix dialog, an alert dialog, a popover or
-// the file preview, so the DOM is the one source. An overlay that is a dialog itself, such as the mail
-// cheat sheet, registers its keys ungated.
-//
-// Presence rather than focus: a dialog opened from a context menu has no trigger left to return focus
-// to, so its close lands focus on <body> without an event, and a focus-based gate would stick shut.
-// Radix keeps a closing dialog mounted as data-state="closed" for its exit animation.
+// Presence rather than focus: a dialog opened from a context menu closes onto <body> without an event, so a focus gate
+// would stick shut. Radix keeps a closing dialog mounted as data-state="closed" for its exit animation.
 const OPEN_DIALOG = '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"])';
 
-// An open menu, such as a bar menu, a dropdown or the app switcher, whose links have no menu role. A menu still fading
-// out after a pick is not open.
-export const OPEN_MENU = '[role="menu"][data-state="open"], [data-slot="navigation-menu-content"][data-state="open"]';
+// An open menu, such as a bar menu, a dropdown, a select's listbox or the app switcher, whose links have no menu role.
+// A menu still fading out after a pick is not open.
+export const OPEN_MENU =
+    '[role="menu"][data-state="open"], [role="listbox"][data-state="open"], [data-slot="navigation-menu-content"][data-state="open"]';
 
 // One observer for every subscriber, alive only while one is mounted.
 const listeners = new Set<() => void>();

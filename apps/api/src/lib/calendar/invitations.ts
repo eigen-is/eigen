@@ -6,7 +6,7 @@
 
 import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
-import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, Organizer, RecurrenceScope } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -167,7 +167,7 @@ export async function rsvp(
     user: User,
     input: {
         status: Attendee['status'];
-        scope?: 'this' | 'this-and-following' | 'all';
+        scope?: RecurrenceScope;
         recurrenceDate?: string;
         remove?: boolean;
     },
@@ -443,9 +443,8 @@ async function fileNewInvitation(
     return { kind: 'created', calendarId };
 }
 
-// The guest's answer on their own copy is theirs: a message only asks again, as NEEDS-ACTION at a higher SEQUENCE than
-// the copy holds, when the organizer reschedules. With no answer given, the message's stands, as one the guest gave
-// from another client, except the decline a cut copy's organizer echoes, which answers none of the dates kept.
+// The guest's own answer stands until the organizer reschedules, which asks again as NEEDS-ACTION. Without one the
+// message's stands, except the decline a cut copy's organizer echoes, which answers none of the dates kept.
 function keepOwnAnswer(
     calendar: Calendar,
     parsed: ParsedEvent,

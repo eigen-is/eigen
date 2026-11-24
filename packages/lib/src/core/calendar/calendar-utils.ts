@@ -1,90 +1,34 @@
-// Pure calendar helpers the Calendar app, its cards and the API share: the month and week ranges, the events of one
-// day, time zones and an instant's wall time in one, how an event's time and recurrence read, and invitations. It also
-// turns an edit of one occurrence into the change saved on the whole series, and cuts a series at a date.
+// Pure calendar helpers the Calendar app, its cards and the API share: local days, time zones and an instant's wall
+// time in one, how an event's time and recurrence read, and invitations. It also turns an edit of one occurrence into
+// the change saved on the whole series, and cuts a series at a date.
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
-import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
+import type { AuthUser } from '../../types/auth';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    EventData,
+    RecurrenceScope,
+    SharedCalendar,
+} from '../../types/calendar';
+import { RECURRENCE_SCOPES } from '../../types/calendar';
+import { parseOwnerId } from '../../types/owner';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
-export type ViewMode = 'month' | 'week';
-
-export function getMonthRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-
-    const firstOfMonth = new Date(year, month, 1);
-    const lastOfMonth = new Date(year, month + 1, 0);
-
-    const startDay = firstOfMonth.getDay();
-    const startDate = new Date(firstOfMonth);
-    startDate.setDate(startDate.getDate() - (startDay === 0 ? 6 : startDay - 1));
-
-    const endDay = lastOfMonth.getDay();
-    const endDate = new Date(lastOfMonth);
-    if (endDay !== 0) {
-        endDate.setDate(endDate.getDate() + (7 - endDay));
-    }
-
-    const from = Math.floor(
-        new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000,
-    );
-    const to = Math.floor(
-        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
-    );
-
-    return { from, to, startDate, endDate };
-}
-
-export function getWeekRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = day === 0 ? 6 : day - 1;
-    const startDate = new Date(d);
-    startDate.setDate(d.getDate() - diff);
-    startDate.setHours(0, 0, 0, 0);
-
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 6);
-    endDate.setHours(23, 59, 59, 999);
-
-    const from = Math.floor(startDate.getTime() / 1000);
-    const to = Math.floor(endDate.getTime() / 1000);
-
-    return { from, to, startDate, endDate };
-}
-
-export function getDaysInRange(startDate: Date, endDate: Date): Date[] {
-    const days: Date[] = [];
-    const current = new Date(startDate);
-    while (current <= endDate) {
-        days.push(new Date(current));
-        current.setDate(current.getDate() + 1);
-    }
-    return days;
-}
-
-export function getEventsForDay(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
-    return events.filter((e) => {
-        if (e.allDay) {
-            const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
-            const dayEndUtcMs = dayUtcMs + 86400_000;
-            return e.startTime.getTime() < dayEndUtcMs && e.endTime.getTime() > dayUtcMs;
-        }
-        const dayStartMs = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-        // Next local midnight, not +24h — DST transition days are 23/25 hours long.
-        const dayEndMs = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
-        return e.startTime.getTime() < dayEndMs && e.endTime.getTime() > dayStartMs;
-    });
-}
-
-// The local day, for `<input type="date">`; occurrenceDateToString gives the UTC day that wire values carry.
+// The local day as YYYY-MM-DD, for `<input type="date">` and a view's URL; occurrenceDateToString gives the UTC day
+// that wire values carry.
 export function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+}
+
+// Through the Date constructor, not milliseconds, so a DST day of 23 or 25 hours still steps one calendar day.
+export function addDays(date: Date, days: number): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 export function formatEventTime(event: CalendarEventOccurrence): string {
@@ -98,9 +42,8 @@ export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the
-// next DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop
-// at the zone count.
+// Intl knows no Windows zone name, and dropping one would expand an Outlook series in UTC, off by an hour after the next
+// DST change. One spelling per zone leaves here, so a server's formatter cache stops at the zone count.
 export function normalizeTimezone(timezone: string | null | undefined): string | null {
     if (!timezone) return null;
     try {
@@ -207,6 +150,10 @@ export function getCalendarColor(
     return DEFAULT_CALENDAR_COLOR;
 }
 
+export function defaultCalendar(calendars: readonly CalendarItem[]): CalendarItem | undefined {
+    return calendars.find((c) => c.isDefault) ?? calendars[0];
+}
+
 export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {
     return !event.id;
 }
@@ -220,6 +167,15 @@ export function isSeriesOccurrence(event: { rrule: string | null; parentEventId:
     return !!event.rrule || !!event.parentEventId;
 }
 
+// An override has no rule of its own to cut, so nothing follows it that a split could take.
+export function occurrenceScopes(event: {
+    rrule: string | null;
+    parentEventId: string | null;
+}): readonly RecurrenceScope[] {
+    if (!isSeriesOccurrence(event)) return [];
+    return event.parentEventId ? ['this', 'all'] : RECURRENCE_SCOPES;
+}
+
 // CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation. A team Home has no
 // address, so there only Eigen's organizer stamp does: a member's own event carries the member's address.
 export function isInvitationFromOthers(event: { data?: EventData | null }, ownerEmail?: string): boolean {
@@ -227,6 +183,30 @@ export function isInvitationFromOthers(event: { data?: EventData | null }, owner
     if (!organizer) return false;
     if (!ownerEmail) return !!event.data?.organizerEventId;
     return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+}
+
+// The owner whose address judges the events on their calendar: not the viewer, who knows their own, nor a team, which
+// has none.
+export function ownerAddressToLookUp(ownerId: string, viewerId: string | undefined): string | undefined {
+    return ownerId === viewerId || parseOwnerId(ownerId).type === 'team' ? undefined : ownerId;
+}
+
+// A team's events are judged by Eigen's organizer stamp, and a user's by their address. Until a looked-up address
+// arrives every event counts as an invitation, so none is briefly editable.
+export function isInvitationOnCalendar(
+    event: { data?: EventData | null },
+    ownerId: string,
+    viewer: AuthUser | null | undefined,
+    ownerEmail: string | undefined,
+): boolean {
+    if (parseOwnerId(ownerId).type === 'team') return isInvitationFromOthers(event);
+    const email = ownerId === viewer?.id ? viewer.email : ownerEmail;
+    return !email || isInvitationFromOthers(event, email);
+}
+
+// The shared calendars the viewer may write to, which a picker offers and a drag may change.
+export function writableShares(sharedCalendars: readonly SharedCalendar[]): SharedCalendar[] {
+    return sharedCalendars.filter((sc) => sc.permission === 'write');
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
@@ -237,8 +217,6 @@ export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: stri
     if (attendee.status === 'pending') return 'pending';
     return null;
 }
-
-export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export function occurrenceDateToString(value: Date): string {
     const pad = (n: number, width: number) => String(n).padStart(width, '0');

@@ -3,8 +3,8 @@
 // without opening the editor, and ticking the last box of a list now and then celebrates. It is the lead of the
 // card's thread, so it scrolls with the replies in any host, such as the card dialog.
 
-import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
+import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
@@ -30,6 +30,7 @@ export function CardBody({
     attachments,
     meta,
 }: CardBodyProps) {
+    const surface = color ? colorSurface(color, 'panel') : undefined;
     const celebrate = useCelebrate();
     // One roll per opening, so re-ticking the last box can't farm it. The refs die with the card, which also disarms a
     // tick whose save never came back.
@@ -68,23 +69,8 @@ export function CardBody({
     return (
         <div className="app-gutter-x flex flex-col gap-3 pt-1 pb-4">
             <div
-                className={cn(
-                    'rounded-lg px-4 py-3',
-                    color
-                        ? // In dark mode the block looks like a mail list row: a 2px stripe over a faint wash of the color.
-                          'bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]'
-                        : 'bg-muted text-foreground',
-                )}
-                style={
-                    color
-                        ? {
-                              '--note-bg': lightenColor(color, 0.5),
-                              '--note-fg': readableTextColor(lightenColor(color, 0.5)),
-                              '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color,
-                              '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                          }
-                        : undefined
-                }
+                className={cn('rounded-lg px-4 py-3', surface?.className ?? 'bg-muted text-foreground')}
+                style={surface?.style}
             >
                 <h2 className="text-lg leading-snug font-medium break-words">{title}</h2>
                 {description && (

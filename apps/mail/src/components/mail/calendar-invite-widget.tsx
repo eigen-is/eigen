@@ -1,19 +1,16 @@
+// The card Mail draws under a message that carries a calendar invitation: the event's title, time, place and
+// organizer, whether it was canceled or is an answer, and View in Calendar to open it there. The message view draws
+// one per calendar attachment, from the summary the server read out of the file.
+
 import { getCalendarAppUrl } from '@workspace/lib/api';
-import { formatEventWhen, getMonthRange, viewerTimeZone } from '@workspace/lib/calendar';
+import { calendarEventLink, formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
 import type { CalendarInvite } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';
 import { Calendar } from 'lucide-react';
 
-function buildCalendarLink(invite: CalendarInvite): string {
-    if (!invite.uid) return getCalendarAppUrl();
-    const { from, to } = getMonthRange(invite.startTime);
-    return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${encodeURIComponent(invite.uid)}`);
-}
-
 type CalendarInviteWidgetProps = {
-    // null = the server could not parse the attached ICS; undefined = the payload carries no
-    // summary at all (stale cache / version skew). Both render the error card.
+    // null when the server could not read the file, undefined when the payload has no summary; both draw the error card.
     invite: CalendarInvite | null | undefined;
 };
 
@@ -64,7 +61,15 @@ export function CalendarInviteWidget({ invite }: CalendarInviteWidgetProps) {
                 {organizer && <p className="text-xs text-muted-foreground">Organizer: {organizer}</p>}
             </div>
             <Button variant="outline" size="sm" className="shrink-0" asChild>
-                <a href={buildCalendarLink(invite)}>View in Calendar</a>
+                <a
+                    href={
+                        invite.uid
+                            ? calendarEventLink({ date: invite.startTime, eventId: invite.uid })
+                            : getCalendarAppUrl()
+                    }
+                >
+                    View in Calendar
+                </a>
             </Button>
         </div>
     );

@@ -7,9 +7,8 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     isSeriesOccurrence,
-    seriesEditFromOccurrence,
+    occurrenceScopes,
     toLocalDateString,
-    truncateRRule,
     useCalendarOptions,
     useCalendars,
     useCreateEvent,
@@ -18,11 +17,11 @@ import {
     useIsInvitationFromOthers,
     useMoveEvent,
     useRefuseStaleEvent,
+    useSaveOccurrence,
     useSharedCalendars,
-    useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import type { Attendee, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEventOccurrence, RecurrenceScope } from '@workspace/lib/types/calendar';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -32,7 +31,6 @@ import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
-import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
 import { toTimeString } from './time-select';
 
@@ -40,7 +38,8 @@ type EditEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     event: CalendarEventOccurrence;
-    ownerUserId?: string;
+    // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
+    ownerId: string;
 };
 
 // What the user changed, and nothing else. The times and the repeat are one entry, because a preset rule names the
@@ -54,15 +53,14 @@ type TypedFields = {
     calendarKey?: string;
 };
 
-export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: EditEventDialogProps) {
+export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEventDialogProps) {
     const { user } = useAuth();
-    const ownerId = user?.id ?? '';
-    const eventOwnerId = ownerUserId || ownerId;
+    const viewerId = user?.id ?? '';
 
-    const { data: calendars = [] } = useCalendars(ownerId);
-    const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
+    const { data: calendars = [] } = useCalendars(viewerId);
+    const { data: sharedCalendars = [] } = useSharedCalendars(viewerId);
 
-    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
+    const calendarOptions = useCalendarOptions(viewerId, calendars, sharedCalendars);
 
     // The fields live here, not in a child that mounts with the dialog as New event's do. Edit event hides behind the
     // recurring choice or the move warning, and a cancel there brings it back with the edits still in it.
@@ -71,10 +69,11 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
     // A refused save goes back to the form the toast says to check.
-    const { heldEtag, holdEtag, refuse, saveHeld } = useHeldEtag(event.etag, Object.keys(typed).length > 0, () => {
+    const held = useHeldEtag(event.etag, Object.keys(typed).length > 0, () => {
         setShowRecurringDialog(false);
         setShowMoveConfirm(false);
     });
+    const { heldEtag, holdEtag, refuse, saveHeld } = held;
 
     const times = typed.times ?? fieldTimes(event);
     const edit = (change: TypedFields) => setTyped((current) => ({ ...current, ...change }));
@@ -84,23 +83,22 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     };
 
     const currentCal =
-        calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId) ?? calendarOptions[0];
+        calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === ownerId) ?? calendarOptions[0];
     const selectedCalKey = typed.calendarKey ?? (currentCal ? calendarKey(currentCal) : '');
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
-    const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId;
+    const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== ownerId;
 
-    const updateEvent = useUpdateEvent(eventOwnerId);
-    const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
-    const deleteEventOnSource = useDeleteEvent(eventOwnerId);
-    const moveEvent = useMoveEvent(eventOwnerId);
-    const refuseStaleEvent = useRefuseStaleEvent(eventOwnerId);
-    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
-    // A series is saved on its master, and only the master's own row says which date the series starts on.
+    const saveOccurrence = useSaveOccurrence(ownerId, held);
+    const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
+    const deleteEventOnSource = useDeleteEvent(ownerId);
+    const moveEvent = useMoveEvent(ownerId);
+    const refuseStaleEvent = useRefuseStaleEvent(ownerId);
+    const isFromOthers = useIsInvitationFromOthers(ownerId);
+    // The series' own guests are on its master.
     const { data: master } = useEvent(
-        eventOwnerId,
+        ownerId,
         event.calendarId,
-        event.parentEventId || event.id,
-        open && isSeriesOccurrence(event),
+        open && isSeriesOccurrence(event) ? event.parentEventId || event.id : null,
     );
 
     const title = typed.title ?? event.title;
@@ -111,24 +109,23 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const serverAttendees = event.data?.attendees ?? [];
     const attendees =
         typed.attendees?.map(
-            (guest) => serverAttendees.find((held) => held.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
+            (guest) =>
+                serverAttendees.find((stored) => stored.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
         ) ?? serverAttendees;
     const isRecurring = !!event.rrule;
-    // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
-    const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isFromOthers(event);
     // An invitation from someone else is read-only except for which calendar holds the copy.
     const canSave = !isLinkedEvent || calendarChanged;
 
     // A cross-Home move fires deleteEvent's iMIP side effects and leaves the exception children behind, so warn first.
-    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
+    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== ownerId;
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
     else if (attendees.length) moveLossReasons.push('guests will be notified it was canceled and re-invited');
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
-    const write = async (action: RecurringAction) => {
+    const write = async (scope: RecurrenceScope) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const seriesGuests = (own: readonly Attendee[]) => {
@@ -142,7 +139,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             );
             return [...kept, ...joined];
         };
-        const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
         const edited = {
             title: title.trim(),
             description: description.trim() || null,
@@ -150,96 +146,58 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             allDay,
             startTime: start,
             endTime: end,
-        };
-        const updates = {
-            ...edited,
-            rrule: isOverride ? undefined : rruleString,
-            timezone,
+            rrule: rruleString,
+            timezone: allDay ? null : (event.timezone ?? viewerTimeZone()),
             data: { ...event.data, attendees },
         };
-        // The master takes only what the user changed: the clicked occurrence's times would restart the series there.
-        // Its guests are its own list plus or minus the guests changed here, so one this date leaves out stays on.
-        const seriesUpdates = master
-            ? {
-                  rrule: updates.rrule,
-                  timezone,
-                  ...(typed.attendees && { data: { attendees: seriesGuests(master.data?.attendees ?? []) } }),
-                  ...seriesEditFromOccurrence(event, master, edited),
-              }
-            : updates;
+        // The series' guests are its own list plus or minus the guests changed here, so one this date leaves out stays.
+        const seriesData =
+            master && typed.attendees ? { attendees: seriesGuests(master.data?.attendees ?? []) } : undefined;
+        const occurrenceSave = { occurrence: event, edited, seriesData };
 
         const targetId = event.parentEventId || event.id;
 
-        if (calendarChanged && selectedCal) {
-            if (selectedCal.ownerId === eventOwnerId) {
-                // The server-owned move carries the exception children and the organizer link, and fires no decline.
-                const updated = await updateEvent.mutateAsync({
-                    id: targetId,
-                    calendarId: event.calendarId,
-                    etag: heldEtag,
-                    ...seriesUpdates,
-                });
-                holdEtag(updated.etag);
-                await moveEvent.mutateAsync({
-                    calendarId: event.calendarId,
-                    id: targetId,
-                    targetCalendarId: selectedCal.id,
-                    etag: updated.etag,
-                });
-            } else {
-                // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
-                // overrides stay behind.
-                await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                await deleteEventOnSource.mutateAsync({
-                    id: targetId,
-                    calendarId: event.calendarId,
-                    etag: heldEtag,
-                });
-            }
-        } else if (action === 'all') {
-            await updateEvent.mutateAsync({
+        if (!calendarChanged || !selectedCal) {
+            await saveOccurrence({ ...occurrenceSave, scope });
+        } else if (selectedCal.ownerId === ownerId) {
+            // The server-owned move carries the exception children and the organizer link, and fires no decline.
+            const updated = await saveOccurrence({ ...occurrenceSave, scope: 'all' });
+            holdEtag(updated.etag);
+            await moveEvent.mutateAsync({
+                calendarId: event.calendarId,
+                id: targetId,
+                targetCalendarId: selectedCal.id,
+                etag: updated.etag,
+            });
+        } else {
+            // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
+            // overrides stay behind. An override is copied as one event, without a rule.
+            await createEvent.mutateAsync({
+                calendarId: selectedCal.id,
+                ...edited,
+                rrule: event.parentEventId ? undefined : rruleString,
+            });
+            await deleteEventOnSource.mutateAsync({
                 id: targetId,
                 calendarId: event.calendarId,
                 etag: heldEtag,
-                ...seriesUpdates,
             });
-        } else if (action === 'this') {
-            await createEvent.mutateAsync({
-                calendarId: event.calendarId,
-                ...updates,
-                rrule: null,
-                parentEventId: targetId,
-                recurrenceDate: event.occurrenceDate,
-                etag: heldEtag,
-            });
-        } else if (action === 'this-and-following') {
-            if (event.rrule) {
-                const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
-                const updated = await updateEvent.mutateAsync({
-                    id: targetId,
-                    calendarId: event.calendarId,
-                    etag: heldEtag,
-                    rrule: truncated,
-                });
-                holdEtag(updated.etag);
-            }
-            await createEvent.mutateAsync({ calendarId: event.calendarId, ...updates });
         }
     };
 
     // A cross-home copy made by a form already behind the event would only stand beside the original.
-    const save = async (action: RecurringAction): Promise<false | undefined> => {
+    const save = async (scope: RecurrenceScope): Promise<false | undefined> => {
         if (crossHomeMove && heldEtag !== event.etag) {
             refuseStaleEvent();
             refuse();
             return false;
         }
-        await saveHeld(() => write(action));
+        await saveHeld(() => write(scope));
     };
 
     // Edit event is hidden while the recurring choice or the move warning is up, so their save closes it too.
-    const saveAndClose = async (action: RecurringAction) => {
-        if ((await save(action)) !== false) onOpenChange(false);
+    const saveAndClose = async (scope: RecurrenceScope) => {
+        if ((await save(scope)) !== false) onOpenChange(false);
     };
 
     return (
@@ -328,7 +286,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={saveAndClose}
-                options={isOverride ? ['this', 'all'] : undefined}
+                options={occurrenceScopes(event)}
             />
 
             <ConfirmDialog

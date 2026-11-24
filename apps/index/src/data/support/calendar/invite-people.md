@@ -5,14 +5,14 @@ type: how-to
 tags: [calendar, attendees, invite, guests, rsvp]
 related: [calendar/create-event, calendar/respond-to-invitation, calendar/external-invitations]
 order: 40
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
 You can invite other people to any event you create in Calendar. Guests receive the invitation immediately, and you can see who has accepted, declined, or not replied yet.
 
 ## Add guests when creating an event
 
-1. Open Calendar and click any day to open the **New event** dialog.
+1. Open Calendar and click **Create event** at the top of the sidebar to open the **New event** dialog.
 2. In the **Add guests** field, type a name or email address. Calendar suggests people from your contacts as you type.
 3. Select a suggestion, or finish typing a full email address and click the **+** button.
 4. Repeat to add more guests.

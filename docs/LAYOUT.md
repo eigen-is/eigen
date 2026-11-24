@@ -41,6 +41,8 @@ On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` rende
 
 `AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose `condensed` is true on a tablet's rail. On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list its scroll.
 
+The **Recent files** row belongs in the sidebars of Drive and the file apps (Docs, Sheets, Slides, Stickies, Vector) only, because it lists files; Mail, Chat, Calendar and Contacts have none.
+
 A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarItem`), because opening an item in a list adds it to the URL's search, and a match on the search would unselect a filter such as **All stickies** the moment a board is picked. A fullscreen view with only the topbar, such as `RequestAccessView`, calls `setSidebarHidden(true)` from `useLayout()` and restores it on unmount.
 
 ## A dialog is wide unless it is small and has nothing to type in
@@ -231,9 +233,11 @@ The menu key (Shift+F10 or ContextMenu) opens the same menu from the row's rect,
 
 A menu row's icon gap lives in the item primitives (`gap-4`); never add `mr-*` or a `gap-*` override to a menu icon.
 
-## Reordering uses dnd-kit, moving between lists uses native drag
+## Reordering uses dnd-kit, moving between lists uses native drag, placing uses a pointer drag
 
 Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Dragging between lists, onto a sidebar target, or to and from the OS uses native HTML5 drag (`useListDrag`, `useListDropTarget`, `useFileDropTarget`), because dnd-kit never sees an OS file drop and only the native path carries the drag type across lists.
+
+Placing and resizing a handle or block that follows one pointer uses `usePointerDrag` from `packages/ui/src/hooks/`: it follows the pointer under pointer capture, and Escape or a cancelled pointer cancels. dnd-kit has no resize. `ObjectTransform` keeps its own lifecycle, since Alt and Shift reshape a resize mid-drag. dnd-kit's sensors, `useDragScroll` and `usePointerDrag`'s default read one `DRAG_THRESHOLD_PX` from `@workspace/lib/constants/drag`, the travel before a press becomes a drag. Vector's handles pass a smaller threshold of their own, since a handle drag goes live almost at once.
 
 ## Hover-revealed affordances rest visible on touch
 

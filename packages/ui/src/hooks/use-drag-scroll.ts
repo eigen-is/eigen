@@ -3,11 +3,10 @@
 // `dragging`, turns off snapping and text selection. On release the strip glides on to the next item that snaps at its
 // start, in the drag's direction, and stays `dragging` until it lands where its CSS snap holds it.
 
+import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import type { DragEvent, HTMLAttributes, MouseEvent, PointerEvent } from 'react';
 import { useRef, useState } from 'react';
 
-// How far the mouse moves before a press is a drag rather than a click, and how long the release glide takes.
-const DRAG_THRESHOLD_PX = 5;
 const GLIDE_MS = 400;
 
 type DragScroll = {

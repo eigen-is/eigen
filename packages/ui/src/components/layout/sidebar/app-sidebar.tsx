@@ -11,14 +11,13 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Badge } from '@workspace/ui/components/badge';
 import type { LucideIcon } from 'lucide-react';
-import { Bell, Download, Home, Image, Trash2, UsersRound } from 'lucide-react';
+import { Bell, Clock, Download, Home, Image, Trash2, UsersRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { EigenDocAppConfig } from '../../drive/eigendoc-config';
 import { EIGEN_DOC_APP_CONFIGS, eigenDocSharedTitle } from '../../drive/eigendoc-config';
 import { StorageUsage } from '../../home/usage';
 import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from '../app/layout-context';
-import { RecentFilesSidebarItem } from './recent-files-sidebar-item';
 import { SidebarBody } from './sidebar-body';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';
@@ -103,6 +102,7 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
     const driveHomeProps = inDrive
         ? { to: driveHomePath ? `/${driveHomePath}` : '/' }
         : { href: getDriveAppUrl(driveHomePath) };
+    const recentProps = inDrive ? { to: '/recent' } : { href: getDriveAppUrl('recent') };
     const trashProps = inDrive ? { to: '/trash' } : { href: getDriveAppUrl('trash') };
     const watchedProps = inDrive ? { to: '/watched' } : { href: getDriveAppUrl('watched') };
 
@@ -117,7 +117,12 @@ function UserAppSidebar({ user, condensed, newButton }: { user: AuthUser; conden
                     label="Drive"
                     condensed={condensed}
                 />
-                <RecentFilesSidebarItem inDrive={inDrive} condensed={condensed} />
+                <SidebarItem
+                    icon={<Clock className="h-4 w-4" />}
+                    {...recentProps}
+                    label="Recent files"
+                    condensed={condensed}
+                />
             </SidebarSection>
 
             <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>

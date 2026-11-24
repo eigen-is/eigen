@@ -10,6 +10,7 @@ import type {
     CalendarEventOccurrence,
     CalendarItem,
     CalendarShare,
+    RecurrenceScope,
     SharedCalendar,
     SharedWithMeCalendar,
 } from '@workspace/lib/types/calendar';
@@ -549,7 +550,7 @@ export class Calendar {
         user: User,
         input: {
             status: Attendee['status'];
-            scope?: 'this' | 'this-and-following' | 'all';
+            scope?: RecurrenceScope;
             recurrenceDate?: string;
             remove?: boolean;
         },

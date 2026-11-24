@@ -12,6 +12,7 @@ import type {
     SharedCalendar,
     SharedWithMeCalendar,
 } from '@workspace/lib/types/calendar';
+import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { ICS_CONTENT_TYPE, isIcsFile } from '@workspace/lib/types/file-kinds';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { Elysia, t } from 'elysia';
@@ -32,7 +33,7 @@ import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
-import { importFromDriveSchema } from './shared-schemas';
+import { importFromDriveSchema, optionalEnum } from './shared-schemas';
 
 // Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints. Anything a CalDAV PUT
 // may store is capped at the ceiling itself, or an event a device wrote could not be edited here.
@@ -290,7 +291,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         {
             body: t.Object({
                 status: t.Union([t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
-                scope: t.Optional(t.Union([t.Literal('this'), t.Literal('this-and-following'), t.Literal('all')])),
+                scope: optionalEnum(RECURRENCE_SCOPES),
                 recurrenceDate: t.Optional(t.String(TEXT)),
                 remove: t.Optional(t.Boolean()),
             }),

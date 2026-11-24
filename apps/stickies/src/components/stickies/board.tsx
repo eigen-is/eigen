@@ -7,6 +7,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
@@ -232,11 +233,7 @@ export function StickiesBoard({
         return next;
     }, [board, cards, isCardVisible]);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: { distance: 5 },
-        }),
-    );
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_THRESHOLD_PX } }));
 
     const getActiveComponent = () => {
         if (dragState.activeType === 'task') {

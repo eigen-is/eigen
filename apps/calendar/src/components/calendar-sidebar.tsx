@@ -1,13 +1,15 @@
-// Calendar's sidebar: the Create event button, the month and week shortcuts, the link to Drive's Recent files,
-// and the calendar lists (the user's own, those shared with them, and their teams'), each with a checkbox that
-// shows or hides its events.
+// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer picks
+// the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
+// checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
+// so the month stays in view however many calendars there are.
 
-import { useNavigate } from '@tanstack/react-router';
+import { useMatch } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import type { ViewMode } from '@workspace/lib/calendar';
+import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
-    getMonthRange,
-    getWeekRange,
+    CALENDAR_VIEW_LABELS,
+    CALENDAR_VIEW_MODES,
+    toLocalDateString,
     useCalendars,
     useExportCalendar,
     useImportCalendar,
@@ -25,21 +27,38 @@ import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
-import {
-    RecentFilesSidebarItem,
-    SidebarBody,
-    SidebarItem,
-    SidebarSection,
-} from '@workspace/ui/components/layout/sidebar';
+import { useLayout } from '@workspace/ui/components/layout/app';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { KebabTrigger, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { cn, SOFT_HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
-import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
-import type { MouseEvent } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+    Calendar1,
+    CalendarDays,
+    CalendarPlus,
+    CalendarRange,
+    Check,
+    Columns3,
+    Download,
+    List,
+    Pencil,
+    Plus,
+    Upload,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
+import { MiniMonth } from './mini-month';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
+
+const VIEW_ICONS: Record<CalendarViewMode, LucideIcon> = {
+    day: Calendar1,
+    '3day': Columns3,
+    week: CalendarRange,
+    month: CalendarDays,
+    schedule: List,
+};
 
 type CalendarSidebarProps = {
     condensed?: boolean;
@@ -142,7 +161,11 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const importCalendar = useImportCalendar();
     const importFromDevice = useImportCalendarFromDevice();
     const isGuest = useIsGuest();
-    const navigate = useNavigate();
+    const { isMobile } = useLayout();
+    // Outside a view, such as on the not-found page, the views open on today.
+    const view = useMatch({ from: '/_auth/view/$mode/$date', shouldThrow: false })?.context;
+    const focus = view?.focus ?? new Date();
+    const focusKey = toLocalDateString(focus);
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -185,19 +208,6 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         setSharedConfigDialogOpen(true);
     };
 
-    // Recomputed at click time: a tab left open across midnight would navigate to yesterday's period.
-    const navigateToCurrentPeriod = (e: MouseEvent, mode: ViewMode) => {
-        e.preventDefault();
-        const range = mode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
-        navigate({
-            to: '/view/$mode/$from/$to',
-            params: { mode, from: String(range.from), to: String(range.to) },
-            search: { eventId: undefined },
-        });
-    };
-    const monthRange = getMonthRange(new Date());
-    const weekRange = getWeekRange(new Date());
-
     return (
         <>
             <SidebarBody>
@@ -208,28 +218,21 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     onClick={() => setCreateEventOpen(true)}
                 />
 
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<CalendarDays className="h-4 w-4" />}
-                        label="View month"
-                        to="/view/$mode/$from/$to"
-                        params={{ mode: 'month', from: String(monthRange.from), to: String(monthRange.to) }}
-                        onClick={(e) => navigateToCurrentPeriod(e, 'month')}
-                        condensed={condensed}
-                    />
-                    <SidebarItem
-                        icon={<CalendarRange className="h-4 w-4" />}
-                        label="View week"
-                        to="/view/$mode/$from/$to"
-                        params={{ mode: 'week', from: String(weekRange.from), to: String(weekRange.to) }}
-                        onClick={(e) => navigateToCurrentPeriod(e, 'week')}
-                        condensed={condensed}
-                    />
-                </SidebarSection>
-
-                {!isGuest && (
+                {isMobile && (
                     <SidebarSection condensed={condensed}>
-                        <RecentFilesSidebarItem condensed={condensed} />
+                        {CALENDAR_VIEW_MODES.map((mode) => {
+                            const Icon = VIEW_ICONS[mode];
+                            return (
+                                <SidebarItem
+                                    key={mode}
+                                    icon={<Icon className="h-4 w-4" />}
+                                    label={CALENDAR_VIEW_LABELS[mode]}
+                                    to="/view/$mode/$date"
+                                    params={{ mode, date: focusKey }}
+                                    condensed={condensed}
+                                />
+                            );
+                        })}
                     </SidebarSection>
                 )}
 
@@ -311,6 +314,13 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                         </SidebarSection>
                     )}
                 </div>
+
+                {/* Keyed by the focused day, so a view that moves brings the month it shows back to its focus. */}
+                {!condensed && (
+                    <div className="app-gutter-bleed border-t pt-2">
+                        <MiniMonth key={focusKey} mode={view?.mode} focus={focus} />
+                    </div>
+                )}
 
                 <StorageUsage className="mt-auto" condensed={condensed} />
             </SidebarBody>

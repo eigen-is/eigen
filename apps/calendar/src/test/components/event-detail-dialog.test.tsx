@@ -103,7 +103,7 @@ afterEach(async () => {
 
 async function open(event: CalendarEventOccurrence = dentist) {
     ({ unmount } = await renderInDocument(
-        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work }),
+        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work, ownerId: 'u1' }),
     ));
 }
 
@@ -147,6 +147,14 @@ test('deleting this and following occurrences of an invitation declines them and
         remove: true,
     });
     expect(deleteEvent.mutateAsync).not.toHaveBeenCalled();
+});
+
+test("deleting a changed occurrence of an invitation offers this and following, which declines the series' rest", async () => {
+    isFromOthers = () => true;
+    await open({ ...dentist, id: 'e1-override', parentEventId: 'e1', recurrenceDate: '2026-10-09' });
+    await click('Delete event');
+    const options = [...document.querySelectorAll('[role="dialog"] [role="radio"]')].map((radio) => radio.id);
+    expect(options).toEqual(['recurring-this', 'recurring-this-and-following', 'recurring-all']);
 });
 
 test('deleting a changed occurrence offers no this and following, as it has no rule to cut', async () => {

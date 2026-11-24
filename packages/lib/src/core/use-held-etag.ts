@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { isStaleWrite } from './api-error';
 
-type HeldEtag = {
+export type HeldEtag = {
     heldEtag: string;
     // For a save of two writes: the second answers to what the first returned, even if the record has left the list.
     holdEtag: (etag: string) => void;
