@@ -16,6 +16,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 - **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row
 - **Delete in settings dialogs** — a trash icon at the bottom left deletes a label in Contacts, a calendar in Calendar and a column in Stickies, and removes data validation in Sheets
+- **Calendar's sidebar** — the small month sits at the bottom under a line, as wide as the sidebar, and stays in view while a long list of calendars scrolls. The Recent files row is gone from Calendar
 - **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
 - **Messages in Sheets** — a refusal, such as a blocked paste, shows in the corner instead of a box you have to close
 - **Rows of attachments** — in Stickies, Chat and Mail, a row of files too long to fit scrolls when you drag it with the mouse, or with an arrow button at each end that hides more

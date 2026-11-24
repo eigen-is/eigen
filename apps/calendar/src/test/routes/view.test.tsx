@@ -7,7 +7,8 @@
 // event's detail on a click, and says when the days are empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
 // multi-day all-day events as one bar, and the current time only while today is in view. Google's keys switch the
 // view on the same day, go to today and open New event, and do nothing while a dialog is open. The sidebar's mini
-// month marks the view's days, browses months on its own, and opens a clicked day in the current view.
+// month sits under the calendar lists at full width, marks the view's days, browses months on its own, and opens a
+// clicked day in the current view.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -454,6 +455,17 @@ test('the mini month marks the week a week view shows', async () => {
             .filter((cell) => cell.classList.contains('bg-muted'))
             .map((cell) => cell.dataset.day),
     ).toEqual(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']);
+});
+
+test('the sidebar has no Recent files row, and the mini month sits under the calendar lists at full width', async () => {
+    const { container } = await open('/view/week/2026-11-04');
+    expect(container.textContent).not.toContain('Recent files');
+    const lists = [...document.querySelectorAll('h3')].find((heading) => heading.textContent === 'My calendars');
+    const month = document.querySelector('.rdp-root');
+    if (!lists || !month) throw new Error('the sidebar has no calendar list or mini month');
+    expect(lists.compareDocumentPosition(month) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(month.classList.contains('w-full')).toBe(true);
+    expect(document.querySelector('.rdp-month_grid')?.classList.contains('w-full')).toBe(true);
 });
 
 test('3 days show the focused day and the two after it, and step by three', async () => {

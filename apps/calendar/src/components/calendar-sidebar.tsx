@@ -1,6 +1,7 @@
-// Calendar's sidebar: the Create event button, the mini month, on a phone a link per view that keeps the focused day
-// (a computer picks the view in the toolbar), the link to Drive's Recent files, and the calendar lists (the user's
-// own, those shared with them, and their teams'), each with a checkbox that shows or hides its events.
+// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer picks
+// the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
+// checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
+// so the month stays in view however many calendars there are.
 
 import { useParams } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -29,12 +30,7 @@ import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { useLayout } from '@workspace/ui/components/layout/app';
-import {
-    RecentFilesSidebarItem,
-    SidebarBody,
-    SidebarItem,
-    SidebarSection,
-} from '@workspace/ui/components/layout/sidebar';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui/components/layout/sidebar';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { KebabTrigger, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { cn, SOFT_HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
@@ -224,15 +220,6 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     onClick={() => setCreateEventOpen(true)}
                 />
 
-                {/* Keyed by the focused day, so a view that moves brings the month it shows back to its focus. */}
-                {!condensed && (
-                    <MiniMonth
-                        key={focusKey}
-                        mode={mode !== undefined && isCalendarViewMode(mode) ? mode : undefined}
-                        focus={focus}
-                    />
-                )}
-
                 {isMobile && (
                     <SidebarSection condensed={condensed}>
                         {CALENDAR_VIEW_MODES.map((mode) => {
@@ -248,12 +235,6 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                 />
                             );
                         })}
-                    </SidebarSection>
-                )}
-
-                {!isGuest && (
-                    <SidebarSection condensed={condensed}>
-                        <RecentFilesSidebarItem condensed={condensed} />
                     </SidebarSection>
                 )}
 
@@ -335,6 +316,17 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                         </SidebarSection>
                     )}
                 </div>
+
+                {/* Keyed by the focused day, so a view that moves brings the month it shows back to its focus. */}
+                {!condensed && (
+                    <div className="app-gutter-bleed border-t pt-2">
+                        <MiniMonth
+                            key={focusKey}
+                            mode={mode !== undefined && isCalendarViewMode(mode) ? mode : undefined}
+                            focus={focus}
+                        />
+                    </div>
+                )}
 
                 <StorageUsage className="mt-auto" condensed={condensed} />
             </SidebarBody>
