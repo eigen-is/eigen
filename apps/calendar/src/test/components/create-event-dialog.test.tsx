@@ -211,6 +211,29 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
     expect(unhandled).toEqual([]);
 });
 
+test('times the caller gives fill the start and end, and all day', async () => {
+    const save = async (initial: { start: Date; end: Date; allDay: boolean }) => {
+        createEvent.mutateAsync.mockClear();
+        ({ unmount } = await renderInDocument(
+            createElement(CreateEventDialog, { open: true, onOpenChange, defaultCalendarId: 'work', initial }),
+        ));
+        await type(titleField(), 'Focus');
+        await act(async () => button('Save')?.click());
+        await unmount();
+        const input = createEvent.mutateAsync.mock.calls[0]?.[0];
+        // toMatchObject would pass any Date against any other.
+        return { startTime: input?.startTime, endTime: input?.endTime, allDay: input?.allDay };
+    };
+    expect(
+        await save({ start: new Date(2026, 9, 9, 10, 0), end: new Date(2026, 9, 9, 11, 30), allDay: false }),
+    ).toEqual({ startTime: new Date(2026, 9, 9, 10, 0), endTime: new Date(2026, 9, 9, 11, 30), allDay: false });
+    expect(await save({ start: new Date(2026, 9, 9), end: new Date(2026, 9, 9), allDay: true })).toEqual({
+        startTime: new Date(Date.UTC(2026, 9, 9)),
+        endTime: new Date(Date.UTC(2026, 9, 10)),
+        allDay: true,
+    });
+});
+
 test('closing and reopening starts empty', async () => {
     await open();
     await type(titleField(), 'Dentist');

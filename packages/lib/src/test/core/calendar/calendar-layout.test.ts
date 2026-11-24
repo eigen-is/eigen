@@ -10,6 +10,7 @@ import {
     resizedTimes,
     SNAP_MINUTES,
     slotAt,
+    slotRange,
 } from '../../../core/calendar/calendar-layout';
 import type { CalendarEventOccurrence } from '../../../types/calendar';
 
@@ -283,6 +284,16 @@ describe('layoutTimedEvents', () => {
 describe('slotAt', () => {
     test('snaps down to the slot the minute is in, inside the day', () => {
         expect([0, 14, 15, 600.5, 1439, 1440, -5].map(slotAt)).toEqual([0, 0, 15, 600, 1425, 1425, 0]);
+    });
+});
+
+describe('slotRange', () => {
+    test('keeps the pressed slot and stretches to the snap line nearest the pointer, either way', () => {
+        expect(slotRange(605, 690)).toEqual({ top: 600, bottom: 690 });
+        expect(slotRange(605, 612)).toEqual({ top: 600, bottom: 615 });
+        expect(slotRange(605, 548)).toEqual({ top: 555, bottom: 615 });
+        expect(slotRange(1430, 1500)).toEqual({ top: 1425, bottom: 1440 });
+        expect(slotRange(20, -30)).toEqual({ top: 0, bottom: 30 });
     });
 });
 

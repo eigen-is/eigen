@@ -583,3 +583,128 @@ test('the current time shows only while today is in view', async () => {
     const nextWeek = await open('/view/week/2026-10-20');
     expect(nextWeek.container.textContent).not.toContain('14:19');
 });
+
+// A day column of the grid's hours. happy-dom has no layout, so a column's top is at 0 and clientY is its pixel.
+const HOUR = 48;
+const dayColumn = (container: HTMLElement, index = 0) => {
+    const column = container.querySelectorAll('.overflow-y-auto .border-l')[index];
+    if (!column) throw new Error(`the grid has no column ${index}`);
+    return column;
+};
+const pointer = (target: EventTarget, type: string, clientY: number, pointerType = 'mouse') =>
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, clientY, pointerType, pointerId: 1 }));
+// A press at `from` released at `to`, with the click the browser sends after it; `between` runs once React drew the move.
+async function press(column: Element, from: number, to: number, pointerType = 'mouse', between = () => {}) {
+    await act(async () => {
+        pointer(column, 'pointerdown', from, pointerType);
+        if (to !== from) pointer(document, 'pointermove', to, pointerType);
+    });
+    await act(async () => between());
+    await act(async () => {
+        pointer(column, 'pointerup', to, pointerType);
+        column.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: to }));
+    });
+}
+
+// The times New event saves. toMatchObject would pass any Date against any other, so they are compared whole.
+async function savedTimes() {
+    expect(dialogTitle()).toBe('New event');
+    const title = document.querySelector<HTMLInputElement>('input[placeholder="Add title"]');
+    if (!title) throw new Error('the dialog has no title field');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(title, 'Focus');
+        title.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(button('Save'));
+    const input = createEvent.mutateAsync.mock.calls[0]?.[0];
+    return { startTime: input?.startTime, endTime: input?.endTime, allDay: input?.allDay };
+}
+
+test('a click on an empty slot opens New event at its quarter hour, an hour long', async () => {
+    const { container } = await open('/view/day/2026-10-13');
+    await press(dayColumn(container), 10 * HOUR + 10, 10 * HOUR + 10);
+    expect(await savedTimes()).toEqual({ startTime: at(13, 10), endTime: at(13, 11), allDay: false });
+});
+
+test('a drag over a day column draws the range and opens New event with it', async () => {
+    const { container } = await open('/view/week/2026-10-14');
+    const column = dayColumn(container, 2);
+    let drawn = '';
+    await press(column, 10 * HOUR, 11.5 * HOUR, 'mouse', () => {
+        drawn = column.textContent ?? '';
+    });
+    expect(drawn).toContain('(No title)10:00 – 11:30');
+    expect(column.textContent).not.toContain('(No title)');
+    expect(await savedTimes()).toEqual({
+        startTime: at(14, 10),
+        endTime: new Date(2026, 9, 14, 11, 30),
+        allDay: false,
+    });
+});
+
+test('Escape during a drag drops the range and opens nothing', async () => {
+    const { container } = await open('/view/day/2026-10-13');
+    const column = dayColumn(container);
+    await press(column, 10 * HOUR, 12 * HOUR, 'mouse', () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(column.textContent).not.toContain('(No title)');
+    expect(dialogTitle()).toBeUndefined();
+});
+
+test('a right-button press draws no range', async () => {
+    const { container } = await open('/view/day/2026-10-13');
+    const column = dayColumn(container);
+    await act(async () => {
+        column.dispatchEvent(
+            new PointerEvent('pointerdown', {
+                bubbles: true,
+                button: 2,
+                clientY: 9 * HOUR,
+                pointerType: 'mouse',
+                pointerId: 1,
+            }),
+        );
+        pointer(document, 'pointermove', 12 * HOUR);
+    });
+    expect(column.textContent).not.toContain('(No title)');
+});
+
+test('a finger does not drag: its tap opens the slot it pressed', async () => {
+    const { container } = await open('/view/day/2026-10-13');
+    const column = dayColumn(container);
+    await act(async () => {
+        pointer(column, 'pointerdown', 9 * HOUR, 'touch');
+        pointer(document, 'pointermove', 12 * HOUR, 'touch');
+    });
+    const drawn = column.textContent;
+    await act(async () => {
+        pointer(column, 'pointerup', 9 * HOUR, 'touch');
+        column.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 9 * HOUR }));
+    });
+    expect(drawn).not.toContain('(No title)');
+    expect(await savedTimes()).toEqual({ startTime: at(13, 9), endTime: at(13, 10), allDay: false });
+});
+
+test('a click on an empty spot of the all-day lane opens an all-day New event on that day', async () => {
+    ownEvents.data = [
+        event({
+            title: 'Holiday',
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 12)),
+            endTime: new Date(Date.UTC(2026, 9, 13)),
+        }),
+    ];
+    const { container } = await open('/view/week/2026-10-14');
+    const lane = container.querySelectorAll('.border-b > .grid')[1];
+    if (!lane) throw new Error('the grid has no all-day lane');
+    lane.getBoundingClientRect = () => new DOMRect(0, 0, 700, 24);
+    await act(async () => {
+        lane.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 250 }));
+    });
+    expect(await savedTimes()).toEqual({
+        startTime: new Date(Date.UTC(2026, 9, 14)),
+        endTime: new Date(Date.UTC(2026, 9, 15)),
+        allDay: true,
+    });
+});

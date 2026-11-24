@@ -1,7 +1,8 @@
 // Where the calendar views draw events and where a drag puts them: day spans, lanes for month rows and the all-day
-// lane, overlap columns in the time grid, the 15-minute snap, and the times and recurring choices of a move or resize.
-// Pure, so the views stay thin and the layout is tested without a browser. An all-day event places by its UTC date,
-// a timed one by the viewer's local day, and positions are wall-clock minutes, so 09:00 stays 09:00 on a DST day.
+// lane, overlap columns in the time grid, the 15-minute snap, the range a drag over an empty column covers, and the
+// times and recurring choices of a move or resize. Pure, so the views stay thin and the layout is tested without a
+// browser. An all-day event places by its UTC date, a timed one by the viewer's local day, and positions are
+// wall-clock minutes, so 09:00 stays 09:00 on a DST day.
 
 import type { CalendarEventOccurrence, RecurrenceScope } from '../../types/calendar';
 import { dateFormatter } from '../date';
@@ -135,6 +136,13 @@ export function layoutTimedEvents(events: readonly CalendarEventOccurrence[], da
 export function slotAt(minutes: number): number {
     const slot = Math.floor(minutes / SNAP_MINUTES) * SNAP_MINUTES;
     return Math.min(DAY_MINUTES - SNAP_MINUTES, Math.max(0, slot));
+}
+
+// A drag over an empty day column keeps the slot it pressed and stretches to the snap line nearest the pointer.
+export function slotRange(pressed: number, minutes: number): { top: number; bottom: number } {
+    const slot = slotAt(pressed);
+    const line = Math.min(DAY_MINUTES, Math.max(0, Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES));
+    return line > slot ? { top: slot, bottom: line } : { top: line, bottom: slot + SNAP_MINUTES };
 }
 
 export function movedTimes(event: CalendarEventOccurrence, deltaDays: number, deltaMinutes: number): EventTimes {

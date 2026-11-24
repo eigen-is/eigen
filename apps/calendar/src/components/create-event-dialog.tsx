@@ -1,5 +1,6 @@
-// The New event dialog, opened from the toolbar or from a click on a day. It starts at the next quarter hour, on the
-// clicked day when there is one, for half an hour, in the default calendar, and saves through useCreateEvent.
+// The New event dialog, opened from the toolbar, a click on a day or a slot, or a drag over a range of the time grid.
+// It starts at the times the view gives, or else at the next quarter hour, on the clicked day when there is one, for
+// half an hour, in the default calendar, and saves through useCreateEvent.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -17,46 +18,61 @@ import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
-import { endAfter, roundToNext15Minutes, toTimeString } from './time-select';
+import { roundToNext15Minutes, toTimeString } from './time-select';
+
+// The form's start and end fields: an all-day event's end is its last day, as the end date field shows it.
+export type NewEventTimes = { start: Date; end: Date; allDay: boolean };
 
 type CreateEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
+    initial?: NewEventTimes;
     defaultCalendarId?: string;
 };
 
-export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCalendarId }: CreateEventDialogProps) {
+export function CreateEventDialog({
+    open,
+    onOpenChange,
+    defaultDate,
+    initial,
+    defaultCalendarId,
+}: CreateEventDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title="New event">
-            <CreateEventForm defaultDate={defaultDate} defaultCalendarId={defaultCalendarId} />
+            <CreateEventForm defaultDate={defaultDate} initial={initial} defaultCalendarId={defaultCalendarId} />
         </FormDialog>
     );
 }
 
-// Mounted with the dialog, so each opening starts empty at the next quarter hour.
-function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
+// Mounted with the dialog, so each opening starts empty at its own times.
+function CreateEventForm({
+    defaultDate,
+    initial,
+    defaultCalendarId,
+}: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
-    const [initial] = useState(() => {
+    const [seed] = useState((): NewEventTimes => {
+        if (initial) return initial;
         const rounded = roundToNext15Minutes(new Date());
         const start = defaultDate ? new Date(defaultDate) : rounded;
         start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-        return { start, end: endAfter(start, 30) };
+        return { start, end: new Date(start.getTime() + 30 * 60_000), allDay: false };
     });
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
     const [pickedCalKey, setPickedCalKey] = useState<string>();
-    const [allDay, setAllDay] = useState(false);
-    const [startDate, setStartDate] = useState(toLocalDateString(initial.start));
-    const [endDate, setEndDate] = useState(initial.end.date);
-    const [startTime, setStartTime] = useState(toTimeString(initial.start));
-    const [endTime, setEndTime] = useState(initial.end.time);
+    const [allDay, setAllDay] = useState(seed.allDay);
+    const [startDate, setStartDate] = useState(toLocalDateString(seed.start));
+    const [endDate, setEndDate] = useState(toLocalDateString(seed.end));
+    const [startTime, setStartTime] = useState(toTimeString(seed.start));
+    const [endTime, setEndTime] = useState(toTimeString(seed.end));
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
 
