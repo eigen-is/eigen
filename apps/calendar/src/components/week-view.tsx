@@ -15,7 +15,7 @@ import { readableTextColor } from '@workspace/lib/constants/colors';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { eventPillStateClasses } from './calendar-utils';
+import { eventSurfaceClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -85,7 +85,11 @@ export function WeekView({ days, events, calendars, sharedCalendars, onDayClick,
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
                                                     'text-xs leading-tight px-1.5 py-1 rounded truncate',
-                                                    eventPillStateClasses('block', freeBusy, inviteStatus),
+                                                    eventSurfaceClasses('block', {
+                                                        past: event.endTime <= new Date(),
+                                                        freeBusy,
+                                                        inviteStatus,
+                                                    }),
                                                 )}
                                                 style={
                                                     inviteStatus === 'pending'
@@ -113,7 +117,11 @@ export function WeekView({ days, events, calendars, sharedCalendars, onDayClick,
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
                                                     'text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 rounded',
-                                                    eventPillStateClasses('dot', freeBusy, inviteStatus),
+                                                    eventSurfaceClasses('dot', {
+                                                        past: event.endTime <= new Date(),
+                                                        freeBusy,
+                                                        inviteStatus,
+                                                    }),
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}
