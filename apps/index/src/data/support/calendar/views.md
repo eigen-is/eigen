@@ -59,7 +59,7 @@ On a phone, **Today** folds into the **⋮** button (**View options**) on the ri
 
 ## Pick a day in the mini month
 
-The sidebar shows a small month under **Create event**, starting on Monday. Today has a filled circle, and the days the view shows are shaded, such as the whole week in the week view. Use the arrows beside the month name to look at other months; the view stays where it is until you click a day. Click a day to open it in the view you are in: in the week view, the week of that day. On a phone, the click also takes you from the sidebar back to the calendar.
+The sidebar shows a small month at its bottom, below your calendars, starting on Monday. Today has a filled circle, and the days the view shows are shaded, such as the whole week in the week view. Use the arrows beside the month name to look at other months; the view stays where it is until you click a day. Click a day to open it in the view you are in: in the week view, the week of that day. On a phone, the click also takes you from the sidebar back to the calendar.
 
 ## Use the keyboard
 

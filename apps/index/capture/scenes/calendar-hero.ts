@@ -7,8 +7,8 @@ import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 import { openFestivalMonth } from './festival-week';
 
-// The empty sidebar under the calendars, as a day cell lights up under the pointer.
-const REST = { x: 130, y: 470 };
+// The empty sidebar between the calendars and the mini month at its foot, as a day cell lights up under the pointer.
+const REST = { x: 130, y: 295 };
 
 export const calendarHero = {
     name: 'calendar-hero',

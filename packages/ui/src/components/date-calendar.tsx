@@ -1,6 +1,8 @@
 // shadcn's Calendar: react-day-picker's month grid in the house style, its month on the left and the arrows that
 // step it on the right, as Google draws one. Weeks start on Calendar's week start, weekdays read as one letter, and
-// today is a circle in the app's color. Its first user is Calendar's mini month; the caller adds what it marks.
+// today is a circle in the app's color. It is as wide as its days by default, and a caller that gives it a width,
+// such as `w-full`, spreads the seven columns over it. Its first user is Calendar's mini month; the caller adds what
+// it marks.
 
 import { WEEK_STARTS_ON } from '@workspace/lib/calendar';
 import { dateFormatter, formatDayMonth } from '@workspace/lib/date';
@@ -28,6 +30,7 @@ export function DateCalendar({ className, classNames, ...props }: React.Componen
             classNames={{
                 root: cn('relative', defaultClassNames.root),
                 month: cn('flex flex-col gap-1', defaultClassNames.month),
+                month_grid: cn('w-full', defaultClassNames.month_grid),
                 nav: cn('absolute top-0 right-0 flex items-center', defaultClassNames.nav),
                 button_previous: cn(
                     buttonVariants({ variant: 'ghost', size: 'icon' }),
@@ -42,10 +45,10 @@ export function DateCalendar({ className, classNames, ...props }: React.Componen
                 month_caption: cn('flex h-(--cell-size) items-center px-2', defaultClassNames.month_caption),
                 caption_label: cn('select-none text-sm font-medium', defaultClassNames.caption_label),
                 weekday: cn(
-                    'size-(--cell-size) select-none text-[0.7rem] font-normal text-muted-foreground',
+                    'h-(--cell-size) min-w-(--cell-size) select-none text-[0.7rem] font-normal text-muted-foreground',
                     defaultClassNames.weekday,
                 ),
-                day: cn('size-(--cell-size) p-0 text-center', defaultClassNames.day),
+                day: cn('h-(--cell-size) min-w-(--cell-size) p-0 text-center', defaultClassNames.day),
                 day_button: cn(
                     buttonVariants({ variant: 'ghost', size: 'icon' }),
                     'size-(--cell-size) rounded-full text-xs font-normal',

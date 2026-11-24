@@ -1,4 +1,4 @@
-// Calendar's mini month, in the sidebar under Create event: the focused month with today and the days the view shows
+// Calendar's mini month, at the foot of the sidebar: the focused month with today and the days the view shows
 // marked. Its arrows browse months without moving the view, and a click on a day opens that day in the current view,
 // closing the sidebar on a phone as a sidebar link does. Outside a view there is no mode, so a day opens on the start
 // page, which picks the view for the device.
@@ -23,7 +23,7 @@ export function MiniMonth({ mode, focus }: { mode?: CalendarViewMode; focus: Dat
 
     return (
         <DateCalendar
-            className="[--cell-size:--spacing(7)]"
+            className="w-full [--cell-size:--spacing(7)]"
             defaultMonth={focus}
             fixedWeeks
             modifiers={{ inView: days, viewStart: days.slice(0, 1), viewEnd: days.slice(-1) }}
