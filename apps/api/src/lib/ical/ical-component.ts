@@ -167,6 +167,8 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
     const raised = raisedSequence(held);
     // A new item starts from what the file holds for its date, the series' revision when it holds none.
     const heldFor = (key: string) => held.get(key) ?? held.get(null) ?? { sequence: 0, dtstamp: null };
+    const heldRule = master?.getFirstPropertyValue('rrule');
+    const heldEnd = master && heldRule ? ruleEnd(master, String(heldRule)) : null;
     const replaced = new Set<ICAL.Component>();
     const unexcluded = new Set<string>();
     const exclusions = new Map<string, { id: string; revision: Revision }>();
@@ -217,12 +219,19 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
             master.addProperty(exclusionStamp(key, id, revision.sequence, revision.dtstamp ?? null));
         }
     }
-    // A rule that now ends keeps no override or exclusion past its last day, or a split's new series would show an
-    // edited date twice and bring a cancelled one back.
+    // A rule that now ends sooner keeps no override or exclusion it stops reaching, or a split's new series would show
+    // an edited date twice and bring a cancelled one back. A date past the old end too is an RDATE's, so it stays.
     const masterEdit = edits.get(null);
     const until =
         master && masterEdit?.kind === 'patch' && masterEdit.patch.rrule && ruleEnd(master, masterEdit.patch.rrule);
-    if (until) changed = dropExceptions(resource, (key) => key > until) || changed;
+    if (master && until) {
+        const stopsReaching = (key: string) => key > until && (!heldEnd || key <= heldEnd) && !edits.has(key);
+        const dropped = new Set(
+            [...keyVEvents(resource)].filter(([key]) => key !== null && stopsReaching(key)).map(([, v]) => v),
+        );
+        if (dropped.size) keepSubcomponents(resource, (sub) => !dropped.has(sub));
+        changed = dropExclusions(master, stopsReaching) || dropped.size > 0 || changed;
+    }
     if (changed) syncVTimezones(resource);
     return changed;
 }
@@ -257,13 +266,11 @@ export function keepOrganizers(resource: ICAL.Component, saver: Organizer, ctx: 
     return changed;
 }
 
-// A guest's "delete this and following" from `fromKey` keeps no override or exclusion from that date on, or a moved
-// occurrence would outlive the series. The master records the cut, which every organizer update is held to.
+// A guest's "delete this and following" from `fromKey` is recorded on the master, and every organizer update is held to
+// it. The truncated rule's own write drops the overrides and exclusions from that date on.
 export function cutGuestCopy(resource: ICAL.Component, fromKey: string): void {
-    dropExceptions(resource, (key) => key >= fromKey);
     const master = keyVEvents(resource).get(null);
     if (master) setProperty(master, rawProperty(EIGEN.guestCut, fromKey));
-    syncVTimezones(resource);
 }
 
 // The first date a guest's own cut removed from their copy, null on a copy never cut.
@@ -789,15 +796,6 @@ function keyVEvents(resource: ICAL.Component): Map<string | null, ICAL.Component
 function ruleEnd(master: ICAL.Component, rrule: string): string | null {
     const { until } = wallClockRule(rrule, propTzid(master.getFirstProperty('dtstart')));
     return until ? occurrenceDateToString(until) : null;
-}
-
-function dropExceptions(resource: ICAL.Component, drops: (recurrenceKey: string) => boolean): boolean {
-    const vevents = keyVEvents(resource);
-    const dropped = new Set([...vevents].filter(([key]) => key !== null && drops(key)).map(([, v]) => v));
-    if (dropped.size) keepSubcomponents(resource, (sub) => !dropped.has(sub));
-    const master = vevents.get(null);
-    const excluded = !!master && dropExclusions(master, drops);
-    return dropped.size > 0 || excluded;
 }
 
 function setProperty(comp: ICAL.Component, prop: ICAL.Property): boolean {
