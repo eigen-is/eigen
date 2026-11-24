@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2381 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2383 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -382,7 +382,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (311)
+## Hooks (312)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -694,6 +694,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |
 | `useListSelection` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `useLongPress` | `@workspace/ui/hooks/use-long-press` | packages/ui/src/hooks/use-long-press.ts |
+| `usePointerDrag` | `@workspace/ui/hooks/use-pointer-drag` | packages/ui/src/hooks/use-pointer-drag.ts |
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
@@ -1171,7 +1172,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1246)
+## Utilities & constants (1247)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1485,6 +1486,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DOCUMENT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCUMENT_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `DRAG_THRESHOLD_PX` | `@workspace/lib/constants` | packages/lib/src/constants/drag.ts |
 | `DUPLICATE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |

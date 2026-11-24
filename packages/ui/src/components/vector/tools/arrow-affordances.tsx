@@ -1,9 +1,7 @@
-// Drag-time attach affordances for arrows, drawn in the scene group next to the bind-target outline
-// (the snap dots and the straight-arrow focus point). Pulled out of canvas-editor.tsx and use-drawing-tools
-// (the canvas only dispatches; this unit owns its own render) so neither file grows. All geometry is SCENE
-// space — the group scales by zoom, so screen-constant sizes divide by zoom and stroke widths ride
-// `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colors are ours (the selection-handle
-// accent), the geometry/sizes are Excalidraw's (interactiveScene.ts).
+// The attach affordances of an arrow, such as the snap dots over a bind target and the focus point a bound straight
+// arrow aims at, which a drag re-aims. Drawn in scene space beside the bind-target outline: the group scales by zoom,
+// so screen-constant sizes divide by zoom and strokes use `non-scaling-stroke`. The canvas only places them. The
+// sizes are Excalidraw's, the colors the selection-handle accent.
 
 import type { Box, Point, VectorArrowElement, VectorBindableElement, VectorElement } from '@workspace/lib/vector';
 import {
@@ -20,19 +18,18 @@ import {
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
+import { usePointerDrag } from '../../../hooks/use-pointer-drag';
+import { cn } from '../../../lib/utils';
 import { pointInsideShape } from './binding';
-import { useHandleDrag } from './use-handle-drag';
 
 // Screen radius of a side-midpoint snap dot (Excalidraw's 4 / zoom).
 const SNAP_DOT_SCREEN_R = 4;
-// Excalidraw's FOCUS_POINT_SIZE — the focus circle is FOCUS_POINT_SIZE / 1.5 / 1.5 ≈ 4.44 px, and the
-// indicator hides once the anchor sits within FOCUS_POINT_SIZE · 1.5 px of its own endpoint (isFocusPointVisible).
+// Excalidraw's focus point size; the indicator hides once its anchor sits this close to its own endpoint.
 const FOCUS_POINT_SIZE = 10;
 const FOCUS_CIRCLE_SCREEN_R = FOCUS_POINT_SIZE / 1.5 / 1.5;
 const FOCUS_MIN_SCREEN_GAP = FOCUS_POINT_SIZE * 1.5;
-// The focus GRAB ring only claims the pointer once the anchor clears the endpoint's own ~22px grab radius —
-// in the 15-22px overlap zone the ENDPOINT drag takes precedence (Excalidraw's "endpoint dragging takes
-// precedence"). The dashed INDICATOR still shows from FOCUS_MIN_SCREEN_GAP; only the grab is gated wider.
+// The endpoint's own grab radius: closer than this the endpoint drag wins, as in Excalidraw, while the
+// indicator still shows from FOCUS_MIN_SCREEN_GAP.
 const FOCUS_GRAB_MIN_SCREEN_GAP = 22;
 // Screen radius of the solid dock dot at a bound straight endpoint.
 const FOCUS_DOCK_SCREEN_R = 4;
@@ -41,10 +38,8 @@ function clampUnit(n: number): number {
     return Math.min(1, Math.max(0, n));
 }
 
-// The side-midpoint snap dots over a bind candidate: all four rendered, the one nearest the pointer
-// within bindingDistance + strokeWidth/2 filled in the accent, the rest ghosted. For a NON-elbow arrow the
-// dots are suppressed while the cursor is buried inside the shape (Excalidraw's !isPointInElement); for an
-// elbow arrow all four always show, even inside.
+// The side-midpoint snap dots over a bind candidate, the one nearest the pointer filled in the accent. A straight
+// arrow draws none while the pointer is inside the shape, as Excalidraw does; an elbow arrow always draws.
 export function SnapDots({
     shape,
     pointer,
@@ -56,8 +51,6 @@ export function SnapDots({
     zoom: number;
     elbow: boolean;
 }) {
-    // Excalidraw draws nothing when the cursor is buried inside a NON-elbow bindable (interactiveScene's
-    // `!cursorIsInsideBindable || isElbow` gate); an elbow always draws.
     if (!elbow && pointInsideShape(shape, pointer)) return null;
     const mids = shapeAnchorPoints(shape);
     const r = SNAP_DOT_SCREEN_R / zoom;
@@ -73,7 +66,7 @@ export function SnapDots({
         }
     }
     // Elbow: all four dots, the nearest within the band filled, the rest ghosted. Non-elbow: ONLY the
-    // nearest dot, filled within the band or ghosted within 2× it, nothing beyond (interactiveScene:540-552).
+    // nearest dot, filled within the band or ghosted within 2× it, nothing beyond, as Excalidraw does.
     return (
         <>
             {mids.map((m, i) => {
@@ -95,15 +88,12 @@ export function SnapDots({
     );
 }
 
-// One bound end worth showing a focus affordance for: the anchor the arrow aims at (inside the shape) and
-// the endpoint it docks to (on the outline). `anchor` is read from the LIVE arrow (the preview element while
-// a focus drag re-aims it), so the dashed line + dot track the drag.
+// `anchor` is where the arrow aims, inside the shape, read from the live arrow so it tracks a focus drag;
+// `endpoint` is where it docks on the outline.
 type FocusEnd = { end: 'start' | 'end'; shape: VectorBindableElement; anchor: Point; endpoint: Point };
 
-// The bound ends of a straight 2-point arrow that should show a focus point, skipping `hideEnd` (the end
-// being endpoint-dragged) and any end whose anchor has all but collapsed onto its endpoint
-// (isFocusPointVisible's distance gate). Shared by the SVG indicators and the DOM grab handles so both agree
-// on which dots exist and where.
+// The bound ends of a straight two-point arrow that show a focus point, so the indicators and the grab handles
+// agree. `hideEnd` is the end being endpoint-dragged.
 function focusEnds(
     arrow: VectorArrowElement,
     byId: Map<string, VectorElement>,
@@ -127,12 +117,8 @@ function focusEnds(
     return out;
 }
 
-// The focus-point affordance for a selected bound STRAIGHT arrow, per bound end: a solid dock dot on
-// the shape outline (the endpoint) and a dashed line to the hollow anchor dot inside the shape, so the
-// distinction between "the anchor the arrow aims at" and "the endpoint on the outline" is visible and the
-// release orbit reads as intended rather than a jump. Never for elbow arrows (their endpoint IS the anchor).
-// The hollow dot is a DRAGGABLE grab target (FocusPointHandles, a DOM overlay); this is its screen-constant
-// SVG face, drawn in the scene group so it rides rotation/zoom.
+// Per bound end of a selected straight arrow, a solid dot where it docks and a dashed line to a hollow dot where it
+// aims, so a release that orbits the arrow reads as intended rather than a jump. An elbow arrow docks where it aims.
 export function FocusIndicators({
     arrow,
     byId,
@@ -181,15 +167,9 @@ export function FocusIndicators({
     );
 }
 
-// The draggable grab targets over each focus point: a transparent ~22px DOM ring over the SVG
-// hollow anchor dot, so the aim point can be grabbed with the same generous target as a vertex handle. Its
-// pointerdown claims the gesture BEFORE the canvas hit-test (capture + stopPropagation, exactly as the vertex
-// handles do) so grabbing the dot re-aims the binding rather than dragging the shape underneath. Dragging
-// moves the aim live: fixedPoint = the cursor's anchor ratio clamped to the shape's inside ([0,1]); the
-// endpoint re-derives through the chord (the host's preview element), the dashed line + dots track. Release
-// commits ONE sealed step storing the RAW dragged aim — Excalidraw does not re-project a focus-point drag
-// (handleFocusPointDrag stores the raw ratio; the diagonal projection is a bind-time-only nicety). Escape
-// cancels. Self-contained like LinePointHandles: it owns its drag lifecycle under an AbortController.
+// A transparent DOM ring over each focus point's hollow dot, as generous a target as a vertex handle. Dragging it
+// re-aims the binding live, clamped inside the shape, and release stores the raw aim as one undo step: Excalidraw
+// re-projects the aim only when an arrow binds, never on a focus-point drag.
 export function FocusPointHandles({
     arrow,
     byId,
@@ -208,16 +188,13 @@ export function FocusPointHandles({
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
     frozenRef: MutableRefObject<boolean>;
-    // Live aim during a drag (null clears the preview) — the host re-binds the dragged end to `fixedPoint`
-    // and re-derives its endpoint, so the drawn arrow + this handle both track.
+    // Null clears the preview.
     onPreview: (end: 'start' | 'end', fixedPoint: [number, number] | null, pointer?: Point) => void;
-    // One sealed write of the new aim on release.
     onCommit: (end: 'start' | 'end', fixedPoint: [number, number]) => void;
 }) {
-    // The end being dragged and its live anchor position, so the grabbed dot follows the cursor without
-    // waiting on the parent's preview round-trip (mirrors LinePointHandles' `drag.local`).
+    // The grabbed dot follows the cursor without waiting on the host's preview round-trip.
     const [drag, setDrag] = useState<{ end: 'start' | 'end'; anchor: Point } | null>(null);
-    const startHandleDrag = useHandleDrag(frozenRef);
+    const startPointerDrag = usePointerDrag(frozenRef);
 
     // Grab handles claim the pointer only past the wider gap, so the endpoint wins the 15-22px overlap zone.
     const ends = focusEnds(arrow, byId, zoom, hideEnd, FOCUS_GRAB_MIN_SCREEN_GAP);
@@ -225,12 +202,12 @@ export function FocusPointHandles({
 
     const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorBindableElement) => {
         let latest: [number, number] | null = null;
-        startHandleDrag(e, {
+        startPointerDrag(e, {
+            threshold: 0,
             move: (me) => {
                 const scene = clientToScene(me.clientX, me.clientY);
-                // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + center),
-                // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer
-                // is still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
+                // Our addition to Excalidraw: the aim snaps to the shape's snap points unless Ctrl or Cmd is
+                // held, as every other bind does. The raw pointer still goes up, so the host lights the SnapDots.
                 const suppressed = me.ctrlKey || me.metaKey;
                 const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
                 const [rx, ry] = bindingAnchor(shape, snapped);
@@ -241,7 +218,6 @@ export function FocusPointHandles({
             },
             end: () => {
                 setDrag(null);
-                // A click that never moved leaves `latest` null → commit nothing (no spurious re-bind).
                 if (latest) onCommit(end, latest);
                 else onPreview(end, null);
             },
@@ -262,9 +238,10 @@ export function FocusPointHandles({
             {ends.map(({ end, shape, anchor }) => (
                 <div
                     key={end}
-                    className={`eigen-focus-handle pointer-events-auto touch-none cursor-pointer${
-                        drag ? ' eigen-point-handle-no-halo' : ''
-                    }`}
+                    className={cn(
+                        'eigen-focus-handle pointer-events-auto touch-none cursor-pointer',
+                        drag && 'eigen-point-handle-no-halo',
+                    )}
                     style={dotStyle(drag?.end === end ? drag.anchor : anchor)}
                     onPointerDown={(e) => startDrag(e, end, shape)}
                 />
