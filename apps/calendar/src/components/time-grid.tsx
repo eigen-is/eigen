@@ -49,6 +49,8 @@ const SCROLL_TO_HOUR = 7;
 // A block's text lines are text-xs at leading-4, inside 2px of padding above and below.
 const LINE_HEIGHT = 16;
 const BLOCK_PADDING = 4;
+// Dark mode draws a 2px color stripe at the left edge, so the text starts further in.
+const BLOCK = 'absolute rounded px-1 py-0.5 dark:pl-2';
 const GUTTER = 'w-11 shrink-0 md:w-14';
 // A drag this close to the scroller's top or bottom edge scrolls it by a step each frame.
 const NUDGE_EDGE_PX = 24;
@@ -194,54 +196,52 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                     </div>
                 </div>
 
-                {allDayEvents.length > 0 && (
-                    <div className="flex overflow-hidden border-b [scrollbar-gutter:stable]">
-                        <div className={cn(GUTTER, 'flex justify-center')}>
-                            {lanesOverflow && (
-                                <TooltipButton
-                                    icon={allDayExpanded ? ChevronUp : ChevronDown}
-                                    tooltipText={allDayExpanded ? 'Show fewer' : 'Show all'}
-                                    onClick={() => setAllDayExpanded(!allDayExpanded)}
-                                    className="h-6 w-6"
-                                />
-                            )}
-                        </div>
-                        <div
-                            className="grid flex-1 gap-y-0.5 py-0.5"
-                            style={columns}
-                            onClick={(e) => {
-                                if (isOnEvent(e.target)) return;
-                                const { left, width } = e.currentTarget.getBoundingClientRect();
-                                const idx = Math.floor(((e.clientX - left) / width) * days.length);
-                                const day = days[Math.min(days.length - 1, Math.max(0, idx))];
-                                onCreateEvent({ start: day, end: day, allDay: true });
-                            }}
-                        >
-                            {bars.map((bar) => (
-                                <EventBar
-                                    key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
-                                    bar={bar}
-                                    {...surfaceProps}
-                                />
-                            ))}
-                            {!allDayExpanded &&
-                                collapsedLanes.hidden.map(
-                                    (count, idx) =>
-                                        count > 0 && (
-                                            <button
-                                                key={toLocalDateString(days[idx])}
-                                                type="button"
-                                                className="mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent"
-                                                style={{ gridRow: MAX_ALL_DAY_LANES, gridColumn: idx + 1 }}
-                                                onClick={() => setAllDayExpanded(true)}
-                                            >
-                                                {`${count} more`}
-                                            </button>
-                                        ),
-                                )}
-                        </div>
+                <div className="flex overflow-hidden border-b [scrollbar-gutter:stable]">
+                    <div className={cn(GUTTER, 'flex justify-center')}>
+                        {lanesOverflow && (
+                            <TooltipButton
+                                icon={allDayExpanded ? ChevronUp : ChevronDown}
+                                tooltipText={allDayExpanded ? 'Show fewer' : 'Show all'}
+                                onClick={() => setAllDayExpanded(!allDayExpanded)}
+                                className="h-6 w-6"
+                            />
+                        )}
                     </div>
-                )}
+                    <div
+                        className="grid min-h-6 flex-1 gap-y-0.5 py-0.5"
+                        style={columns}
+                        onClick={(e) => {
+                            if (isOnEvent(e.target)) return;
+                            const { left, width } = e.currentTarget.getBoundingClientRect();
+                            const idx = Math.floor(((e.clientX - left) / width) * days.length);
+                            const day = days[Math.min(days.length - 1, Math.max(0, idx))];
+                            onCreateEvent({ start: day, end: day, allDay: true });
+                        }}
+                    >
+                        {bars.map((bar) => (
+                            <EventBar
+                                key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
+                                bar={bar}
+                                {...surfaceProps}
+                            />
+                        ))}
+                        {!allDayExpanded &&
+                            collapsedLanes.hidden.map(
+                                (count, idx) =>
+                                    count > 0 && (
+                                        <button
+                                            key={toLocalDateString(days[idx])}
+                                            type="button"
+                                            className="mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent"
+                                            style={{ gridRow: MAX_ALL_DAY_LANES, gridColumn: idx + 1 }}
+                                            onClick={() => setAllDayExpanded(true)}
+                                        >
+                                            {`${count} more`}
+                                        </button>
+                                    ),
+                            )}
+                    </div>
+                </div>
 
                 <div ref={scrollerRef} className="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                     <div className="relative flex" style={{ height: 24 * HOUR_HEIGHT }}>
@@ -353,7 +353,8 @@ function DraftBlock({ day, top, bottom, color }: { day: Date; top: number; botto
     return (
         <div
             className={cn(
-                'pointer-events-none absolute inset-x-0 overflow-hidden rounded px-1 py-0.5 text-xs leading-4 shadow-md',
+                'pointer-events-none inset-x-0 overflow-hidden text-xs leading-4 shadow-md',
+                BLOCK,
                 surface.className,
             )}
             style={{ ...surface.style, top: (top * HOUR_HEIGHT) / 60, height }}
@@ -381,7 +382,7 @@ function TimedEventBlock({ block, ...surfaceProps }: { block: TimedBlock } & Eve
         <EventSurface
             event={event}
             {...surfaceProps}
-            className="absolute rounded px-1 py-0.5 ring-1 ring-background"
+            className={cn(BLOCK, 'ring-1 ring-background')}
             style={{
                 top: (block.top * HOUR_HEIGHT) / 60,
                 height,

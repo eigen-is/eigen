@@ -1,14 +1,17 @@
 // Where the calendar views draw events and where a drag puts them: day spans, lanes for month rows and the all-day
-// lane, overlap columns in the time grid, the 15-minute snap, the range a drag over an empty column covers, and the
-// times and recurring choices of a move or resize. Pure, so the views stay thin and the layout is tested without a
-// browser. An all-day event places by its UTC date, a timed one by the viewer's local day, and positions are
-// wall-clock minutes, so 09:00 stays 09:00 on a DST day.
+// lane, overlap columns and a block's minimum length in the time grid, the 15-minute snap, the range a drag over an
+// empty column covers, and the times and recurring choices of a move or resize. Pure, so the views stay thin and the
+// layout is tested without a browser. An all-day event places by its UTC date, a timed one by the viewer's local day,
+// and positions are wall-clock minutes, so 09:00 stays 09:00 on a DST day.
 
 import type { CalendarEventOccurrence, RecurrenceScope } from '../../types/calendar';
 import { dateFormatter } from '../date';
 import { normalizeTimezone, occurrenceDateToString, occurrenceScopes, toLocalDateString } from './calendar-utils';
 
 export const SNAP_MINUTES = 15;
+// The shortest a timed block is drawn and collides with others: at the grid's 48px an hour, half an hour holds one
+// 16px line of text and its padding, with room to spare.
+export const MIN_BLOCK_MINUTES = 30;
 
 const DAY_MINUTES = 1440;
 const DAY_MS = 86400_000;
@@ -116,8 +119,8 @@ export function layoutTimedEvents(events: readonly CalendarEventOccurrence[], da
             if (start >= dayEnd || (end <= dayStart && start !== dayStart)) continue;
             const top = start <= dayStart ? 0 : wallMinutes(event.startTime);
             const bottom = end >= dayEnd ? DAY_MINUTES : wallMinutes(event.endTime);
-            const shownBottom = Math.min(DAY_MINUTES, Math.max(bottom, top + SNAP_MINUTES));
-            segments.push({ event, top: Math.min(top, shownBottom - SNAP_MINUTES), bottom: shownBottom });
+            const shownBottom = Math.min(DAY_MINUTES, Math.max(bottom, top + MIN_BLOCK_MINUTES));
+            segments.push({ event, top: Math.min(top, shownBottom - MIN_BLOCK_MINUTES), bottom: shownBottom });
         }
         segments.sort((a, b) => a.top - b.top || b.bottom - a.bottom || a.event.title.localeCompare(b.event.title));
 

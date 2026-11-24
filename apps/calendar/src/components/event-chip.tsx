@@ -26,7 +26,8 @@ type PlacedEventProps = EventSurfaceProps & {
     style?: CSSProperties;
 };
 
-const BAR = 'truncate rounded px-1.5 py-0.5 font-medium';
+// Dark mode draws a 2px color stripe at the left edge, so the text starts further in.
+const BAR = 'truncate rounded px-1.5 py-0.5 font-medium dark:pl-2';
 
 export function EventSurface({
     event,
