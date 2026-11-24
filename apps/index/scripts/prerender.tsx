@@ -9,6 +9,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import { escapeXml } from '@workspace/lib/xml';
 import { createServer } from 'vite';
 import { withInlineScriptHashes } from '../../../vite.security-headers';
+import { previewCard } from '../src/content/about-media';
 import type { ArticleBody, ContentManifest } from './lib/content-types';
 
 const ROOT = process.cwd(); // apps/index
@@ -34,6 +35,8 @@ type PageMeta = {
     url: string | undefined;
     type: 'website' | 'article';
     updated?: string;
+    // The card other sites show for a link to the page, when it is not Eigen's own.
+    image?: string;
 };
 type ArticleRef = { collection: 'blog' | 'support' | 'about'; slug: string };
 type PageArticle = ArticleRef & { body: ArticleBody };
@@ -135,6 +138,7 @@ function routes(shellDescription: string): PrerenderRoute[] {
                 description: page.description,
                 url: publicUrl(path),
                 type: overview ? 'website' : 'article',
+                image: overview ? undefined : previewCard(page.slug),
             },
             article: { collection: 'about', slug: page.slug },
             canonical: `${ABOUT_ORIGIN}${path}`,
@@ -153,10 +157,10 @@ function withMeta(html: string, meta: PageMeta, shellDescription: string): strin
         .replace('content="website"', `content="${meta.type}"`);
     const ogUrl = meta.url ? `<meta property="og:url" content="${escapeHtml(meta.url)}"/>` : '';
     // OG scrapers ignore a relative og:image URL, so it gets the origin when that is known.
-    const absolutized = PUBLIC_ORIGIN
-        ? page.replace('content="/eigen-space-logo.svg', `content="${PUBLIC_ORIGIN}/eigen-space-logo.svg`)
-        : page;
-    return absolutized.replace('</head>', `${ogUrl}</head>`);
+    const image = `${PUBLIC_ORIGIN ?? ''}${meta.image ?? previewCard('eigen')}`;
+    return page
+        .replace(`property="og:image" content="${previewCard('eigen')}"`, `property="og:image" content="${image}"`)
+        .replace('</head>', `${ogUrl}</head>`);
 }
 
 function jsonLd(meta: PageMeta): string {

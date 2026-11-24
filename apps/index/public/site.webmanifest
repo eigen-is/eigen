@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Eigen",
   "short_name": "Eigen",
-  "description": "Eigen is a self-hosted alternative to Google Workspace: mail, drive, docs, sheets, slides, calendar, contacts and chat, on your own server.",
+  "description": "Eigen is a self-hosted alternative to Google Workspace: mail, drive, docs, sheets, slides, vector, stickies, calendar, contacts and chat, on your own server.",
   "start_url": "/space/",
   "scope": "/",
   "display": "standalone",

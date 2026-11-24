@@ -7,6 +7,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Open recent** — in Docs, Sheets, Slides, Stickies and Vector, File › Open recent lists up to eight of your newest files of that kind, from Drive's Recent files
+- **Link previews** — a link to the public site in Slack, LinkedIn or X shows a picture: the eigen wordmark over the apps, or on an About page that app's own screen
 
 ### Changed
 
