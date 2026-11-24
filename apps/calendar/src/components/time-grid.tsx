@@ -79,10 +79,15 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const nudgeFrameRef = useRef(0);
     const { swallowNextClick, rootProps } = useSwallowedClick();
 
-    // Ticks on the minute, not a minute after mount, so the gutter's time is never a minute behind.
+    // Ticks on the minute, and at once when the tab shows again, since a hidden tab's timers run late.
     useEffect(() => {
-        const timer = setTimeout(() => setNow(new Date()), 60_000 - (now.getTime() % 60_000));
-        return () => clearTimeout(timer);
+        const tick = () => setNow(new Date());
+        const timer = setTimeout(tick, 60_000 - (now.getTime() % 60_000));
+        document.addEventListener('visibilitychange', tick);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('visibilitychange', tick);
+        };
     }, [now]);
     useEffect(() => () => cancelAnimationFrame(nudgeFrameRef.current), []);
 
