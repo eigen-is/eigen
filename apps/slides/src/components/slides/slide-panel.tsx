@@ -53,7 +53,7 @@ export function SlidePanel({
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_THRESHOLD_PX } }));
     const { resolveMediaUrl } = useMediaResolver();
-    // dragActiveId cancels an armed press the moment a drag starts (the stickies-card mechanism).
+    // dragActiveId cancels an armed press the moment a drag starts.
     const slideLongPress = useLongPress(slideMenu?.openAt ?? noop, { disabled: !!dragActiveId || !slideMenu });
 
     const dragged = frames.find((frame) => frame.id === dragActiveId);
