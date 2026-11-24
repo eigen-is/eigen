@@ -6,7 +6,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { isFreeBusyEvent } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useEffect, useRef, useState } from 'react';
-import { eventOwnerId, isSameOccurrence } from '../calendar-utils';
+import { isSameOccurrence } from '../calendar-utils';
 
 type UseEventDetailStateOptions = {
     events: readonly CalendarEventOccurrence[];
@@ -76,9 +76,7 @@ export function useEventDetailState({
             event: selectedEvent,
             calendar: selectedCalendar,
             sharedCalendar: selectedSharedCalendar,
-            ownerId: selectedEvent
-                ? eventOwnerId(selectedEvent, calendars, sharedCalendars, user?.id)
-                : (user?.id ?? ''),
+            ownerId: selectedSharedCalendar?.ownerUserId ?? user?.id ?? '',
         },
     };
 }

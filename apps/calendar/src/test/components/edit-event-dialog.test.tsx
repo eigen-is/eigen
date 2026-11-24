@@ -94,7 +94,7 @@ mock.module('@workspace/lib/calendar', () => ({
     useDeleteEvent: () => deleteEvent,
     useMoveEvent: () => idle,
     useEvent: () => master,
-    // A save on the series reads the master from the cache the real useEvent fills.
+    // A save on the series reads the master fresh, through the same query config.
     eventQueryConfig: (ownerId: string, calendarId: string, id: string) => ({
         ...realCalendar.eventQueryConfig(ownerId, calendarId, id),
         queryFn: async () => master.data,
@@ -140,9 +140,9 @@ beforeEach(() => {
     unhandled.length = 0;
 });
 
-async function open(event = dentist, ownerUserId?: string) {
+async function open(event = dentist, ownerId = session.user.id) {
     ({ unmount } = await renderInDocument(
-        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerUserId }),
+        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerId }),
     ));
 }
 

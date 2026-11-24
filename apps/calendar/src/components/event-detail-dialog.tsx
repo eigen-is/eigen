@@ -335,7 +335,7 @@ export function EventDetailDialog({
                     if (!editing) onOpenChange(false);
                 }}
                 event={event}
-                ownerUserId={sharedCalendar?.ownerUserId}
+                ownerId={ownerId}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

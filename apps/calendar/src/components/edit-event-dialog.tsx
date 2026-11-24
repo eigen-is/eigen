@@ -38,7 +38,8 @@ type EditEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     event: CalendarEventOccurrence;
-    ownerUserId?: string;
+    // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
+    ownerId: string;
 };
 
 // What the user changed, and nothing else. The times and the repeat are one entry, because a preset rule names the
@@ -52,15 +53,14 @@ type TypedFields = {
     calendarKey?: string;
 };
 
-export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: EditEventDialogProps) {
+export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEventDialogProps) {
     const { user } = useAuth();
-    const ownerId = user?.id ?? '';
-    const eventOwnerId = ownerUserId || ownerId;
+    const viewerId = user?.id ?? '';
 
-    const { data: calendars = [] } = useCalendars(ownerId);
-    const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
+    const { data: calendars = [] } = useCalendars(viewerId);
+    const { data: sharedCalendars = [] } = useSharedCalendars(viewerId);
 
-    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
+    const calendarOptions = useCalendarOptions(viewerId, calendars, sharedCalendars);
 
     // The fields live here, not in a child that mounts with the dialog as New event's do. Edit event hides behind the
     // recurring choice or the move warning, and a cancel there brings it back with the edits still in it.
@@ -83,23 +83,22 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     };
 
     const currentCal =
-        calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId) ?? calendarOptions[0];
+        calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === ownerId) ?? calendarOptions[0];
     const selectedCalKey = typed.calendarKey ?? (currentCal ? calendarKey(currentCal) : '');
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
-    const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId;
+    const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== ownerId;
 
-    const saveOccurrence = useSaveOccurrence(eventOwnerId, held);
-    const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
-    const deleteEventOnSource = useDeleteEvent(eventOwnerId);
-    const moveEvent = useMoveEvent(eventOwnerId);
-    const refuseStaleEvent = useRefuseStaleEvent(eventOwnerId);
-    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
-    // The series' own guests are on its master, and a save on the series reads it from this same cache.
+    const saveOccurrence = useSaveOccurrence(ownerId, held);
+    const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
+    const deleteEventOnSource = useDeleteEvent(ownerId);
+    const moveEvent = useMoveEvent(ownerId);
+    const refuseStaleEvent = useRefuseStaleEvent(ownerId);
+    const isFromOthers = useIsInvitationFromOthers(ownerId);
+    // The series' own guests are on its master.
     const { data: master } = useEvent(
-        eventOwnerId,
+        ownerId,
         event.calendarId,
-        event.parentEventId || event.id,
-        open && isSeriesOccurrence(event),
+        open && isSeriesOccurrence(event) ? event.parentEventId || event.id : null,
     );
 
     const title = typed.title ?? event.title;
@@ -120,7 +119,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const canSave = !isLinkedEvent || calendarChanged;
 
     // A cross-Home move fires deleteEvent's iMIP side effects and leaves the exception children behind, so warn first.
-    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
+    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== ownerId;
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
     else if (attendees.length) moveLossReasons.push('guests will be notified it was canceled and re-invited');
@@ -160,7 +159,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
 
         if (!calendarChanged || !selectedCal) {
             await saveOccurrence({ ...occurrenceSave, scope });
-        } else if (selectedCal.ownerId === eventOwnerId) {
+        } else if (selectedCal.ownerId === ownerId) {
             // The server-owned move carries the exception children and the organizer link, and fires no decline.
             const updated = await saveOccurrence({ ...occurrenceSave, scope: 'all' });
             holdEtag(updated.etag);
