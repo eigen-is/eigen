@@ -1,8 +1,14 @@
-// Small helpers the Calendar app's views and event dialogs share, such as the state classes an event draws over its
-// color surface, an event's start and end from the form's date and time fields, and the key a calendar picker names a
-// calendar by.
+// Small helpers the Calendar app's views and event dialogs share, such as the color and state an event draws in and
+// the classes that state lays over its color surface, an event's start and end from the form's date and time fields,
+// and the key a calendar picker names a calendar by.
 
-import type { CalendarOption } from '@workspace/lib/types/calendar';
+import { getCalendarColor, getInviteStatus, isFreeBusyEvent } from '@workspace/lib/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    CalendarOption,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
 
 type EventPillVariant = 'block' | 'dot';
@@ -12,6 +18,23 @@ type EventSurfaceState = {
     freeBusy: boolean;
     inviteStatus: 'pending' | 'declined' | null;
 };
+
+// Every view reads an event's color and state here, so a past, free/busy, pending or declined event looks the same in
+// each of them.
+export function eventState(
+    event: CalendarEventOccurrence,
+    calendars: readonly CalendarItem[],
+    sharedCalendars: readonly SharedCalendar[] | undefined,
+    viewerEmail: string | undefined,
+): EventSurfaceState & { color: string } {
+    const freeBusy = isFreeBusyEvent(event);
+    return {
+        color: getCalendarColor(event, calendars, sharedCalendars),
+        past: event.endTime <= new Date(),
+        freeBusy,
+        inviteStatus: freeBusy ? null : getInviteStatus(event, viewerEmail),
+    };
+}
 
 // Merged after colorSurface's classes, so a pending block's background replaces the fill. The past comes first, so a
 // declined or free/busy fade wins over its dimming.

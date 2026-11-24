@@ -155,23 +155,30 @@ describe('allocateLanes', () => {
 });
 
 describe('monthWeekLayout', () => {
-    test('hides lanes past maxLanes and counts them per day', () => {
-        const trip = allDay('Trip', '2026-11-24', 2);
-        const crowded = [trip, timed('A', tue, 9, 10), timed('B', tue, 10, 11), timed('C', tue, 11, 12)];
-        const layout = monthWeekLayout(week, crowded, 2);
-        expect(layout.bars.map((b) => b.event.title)).toEqual(['Trip', 'A']);
+    test('a day gives its last lane to "N more" only when its events overflow', () => {
+        const wed: [number, number, number] = [2026, 11, 25];
+        const crowded = [
+            timed('A', tue, 9, 10),
+            timed('B', tue, 10, 11),
+            timed('C', tue, 11, 12),
+            timed('D', tue, 12, 13),
+        ];
+        const full = [timed('E', wed, 9, 10), timed('F', wed, 10, 11), timed('G', wed, 11, 12)];
+        const layout = monthWeekLayout(week, [...crowded, ...full], 3);
+        expect(layout.bars.map((b) => b.event.title)).toEqual(['A', 'B', 'E', 'F', 'G']);
         expect(layout.hidden).toEqual([0, 2, 0, 0, 0, 0, 0]);
     });
 
-    test('a hidden multi-day bar counts on every day it covers', () => {
+    test('a bar that a crowded day hides is hidden and counted on every day it covers', () => {
         const events = [
-            allDay('One', '2026-11-23', 3),
-            allDay('Two', '2026-11-23', 2),
-            allDay('Three', '2026-11-24', 2),
+            allDay('Long', '2026-11-23', 3),
+            allDay('Trip', '2026-11-24', 2),
+            timed('C', [2026, 11, 25], 9, 10),
+            timed('D', [2026, 11, 25], 10, 11),
         ];
         const layout = monthWeekLayout(week, events, 2);
-        expect(layout.bars.map((b) => b.event.title)).toEqual(['One', 'Two']);
-        expect(layout.hidden).toEqual([0, 1, 1, 0, 0, 0, 0]);
+        expect(layout.bars.map((b) => b.event.title)).toEqual(['Long']);
+        expect(layout.hidden).toEqual([0, 1, 3, 0, 0, 0, 0]);
     });
 });
 

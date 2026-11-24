@@ -79,19 +79,26 @@ export function allocateLanes(items: readonly CalendarEventOccurrence[], days: r
     });
 }
 
+// As Google does, a day keeps every lane while its events fit and gives the last one to "N more" when they don't. A
+// bar any of its days can't hold is hidden on all of them; a quiet day it covers then shows "N more" in the lane the
+// bar left free.
 export function monthWeekLayout(
     days: readonly Date[],
     events: readonly CalendarEventOccurrence[],
     maxLanes: number,
 ): { bars: LaneBar[]; hidden: number[] } {
+    const placed = allocateLanes(events, days);
+    const overflows = days.map(() => false);
+    for (const bar of placed) {
+        if (bar.lane >= maxLanes) for (const day of barDays(bar)) overflows[day] = true;
+    }
+    const fits = (bar: LaneBar) => barDays(bar).every((day) => bar.lane < maxLanes - (overflows[day] ? 1 : 0));
+
     const bars: LaneBar[] = [];
     const hidden = days.map(() => 0);
-    for (const bar of allocateLanes(events, days)) {
-        if (bar.lane < maxLanes) {
-            bars.push(bar);
-            continue;
-        }
-        for (let day = bar.start; day < bar.start + bar.span; day++) hidden[day]++;
+    for (const bar of placed) {
+        if (fits(bar)) bars.push(bar);
+        else for (const day of barDays(bar)) hidden[day]++;
     }
     return { bars, hidden };
 }
@@ -178,6 +185,10 @@ export function rescheduleScopes(event: CalendarEventOccurrence, moved: EventTim
     const timeZone = event.allDay ? 'UTC' : (normalizeTimezone(event.timezone) ?? 'UTC');
     const day = dateFormatter({ timeZone });
     return day.format(event.startTime) === day.format(moved.startTime) ? scopes : ['this'];
+}
+
+function barDays(bar: LaneBar): number[] {
+    return Array.from({ length: bar.span }, (_, i) => bar.start + i);
 }
 
 function lastInstant(event: CalendarEventOccurrence): Date {

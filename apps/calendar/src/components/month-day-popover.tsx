@@ -4,6 +4,7 @@
 import { formatDayMonth } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { EventChip } from './event-chip';
 
@@ -14,6 +15,7 @@ type MonthDayPopoverProps = {
     calendars: readonly CalendarItem[];
     sharedCalendars?: readonly SharedCalendar[];
     onEventClick: (event: CalendarEventOccurrence, e: React.MouseEvent) => void;
+    style: CSSProperties;
 };
 
 export function MonthDayPopover({
@@ -23,22 +25,23 @@ export function MonthDayPopover({
     calendars,
     sharedCalendars,
     onEventClick,
+    style,
 }: MonthDayPopoverProps) {
     const [open, setOpen] = useState(false);
 
+    // Modal, so the page takes no pointer events while the list is open and a click on another day only closes it.
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={setOpen} modal>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className="block text-xs text-muted-foreground font-medium px-0.5 rounded cursor-pointer hover:bg-accent"
-                    onClick={(e) => e.stopPropagation()}
+                    className="mx-0.5 truncate rounded px-1 text-left text-xs font-medium leading-5 text-muted-foreground hover:bg-accent"
+                    style={style}
                 >
-                    {hiddenCount} more
+                    {`${hiddenCount} more`}
                 </button>
             </PopoverTrigger>
-            {/* React bubbles a click out of the portal to the day, which would open New event. */}
-            <PopoverContent align="start" className="w-56 p-2" onClick={(e) => e.stopPropagation()}>
+            <PopoverContent align="start" className="w-56 p-2">
                 <div className="text-xs font-medium text-muted-foreground px-0.5 mb-1">
                     {formatDayMonth(day, { weekday: 'short' })}
                 </div>
@@ -53,6 +56,7 @@ export function MonthDayPopover({
                                 setOpen(false);
                                 onEventClick(clicked, e);
                             }}
+                            className="w-full"
                         />
                     ))}
                 </div>

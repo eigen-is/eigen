@@ -1,11 +1,14 @@
-// A month day with more events than fit shows "N more", which opens a list of all of them instead of New event, and an
-// event picked from that list opens its detail as a click in the day does.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+// The month grid: a multi-day event is one bar per week row, a day shows as many events as its row's height fits and
+// counts the rest on "N more", which lists the whole day. The date links to that day's view, a click on an empty part
+// of a day creates an event there, and while the list is open a click elsewhere only closes it.
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
-installHappyDom();
+// happy-dom lays nothing out, so each test gives every element a height and fires the row's observer itself.
+const resizeCallbacks: (() => void)[] = [];
+installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback) });
 
 const created = new Date('2026-10-01T00:00:00Z');
 const work: CalendarItem = {
@@ -19,17 +22,15 @@ const work: CalendarItem = {
     createdAt: created,
     updatedAt: created,
 };
-const titles = ['Standup', 'Dentist', 'Lunch', 'Review', 'Drinks'];
-const events: CalendarEventOccurrence[] = titles.map((title, i) => ({
-    id: `e${i}`,
+const occurrence = (
+    p: Partial<CalendarEventOccurrence> & Pick<CalendarEventOccurrence, 'title' | 'startTime' | 'endTime'>,
+): CalendarEventOccurrence => ({
+    id: p.title,
     calendarId: 'work',
-    uid: `e${i}@eigen`,
-    uri: `e${i}.ics`,
-    title,
+    uid: `${p.title}@eigen`,
+    uri: `${p.title}.ics`,
     description: null,
     location: null,
-    startTime: new Date(2026, 9, 9, 9 + i, 0),
-    endTime: new Date(2026, 9, 9, 9 + i, 30),
     allDay: false,
     rrule: null,
     timezone: null,
@@ -42,8 +43,20 @@ const events: CalendarEventOccurrence[] = titles.map((title, i) => ({
     createByUserId: 'u1',
     createdAt: created,
     updatedAt: created,
-    occurrenceDate: '2026-10-09',
-}));
+    occurrenceDate: p.startTime.toISOString().slice(0, 10),
+    ...p,
+});
+const allDay = (title: string, from: number, days: number) =>
+    occurrence({
+        title,
+        allDay: true,
+        startTime: new Date(Date.UTC(2026, 9, from)),
+        endTime: new Date(Date.UTC(2026, 9, from + days)),
+    });
+const titles = ['Standup', 'Dentist', 'Lunch', 'Review', 'Drinks'];
+const busyDay = titles.map((title, i) =>
+    occurrence({ title, startTime: new Date(2026, 9, 9, 9 + i, 0), endTime: new Date(2026, 9, 9, 9 + i, 30) }),
+);
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 // Stable across renders, as React Query's results are, or the dialogs' effects would rerun on every render.
 const calendars = { data: [work] };
@@ -81,35 +94,110 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
+const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { MonthView } = await import('../../components/month-view');
 
 const onDayClick = mock((_date: Date) => {});
+const realRect = HTMLElement.prototype.getBoundingClientRect;
+// A week row of 116px holds four lanes under its dates.
+let rowHeight = 116;
+beforeEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 140, rowHeight);
+});
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     onDayClick.mockClear();
+    resizeCallbacks.length = 0;
+    rowHeight = 116;
+    HTMLElement.prototype.getBoundingClientRect = realRect;
 });
 
-async function openMore() {
-    ({ unmount } = await renderInDocument(
-        createElement(MonthView, { focus: new Date(2026, 9, 1), events, calendars: [work], onDayClick }),
-    ));
-    await act(async () => {
-        const more = [...document.querySelectorAll<HTMLElement>('body *')].find(
-            (element) => element.childElementCount === 0 && element.textContent === '1 more',
-        );
-        if (!more) throw new Error('the day shows no 1 more');
-        more.click();
+async function renderMonth(events: CalendarEventOccurrence[]) {
+    const month = () =>
+        createElement(MonthView, { focus: new Date(2026, 9, 1), events, calendars: [work], onDayClick });
+    const router = createRouter({
+        routeTree: createRootRoute({ component: month }),
+        history: createMemoryHistory({ initialEntries: ['/'] }),
     });
+    await router.load();
+    const rendered = await renderInDocument(createElement(RouterProvider, { router }));
+    unmount = rendered.unmount;
+    await act(async () => {
+        for (const callback of resizeCallbacks) callback();
+    });
+    return rendered.container;
+}
+
+const leaf = (text: string) =>
+    [...document.querySelectorAll<HTMLElement>('body *')].find(
+        (element) => element.childElementCount === 0 && element.textContent === text,
+    );
+const day = (container: HTMLElement, date: number) =>
+    [...container.querySelectorAll('a')].find((link) => link.textContent === String(date))?.parentElement;
+
+// happy-dom has no hit testing, so a click goes where a browser sends it: past a page that takes no pointer events.
+const click = (element: Element | null | undefined) =>
+    act(async () => {
+        if (!element) throw new Error('nothing to click');
+        const target = document.body.style.pointerEvents === 'none' ? document.documentElement : element;
+        target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+async function openMore() {
+    const container = await renderMonth(busyDay);
+    await click(leaf('2 more'));
+    return container;
 }
 
 const popover = () => document.querySelector('[data-slot="popover-content"]');
+
+test('an event over three days is one bar, and two where it crosses into the next week', async () => {
+    const container = await renderMonth([allDay('Retreat', 13, 3), allDay('Trip', 17, 3)]);
+    const placed = (title: string) =>
+        [...container.querySelectorAll(`[title="${title}"]`)].map((bar) => bar.getAttribute('style'));
+    expect(placed('Retreat')).toEqual([expect.stringContaining('grid-column: 2 / span 3')]);
+    expect(placed('Trip')).toEqual([
+        expect.stringContaining('grid-column: 6 / span 2'),
+        expect.stringContaining('grid-column: 1 / span 1'),
+    ]);
+});
+
+test("a day shows as many events as its row's height fits, and gives the last to N more when they overflow", async () => {
+    rowHeight = 72;
+    const container = await renderMonth([...busyDay.slice(0, 3), allDay('Fair', 14, 1), allDay('Expo', 14, 1)]);
+    const shown = [...container.querySelectorAll('[title]')].map((chip) => chip.getAttribute('title'));
+    expect(shown).toEqual(['Standup', 'Expo', 'Fair']);
+    expect(leaf('2 more')).toBeDefined();
+});
+
+test("the date links to that day's view", async () => {
+    const container = await renderMonth([]);
+    expect(day(container, 9)?.querySelector('a')?.getAttribute('href')).toBe('/view/day/2026-10-09');
+});
+
+test('a click on an empty part of a day creates an event there, a click on its date does not', async () => {
+    const container = await renderMonth([]);
+    await click(day(container, 9)?.querySelector('a'));
+    expect(onDayClick).not.toHaveBeenCalled();
+    await click(day(container, 9));
+    expect(onDayClick).toHaveBeenCalledWith(new Date(2026, 9, 9));
+});
 
 test('N more lists all the events of the day and creates no event', async () => {
     await openMore();
     expect(onDayClick).not.toHaveBeenCalled();
     const listed = [...(popover()?.querySelectorAll('[title]') ?? [])].map((chip) => chip.getAttribute('title'));
     expect(listed).toEqual(titles);
+});
+
+test('while the list is open, a click on another day only closes it', async () => {
+    const container = await openMore();
+    await click(day(container, 14));
+    expect(popover()).toBeNull();
+    expect(onDayClick).not.toHaveBeenCalled();
 });
 
 test('an event picked from the list opens its detail and closes the list', async () => {

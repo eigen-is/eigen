@@ -1,5 +1,5 @@
-// The month view draws the visible calendars' events and the shared ones, four to a day with a count of the
-// rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
+// The month view draws the visible calendars' events and the shared ones, as many to a day as its row fits with a
+// count of the rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
 // cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
 // the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
 // the sidebar's views keep the day, an unknown view or day is not found, and the start page picks the view for the
@@ -17,8 +17,10 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
-// A desktop window, so the toolbar shows its buttons rather than a kebab.
-const { happyDOM } = installHappyDom();
+// A desktop window, so the toolbar shows its buttons rather than a kebab. happy-dom lays nothing out, so open() fires
+// the observers itself.
+const resizeCallbacks: (() => void)[] = [];
+const { happyDOM } = installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback) });
 happyDOM.setViewport({ width: 1440, height: 900 });
 
 const created = new Date('2026-10-01T00:00:00Z');
@@ -137,8 +139,16 @@ async function open(url = OCTOBER) {
         context: { auth },
     });
     await router.load();
+    resizeCallbacks.length = 0;
     const rendered = await renderInDocument(createElement(RouterProvider, { router }));
     unmount = rendered.unmount;
+    // A month row 116px tall, which holds four lanes of events under its dates.
+    const realRect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 140, 116);
+    await act(async () => {
+        for (const callback of resizeCallbacks) callback();
+    });
+    HTMLElement.prototype.getBoundingClientRect = realRect;
     return {
         container: rendered.container,
         path: () => router.state.location.pathname,
@@ -171,7 +181,7 @@ test("the month shows the visible calendars' events and the shared ones, never a
     expect(pills(container)).toEqual(['Standup', 'Team sync']);
 });
 
-test('a day holds four events, all-day first, and counts the rest', async () => {
+test('a day holds the events its row fits, all-day first, and gives its last lane to the count of the rest', async () => {
     ownEvents.data = [
         event({ title: 'Late', startTime: at(20, 16) }),
         event({ title: 'Early', startTime: at(20, 8) }),
@@ -185,8 +195,8 @@ test('a day holds four events, all-day first, and counts the rest', async () => 
         }),
     ];
     const { container } = await open();
-    expect(pills(container)).toEqual(['Team sync', 'Holiday', 'Early', 'Noon', 'Late']);
-    expect(container.textContent).toContain('1 more');
+    expect(pills(container)).toEqual(['Team sync', 'Holiday', 'Early', 'Noon']);
+    expect(container.textContent).toContain('2 more');
 });
 
 test("an all-day pill's title is black on a light color and white on a dark one", async () => {
@@ -549,7 +559,7 @@ test('the all-day lane shows three rows and counts the rest, until "N more" open
     );
     const { container } = await open('/view/day/2026-10-13');
     expect(pill(container, 'Di')).toBeNull();
-    await click([...container.querySelectorAll('button')].find((b) => b.textContent === '1 more'));
+    await click([...container.querySelectorAll('button')].find((b) => b.textContent === '2 more'));
     expect(pill(container, 'Di')).not.toBeNull();
 });
 
