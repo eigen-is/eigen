@@ -1,6 +1,7 @@
 // An occurrence saved at a scope: "this" writes an override into the master, "this and following" truncates the series
 // and starts a new one, and "all" saves the change on the master as a delta. Every write answers to the held etag, a
-// split that fails at its second write retries on the etag its first one answered, and a 412 reloads and says so.
+// split that fails at its second write retries on the etag its first one answered, and a 412 reloads and says so. An
+// "all" on a series loads the master it saves on, unless the cache already holds it.
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, SaveOccurrenceInput } from '../../../../types/calendar';
 import { hasKey, installTransferHarness, OWNER, toasts, trackingClient } from '../../../transfer-harness';
@@ -14,6 +15,8 @@ const refused = (status: number): Answer => ({ data: null, error: { status, valu
 // What each write is answered with, in order; past the end, a plain success.
 let answers: Answer[] = [];
 const sent: { write: string; id?: string; body: Record<string, unknown> }[] = [];
+// The events whose stored row was read, which only the master is.
+const loaded: string[] = [];
 const write =
     (name: string, id?: string) =>
     async (body: Record<string, unknown>): Promise<Answer> => {
@@ -26,7 +29,16 @@ mock.module('../../../../core/api', () => ({
     ...realApiModule,
     calendarApi: () => ({
         calendars: () => ({
-            events: Object.assign(({ id }: { id: string }) => ({ put: write('put', id) }), { post: write('post') }),
+            events: Object.assign(
+                ({ id }: { id: string }) => ({
+                    put: write('put', id),
+                    get: async () => {
+                        loaded.push(id);
+                        return { data: master, error: null, status: 200 };
+                    },
+                }),
+                { post: write('post') },
+            ),
         }),
     }),
 }));
@@ -116,7 +128,7 @@ async function mount(liveEtag = 'v1') {
             root.unmount();
         });
     };
-    return { save, render, latest, invalidated };
+    return { save, render, latest, invalidated, queryClient };
 }
 
 let unmount = async () => {};
@@ -124,6 +136,7 @@ afterEach(() => unmount());
 beforeEach(() => {
     answers = [];
     sent.length = 0;
+    loaded.length = 0;
     toasts.length = 0;
 });
 
@@ -161,9 +174,12 @@ describe('a save at each scope', () => {
     });
 
     test('all saves the change on the master as a delta, so the series keeps its own start', async () => {
-        const { save } = await mount();
-        await save({ occurrence, scope: 'all', edited: anHourLater(occurrence), master });
+        const { save, queryClient } = await mount();
+        // Edit event's form has loaded the master already.
+        queryClient.setQueryData(calendarKeys.event(OWNER, 'work', 's1'), master);
+        await save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
 
+        expect(loaded).toEqual([]);
         expect(sent).toEqual([
             {
                 write: 'put',
@@ -179,14 +195,27 @@ describe('a save at each scope', () => {
         ]);
     });
 
+    test("all with no master loaded reads it once and sends the master's start, not the occurrence's", async () => {
+        const { save } = await mount();
+        await save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
+
+        expect(loaded).toEqual(['s1']);
+        expect(sent).toHaveLength(1);
+        expect(sent[0].body).toMatchObject({
+            startTime: new Date('2026-10-01T10:00:00Z'),
+            endTime: new Date('2026-10-01T10:15:00Z'),
+        });
+    });
+
     test("all from an override keeps the master's rule and takes the series data it is given", async () => {
         const { save } = await mount();
         const seriesData = {
             attendees: [{ email: 'ada@example.org', status: 'pending' as const, role: 'required' as const }],
         };
-        await save({ occurrence: override, scope: 'all', edited: anHourLater(override), master, seriesData });
+        await save({ occurrence: override, scope: 'all', edited: anHourLater(override), seriesData });
 
         expect(sent).toHaveLength(1);
+        expect(loaded).toEqual(['s1']);
         expect(sent[0]).toMatchObject({ write: 'put', id: 's1', body: { data: seriesData } });
         expect(sent[0].body.rrule).toBeUndefined();
     });
@@ -196,6 +225,7 @@ describe('a save at each scope', () => {
         const { save } = await mount();
         await save({ occurrence: single, scope: 'all', edited: { ...anHourLater(single), title: 'Dentist' } });
 
+        expect(loaded).toEqual([]);
         expect(sent).toHaveLength(1);
         expect(sent[0]).toMatchObject({
             write: 'put',
@@ -235,7 +265,7 @@ describe('a save that fails', () => {
         expect(sent.map(({ write }) => write)).toEqual(['put']);
 
         await render('v2');
-        await save({ occurrence, scope: 'all', edited: anHourLater(occurrence), master });
+        await save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
         expect(sent.map(({ body }) => body.etag)).toEqual(['v1', 'v2']);
     });
 });

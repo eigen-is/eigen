@@ -94,6 +94,11 @@ mock.module('@workspace/lib/calendar', () => ({
     useDeleteEvent: () => deleteEvent,
     useMoveEvent: () => idle,
     useEvent: () => master,
+    // A save on the series reads the master from the cache the real useEvent fills.
+    eventQueryConfig: (ownerId: string, calendarId: string, id: string) => ({
+        ...realCalendar.eventQueryConfig(ownerId, calendarId, id),
+        queryFn: async () => master.data,
+    }),
     useIsInvitationFromOthers: () => isFromOthers,
 }));
 mock.module('@workspace/lib/contacts', () => ({

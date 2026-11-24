@@ -6,6 +6,7 @@ import {
     isSeriesOccurrence,
     normalizeTimezone,
     occurrenceDateToString,
+    occurrenceScopes,
     rruleToText,
     seriesEditFromOccurrence,
     viewerTimeZone,
@@ -98,6 +99,22 @@ describe('isSeriesOccurrence', () => {
 
     test('an event that repeats nowhere and overrides nothing is on its own', () => {
         expect(isSeriesOccurrence(row(null, null))).toBe(false);
+    });
+});
+
+describe('occurrenceScopes', () => {
+    const row = (rrule: string | null, parentEventId: string | null) => ({ rrule, parentEventId });
+
+    test('an occurrence of a series offers this one, this and following, and all', () => {
+        expect(occurrenceScopes(row('FREQ=WEEKLY', null))).toEqual(['this', 'this-and-following', 'all']);
+    });
+
+    test('an override has no rule to cut, so it offers this one and all', () => {
+        expect(occurrenceScopes(row(null, 'evt-master'))).toEqual(['this', 'all']);
+    });
+
+    test('an event on its own offers no choice', () => {
+        expect(occurrenceScopes(row(null, null))).toEqual([]);
     });
 });
 

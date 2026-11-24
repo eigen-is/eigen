@@ -1,21 +1,24 @@
 // Saves one occurrence of an event at a recurrence scope: this one becomes an override in the master, this and the
-// following ones split the series in two, and all of them change the master. Its host is bound to the event's owner,
-// such as Edit event, and holds the etag every write answers to. A refused write reloads the events and says so,
-// through the event writes' own error path.
+// following ones split the series in two, and all of them change the master, read from the cache or else the server.
+// Its host is bound to the event's owner, such as Edit event, and holds the etag every write that sends one answers
+// to. A refused write reloads the events and says so, through the event writes' own error path.
 
+import { useQueryClient } from '@tanstack/react-query';
 import type { CalendarEvent, SaveOccurrenceInput } from '@workspace/lib/types/calendar';
+import { onMutationError } from '../../api-error';
 import type { HeldEtag } from '../../use-held-etag';
-import { seriesEditFromOccurrence, truncateRRule } from '../calendar-utils';
-import { useCreateEvent, useUpdateEvent } from './use-calendar';
+import { isSeriesOccurrence, seriesEditFromOccurrence, truncateRRule } from '../calendar-utils';
+import { eventQueryConfig, useCreateEvent, useUpdateEvent } from './use-calendar';
 
 export function useSaveOccurrence(
     ownerId: string,
     { heldEtag, holdEtag }: HeldEtag,
 ): (save: SaveOccurrenceInput) => Promise<CalendarEvent> {
+    const queryClient = useQueryClient();
     const createEvent = useCreateEvent(ownerId);
     const updateEvent = useUpdateEvent(ownerId);
 
-    return async ({ occurrence, scope, edited, master, seriesData }) => {
+    return async ({ occurrence, scope, edited, seriesData }) => {
         const { calendarId, occurrenceDate } = occurrence;
         const id = occurrence.parentEventId || occurrence.id;
         const { title, description, location, allDay, startTime, endTime, rrule, timezone, data } = edited;
@@ -44,17 +47,25 @@ export function useSaveOccurrence(
             }
             return createEvent.mutateAsync({ calendarId, ...fields, rrule });
         }
-        // An override carries no rule of its own: sending its empty one would end the series.
-        const seriesRule = occurrence.parentEventId ? undefined : rrule;
-        // The master takes only what changed: the occurrence's own times would restart the series there.
-        const changes = master
-            ? {
-                  rrule: seriesRule,
-                  timezone,
-                  ...(seriesData && { data: seriesData }),
-                  ...seriesEditFromOccurrence(occurrence, master, edited),
-              }
-            : { ...fields, rrule: seriesRule };
-        return updateEvent.mutateAsync({ id, calendarId, etag: heldEtag, ...changes });
+        if (!isSeriesOccurrence(occurrence)) {
+            return updateEvent.mutateAsync({ id, calendarId, etag: heldEtag, ...fields, rrule });
+        }
+        const master = await queryClient
+            .ensureQueryData(eventQueryConfig(ownerId, calendarId, id))
+            .catch((error: unknown) => {
+                onMutationError(error);
+                throw error;
+            });
+        // The master takes only what changed: the occurrence's own times would restart the series there. An override
+        // carries no rule of its own, and sending its empty one would end the series.
+        return updateEvent.mutateAsync({
+            id,
+            calendarId,
+            etag: heldEtag,
+            rrule: occurrence.parentEventId ? undefined : rrule,
+            timezone,
+            ...(seriesData && { data: seriesData }),
+            ...seriesEditFromOccurrence(occurrence, master, edited),
+        });
     };
 }

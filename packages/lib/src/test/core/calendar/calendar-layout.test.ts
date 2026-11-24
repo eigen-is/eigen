@@ -360,6 +360,15 @@ describe('rescheduleScopes', () => {
         expect(rescheduleScopes(a, movedTimes(a, 1, 0))).toEqual(['this']);
     });
 
+    test('an override moved within its day has no rule to cut, so it offers this event and all', () => {
+        const a = event({
+            parentEventId: 'master',
+            startTime: new Date(2026, 10, 24, 9),
+            endTime: new Date(2026, 10, 24, 10),
+        });
+        expect(rescheduleScopes(a, movedTimes(a, 0, 120))).toEqual(['this', 'all']);
+    });
+
     test("the day is judged in the series' zone, not the viewer's", () => {
         // 17:00 in New York is 23:00 in Amsterdam: two hours later is the next day here, the same day there.
         const ny = series({
