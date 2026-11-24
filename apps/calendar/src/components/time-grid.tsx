@@ -79,10 +79,11 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const nudgeFrameRef = useRef(0);
     const { swallowNextClick, rootProps } = useSwallowedClick();
 
+    // Ticks on the minute, not a minute after mount, so the gutter's time is never a minute behind.
     useEffect(() => {
-        const timer = setInterval(() => setNow(new Date()), 60_000);
-        return () => clearInterval(timer);
-    }, []);
+        const timer = setTimeout(() => setNow(new Date()), 60_000 - (now.getTime() % 60_000));
+        return () => clearTimeout(timer);
+    }, [now]);
     useEffect(() => () => cancelAnimationFrame(nudgeFrameRef.current), []);
 
     useLayoutEffect(() => {
