@@ -8,14 +8,14 @@ order: 30
 updated: 2026-11-24
 ---
 
-You can create an event from the sidebar or by clicking any day in the calendar, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
+You can create an event from the sidebar or by clicking a day in the month view, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
 
 ## Create an event
 
 There are two ways to open the new-event form.
 
 - Click **Create event** at the top of the sidebar.
-- Click any day in the grid. The form opens with that date already filled in.
+- Click a day in the **Month** view. The form opens with that date already filled in.
 
 The **New event** form opens as a dialog. Fill in the fields you need:
 

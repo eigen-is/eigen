@@ -172,6 +172,10 @@ The web app's page is `/view/$mode/$date`: a mode (`day`, `3day`, `week`, `month
 
 A link from another app, such as Mail's View in Calendar or a notification, goes to `/?date=…&eventId=…` through `calendarEventLink` and names no view, so the start page picks one for the device: a week on a desktop, 3 days on a phone, read from the shared phone breakpoint when the redirect runs.
 
+## The time grid draws what pure layout functions decide
+
+Day, 3 days and Week are one `TimeGrid`. Where everything goes is decided in `calendar-layout.ts` and tested there, because happy-dom has no layout; the component only turns minutes into pixels at one hour height. An event goes to the all-day lane when it is all-day or lasts 24 hours or more (`inAllDayLane`), so a long trip is one bar and not a column-high block. Bars take lanes through `allocateLanes`, the same function month rows use, and the lane shows three before it counts the rest per day. Timed events split per local day, overlapping ones form a cluster, each takes the first free column and widens right while the columns beside it are free (`layoutTimedEvents`). Positions are wall-clock minutes from the day's local midnight, so 09:00 sits at 09:00 on a DST day, and a block is at least `SNAP_MINUTES` tall so a zero-length event can still be clicked.
+
 ## Sharing is pushed, and team calendars are off by default
 
 A share grants `free-busy` (time blocks only), `read` or `write`. When shares change, `share-propagation.ts` writes the calendar into each named recipient's `shared_calendars` ([ACL.md § Share Propagation](ACL.md#share-propagation)). A `free-busy` reader gets blocks with cancelled occurrences left out, so their existence doesn't leak.
