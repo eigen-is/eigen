@@ -122,6 +122,18 @@ describe('describeFileEvent', () => {
             primary: 'Roadmap',
         });
     });
+    test('assigned, resolved and reopened say a card on a board and a comment in other documents', () => {
+        const assigned = { eventType: 'assigned', details: { assignee: 'bob@x.test', card: 'Ship it' } } as const;
+        const resolved = { eventType: 'resolved', details: { chatName: 'c1', card: 'Ship it' } } as const;
+        const doc = { pathName: 'Plan.eigendoc', pathType: 'doc' } as const;
+        expect(describeFileEvent({ ...base, ...assigned }, 'own').action).toBe('assigned a card');
+        expect(describeFileEvent({ ...base, ...resolved }, 'container').action).toBe('resolved a card in "Roadmap"');
+        expect(describeFileEvent({ ...base, ...resolved, eventType: 'reopened' }, 'own').action).toBe(
+            'reopened a card',
+        );
+        expect(describeFileEvent({ ...doc, ...assigned }, 'own').action).toBe('assigned a comment');
+        expect(describeFileEvent({ ...doc, ...resolved }, 'own').action).toBe('resolved a comment');
+    });
     test('created: names the item in the own-ctx action, name as primary in container ctx', () => {
         const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
         expect(describeFileEvent(e, 'own')).toEqual({ action: 'created "notes.txt"' });

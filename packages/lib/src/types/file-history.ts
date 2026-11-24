@@ -5,7 +5,7 @@
 import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
 import type { DrivePathType } from './drive';
-import { stripEigenExtension } from './drive';
+import { DRIVE_TYPE_STICKIES, stripEigenExtension } from './drive';
 import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from './owner';
 
 export type FileEventDetailsMap = {
@@ -99,9 +99,9 @@ const FILE_EVENT_PHRASES: Record<FileEventType, string> = {
     'card-added': 'added a card',
     'card-moved': 'moved a card',
     'card-removed': 'removed a card',
-    assigned: 'assigned a comment',
-    resolved: 'resolved a comment',
-    reopened: 'reopened a comment',
+    assigned: 'assigned',
+    resolved: 'resolved',
+    reopened: 'reopened',
 };
 
 // A stored row can hold a type this build doesn't know. It reads as 'edited', so every FileEvent has a known type
@@ -135,6 +135,8 @@ export function describeFileEvent(
     const name = stripEigenExtension(event.pathName);
     const container = ctx === 'container';
     const details = event.details;
+    // A comment on a Stickies board is one of its cards.
+    const comment = event.pathType === DRIVE_TYPE_STICKIES ? 'a card' : 'a comment';
 
     switch (event.eventType) {
         case 'renamed': {
@@ -211,7 +213,7 @@ export function describeFileEvent(
                     : (opts?.resolveName?.(d.assignee) ?? d.assignee.split('@')[0])
                 : undefined;
             return {
-                action: container ? `assigned a comment in "${name}"` : 'assigned a comment',
+                action: container ? `assigned ${comment} in "${name}"` : `assigned ${comment}`,
                 primary: d?.card ?? (who ? `to ${who}` : undefined),
                 secondary: d?.card && who ? `to ${who}` : undefined,
             };
@@ -219,10 +221,9 @@ export function describeFileEvent(
         case 'resolved':
         case 'reopened': {
             const d = details && 'chatName' in details ? details : null;
+            const action = `${FILE_EVENT_PHRASES[event.eventType]} ${comment}`;
             return {
-                action: container
-                    ? `${FILE_EVENT_PHRASES[event.eventType]} in "${name}"`
-                    : FILE_EVENT_PHRASES[event.eventType],
+                action: container ? `${action} in "${name}"` : action,
                 primary: d && 'card' in d ? d.card : undefined,
             };
         }

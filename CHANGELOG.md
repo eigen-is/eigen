@@ -17,7 +17,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
 - **Messages in Sheets** — a refusal, such as a blocked paste, shows in the corner instead of a box you have to close
 - **Rows of attachments** — in Stickies, Chat and Mail, a row of files too long to fit scrolls when you drag it with the mouse, or with an arrow button at each end that hides more
-- **Cards in Stickies** — the items on a board are called cards in every button, menu, notification and help article, such as **Add card** and **Delete card**
+- **Cards in Stickies** — the items on a board are called cards in every button, menu, notification, activity row and help article, such as **Add card** and **Delete card**
 
 ### Fixed
 
