@@ -57,6 +57,10 @@ Today's date is always highlighted with a filled circle, so you can spot it at a
 
 On a phone, **Today** folds into the **⋮** button (**View options**) on the right of the toolbar.
 
+## Pick a day in the mini month
+
+The sidebar shows a small month under **Create event**, starting on Monday. Today has a filled circle, and the days the view shows are shaded, such as the whole week in the week view. Use the arrows beside the month name to look at other months; the view stays where it is until you click a day. Click a day to open it in the view you are in: in the week view, the week of that day. On a phone, the click also takes you from the sidebar back to the calendar.
+
 ## Use the keyboard
 
 On a computer, single keys do the same as the toolbar: **t** for today, **j** and **k** for the next and previous period, and **d**, **x**, **w**, **m** and **a** for the views. See [Keyboard shortcuts in Calendar](/support/calendar/keyboard-shortcuts) for every key.

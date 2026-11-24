@@ -1,6 +1,6 @@
-// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer
-// picks the view in the toolbar), the link to Drive's Recent files, and the calendar lists (the user's own, those
-// shared with them, and their teams'), each with a checkbox that shows or hides its events.
+// Calendar's sidebar: the Create event button, the mini month, on a phone a link per view that keeps the focused day
+// (a computer picks the view in the toolbar), the link to Drive's Recent files, and the calendar lists (the user's
+// own, those shared with them, and their teams'), each with a checkbox that shows or hides its events.
 
 import { useParams } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -8,6 +8,7 @@ import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
     CALENDAR_VIEW_LABELS,
     CALENDAR_VIEW_MODES,
+    isCalendarViewMode,
     parseDayKey,
     toLocalDateString,
     useCalendars,
@@ -54,6 +55,7 @@ import {
 import { useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
+import { MiniMonth } from './mini-month';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
 
 const VIEW_ICONS: Record<CalendarViewMode, LucideIcon> = {
@@ -167,8 +169,9 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const isGuest = useIsGuest();
     const { isMobile } = useLayout();
     // Outside a view, such as on the not-found page, the views open on today.
-    const { date } = useParams({ strict: false });
-    const focusKey = date !== undefined && parseDayKey(date) ? date : toLocalDateString(new Date());
+    const { mode, date } = useParams({ strict: false });
+    const focus = (date !== undefined && parseDayKey(date)) || new Date();
+    const focusKey = toLocalDateString(focus);
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -220,6 +223,15 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     condensed={condensed}
                     onClick={() => setCreateEventOpen(true)}
                 />
+
+                {/* Keyed by the focused day, so a view that moves brings the month it shows back to its focus. */}
+                {!condensed && (
+                    <MiniMonth
+                        key={focusKey}
+                        mode={mode !== undefined && isCalendarViewMode(mode) ? mode : undefined}
+                        focus={focus}
+                    />
+                )}
 
                 {isMobile && (
                     <SidebarSection condensed={condensed}>

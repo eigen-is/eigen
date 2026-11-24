@@ -6,7 +6,8 @@
 // not found, and the start page picks the view for the device. The schedule lists only the days with events, opens an
 // event's detail on a click, and says when the days are empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
 // multi-day all-day events as one bar, and the current time only while today is in view. Google's keys switch the
-// view on the same day, go to today and open New event, and do nothing while a dialog is open.
+// view on the same day, go to today and open New event, and do nothing while a dialog is open. The sidebar's mini
+// month marks the view's days, browses months on its own, and opens a clicked day in the current view.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -403,6 +404,57 @@ test("on a phone the sidebar's views keep the focused day and mark the view, and
         expect(viewLink('Week')?.getAttribute('data-status')).toBe('active');
         expect(viewLink('Month')?.getAttribute('data-status')).toBeNull();
     }));
+
+// The sidebar's mini month: its caption, and its day cells by day key.
+const miniCaption = () => document.querySelector('.rdp-caption_label')?.textContent;
+const miniDays = () => [...document.querySelectorAll<HTMLElement>('td[data-day]')];
+const miniDay = (key: string) => document.querySelector(`td[data-day="${key}"] button`);
+
+test('the mini month shows the focused month from Monday, with today in the app color', async () => {
+    setSystemTime(new Date(2026, 10, 24, 10));
+    await open('/view/week/2026-11-04');
+    expect(miniCaption()).toBe('November 2026');
+    expect([...document.querySelectorAll('.rdp-weekday')].map((day) => day.textContent)).toEqual([
+        'M',
+        'T',
+        'W',
+        'T',
+        'F',
+        'S',
+        'S',
+    ]);
+    expect(miniDays()[0]?.dataset.day).toBe('2026-10-26');
+    expect(document.querySelector('td[data-today]')?.className).toContain('[&>button]:bg-(--app-current-color)');
+});
+
+test('a click on a day of the mini month opens that day in the current view', async () => {
+    const { path } = await open('/view/3day/2026-11-04');
+    await click(miniDay('2026-11-19'));
+    expect(path()).toBe('/view/3day/2026-11-19');
+});
+
+test("the mini month's arrows show another month and leave the view where it is", async () => {
+    const { path } = await open('/view/week/2026-11-04');
+    await click(document.querySelector('button[aria-label="Show next month"]'));
+    expect(miniCaption()).toBe('December 2026');
+    await click(document.querySelector('button[aria-label="Show previous month"]'));
+    await click(document.querySelector('button[aria-label="Show previous month"]'));
+    expect(miniCaption()).toBe('October 2026');
+    expect(path()).toBe('/view/week/2026-11-04');
+
+    await click(document.querySelector('button[aria-label="Next week"]'));
+    expect(path()).toBe('/view/week/2026-11-11');
+    expect(miniCaption()).toBe('November 2026');
+});
+
+test('the mini month marks the week a week view shows', async () => {
+    await open('/view/week/2026-11-04');
+    expect(
+        miniDays()
+            .filter((cell) => cell.classList.contains('bg-muted'))
+            .map((cell) => cell.dataset.day),
+    ).toEqual(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08']);
+});
 
 test('3 days show the focused day and the two after it, and step by three', async () => {
     ownEvents.data = [

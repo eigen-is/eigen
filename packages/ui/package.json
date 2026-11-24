@@ -20,6 +20,7 @@
     "cmdk": "^1.1.1",
     "prosemirror-search": "^1.1.1",
     "radix-ui": "^1.8.1",
+    "react-day-picker": "^10.0.2",
     "y-websocket": "^3.1.0",
     "yjs": "^13.6.33"
   },

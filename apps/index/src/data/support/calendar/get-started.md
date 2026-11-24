@@ -12,7 +12,7 @@ updated: 2026-11-24
 
 Calendar is where you keep your schedule in Eigen. You create events, invite other people, and see your team's calendars and the ones others share with you beside your own.
 
-The screen has two parts: the sidebar on the left, with **Create event** at the top and your calendars below it, and the grid on the right.
+The screen has two parts: the sidebar on the left, with **Create event** at the top, a small month under it and your calendars below, and the grid on the right.
 
 ::: video src="/data/about/media/calendar-hero" caption="An event opened on its guests and their answers, then a team's calendar hidden and shown again."
 :::
