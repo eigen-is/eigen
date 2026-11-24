@@ -52,7 +52,6 @@ describe('colorSurface', () => {
                 '--surface-bg': fill,
                 '--surface-fg': readableTextColor(fill),
                 '--surface-indicator': indicatorColor(value),
-                '--surface-soft': 'color-mix(in oklab, var(--surface-indicator) 14%, var(--background))',
             });
         }
     });
@@ -61,13 +60,12 @@ describe('colorSurface', () => {
         const { className, style } = colorSurface(eigenColor('orange', 100), 'tile');
         expect(className.split(' ')).toEqual(
             expect.arrayContaining([
-                'dark:bg-(--surface-soft)',
+                'dark:bg-[color-mix(in_oklab,var(--surface-indicator)_14%,var(--background))]',
                 'dark:text-card-foreground',
                 'dark:shadow-[inset_2px_0_0_0_var(--surface-indicator)]',
             ]),
         );
         expect(style['--surface-indicator']).toBe(eigenColor('orange', 400));
-        expect(style['--surface-soft']).toBe('color-mix(in oklab, var(--surface-indicator) 14%, var(--background))');
     });
 
     test("a user's own hex is its own stripe, and a dashed edge a caller adds takes the same color", () => {

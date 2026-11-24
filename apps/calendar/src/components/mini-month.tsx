@@ -8,16 +8,17 @@ import type { CalendarViewMode } from '@workspace/lib/calendar';
 import { toLocalDateString, viewDays } from '@workspace/lib/calendar';
 import { DateCalendar } from '@workspace/ui/components/date-calendar';
 import { useLayout } from '@workspace/ui/components/layout/app';
+import { useShowView } from './hooks/use-show-view';
 
 export function MiniMonth({ mode, focus }: { mode?: CalendarViewMode; focus: Date }) {
     const navigate = useNavigate();
+    const showView = useShowView();
     const { setSidebarOpen } = useLayout();
     const days = mode ? viewDays(mode, focus) : [];
 
     const openDay = (day: Date) => {
-        const date = toLocalDateString(day);
-        if (mode) navigate({ to: '/view/$mode/$date', params: { mode, date } });
-        else navigate({ to: '/', search: { date } });
+        if (mode) showView(mode, day);
+        else navigate({ to: '/', search: { date: toLocalDateString(day) } });
         setSidebarOpen(false);
     };
 

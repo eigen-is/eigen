@@ -3,14 +3,12 @@
 // checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
 // so the month stays in view however many calendars there are.
 
-import { useParams } from '@tanstack/react-router';
+import { useMatch } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
     CALENDAR_VIEW_LABELS,
     CALENDAR_VIEW_MODES,
-    isCalendarViewMode,
-    parseDayKey,
     toLocalDateString,
     useCalendars,
     useExportCalendar,
@@ -165,8 +163,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const isGuest = useIsGuest();
     const { isMobile } = useLayout();
     // Outside a view, such as on the not-found page, the views open on today.
-    const { mode, date } = useParams({ strict: false });
-    const focus = (date !== undefined && parseDayKey(date)) || new Date();
+    const view = useMatch({ from: '/_auth/view/$mode/$date', shouldThrow: false })?.context;
+    const focus = view?.focus ?? new Date();
     const focusKey = toLocalDateString(focus);
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
@@ -320,11 +318,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                 {/* Keyed by the focused day, so a view that moves brings the month it shows back to its focus. */}
                 {!condensed && (
                     <div className="app-gutter-bleed border-t pt-2">
-                        <MiniMonth
-                            key={focusKey}
-                            mode={mode !== undefined && isCalendarViewMode(mode) ? mode : undefined}
-                            focus={focus}
-                        />
+                        <MiniMonth key={focusKey} mode={view?.mode} focus={focus} />
                     </div>
                 )}
 

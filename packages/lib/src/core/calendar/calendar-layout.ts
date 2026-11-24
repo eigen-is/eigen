@@ -6,7 +6,13 @@
 
 import type { CalendarEventOccurrence, RecurrenceScope } from '../../types/calendar';
 import { dateFormatter } from '../date';
-import { normalizeTimezone, occurrenceDateToString, occurrenceScopes, toLocalDateString } from './calendar-utils';
+import {
+    addDays,
+    normalizeTimezone,
+    occurrenceDateToString,
+    occurrenceScopes,
+    toLocalDateString,
+} from './calendar-utils';
 
 export const SNAP_MINUTES = 15;
 // The shortest a timed block is drawn and collides with others: at the grid's 48px an hour, half an hour holds one
@@ -42,6 +48,16 @@ type PlacedSegment = Omit<TimedBlock, 'columns' | 'span'>;
 export function eventDaySpan(event: CalendarEventOccurrence): { first: string; last: string } {
     const dayKey = event.allDay ? occurrenceDateToString : toLocalDateString;
     return { first: dayKey(event.startTime), last: dayKey(lastInstant(event)) };
+}
+
+export function dayEvents(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
+    const key = toLocalDateString(day);
+    return events
+        .filter((event) => {
+            const { first, last } = eventDaySpan(event);
+            return first <= key && key <= last;
+        })
+        .sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.startTime.getTime() - b.startTime.getTime());
 }
 
 export function inAllDayLane(event: CalendarEventOccurrence): boolean {
@@ -82,9 +98,8 @@ export function allocateLanes(items: readonly CalendarEventOccurrence[], days: r
     });
 }
 
-// As Google does, a day keeps every lane while its events fit and gives the last one to "N more" when they don't. A
-// bar any of its days can't hold is hidden on all of them; a quiet day it covers then shows "N more" in the lane the
-// bar left free.
+// As Google does, a day keeps its lanes while its events fit and gives the last to "N more" when they don't; a bar
+// any of its days can't hold is hidden on all of them.
 export function monthWeekLayout(
     days: readonly Date[],
     events: readonly CalendarEventOccurrence[],
@@ -109,9 +124,8 @@ export function monthWeekLayout(
 export function layoutTimedEvents(events: readonly CalendarEventOccurrence[], days: readonly Date[]): TimedBlock[][] {
     const timedEvents = events.filter((event) => !inAllDayLane(event));
     return days.map((day) => {
-        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-        // The next local midnight, not 24 hours on: a DST day is 23 or 25 hours long.
-        const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
+        const dayStart = day.getTime();
+        const dayEnd = addDays(day, 1).getTime();
         const segments: Omit<PlacedSegment, 'column'>[] = [];
         for (const event of timedEvents) {
             const start = event.startTime.getTime();

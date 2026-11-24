@@ -1,8 +1,7 @@
 // shadcn's Calendar: react-day-picker's month grid in the house style, its month on the left and the arrows that
 // step it on the right, as Google draws one. Weeks start on Calendar's week start, weekdays read as one letter, and
 // today is a circle in the app's color. It is as wide as its days by default, and a caller that gives it a width,
-// such as `w-full`, spreads the seven columns over it. Its first user is Calendar's mini month; the caller adds what
-// it marks.
+// such as `w-full`, spreads the seven columns over it. A caller, such as Calendar's mini month, adds what it marks.
 
 import { WEEK_STARTS_ON } from '@workspace/lib/calendar';
 import { dateFormatter, formatDayMonth } from '@workspace/lib/date';

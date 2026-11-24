@@ -1,6 +1,6 @@
-// Pure calendar helpers the Calendar app, its cards and the API share: the events of one day, time zones and an
-// instant's wall time in one, how an event's time and recurrence read, and invitations. It also turns an edit of one
-// occurrence into the change saved on the whole series, and cuts a series at a date.
+// Pure calendar helpers the Calendar app, its cards and the API share: local days, time zones and an instant's wall
+// time in one, how an event's time and recurrence read, and invitations. It also turns an edit of one occurrence into
+// the change saved on the whole series, and cuts a series at a date.
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
@@ -15,20 +15,6 @@ import { RECURRENCE_SCOPES } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
-export function getEventsForDay(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
-    return events.filter((e) => {
-        if (e.allDay) {
-            const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
-            const dayEndUtcMs = dayUtcMs + 86400_000;
-            return e.startTime.getTime() < dayEndUtcMs && e.endTime.getTime() > dayUtcMs;
-        }
-        const dayStartMs = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-        // Next local midnight, not +24h — DST transition days are 23/25 hours long.
-        const dayEndMs = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
-        return e.startTime.getTime() < dayEndMs && e.endTime.getTime() > dayStartMs;
-    });
-}
-
 // The local day as YYYY-MM-DD, for `<input type="date">` and a view's URL; occurrenceDateToString gives the UTC day
 // that wire values carry.
 export function toLocalDateString(date: Date): string {
@@ -36,6 +22,11 @@ export function toLocalDateString(date: Date): string {
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+}
+
+// Through the Date constructor, not milliseconds, so a DST day of 23 or 25 hours still steps one calendar day.
+export function addDays(date: Date, days: number): Date {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 export function formatEventTime(event: CalendarEventOccurrence): string {
@@ -49,9 +40,8 @@ export function viewerTimeZone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-// Intl knows no Windows zone name, and dropping one expands an Outlook series in UTC, breaking its wall time at the
-// next DST change. Intl reads a zone in any case, so one spelling per zone leaves here and a server's formatters stop
-// at the zone count.
+// Intl knows no Windows zone name, and dropping one would expand an Outlook series in UTC, off by an hour after the next
+// DST change. One spelling per zone leaves here, so a server's formatter cache stops at the zone count.
 export function normalizeTimezone(timezone: string | null | undefined): string | null {
     if (!timezone) return null;
     try {
@@ -156,6 +146,10 @@ export function getCalendarColor(
         if (sc) return sc.color || sc.calendarColor;
     }
     return DEFAULT_CALENDAR_COLOR;
+}
+
+export function defaultCalendar(calendars: readonly CalendarItem[]): CalendarItem | undefined {
+    return calendars.find((c) => c.isDefault) ?? calendars[0];
 }
 
 export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {

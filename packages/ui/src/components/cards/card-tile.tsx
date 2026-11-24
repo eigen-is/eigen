@@ -62,7 +62,7 @@ export function CardTile({
                 'p-0 w-full shadow-md select-none rounded-none',
                 surface ? 'border-0' : 'border',
                 surface?.className,
-                onClick ? 'cursor-pointer' : '',
+                onClick && 'cursor-pointer',
                 className,
             )}
             style={{ ...surface?.style, ...style }}

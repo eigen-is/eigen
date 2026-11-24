@@ -274,10 +274,8 @@ export function eigenColor(name: (typeof EIGEN_COLOR_NAMES)[number], step: (type
     return EIGEN_COLORS_MAP[EIGEN_COLOR_NAMES.indexOf(name)][EIGEN_COLOR_STEPS.indexOf(step)];
 }
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]);
-// The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
-// each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
-// protanopia and tritanopia. Yellow and lime (under 2:1 on white) sit past the eighth, and rose and fuchsia, which sit
-// close to pink, come late.
+// The order calendars, labels, chart series and presence hand the accents out in: pink, Eigen's accent, first, then
+// each the furthest (CIEDE2000) from those before it for normal and color-blind vision.
 const EIGEN_ACCENT_ORDER = [
     'pink',
     'green',
@@ -306,17 +304,15 @@ export function userColor(userId: string): string {
     const hash = Math.abs([...userId].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0));
     return EIGEN_ACCENT_COLORS_SHUFFLED[hash % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 }
-export const EIGEN_STICKIES_COLORS = [EIGEN_PALE_COLOR_ROW].map((ri) =>
-    [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
-);
+export const EIGEN_STICKIES_COLORS = [[1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][EIGEN_PALE_COLOR_ROW])];
 
 // Each palette color's family, its column of steps.
 const EIGEN_COLOR_FAMILY: Map<string, readonly string[]> = new Map(
     EIGEN_COLORS_MAP.flatMap((family) => family.map((hex) => [hex, family])),
 );
 
-// How far toward white a color outside the palette moves to its pale tone. The least-squares fit that takes each
-// family's 500 step to its 100 step is 0.838, within 20 of 255 on every channel.
+// How far toward white a color outside the palette moves to its pale tone: about as far as each family's 100 step sits
+// from its 500 step.
 const PALE_TONE_LIGHTEN = 0.84;
 
 // The pale tone a color fills a surface with: a palette color of any step is its family's 100 step, and any other
@@ -391,9 +387,8 @@ const RGB_COLOR = new RegExp(
     'i',
 );
 
-// An rgb() or rgba() color, as a browser computes it or a stylesheet writes it: commas or spaces, channels
-// rounded to whole numbers, and an alpha as a number or a percent. It reads as #rrggbb and an alpha from 0 to 1.
-// A channel past 255 is no color.
+// An rgb() or rgba() color, as a browser computes it or a stylesheet writes it, read as #rrggbb and an alpha from 0 to
+// 1; channels round to whole numbers, and one past 255 is no color.
 export function parseRgb(color: string): { hex: string; alpha: number } | undefined {
     const [, red, green, blue, alpha, percent] = RGB_COLOR.exec(color) ?? [];
     const channels = [red, green, blue].map((channel) => Math.round(Number(channel)));

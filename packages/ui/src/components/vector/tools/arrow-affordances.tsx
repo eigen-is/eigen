@@ -167,9 +167,8 @@ export function FocusIndicators({
     );
 }
 
-// A transparent DOM ring over each focus point's hollow dot, as generous a target as a vertex handle. Dragging it
-// re-aims the binding live, clamped inside the shape, and release stores the raw aim as one undo step: Excalidraw
-// re-projects the aim only when an arrow binds, never on a focus-point drag.
+// A transparent ring over each focus point's dot re-aims the binding live, clamped inside the shape, and release
+// stores the raw aim as one undo step: as Excalidraw, the aim is re-projected only when an arrow binds.
 export function FocusPointHandles({
     arrow,
     byId,

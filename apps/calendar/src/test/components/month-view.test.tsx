@@ -115,7 +115,13 @@ afterEach(async () => {
 
 async function renderMonth(events: CalendarEventOccurrence[]) {
     const month = () =>
-        createElement(MonthView, { focus: new Date(2026, 9, 1), events, calendars: [work], onDayClick });
+        createElement(MonthView, {
+            focus: new Date(2026, 9, 1),
+            events,
+            calendars: [work],
+            sharedCalendars: [],
+            onDayClick,
+        });
     const router = createRouter({
         routeTree: createRootRoute({ component: month }),
         history: createMemoryHistory({ initialEntries: ['/'] }),

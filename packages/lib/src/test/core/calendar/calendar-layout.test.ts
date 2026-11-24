@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
     allocateLanes,
+    dayEvents,
     eventDaySpan,
     inAllDayLane,
     layoutTimedEvents,
@@ -76,6 +77,39 @@ function localDays(y: number, m: number, d: number, count: number): Date[] {
 const week = localDays(2026, 11, 23, 7);
 const nextWeek = localDays(2026, 11, 30, 7);
 const tue: [number, number, number] = [2026, 11, 24];
+
+describe('dayEvents', () => {
+    // Weekly Sunday 23:30 Europe/Amsterdam, as expanded by the API (real UTC instants).
+    const sunday = (occurrenceDate: string, start: string, end: string) =>
+        event({ occurrenceDate, startTime: new Date(start), endTime: new Date(end) });
+    const weekly = [
+        sunday('2025-10-19', '2025-10-19T21:30:00Z', '2025-10-19T22:00:00Z'),
+        sunday('2025-10-26', '2025-10-26T22:30:00Z', '2025-10-26T23:00:00Z'),
+        sunday('2025-11-02', '2025-11-02T22:30:00Z', '2025-11-02T23:00:00Z'),
+    ];
+    const dates = (day: Date) => dayEvents(weekly, day).map((e) => e.occurrenceDate);
+
+    test('keeps a 23:30 occurrence on the 25-hour DST fall-back day, not the next', () => {
+        expect(dates(new Date(2025, 9, 26))).toEqual(['2025-10-26']);
+        expect(dates(new Date(2025, 9, 27))).toEqual([]);
+    });
+
+    test('keeps neighbouring Sundays on their own day', () => {
+        expect(dates(new Date(2025, 9, 19))).toEqual(['2025-10-19']);
+        expect(dates(new Date(2025, 10, 2))).toEqual(['2025-11-02']);
+    });
+
+    test('does not duplicate an early-morning event onto the 23-hour spring-forward day', () => {
+        const early = [sunday('2025-03-31', '2025-03-30T22:30:00Z', '2025-03-30T23:00:00Z')];
+        expect(dayEvents(early, new Date(2025, 2, 30))).toEqual([]);
+        expect(dayEvents(early, new Date(2025, 2, 31)).map((e) => e.occurrenceDate)).toEqual(['2025-03-31']);
+    });
+
+    test('lists all-day events first, then the timed ones by start', () => {
+        const events = [timed('Late', tue, 15, 16), timed('Early', tue, 9, 10), allDay('Trip', '2026-11-23', 3)];
+        expect(dayEvents(events, new Date(2026, 10, 24)).map((e) => e.title)).toEqual(['Trip', 'Early', 'Late']);
+    });
+});
 
 describe('eventDaySpan', () => {
     test('a timed event inside one day covers that day', () => {

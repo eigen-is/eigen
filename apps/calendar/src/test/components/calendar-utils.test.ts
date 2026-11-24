@@ -53,7 +53,7 @@ describe('eventSurfaceClasses', () => {
             expect.arrayContaining(['border', 'border-dashed', 'border-(--surface-indicator)', 'bg-background']),
         );
         expect(pending).not.toContain('bg-(--surface-bg)');
-        expect(pending).not.toContain('dark:bg-(--surface-soft)');
+        expect(pending.some((c) => c.startsWith('dark:bg-[color-mix'))).toBe(false);
         expect(pending).not.toContain('dark:shadow-[inset_2px_0_0_0_var(--surface-indicator)]');
         expect(classes('dot', { ...plain, inviteStatus: 'pending' })).not.toContain('border-dashed');
     });

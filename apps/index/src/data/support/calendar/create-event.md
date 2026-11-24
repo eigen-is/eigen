@@ -21,7 +21,7 @@ There are three ways to open the new-event form.
 The **New event** form opens as a dialog. Fill in the fields you need:
 
 1. Type a title in the **Add title** field at the top. A title is required.
-2. Set the date and, if it is a timed event, pick a start time and an end time from the dropdowns.
+2. Set the date and, if it is a timed event, pick a start time and an end time from the dropdowns. A new event starts an hour long.
 3. Tick **All day** if the event has no specific time. The time pickers are replaced by a date-range picker.
 4. To make the event repeat, open the recurrence dropdown (which shows **Does not repeat** by default) and pick a frequency. The built-in options are daily, weekly, monthly, annually, and every weekday. See [Create a recurring event](/support/calendar/recurring-events) for more detail.
 5. To invite people, type a name or email address into the **Add guests** field and click the **+** button or press Enter. Repeat for each guest. See [Invite people and manage attendees](/support/calendar/invite-people) for how invitations work.

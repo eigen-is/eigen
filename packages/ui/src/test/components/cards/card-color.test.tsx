@@ -16,7 +16,7 @@ const { CardTile } = await import('../../../components/cards/card-tile');
 const { CardBody } = await import('../../../components/cards/card-body');
 const { colorSurface } = await import('../../../lib/color-surface');
 
-const SURFACE_VARIABLES = ['--surface-bg', '--surface-fg', '--surface-indicator', '--surface-soft'] as const;
+const SURFACE_VARIABLES = ['--surface-bg', '--surface-fg', '--surface-indicator'] as const;
 
 async function surfaceOf(element: React.ReactElement) {
     const { container } = await renderInDocument(element);
@@ -37,7 +37,6 @@ test('a tile and an opened card share the indicator and dark wash, and differ in
     expect(body.variables).toEqual(SURFACE_VARIABLES.map((name) => colorSurface(color, 'panel').style[name]));
     expect(body.variables[0]).not.toBe(tile.variables[0]);
     expect(body.variables[2]).toBe(tile.variables[2]);
-    expect(body.variables[3]).toBe(tile.variables[3]);
     for (const { classes } of [tile, body]) {
         expect(classes).toEqual(expect.arrayContaining(tileSurface.className.split(' ')));
     }

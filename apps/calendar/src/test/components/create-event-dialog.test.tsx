@@ -99,7 +99,6 @@ function Harness() {
             setOpenState(next);
         },
         defaultDate: new Date(2026, 9, 9),
-        defaultCalendarId: 'work',
     });
 }
 
@@ -214,9 +213,7 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 test('times the caller gives fill the start and end, and all day', async () => {
     const save = async (initial: { start: Date; end: Date; allDay: boolean }) => {
         createEvent.mutateAsync.mockClear();
-        ({ unmount } = await renderInDocument(
-            createElement(CreateEventDialog, { open: true, onOpenChange, defaultCalendarId: 'work', initial }),
-        ));
+        ({ unmount } = await renderInDocument(createElement(CreateEventDialog, { open: true, onOpenChange, initial })));
         await type(titleField(), 'Focus');
         await act(async () => button('Save')?.click());
         await unmount();

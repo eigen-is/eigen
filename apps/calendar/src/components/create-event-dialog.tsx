@@ -1,9 +1,10 @@
 // The New event dialog, opened from the toolbar, a click on a day or a slot, or a drag over a range of the time grid.
 // It starts at the times the view gives, or else at the next quarter hour, on the clicked day when there is one, for
-// half an hour, in the default calendar, and saves through useCreateEvent.
+// a new event's length, in the default calendar, and saves through useCreateEvent.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
+    defaultCalendar,
     toLocalDateString,
     useCalendarOptions,
     useCalendars,
@@ -11,6 +12,7 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { UsersRound } from 'lucide-react';
@@ -28,29 +30,18 @@ type CreateEventDialogProps = {
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
     initial?: NewEventTimes;
-    defaultCalendarId?: string;
 };
 
-export function CreateEventDialog({
-    open,
-    onOpenChange,
-    defaultDate,
-    initial,
-    defaultCalendarId,
-}: CreateEventDialogProps) {
+export function CreateEventDialog({ open, onOpenChange, defaultDate, initial }: CreateEventDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title="New event">
-            <CreateEventForm defaultDate={defaultDate} initial={initial} defaultCalendarId={defaultCalendarId} />
+            <CreateEventForm defaultDate={defaultDate} initial={initial} />
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts empty at its own times.
-function CreateEventForm({
-    defaultDate,
-    initial,
-    defaultCalendarId,
-}: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
+function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars = [] } = useCalendars(ownerId);
@@ -62,7 +53,7 @@ function CreateEventForm({
         const rounded = roundToNext15Minutes(new Date());
         const start = defaultDate ? new Date(defaultDate) : rounded;
         start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-        return { start, end: new Date(start.getTime() + 30 * 60_000), allDay: false };
+        return { start, end: new Date(start.getTime() + NEW_EVENT_MINUTES * 60_000), allDay: false };
     });
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -77,7 +68,7 @@ function CreateEventForm({
     const [attendees, setAttendees] = useState<Attendee[]>([]);
 
     // Until the user picks one, the default calendar follows the list, which may still be loading.
-    const defaultCal = defaultCalendarId ? calendarOptions.find((c) => c.id === defaultCalendarId) : calendarOptions[0];
+    const defaultCal = calendarOptions.find((c) => c.id === defaultCalendar(calendars)?.id);
     const selectedCalKey = pickedCalKey ?? (defaultCal ? calendarKey(defaultCal) : '');
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId ?? ownerId);

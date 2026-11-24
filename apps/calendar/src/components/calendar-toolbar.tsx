@@ -1,15 +1,15 @@
 // The toolbar above Calendar's views: Today, previous and next, the title with the view's days, and the view choice.
 // On a phone, Today folds into a kebab menu and the sidebar picks the view. The URL holds the view and its focused
-// day, so each control navigates to a new one, and switching the view keeps the day.
+// day, so each control navigates to a new one, and switching the view keeps the day. It also binds Google's keys for
+// the same moves, and c for New event, while no dialog or menu is open.
 
-import { useNavigate } from '@tanstack/react-router';
 import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
     CALENDAR_VIEW_LABELS,
     CALENDAR_VIEW_MODES,
     isCalendarViewMode,
     stepFocus,
-    toLocalDateString,
+    useCalendarShortcuts,
     viewTitle,
 } from '@workspace/lib/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -17,23 +17,34 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/
 import { useLayout } from '@workspace/ui/components/layout/app';
 import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useDialogOpen, useMenuOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useShowView } from './hooks/use-show-view';
 
 const VIEW_OPTIONS = CALENDAR_VIEW_MODES.map((value) => ({ value, label: CALENDAR_VIEW_LABELS[value] }));
 
 type CalendarToolbarProps = {
     mode: CalendarViewMode;
     focus: Date;
+    onCreateEvent: () => void;
 };
 
-export function CalendarToolbar({ mode, focus }: CalendarToolbarProps) {
+export function CalendarToolbar({ mode, focus, onCreateEvent }: CalendarToolbarProps) {
     const { isMobile } = useLayout();
-    const navigate = useNavigate();
-    const show = (nextMode: CalendarViewMode, day: Date) =>
-        navigate({ to: '/view/$mode/$date', params: { mode: nextMode, date: toLocalDateString(day) } });
-    // Today is read at the click, so a tab left open past midnight doesn't go to yesterday.
+    const show = useShowView();
+    // Today is read at the press, so a tab left open past midnight doesn't go to yesterday.
     const showToday = () => show(mode, new Date());
     const step = CALENDAR_VIEW_LABELS[mode].toLowerCase();
+    const dialogOpen = useDialogOpen();
+    const menuOpen = useMenuOpen();
+    useCalendarShortcuts({
+        mode,
+        focus,
+        show,
+        showToday,
+        create: onCreateEvent,
+        enabled: !dialogOpen && !menuOpen,
+    });
 
     return (
         <Toolbar>
