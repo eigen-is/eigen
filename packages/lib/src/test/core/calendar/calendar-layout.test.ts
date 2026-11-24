@@ -4,6 +4,7 @@ import {
     eventDaySpan,
     inAllDayLane,
     layoutTimedEvents,
+    MIN_BLOCK_MINUTES,
     monthWeekLayout,
     movedTimes,
     rescheduleScopes,
@@ -258,8 +259,18 @@ describe('layoutTimedEvents', () => {
     test('a zero-length event gets the minimum visual length, kept inside the day', () => {
         expect(columns([timed('Ping', tue, 9, 9), timed('Late', tue, 23.75, 23.75)])).toEqual([
             [
-                ['Ping', 540, 540 + SNAP_MINUTES, 0, 1, 1],
-                ['Late', 1440 - SNAP_MINUTES, 1440, 0, 1, 1],
+                ['Ping', 540, 540 + MIN_BLOCK_MINUTES, 0, 1, 1],
+                ['Late', 1440 - MIN_BLOCK_MINUTES, 1440, 0, 1, 1],
+            ],
+        ]);
+    });
+
+    test('a 15-minute event is drawn at the minimum length, and the event after it sits beside it', () => {
+        expect(MIN_BLOCK_MINUTES).toBeGreaterThan(SNAP_MINUTES);
+        expect(columns([timed('Standup', tue, 9.5, 9.75), timed('Review', tue, 9.75, 10.5)])).toEqual([
+            [
+                ['Standup', 570, 570 + MIN_BLOCK_MINUTES, 0, 2, 1],
+                ['Review', 585, 630, 1, 2, 1],
             ],
         ]);
     });

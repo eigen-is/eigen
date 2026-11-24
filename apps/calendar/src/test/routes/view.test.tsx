@@ -718,3 +718,48 @@ test('a click on an empty spot of the all-day lane opens an all-day New event on
         allDay: true,
     });
 });
+
+test('a 15-minute block is tall enough for its line of text', async () => {
+    ownEvents.data = [event({ title: 'Standup', startTime: at(13, 9), endTime: new Date(2026, 9, 13, 9, 15) })];
+    const { container } = await open('/view/day/2026-10-13');
+    const block = pill(container, 'Standup');
+    if (!(block instanceof HTMLElement)) throw new Error('the grid has no Standup block');
+    // One 16px line inside 2px of padding above and below.
+    expect(Number.parseFloat(block.style.height)).toBeGreaterThanOrEqual(20);
+});
+
+test('an empty week still has an all-day lane, and a click there opens an all-day New event', async () => {
+    const { container } = await open('/view/week/2026-10-14');
+    const lane = container.querySelectorAll('.border-b > .grid')[1];
+    if (!lane) throw new Error('the grid has no all-day lane');
+    lane.getBoundingClientRect = () => new DOMRect(0, 0, 700, 24);
+    await act(async () => {
+        lane.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 50 }));
+    });
+    expect(await savedTimes()).toEqual({
+        startTime: new Date(Date.UTC(2026, 9, 12)),
+        endTime: new Date(Date.UTC(2026, 9, 13)),
+        allDay: true,
+    });
+});
+
+test('in dark mode a block, a bar and a drawn range leave room after their color stripe', async () => {
+    ownEvents.data = [
+        event({ title: 'Review', startTime: at(14, 14) }),
+        event({
+            title: 'Retreat',
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 13)),
+            endTime: new Date(Date.UTC(2026, 9, 16)),
+        }),
+    ];
+    const { container } = await open('/view/week/2026-10-14');
+    expect(pill(container, 'Review')?.classList).toContain('dark:pl-2');
+    expect(pill(container, 'Retreat')?.classList).toContain('dark:pl-2');
+    const column = dayColumn(container, 2);
+    let draftClasses = '';
+    await press(column, 10 * HOUR, 11 * HOUR, 'mouse', () => {
+        draftClasses = column.querySelector('.pointer-events-none')?.className ?? '';
+    });
+    expect(draftClasses.split(' ')).toContain('dark:pl-2');
+});
