@@ -1,3 +1,4 @@
+export * from './calendar-layout';
 export * from './calendar-utils';
 export * from './calendar-view';
 export * from './hooks';
