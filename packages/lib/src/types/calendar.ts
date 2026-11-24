@@ -94,6 +94,23 @@ export type CalendarEventOccurrence = CalendarEvent & {
     occurrenceDate: string;
 };
 
+// Which occurrences of a series a change or an answer applies to.
+export const RECURRENCE_SCOPES = ['this', 'this-and-following', 'all'] as const;
+export type RecurrenceScope = (typeof RECURRENCE_SCOPES)[number];
+
+// One occurrence's save at a scope: `edited` is the occurrence as the save leaves it, `master` the series' stored row
+// an "all" saves on, and `seriesData` the master's data when the save changes it.
+export type SaveOccurrenceInput = {
+    occurrence: CalendarEventOccurrence;
+    scope: RecurrenceScope;
+    edited: Pick<
+        CalendarEvent,
+        'title' | 'description' | 'location' | 'allDay' | 'startTime' | 'endTime' | 'rrule' | 'timezone' | 'data'
+    >;
+    master?: CalendarEvent;
+    seriesData?: EventData;
+};
+
 export type FreeBusyBlock = {
     startTime: Date;
     endTime: Date;

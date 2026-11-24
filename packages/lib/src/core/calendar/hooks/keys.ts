@@ -37,10 +37,11 @@ export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: str
     invalidateEventList(queryClient, ownerId);
 }
 
-// A moved event stales every range query, and its `.ics` bytes count against the Home's storage budget.
-export function invalidateEventList(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+// A moved event stales every range query, and its `.ics` bytes count against the Home's storage budget. The promise
+// settles once the shown ranges have refetched.
+export function invalidateEventList(queryClient: QueryClient, ownerId: string): Promise<void> {
     invalidateHomeSize(queryClient, ownerId);
+    return queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }
 
 export function invalidateSharedCalendarUpdated(queryClient: QueryClient, ownerId: string): void {

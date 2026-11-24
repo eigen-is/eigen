@@ -2,9 +2,9 @@
 // option on every opening, and a screen reader names its choices by the dialog's title. OK hands the chosen one on
 // and closes, and a confirm that fails keeps it open.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import type { RecurrenceScope } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import type { RecurringAction } from '../../components/recurring-action-dialog';
 
 installHappyDom();
 
@@ -19,7 +19,7 @@ const toasted = (message: string) => {
 };
 const { RecurringActionDialog } = await import('../../components/recurring-action-dialog');
 
-const onConfirm = mock(async (_action: RecurringAction) => {});
+const onConfirm = mock(async (_scope: RecurrenceScope) => {});
 const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -31,7 +31,7 @@ beforeEach(() => {
 
 // The dialog under a parent that owns `open`, as the event dialogs do, so a test can close and reopen it.
 let setOpen = (_open: boolean) => {};
-function Harness({ options }: { options?: RecurringAction[] }) {
+function Harness({ options }: { options?: RecurrenceScope[] }) {
     const [open, setOpenState] = useState(true);
     setOpen = setOpenState;
     return createElement(RecurringActionDialog, {
@@ -46,7 +46,7 @@ function Harness({ options }: { options?: RecurringAction[] }) {
     });
 }
 
-async function open(options?: RecurringAction[]) {
+async function open(options?: RecurrenceScope[]) {
     ({ unmount } = await renderInDocument(createElement(Harness, { options })));
 }
 

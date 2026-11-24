@@ -6,7 +6,7 @@
 
 import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { calendarInviteTag } from '@workspace/lib/notification/tags';
-import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, Organizer, RecurrenceScope } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -167,7 +167,7 @@ export async function rsvp(
     user: User,
     input: {
         status: Attendee['status'];
-        scope?: 'this' | 'this-and-following' | 'all';
+        scope?: RecurrenceScope;
         recurrenceDate?: string;
         remove?: boolean;
     },
