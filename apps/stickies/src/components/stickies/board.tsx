@@ -183,7 +183,7 @@ export function StickiesBoard({
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             recordHistory.mutate({
-                eventType: 'sticky-added',
+                eventType: 'card-added',
                 details: {
                     card: patch.title ?? '',
                     toColumn: board.columns[targetColumnId]?.title ?? '',
@@ -417,7 +417,7 @@ export function StickiesBoard({
                                             const removed = cards[cardId];
                                             deleteCardFromBoard(cardId);
                                             recordHistory.mutate({
-                                                eventType: 'sticky-removed',
+                                                eventType: 'card-removed',
                                                 details: { card: removed?.title ?? '', cardId },
                                             });
                                         }}
