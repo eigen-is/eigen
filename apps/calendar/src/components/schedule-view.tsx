@@ -3,12 +3,12 @@
 // event's detail dialog, as a chip in the month grid does; the route around it picks the days and fetches the events.
 
 import { useAuth } from '@workspace/lib/auth';
-import { getCalendarColor, getEventsForDay, getInviteStatus, isFreeBusyEvent } from '@workspace/lib/calendar';
+import { getEventsForDay } from '@workspace/lib/calendar';
 import { dateFormatter, formatMonth, formatTime, isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { cn } from '@workspace/ui/lib/utils';
-import { eventSurfaceClasses } from './calendar-utils';
+import { eventState, eventSurfaceClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -51,7 +51,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                 <span
                                     className={cn(
                                         'flex h-8 w-8 items-center justify-center rounded-full text-lg text-foreground',
-                                        isToday(day) && 'bg-primary text-primary-foreground',
+                                        isToday(day) && 'bg-(--app-current-color) text-background',
                                     )}
                                 >
                                     {day.getDate()}
@@ -60,33 +60,26 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                             </h3>
                             <ul className="min-w-0 flex-1">
                                 {dayEvents.map((event, idx) => {
-                                    const freeBusy = isFreeBusyEvent(event);
-                                    const color = getCalendarColor(event, calendars, sharedCalendars);
-                                    const inviteStatus = freeBusy ? null : getInviteStatus(event, user?.email);
+                                    const state = eventState(event, calendars, sharedCalendars, user?.email);
+                                    const pending = state.inviteStatus === 'pending';
                                     return (
                                         <li key={`${event.id}-${event.occurrenceDate}-${idx}`}>
                                             <button
                                                 type="button"
                                                 className={cn(
                                                     'flex w-full items-center gap-3 rounded px-2 py-1.5 text-left text-sm',
-                                                    eventSurfaceClasses('dot', {
-                                                        past: event.endTime <= new Date(),
-                                                        freeBusy,
-                                                        inviteStatus,
-                                                    }),
+                                                    eventSurfaceClasses('dot', state),
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                             >
                                                 <span
                                                     className={cn(
                                                         'h-2.5 w-2.5 shrink-0 rounded-full',
-                                                        inviteStatus === 'pending' &&
-                                                            'ring-1 ring-current bg-transparent',
+                                                        pending && 'ring-1 ring-current bg-transparent',
                                                     )}
                                                     style={{
-                                                        backgroundColor:
-                                                            inviteStatus === 'pending' ? 'transparent' : color,
-                                                        color,
+                                                        backgroundColor: pending ? 'transparent' : state.color,
+                                                        color: state.color,
                                                     }}
                                                 />
                                                 <span className="w-28 shrink-0 text-muted-foreground tabular-nums">

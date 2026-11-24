@@ -1,13 +1,22 @@
-// The Calendar app's month grid: every week the month touches, each day with up to four events, all-day ones first,
-// then an "N more" that lists them all. A click on an event opens its detail dialog and a click on a day creates an
-// event there; the route around it fetches the events.
+// The Calendar app's month grid: every week the month touches as a row of seven days, its events in lanes under the
+// dates, a multi-day one as one bar across its days. A row holds as many lanes as its height fits, and a day with more
+// events than that shows "N more", which lists the whole day. A date links to that day's view, a click on an event
+// opens its detail dialog and a click on an empty part of a day creates an event there; the route fetches the events.
 
-import { getEventsForDay, viewDays, WEEKDAY_HEADERS } from '@workspace/lib/calendar';
+import { Link } from '@tanstack/react-router';
+import {
+    getEventsForDay,
+    monthWeekLayout,
+    toLocalDateString,
+    viewDays,
+    WEEKDAY_HEADERS,
+} from '@workspace/lib/calendar';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo } from 'react';
-import { EventChip } from './event-chip';
+import { EventBar } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 import { MonthDayPopover } from './month-day-popover';
@@ -21,7 +30,10 @@ type MonthViewProps = {
     initialEventId?: string;
 };
 
-const MAX_VISIBLE_EVENTS = 4;
+// In pixels: the lanes start under the date row (top-7), each lane is a text-xs line with py-0.5, gap-y-0.5 apart.
+const DATE_ROW = 28;
+const LANE = 20;
+const GAP = 2;
 
 export function MonthView({ focus, events, calendars, sharedCalendars, onDayClick, initialEventId }: MonthViewProps) {
     const { handleEventClick, detailDialogProps } = useEventDetailState({
@@ -30,14 +42,16 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
         sharedCalendars,
         initialEventId,
     });
+    // The rows share the height equally, so the first one measures them all.
+    const [rowRef, rowSize] = useElementSize<HTMLDivElement>();
+    const lanes = Math.max(1, Math.floor((rowSize.height - DATE_ROW) / (LANE + GAP)));
 
-    const days = useMemo(() => viewDays('month', focus), [focus]);
+    const weeks = useMemo(() => {
+        const days = viewDays('month', focus);
+        return Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7));
+    }, [focus]);
     const currentMonth = focus.getMonth();
-
-    const weeks: Date[][] = [];
-    for (let i = 0; i < days.length; i += 7) {
-        weeks.push(days.slice(i, i + 7));
-    }
+    const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
 
     return (
         <>
@@ -54,72 +68,87 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
                 </div>
 
                 <div
-                    className="flex-1 grid overflow-auto"
+                    className="flex-1 grid overflow-hidden"
                     style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(0, 1fr))` }}
                 >
-                    {weeks.map((week, weekIdx) => (
-                        <div key={weekIdx} className="grid grid-cols-7 border-b last:border-b-0">
-                            {week.map((day, dayIdx) => {
-                                const dayEvents = getEventsForDay(events, day);
-                                const allDayEvents = dayEvents.filter((e) => e.allDay);
-                                const timedEvents = dayEvents
-                                    .filter((e) => !e.allDay)
-                                    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-                                const sortedEvents = [...allDayEvents, ...timedEvents];
-                                const visibleEvents = sortedEvents.slice(0, MAX_VISIBLE_EVENTS);
-                                const moreCount = sortedEvents.length - MAX_VISIBLE_EVENTS;
-                                const isCurrentMonth = day.getMonth() === currentMonth;
-                                const today = isToday(day);
-
-                                return (
-                                    <div
-                                        key={dayIdx}
-                                        className={cn(
-                                            'border-r last:border-r-0 p-1 cursor-pointer hover:bg-accent/30 transition-colors',
-                                            !isCurrentMonth && 'bg-muted/30',
-                                        )}
-                                        onClick={() => onDayClick?.(day)}
-                                    >
+                    {weeks.map((week, weekIdx) => {
+                        const { bars, hidden } = monthWeekLayout(week, events, lanes);
+                        return (
+                            <div
+                                key={toLocalDateString(week[0])}
+                                ref={weekIdx === 0 ? rowRef : undefined}
+                                className="relative grid grid-cols-7 overflow-hidden border-b last:border-b-0"
+                            >
+                                {week.map((day) => {
+                                    const isCurrentMonth = day.getMonth() === currentMonth;
+                                    const today = isToday(day);
+                                    const key = toLocalDateString(day);
+                                    return (
                                         <div
+                                            key={key}
                                             className={cn(
-                                                'text-xs font-medium mb-0.5 w-6 h-6 flex items-center justify-center rounded-full',
-                                                today && 'bg-primary text-primary-foreground',
-                                                !isCurrentMonth && !today && 'text-muted-foreground',
+                                                'border-r last:border-r-0 p-1 cursor-pointer hover:bg-accent/30 transition-colors',
+                                                !isCurrentMonth && 'bg-muted/30',
                                             )}
+                                            onClick={(e) => e.target === e.currentTarget && onDayClick?.(day)}
                                         >
-                                            {day.getDate()}
+                                            <Link
+                                                to="/view/$mode/$date"
+                                                params={{ mode: 'day', date: key }}
+                                                className={cn(
+                                                    'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full',
+                                                    today
+                                                        ? 'bg-(--app-current-color) text-background'
+                                                        : 'hover:bg-accent',
+                                                    !isCurrentMonth && !today && 'text-muted-foreground',
+                                                )}
+                                            >
+                                                {day.getDate()}
+                                            </Link>
                                         </div>
+                                    );
+                                })}
 
-                                        <div className="space-y-0.5">
-                                            {visibleEvents.map((event, idx) => (
-                                                <EventChip
-                                                    key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                    event={event}
-                                                    calendars={calendars}
-                                                    sharedCalendars={sharedCalendars}
-                                                    onClick={handleEventClick}
-                                                />
-                                            ))}
-                                            {moreCount > 0 && (
+                                <div
+                                    className="pointer-events-none absolute inset-x-0 top-7 grid grid-cols-7 gap-y-0.5 *:pointer-events-auto"
+                                    style={{ gridTemplateRows: `repeat(${lanes}, ${LANE}px)` }}
+                                >
+                                    {bars.map((bar) => (
+                                        <EventBar
+                                            key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
+                                            bar={bar}
+                                            {...surfaceProps}
+                                        />
+                                    ))}
+                                    {hidden.map(
+                                        (count, idx) =>
+                                            count > 0 && (
                                                 <MonthDayPopover
-                                                    day={day}
-                                                    events={sortedEvents}
-                                                    hiddenCount={moreCount}
+                                                    key={toLocalDateString(week[idx])}
+                                                    day={week[idx]}
+                                                    events={dayList(events, week[idx])}
+                                                    hiddenCount={count}
                                                     calendars={calendars}
                                                     sharedCalendars={sharedCalendars}
                                                     onEventClick={handleEventClick}
+                                                    style={{ gridRow: lanes, gridColumn: idx + 1 }}
                                                 />
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
+                                            ),
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
             <EventDetailDialog {...detailDialogProps} />
         </>
     );
+}
+
+function dayList(events: readonly CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
+    const dayEvents = getEventsForDay(events, day);
+    const timed = dayEvents.filter((e) => !e.allDay).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    return [...dayEvents.filter((e) => e.allDay), ...timed];
 }

@@ -4,14 +4,10 @@
 // opens its detail dialog; the route around it picks the days and fetches the events.
 
 import { Link } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
-import type { LaneBar, TimedBlock } from '@workspace/lib/calendar';
+import type { TimedBlock } from '@workspace/lib/calendar';
 import {
     allocateLanes,
-    getCalendarColor,
-    getInviteStatus,
     inAllDayLane,
-    isFreeBusyEvent,
     layoutTimedEvents,
     monthWeekLayout,
     toLocalDateString,
@@ -20,12 +16,11 @@ import {
 import { formatTime } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
-import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { eventSurfaceClasses } from './calendar-utils';
+import type { EventSurfaceProps } from './event-chip';
+import { EventBar, EventSurface } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -136,7 +131,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                         </div>
                         <div className="grid flex-1 gap-y-0.5 py-0.5" style={columns}>
                             {bars.map((bar) => (
-                                <AllDayBar
+                                <EventBar
                                     key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
                                     bar={bar}
                                     {...surfaceProps}
@@ -150,7 +145,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                                 key={toLocalDateString(days[idx])}
                                                 type="button"
                                                 className="mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent"
-                                                style={{ gridRow: MAX_ALL_DAY_LANES + 1, gridColumn: idx + 1 }}
+                                                style={{ gridRow: MAX_ALL_DAY_LANES, gridColumn: idx + 1 }}
                                                 onClick={() => setAllDayExpanded(true)}
                                             >
                                                 {`${count} more`}
@@ -228,36 +223,13 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     );
 }
 
-type EventSurfaceProps = {
-    calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
-    onClick: (event: CalendarEventOccurrence, e: React.MouseEvent) => void;
-};
-
-function AllDayBar({ bar, ...surfaceProps }: { bar: LaneBar } & EventSurfaceProps) {
-    return (
-        <GridEvent
-            event={bar.event}
-            {...surfaceProps}
-            className={cn(
-                'mx-0.5 truncate rounded px-1.5 py-0.5 font-medium',
-                bar.continuesBefore && 'ml-0 rounded-l-none',
-                bar.continuesAfter && 'mr-0 rounded-r-none',
-            )}
-            style={{ gridRow: bar.lane + 1, gridColumn: `${bar.start + 1} / span ${bar.span}` }}
-        >
-            {bar.event.title}
-        </GridEvent>
-    );
-}
-
 // What a block shows follows its height: the title always, then the time, then the place.
 function TimedEventBlock({ block, ...surfaceProps }: { block: TimedBlock } & EventSurfaceProps) {
     const { event } = block;
     const height = ((block.bottom - block.top) * HOUR_HEIGHT) / 60;
     const lines = Math.floor((height - BLOCK_PADDING) / LINE_HEIGHT);
     return (
-        <GridEvent
+        <EventSurface
             event={event}
             {...surfaceProps}
             className="absolute rounded px-1 py-0.5 ring-1 ring-background"
@@ -281,36 +253,6 @@ function TimedEventBlock({ block, ...surfaceProps }: { block: TimedBlock } & Eve
                     {lines > 2 && event.location && <span className="block truncate">{event.location}</span>}
                 </>
             )}
-        </GridEvent>
-    );
-}
-
-type GridEventProps = EventSurfaceProps & {
-    event: CalendarEventOccurrence;
-    className: string;
-    style: CSSProperties;
-    children: ReactNode;
-};
-// An all-day bar or a timed block: the event on its calendar's color surface, with its state drawn over it.
-function GridEvent({ event, calendars, sharedCalendars, onClick, className, style, children }: GridEventProps) {
-    const { user } = useAuth();
-    const freeBusy = isFreeBusyEvent(event);
-    const inviteStatus = freeBusy ? null : getInviteStatus(event, user?.email);
-    const surface = colorSurface(getCalendarColor(event, calendars, sharedCalendars));
-    return (
-        <button
-            type="button"
-            className={cn(
-                'overflow-hidden text-left text-xs leading-4',
-                surface.className,
-                className,
-                eventSurfaceClasses('block', { past: event.endTime <= new Date(), freeBusy, inviteStatus }),
-            )}
-            style={{ ...surface.style, ...style }}
-            onClick={(e) => onClick(event, e)}
-            title={event.title}
-        >
-            {children}
-        </button>
+        </EventSurface>
     );
 }

@@ -26,9 +26,17 @@ The schedule view starts on that day too and shows the next four weeks as a list
 
 These views show the hours of the day down the left side, with a column for each day. Each event is a block that starts and ends at its times, so you can see how long it lasts and where the gaps are. A block shows the title, then the time, then the place, as far as its height allows; a short block shows the title and start time on one line. Events at the same time sit side by side. Click an event to see its details.
 
-All-day events, and events that last 24 hours or more, sit in a strip above the hours, as one bar across the days they cover. When more than three overlap, the strip counts the rest on each day: click the count, such as **2 more**, or the **Show all** arrow on the left, to see them all.
+All-day events, and events that last 24 hours or more, sit in a strip above the hours, as one bar across the days they cover. The strip is three rows high. On a day with more than three, it shows two and counts the rest: click the count, such as **2 more**, or the **Show all** arrow on the left, to see them all.
 
 A line marks the current time across today's column, with the time in the hour column beside it. The view opens an hour before the current time when today is in it, and at 07:00 otherwise. Weekends are slightly shaded. Click a date at the top of a column to open that day on its own.
+
+## Read the month view
+
+The month view shows every week of the month as a row, with each day's events under its date. An event that lasts several days is one bar across those days; when it runs into the next week, it continues on the next row. A timed event shows a colored dot, its start time and its title. On a phone, or in a narrow window, the time is left out so the title still fits.
+
+Each day shows as many events as fit, so a larger window shows more. When a day has more events than fit, its last line counts the rest, such as **3 more**. Click it to see all of that day's events in a list, and click an event in the list to see its details. Click anywhere else to close the list.
+
+Click a date number to open that day in the day view.
 
 ## Move to the next or previous period
 
@@ -51,4 +59,4 @@ On a phone, **Today** and the view picker fold into the **⋮** button (**View o
 
 ## Create an event by clicking a day
 
-In the month view, you can click any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
