@@ -3,7 +3,12 @@
 // calendar store calls it for every write. `ICAL.Component.toString()` is the only serializer, so folding,
 // escaping and quoting stay ical.js's problem and an untouched property survives an edit as the client wrote it.
 
-import { localToUtc, normalizeTimezone, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
+import {
+    localToUtc,
+    normalizeTimezone,
+    occurrenceDateToString,
+    utcToLocal,
+} from '@workspace/lib/calendar/calendar-utils';
 import { stripControlChars, stripLineBreaks } from '@workspace/lib/content-line';
 import type {
     Attendee,
@@ -36,7 +41,7 @@ import {
     utcStampString,
 } from './ical-parse';
 import { buildVTimezone } from './vtimezone';
-import { occurrenceStart } from './wall-clock';
+import { occurrenceStart, wallClockRule } from './wall-clock';
 
 export const PRODID = '-//Eigen//CalDAV//EN';
 
@@ -212,6 +217,12 @@ export function applyEdits(resource: ICAL.Component, edits: ReadonlyMap<string |
             master.addProperty(exclusionStamp(key, id, revision.sequence, revision.dtstamp ?? null));
         }
     }
+    // A rule that now ends keeps no override or exclusion past its last day, or a split's new series would show an
+    // edited date twice and bring a cancelled one back.
+    const masterEdit = edits.get(null);
+    const until =
+        master && masterEdit?.kind === 'patch' && masterEdit.patch.rrule && ruleEnd(master, masterEdit.patch.rrule);
+    if (until) changed = dropExceptions(resource, (key) => key > until) || changed;
     if (changed) syncVTimezones(resource);
     return changed;
 }
@@ -227,9 +238,8 @@ export function patchEvent(
     return applyEdits(resource, new Map([[recurrenceKey, { kind: 'patch', patch, ctx }]]));
 }
 
-// Guests answer the ORGANIZER (RFC 5546), and RFC 5545 gives an event on one person's calendar none. So after an
-// organizer's save every VEVENT of the file names one ORGANIZER exactly while it has guests: the line the file holds,
-// else the saver's. A saver with no address, such as a script on a team calendar, names none.
+// Guests answer the ORGANIZER (RFC 5546), and an event on one person's calendar has none (RFC 5545). So a VEVENT names
+// one exactly while it has guests: the line the file holds, else the saver's, and none for a saver with no address.
 export function keepOrganizers(resource: ICAL.Component, saver: Organizer, ctx: WriteContext): boolean {
     const vevents = resource.getAllSubcomponents('vevent');
     const held = vevents.find((vevent) => vevent.hasProperty('organizer'))?.getFirstProperty('organizer');
@@ -250,14 +260,9 @@ export function keepOrganizers(resource: ICAL.Component, saver: Organizer, ctx: 
 // A guest's "delete this and following" from `fromKey` keeps no override or exclusion from that date on, or a moved
 // occurrence would outlive the series. The master records the cut, which every organizer update is held to.
 export function cutGuestCopy(resource: ICAL.Component, fromKey: string): void {
-    const vevents = keyVEvents(resource);
-    const past = new Set([...vevents].filter(([key]) => key !== null && key >= fromKey).map(([, v]) => v));
-    if (past.size) keepSubcomponents(resource, (sub) => !past.has(sub));
-    const master = vevents.get(null);
-    if (master) {
-        dropExclusions(master, (key) => key >= fromKey);
-        setProperty(master, rawProperty(EIGEN.guestCut, fromKey));
-    }
+    dropExceptions(resource, (key) => key >= fromKey);
+    const master = keyVEvents(resource).get(null);
+    if (master) setProperty(master, rawProperty(EIGEN.guestCut, fromKey));
     syncVTimezones(resource);
 }
 
@@ -290,9 +295,8 @@ export function raisedSequence(revisions: ReadonlyMap<string | null, Revision>):
     return highest + 1;
 }
 
-// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
-// would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
-// change takes `raised`. Any other write keeps what is `held`.
+// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, as a number of its own would
+// outrank the organizer's next update; the organizer's scheduling change takes `raised`, any other write keeps `held`.
 export function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
     const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
     return {
@@ -779,6 +783,21 @@ function keyVEvents(resource: ICAL.Component): Map<string | null, ICAL.Component
         if (!keyed.has(key)) keyed.set(key, vevent);
     }
     return keyed;
+}
+
+// The last day a rule's UNTIL keeps, in the series' wall clock, where occurrence keys are named.
+function ruleEnd(master: ICAL.Component, rrule: string): string | null {
+    const { until } = wallClockRule(rrule, propTzid(master.getFirstProperty('dtstart')));
+    return until ? occurrenceDateToString(until) : null;
+}
+
+function dropExceptions(resource: ICAL.Component, drops: (recurrenceKey: string) => boolean): boolean {
+    const vevents = keyVEvents(resource);
+    const dropped = new Set([...vevents].filter(([key]) => key !== null && drops(key)).map(([, v]) => v));
+    if (dropped.size) keepSubcomponents(resource, (sub) => !dropped.has(sub));
+    const master = vevents.get(null);
+    const excluded = !!master && dropExclusions(master, drops);
+    return dropped.size > 0 || excluded;
 }
 
 function setProperty(comp: ICAL.Component, prop: ICAL.Property): boolean {

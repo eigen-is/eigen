@@ -1,5 +1,5 @@
 // Saves one occurrence of an event at a recurrence scope: this one becomes an override in the master, this and the
-// following ones split the series in two, and all of them change the master, read from the cache or else the server.
+// following ones split the series in two, and all of them change the master, read fresh from the server each time.
 // Its host is bound to the event's owner, such as Edit event, and holds the etag every write that sends one answers
 // to. A refused write reloads the events and says so, through the event writes' own error path.
 
@@ -51,7 +51,7 @@ export function useSaveOccurrence(
             return updateEvent.mutateAsync({ id, calendarId, etag: heldEtag, ...fields, rrule });
         }
         const master = await queryClient
-            .ensureQueryData(eventQueryConfig(ownerId, calendarId, id))
+            .fetchQuery({ ...eventQueryConfig(ownerId, calendarId, id), staleTime: 0 })
             .catch((error: unknown) => {
                 onMutationError(error);
                 throw error;

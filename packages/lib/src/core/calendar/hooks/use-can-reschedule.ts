@@ -4,38 +4,30 @@
 // address arrives their events stay put, as the dialogs keep an invitation's details locked meanwhile.
 
 import { useAuth } from '@workspace/lib/auth';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
 import { usePublicUsers } from '../../public';
-import { isInvitationFromOthers } from '../calendar-utils';
+import { isInvitationOnCalendar, ownerAddressToLookUp, writableShares } from './use-calendar';
 
 export function useCanReschedule(
     calendars: readonly CalendarItem[],
-    sharedCalendars: readonly SharedCalendar[] = [],
+    sharedCalendars: readonly SharedCalendar[],
 ): (event: CalendarEventOccurrence) => boolean {
     const { user } = useAuth();
-    const writable = useMemo(() => sharedCalendars.filter((sc) => sc.permission === 'write'), [sharedCalendars]);
-    // A team Home has no address, so its events are judged by Eigen's organizer stamp instead.
-    const userOwners = useMemo(
-        () => [
-            ...new Set(
-                writable.filter((sc) => parseOwnerId(sc.ownerUserId).type !== 'team').map((sc) => sc.ownerUserId),
-            ),
-        ],
-        [writable],
+    const writable = useMemo(() => writableShares(sharedCalendars), [sharedCalendars]);
+    const lookUps = useMemo(
+        () => [...new Set(writable.flatMap((sc) => ownerAddressToLookUp(sc.ownerUserId, user?.id) ?? []))],
+        [writable, user?.id],
     );
-    const owners = usePublicUsers(userOwners);
+    const owners = usePublicUsers(lookUps);
 
     return useCallback(
         (event: CalendarEventOccurrence) => {
             if (!user) return false;
-            if (calendars.some((c) => c.id === event.calendarId)) return !isInvitationFromOthers(event, user.email);
-            const sc = writable.find((s) => s.calendarId === event.calendarId);
-            if (!sc) return false;
-            if (parseOwnerId(sc.ownerUserId).type === 'team') return !isInvitationFromOthers(event);
-            const ownerEmail = owners[sc.ownerUserId]?.email;
-            return !!ownerEmail && !isInvitationFromOthers(event, ownerEmail);
+            const ownerId = calendars.some((c) => c.id === event.calendarId)
+                ? user.id
+                : writable.find((sc) => sc.calendarId === event.calendarId)?.ownerUserId;
+            return !!ownerId && !isInvitationOnCalendar(event, ownerId, user, owners[ownerId]?.email);
         },
         [calendars, writable, owners, user],
     );

@@ -6,6 +6,7 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isSeriesOccurrence,
     isTransferableCalendarHome,
+    occurrenceScopes,
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
@@ -21,6 +22,7 @@ import type {
     RecurrenceScope,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -315,8 +317,8 @@ export function EventDetailDialog({
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
                 onConfirm={handleRecurringDelete}
-                // A changed occurrence of our own has no rule to cut. An invitation's goes to the series on the server.
-                options={isException && !isLinkedEvent ? ['this', 'all'] : undefined}
+                // An invitation's this and following goes to the series on the server, so even a changed date offers it.
+                options={isLinkedEvent ? RECURRENCE_SCOPES : occurrenceScopes(event)}
             />
 
             <RecurringActionDialog
@@ -335,7 +337,7 @@ export function EventDetailDialog({
                     if (!editing) onOpenChange(false);
                 }}
                 event={event}
-                ownerUserId={sharedCalendar?.ownerUserId}
+                ownerId={ownerId}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

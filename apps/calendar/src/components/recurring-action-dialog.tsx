@@ -3,7 +3,6 @@
 // with a next question, such as a drop's guest question, resolves false and closes it by its open flag instead.
 
 import type { RecurrenceScope } from '@workspace/lib/types/calendar';
-import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
@@ -21,13 +20,13 @@ type RecurringActionDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     onConfirm: (scope: RecurrenceScope) => ReturnType<DialogAction>;
-    options?: readonly RecurrenceScope[];
+    options: readonly RecurrenceScope[];
 };
 
 export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, options }: RecurringActionDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title={title} size="sm">
-            <RecurringActionForm title={title} onConfirm={onConfirm} options={options ?? RECURRENCE_SCOPES} />
+            <RecurringActionForm title={title} onConfirm={onConfirm} options={options} />
         </FormDialog>
     );
 }
@@ -37,7 +36,7 @@ function RecurringActionForm({
     title,
     onConfirm,
     options,
-}: Required<Pick<RecurringActionDialogProps, 'title' | 'onConfirm' | 'options'>>) {
+}: Pick<RecurringActionDialogProps, 'title' | 'onConfirm' | 'options'>) {
     const [selected, setSelected] = useState(options[0]);
 
     return (

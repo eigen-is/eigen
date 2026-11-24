@@ -5,7 +5,7 @@
 // to, for a picker.
 
 import type { QueryClient } from '@tanstack/react-query';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -128,11 +128,10 @@ export function eventQueryConfig(ownerId: string, calendarId: string, id: string
     };
 }
 
-export function useEvent(ownerId: string, calendarId: string, id: string, enabled = true) {
-    return useQuery({
-        ...eventQueryConfig(ownerId, calendarId, id),
-        enabled: enabled && !!ownerId && !!calendarId && !!id,
-    });
+// `id` is null while nothing needs the stored row.
+export function useEvent(ownerId: string, calendarId: string, id: string | null) {
+    const config = eventQueryConfig(ownerId, calendarId, id ?? '');
+    return useQuery({ ...config, queryFn: id ? config.queryFn : skipToken });
 }
 
 export function useCreateEvent(ownerId: string) {
@@ -217,18 +216,38 @@ export function useRefuseStaleEvent(ownerId: string): () => void {
     };
 }
 
-// The owner's address tells their own organized events from invitations; a team owner has none to ask for. Until a
-// user owner's address arrives every event counts as an invitation, so none is briefly editable.
+// The owner's address tells their own organized events from invitations, by isInvitationOnCalendar's rule.
 export function useIsInvitationFromOthers(eventOwnerId: string): (event: { data?: EventData | null }) => boolean {
     const { user } = useAuth();
-    const ownerIsViewer = eventOwnerId === user?.id;
-    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
-    const owner = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
-    const ownerEmail = ownerIsViewer ? user?.email : owner.data?.email;
+    const ownerEmail = usePublicUser(ownerAddressToLookUp(eventOwnerId, user?.id)).data?.email;
     return useCallback(
-        (event: { data?: EventData | null }) => owner.isLoading || isInvitationFromOthers(event, ownerEmail),
-        [owner.isLoading, ownerEmail],
+        (event: { data?: EventData | null }) => isInvitationOnCalendar(event, eventOwnerId, user, ownerEmail),
+        [eventOwnerId, user, ownerEmail],
     );
+}
+
+// The owner whose address judges the events on their calendar: not the viewer, who knows their own, nor a team, which
+// has none.
+export function ownerAddressToLookUp(ownerId: string, viewerId: string | undefined): string | undefined {
+    return ownerId === viewerId || parseOwnerId(ownerId).type === 'team' ? undefined : ownerId;
+}
+
+// A team's events are judged by Eigen's organizer stamp, and a user's by their address. Until a looked-up address
+// arrives every event counts as an invitation, so none is briefly editable.
+export function isInvitationOnCalendar(
+    event: { data?: EventData | null },
+    ownerId: string,
+    viewer: { id: string; email: string } | null | undefined,
+    ownerEmail: string | undefined,
+): boolean {
+    if (parseOwnerId(ownerId).type === 'team') return isInvitationFromOthers(event);
+    const email = ownerId === viewer?.id ? viewer.email : ownerEmail;
+    return !email || isInvitationFromOthers(event, email);
+}
+
+// The shared calendars the viewer may write to, which a picker offers and a drag may change.
+export function writableShares(sharedCalendars: readonly SharedCalendar[]): SharedCalendar[] {
+    return sharedCalendars.filter((sc) => sc.permission === 'write');
 }
 
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
@@ -345,18 +364,16 @@ export function useCalendarOptions(
     const label = useSharedCalendarLabel(sharedCalendars);
 
     return useMemo(() => {
-        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
-        for (const sc of sharedCalendars) {
-            if (sc.permission === 'write') {
-                options.push({
-                    id: sc.calendarId,
-                    name: label(sc),
-                    color: sc.color || sc.calendarColor,
-                    ownerId: sc.ownerUserId,
-                });
-            }
-        }
-        return options;
+        const own = calendars.map((c): CalendarOption => ({ id: c.id, name: c.name, color: c.color, ownerId }));
+        const shared = writableShares(sharedCalendars).map(
+            (sc): CalendarOption => ({
+                id: sc.calendarId,
+                name: label(sc),
+                color: sc.color || sc.calendarColor,
+                ownerId: sc.ownerUserId,
+            }),
+        );
+        return [...own, ...shared];
     }, [calendars, sharedCalendars, ownerId, label]);
 }
 

@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2417 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2420 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1181,7 +1181,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1272)
+## Utilities & constants (1275)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1352,6 +1352,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isCalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `isInvitationOnCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `layoutTimedEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
@@ -1362,6 +1363,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `ownerAddressToLookUp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `parseDayKey` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `rescheduleScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `resizedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
@@ -1381,6 +1383,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `WEEK_STARTS_ON` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `weekdayHeader` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `writableShares` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `applyChartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `BAR_GROUP_WIDTH` | `@workspace/lib/charts` | packages/lib/src/charts/scales.ts |
 | `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |

@@ -1,7 +1,7 @@
 // An occurrence saved at a scope: "this" writes an override into the master, "this and following" truncates the series
 // and starts a new one, and "all" saves the change on the master as a delta. Every write answers to the held etag, a
 // split that fails at its second write retries on the etag its first one answered, and a 412 reloads and says so. An
-// "all" on a series loads the master it saves on, unless the cache already holds it.
+// "all" on a series loads the master it saves on, every time, so a second save starts from the first one's result.
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, SaveOccurrenceInput } from '../../../../types/calendar';
 import { hasKey, installTransferHarness, OWNER, toasts, trackingClient } from '../../../transfer-harness';
@@ -15,8 +15,9 @@ const refused = (status: number): Answer => ({ data: null, error: { status, valu
 // What each write is answered with, in order; past the end, a plain success.
 let answers: Answer[] = [];
 const sent: { write: string; id?: string; body: Record<string, unknown> }[] = [];
-// The events whose stored row was read, which only the master is.
+// The events whose stored row was read, which only the master is, and the master the server holds now.
 const loaded: string[] = [];
+let stored: CalendarEvent;
 const write =
     (name: string, id?: string) =>
     async (body: Record<string, unknown>): Promise<Answer> => {
@@ -34,7 +35,7 @@ mock.module('../../../../core/api', () => ({
                     put: write('put', id),
                     get: async () => {
                         loaded.push(id);
-                        return { data: master, error: null, status: 200 };
+                        return { data: stored, error: null, status: 200 };
                     },
                 }),
                 { post: write('post') },
@@ -138,6 +139,7 @@ beforeEach(() => {
     sent.length = 0;
     loaded.length = 0;
     toasts.length = 0;
+    stored = master;
 });
 
 describe('a save at each scope', () => {
@@ -154,9 +156,9 @@ describe('a save at each scope', () => {
                 recurrenceDate: '2026-10-15',
                 rrule: null,
                 etag: 'v0',
-                startTime: new Date('2026-10-15T10:00:00Z'),
             },
         });
+        expect(sent[0].body.startTime).toEqual(new Date('2026-10-15T10:00:00Z'));
         expect(Object.keys(sent[0].body)).not.toContain('uid');
     });
 
@@ -169,17 +171,16 @@ describe('a save at each scope', () => {
             ['post', undefined, undefined],
         ]);
         expect(sent[0].body.rrule).toContain('UNTIL=');
-        expect(sent[1].body).toMatchObject({ rrule: 'FREQ=WEEKLY', startTime: new Date('2026-10-15T10:00:00Z') });
+        console.log(JSON.stringify(sent), loaded);
+        expect(sent[1].body.rrule).toBe('FREQ=WEEKLY');
+        expect(sent[1].body.startTime).toEqual(new Date('2026-10-15T10:00:00Z'));
         expect(sent[1].body.parentEventId).toBeUndefined();
     });
 
     test('all saves the change on the master as a delta, so the series keeps its own start', async () => {
-        const { save, queryClient } = await mount();
-        // Edit event's form has loaded the master already.
-        queryClient.setQueryData(calendarKeys.event(OWNER, 'work', 's1'), master);
+        const { save } = await mount();
         await save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
 
-        expect(loaded).toEqual([]);
         expect(sent).toEqual([
             {
                 write: 'put',
@@ -195,16 +196,48 @@ describe('a save at each scope', () => {
         ]);
     });
 
-    test("all with no master loaded reads it once and sends the master's start, not the occurrence's", async () => {
-        const { save } = await mount();
+    test("all reads the master even when the cache holds it, and sends the master's start", async () => {
+        const { save, queryClient } = await mount();
+        // Edit event's form has loaded the master already.
+        queryClient.setQueryData(calendarKeys.event(OWNER, 'work', 's1'), master);
         await save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
 
         expect(loaded).toEqual(['s1']);
         expect(sent).toHaveLength(1);
-        expect(sent[0].body).toMatchObject({
-            startTime: new Date('2026-10-01T10:00:00Z'),
-            endTime: new Date('2026-10-01T10:15:00Z'),
+        expect([sent[0].body.startTime, sent[0].body.endTime]).toEqual([
+            new Date('2026-10-01T10:00:00Z'),
+            new Date('2026-10-01T10:15:00Z'),
+        ]);
+    });
+
+    // The first save moved the series an hour later on the server, and the list shows the occurrence there.
+    const afterMove = async () => {
+        const mounted = await mount();
+        await mounted.save({ occurrence, scope: 'all', edited: anHourLater(occurrence) });
+        stored = { ...master, startTime: new Date('2026-10-01T10:00:00Z'), endTime: new Date('2026-10-01T10:15:00Z') };
+        return { ...mounted, shown: { ...occurrence, ...anHourLater(occurrence) } };
+    };
+
+    test('a second move of the series starts from the moved master', async () => {
+        const { save, shown } = await afterMove();
+        await save({ occurrence: shown, scope: 'all', edited: anHourLater(shown) });
+
+        expect([sent[1].body.startTime, sent[1].body.endTime]).toEqual([
+            new Date('2026-10-01T11:00:00Z'),
+            new Date('2026-10-01T11:15:00Z'),
+        ]);
+    });
+
+    test('a resize after a move ends the series from the moved master', async () => {
+        const { save, shown } = await afterMove();
+        await save({
+            occurrence: shown,
+            scope: 'all',
+            edited: { ...shown, endTime: new Date('2026-10-15T10:45:00Z') },
         });
+
+        expect(sent[1].body.startTime).toBeUndefined();
+        expect(sent[1].body.endTime).toEqual(new Date('2026-10-01T10:45:00Z'));
     });
 
     test("all from an override keeps the master's rule and takes the series data it is given", async () => {
@@ -230,8 +263,9 @@ describe('a save at each scope', () => {
         expect(sent[0]).toMatchObject({
             write: 'put',
             id: 'e1',
-            body: { etag: 'v1', title: 'Dentist', rrule: null, startTime: new Date('2026-10-15T10:00:00Z') },
+            body: { etag: 'v1', title: 'Dentist', rrule: null },
         });
+        expect(sent[0].body.startTime).toEqual(new Date('2026-10-15T10:00:00Z'));
     });
 });
 
