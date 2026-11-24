@@ -1,13 +1,13 @@
-// A comment drawn as a card: a CommentCard and its index row mapped onto NoteCard, with the cover and the attachment
+// A comment drawn as a card: a CommentCard and its index row mapped onto CardTile, with the cover and the attachment
 // count read through the document's media resolver. A list renders one per row, since a hook can't run inside its map.
 // The caller decides what varies, such as the pane's prefixed title or the width of a board's drag overlay.
 
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { useAttachmentMeta } from '../attachment/use-attachment-meta';
-import { NoteCard } from '../notes/note-card';
+import { CardTile } from '../cards/card-tile';
 
-export function CommentNoteCard({
+export function CommentCardTile({
     card,
     entry,
     title,
@@ -28,7 +28,7 @@ export function CommentNoteCard({
 }) {
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
     return (
-        <NoteCard
+        <CardTile
             title={title}
             description={card.description}
             color={card.color}

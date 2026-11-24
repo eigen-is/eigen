@@ -18,11 +18,11 @@ mock.module('../../../components/comments/member-avatar', () => ({
     MemberAvatar: ({ className }: { className?: string }) => <span data-testid="avatar" className={className} />,
 }));
 
-const { NoteCard } = await import('../../../components/notes/note-card');
+const { CardTile } = await import('../../../components/cards/card-tile');
 
 async function avatarClasses(assigneeEmail: string, resolved = false) {
     const { container } = await renderInDocument(
-        <NoteCard title="A card" assigneeEmail={assigneeEmail} resolved={resolved} />,
+        <CardTile title="A card" assigneeEmail={assigneeEmail} resolved={resolved} />,
     );
     return container.querySelector('[data-testid="avatar"]')?.className ?? '';
 }
@@ -54,7 +54,7 @@ test("a card assigned to someone else keeps the avatar muted, and so does anyone
 });
 
 test('the unread dot leads the footer, before the replies, and stays unmuted', async () => {
-    const { container } = await renderInDocument(<NoteCard title="A card" unread replyCount={2} />);
+    const { container } = await renderInDocument(<CardTile title="A card" unread replyCount={2} />);
     const footer = container.querySelector('p');
     expect(footer?.firstElementChild?.className).toContain('bg-destructive');
     expect(footer?.firstElementChild?.className).not.toContain('opacity-50');
@@ -63,8 +63,8 @@ test('the unread dot leads the footer, before the replies, and stays unmuted', a
 });
 
 test('an unread card with no replies still shows the dot, and a read one has no footer', async () => {
-    const unread = await renderInDocument(<NoteCard title="A card" unread />);
+    const unread = await renderInDocument(<CardTile title="A card" unread />);
     expect(unread.container.querySelector('p > .bg-destructive')).not.toBeNull();
-    const read = await renderInDocument(<NoteCard title="A card" />);
+    const read = await renderInDocument(<CardTile title="A card" />);
     expect(read.container.querySelector('p')).toBeNull();
 });

@@ -32,7 +32,7 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
-const { CommentNoteCard } = await import('../../../components/comments');
+const { CommentCardTile } = await import('../../../components/comments');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -62,7 +62,7 @@ const text = () => document.body.textContent ?? '';
 test('a card shows the title it is given, its description, its replies and its attachments', async () => {
     let container: HTMLElement;
     ({ unmount, container } = await renderInDocument(
-        createElement(CommentNoteCard, { card, entry, title: 'Sheet2 · A title', unread: false }),
+        createElement(CommentCardTile, { card, entry, title: 'Sheet2 · A title', unread: false }),
     ));
     expect(text()).toContain('Sheet2 · A title');
     expect(text()).not.toContain('The stored title');
@@ -74,7 +74,7 @@ test('a card shows the title it is given, its description, its replies and its a
 
 test('a resolved card shows the check, an assigned one the avatar, and an unread one the dot', async () => {
     const unreadCard = await renderInDocument(
-        createElement(CommentNoteCard, { card, entry, title: 'T', unread: true }),
+        createElement(CommentCardTile, { card, entry, title: 'T', unread: true }),
     );
     unmount = unreadCard.unmount;
     expect(unreadCard.container.querySelector('.lucide-check')).not.toBeNull();
@@ -85,7 +85,7 @@ test('a resolved card shows the check, an assigned one the avatar, and an unread
 test('a card with no index row yet shows none of what the row holds', async () => {
     let container: HTMLElement;
     ({ unmount, container } = await renderInDocument(
-        createElement(CommentNoteCard, {
+        createElement(CommentCardTile, {
             card: { ...card, attachments: undefined },
             entry: undefined,
             title: 'T',
@@ -101,7 +101,7 @@ test('a card with no index row yet shows none of what the row holds', async () =
 
 test('a deleted card shows its title and the line, and nothing of its content', async () => {
     ({ unmount } = await renderInDocument(
-        createElement(CommentNoteCard, { card, entry, title: 'A title', unread: false, deleted: true }),
+        createElement(CommentCardTile, { card, entry, title: 'A title', unread: false, deleted: true }),
     ));
     expect(text()).toContain('A title');
     expect(text()).toContain('This comment was deleted');
@@ -114,7 +114,7 @@ test('the caller gets the click and the right-click, and sets the width', async 
     const onContextMenu = mock(() => {});
     let container: HTMLElement;
     ({ unmount, container } = await renderInDocument(
-        createElement(CommentNoteCard, {
+        createElement(CommentCardTile, {
             card,
             entry,
             title: 'A title',

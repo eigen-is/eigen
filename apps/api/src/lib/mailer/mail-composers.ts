@@ -4,7 +4,7 @@
 
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_STICKIES, stripEigenExtension } from '@workspace/lib/types/drive';
 import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     buildAttachmentUrl,
@@ -45,6 +45,16 @@ export function composeShareEmail(
     };
 }
 
+// What an assignment is called: a card on a Stickies board, and a task in every other document.
+function assignedNoun(path: DrivePath): string {
+    return path.type === DRIVE_TYPE_STICKIES ? 'card' : 'task';
+}
+
+// The assignment mail's subject, and the title of the notification the assignee gets with it.
+export function assignedTitle(path: DrivePath, actor: { name: string; email: string }): string {
+    return `${actor.name || actor.email} assigned you a ${assignedNoun(path)} on "${stripEigenExtension(path.name)}"`;
+}
+
 export function composeAssignedEmail(
     path: DrivePath,
     recipientEmail: string,
@@ -54,16 +64,16 @@ export function composeAssignedEmail(
 ): OutboundMail {
     const displayName = stripEigenExtension(path.name);
     const actorDisplay = actor.name || actor.email;
-    const subject = `${actorDisplay} assigned you a task on "${displayName}"`;
+    const subject = assignedTitle(path, actor);
     const url = new URL(buildAttachmentUrl(toAttachmentReference(path), recipientEmail));
     url.searchParams.set('chat', chatName);
     const html = renderEigenEmail({
         title: subject,
-        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} assigned you a task. Open it from the link below.</p>${card ? quoteBlock(escapeHtml(card)) : ''}`,
+        bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} assigned you a ${assignedNoun(path)}. Open it from the link below.</p>${card ? quoteBlock(escapeHtml(card)) : ''}`,
         links: [{ name: displayName, href: url.toString() }],
         footerLine: `Assigned by ${actorDisplay}`,
     });
-    const textParts = [`${actorDisplay} assigned you a task on "${displayName}".`];
+    const textParts = [`${subject}.`];
     if (card) textParts.push(card);
     textParts.push(url.toString());
     return {

@@ -7,7 +7,7 @@ tags: [stickies, kanban, cards, columns, getting-started]
 related: [stickies/create-board, stickies/add-and-edit-cards, stickies/move-cards, stickies/card-comments]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-24
 ---
 
 Stickies is a board of cards in columns, also called a kanban board. You move cards from column to column as the work moves on, and each card has its own comment thread for the people you share the board with.
@@ -35,7 +35,7 @@ You can reorder columns by dragging their header left or right.
 
 ## Cards
 
-To add a card to a column, click **Add a sticky** at the bottom of that column (or the plus icon in the column header). The **Add sticky** dialog opens, where you fill in a title, an optional description, and pick a color. Click **Add sticky** to save it.
+To add a card to a column, click **Add a card** at the bottom of that column (or the plus icon in the column header). The **Add card** dialog opens, where you fill in a title, an optional description, and pick a color. Click **Add card** to save it.
 
 To edit a card you have already added, open it by clicking on it, then click the pencil icon in the card detail view.
 

@@ -10,7 +10,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef } from 'react';
 import type { CardPeer } from './hooks/use-stickies-presence';
-import { SortableNoteCard } from './sortable-note-card';
+import { SortableCard } from './sortable-card';
 import type { ColumnItem } from './types';
 
 type ColumnProps = {
@@ -98,7 +98,7 @@ export const Column = memo(function Column({
                     <div className="flex items-center">
                         <TooltipButton
                             icon={Plus}
-                            tooltipText="Add a sticky"
+                            tooltipText="Add a card"
                             onClick={() => onAddCard(column.id)}
                             className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
                         />
@@ -128,7 +128,7 @@ export const Column = memo(function Column({
                             {cards.map((card) => {
                                 const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
                                 return (
-                                    <SortableNoteCard
+                                    <SortableCard
                                         key={card.id}
                                         card={card}
                                         replyCount={entry?.messageCount}
@@ -154,7 +154,7 @@ export const Column = memo(function Column({
                         className="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1.5 rounded-sm w-full"
                     >
                         <Plus size={16} />
-                        <span>Add a sticky</span>
+                        <span>Add a card</span>
                     </button>
                 )}
             </div>

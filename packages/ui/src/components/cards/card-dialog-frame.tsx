@@ -1,6 +1,6 @@
-// The dialog a sticky or comment card opens into: a top bar with the card's actions and the close button, over the
-// card's body, which fills the rest and scrolls on its own, such as its thread or its edit form. Callers such as
-// CardDialog fill in both.
+// The dialog a card opens into, on a board or beside a document: a top bar with the card's actions and the close
+// button, over the card's body, which fills the rest and scrolls on its own, such as its thread or its edit form.
+// Callers such as CardDialog fill in both.
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../dialog
 import { Toolbar } from '../layout/toolbar/toolbar';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
-type NoteCardDialogProps = {
+type CardDialogFrameProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     // Names the dialog for a screen reader. The body shows the title itself.
@@ -17,7 +17,7 @@ type NoteCardDialogProps = {
     children: ReactNode;
 };
 
-export function NoteCardDialog({ open, onOpenChange, title, actions, children }: NoteCardDialogProps) {
+export function CardDialogFrame({ open, onOpenChange, title, actions, children }: CardDialogFrameProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             {/* The gutter takes the 24px every dialog pads with, so the edit form's footer runs exactly edge to edge. */}

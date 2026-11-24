@@ -730,7 +730,7 @@
 
 /* ===== Task lists — TipTap output ===== */
 /* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
-   renderers (e.g. NoteCard description thumbnail) get the styling without
+   renderers (e.g. a CardTile description preview) get the styling without
    needing the prose font/color override. */
 
 ul[data-type="taskList"] {

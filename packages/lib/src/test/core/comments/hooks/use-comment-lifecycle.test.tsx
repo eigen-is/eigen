@@ -1,5 +1,5 @@
 // One rule opens a comment wherever it is reached, in every host. A landing, a search hit or an activity row that names
-// a thread whose card is gone from the map, such as a sticky deleted from its board, opens the comment as deleted: no
+// a thread whose card is gone from the map, such as a card deleted from its board, opens the comment as deleted: no
 // card, only the index row and the title it keeps. A name that neither a card nor a row knows is reported, so the host can drop it.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
