@@ -1,6 +1,5 @@
 // Mail's sidebar: the compose button, the special mailboxes such as Inbox and Sent with their unread counts,
-// the link to Drive's Recent files, and the folders the user made in another mail client. A mailbox row takes
-// a dragged message as a move into it.
+// and the folders the user made in another mail client. A mailbox row takes a dragged message as a move into it.
 
 import {
     mailboxDisplayName,
@@ -11,12 +10,7 @@ import {
 import { CUSTOM_MAILBOX_ICON, MAILBOX_ICONS } from '@workspace/lib/mailbox-icons';
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import { StorageUsage } from '@workspace/ui/components/home';
-import {
-    RecentFilesSidebarItem,
-    SidebarBody,
-    SidebarItem,
-    SidebarSection,
-} from '@workspace/ui/components/layout/sidebar';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui/components/layout/sidebar';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -125,10 +119,6 @@ export function EmailSidebar({
                 {standardMailboxList.map((item) => (
                     <MailboxRow key={item.path} item={item} condensed={condensed} onMoveToFolder={onMoveToFolder} />
                 ))}
-            </SidebarSection>
-
-            <SidebarSection condensed={condensed}>
-                <RecentFilesSidebarItem condensed={condensed} />
             </SidebarSection>
 
             {customMailboxList.length > 0 && (

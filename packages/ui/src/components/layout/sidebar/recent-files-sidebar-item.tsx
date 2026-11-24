@@ -1,5 +1,5 @@
-// The sidebar row of Drive's Recent page, which Drive's sidebar and the other apps' sidebars, such as Chat's
-// and Mail's, all draw. Inside Drive it routes to the page, and from any other app it opens the page in Drive.
+// The sidebar row of Drive's Recent page, which the sidebars of Drive and the file apps, such as Docs and Sheets,
+// draw. Inside Drive it routes to the page, and from any other app it opens the page in Drive.
 
 import { getDriveAppUrl } from '@workspace/lib/api';
 import { Clock } from 'lucide-react';

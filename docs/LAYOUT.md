@@ -41,6 +41,8 @@ On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` rende
 
 `AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose `condensed` is true on a tablet's rail. On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list its scroll.
 
+The **Recent files** row belongs in the sidebars of Drive and the file apps (Docs, Sheets, Slides, Stickies, Vector) only, because it lists files; Mail, Chat, Calendar and Contacts have none.
+
 A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarItem`), because opening an item in a list adds it to the URL's search, and a match on the search would unselect a filter such as **All stickies** the moment a board is picked. A fullscreen view with only the topbar, such as `RequestAccessView`, calls `setSidebarHidden(true)` from `useLayout()` and restores it on unmount.
 
 ## A dialog is wide unless it is small and has nothing to type in
