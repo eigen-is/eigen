@@ -3,7 +3,8 @@
 // cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
 // the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
 // the sidebar's views keep the day, an unknown view or day is not found, and the start page picks the view for the
-// device.
+// device. The schedule lists only the days with events, opens an event's detail on a click, and says when the days are
+// empty.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -346,11 +347,14 @@ const viewLink = (label: string) =>
 
 test('switching month to week from the sidebar keeps the focused day, and marks the view it is on', async () => {
     const { container, path } = await open('/view/month/2026-11-04');
-    expect(['Day', '3 days', 'Week', 'Month'].map((label) => viewLink(label)?.getAttribute('href'))).toEqual([
+    expect(
+        ['Day', '3 days', 'Week', 'Month', 'Schedule'].map((label) => viewLink(label)?.getAttribute('href')),
+    ).toEqual([
         '/view/day/2026-11-04',
         '/view/3day/2026-11-04',
         '/view/week/2026-11-04',
         '/view/month/2026-11-04',
+        '/view/schedule/2026-11-04',
     ]);
     expect(viewLink('Month')?.getAttribute('data-status')).toBe('active');
 
@@ -388,6 +392,51 @@ test('a day shows that day alone', async () => {
     const { container } = await open('/view/day/2026-10-13');
     expect(container.textContent).toContain('Tuesday, 13 Oct 2026');
     expect([!!pill(container, 'Today'), !!pill(container, 'Tomorrow')]).toEqual([true, false]);
+});
+
+// The schedule's day headings and the titles of its rows, in the order they draw.
+const scheduleDays = (container: HTMLElement) =>
+    [...container.querySelectorAll('section h3')].map((h) => h.textContent);
+const scheduleRow = (title: string) =>
+    [...document.querySelectorAll('li button')].find((row) => row.textContent?.includes(title));
+
+test('a schedule lists only the days with events, all-day first, and a multi-day event on each of its days', async () => {
+    ownEvents.data = [
+        event({ title: 'Before', startTime: at(12, 9) }),
+        event({ title: 'Late', startTime: at(20, 16), location: 'Room 4' }),
+        event({ title: 'Early', startTime: at(20, 8) }),
+        event({
+            title: 'Retreat',
+            allDay: true,
+            startTime: new Date(Date.UTC(2026, 9, 20)),
+            endTime: new Date(Date.UTC(2026, 9, 22)),
+        }),
+    ];
+    const { container } = await open('/view/schedule/2026-10-13');
+    expect(container.textContent).toContain('13 Oct – 9 Nov 2026');
+    expect(scheduleDays(container)).toEqual(['14Oct, Wed', '20Oct, Tue', '21Oct, Wed']);
+    expect(scheduleRow('Retreat')?.textContent).toBe('All dayRetreat');
+    expect(scheduleRow('Late')?.textContent).toBe('16:00 – 17:00LateRoom 4');
+    expect([...container.querySelectorAll('li button')].map((row) => row.textContent)).toEqual([
+        '09:00 – 10:00Team sync',
+        'All dayRetreat',
+        '08:00 – 09:00Early',
+        '16:00 – 17:00LateRoom 4',
+        'All dayRetreat',
+    ]);
+});
+
+test("a click on a schedule row opens the event's detail", async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(22, 14) })];
+    await open('/view/schedule/2026-10-13');
+    await click(scheduleRow('Review'));
+    expect(dialogTitle()).toBe('Review');
+});
+
+test('a schedule with no events in its 28 days says nothing is planned', async () => {
+    const { container } = await open('/view/schedule/2026-11-20');
+    expect(scheduleDays(container)).toEqual([]);
+    expect(container.textContent).toContain('Nothing planned');
 });
 
 test.each([

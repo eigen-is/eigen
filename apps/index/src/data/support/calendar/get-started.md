@@ -1,6 +1,6 @@
 ---
 title: "Get started with Calendar"
-description: "Find your way around Calendar: the day, 3-day, week and month views, how to move between dates, and how to create your first event."
+description: "Find your way around Calendar: the day, 3-day, week, month and schedule views, how to move between dates, and how to create your first event."
 type: overview
 category: Basics
 tags: [calendar, getting-started, events, scheduling]
@@ -21,14 +21,14 @@ The screen has two parts: the sidebar on the left, with **Create event** at the 
 
 Calendar opens in the **Week** view on a computer and in the **3 days** view on a phone. The week view shows seven columns, Monday to Sunday, with events listed in time order inside each column. All-day events appear at the top of the column. Today's date is highlighted with a filled circle.
 
-To switch, click **Day**, **3 days**, **Week** or **Month** in the sidebar, or pick one from the dropdown in the top-right corner of the toolbar. In the **Month** view each cell in the grid is a day, and your events appear inside it. See [Switch views and navigate dates](/support/calendar/views) for more.
+To switch, click **Day**, **3 days**, **Week**, **Month** or **Schedule** in the sidebar, or pick one from the dropdown in the top-right corner of the toolbar. In the **Month** view each cell in the grid is a day, and your events appear inside it. See [Switch views and navigate dates](/support/calendar/views) for more.
 
 ## Navigate between dates
 
 The toolbar at the top has three controls for moving around:
 
 - Click **Today** to jump back to the current date.
-- Click the left or right chevron buttons to move one view's length backwards or forwards: a day, 3 days, a week or a month.
+- Click the left or right chevron buttons to move one view's length backwards or forwards: a day, 3 days, a week, a month or the schedule's four weeks.
 
 The title in the toolbar updates to show the period you're looking at: a month name and year in the month view, the date in the day view, or the range of dates in the other views.
 

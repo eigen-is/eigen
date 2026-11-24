@@ -8,7 +8,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Open recent** — in Docs, Sheets, Slides, Stickies and Vector, File › Open recent lists up to eight of your newest files of that kind, from Drive's Recent files
 - **Link previews** — a link to the public site in Slack, LinkedIn or X shows a picture: the eigen wordmark over the apps, or on an About page that app's own screen
-- **Day and 3-day views in Calendar** — the sidebar lists **Day**, **3 days**, **Week** and **Month**. Calendar opens on a week on a computer and on 3 days on a phone
+- **Day, 3-day and schedule views in Calendar** — the sidebar lists **Day**, **3 days**, **Week**, **Month** and **Schedule**, a list of the next four weeks' events, day by day. Calendar opens on a week on a computer and on 3 days on a phone
 
 ### Changed
 

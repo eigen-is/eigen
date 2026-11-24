@@ -45,6 +45,7 @@ import {
     Check,
     Columns3,
     Download,
+    List,
     Pencil,
     Plus,
     Upload,
@@ -59,6 +60,7 @@ const VIEW_ICONS: Record<CalendarViewMode, LucideIcon> = {
     '3day': Columns3,
     week: CalendarRange,
     month: CalendarDays,
+    schedule: List,
 };
 
 type CalendarSidebarProps = {

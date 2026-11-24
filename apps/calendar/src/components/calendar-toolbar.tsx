@@ -85,7 +85,7 @@ export function CalendarToolbar({ mode, focus }: CalendarToolbarProps) {
                             if (isCalendarViewMode(value)) show(value, focus);
                         }}
                     >
-                        <SelectTrigger className="w-24 h-8">
+                        <SelectTrigger className="w-28 h-8">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

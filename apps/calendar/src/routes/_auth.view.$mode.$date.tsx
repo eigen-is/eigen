@@ -19,6 +19,7 @@ import { useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
 import { CreateEventDialog } from '../components/create-event-dialog';
 import { MonthView } from '../components/month-view';
+import { ScheduleView } from '../components/schedule-view';
 import { WeekView } from '../components/week-view';
 
 export const Route = createFileRoute('/_auth/view/$mode/$date')({
@@ -79,6 +80,14 @@ function CalendarView() {
                                 calendars={calendars}
                                 sharedCalendars={sharedCalendars}
                                 onDayClick={handleDayClick}
+                                initialEventId={eventId}
+                            />
+                        ) : mode === 'schedule' ? (
+                            <ScheduleView
+                                days={viewDays(mode, focus)}
+                                events={allEvents}
+                                calendars={calendars}
+                                sharedCalendars={sharedCalendars}
                                 initialEventId={eventId}
                             />
                         ) : (

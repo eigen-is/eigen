@@ -1,13 +1,13 @@
-// Which days a Calendar view shows. A view is a mode, such as week or month, and a focused local day, both read
-// from the app's URL. From them come the days to draw, the range the event query asks for, the day an arrow steps
-// to, and the toolbar's title. The Calendar app's routes, toolbar and sidebar use it, and so do the links into
-// Calendar from other apps, such as an invitation in Mail.
+// Which days a Calendar view shows. A view is a mode, such as week, month or schedule, and a focused local day,
+// both read from the app's URL. From them come the days to draw, the range the event query asks for, the day an
+// arrow steps to, and the toolbar's title. The Calendar app's routes, toolbar and sidebar use it, and so do the links
+// into Calendar from other apps, such as an invitation in Mail.
 
 import { getCalendarAppUrl } from '../api';
 import { dateFormatter, formatDayMonth, formatMonth } from '../date';
 import { toLocalDateString } from './calendar-utils';
 
-export const CALENDAR_VIEW_MODES = ['day', '3day', 'week', 'month'] as const;
+export const CALENDAR_VIEW_MODES = ['day', '3day', 'week', 'month', 'schedule'] as const;
 
 export type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 
@@ -16,7 +16,10 @@ export const CALENDAR_VIEW_LABELS: Record<CalendarViewMode, string> = {
     '3day': '3 days',
     week: 'Week',
     month: 'Month',
+    schedule: 'Schedule',
 };
+
+const SCHEDULE_DAYS = 28;
 
 // Numbered as Date.getDay() numbers weekdays.
 export const WEEK_STARTS_ON = 1;
@@ -42,6 +45,7 @@ export function viewDays(mode: CalendarViewMode, focus: Date): Date[] {
     if (mode === 'day') return daysFrom(focus, 1);
     if (mode === '3day') return daysFrom(focus, 3);
     if (mode === 'week') return daysFrom(startOfWeek(focus), 7);
+    if (mode === 'schedule') return daysFrom(focus, SCHEDULE_DAYS);
     const first = startOfWeek(new Date(focus.getFullYear(), focus.getMonth(), 1));
     const last = new Date(focus.getFullYear(), focus.getMonth() + 1, 0);
     const weeks = Math.ceil((dayNumber(last) - dayNumber(first) + 1) / 7);
@@ -63,6 +67,7 @@ export function stepFocus(mode: CalendarViewMode, focus: Date, dir: 1 | -1): Dat
     if (mode === 'day') return addDays(focus, dir);
     if (mode === '3day') return addDays(focus, 3 * dir);
     if (mode === 'week') return addDays(focus, 7 * dir);
+    if (mode === 'schedule') return addDays(focus, SCHEDULE_DAYS * dir);
     const lastOfTarget = new Date(focus.getFullYear(), focus.getMonth() + dir + 1, 0).getDate();
     return new Date(focus.getFullYear(), focus.getMonth() + dir, Math.min(focus.getDate(), lastOfTarget));
 }

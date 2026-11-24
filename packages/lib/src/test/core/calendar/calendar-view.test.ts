@@ -27,10 +27,10 @@ const keys = (days: readonly Date[]) => days.map(toLocalDateString);
 const midnight = (date: Date) => [date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds()];
 
 describe('view modes', () => {
-    test('are day, 3 days, week and month, and nothing else reads as one', () => {
-        expect(CALENDAR_VIEW_MODES).toEqual(['day', '3day', 'week', 'month']);
+    test('are day, 3 days, week, month and schedule, and nothing else reads as one', () => {
+        expect(CALENDAR_VIEW_MODES).toEqual(['day', '3day', 'week', 'month', 'schedule']);
         expect(CALENDAR_VIEW_MODES.every(isCalendarViewMode)).toBe(true);
-        expect(['year', 'schedule', 'Week', ''].some(isCalendarViewMode)).toBe(false);
+        expect(['year', 'agenda', 'Week', ''].some(isCalendarViewMode)).toBe(false);
     });
 });
 
@@ -59,6 +59,13 @@ describe('viewDays', () => {
             '2026-11-28',
             '2026-11-29',
         ]);
+    });
+
+    test('a schedule is 28 days from the focused day', () => {
+        const days = viewDays('schedule', focus);
+        expect(days).toHaveLength(28);
+        expect([toLocalDateString(days[0]), toLocalDateString(days[27])]).toEqual(['2026-11-24', '2026-12-21']);
+        expect(midnight(days[0])).toEqual([0, 0, 0, 0]);
     });
 
     test('a month covers whole weeks, from the Monday before a 1st that falls on a Sunday', () => {
@@ -106,6 +113,13 @@ describe('viewRange', () => {
         });
     });
 
+    test('a schedule runs to the last second of its 28th day', () => {
+        expect(viewRange('schedule', new Date(2026, 10, 24))).toEqual({
+            from: new Date(2026, 10, 24).getTime() / 1000,
+            to: new Date(2026, 11, 21, 23, 59, 59).getTime() / 1000,
+        });
+    });
+
     test('a week that ends on the autumn DST change ends on its Sunday, an hour longer than usual', () => {
         const { from, to } = viewRange('week', new Date(2026, 9, 22));
         expect(to).toBe(new Date(2026, 9, 25, 23, 59, 59).getTime() / 1000);
@@ -122,6 +136,11 @@ describe('stepFocus', () => {
         expect([step('day', focus, 1), step('day', focus, -1)]).toEqual(['2026-11-25', '2026-11-23']);
         expect([step('3day', focus, 1), step('3day', focus, -1)]).toEqual(['2026-11-27', '2026-11-21']);
         expect([step('week', focus, 1), step('week', focus, -1)]).toEqual(['2026-12-01', '2026-11-17']);
+    });
+
+    test('a schedule steps by 28 days', () => {
+        const focus = new Date(2026, 10, 24);
+        expect([step('schedule', focus, 1), step('schedule', focus, -1)]).toEqual(['2026-12-22', '2026-10-27']);
     });
 
     test('a month keeps the day of the month', () => {
@@ -168,6 +187,11 @@ describe('viewTitle', () => {
 
     test('a week across two years names both', () => {
         expect(viewTitle('week', new Date(2026, 11, 30))).toBe('28 Dec 2026 – 3 Jan 2027');
+    });
+
+    test('a schedule is titled by its 28 days', () => {
+        expect(viewTitle('schedule', new Date(2026, 10, 24))).toBe('24 Nov – 21 Dec 2026');
+        expect(viewTitle('schedule', new Date(2026, 11, 20))).toBe('20 Dec 2026 – 16 Jan 2027');
     });
 
     test('3 days are titled by their own days', () => {
