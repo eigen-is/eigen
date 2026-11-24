@@ -60,6 +60,6 @@ Every file you touch gets every step, a one-line edit or a follow-up to a file a
 ## Verify
 
 - `bunx biome check <files>`, then the workspace typecheck (`cd apps/api && bunx tsc --noEmit -p .`), then the domain's tests (`cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/`).
-- A cleanup that changes behaviour, or touches a lifecycle, a lock, a cache or a cross-home call, is done only after the orchestrate skill's cold review and an adversarial hunt on that mechanism.
-- Another agent in the tree slows the machine and a 5 s hook timeout fails: re-run the failing file alone or with `--timeout 60000` before you blame your change, and don't run `bun run check` while another agent works.
+- A cleanup that changes behaviour or touches a risk seam (a lifecycle, a lock, a cache, a cross-home call) is done only after a cold review ([orchestrate skill](../orchestrate/SKILL.md)).
+- Another agent in the tree slows the machine, so a 5 s hook timeout can fail: re-run the failing file alone or with `--timeout 60000` before you blame your change.
 - The Write tool decodes `\u` escapes, so a file that needs one gets the character from `String.fromCharCode`, or is edited another way.
