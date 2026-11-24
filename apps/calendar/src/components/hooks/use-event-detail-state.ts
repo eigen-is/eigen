@@ -1,11 +1,12 @@
 // The event-detail selection the calendar views share, such as the month view: the clicked occurrence, the dialog's open
-// flag, the once-only ?eventId deep-link auto-open, and the calendar lookup the dialog needs. The dialog always gets the
-// occurrence as the current list has it, so what it shows and the etag it writes with follow every refetch.
+// flag, the once-only ?eventId deep-link auto-open, and the calendar and owner the dialog needs. The dialog always gets
+// the occurrence as the current list has it, so what it shows and the etag it writes with follow every refetch.
 
+import { useAuth } from '@workspace/lib/auth';
 import { isFreeBusyEvent } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useEffect, useRef, useState } from 'react';
-import { isSameOccurrence } from '../calendar-utils';
+import { eventOwnerId, isSameOccurrence } from '../calendar-utils';
 
 type UseEventDetailStateOptions = {
     events: readonly CalendarEventOccurrence[];
@@ -22,6 +23,7 @@ type UseEventDetailStateReturn = {
         event: CalendarEventOccurrence | null;
         calendar: CalendarItem | null;
         sharedCalendar: SharedCalendar | null;
+        ownerId: string;
     };
 };
 
@@ -31,6 +33,7 @@ export function useEventDetailState({
     sharedCalendars,
     initialEventId,
 }: UseEventDetailStateOptions): UseEventDetailStateReturn {
+    const { user } = useAuth();
     const [clicked, setClicked] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
@@ -73,6 +76,9 @@ export function useEventDetailState({
             event: selectedEvent,
             calendar: selectedCalendar,
             sharedCalendar: selectedSharedCalendar,
+            ownerId: selectedEvent
+                ? eventOwnerId(selectedEvent, calendars, sharedCalendars, user?.id)
+                : (user?.id ?? ''),
         },
     };
 }

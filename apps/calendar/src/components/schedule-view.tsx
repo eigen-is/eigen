@@ -4,6 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { getEventsForDay } from '@workspace/lib/calendar';
+import { indicatorColor } from '@workspace/lib/constants/colors';
 import { dateFormatter, formatMonth, formatTime, isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EmptyState } from '@workspace/ui/components/layout/app';
@@ -61,7 +62,6 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                             <ul className="min-w-0 flex-1">
                                 {dayEvents.map((event, idx) => {
                                     const state = eventState(event, calendars, sharedCalendars, user?.email);
-                                    const pending = state.inviteStatus === 'pending';
                                     return (
                                         <li key={`${event.id}-${event.occurrenceDate}-${idx}`}>
                                             <button
@@ -75,12 +75,11 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                                 <span
                                                     className={cn(
                                                         'h-2.5 w-2.5 shrink-0 rounded-full',
-                                                        pending && 'ring-1 ring-current bg-transparent',
+                                                        state.inviteStatus === 'pending'
+                                                            ? 'ring-1 ring-current'
+                                                            : 'bg-current',
                                                     )}
-                                                    style={{
-                                                        backgroundColor: pending ? 'transparent' : state.color,
-                                                        color: state.color,
-                                                    }}
+                                                    style={{ color: indicatorColor(state.color) }}
                                                 />
                                                 <span className="w-28 shrink-0 text-muted-foreground tabular-nums">
                                                     {event.allDay

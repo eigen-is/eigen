@@ -53,11 +53,19 @@ type EventDetailDialogProps = {
     event: CalendarEventOccurrence | null;
     calendar?: CalendarItem | null;
     sharedCalendar?: SharedCalendar | null;
+    // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
+    ownerId: string;
 };
 
-export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {
+export function EventDetailDialog({
+    open,
+    onOpenChange,
+    event,
+    calendar,
+    sharedCalendar,
+    ownerId,
+}: EventDetailDialogProps) {
     const { user } = useAuth();
-    const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
@@ -65,15 +73,15 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const [editOpen, setEditOpen] = useState(false);
     // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
     const [editMount, setEditMount] = useState(0);
-    const deleteEvent = useDeleteEvent(eventOwnerId);
-    const createEvent = useCreateEvent(eventOwnerId);
-    const updateEvent = useUpdateEvent(eventOwnerId);
+    const deleteEvent = useDeleteEvent(ownerId);
+    const createEvent = useCreateEvent(ownerId);
+    const updateEvent = useUpdateEvent(ownerId);
     const rsvp = useRsvp(user?.id || '');
     const { exportCalendar, isExporting } = useExportCalendar();
     const isGuest = useIsGuest();
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
-    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
+    const isFromOthers = useIsInvitationFromOthers(ownerId);
 
     if (!event) return null;
 
@@ -81,7 +89,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const canEdit = !sharedCalendar || sharedCalendar.permission === 'write';
-    const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
+    const canExport = !isGuest && isTransferableCalendarHome(ownerId, user?.id ?? '');
     const isLinkedEvent = isFromOthers(event);
     const attendees = event.data?.attendees ?? [];
     const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
@@ -271,7 +279,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                             disabled={isExporting}
                                             // An occurrence is drawn from its series, so the series is what leaves.
                                             onClick={() =>
-                                                void exportCalendar(eventOwnerId, event.calendarId, [
+                                                void exportCalendar(ownerId, event.calendarId, [
                                                     event.parentEventId || event.id,
                                                 ])
                                             }

@@ -1,9 +1,7 @@
-// How the calendar views draw one event. EventSurface is the event on its calendar's color surface with its state over
-// it, such as a past event dimmed or a pending invitation outlined; the time grid's blocks are one. EventBar places an
-// event in a row of lanes, such as the time grid's all-day lane or a month week, across its days and squared off where
-// it runs on past the row. EventChip is one day's event: a timed one as a dot, its time and its title, a longer one on
-// its surface, in a lane or in the list "N more" opens. LaneGhost is the event a drag carries over a lane. A click hands
-// the event to the view's detail dialog, and a press may start the view's drag.
+// How the calendar views draw one event. EventSurface is the event on its calendar's color with its state over it, such
+// as a past event dimmed; the time grid's blocks are one. EventBar spans an event across its days in a row of lanes,
+// such as a month week. EventChip is one day's event, a timed one as a dot, its time and its title. LaneGhost is the
+// event a drag carries over a lane. A click hands the event to the view's detail dialog, and a press may start a drag.
 
 import { useAuth } from '@workspace/lib/auth';
 import type { LaneBar } from '@workspace/lib/calendar';

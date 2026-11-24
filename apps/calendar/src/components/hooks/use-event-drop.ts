@@ -8,7 +8,7 @@ import type { EventTimes } from '@workspace/lib/calendar';
 import { useCanReschedule } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useState } from 'react';
-import { isSameOccurrence } from '../calendar-utils';
+import { eventOwnerId, isSameOccurrence } from '../calendar-utils';
 import type { EventDropHostProps } from '../event-drop-host';
 
 type UseEventDropOptions = {
@@ -33,10 +33,6 @@ export function useEventDrop({ events, calendars, sharedCalendars }: UseEventDro
 
     const isDropped = (e: CalendarEventOccurrence) => !!dropped && isSameOccurrence(e, dropped.event);
     const current = dropped && (events.find(isDropped) ?? dropped.event);
-    const sharedCalendar =
-        current && !calendars.some((c) => c.id === current.calendarId)
-            ? sharedCalendars?.find((sc) => sc.calendarId === current.calendarId)
-            : undefined;
 
     return {
         shownEvents: dropped ? events.map((e) => (isDropped(e) ? { ...e, ...dropped.moved } : e)) : events,
@@ -51,7 +47,7 @@ export function useEventDrop({ events, calendars, sharedCalendars }: UseEventDro
                 ? {
                       event: current,
                       moved: dropped.moved,
-                      ownerId: sharedCalendar?.ownerUserId || user?.id || '',
+                      ownerId: eventOwnerId(current, calendars, sharedCalendars, user?.id),
                       onDone: () => setDropped(null),
                   }
                 : null,

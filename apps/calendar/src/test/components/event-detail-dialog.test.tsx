@@ -103,7 +103,7 @@ afterEach(async () => {
 
 async function open(event: CalendarEventOccurrence = dentist) {
     ({ unmount } = await renderInDocument(
-        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work }),
+        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work, ownerId: 'u1' }),
     ));
 }
 

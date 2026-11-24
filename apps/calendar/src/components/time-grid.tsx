@@ -1,9 +1,8 @@
-// The Calendar app's day, 3-day and week views: a column per day under its weekday and date, which link to that day
-// alone, an all-day lane of bars that span their days, and a scrolling day of hours with each timed event as a block
-// at its minutes, side by side where events overlap. A line marks the current time across today. A click on an event
-// opens its detail dialog, and a click on an empty slot or a mouse or pen drag over a range, or a click in the all-day
-// lane, asks the route to open New event at those times. A mouse or pen drags a block to other days and minutes, its
-// bottom edge to another end and a bar to other days, and the drop saves it; the route picks the days and the events.
+// The Calendar app's day, 3-day and week views: a column per day under its date, an all-day lane of bars across their
+// days, and a scrolling day of hours with each timed event as a block at its minutes, side by side where they overlap.
+// A click on an event opens its detail, and a click or a mouse or pen drag on empty time asks the route to open New
+// event there. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a bar to
+// other days, and the drop saves it; the route picks the days and the events.
 
 import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';
@@ -35,6 +34,7 @@ import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
+import { useSwallowedClick } from './hooks/use-swallowed-click';
 import { atMinutes, DraftBlock, HOUR_HEIGHT, TimedEventBlock } from './time-grid-block';
 
 type TimeGridProps = {
@@ -49,7 +49,7 @@ type TimeGridProps = {
 // A range drawn over one day column, in minutes from its midnight.
 type Draft = { dayIdx: number; top: number; bottom: number };
 
-type DragSteps = { follow: (clientX: number, clientY: number) => void; drop: () => void; scrolls: boolean };
+type DragSteps = { follow: (clientX: number, clientY: number) => void; land: () => void; scrolls: boolean };
 
 const MAX_ALL_DAY_LANES = 3;
 const SCROLL_TO_HOUR = 7;
@@ -77,8 +77,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     // The dragged event at the times it would land on.
     const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
     const nudgeFrameRef = useRef(0);
-    // The browser sends a click after a drag's release, and after Escape too, since the pointer stays captured.
-    const swallowClickRef = useRef(false);
+    const { swallowNextClick, rootProps } = useSwallowedClick();
 
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60_000);
@@ -113,8 +112,8 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
         onCreateEvent({ start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false });
 
     // One gesture at a time: `follow` draws it for the pointer's last spot, as it moves and as an edge scrolls the
-    // hours under it, and `drop` runs on a release after a move.
-    const runDrag = (e: React.PointerEvent<HTMLElement>, { follow, drop, scrolls }: DragSteps) => {
+    // hours under it, and `land` runs on a release after a move.
+    const runDrag = (e: React.PointerEvent<HTMLElement>, { follow, land, scrolls }: DragSteps) => {
         let lastX = e.clientX;
         let lastY = e.clientY;
         let travelled = false;
@@ -152,12 +151,12 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
             end: () => {
                 stop();
                 if (!travelled) return;
-                swallowClickRef.current = true;
-                drop();
+                swallowNextClick();
+                land();
             },
             cancel: () => {
                 stop();
-                swallowClickRef.current = true;
+                swallowNextClick();
             },
         });
     };
@@ -172,7 +171,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                 range = { dayIdx, ...slotRange(pressed, minutesAt(column, y)) };
                 setDraft(range);
             },
-            drop: () => createTimed(range.dayIdx, range.top, range.bottom),
+            land: () => createTimed(range.dayIdx, range.top, range.bottom),
             scrolls: true,
         });
     };
@@ -191,7 +190,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                 moved = movedTimes(event, dayAt(surface, x, days.length) - pressedDay, minutes);
                 setGhost({ ...event, ...moved });
             },
-            drop: () => drop(event, moved),
+            land: () => drop(event, moved),
             scrolls: timed,
         });
     };
@@ -205,24 +204,14 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                 resized = resizedTimes(event, minutesAt(hours, y));
                 setGhost({ ...event, ...resized });
             },
-            drop: () => drop(event, resized),
+            land: () => drop(event, resized),
             scrolls: true,
         });
     };
 
     return (
         <>
-            <div
-                className="flex h-full flex-col"
-                onPointerDownCapture={() => {
-                    swallowClickRef.current = false;
-                }}
-                onClickCapture={(e) => {
-                    if (!swallowClickRef.current) return;
-                    swallowClickRef.current = false;
-                    e.stopPropagation();
-                }}
-            >
+            <div className="flex h-full flex-col" {...rootProps}>
                 <div className="flex overflow-hidden border-b [scrollbar-gutter:stable]">
                     <div className={GUTTER} />
                     <div className="grid flex-1" style={columns}>

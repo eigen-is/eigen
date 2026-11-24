@@ -26,7 +26,8 @@ export function EventDropHost({ event, moved, ownerId, onDone }: EventDropHostPr
     const held = useHeldEtag(event.etag, false);
     const save = useSaveOccurrence(ownerId, held);
     // Asked of the event as it was dropped, so a reload under an open question doesn't change the question. The server
-    // tells every guest but the one saving and the calendar's owner, whom an event with guests names as its organizer.
+    // tells every guest but the one saving and the calendar's owner, the organizer an event with guests names. A team has
+    // no address, so on its calendar the organizer is the member who created the event, and the question skips them too.
     const [asks] = useState(() => {
         const selves = new Set([user?.email, event.data?.organizer?.email].map((email) => email?.toLowerCase()));
         return {
@@ -46,7 +47,9 @@ export function EventDropHost({ event, moved, ownerId, onDone }: EventDropHostPr
         if (asks.scopes.length > 0 || asks.guests) return;
         void write('all').catch(rethrowUntoasted).finally(onDone);
     });
-    useEffect(() => saveAtOnce(), []);
+    useEffect(() => {
+        saveAtOnce();
+    }, []);
 
     const close = (open: boolean) => {
         if (!open) onDone();
