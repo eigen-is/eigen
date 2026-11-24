@@ -20,8 +20,9 @@ export const HOUR_HEIGHT = 48;
 // A block's text lines are text-xs at leading-4, inside 2px of padding above and below.
 const LINE_HEIGHT = 16;
 const BLOCK_PADDING = 4;
-// Dark mode draws a 2px color stripe at the left edge, so the text starts further in.
-const BLOCK = 'absolute rounded px-1 py-0.5 dark:pl-2';
+// A button centers its content, so the lines stack from the top as a column. Dark mode draws a 2px color stripe at
+// the left edge, so the text starts further in.
+const BLOCK = 'absolute flex flex-col justify-start rounded px-1 py-0.5 dark:pl-2';
 
 export function atMinutes(day: Date, minutes: number): Date {
     return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);

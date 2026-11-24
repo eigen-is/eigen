@@ -278,6 +278,12 @@ test('the block stays where it was dropped until the save has settled', async ()
     expect(topOf('Review')).toBe(`${12 * HOUR}px`);
 });
 
+test("a block's lines stack from its top, as Google draws them", async () => {
+    await open([review]);
+    expect(block('Review').className).toContain('flex-col');
+    expect(block('Review').className).toContain('justify-start');
+});
+
 test('a press that never travels opens the detail and saves nothing', async () => {
     await open([review]);
     await drag(block('Review'), tuesday(10.2), tuesday(10.2));
