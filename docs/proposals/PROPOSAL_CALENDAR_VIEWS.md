@@ -25,7 +25,7 @@ Calendar works, but its views are the weakest part of it. Week view is seven lis
 - A real time grid for day, 3 days and week: duration, overlap and gaps visible at a glance.
 - A month view that shows titles, draws multi-day events as one bar per week row, and lists the rest of a day on "N more".
 - Drag to create, move and resize, through the same save path and etag rules as Edit event.
-- A schedule list, which is also the phone's natural view, and every view in the sidebar.
+- A schedule list, and every view in the sidebar.
 - Keyboard shortcuts.
 - Event colors in the one color treatment stickies and comments already use.
 
@@ -41,7 +41,7 @@ Time-zone rails, natural-language entry, tasks on the calendar, availability sha
 
 ## Constraints
 
-- No new API route, migration or npm package. None is needed: keyboard shortcuts use `@tanstack/react-hotkeys`, which lib already has; drag uses our own pointer code.
+- No new API route, migration or npm package. None is needed: keyboard shortcuts use `@tanstack/react-hotkeys` through a hook in lib, which already depends on it, so calendar's `package.json` gains nothing; drag uses our own pointer code.
 - Every write carries the etag and goes through the recurring this / following / all choice ([CALENDAR.md](../CALENDAR.md)).
 - Times stay 24-hour (owner's ruling). Weeks start on Monday until the week-start setting lands.
 - Pages are `ColumnLayout` + `Column` with the `toolbar` prop. App components hold no queries, mutations or toasts.
@@ -56,8 +56,8 @@ Time-zone rails, natural-language entry, tasks on the calendar, availability sha
 
 ### Shared pieces
 
-- **Color surface.** `colorSurface(color)` in `packages/ui/src/components/color-surface.ts` returns `{ className, style }`: a lightened fill with readable text in light mode, a 14% wash with a 2px inset stripe in the indicator color in dark mode. One tint for every surface: it replaces the two written-out copies in `notes/note-card.tsx` (0.25) and `note-card-content.tsx` (0.5), so a sticky looks the same on the board and open. Calendar events use it too. The color math stays in `lib/constants/colors.ts`, which gains `indicatorColor(color)`; `commentIndicatorColor` calls it. A user's arbitrary hex is its own indicator. A function, not a CSS class, because a base-layer `box-shadow` would lose to NoteCard's `shadow-md`, and utility classes let state classes replace a fill through `cn`.
-- **Event states** layer after the surface, in `eventSurfaceClasses` (today's `eventPillStateClasses`): pending = dashed outline in the event's color on the background; declined = faded; free/busy = faded and not clickable; past = dimmed, listed first so the others win.
+- **Color surface.** `colorSurface(color)` in `packages/ui/src/lib/color-surface.ts`, beside `cn`, returns `{ className, style }`: a lightened fill with readable text in light mode, a 14% wash with a 2px inset stripe in the indicator color in dark mode. One tint for every surface: it replaces the two written-out copies in `notes/note-card.tsx` (0.25) and `note-card-content.tsx` (0.5), so a sticky looks the same on the board and open. Calendar events use it too. The color math stays in `lib/constants/colors.ts`, which gains `indicatorColor(color)`; `commentIndicatorColor` calls it. A user's arbitrary hex is its own indicator. A function, not a CSS class, because a base-layer `box-shadow` would lose to NoteCard's `shadow-md`, and utility classes let state classes replace a fill through `cn`.
+- **Event states** layer after the surface, in `eventSurfaceClasses` (today's `eventPillStateClasses`): pending = dashed outline in the event's color on the background; declined = faded and struck through; free/busy = faded and not clickable; past = dimmed, listed first so the others win.
 - **Pointer drag.** `useHandleDrag` moves from `components/vector/tools/` to `packages/ui/src/hooks/use-pointer-drag.ts` (one gesture at a time, pointer capture, travel threshold, Escape cancels). Vector's three callers adopt it; calendar is its fourth user instead of a fourth hand-written drag lifecycle.
 - **Recurrence scopes.** `RECURRENCE_SCOPES` / `RecurrenceScope` in `lib/types/calendar.ts`, replacing `RECURRING_ACTIONS` in `recurring-action-dialog.tsx` and the inline union in `useRsvp`.
 - **One save path.** `useSaveOccurrence` (new, lib) saves an occurrence at a scope with its etag. Edit event and a drop both save through it. `invalidateEventList` returns its refetch promise, so a write settles once the list shows it.
@@ -65,8 +65,7 @@ Time-zone rails, natural-language entry, tasks on the calendar, availability sha
 ### Pure modules in lib
 
 - `calendar-view.ts`: view modes, `WEEK_STARTS_ON`, `viewDays`, `viewRange`, `stepFocus` (31 Jan steps to 28 Feb), `viewTitle`, `parseDayKey`, `calendarEventLink`. Replaces `getMonthRange`, `getWeekRange`, `getDaysInRange` and the toolbar's private Monday math.
-- `calendar-layout.ts`: `eventDaySpan`, `inAllDayLane` (all-day, or timed for 24 hours or more), `allocateLanes` (one function for month rows and the all-day lane), `layoutTimedEvents` (split per day, cluster, first free column, widen right while free), `monthWeekLayout`, `SNAP_MINUTES = 15`, `slotAt`. Positions are wall-clock minutes, so a DST day keeps 09:00 at 09:00. All-day events place by UTC date, timed by local day.
-- `calendar-reschedule.ts`: `movedTimes`, `resizedTimes` (at least 15 minutes), `rescheduleScopes`.
+- `calendar-layout.ts`: `eventDaySpan`, `inAllDayLane` (all-day, or timed for 24 hours or more), `allocateLanes` (one function for month rows and the all-day lane), `layoutTimedEvents` (split per day, cluster, first free column, widen right while free), `monthWeekLayout`, `SNAP_MINUTES = 15`, `slotAt`, and the drag math: `movedTimes`, `resizedTimes` (at least 15 minutes), `rescheduleScopes`. A move steps UTC days for an all-day event and local days for a timed one; whether a series occurrence changed day is judged in the series' own zone. Positions are wall-clock minutes, so a DST day keeps 09:00 at 09:00. All-day events place by UTC date, timed by local day.
 
 ### URL
 
@@ -91,12 +90,12 @@ Last in the program (see Rulings). While the views are built, a click on an even
 
 ### Drag
 
-Why not dnd-kit, as slides and stickies use: [LAYOUT.md](../LAYOUT.md#reordering-uses-dnd-kit-moving-between-lists-uses-native-drag) gives dnd-kit to reordering in place (the slides rail, a stickies column) and native drag to moving between lists. A calendar drag is neither: it places a block on a continuous time axis and resizes it, which is what vector's handles do. dnd-kit has no resize, so calendar would need its own pointer code beside it anyway, and adding it to calendar's `package.json` needs the owner's yes. So the rule gains a third line, placing and resizing on a surface uses `usePointerDrag`, and LAYOUT.md says so. What the three share is one fact: the travel before a press becomes a drag, today 5px in slides and stickies (`activationConstraint`) and 4px in `useHandleDrag`. It becomes one `DRAG_THRESHOLD_PX` in lib that all three read.
+Why not dnd-kit, as slides and stickies use: [LAYOUT.md](../LAYOUT.md#reordering-uses-dnd-kit-moving-between-lists-uses-native-drag) gives dnd-kit to reordering in place (the slides rail, a stickies column) and native drag to moving between lists. A calendar drag is neither: it places a block on a continuous time axis and resizes it, which is what vector's handles do. dnd-kit has no resize, so calendar would need its own pointer code beside it anyway, and adding it to calendar's `package.json` needs the owner's yes. So the rule gains a third line, placing and resizing on a surface uses `usePointerDrag`, and LAYOUT.md says so. What the three share is one fact: the travel before a press becomes a drag, today 5px in slides and stickies (`activationConstraint`) and in `use-drag-scroll.ts`. It becomes one `DRAG_THRESHOLD_PX = 5` in lib that they and `usePointerDrag`'s default read. Vector's handles keep their own smaller thresholds on purpose, as they go live from the first move.
 
 
-- Mouse and pen only, from a 4px threshold; below it a press is a click. A block's body moves, its bottom strip resizes, an empty column creates a range, a month chip moves by days. The scroller nudges near its edge. Escape cancels. A click after a real drag is swallowed.
-- Only where `useCanReschedule` allows: not free/busy, not someone else's invitation, not a read-only calendar.
-- A drop sets a landing that draws the block at its new place until the write settles. A single event saves at once. A series occurrence asks this / following / all first, through `RecurringActionDialog`. The etag is the current list copy's at submit time.
+- Mouse and pen only, from `DRAG_THRESHOLD_PX`; below it a press is a click. A block's body moves, its bottom strip resizes, an empty column creates a range, a month chip moves by days. The scroller nudges near its edge. Escape cancels. A click after a real drag is swallowed.
+- Only where `useCanReschedule` (new, lib) allows: not free/busy, not someone else's invitation, not a read-only calendar.
+- A drop mounts a small host bound to the event's owner, as `EditEventDialog` is (owner's choice): it loads the series master when the choice needs it, asks this / following / all, and asks "Send update emails to guests?" when the event has guests (owner: as Google; Cancel snaps back). A landing draws the block at its new place until the write settles. A single event saves at once. A series occurrence asks this / following / all first, through `RecurringActionDialog`. The etag is the current list copy's at submit time; a this-and-following split holds the etag its first write answered, as Edit event does, since the occurrence leaves the list.
 - A 412 reloads and toasts through the hook's existing error path; a direct drop snaps back to the reloaded event, and the recurring choice stays open so the next OK sends the reloaded etag.
 - Not in this round: drag between all-day and timed, drag on touch, drag to create in month view.
 
@@ -106,24 +105,23 @@ Why not dnd-kit, as slides and stickies use: [LAYOUT.md](../LAYOUT.md#reordering
 
 ## Units
 
-Each unit lands with its tests, CALENDAR.md lines, help article and CHANGELOG lines. Wave A units are independent.
+Each unit lands with its tests, CALENDAR.md lines, help article and CHANGELOG lines. U2, U4, U12 and U13 touch different files and run in parallel; U3 waits for U2, which edits the same views.
 
 | Unit | What | Wave |
 |---|---|---|
 | U1 | "N more" lists the day (extract `event-chip.tsx`, add `month-day-popover.tsx`) | A |
-| U2 | URL model `/view/$mode/$date`, `calendar-view.ts`, inbound links; fixes the month-to-week jump | A |
+| U2 | URL model `/view/$mode/$date`, `calendar-view.ts`, inbound links, and the sidebar's view items (was U9); fixes the month-to-week jump | A |
 | U3 | `colorSurface` and `indicatorColor`; stickies, card and calendar adopt one tint; screenshots of stickies and calendar at 0.25, 0.35 and 0.5, light and dark, for the owner to pick | A, after U1 |
 | U4 | `calendar-layout.ts` with its tests | A |
-| U12 | `useSaveOccurrence`, `RecurrenceScope`; Edit event adopts; the stale-write suite must pass unchanged | A |
+| U12 | `useSaveOccurrence`, `RecurrenceScope` (also the API's copies); Edit event adopts; the stale-write suite must pass unchanged | A |
 | U13 | `usePointerDrag` promoted; vector adopts; one `DRAG_THRESHOLD_PX` that slides and stickies read too; LAYOUT.md's drag rule gains the surface line | A |
 | U6 | Time grid for day, 3 days and week; deletes `week-view.tsx` | B |
 | U7 | Month rewrite: spanning bars, measured lanes, date link | B, after U6 |
 | U8 | Schedule view | B |
-| U9 | Sidebar lists every view as a `SidebarItem` | B |
 | U14 | Drag or click to create: opens today's New event dialog with the range | after U13, U6 |
 | U15 | Drag to move and resize | after U12, U13, U6, U7 |
 | U16 | Keyboard shortcuts | after U6, U8 |
-| U10 | Mini month in the sidebar | after U2, U9 |
+| U10 | Mini month in the sidebar | after U2 |
 | U11 | Event card and quick create: context and previews to the owner, then the build the owner rules | last |
 
 Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest; its all-day lane can split off.
@@ -141,6 +139,5 @@ Taken unless the owner says otherwise: 3 days is fixed (not 2 to 7), the schedul
 
 ## Found on the way
 
-- The ROADMAP row "Edit event wipes what the user typed when its data refetches" is stale: `EditEventDialog` holds `typed` state and has no refill effect. The row can go.
-- The Calendar pack row "Working hours and a week-start setting" points to `calendar-toolbar.tsx`, but the Monday rule also lives in lib's range functions. U2 makes it one constant.
-- `packages/ui/src/components/hover-card.tsx` has no importer.
+- The Monday rule lives in lib's range functions, `WEEKDAY_HEADERS` and the toolbar's title; U2 makes it one constant.
+- A notification for an all-day invitation carries only its start time, so west of UTC its link lands on the day before. Accepted as rare: fixing it changes the stored tag.
