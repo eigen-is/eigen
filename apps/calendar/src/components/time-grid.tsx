@@ -2,15 +2,19 @@
 // alone, an all-day lane of bars that span their days, and a scrolling day of hours with each timed event as a block
 // at its minutes, side by side where events overlap. A line marks the current time across today. A click on an event
 // opens its detail dialog, and a click on an empty slot or a mouse or pen drag over a range, or a click in the all-day
-// lane, asks the route to open New event at those times; the route also picks the days and fetches the events.
+// lane, asks the route to open New event at those times. A mouse or pen drags a block to other days and minutes, its
+// bottom edge to another end and a bar to other days, and the drop saves it; the route picks the days and the events.
 
 import { Link } from '@tanstack/react-router';
-import type { TimedBlock } from '@workspace/lib/calendar';
+import type { EventTimes } from '@workspace/lib/calendar';
 import {
     allocateLanes,
+    eventDaySpan,
     inAllDayLane,
     layoutTimedEvents,
     monthWeekLayout,
+    movedTimes,
+    resizedTimes,
     slotAt,
     slotRange,
     toLocalDateString,
@@ -21,15 +25,17 @@ import { formatTime } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { usePointerDrag } from '@workspace/ui/hooks/use-pointer-drag';
-import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isDragPointer } from './calendar-utils';
 import type { NewEventTimes } from './create-event-dialog';
-import type { EventSurfaceProps } from './event-chip';
-import { EventBar, EventSurface } from './event-chip';
+import { EventBar, LaneGhost } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
+import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
+import { useEventDrop } from './hooks/use-event-drop';
+import { atMinutes, DraftBlock, HOUR_HEIGHT, TimedEventBlock } from './time-grid-block';
 
 type TimeGridProps = {
     days: readonly Date[];
@@ -43,14 +49,10 @@ type TimeGridProps = {
 // A range drawn over one day column, in minutes from its midnight.
 type Draft = { dayIdx: number; top: number; bottom: number };
 
-const HOUR_HEIGHT = 48;
+type DragSteps = { follow: (clientX: number, clientY: number) => void; drop: () => void; scrolls: boolean };
+
 const MAX_ALL_DAY_LANES = 3;
 const SCROLL_TO_HOUR = 7;
-// A block's text lines are text-xs at leading-4, inside 2px of padding above and below.
-const LINE_HEIGHT = 16;
-const BLOCK_PADDING = 4;
-// Dark mode draws a 2px color stripe at the left edge, so the text starts further in.
-const BLOCK = 'absolute rounded px-1 py-0.5 dark:pl-2';
 const GUTTER = 'w-11 shrink-0 md:w-14';
 // A drag this close to the scroller's top or bottom edge scrolls it by a step each frame.
 const NUDGE_EDGE_PX = 24;
@@ -64,11 +66,16 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
         sharedCalendars,
         initialEventId,
     });
+    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
     const [allDayExpanded, setAllDayExpanded] = useState(false);
     const [now, setNow] = useState(() => new Date());
     const scrollerRef = useRef<HTMLDivElement>(null);
+    const allDayLaneRef = useRef<HTMLDivElement>(null);
+    const hoursRef = useRef<HTMLDivElement>(null);
     const startPointerDrag = usePointerDrag();
     const [draft, setDraft] = useState<Draft | null>(null);
+    // The dragged event at the times it would land on.
+    const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
     const nudgeFrameRef = useRef(0);
     // The browser sends a click after a drag's release, and after Escape too, since the pointer stays captured.
     const swallowClickRef = useRef(false);
@@ -87,11 +94,13 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
         scroller.scrollTop = (todayInView ? current.getHours() - 1 : SCROLL_TO_HOUR) * HOUR_HEIGHT;
     }, [days]);
 
-    const allDayEvents = events.filter(inAllDayLane);
+    const allDayEvents = shownEvents.filter(inAllDayLane);
     const collapsedLanes = monthWeekLayout(days, allDayEvents, MAX_ALL_DAY_LANES);
     const lanesOverflow = collapsedLanes.hidden.some((count) => count > 0);
     const bars = allDayExpanded ? allocateLanes(allDayEvents, days) : collapsedLanes.bars;
-    const blocks = layoutTimedEvents(events, days);
+    const blocks = layoutTimedEvents(shownEvents, days);
+    const ghostBar = ghost && inAllDayLane(ghost) ? allocateLanes([ghost], days)[0] : undefined;
+    const ghostBlocks = ghost && !inAllDayLane(ghost) ? layoutTimedEvents([ghost], days) : undefined;
 
     const todayKey = toLocalDateString(now);
     const todayIndex = days.findIndex((day) => toLocalDateString(day) === todayKey);
@@ -103,18 +112,12 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const createTimed = (dayIdx: number, top: number, bottom: number) =>
         onCreateEvent({ start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false });
 
-    // Mouse and pen draw a range; a finger scrolls the grid, and its tap is the column's click.
-    const handleColumnPointerDown = (e: React.PointerEvent<HTMLDivElement>, dayIdx: number) => {
-        swallowClickRef.current = false;
-        if ((e.pointerType !== 'mouse' && e.pointerType !== 'pen') || e.button !== 0 || isOnEvent(e.target)) return;
-        const column = e.currentTarget;
-        const pressed = minutesAt(column, e.clientY);
+    // One gesture at a time: `follow` draws it for the pointer's last spot, as it moves and as an edge scrolls the
+    // hours under it, and `drop` runs on a release after a move.
+    const runDrag = (e: React.PointerEvent<HTMLElement>, { follow, drop, scrolls }: DragSteps) => {
+        let lastX = e.clientX;
         let lastY = e.clientY;
-        let range: Draft | null = null;
-        const follow = () => {
-            range = { dayIdx, ...slotRange(pressed, minutesAt(column, lastY)) };
-            setDraft(range);
-        };
+        let travelled = false;
         // Runs a frame at a time for as long as the pointer near an edge still scrolls the grid.
         const nudge = () => {
             nudgeFrameRef.current = 0;
@@ -129,25 +132,28 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
             );
             if (scrollTop === scroller.scrollTop) return;
             scroller.scrollTop = scrollTop;
-            follow();
+            follow(lastX, lastY);
             nudgeFrameRef.current = requestAnimationFrame(nudge);
         };
         const stop = () => {
             cancelAnimationFrame(nudgeFrameRef.current);
             nudgeFrameRef.current = 0;
             setDraft(null);
+            setGhost(null);
         };
         startPointerDrag(e, {
             move: (me) => {
+                lastX = me.clientX;
                 lastY = me.clientY;
-                follow();
-                if (nudgeFrameRef.current === 0) nudge();
+                travelled = true;
+                follow(lastX, lastY);
+                if (scrolls && nudgeFrameRef.current === 0) nudge();
             },
             end: () => {
                 stop();
-                if (!range) return;
+                if (!travelled) return;
                 swallowClickRef.current = true;
-                createTimed(range.dayIdx, range.top, range.bottom);
+                drop();
             },
             cancel: () => {
                 stop();
@@ -156,9 +162,67 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
         });
     };
 
+    const handleColumnPointerDown = (e: React.PointerEvent<HTMLDivElement>, dayIdx: number) => {
+        if (!isDragPointer(e) || isOnEvent(e.target)) return;
+        const column = e.currentTarget;
+        const pressed = minutesAt(column, e.clientY);
+        let range: Draft = { dayIdx, top: 0, bottom: 0 };
+        runDrag(e, {
+            follow: (_x, y) => {
+                range = { dayIdx, ...slotRange(pressed, minutesAt(column, y)) };
+                setDraft(range);
+            },
+            drop: () => createTimed(range.dayIdx, range.top, range.bottom),
+            scrolls: true,
+        });
+    };
+
+    // A block moves by days and minutes, a bar in the all-day lane by days alone.
+    const moveEvent = (event: CalendarEventOccurrence, e: React.PointerEvent<HTMLElement>) => {
+        const timed = !inAllDayLane(event);
+        const surface = timed ? hoursRef.current : allDayLaneRef.current;
+        if (!isDragPointer(e) || !canDrag(event) || !surface) return;
+        const pressedDay = dayAt(surface, e.clientX, days.length);
+        const pressedMinutes = minutesAt(surface, e.clientY);
+        let moved: EventTimes = event;
+        runDrag(e, {
+            follow: (x, y) => {
+                const minutes = timed ? minutesAt(surface, y) - pressedMinutes : 0;
+                moved = movedTimes(event, dayAt(surface, x, days.length) - pressedDay, minutes);
+                setGhost({ ...event, ...moved });
+            },
+            drop: () => drop(event, moved),
+            scrolls: timed,
+        });
+    };
+
+    const resizeEvent = (event: CalendarEventOccurrence, e: React.PointerEvent<HTMLElement>) => {
+        const hours = hoursRef.current;
+        if (!isDragPointer(e) || !hours) return;
+        let resized: EventTimes = event;
+        runDrag(e, {
+            follow: (_x, y) => {
+                resized = resizedTimes(event, minutesAt(hours, y));
+                setGhost({ ...event, ...resized });
+            },
+            drop: () => drop(event, resized),
+            scrolls: true,
+        });
+    };
+
     return (
         <>
-            <div className="flex h-full flex-col">
+            <div
+                className="flex h-full flex-col"
+                onPointerDownCapture={() => {
+                    swallowClickRef.current = false;
+                }}
+                onClickCapture={(e) => {
+                    if (!swallowClickRef.current) return;
+                    swallowClickRef.current = false;
+                    e.stopPropagation();
+                }}
+            >
                 <div className="flex overflow-hidden border-b [scrollbar-gutter:stable]">
                     <div className={GUTTER} />
                     <div className="grid flex-1" style={columns}>
@@ -208,13 +272,12 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                         )}
                     </div>
                     <div
+                        ref={allDayLaneRef}
                         className="grid min-h-6 flex-1 gap-y-0.5 py-0.5"
                         style={columns}
                         onClick={(e) => {
                             if (isOnEvent(e.target)) return;
-                            const { left, width } = e.currentTarget.getBoundingClientRect();
-                            const idx = Math.floor(((e.clientX - left) / width) * days.length);
-                            const day = days[Math.min(days.length - 1, Math.max(0, idx))];
+                            const day = days[dayAt(e.currentTarget, e.clientX, days.length)];
                             onCreateEvent({ start: day, end: day, allDay: true });
                         }}
                     >
@@ -223,6 +286,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                 key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
                                 bar={bar}
                                 {...surfaceProps}
+                                onDragStart={moveEvent}
                             />
                         ))}
                         {!allDayExpanded &&
@@ -240,6 +304,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                         </button>
                                     ),
                             )}
+                        {ghostBar && <LaneGhost bar={ghostBar} {...surfaceProps} />}
                     </div>
                 </div>
 
@@ -265,15 +330,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                             )}
                         </div>
 
-                        <div
-                            className="relative grid flex-1"
-                            style={columns}
-                            onClickCapture={(e) => {
-                                if (!swallowClickRef.current) return;
-                                swallowClickRef.current = false;
-                                e.stopPropagation();
-                            }}
-                        >
+                        <div ref={hoursRef} className="relative grid flex-1" style={columns}>
                             {HOUR_LABELS.slice(1).map((label, idx) => (
                                 <div
                                     key={label}
@@ -281,53 +338,72 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                     style={{ top: (idx + 1) * HOUR_HEIGHT }}
                                 />
                             ))}
-                            {days.map((day, dayIdx) => (
-                                <div
-                                    key={toLocalDateString(day)}
-                                    className={cn(
-                                        'relative border-l',
-                                        (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/30',
-                                    )}
-                                    onPointerDown={(e) => handleColumnPointerDown(e, dayIdx)}
-                                    onClick={(e) => {
-                                        if (isOnEvent(e.target)) return;
-                                        const top = slotAt(minutesAt(e.currentTarget, e.clientY));
-                                        createTimed(dayIdx, top, top + 60);
-                                    }}
-                                >
-                                    <div className="absolute inset-y-0 left-0 right-1 md:right-2">
-                                        {blocks[dayIdx].map((block) => (
-                                            <TimedEventBlock
-                                                key={`${block.event.id}-${block.event.occurrenceDate}-${block.top}`}
-                                                block={block}
-                                                {...surfaceProps}
-                                            />
-                                        ))}
-                                        {draft?.dayIdx === dayIdx && (
-                                            <DraftBlock
-                                                day={day}
-                                                top={draft.top}
-                                                bottom={draft.bottom}
-                                                color={draftColor}
-                                            />
+                            {days.map((day, dayIdx) => {
+                                const key = toLocalDateString(day);
+                                return (
+                                    <div
+                                        key={key}
+                                        className={cn(
+                                            'relative border-l',
+                                            (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/30',
+                                        )}
+                                        onPointerDown={(e) => handleColumnPointerDown(e, dayIdx)}
+                                        onClick={(e) => {
+                                            if (isOnEvent(e.target)) return;
+                                            const top = slotAt(minutesAt(e.currentTarget, e.clientY));
+                                            createTimed(dayIdx, top, top + 60);
+                                        }}
+                                    >
+                                        <div className="absolute inset-y-0 left-0 right-1 md:right-2">
+                                            {blocks[dayIdx].map((block) => (
+                                                <TimedEventBlock
+                                                    key={`${block.event.id}-${block.event.occurrenceDate}-${block.top}`}
+                                                    block={block}
+                                                    {...surfaceProps}
+                                                    onDragStart={moveEvent}
+                                                    // The edge is the event's end only on the day it ends.
+                                                    onResizeStart={
+                                                        canDrag(block.event) && eventDaySpan(block.event).last === key
+                                                            ? resizeEvent
+                                                            : undefined
+                                                    }
+                                                />
+                                            ))}
+                                            {ghostBlocks?.[dayIdx].map((block) => (
+                                                <TimedEventBlock
+                                                    key={block.top}
+                                                    block={block}
+                                                    {...surfaceProps}
+                                                    className="pointer-events-none shadow-md"
+                                                />
+                                            ))}
+                                            {draft?.dayIdx === dayIdx && (
+                                                <DraftBlock
+                                                    day={day}
+                                                    top={draft.top}
+                                                    bottom={draft.bottom}
+                                                    color={draftColor}
+                                                />
+                                            )}
+                                        </div>
+                                        {dayIdx === todayIndex && (
+                                            <div
+                                                className="absolute inset-x-0 h-0.5 -translate-y-1/2 bg-(--app-current-color)"
+                                                style={{ top: nowTop }}
+                                            >
+                                                <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-(--app-current-color)" />
+                                            </div>
                                         )}
                                     </div>
-                                    {dayIdx === todayIndex && (
-                                        <div
-                                            className="absolute inset-x-0 h-0.5 -translate-y-1/2 bg-(--app-current-color)"
-                                            style={{ top: nowTop }}
-                                        >
-                                            <div className="absolute -left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-(--app-current-color)" />
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
             </div>
 
             <EventDetailDialog {...detailDialogProps} />
+            {dropHostProps && <EventDropHost {...dropHostProps} />}
         </>
     );
 }
@@ -337,72 +413,12 @@ function minutesAt(column: Element, clientY: number): number {
     return ((clientY - column.getBoundingClientRect().top) * 60) / HOUR_HEIGHT;
 }
 
-function atMinutes(day: Date, minutes: number): Date {
-    return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
+// The day under a pointer, of the `count` equal columns an element holds.
+function dayAt(element: Element, clientX: number, count: number): number {
+    const { left, width } = element.getBoundingClientRect();
+    return Math.min(count - 1, Math.max(0, Math.floor(((clientX - left) / width) * count)));
 }
 
 function isOnEvent(target: EventTarget): boolean {
     return target instanceof Element && target.closest('button') !== null;
-}
-
-// The range a drag draws before New event opens, on the default calendar's color, laid out as a block is.
-function DraftBlock({ day, top, bottom, color }: { day: Date; top: number; bottom: number; color: string }) {
-    const surface = colorSurface(color, 'tile');
-    const height = ((bottom - top) * HOUR_HEIGHT) / 60;
-    const range = `${formatTime(atMinutes(day, top))} – ${formatTime(atMinutes(day, bottom))}`;
-    return (
-        <div
-            className={cn(
-                'pointer-events-none inset-x-0 overflow-hidden text-xs leading-4 shadow-md',
-                BLOCK,
-                surface.className,
-            )}
-            style={{ ...surface.style, top: (top * HOUR_HEIGHT) / 60, height }}
-        >
-            {height - BLOCK_PADDING < 2 * LINE_HEIGHT ? (
-                <span className="block truncate">
-                    <span className="font-medium">(No title)</span>, {range}
-                </span>
-            ) : (
-                <>
-                    <span className="block truncate font-medium">(No title)</span>
-                    <span className="block truncate">{range}</span>
-                </>
-            )}
-        </div>
-    );
-}
-
-// What a block shows follows its height: the title always, then the time, then the place.
-function TimedEventBlock({ block, ...surfaceProps }: { block: TimedBlock } & EventSurfaceProps) {
-    const { event } = block;
-    const height = ((block.bottom - block.top) * HOUR_HEIGHT) / 60;
-    const lines = Math.floor((height - BLOCK_PADDING) / LINE_HEIGHT);
-    return (
-        <EventSurface
-            event={event}
-            {...surfaceProps}
-            className={cn(BLOCK, 'ring-1 ring-background')}
-            style={{
-                top: (block.top * HOUR_HEIGHT) / 60,
-                height,
-                left: `${(block.column / block.columns) * 100}%`,
-                width: `${(block.span / block.columns) * 100}%`,
-            }}
-        >
-            {lines < 2 ? (
-                <span className="block truncate">
-                    <span className="font-medium">{event.title}</span>, {formatTime(event.startTime)}
-                </span>
-            ) : (
-                <>
-                    <span className="block truncate font-medium">{event.title}</span>
-                    <span className="block truncate">
-                        {`${formatTime(event.startTime)} – ${formatTime(event.endTime)}`}
-                    </span>
-                    {lines > 2 && event.location && <span className="block truncate">{event.location}</span>}
-                </>
-            )}
-        </EventSurface>
-    );
 }

@@ -50,6 +50,18 @@ When you save changes to a recurring event, Calendar asks which occurrences to u
 
 Choose the option that matches what you want, then click **OK**.
 
+### Move an event by dragging
+
+With a mouse or a pen you can change an event's time without opening it.
+
+- In the **Day**, **3 days** or **Week** view, drag an event up or down to another time, or sideways to another day. It moves in steps of 15 minutes.
+- Drag the bottom edge of an event to make it end earlier or later. It stays at least 15 minutes long.
+- Drag an event in the strip of all-day events, or in the **Month** view, to another day.
+
+Press Escape while dragging to put the event back. A click without dragging still opens the detail panel. On a touch screen, dragging scrolls the calendar instead.
+
+If the event repeats, Calendar asks which occurrences to move, as it does for other edits. When you drag an occurrence to another day, it offers only **This event**. If the event has guests, a **Send update emails to guests?** dialog asks first: click **Send** to move it and tell them, or **Cancel** to leave it where it was. You can't drag an event someone else invited you to, or one on a calendar you can only view.
+
 ## Delete an event
 
 1. Click the event to open its detail panel.

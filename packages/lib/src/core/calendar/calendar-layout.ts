@@ -16,7 +16,7 @@ export const MIN_BLOCK_MINUTES = 30;
 const DAY_MINUTES = 1440;
 const DAY_MS = 86400_000;
 
-type EventTimes = { startTime: Date; endTime: Date };
+export type EventTimes = { startTime: Date; endTime: Date };
 
 export type LaneBar = {
     event: CalendarEventOccurrence;

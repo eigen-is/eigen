@@ -1,11 +1,13 @@
-// Asks which events of a series an edit or a delete applies to: this one, this and the following ones, or all. The
-// event dialogs open it before they change a recurring event, and OK hands the choice to their onConfirm.
+// Asks which events of a series an edit, a delete or a drop applies to: this one, this and the following ones, or all.
+// The event dialogs open it before they change a recurring event, and OK hands the choice to their onConfirm. A host
+// with a next question, such as a drop's guest question, resolves false and closes it by its open flag instead.
 
 import type { RecurrenceScope } from '@workspace/lib/types/calendar';
 import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
+import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useState } from 'react';
 
 const SCOPE_LABELS: Record<RecurrenceScope, string> = {
@@ -18,7 +20,7 @@ type RecurringActionDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;
-    onConfirm: (scope: RecurrenceScope) => void | Promise<void>;
+    onConfirm: (scope: RecurrenceScope) => ReturnType<DialogAction>;
     options?: readonly RecurrenceScope[];
 };
 
@@ -35,11 +37,7 @@ function RecurringActionForm({
     title,
     onConfirm,
     options,
-}: {
-    title: string;
-    onConfirm: (scope: RecurrenceScope) => void | Promise<void>;
-    options: readonly RecurrenceScope[];
-}) {
+}: Required<Pick<RecurringActionDialogProps, 'title' | 'onConfirm' | 'options'>>) {
     const [selected, setSelected] = useState(options[0]);
 
     return (
