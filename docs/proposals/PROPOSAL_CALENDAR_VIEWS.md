@@ -1,6 +1,6 @@
 # Calendar views: a time grid, month bars, a schedule list and drag
 
-Status: approved in part by the owner, 24 November 2026: views and navigation now; cards next to the event on hold (see Rulings). The research screenshots live outside the repo, in the gitignored `.superpowers/ui-reference/calendar/` (`eigen/`, `google/`, `apple/`, `inspo/` with `FINDINGS.md`).
+Status: approved by the owner, 24 November 2026: views, navigation and the sidebar's mini month first; the event card and quick create last, in the same program, once the owner has seen previews (see Rulings). The research screenshots live outside the repo, in the gitignored `.superpowers/ui-reference/calendar/` (`eigen/`, `google/`, `apple/`, `inspo/` with `FINDINGS.md`).
 
 ## Why
 
@@ -17,8 +17,8 @@ Calendar works, but its views are the weakest part of it. Week view is seven lis
 ## Rulings (owner, 24 November 2026)
 
 - Only navigation and views change. What opens when you click an event (today's detail dialog) and the Edit event and New event dialogs look as they do now. Clicking an empty slot or day, or dragging a range, opens today's New event dialog with the times filled in.
-- The event card and quick create next to the event are on hold until the views land. They are what Google, Apple, Outlook and Notion Calendar do, but no other Eigen app opens an item that way, so it is an Eigen-wide choice. ROADMAP row "Event card and quick create next to the event".
-- The sidebar lists the views as `SidebarItem`s with `to`, as Contacts, Mail and the other apps do, so on a phone the back-to-sidebar flow works the same everywhere. The mini month waits with the cards, as no other app's sidebar has one.
+- The event card and quick create next to the event come after the views, in the same program: the owner first sees the context and previews of how they could work, then rules. They are what Google, Apple, Outlook and Notion Calendar do, but no other Eigen app opens an item that way, so it is an Eigen-wide choice.
+- The sidebar lists the views as `SidebarItem`s with `to`, as Contacts, Mail and the other apps do, so on a phone the back-to-sidebar flow works the same everywhere. The mini month goes in the sidebar too.
 
 ## Goals
 
@@ -77,12 +77,12 @@ Time-zone rails, natural-language entry, tasks on the calendar, availability sha
 - **Time grid** (`time-grid.tsx`, replaces `week-view.tsx`): hour gutter, an all-day lane with spanning bars, blocks placed from `layoutTimedEvents` (title, time and place lines by height, a resize strip at the bottom on a fine pointer), a now line across today with the time in the gutter, scrolled to an hour before now when today is visible and to 07:00 otherwise, weekend columns dimmed, past events dimmed.
 - **Month**: week rows as CSS grids, multi-day bars from `monthWeekLayout`, as many lanes as the row's measured height fits, "N more" as a real popover trigger listing the day, the date number links to day view, an empty cell opens today's New event dialog on that day.
 - **Schedule**: days with events as dot, time, title and place rows; an empty state when there are none.
-- **Sidebar**: one `SidebarItem` per view (Day, 3 days, Week, Month, Schedule) with `to` and params, active on its route, replacing today's "View month" and "View week" `onClick` items. Each keeps the focused day. The mini month is on hold (see Rulings).
+- **Sidebar**: one `SidebarItem` per view (Day, 3 days, Week, Month, Schedule) with `to` and params, active on its route, replacing today's "View month" and "View week" `onClick` items. Each keeps the focused day. Below them a mini month: the focused month with today and the focused range marked, its own month steps, a click on a day opens it in the current view.
 - **Week start** slots in later by swapping the `WEEK_STARTS_ON` constant for a reader of a `calendar.weekStart` field in the existing settings JSON.
 
 ### Cards and dialogs
 
-On hold (see Rulings). This round, a click on an event opens today's `EventDetailDialog`, and a click on an empty slot or day, or a drag over a range, opens today's `CreateEventDialog` with the times filled in (an `initial` prop beside `defaultDate`). What follows is the design for later.
+Last in the program (see Rulings). While the views are built, a click on an event opens today's `EventDetailDialog`, and a click on an empty slot or day, or a drag over a range, opens today's `CreateEventDialog` with the times filled in (an `initial` prop beside `defaultDate`). What follows is the draft the previews start from.
 
 
 - **Peek card** (`event-detail.tsx`, renamed from `event-detail-dialog.tsx`, one instance at the route): today's body in a `Popover` anchored to the clicked element through `PopoverAnchor virtualRef`, the pattern `comment-hover-card.tsx` uses. A deep link and a phone keep today's `Dialog`. The sub-dialogs (confirm, recurring choice, Edit event) stay as they are.
@@ -123,6 +123,8 @@ Each unit lands with its tests, CALENDAR.md lines, help article and CHANGELOG li
 | U14 | Drag or click to create: opens today's New event dialog with the range | after U13, U6 |
 | U15 | Drag to move and resize | after U12, U13, U6, U7 |
 | U16 | Keyboard shortcuts | after U6, U8 |
+| U10 | Mini month in the sidebar | after U2, U9 |
+| U11 | Event card and quick create: context and previews to the owner, then the build the owner rules | last |
 
 Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest; its all-day lane can split off.
 
