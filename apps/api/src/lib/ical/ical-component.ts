@@ -238,9 +238,8 @@ export function patchEvent(
     return applyEdits(resource, new Map([[recurrenceKey, { kind: 'patch', patch, ctx }]]));
 }
 
-// Guests answer the ORGANIZER (RFC 5546), and RFC 5545 gives an event on one person's calendar none. So after an
-// organizer's save every VEVENT of the file names one ORGANIZER exactly while it has guests: the line the file holds,
-// else the saver's. A saver with no address, such as a script on a team calendar, names none.
+// Guests answer the ORGANIZER (RFC 5546), and an event on one person's calendar has none (RFC 5545). So a VEVENT names
+// one exactly while it has guests: the line the file holds, else the saver's, and none for a saver with no address.
 export function keepOrganizers(resource: ICAL.Component, saver: Organizer, ctx: WriteContext): boolean {
     const vevents = resource.getAllSubcomponents('vevent');
     const held = vevents.find((vevent) => vevent.hasProperty('organizer'))?.getFirstProperty('organizer');
@@ -296,9 +295,8 @@ export function raisedSequence(revisions: ReadonlyMap<string | null, Revision>):
     return highest + 1;
 }
 
-// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, since a number of its own
-// would outrank the organizer's next update, and on its copy only a message moves DTSTAMP. The organizer's scheduling
-// change takes `raised`. Any other write keeps what is `held`.
+// The one rule for a revision (RFC 5546 § 2.1.4). A receiver mirrors what a message states, as a number of its own would
+// outrank the organizer's next update; the organizer's scheduling change takes `raised`, any other write keeps `held`.
 export function revisionAfter(ctx: WriteContext, raised: number | null, held: Revision, stated?: number): Revision {
     const stamped = !!ctx.dtstamp || ctx.actorIsOrganizer;
     return {
