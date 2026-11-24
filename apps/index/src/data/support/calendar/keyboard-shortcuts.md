@@ -12,7 +12,7 @@ Calendar has single-key shortcuts in the style of Google Calendar: **t** goes to
 
 <div class="eigen-callout">
 
-The keys go quiet while a dialog is open, such as **New event** or an event's details, and while you type in a field, so typing an **m** in a title never switches the view.
+The keys go quiet while a dialog is open, such as **New event** or an event's details, while a menu or the view list is open, and while you type in a field, so typing an **m** in a title never switches the view.
 
 </div>
 
@@ -40,6 +40,6 @@ Each view key keeps the day you are looking at.
 
 | Key | What it does |
 |---|---|
-| **c** | New event, at the next quarter hour of today |
+| **c** | New event, at the next quarter hour of today, an hour long |
 
 A key pressed with **⌘**, **Ctrl**, **Alt** or **Shift** held does nothing in Calendar, so the browser's own shortcuts keep working.

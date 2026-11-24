@@ -1,6 +1,7 @@
 // Calendar's keyboard shortcuts, Google Calendar's keys: t for today, j and k or the arrows to step a period, a letter
 // per view, and c to create. Calendar's toolbar binds them once, on the whole page, and turns them off while a dialog
-// is open. The hotkey library leaves a key typed in a field to the field, and a key with a modifier to the browser.
+// or a menu is open. The hotkey library leaves a key typed in a field to the field, and a key with a modifier to the
+// browser.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import type { CalendarViewMode } from '../calendar-view';

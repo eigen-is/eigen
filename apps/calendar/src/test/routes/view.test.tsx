@@ -883,3 +883,14 @@ test('while a dialog is open the keys do nothing', async () => {
     for (const key of ['m', 'j', 'ArrowRight', 't']) await typeKey(key);
     expect(path()).toBe('/view/week/2026-10-14');
 });
+
+test('while a menu or the view select is open the keys do nothing', async () => {
+    for (const trigger of ['[aria-label="Calendar options"]', '[data-slot="select-trigger"]']) {
+        const { path } = await open('/view/week/2026-10-14');
+        await click(document.querySelector(trigger));
+        expect(document.querySelector('[role="menu"], [role="listbox"]')).not.toBeNull();
+        for (const key of ['d', 'ArrowRight']) await typeKey(key);
+        expect(path()).toBe('/view/week/2026-10-14');
+        await unmount();
+    }
+});
