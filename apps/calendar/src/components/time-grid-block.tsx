@@ -27,8 +27,8 @@ export function atMinutes(day: Date, minutes: number): Date {
     return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
 }
 
-// What a block shows follows its height: the title always, then the time, then the place. The resize edge needs a
-// fine pointer, since a finger never drags.
+// What a block shows follows its height: the title always, then the time, then the place. The resize edge shows for
+// any fine pointer, such as a Pencil on an iPad whose primary pointer is a finger, and a tap on it still clicks.
 export function TimedEventBlock({ block, className, onResizeStart, ...surfaceProps }: TimedEventBlockProps) {
     const { event } = block;
     const height = ((block.bottom - block.top) * HOUR_HEIGHT) / 60;
@@ -60,7 +60,7 @@ export function TimedEventBlock({ block, className, onResizeStart, ...surfacePro
             )}
             {onResizeStart && (
                 <span
-                    className="absolute inset-x-0 bottom-0 hidden h-1.5 cursor-ns-resize pointer-fine:block"
+                    className="absolute inset-x-0 bottom-0 hidden h-1.5 cursor-ns-resize any-pointer-fine:block"
                     onPointerDown={(e) => onResizeStart(event, e)}
                 />
             )}

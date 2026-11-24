@@ -1,6 +1,6 @@
 // Small helpers the Calendar app's views and event dialogs share, such as the color and state an event draws in and
-// the classes that state lays over its color surface, which occurrence a refetched list holds for one on screen, an
-// event's start and end from the form's date and time fields, and the key a calendar picker names a calendar by.
+// the classes that state lays over its color surface, which occurrence a refetched list holds for one on screen, whose
+// Home an event is saved in, an event's start and end from the form's fields, and the key a picker names a calendar by.
 
 import { getCalendarColor, getInviteStatus, isFreeBusyEvent, isSeriesOccurrence } from '@workspace/lib/calendar';
 import type {
@@ -60,6 +60,19 @@ export function isSameOccurrence(a: CalendarEventOccurrence, b: CalendarEventOcc
         (a.parentEventId || a.id) === (b.parentEventId || b.id) &&
         (!isSeriesOccurrence(a) || !isSeriesOccurrence(b) || a.occurrenceDate === b.occurrenceDate)
     );
+}
+
+// An event on none of the viewer's own calendars sits on a calendar shared with them, so its owner is the sharer.
+export function eventOwnerId(
+    event: CalendarEventOccurrence,
+    calendars: readonly CalendarItem[],
+    sharedCalendars: readonly SharedCalendar[] | undefined,
+    userId: string | undefined,
+): string {
+    const shared = calendars.some((c) => c.id === event.calendarId)
+        ? undefined
+        : sharedCalendars?.find((sc) => sc.calendarId === event.calendarId);
+    return shared?.ownerUserId ?? userId ?? '';
 }
 
 // A finger scrolls the views and its tap opens the event, so only the primary button of a mouse or pen drags.

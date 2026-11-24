@@ -27,6 +27,7 @@ import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
+import { useSwallowedClick } from './hooks/use-swallowed-click';
 import { MonthDayPopover } from './month-day-popover';
 
 type MonthViewProps = {
@@ -58,8 +59,7 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
     const startPointerDrag = usePointerDrag();
     // The dragged event at the days it would land on.
     const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
-    // The browser sends a click after a drag's release, and after Escape too, since the pointer stays captured.
-    const swallowClickRef = useRef(false);
+    const { swallowNextClick, rootProps } = useSwallowedClick();
 
     const weeks = useMemo(() => {
         const days = viewDays('month', focus);
@@ -81,29 +81,19 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
             end: () => {
                 setGhost(null);
                 if (!moved) return;
-                swallowClickRef.current = true;
+                swallowNextClick();
                 drop(event, moved);
             },
             cancel: () => {
                 setGhost(null);
-                swallowClickRef.current = true;
+                swallowNextClick();
             },
         });
     };
 
     return (
         <>
-            <div
-                className="flex flex-col h-full"
-                onPointerDownCapture={() => {
-                    swallowClickRef.current = false;
-                }}
-                onClickCapture={(e) => {
-                    if (!swallowClickRef.current) return;
-                    swallowClickRef.current = false;
-                    e.stopPropagation();
-                }}
-            >
+            <div className="flex flex-col h-full" {...rootProps}>
                 <div className="grid grid-cols-7 border-b">
                     {WEEKDAY_HEADERS.map((day) => (
                         <div
