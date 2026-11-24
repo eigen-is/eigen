@@ -1,5 +1,5 @@
 // The comment the card dialog shows, named by its card id or by its chat name, with its index row. A chat name no card
-// holds, such as that of a sticky deleted from its board, still names a comment while its row stays. Such a comment is
+// holds, such as that of a card deleted from its board, still names a comment while its row stays. Such a comment is
 // gone: it has no card, only the row, and the dialog shows it deleted.
 
 import { useMemo } from 'react';

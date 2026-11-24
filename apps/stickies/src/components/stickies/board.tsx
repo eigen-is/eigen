@@ -385,8 +385,8 @@ export function StickiesBoard({
                                         allowAttachments={!!mediaFolderId}
                                         members={members}
                                         currentUserEmail={user?.email}
-                                        dialogTitle="Add sticky"
-                                        submitLabel="Add sticky"
+                                        dialogTitle="Add card"
+                                        submitLabel="Add card"
                                     />
 
                                     <AddColumnDialog
@@ -421,7 +421,7 @@ export function StickiesBoard({
                                                 details: { card: removed?.title ?? '', cardId },
                                             });
                                         }}
-                                        noun="sticky"
+                                        noun="card"
                                         onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>

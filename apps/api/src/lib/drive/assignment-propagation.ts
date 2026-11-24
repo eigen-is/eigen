@@ -4,11 +4,10 @@
 
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { getServerSettings } from '../config/server-settings';
 import { WindowLimiter } from '../core/window-limiter';
 import { pushToHomes } from '../home/home-relay';
-import { composeAssignedEmail } from '../mailer/mail-composers';
+import { assignedTitle, composeAssignedEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { User } from '../user';
 import { getUserByEmail, isGuest } from '../user';
@@ -42,7 +41,7 @@ export async function propagateAssignment(
         notification: {
             type: 'assigned',
             actorEmail: actor.email,
-            title: `${actor.name || actor.email} assigned you a task on "${stripEigenExtension(path.name)}"`,
+            title: assignedTitle(path, actor),
             tag: commentAssignedTag({ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id, chatName }),
             details: { pathType: path.type },
         },

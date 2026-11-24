@@ -1,7 +1,7 @@
 // A collab document's body text for the search index, cut to the index's byte budget. It runs in the transform
 // process, so it reaches neither the Mount nor the transform seam. Each heavy reader loads through a dynamic import, so
 // a doc's extract never loads the sheet engine; the React-free chart reader is a static import. Light reads, such as a
-// sticky or a chat, stay on the main thread.
+// Stickies board or a chat, stay on the main thread.
 
 import type { JSONContent } from '@tiptap/core';
 import { chartSearchText, readChartSpec } from '@workspace/lib/charts';

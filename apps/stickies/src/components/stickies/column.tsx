@@ -98,7 +98,7 @@ export const Column = memo(function Column({
                     <div className="flex items-center">
                         <TooltipButton
                             icon={Plus}
-                            tooltipText="Add a sticky"
+                            tooltipText="Add a card"
                             onClick={() => onAddCard(column.id)}
                             className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
                         />
@@ -154,7 +154,7 @@ export const Column = memo(function Column({
                         className="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1.5 rounded-sm w-full"
                     >
                         <Plus size={16} />
-                        <span>Add a sticky</span>
+                        <span>Add a card</span>
                     </button>
                 )}
             </div>
