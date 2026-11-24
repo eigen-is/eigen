@@ -1,7 +1,7 @@
 // The calendar's main page: the signed-in user's own and shared events over the days one view shows, such as a week
 // or a month. The URL names the view's mode and its focused local day, so switching mode keeps the day, and an
-// unknown mode or day is the not-found page. A click on a month day opens the new-event dialog for that day, and
-// `?eventId=` opens that event's details.
+// unknown mode or day is the not-found page. A click on a month day opens the new-event dialog for that day, a slot or
+// range picked in the time grid opens it at those times, and `?eventId=` opens that event's details.
 
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import {
@@ -17,6 +17,7 @@ import {
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
+import type { NewEventTimes } from '../components/create-event-dialog';
 import { CreateEventDialog } from '../components/create-event-dialog';
 import { MonthView } from '../components/month-view';
 import { ScheduleView } from '../components/schedule-view';
@@ -41,6 +42,7 @@ function CalendarView() {
 
     const [createEventOpen, setCreateEventOpen] = useState(false);
     const [createEventDate, setCreateEventDate] = useState<Date | undefined>();
+    const [createEventTimes, setCreateEventTimes] = useState<NewEventTimes | undefined>();
 
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
@@ -57,6 +59,11 @@ function CalendarView() {
 
     const handleDayClick = (date: Date) => {
         setCreateEventDate(date);
+        setCreateEventTimes(undefined);
+        setCreateEventOpen(true);
+    };
+    const handleCreateEvent = (times: NewEventTimes) => {
+        setCreateEventTimes(times);
         setCreateEventOpen(true);
     };
 
@@ -98,6 +105,7 @@ function CalendarView() {
                                 calendars={calendars}
                                 sharedCalendars={sharedCalendars}
                                 initialEventId={eventId}
+                                onCreateEvent={handleCreateEvent}
                             />
                         )}
                     </div>
@@ -107,6 +115,7 @@ function CalendarView() {
                     open={createEventOpen}
                     onOpenChange={setCreateEventOpen}
                     defaultDate={createEventDate}
+                    initial={createEventTimes}
                     defaultCalendarId={defaultCalendarId}
                 />
             </Column>

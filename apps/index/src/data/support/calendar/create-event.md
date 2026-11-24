@@ -8,14 +8,15 @@ order: 30
 updated: 2026-11-24
 ---
 
-You can create an event from the sidebar or by clicking a day in the month view, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
+You can create an event from the sidebar, by clicking a day in the month view, or by clicking or dragging over a time in the day, 3-day or week view, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
 
 ## Create an event
 
-There are two ways to open the new-event form.
+There are three ways to open the new-event form.
 
 - Click **Create event** at the top of the sidebar.
 - Click a day in the **Month** view. The form opens with that date already filled in.
+- Click an empty time in the **Day**, **3 days** or **Week** view. The form opens at that quarter hour, for one hour. With a mouse you can also drag up or down a day's column to pick the start and the end at once. Press Escape while dragging to stop without opening the form. When the strip of all-day events above the hours shows, click an empty spot in it to start an all-day event on that day.
 
 The **New event** form opens as a dialog. Fill in the fields you need:
 

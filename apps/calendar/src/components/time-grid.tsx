@@ -1,7 +1,8 @@
 // The Calendar app's day, 3-day and week views: a column per day under its weekday and date, which link to that day
 // alone, an all-day lane of bars that span their days, and a scrolling day of hours with each timed event as a block
 // at its minutes, side by side where events overlap. A line marks the current time across today. A click on an event
-// opens its detail dialog; the route around it picks the days and fetches the events.
+// opens its detail dialog, and a click on an empty slot or a mouse or pen drag over a range, or a click in the all-day
+// lane, asks the route to open New event at those times; the route also picks the days and fetches the events.
 
 import { Link } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
@@ -14,18 +15,23 @@ import {
     isFreeBusyEvent,
     layoutTimedEvents,
     monthWeekLayout,
+    slotAt,
+    slotRange,
     toLocalDateString,
     weekdayHeader,
 } from '@workspace/lib/calendar';
+import { DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
 import { formatTime } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { usePointerDrag } from '@workspace/ui/hooks/use-pointer-drag';
 import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { eventSurfaceClasses } from './calendar-utils';
+import type { NewEventTimes } from './create-event-dialog';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
 
@@ -35,7 +41,11 @@ type TimeGridProps = {
     calendars: readonly CalendarItem[];
     sharedCalendars?: readonly SharedCalendar[];
     initialEventId?: string;
+    onCreateEvent: (times: NewEventTimes) => void;
 };
+
+// A range drawn over one day column, in minutes from its midnight.
+type Draft = { dayIdx: number; top: number; bottom: number };
 
 const HOUR_HEIGHT = 48;
 const MAX_ALL_DAY_LANES = 3;
@@ -44,9 +54,12 @@ const SCROLL_TO_HOUR = 7;
 const LINE_HEIGHT = 16;
 const BLOCK_PADDING = 4;
 const GUTTER = 'w-11 shrink-0 md:w-14';
+// A drag this close to the scroller's top or bottom edge scrolls it by a step each frame.
+const NUDGE_EDGE_PX = 24;
+const NUDGE_STEP_PX = 6;
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => formatTime(new Date(2026, 0, 1, hour)));
 
-export function TimeGrid({ days, events, calendars, sharedCalendars, initialEventId }: TimeGridProps) {
+export function TimeGrid({ days, events, calendars, sharedCalendars, initialEventId, onCreateEvent }: TimeGridProps) {
     const { handleEventClick, detailDialogProps } = useEventDetailState({
         events,
         calendars,
@@ -56,11 +69,17 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const [allDayExpanded, setAllDayExpanded] = useState(false);
     const [now, setNow] = useState(() => new Date());
     const scrollerRef = useRef<HTMLDivElement>(null);
+    const startPointerDrag = usePointerDrag();
+    const [draft, setDraft] = useState<Draft | null>(null);
+    const nudgeFrameRef = useRef(0);
+    // The browser sends a click after a drag's release, and after Escape too, since the pointer stays captured.
+    const swallowClickRef = useRef(false);
 
     useEffect(() => {
         const timer = setInterval(() => setNow(new Date()), 60_000);
         return () => clearInterval(timer);
     }, []);
+    useEffect(() => () => cancelAnimationFrame(nudgeFrameRef.current), []);
 
     useLayoutEffect(() => {
         const scroller = scrollerRef.current;
@@ -81,6 +100,63 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const nowTop = ((now.getHours() * 60 + now.getMinutes()) * HOUR_HEIGHT) / 60;
     const columns = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` };
     const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
+    const draftColor = (calendars.find((c) => c.isDefault) ?? calendars[0])?.color ?? DEFAULT_CALENDAR_COLOR;
+
+    const createTimed = (dayIdx: number, top: number, bottom: number) =>
+        onCreateEvent({ start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false });
+
+    // Mouse and pen draw a range; a finger scrolls the grid, and its tap is the column's click.
+    const handleColumnPointerDown = (e: React.PointerEvent<HTMLDivElement>, dayIdx: number) => {
+        swallowClickRef.current = false;
+        if ((e.pointerType !== 'mouse' && e.pointerType !== 'pen') || e.button !== 0 || isOnEvent(e.target)) return;
+        const column = e.currentTarget;
+        const pressed = minutesAt(column, e.clientY);
+        let lastY = e.clientY;
+        let range: Draft | null = null;
+        const follow = () => {
+            range = { dayIdx, ...slotRange(pressed, minutesAt(column, lastY)) };
+            setDraft(range);
+        };
+        // Runs a frame at a time for as long as the pointer near an edge still scrolls the grid.
+        const nudge = () => {
+            nudgeFrameRef.current = 0;
+            const scroller = scrollerRef.current;
+            if (!scroller) return;
+            const { top, bottom } = scroller.getBoundingClientRect();
+            const step =
+                lastY < top + NUDGE_EDGE_PX ? -NUDGE_STEP_PX : lastY > bottom - NUDGE_EDGE_PX ? NUDGE_STEP_PX : 0;
+            const scrollTop = Math.min(
+                scroller.scrollHeight - scroller.clientHeight,
+                Math.max(0, scroller.scrollTop + step),
+            );
+            if (scrollTop === scroller.scrollTop) return;
+            scroller.scrollTop = scrollTop;
+            follow();
+            nudgeFrameRef.current = requestAnimationFrame(nudge);
+        };
+        const stop = () => {
+            cancelAnimationFrame(nudgeFrameRef.current);
+            nudgeFrameRef.current = 0;
+            setDraft(null);
+        };
+        startPointerDrag(e, {
+            move: (me) => {
+                lastY = me.clientY;
+                follow();
+                if (nudgeFrameRef.current === 0) nudge();
+            },
+            end: () => {
+                stop();
+                if (!range) return;
+                swallowClickRef.current = true;
+                createTimed(range.dayIdx, range.top, range.bottom);
+            },
+            cancel: () => {
+                stop();
+                swallowClickRef.current = true;
+            },
+        });
+    };
 
     return (
         <>
@@ -134,7 +210,17 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                 />
                             )}
                         </div>
-                        <div className="grid flex-1 gap-y-0.5 py-0.5" style={columns}>
+                        <div
+                            className="grid flex-1 gap-y-0.5 py-0.5"
+                            style={columns}
+                            onClick={(e) => {
+                                if (isOnEvent(e.target)) return;
+                                const { left, width } = e.currentTarget.getBoundingClientRect();
+                                const idx = Math.floor(((e.clientX - left) / width) * days.length);
+                                const day = days[Math.min(days.length - 1, Math.max(0, idx))];
+                                onCreateEvent({ start: day, end: day, allDay: true });
+                            }}
+                        >
                             {bars.map((bar) => (
                                 <AllDayBar
                                     key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
@@ -183,7 +269,15 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                             )}
                         </div>
 
-                        <div className="relative grid flex-1" style={columns}>
+                        <div
+                            className="relative grid flex-1"
+                            style={columns}
+                            onClickCapture={(e) => {
+                                if (!swallowClickRef.current) return;
+                                swallowClickRef.current = false;
+                                e.stopPropagation();
+                            }}
+                        >
                             {HOUR_LABELS.slice(1).map((label, idx) => (
                                 <div
                                     key={label}
@@ -198,6 +292,12 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                         'relative border-l',
                                         (day.getDay() === 0 || day.getDay() === 6) && 'bg-muted/30',
                                     )}
+                                    onPointerDown={(e) => handleColumnPointerDown(e, dayIdx)}
+                                    onClick={(e) => {
+                                        if (isOnEvent(e.target)) return;
+                                        const top = slotAt(minutesAt(e.currentTarget, e.clientY));
+                                        createTimed(dayIdx, top, top + 60);
+                                    }}
                                 >
                                     <div className="absolute inset-y-0 left-0 right-1 md:right-2">
                                         {blocks[dayIdx].map((block) => (
@@ -207,6 +307,14 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                                 {...surfaceProps}
                                             />
                                         ))}
+                                        {draft?.dayIdx === dayIdx && (
+                                            <DraftBlock
+                                                day={day}
+                                                top={draft.top}
+                                                bottom={draft.bottom}
+                                                color={draftColor}
+                                            />
+                                        )}
                                     </div>
                                     {dayIdx === todayIndex && (
                                         <div
@@ -225,6 +333,46 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
 
             <EventDetailDialog {...detailDialogProps} />
         </>
+    );
+}
+
+// Minutes from the column's midnight under a pointer; the column's box moves with the scroller, so it holds the scroll.
+function minutesAt(column: Element, clientY: number): number {
+    return ((clientY - column.getBoundingClientRect().top) * 60) / HOUR_HEIGHT;
+}
+
+function atMinutes(day: Date, minutes: number): Date {
+    return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
+}
+
+function isOnEvent(target: EventTarget): boolean {
+    return target instanceof Element && target.closest('button') !== null;
+}
+
+// The range a drag draws before New event opens, on the default calendar's color, laid out as a block is.
+function DraftBlock({ day, top, bottom, color }: { day: Date; top: number; bottom: number; color: string }) {
+    const surface = colorSurface(color);
+    const height = ((bottom - top) * HOUR_HEIGHT) / 60;
+    const range = `${formatTime(atMinutes(day, top))} – ${formatTime(atMinutes(day, bottom))}`;
+    return (
+        <div
+            className={cn(
+                'pointer-events-none absolute inset-x-0 overflow-hidden rounded px-1 py-0.5 text-xs leading-4 shadow-md',
+                surface.className,
+            )}
+            style={{ ...surface.style, top: (top * HOUR_HEIGHT) / 60, height }}
+        >
+            {height - BLOCK_PADDING < 2 * LINE_HEIGHT ? (
+                <span className="block truncate">
+                    <span className="font-medium">(No title)</span>, {range}
+                </span>
+            ) : (
+                <>
+                    <span className="block truncate font-medium">(No title)</span>
+                    <span className="block truncate">{range}</span>
+                </>
+            )}
+        </div>
     );
 }
 

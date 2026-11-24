@@ -43,7 +43,7 @@ If someone has shared a calendar with you, it appears under **Shared with me**. 
 There are two ways to open the **New event** dialog:
 
 - Click **Create event** at the top of the sidebar.
-- Click directly on a day in the grid. The dialog opens with that date already filled in.
+- Click an empty time in the grid, or drag over a range of time with a mouse. The dialog opens with that time already filled in. In the **Month** view, click a day to fill in its date.
 
 In the dialog:
 

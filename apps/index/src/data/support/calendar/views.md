@@ -49,6 +49,6 @@ Today's date is always highlighted with a filled circle, so you can spot it at a
 
 On a phone, **Today** and the view picker fold into the **⋮** button (**View options**) on the right of the toolbar. Tap a view in the sidebar to go back to the calendar.
 
-## Create an event by clicking a day
+## Create an event by clicking the grid
 
-In the month view, you can click any day to open the event creation dialog with that date pre-filled. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In the month view, you can click any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. See [Create and edit an event](/support/calendar/create-event) for the full steps.
