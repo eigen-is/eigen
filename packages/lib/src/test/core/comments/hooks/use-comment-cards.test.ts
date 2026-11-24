@@ -197,7 +197,7 @@ describe('useCommentCards sanitizes hostile description HTML', () => {
         expect(countTaskItems(card.description)).toEqual({ checked: 2, total: 3 });
     });
 
-    test('sanitizing is idempotent — the toggled innerHTML CardDialogFrame writes back is stable', () => {
+    test('sanitizing is idempotent — the toggled innerHTML CardBody writes back is stable', () => {
         const dirty =
             '<p><strong>keep</strong> <a href="https://eigen.is">link</a></p>' +
             '<img src=x onerror="alert(1)"><script>alert(2)</script>' +
