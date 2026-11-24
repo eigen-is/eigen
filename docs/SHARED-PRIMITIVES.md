@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2414 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2415 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1179,7 +1179,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1271)
+## Utilities & constants (1272)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1572,6 +1572,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MIN_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `nextFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `paleTone` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `parseRgb` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `PASTE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |

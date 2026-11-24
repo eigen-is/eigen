@@ -201,7 +201,7 @@ test('a day holds the events its row fits, all-day first, and gives its last lan
     expect(container.textContent).toContain('2 more');
 });
 
-test("an all-day pill's title is black on a light color and white on a dark one", async () => {
+test("an all-day pill's title is black on the pale fill, for a deep color too", async () => {
     const allDay = (title: string, color: string) =>
         event({
             title,
@@ -214,7 +214,7 @@ test("an all-day pill's title is black on a light color and white on a dark one"
     const { container } = await open();
     expect([pill(container, 'Pale'), pill(container, 'Deep')].map((p) => p?.getAttribute('style'))).toEqual([
         expect.stringMatching(/(^|; )--surface-fg: #000;/),
-        expect.stringMatching(/(^|; )--surface-fg: #fff;/),
+        expect.stringMatching(/(^|; )--surface-fg: #000;/),
     ]);
 });
 
