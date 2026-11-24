@@ -1,32 +1,22 @@
-// The Calendar app's month grid: every week the month touches, each day with up to four events, all-day ones first
-// as pills in their calendar's color and timed ones as a dot and a time, then a count of the rest. A click on an
-// event opens its detail dialog and a click on a day creates an event there; the route around it fetches the events.
+// The Calendar app's month grid: every week the month touches, each day with up to four events, all-day ones first,
+// then an "N more" that lists them all. A click on an event opens its detail dialog and a click on a day creates an
+// event there; the route around it fetches the events.
 
-import { useAuth } from '@workspace/lib/auth';
-import {
-    formatEventTime,
-    getCalendarColor,
-    getDaysInRange,
-    getEventsForDay,
-    getInviteStatus,
-    getMonthRange,
-    isFreeBusyEvent,
-    WEEKDAY_HEADERS,
-} from '@workspace/lib/calendar';
-import { readableTextColor } from '@workspace/lib/constants/colors';
+import { getDaysInRange, getEventsForDay, getMonthRange, WEEKDAY_HEADERS } from '@workspace/lib/calendar';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo } from 'react';
-import { eventPillStateClasses } from './calendar-utils';
+import { EventChip } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
+import { MonthDayPopover } from './month-day-popover';
 
 type MonthViewProps = {
     currentDate: Date;
-    events: CalendarEventOccurrence[];
-    calendars: CalendarItem[];
-    sharedCalendars?: SharedCalendar[];
+    events: readonly CalendarEventOccurrence[];
+    calendars: readonly CalendarItem[];
+    sharedCalendars?: readonly SharedCalendar[];
     onDayClick?: (date: Date) => void;
     initialEventId?: string;
 };
@@ -41,7 +31,6 @@ export function MonthView({
     onDayClick,
     initialEventId,
 }: MonthViewProps) {
-    const { user } = useAuth();
     const { handleEventClick, detailDialogProps } = useEventDetailState({
         events,
         calendars,
@@ -110,68 +99,24 @@ export function MonthView({
                                         </div>
 
                                         <div className="space-y-0.5">
-                                            {visibleEvents.map((event, idx) => {
-                                                const freeBusy = isFreeBusyEvent(event);
-                                                const color = getCalendarColor(event, calendars, sharedCalendars);
-                                                const inviteStatus = freeBusy
-                                                    ? null
-                                                    : getInviteStatus(event, user?.email);
-                                                if (event.allDay) {
-                                                    return (
-                                                        <div
-                                                            key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                            className={cn(
-                                                                'text-xs leading-tight px-1 py-0.5 rounded truncate',
-                                                                eventPillStateClasses('block', freeBusy, inviteStatus),
-                                                            )}
-                                                            style={
-                                                                inviteStatus === 'pending'
-                                                                    ? { borderColor: color, color }
-                                                                    : {
-                                                                          backgroundColor: color,
-                                                                          color: readableTextColor(color),
-                                                                      }
-                                                            }
-                                                            onClick={(e) => handleEventClick(event, e)}
-                                                            title={event.title}
-                                                        >
-                                                            {event.title}
-                                                        </div>
-                                                    );
-                                                }
-                                                return (
-                                                    <div
-                                                        key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                        className={cn(
-                                                            'text-xs leading-tight flex items-center gap-1 truncate rounded px-0.5',
-                                                            eventPillStateClasses('dot', freeBusy, inviteStatus),
-                                                        )}
-                                                        onClick={(e) => handleEventClick(event, e)}
-                                                        title={event.title}
-                                                    >
-                                                        <div
-                                                            className={cn(
-                                                                'h-1.5 w-1.5 rounded-full shrink-0',
-                                                                inviteStatus === 'pending' &&
-                                                                    'ring-1 ring-current bg-transparent',
-                                                            )}
-                                                            style={{
-                                                                backgroundColor:
-                                                                    inviteStatus === 'pending' ? 'transparent' : color,
-                                                                color,
-                                                            }}
-                                                        />
-                                                        <span className="text-muted-foreground">
-                                                            {formatEventTime(event)}
-                                                        </span>
-                                                        <span className="truncate">{event.title}</span>
-                                                    </div>
-                                                );
-                                            })}
+                                            {visibleEvents.map((event, idx) => (
+                                                <EventChip
+                                                    key={`${event.id}-${event.occurrenceDate}-${idx}`}
+                                                    event={event}
+                                                    calendars={calendars}
+                                                    sharedCalendars={sharedCalendars}
+                                                    onClick={handleEventClick}
+                                                />
+                                            ))}
                                             {moreCount > 0 && (
-                                                <div className="text-xs text-muted-foreground font-medium px-0.5">
-                                                    {moreCount} more
-                                                </div>
+                                                <MonthDayPopover
+                                                    day={day}
+                                                    events={sortedEvents}
+                                                    hiddenCount={moreCount}
+                                                    calendars={calendars}
+                                                    sharedCalendars={sharedCalendars}
+                                                    onEventClick={handleEventClick}
+                                                />
                                             )}
                                         </div>
                                     </div>
