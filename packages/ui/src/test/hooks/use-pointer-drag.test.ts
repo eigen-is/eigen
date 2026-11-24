@@ -22,7 +22,7 @@ async function press(threshold?: number) {
                 startDrag(e, {
                     threshold,
                     move: (me) => heard.push(`move ${me.clientX}`),
-                    end: (travelled) => heard.push(travelled ? 'end travelled' : 'end'),
+                    end: () => heard.push('end'),
                     cancel: () => heard.push('cancel'),
                 }),
         });
@@ -54,20 +54,20 @@ test('a press that stays under the default threshold ends as a click', async () 
     expect(heard).toEqual(['end']);
 });
 
-test('a press past the threshold moves and ends travelled', async () => {
+test('a press past the threshold moves and ends', async () => {
     const heard = await press();
     await moveTo(DRAG_THRESHOLD_PX - 1);
     await moveTo(DRAG_THRESHOLD_PX);
     await moveTo(DRAG_THRESHOLD_PX + 3);
     await release();
-    expect(heard).toEqual([`move ${DRAG_THRESHOLD_PX}`, `move ${DRAG_THRESHOLD_PX + 3}`, 'end travelled']);
+    expect(heard).toEqual([`move ${DRAG_THRESHOLD_PX}`, `move ${DRAG_THRESHOLD_PX + 3}`, 'end']);
 });
 
 test('a zero threshold is live from the first move', async () => {
     const heard = await press(0);
     await moveTo(1);
     await release();
-    expect(heard).toEqual(['move 1', 'end travelled']);
+    expect(heard).toEqual(['move 1', 'end']);
 });
 
 test('Escape cancels, and the release after it ends nothing', async () => {
@@ -75,6 +75,16 @@ test('Escape cancels, and the release after it ends nothing', async () => {
     await moveTo(20);
     await act(async () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await release();
+    expect(heard).toEqual(['move 20', 'cancel']);
+});
+
+test('a cancelled pointer after travel cancels and never ends', async () => {
+    const heard = await press();
+    await moveTo(20);
+    await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }));
     });
     await release();
     expect(heard).toEqual(['move 20', 'cancel']);

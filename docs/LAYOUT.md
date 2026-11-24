@@ -235,7 +235,7 @@ A menu row's icon gap lives in the item primitives (`gap-4`); never add `mr-*` o
 
 Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Dragging between lists, onto a sidebar target, or to and from the OS uses native HTML5 drag (`useListDrag`, `useListDropTarget`, `useFileDropTarget`), because dnd-kit never sees an OS file drop and only the native path carries the drag type across lists.
 
-Placing and resizing on a surface, such as a canvas handle or a block on the calendar's time grid, uses `usePointerDrag` from `packages/ui/src/hooks/`. The other two move an item from one slot to another, while a surface puts it at any point and resizes it, which dnd-kit can't, so the hook follows the pointer under pointer capture and Escape cancels. dnd-kit's sensors, `useDragScroll` and `usePointerDrag` read one `DRAG_THRESHOLD_PX` from `@workspace/lib/constants/drag`, the travel before a press becomes a drag, so a click means the same everywhere. Vector's handles pass a smaller threshold of their own, since a handle drag goes live almost at once.
+Placing and resizing a handle or block that follows one pointer uses `usePointerDrag` from `packages/ui/src/hooks/`: it follows the pointer under pointer capture, and Escape or a cancelled pointer cancels. dnd-kit has no resize. `ObjectTransform` keeps its own lifecycle, since Alt and Shift reshape a resize mid-drag. dnd-kit's sensors, `useDragScroll` and `usePointerDrag`'s default read one `DRAG_THRESHOLD_PX` from `@workspace/lib/constants/drag`, the travel before a press becomes a drag. Vector's handles pass a smaller threshold of their own, since a handle drag goes live almost at once.
 
 ## Hover-revealed affordances rest visible on touch
 

@@ -16,15 +16,15 @@ import {
     parsePoints,
     shapeAnchorPoints,
 } from '@workspace/lib/vector';
+import { cn } from '@workspace/ui/lib/utils';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
 import { usePointerDrag } from '../../../hooks/use-pointer-drag';
-import { cn } from '../../../lib/utils';
 import { pointInsideShape } from './binding';
 
 // Screen radius of a side-midpoint snap dot (Excalidraw's 4 / zoom).
 const SNAP_DOT_SCREEN_R = 4;
-// Excalidraw's focus point size; the indicator hides once its anchor sits this close to its own endpoint.
+// Excalidraw's focus point size; the dot's radius and the gap under which the indicator hides derive from it.
 const FOCUS_POINT_SIZE = 10;
 const FOCUS_CIRCLE_SCREEN_R = FOCUS_POINT_SIZE / 1.5 / 1.5;
 const FOCUS_MIN_SCREEN_GAP = FOCUS_POINT_SIZE * 1.5;

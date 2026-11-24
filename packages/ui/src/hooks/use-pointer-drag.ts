@@ -1,7 +1,8 @@
 // The pointer-drag lifecycle for placing and resizing on a surface, such as a canvas handle's dot. One gesture
 // at a time under pointer capture, a travel threshold before the first move counts, Escape to cancel, and every
-// document listener torn down by one AbortController: on release, on Escape, and on unmount if the host goes
-// mid-drag. The caller keeps its own move, end and cancel bodies, and filters pointer types itself.
+// document listener torn down by one AbortController: on release, on Escape or a cancelled pointer, and on unmount
+// if the host goes mid-drag. The caller keeps its own move, end and cancel bodies. It filters pointer types and
+// buttons itself, since the hook prevents and stops the press at once.
 
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import type { MutableRefObject } from 'react';
@@ -11,8 +12,8 @@ type PointerDragOptions = {
     // Client px the pointer travels before the drag goes live; below it the press is a click.
     threshold?: number;
     move: (e: PointerEvent) => void;
-    // A press that never travelled is a click, which must not write and may be the caller's to handle.
-    end: (travelled: boolean) => void;
+    // A press that never travelled is a click, which must not write; the caller's own draft says whether it moved.
+    end: () => void;
     cancel: () => void;
 };
 
@@ -53,7 +54,12 @@ export function usePointerDrag(draggingRef?: MutableRefObject<boolean>): StartPo
         const onUp = (pe: PointerEvent) => {
             if (pe.pointerId !== pointerId) return;
             release();
-            end(travelled);
+            end();
+        };
+        const onCancel = (pe: PointerEvent) => {
+            if (pe.pointerId !== pointerId) return;
+            release();
+            cancel();
         };
         const onKey = (ke: KeyboardEvent) => {
             if (ke.key !== 'Escape') return;
@@ -64,7 +70,7 @@ export function usePointerDrag(draggingRef?: MutableRefObject<boolean>): StartPo
         };
         document.addEventListener('pointermove', onMove, { signal });
         document.addEventListener('pointerup', onUp, { signal });
-        document.addEventListener('pointercancel', onUp, { signal });
+        document.addEventListener('pointercancel', onCancel, { signal });
         document.addEventListener('keydown', onKey, { signal, capture: true });
     };
 }

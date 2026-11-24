@@ -5,9 +5,9 @@
 
 import type { Box, FixedSegment, PinPatch, PinRoutingContext, Point, VectorArrowElement } from '@workspace/lib/vector';
 import { materializeFirstPin, moveSegment, parseFixedSegments, unpinSegment } from '@workspace/lib/vector';
+import { cn } from '@workspace/ui/lib/utils';
 import type { MutableRefObject } from 'react';
 import { usePointerDrag } from '../../../hooks/use-pointer-drag';
-import { cn } from '../../../lib/utils';
 
 // Client px a pin press travels before it pins, so a click never does.
 const PIN_DRAG_THRESHOLD_PX = 2;

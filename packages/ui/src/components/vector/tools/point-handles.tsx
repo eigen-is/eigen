@@ -5,10 +5,10 @@
 
 import type { Box, Point, VectorArrowElement, VectorLinearElement } from '@workspace/lib/vector';
 import { linearLocalToScene, linearSceneToLocal, parsePoints } from '@workspace/lib/vector';
+import { cn } from '@workspace/ui/lib/utils';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
 import { usePointerDrag } from '../../../hooks/use-pointer-drag';
-import { cn } from '../../../lib/utils';
 
 // Client px a midpoint press travels before it inserts, so a plain click adds nothing (Excalidraw's value).
 const MIDPOINT_DRAG_THRESHOLD_PX = 2;
