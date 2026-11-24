@@ -65,7 +65,7 @@ Holding Alt at the drop duplicates the card instead of moving it. The copy goes 
 Most of `board.tsx` wires shared comment modules rather than board code:
 
 - `CommentLifecycleDialogs` for the card dialog, edit form, resolve and delete flows.
-- `colorSurface` (`packages/ui/src/lib/color-surface.ts`) draws a colored card, as `CardTile` on the board and as `CardBody` when open, so a card looks the same in both. Every color surface, calendar events included, takes one tint, `COLOR_SURFACE_TINT`, and a card sets none of its own.
+- `colorSurface` (`packages/ui/src/lib/color-surface.ts`) draws a colored card, as `CardTile` on the board and as `CardBody` when open, so a card looks the same in both. Every color surface, calendar events included, fills in light mode with its color's pale tone (`paleTone`, the family's 100 step, or a typed hex lightened by `PALE_TONE_LIGHTEN`) lightened by one tint, `COLOR_SURFACE_TINT`, with no stripe, so a yellow event looks like a yellow card; in dark mode it is a 14% wash of the indicator color with a 2px stripe. A card sets no tint of its own.
 - `useCommentFilter({ status: 'all' })` drives column contents, so resolved cards stay on the board. The toolbar adds the filter menu, a color row and a summary chip.
 - `PanelColumn` shows the activity panel on desktop only. On mobile the toolbar hides its toggle, because the panel has nowhere to render.
 - One `useContextMenu` opens on right-click and on long-press. Cards are `touch-none` for the drag sensor, which suppresses the native context menu on touch.
