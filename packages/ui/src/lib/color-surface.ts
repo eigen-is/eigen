@@ -1,4 +1,4 @@
-// A block in a color a person picked, such as a sticky or a calendar event, drawn one way everywhere. In light mode
+// A block in a color a person picked, such as a card or a calendar event, drawn one way everywhere. In light mode
 // it fills with the color lightened toward white, with text that reads on it; in dark mode it looks like a mail list
 // row, a faint wash of the indicator tone with a 2px stripe in it. It hands back classes and the style that sets
 // their variables, so a caller merges its own classes, such as an event state, after these with cn.
