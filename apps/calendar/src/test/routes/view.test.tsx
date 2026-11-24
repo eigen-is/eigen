@@ -5,7 +5,8 @@
 // a computer picks the view in the toolbar and a phone in the sidebar, both keeping the day, an unknown view or day is
 // not found, and the start page picks the view for the device. The schedule lists only the days with events, opens an
 // event's detail on a click, and says when the days are empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
-// multi-day all-day events as one bar, and the current time only while today is in view.
+// multi-day all-day events as one bar, and the current time only while today is in view. Google's keys switch the
+// view on the same day, go to today and open New event, and do nothing while a dialog is open.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -784,4 +785,37 @@ test('in dark mode a block, a bar and a drawn range leave room after their color
         draftClasses = column.querySelector('.pointer-events-none')?.className ?? '';
     });
     expect(draftClasses.split(' ')).toContain('dark:pl-2');
+});
+
+const typeKey = (key: string) =>
+    act(async () => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
+
+test('m goes to the month of the same day, and t to today', async () => {
+    setSystemTime(new Date(2026, 10, 24, 9));
+    const { path } = await open('/view/week/2026-10-14');
+    await typeKey('m');
+    expect(path()).toBe('/view/month/2026-10-14');
+    await typeKey('t');
+    expect(path()).toBe('/view/month/2026-11-24');
+});
+
+test('c opens New event at the next quarter hour of today', async () => {
+    setSystemTime(new Date(2026, 9, 27, 10, 7));
+    await open('/view/week/2026-10-14');
+    await typeKey('c');
+    expect(await savedTimes()).toEqual({
+        startTime: new Date(2026, 9, 27, 10, 15),
+        endTime: new Date(2026, 9, 27, 10, 45),
+        allDay: false,
+    });
+});
+
+test('while a dialog is open the keys do nothing', async () => {
+    const { path } = await open('/view/week/2026-10-14');
+    await typeKey('c');
+    expect(dialogTitle()).toBe('New event');
+    for (const key of ['m', 'j', 'ArrowRight', 't']) await typeKey(key);
+    expect(path()).toBe('/view/week/2026-10-14');
 });

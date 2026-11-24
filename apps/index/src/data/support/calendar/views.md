@@ -3,7 +3,7 @@ title: "Switch views and navigate dates"
 description: "Choose a day, 3-day, week, month or schedule view, move forward or backward through time, and jump back to today."
 type: how-to
 tags: [calendar, navigation, day, week, month, schedule]
-related: [calendar/get-started, calendar/create-event]
+related: [calendar/get-started, calendar/create-event, calendar/keyboard-shortcuts]
 order: 20
 updated: 2026-11-24
 ---
@@ -56,6 +56,10 @@ Click **Today** in the toolbar to return to today in the view you are in.
 Today's date is always highlighted with a filled circle, so you can spot it at a glance.
 
 On a phone, **Today** folds into the **⋮** button (**View options**) on the right of the toolbar.
+
+## Use the keyboard
+
+On a computer, single keys do the same as the toolbar: **t** for today, **j** and **k** for the next and previous period, and **d**, **x**, **w**, **m** and **a** for the views. See [Keyboard shortcuts in Calendar](/support/calendar/keyboard-shortcuts) for every key.
 
 ## Create an event by clicking the grid
 

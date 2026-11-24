@@ -1,13 +1,16 @@
 // The calendar's main page: the signed-in user's own and shared events over the days one view shows, such as a week
 // or a month. The URL names the view's mode and its focused local day, so switching mode keeps the day, and an
 // unknown mode or day is the not-found page. A click on a month day opens the new-event dialog for that day, a slot or
-// range picked in the time grid opens it at those times, and `?eventId=` opens that event's details.
+// range picked in the time grid opens it at those times, and `?eventId=` opens that event's details. Google's keys,
+// such as t for today or m for month, work here while no dialog is open.
 
-import { createFileRoute, notFound } from '@tanstack/react-router';
+import { createFileRoute, notFound, useNavigate } from '@tanstack/react-router';
 import {
     isCalendarViewMode,
     parseDayKey,
+    toLocalDateString,
     useAllSharedCalendarEvents,
+    useCalendarShortcuts,
     useCalendars,
     useEvents,
     useSharedCalendars,
@@ -15,6 +18,7 @@ import {
     viewRange,
 } from '@workspace/lib/calendar';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
 import type { NewEventTimes } from '../components/create-event-dialog';
@@ -66,6 +70,21 @@ function CalendarView() {
         setCreateEventTimes(times);
         setCreateEventOpen(true);
     };
+
+    const navigate = useNavigate();
+    useCalendarShortcuts({
+        mode,
+        focus,
+        show: (nextMode, day) =>
+            navigate({ to: '/view/$mode/$date', params: { mode: nextMode, date: toLocalDateString(day) } }),
+        // As the sidebar's Create event, at the next quarter hour of today.
+        create: () => {
+            setCreateEventDate(undefined);
+            setCreateEventTimes(undefined);
+            setCreateEventOpen(true);
+        },
+        enabled: !useDialogOpen(),
+    });
 
     const defaultCalendarId = calendars.find((c) => c.isDefault)?.id ?? calendars[0]?.id;
 
