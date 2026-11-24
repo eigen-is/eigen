@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Report a security vulnerability
+  - name: Report a security problem
     url: https://github.com/eigen-is/eigen/security/advisories/new
-    about: Please report security issues privately, not via public issues. See SECURITY.md.
-  - name: Questions, ideas, or general discussion
+    about: Report it privately, not in a public issue.
+  - name: Questions and ideas
     url: mailto:reinder@eigen.is
-    about: For open-ended questions or project direction, email reinder@eigen.is.
+    about: Mail reinder@eigen.is.

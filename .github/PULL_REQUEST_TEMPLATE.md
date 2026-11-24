@@ -1,39 +1,19 @@
 <!--
-Thanks for opening a PR!
+Small fixes are welcome as a pull request. For a new feature or a bigger change, open an issue first, so we can agree on it before you write code.
 
-**Heads up: for new features or larger changes, please open an issue first** instead of a PR.
-The codebase moves fast and feature PRs often need a rebase or a rethink before they can land.
-Small fixes — bugs, typos, UI tweaks — are very welcome as PRs directly.
-
-Want to take over a whole area (a full app, or a cross-cutting concern)? Email reinder@eigen.is
-rather than opening a PR. See docs/CONTRIBUTING.md for details.
-
-Reminders:
-- One concern per PR. Split unrelated changes into separate PRs.
-- Run `bun run check` (lint + typecheck + test) before pushing.
-- Enable "Allow edits from maintainers" so I can help land your PR.
-- See docs/CONTRIBUTING.md and AGENTS.md before writing code.
+Please turn on "Allow edits from maintainers".
 -->
 
-## What
+## What and why
 
-<!-- What does this PR do? One or two sentences. -->
-
-## Why
-
-<!-- Why is this change needed? Link a related issue if there is one. -->
-
-Closes #
+<!-- What does this change, and why? Link the issue if there is one. -->
 
 ## How to test
 
-<!-- Steps for a reviewer to verify this works. Include setup if non-obvious. -->
+<!-- How can someone check that it works? -->
 
 ## Checklist
 
-- [ ] One concern per PR
-- [ ] `bun run check` passes locally (lint + typecheck + test)
-- [ ] New code lives in the right layer (see AGENTS.md: hooks in `packages/lib/`, shared UI in `packages/ui/`, app-specific in `apps/`)
-- [ ] New code follows all rules from `CODE-STANDARDS.md`
-- [ ] Relevant docs in `docs/` (and `AGENTS.md` if architecture changed) are updated
-- [ ] "Allow edits from maintainers" is enabled on this PR
+- [ ] `bun run check` passes
+- [ ] The code follows [CODE-STANDARDS.md](https://github.com/eigen-is/eigen/blob/main/docs/CODE-STANDARDS.md)
+- [ ] The docs are updated
