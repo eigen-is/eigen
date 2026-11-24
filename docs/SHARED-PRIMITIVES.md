@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2381 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2380 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (329)
+## Components (328)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -52,7 +52,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardHeader` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardTitle` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
-| `CardDialogFrame` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog-frame.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
 | `CardTile` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-tile.tsx |
