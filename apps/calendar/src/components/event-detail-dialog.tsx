@@ -15,7 +15,12 @@ import {
     useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    RecurrenceScope,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -33,7 +38,6 @@ import { UserName } from '@workspace/ui/components/user';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
-import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
 
 // The replies to an invitation, in the order the panel shows them.
@@ -82,22 +86,22 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const attendees = event.data?.attendees ?? [];
     const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
 
-    const handleRecurringDelete = async (action: RecurringAction) => {
+    const handleRecurringDelete = async (scope: RecurrenceScope) => {
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
-            if (action === 'all') {
+            if (scope === 'all') {
                 await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId, etag: event.etag });
             } else {
                 await rsvp.mutateAsync({
                     calendarId: event.calendarId,
                     eventId,
                     status: 'declined',
-                    scope: action,
+                    scope,
                     recurrenceDate: event.occurrenceDate,
                     remove: true,
                 });
             }
-        } else if (action === 'this') {
+        } else if (scope === 'this') {
             if (isException) {
                 await updateEvent.mutateAsync({
                     id: event.id,
@@ -118,7 +122,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     etag: event.etag,
                 });
             }
-        } else if (action === 'this-and-following') {
+        } else if (scope === 'this-and-following') {
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
                 await updateEvent.mutateAsync({
@@ -146,10 +150,10 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const handleDeleteClick = () => (isPartOfSeries ? setShowRecurringDeleteDialog(true) : setShowDeleteDialog(true));
 
-    const handleRsvpScopeConfirm = (action: RecurringAction) => {
+    const handleRsvpScopeConfirm = (scope: RecurrenceScope) => {
         if (!pendingRsvpStatus) return;
         const eventId = event.parentEventId || event.id;
-        if (action === 'this') {
+        if (scope === 'this') {
             rsvp.mutate({
                 calendarId: event.calendarId,
                 eventId,

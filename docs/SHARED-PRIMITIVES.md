@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2405 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2410 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -382,7 +382,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (312)
+## Hooks (313)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -457,6 +457,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRefuseStaleEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useSaveOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-save-occurrence.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useUpdateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -699,7 +700,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (470)
+## Types (473)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -916,6 +917,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecentPath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `RecurrenceScope` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -926,6 +928,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3LifecycleState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3VersioningState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `SaveOccurrenceInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1050,6 +1053,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
+| `HeldEtag` | `@workspace/lib/use-held-etag` | packages/lib/src/core/use-held-etag.ts |
 | `BackupMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
@@ -1174,7 +1178,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1267)
+## Utilities & constants (1268)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1992,6 +1996,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `RECURRENCE_SCOPES` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RESTART_REASONS` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SEARCH_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |

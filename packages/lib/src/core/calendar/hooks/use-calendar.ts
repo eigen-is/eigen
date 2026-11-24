@@ -17,6 +17,7 @@ import type {
     CalendarOption,
     CreateEventInput,
     EventData,
+    RecurrenceScope,
     SharedCalendar,
     UpdateCalendarInput,
     UpdateEventInput,
@@ -395,7 +396,7 @@ export function useRsvp(ownerId: string) {
             calendarId: string;
             eventId: string;
             status: 'accepted' | 'declined' | 'tentative';
-            scope?: 'this' | 'this-and-following' | 'all';
+            scope?: RecurrenceScope;
             recurrenceDate?: string;
             remove?: boolean;
         }) => {
