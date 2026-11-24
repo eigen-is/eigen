@@ -27,7 +27,13 @@ import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { usePublicUser, usePublicUsers } from '../../public';
-import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
+import {
+    formatFreeBusyTitle,
+    isInvitationOnCalendar,
+    occurrenceDateToString,
+    ownerAddressToLookUp,
+    writableShares,
+} from '../calendar-utils';
 import {
     calendarKeys,
     invalidateCalendarDeleted,
@@ -224,30 +230,6 @@ export function useIsInvitationFromOthers(eventOwnerId: string): (event: { data?
         (event: { data?: EventData | null }) => isInvitationOnCalendar(event, eventOwnerId, user, ownerEmail),
         [eventOwnerId, user, ownerEmail],
     );
-}
-
-// The owner whose address judges the events on their calendar: not the viewer, who knows their own, nor a team, which
-// has none.
-export function ownerAddressToLookUp(ownerId: string, viewerId: string | undefined): string | undefined {
-    return ownerId === viewerId || parseOwnerId(ownerId).type === 'team' ? undefined : ownerId;
-}
-
-// A team's events are judged by Eigen's organizer stamp, and a user's by their address. Until a looked-up address
-// arrives every event counts as an invitation, so none is briefly editable.
-export function isInvitationOnCalendar(
-    event: { data?: EventData | null },
-    ownerId: string,
-    viewer: { id: string; email: string } | null | undefined,
-    ownerEmail: string | undefined,
-): boolean {
-    if (parseOwnerId(ownerId).type === 'team') return isInvitationFromOthers(event);
-    const email = ownerId === viewer?.id ? viewer.email : ownerEmail;
-    return !email || isInvitationFromOthers(event, email);
-}
-
-// The shared calendars the viewer may write to, which a picker offers and a drag may change.
-export function writableShares(sharedCalendars: readonly SharedCalendar[]): SharedCalendar[] {
-    return sharedCalendars.filter((sc) => sc.permission === 'write');
 }
 
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {

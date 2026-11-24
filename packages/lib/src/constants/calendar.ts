@@ -10,7 +10,8 @@ export const ICS_MAX_BYTES = 5 * 1024 * 1024;
 export const CALENDAR_NAME_MAX_LENGTH = 200;
 export const DEFAULT_CALENDAR_COLOR = '#4285f4';
 
-// As Google Calendar, wherever an event is made: Create event, the c key and a click on the time grid.
+// As Google Calendar: how long a new event lasts wherever it is made, and how far past a moved start the end goes
+// when that start leaves it less than 15 minutes, in New event and Edit event alike.
 export const NEW_EVENT_MINUTES = 60;
 
 // The words for each share permission, in this order wherever a person picks one.

@@ -14,7 +14,7 @@ import type { EventDropHostProps } from '../event-drop-host';
 type UseEventDropOptions = {
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
-    sharedCalendars?: readonly SharedCalendar[];
+    sharedCalendars: readonly SharedCalendar[];
 };
 
 type UseEventDropReturn = {
@@ -26,7 +26,7 @@ type UseEventDropReturn = {
 
 type Dropped = { event: CalendarEventOccurrence; moved: EventTimes };
 
-export function useEventDrop({ events, calendars, sharedCalendars = [] }: UseEventDropOptions): UseEventDropReturn {
+export function useEventDrop({ events, calendars, sharedCalendars }: UseEventDropOptions): UseEventDropReturn {
     const { user } = useAuth();
     const canReschedule = useCanReschedule(calendars, sharedCalendars);
     const [dropped, setDropped] = useState<Dropped | null>(null);
