@@ -31,7 +31,7 @@ describe('eventSurfaceClasses', () => {
     const classes = (...args: Parameters<typeof eventSurfaceClasses>) => eventSurfaceClasses(...args).split(' ');
     // A block lays its state over the calendar's color surface, as EventChip does.
     const onSurface = (state: Parameters<typeof eventSurfaceClasses>[1]) =>
-        cn(colorSurface(eigenColor('pink', 500)).className, eventSurfaceClasses('block', state)).split(' ');
+        cn(colorSurface(eigenColor('pink', 500), 'tile').className, eventSurfaceClasses('block', state)).split(' ');
 
     test('a past event dims, and an upcoming one does not', () => {
         expect(classes('block', { ...plain, past: true })).toContain('opacity-60');

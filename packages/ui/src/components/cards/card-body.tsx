@@ -30,7 +30,7 @@ export function CardBody({
     attachments,
     meta,
 }: CardBodyProps) {
-    const surface = color ? colorSurface(color) : undefined;
+    const surface = color ? colorSurface(color, 'panel') : undefined;
     const celebrate = useCelebrate();
     // One roll per opening, so re-ticking the last box can't farm it. The refs die with the card, which also disarms a
     // tick whose save never came back.

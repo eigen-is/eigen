@@ -40,7 +40,7 @@ export function EventSurface({
 }: PlacedEventProps & { children: ReactNode }) {
     const { user } = useAuth();
     const state = eventState(event, calendars, sharedCalendars, user?.email);
-    const surface = colorSurface(state.color);
+    const surface = colorSurface(state.color, 'tile');
     return (
         <button
             type="button"
