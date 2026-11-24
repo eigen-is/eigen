@@ -3,16 +3,14 @@
 // Pure, so the views stay thin and the layout is tested without a browser. An all-day event places by its UTC date,
 // a timed one by the viewer's local day, and positions are wall-clock minutes, so 09:00 stays 09:00 on a DST day.
 
-import type { CalendarEventOccurrence } from '../../types/calendar';
+import type { CalendarEventOccurrence, RecurrenceScope } from '../../types/calendar';
 import { dateFormatter } from '../date';
-import { isSeriesOccurrence, normalizeTimezone, occurrenceDateToString, toLocalDateString } from './calendar-utils';
+import { normalizeTimezone, occurrenceDateToString, occurrenceScopes, toLocalDateString } from './calendar-utils';
 
 export const SNAP_MINUTES = 15;
 
 const DAY_MINUTES = 1440;
 const DAY_MS = 86400_000;
-
-type RecurrenceScope = 'this' | 'this-and-following' | 'all';
 
 type EventTimes = { startTime: Date; endTime: Date };
 
@@ -167,11 +165,11 @@ export function resizedTimes(event: CalendarEventOccurrence, newEndMinutes: numb
 // Moving the series start to another day would leave its BYDAY on the old weekday, so only this event may move there.
 // The day is the series' own, because its rule runs in its zone.
 export function rescheduleScopes(event: CalendarEventOccurrence, moved: EventTimes): readonly RecurrenceScope[] {
-    if (!isSeriesOccurrence(event)) return [];
+    const scopes = occurrenceScopes(event);
+    if (scopes.length === 0) return scopes;
     const timeZone = event.allDay ? 'UTC' : (normalizeTimezone(event.timezone) ?? 'UTC');
     const day = dateFormatter({ timeZone });
-    if (day.format(event.startTime) !== day.format(moved.startTime)) return ['this'];
-    return ['this', 'this-and-following', 'all'];
+    return day.format(event.startTime) === day.format(moved.startTime) ? scopes : ['this'];
 }
 
 function lastInstant(event: CalendarEventOccurrence): Date {

@@ -4,7 +4,14 @@
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
-import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    EventData,
+    RecurrenceScope,
+    SharedCalendar,
+} from '../../types/calendar';
+import { RECURRENCE_SCOPES } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
@@ -162,6 +169,15 @@ export function formatFreeBusyTitle(endTime: Date): string {
 // An override carries no rule of its own, so only its link to the master says it belongs to a series.
 export function isSeriesOccurrence(event: { rrule: string | null; parentEventId: string | null }): boolean {
     return !!event.rrule || !!event.parentEventId;
+}
+
+// An override has no rule of its own to cut, so nothing follows it that a split could take.
+export function occurrenceScopes(event: {
+    rrule: string | null;
+    parentEventId: string | null;
+}): readonly RecurrenceScope[] {
+    if (!isSeriesOccurrence(event)) return [];
+    return event.parentEventId ? ['this', 'all'] : RECURRENCE_SCOPES;
 }
 
 // CalDAV clients stamp ORGANIZER with their own address, so only a foreign one marks an invitation. A team Home has no

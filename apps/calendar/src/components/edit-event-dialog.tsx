@@ -7,6 +7,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     isSeriesOccurrence,
+    occurrenceScopes,
     toLocalDateString,
     useCalendarOptions,
     useCalendars,
@@ -93,7 +94,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
     const moveEvent = useMoveEvent(eventOwnerId);
     const refuseStaleEvent = useRefuseStaleEvent(eventOwnerId);
     const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
-    // A series is saved on its master, and only the master's own row says which date the series starts on.
+    // The series' own guests are on its master, and a save on the series reads it from this same cache.
     const { data: master } = useEvent(
         eventOwnerId,
         event.calendarId,
@@ -113,8 +114,6 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 serverAttendees.find((stored) => stored.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
         ) ?? serverAttendees;
     const isRecurring = !!event.rrule;
-    // An override of one occurrence carries no rule of its own, so it has no following events and its copy no rule.
-    const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isFromOthers(event);
     // An invitation from someone else is read-only except for which calendar holds the copy.
@@ -155,7 +154,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
         // The series' guests are its own list plus or minus the guests changed here, so one this date leaves out stays.
         const seriesData =
             master && typed.attendees ? { attendees: seriesGuests(master.data?.attendees ?? []) } : undefined;
-        const occurrenceSave = { occurrence: event, edited, master, seriesData };
+        const occurrenceSave = { occurrence: event, edited, seriesData };
 
         const targetId = event.parentEventId || event.id;
 
@@ -173,11 +172,11 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
             });
         } else {
             // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
-            // overrides stay behind.
+            // overrides stay behind. An override is copied as one event, without a rule.
             await createEvent.mutateAsync({
                 calendarId: selectedCal.id,
                 ...edited,
-                rrule: isOverride ? undefined : rruleString,
+                rrule: event.parentEventId ? undefined : rruleString,
             });
             await deleteEventOnSource.mutateAsync({
                 id: targetId,
@@ -288,7 +287,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerUserId }: Edit
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={saveAndClose}
-                options={isOverride ? ['this', 'all'] : undefined}
+                options={occurrenceScopes(event)}
             />
 
             <ConfirmDialog
