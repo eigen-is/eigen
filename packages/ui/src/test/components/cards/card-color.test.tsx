@@ -1,5 +1,5 @@
-// A card in a color looks the same on the board and open: the tile and the opened body draw the one shared color
-// surface, so both get the same fill, text, stripe and dark-mode wash.
+// A card in a color is drawn by the one shared color surface on the board and open: the tile and the opened body share
+// its stripe and dark-mode wash, and differ only in the light fill, a small tile stronger than a large reading panel.
 import { expect, mock, test } from 'bun:test';
 import { eigenColor } from '@workspace/lib/constants/colors';
 import { installHappyDom } from '../../happy-dom';
@@ -28,13 +28,17 @@ async function surfaceOf(element: React.ReactElement) {
     };
 }
 
-test('a tile and an opened card in the same color get the same surface', async () => {
+test('a tile and an opened card share the indicator and dark wash, and differ in the light fill', async () => {
     const color = eigenColor('orange', 100);
     const tile = await surfaceOf(<CardTile title="A card" color={color} />);
     const body = await surfaceOf(<CardBody title="A card" color={color} />);
-    expect(body.variables).toEqual(tile.variables);
-    expect(tile.variables).toEqual(SURFACE_VARIABLES.map((name) => colorSurface(color).style[name]));
+    const tileSurface = colorSurface(color, 'tile');
+    expect(tile.variables).toEqual(SURFACE_VARIABLES.map((name) => tileSurface.style[name]));
+    expect(body.variables).toEqual(SURFACE_VARIABLES.map((name) => colorSurface(color, 'panel').style[name]));
+    expect(body.variables[0]).not.toBe(tile.variables[0]);
+    expect(body.variables[2]).toBe(tile.variables[2]);
+    expect(body.variables[3]).toBe(tile.variables[3]);
     for (const { classes } of [tile, body]) {
-        expect(classes).toEqual(expect.arrayContaining(colorSurface(color).className.split(' ')));
+        expect(classes).toEqual(expect.arrayContaining(tileSurface.className.split(' ')));
     }
 });

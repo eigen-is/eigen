@@ -347,7 +347,7 @@ function isOnEvent(target: EventTarget): boolean {
 
 // The range a drag draws before New event opens, on the default calendar's color, laid out as a block is.
 function DraftBlock({ day, top, bottom, color }: { day: Date; top: number; bottom: number; color: string }) {
-    const surface = colorSurface(color);
+    const surface = colorSurface(color, 'tile');
     const height = ((bottom - top) * HOUR_HEIGHT) / 60;
     const range = `${formatTime(atMinutes(day, top))} – ${formatTime(atMinutes(day, bottom))}`;
     return (

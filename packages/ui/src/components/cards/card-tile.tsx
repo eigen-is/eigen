@@ -50,7 +50,7 @@ export function CardTile({
 }: CardTileProps) {
     const { user } = useAuth();
     const { checked, total } = countTaskItems(description ?? '');
-    const surface = color && !deleted ? colorSurface(color) : undefined;
+    const surface = color && !deleted ? colorSurface(color, 'tile') : undefined;
     // Open only, as the toolbar badge counts: a resolved card asks nothing more of you. The server stores the assignee
     // in lowercase.
     const onMyPlate = !resolved && assigneeEmail === user?.email.toLowerCase();
