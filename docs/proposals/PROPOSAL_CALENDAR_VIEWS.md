@@ -128,15 +128,14 @@ Each unit lands with its tests, CALENDAR.md lines, help article and CHANGELOG li
 
 Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest; its all-day lane can split off.
 
-## Open for the owner
+## Owner's answers (24 November 2026)
 
-Ask these at the start of the build, one at a time, each with the recommendation first:
-
-1. Default view: desktop week (recommended) or month; phone 3 days (recommended) or day.
-2. Dragging one occurrence of a series to another day offers only "This event" (recommended), because moving the series start leaves `BYDAY` on the old weekday. Another time on the same day keeps this / following / all.
-3. Keyboard shortcuts on by default (recommended, as Google) or opt-in (as Mail's `email.keyboardShortcuts`).
-4. Pending invitation as a dashed outline in the event's color (recommended); declined faded, or faded and struck through (recommended).
-5. Calendar chips and blocks in the `card` tone, 0.25 (recommended); stickies keep both tones.
+1. Default view: week on a desktop, 3 days on a phone.
+2. Dragging one occurrence of a series to another day offers only "This event", because moving the series start leaves `BYDAY` on the old weekday. Another time on the same day keeps this / following / all.
+3. Keyboard shortcuts are on by default, as in Google, and off while a dialog is open.
+4. A pending invitation is a dashed outline in the event's color; a declined one is faded and struck through.
+5. Calendar chips and blocks use the `card` tone (0.25); stickies keep both tones.
+6. The mini month goes in the sidebar (U10). If it is built on shadcn's `Calendar`, that adds `react-day-picker` with `date-fns`, a new package, asked right before U10.
 
 Taken unless the owner says otherwise: 3 days is fixed (not 2 to 7), the schedule shows 28 days a step, drag on touch is a ROADMAP row.
 
