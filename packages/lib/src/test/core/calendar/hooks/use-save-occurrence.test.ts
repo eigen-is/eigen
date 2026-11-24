@@ -171,7 +171,6 @@ describe('a save at each scope', () => {
             ['post', undefined, undefined],
         ]);
         expect(sent[0].body.rrule).toContain('UNTIL=');
-        console.log(JSON.stringify(sent), loaded);
         expect(sent[1].body.rrule).toBe('FREQ=WEEKLY');
         expect(sent[1].body.startTime).toEqual(new Date('2026-10-15T10:00:00Z'));
         expect(sent[1].body.parentEventId).toBeUndefined();

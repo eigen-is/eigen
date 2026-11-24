@@ -1327,6 +1327,65 @@ describe('structural edits', () => {
         expect(resource.getAllSubcomponents('vevent')).toHaveLength(0);
     });
 
+    describe('a rule that gains an end', () => {
+        const AMS = 'Europe/Amsterdam';
+        const at = (day: string) => `${day.replaceAll('-', '')}T120000`;
+        const overrideOn = (day: string) => [
+            'BEGIN:VEVENT',
+            'UID:series@eigen',
+            'DTSTAMP:20260101T000000Z',
+            `RECURRENCE-ID;TZID=${AMS}:${at(day)}`,
+            'SUMMARY:Moved',
+            `DTSTART;TZID=${AMS}:${day.replaceAll('-', '')}T150000`,
+            `DTEND;TZID=${AMS}:${day.replaceAll('-', '')}T160000`,
+            'END:VEVENT',
+        ];
+        const withRule = (rule: string, ...extra: string[]) =>
+            clientSeries(...extra).map((line) => (line.startsWith('RRULE:') ? `RRULE:${rule}` : line));
+        const keysOf = (resource: ICAL.Component) => ({
+            overrides: overridesOf(resource).map((v) => String(v.getFirstPropertyValue('recurrence-id'))),
+            exdates: masterOf(resource)
+                .getAllProperties('exdate')
+                .map((p) => String(p.getFirstValue())),
+        });
+        const SPLIT = 'FREQ=WEEKLY;UNTIL=20260505T215959Z';
+
+        test('a split drops the overrides and EXDATEs it stops reaching', () => {
+            const resource = parseResource(
+                vcal(
+                    withRule('FREQ=WEEKLY;COUNT=8', `EXDATE;TZID=${AMS}:${at('2026-05-27')}`),
+                    overrideOn('2026-05-20'),
+                ),
+            );
+            patchEvent(resource, null, { rrule: SPLIT }, CTX);
+            expect(keysOf(resource)).toEqual({ overrides: [], exdates: [] });
+        });
+
+        // A CalDAV client may reach past the UNTIL with an RDATE, and the "All events" save sends the rule as held.
+        test("a title-only save keeps an RDATE's override and EXDATE past the UNTIL", () => {
+            const resource = parseResource(
+                vcal(
+                    withRule(
+                        SPLIT,
+                        `RDATE;TZID=${AMS}:${at('2026-05-20')},${at('2026-05-27')}`,
+                        `EXDATE;TZID=${AMS}:${at('2026-05-27')}`,
+                    ),
+                    overrideOn('2026-05-20'),
+                ),
+            );
+            const before = keysOf(resource);
+            patchEvent(resource, null, { title: 'Renamed', rrule: SPLIT }, CTX);
+            expect(keysOf(resource)).toEqual(before);
+            expect(before.overrides).toHaveLength(1);
+        });
+
+        test('a second save of a split series drops nothing', () => {
+            const resource = parseResource(vcal(withRule(SPLIT), overrideOn('2026-05-20')));
+            patchEvent(resource, null, { title: 'Renamed', rrule: SPLIT }, CTX);
+            expect(keysOf(resource).overrides).toHaveLength(1);
+        });
+    });
+
     test('putOverride replaces an existing override of the same key', () => {
         const resource = buildResource([MASTER, OVERRIDE]);
         putOverride(resource, { ...OVERRIDE, id: 'evt-override-2', title: 'Second take' });

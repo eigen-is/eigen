@@ -1353,7 +1353,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isCalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `isInvitationOnCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `isInvitationOnCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `layoutTimedEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
@@ -1364,7 +1364,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `ownerAddressToLookUp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `ownerAddressToLookUp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseDayKey` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `rescheduleScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `resizedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
@@ -1383,7 +1383,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `viewTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `WEEK_STARTS_ON` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `weekdayHeader` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
-| `writableShares` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `writableShares` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `applyChartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `BAR_GROUP_WIDTH` | `@workspace/lib/charts` | packages/lib/src/charts/scales.ts |
 | `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |

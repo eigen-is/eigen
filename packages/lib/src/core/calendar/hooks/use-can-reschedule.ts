@@ -7,7 +7,7 @@ import { useAuth } from '@workspace/lib/auth';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { useCallback, useMemo } from 'react';
 import { usePublicUsers } from '../../public';
-import { isInvitationOnCalendar, ownerAddressToLookUp, writableShares } from './use-calendar';
+import { isInvitationOnCalendar, ownerAddressToLookUp, writableShares } from '../calendar-utils';
 
 export function useCanReschedule(
     calendars: readonly CalendarItem[],

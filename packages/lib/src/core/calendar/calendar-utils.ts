@@ -4,6 +4,7 @@
 
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
+import type { AuthUser } from '../../types/auth';
 import type {
     CalendarEventOccurrence,
     CalendarItem,
@@ -12,6 +13,7 @@ import type {
     SharedCalendar,
 } from '../../types/calendar';
 import { RECURRENCE_SCOPES } from '../../types/calendar';
+import { parseOwnerId } from '../../types/owner';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
@@ -181,6 +183,30 @@ export function isInvitationFromOthers(event: { data?: EventData | null }, owner
     if (!organizer) return false;
     if (!ownerEmail) return !!event.data?.organizerEventId;
     return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+}
+
+// The owner whose address judges the events on their calendar: not the viewer, who knows their own, nor a team, which
+// has none.
+export function ownerAddressToLookUp(ownerId: string, viewerId: string | undefined): string | undefined {
+    return ownerId === viewerId || parseOwnerId(ownerId).type === 'team' ? undefined : ownerId;
+}
+
+// A team's events are judged by Eigen's organizer stamp, and a user's by their address. Until a looked-up address
+// arrives every event counts as an invitation, so none is briefly editable.
+export function isInvitationOnCalendar(
+    event: { data?: EventData | null },
+    ownerId: string,
+    viewer: AuthUser | null | undefined,
+    ownerEmail: string | undefined,
+): boolean {
+    if (parseOwnerId(ownerId).type === 'team') return isInvitationFromOthers(event);
+    const email = ownerId === viewer?.id ? viewer.email : ownerEmail;
+    return !email || isInvitationFromOthers(event, email);
+}
+
+// The shared calendars the viewer may write to, which a picker offers and a drag may change.
+export function writableShares(sharedCalendars: readonly SharedCalendar[]): SharedCalendar[] {
+    return sharedCalendars.filter((sc) => sc.permission === 'write');
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
