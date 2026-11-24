@@ -56,7 +56,7 @@ Time-zone rails, natural-language entry, tasks on the calendar, availability sha
 
 ### Shared pieces
 
-- **Color surface.** `colorSurface(color)` in `packages/ui/src/lib/color-surface.ts`, beside `cn`, returns `{ className, style }`: a lightened fill with readable text in light mode, a 14% wash with a 2px inset stripe in the indicator color in dark mode. One tint for every surface: it replaces the two written-out copies in `notes/note-card.tsx` (0.25) and `note-card-content.tsx` (0.5), so a sticky looks the same on the board and open. Calendar events use it too. The color math stays in `lib/constants/colors.ts`, which gains `indicatorColor(color)`; `commentIndicatorColor` calls it. A user's arbitrary hex is its own indicator. A function, not a CSS class, because a base-layer `box-shadow` would lose to NoteCard's `shadow-md`, and utility classes let state classes replace a fill through `cn`.
+- **Color surface.** `colorSurface(color)` in `packages/ui/src/lib/color-surface.ts`, beside `cn`, returns `{ className, style }`: a lightened fill with readable text in light mode, a 14% wash with a 2px inset stripe in the indicator color in dark mode. One tint for every surface: it replaces the two written-out copies in `cards/card-tile.tsx` (0.25) and `cards/card-body.tsx` (0.5), so a card looks the same on the board and open. Calendar events use it too. The color math stays in `lib/constants/colors.ts`, which gains `indicatorColor(color)`; `commentIndicatorColor` calls it. A user's arbitrary hex is its own indicator. A function, not a CSS class, because a base-layer `box-shadow` would lose to CardTile's `shadow-md`, and utility classes let state classes replace a fill through `cn`.
 - **Event states** layer after the surface, in `eventSurfaceClasses` (today's `eventPillStateClasses`): pending = dashed outline in the event's color on the background; declined = faded and struck through; free/busy = faded and not clickable; past = dimmed, listed first so the others win.
 - **Pointer drag.** `useHandleDrag` moves from `components/vector/tools/` to `packages/ui/src/hooks/use-pointer-drag.ts` (one gesture at a time, pointer capture, travel threshold, Escape cancels). Vector's three callers adopt it; calendar is its fourth user instead of a fourth hand-written drag lifecycle.
 - **Recurrence scopes.** `RECURRENCE_SCOPES` / `RecurrenceScope` in `lib/types/calendar.ts`, replacing `RECURRING_ACTIONS` in `recurring-action-dialog.tsx` and the inline union in `useRsvp`.
@@ -111,7 +111,7 @@ Each unit lands with its tests, CALENDAR.md lines, help article and CHANGELOG li
 |---|---|---|
 | U1 | "N more" lists the day (extract `event-chip.tsx`, add `month-day-popover.tsx`) | A |
 | U2 | URL model `/view/$mode/$date`, `calendar-view.ts`, inbound links, and the sidebar's view items (was U9); fixes the month-to-week jump | A |
-| U3 | `colorSurface` and `indicatorColor`; stickies, card and calendar adopt one tint; screenshots of stickies and calendar at 0.25, 0.35 and 0.5, light and dark, for the owner to pick | A, after U1 |
+| U3 | `colorSurface` and `indicatorColor`; stickies cards and calendar adopt one tint; screenshots of stickies and calendar at 0.25, 0.35 and 0.5, light and dark, for the owner to pick | A, after U1 |
 | U4 | `calendar-layout.ts` with its tests | A |
 | U12 | `useSaveOccurrence`, `RecurrenceScope` (also the API's copies); Edit event adopts; the stale-write suite must pass unchanged | A |
 | U13 | `usePointerDrag` promoted; vector adopts; one `DRAG_THRESHOLD_PX` that slides and stickies read too; LAYOUT.md's drag rule gains the surface line | A |
@@ -132,7 +132,7 @@ Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest
 2. Dragging one occurrence of a series to another day offers only "This event", because moving the series start leaves `BYDAY` on the old weekday. Another time on the same day keeps this / following / all.
 3. Keyboard shortcuts are on by default, as in Google, and off while a dialog is open.
 4. A pending invitation is a dashed outline in the event's color; a declined one is faded and struck through.
-5. One tint for every color surface: a sticky on the board, an open sticky and a calendar event look the same. Its strength, between 0.25 and 0.5, is picked from U3's screenshots.
+5. One tint for every color surface: a card on the board, an open card and a calendar event look the same. Its strength, between 0.25 and 0.5, is picked from U3's screenshots.
 6. The mini month goes in the sidebar (U10). If it is built on shadcn's `Calendar`, that adds `react-day-picker` with `date-fns`, a new package, asked right before U10.
 
 7. The views show once per screen size, as Google does: on a computer the toolbar's select, on a phone the sidebar's links (so back-to-sidebar works as in other apps); the phone's ⋮ menu has no view list.

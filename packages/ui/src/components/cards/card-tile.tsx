@@ -5,8 +5,8 @@
 // dialog.
 
 import { useAuth } from '@workspace/lib/auth';
-import { EIGEN_STICKIES_INDICATOR_MAP, lightenColor, readableTextColor } from '@workspace/lib/constants/colors';
 import { countTaskItems } from '@workspace/lib/html';
+import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
@@ -50,7 +50,7 @@ export function CardTile({
 }: CardTileProps) {
     const { user } = useAuth();
     const { checked, total } = countTaskItems(description ?? '');
-    const frameColor = deleted ? null : color;
+    const surface = color && !deleted ? colorSurface(color) : undefined;
     // Open only, as the toolbar badge counts: a resolved card asks nothing more of you. The server stores the assignee
     // in lowercase.
     const onMyPlate = !resolved && assigneeEmail === user?.email.toLowerCase();
@@ -60,25 +60,12 @@ export function CardTile({
             ref={ref}
             className={cn(
                 'p-0 w-full shadow-md select-none rounded-none',
-                frameColor
-                    ? // An inset shadow, not a border, so the color bar doesn't shift the text. In dark mode the
-                      // card looks like a mail list row: a 2px stripe in the full color over a faint wash of it.
-                      'border-0 bg-(--note-bg) text-(--note-fg) dark:bg-(--note-soft) dark:text-card-foreground dark:shadow-[inset_2px_0_0_0_var(--note-indicator)]'
-                    : 'border',
+                surface ? 'border-0' : 'border',
+                surface?.className,
                 onClick ? 'cursor-pointer' : '',
                 className,
             )}
-            style={{
-                ...(frameColor
-                    ? {
-                          '--note-bg': lightenColor(frameColor, 0.25),
-                          '--note-fg': readableTextColor(lightenColor(frameColor, 0.25)),
-                          '--note-indicator': EIGEN_STICKIES_INDICATOR_MAP.get(frameColor) ?? frameColor,
-                          '--note-soft': 'color-mix(in oklab, var(--note-indicator) 14%, var(--background))',
-                      }
-                    : undefined),
-                ...style,
-            }}
+            style={{ ...surface?.style, ...style }}
             onClick={onClick}
             onContextMenu={onContextMenu}
             {...rest}

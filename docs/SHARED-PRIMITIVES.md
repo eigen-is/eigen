@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2413 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2412 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1177,7 +1177,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1272)
+## Utilities & constants (1271)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1522,7 +1522,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_FONT_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_STICKIES_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
-| `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `eigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `EMOJI_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
