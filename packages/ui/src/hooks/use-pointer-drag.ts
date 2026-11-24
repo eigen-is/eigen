@@ -1,58 +1,59 @@
-// The pointer-drag lifecycle every canvas handle shares — the vertex/midpoint dots, the elbow pin dots
-// and the straight-arrow focus dots. One gesture at a time, pointer capture, the canvas frozen for its
-// duration, an optional travel threshold before the first move counts, and every document listener torn
-// down by one AbortController: on release, on Escape, and on unmount if a remote peer deletes the element
-// mid-drag. Each handle keeps its own move/commit bodies; only the harness lives here.
+// The pointer-drag lifecycle for placing and resizing on a surface, such as a canvas handle's dot. One gesture
+// at a time under pointer capture, a travel threshold before the first move counts, Escape to cancel, and every
+// document listener torn down by one AbortController: on release, on Escape, and on unmount if the host goes
+// mid-drag. The caller keeps its own move, end and cancel bodies, and filters pointer types itself.
 
+import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef } from 'react';
 
-type HandleDragOptions = {
-    // Screen px the pointer must travel before the drag goes live. 0 (the default) is live from the
-    // first move — a threshold is what keeps a plain click on a midpoint/pin dot from inserting anything.
+type PointerDragOptions = {
+    // Client px the pointer travels before the drag goes live; below it the press is a click.
     threshold?: number;
     move: (e: PointerEvent) => void;
-    // Pointer released. The caller decides commit-or-nothing from its own draft state, because a
-    // gesture that never traveled must not write.
-    end: () => void;
+    // A press that never travelled is a click, which must not write and may be the caller's to handle.
+    end: (travelled: boolean) => void;
     cancel: () => void;
 };
 
-export function useHandleDrag(frozenRef: MutableRefObject<boolean>) {
+type StartPointerDrag = (e: React.PointerEvent, options: PointerDragOptions) => void;
+
+// `draggingRef` reads true from the press to its release, such as for a canvas that must not hit-test meanwhile.
+export function usePointerDrag(draggingRef?: MutableRefObject<boolean>): StartPointerDrag {
     const abortRef = useRef<AbortController | null>(null);
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    return (e: React.PointerEvent, { threshold = 0, move, end, cancel }: HandleDragOptions) => {
+    return (e, { threshold = DRAG_THRESHOLD_PX, move, end, cancel }) => {
         e.preventDefault();
-        // Claim the gesture before the canvas hit-test, so the shape under the dot isn't dragged instead.
+        // Claim the press before the surface's own handler, so the thing under the target isn't dragged instead.
         e.stopPropagation();
         if (abortRef.current && !abortRef.current.signal.aborted) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        frozenRef.current = true;
+        if (draggingRef) draggingRef.current = true;
         const controller = new AbortController();
         abortRef.current = controller;
         const { signal } = controller;
         const pointerId = e.pointerId;
         const startX = e.clientX;
         const startY = e.clientY;
-        let active = false;
+        let travelled = false;
 
         const release = () => {
-            frozenRef.current = false;
+            if (draggingRef) draggingRef.current = false;
             controller.abort();
         };
         const onMove = (me: PointerEvent) => {
             if (me.pointerId !== pointerId) return;
-            if (!active) {
+            if (!travelled) {
                 if (Math.hypot(me.clientX - startX, me.clientY - startY) < threshold) return;
-                active = true;
+                travelled = true;
             }
             move(me);
         };
         const onUp = (pe: PointerEvent) => {
             if (pe.pointerId !== pointerId) return;
             release();
-            end();
+            end(travelled);
         };
         const onKey = (ke: KeyboardEvent) => {
             if (ke.key !== 'Escape') return;

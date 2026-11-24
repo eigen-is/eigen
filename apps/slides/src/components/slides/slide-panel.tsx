@@ -7,6 +7,7 @@ import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSe
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { getBackgroundStyle } from '@workspace/lib/background';
+import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { VectorElement, VectorFrame } from '@workspace/lib/vector';
 import { parseBackgroundFill } from '@workspace/lib/vector';
@@ -27,9 +28,7 @@ const scrollIntoStrip = (row: HTMLDivElement | null) => {
 
 type SlidePanelProps = {
     frames: VectorFrame[];
-    // The whole scene's elements. The rail slices them ONCE below and hands each thumbnail its own
-    // frame's list — per-thumbnail filtering would be O(slides x elements) on every render, and the
-    // thumbnail's memo needs a value that only changes when that slide does.
+    // The whole scene's, sliced once per render, so each thumbnail's memo sees a list that changes only with its slide.
     elements: VectorElement[];
     activeFrameId: string;
     onSelectFrame: (frameId: string) => void;
@@ -52,7 +51,7 @@ export function SlidePanel({
     slideMenu,
     matchedFrameIds,
 }: SlidePanelProps) {
-    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_THRESHOLD_PX } }));
     const { resolveMediaUrl } = useMediaResolver();
     // dragActiveId cancels an armed press the moment a drag starts (the stickies-card mechanism).
     const slideLongPress = useLongPress(slideMenu?.openAt ?? noop, { disabled: !!dragActiveId || !slideMenu });
@@ -141,8 +140,7 @@ export function SlideStrip({ frames, elements, activeFrameId, onSelectFrame, mat
     );
 }
 
-// One pass over the scene per render, not one per slide. An element homed to a frame that is gone
-// never appears (the reader re-homes it on read, so this is only a within-tick concern).
+// One pass over the scene per render, not one per slide.
 function useElementsByFrame(frames: VectorFrame[], elements: VectorElement[]) {
     return useMemo(() => {
         const byFrame = new Map<string, VectorElement[]>();
@@ -163,9 +161,7 @@ function SortableSlide({
 }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: frameId });
 
-    // Compose the long-press hook's onPointerDown with dnd-kit's drag-activation listener so a
-    // coarse-pointer press opens the menu without clobbering either side. The hook arms only for
-    // touch, so mouse drag stays byte-identical.
+    // Both dnd-kit and the long press listen to the same pointerdown; the long press arms only for touch.
     const bound = longPressBind(frameId);
     const handlePointerDown = (e: React.PointerEvent) => {
         listeners?.onPointerDown?.(e);
