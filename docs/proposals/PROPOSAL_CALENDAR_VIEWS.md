@@ -135,6 +135,8 @@ Highest risk: U12 (it changes Edit event's save path) and U15. U6 is the largest
 5. One tint for every color surface: a sticky on the board, an open sticky and a calendar event look the same. Its strength, between 0.25 and 0.5, is picked from U3's screenshots.
 6. The mini month goes in the sidebar (U10). If it is built on shadcn's `Calendar`, that adds `react-day-picker` with `date-fns`, a new package, asked right before U10.
 
+7. The views show once per screen size, as Google does: on a computer the toolbar's select, on a phone the sidebar's links (so back-to-sidebar works as in other apps); the phone's ⋮ menu has no view list.
+
 Taken unless the owner says otherwise: 3 days is fixed (not 2 to 7), the schedule shows 28 days a step, drag on touch is a ROADMAP row.
 
 ## Found on the way
