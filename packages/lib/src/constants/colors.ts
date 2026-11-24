@@ -1,5 +1,6 @@
-// Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, and the
-// one reader of a written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
+// Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, the color
+// math every color surface and mark shares, such as a lightened fill or an indicator tone, and the one reader of a
+// written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
 // check a hex with isHexColor, read a stored #rrggbb with readHexColor, read its channels with hexChannels and read an
 // rgb() with parseRgb, so they agree on what a color is.
 
@@ -314,6 +315,12 @@ export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
         EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_INDICATOR_ROW],
     ]),
 );
+
+// The stronger tone a color shows as a mark or stripe: a stickies pastel reads as its indicator tone, and any other
+// color, such as a calendar's or one a user typed, is its own indicator.
+export function indicatorColor(color: string): string {
+    return EIGEN_STICKIES_INDICATOR_MAP.get(color) ?? color;
+}
 
 // Whether black text reads better than white on a #rrggbb color. Anything else counts as dark.
 export function isLightColor(hex: string): boolean {

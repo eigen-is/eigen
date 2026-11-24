@@ -199,8 +199,8 @@ test("an all-day pill's title is black on a light color and white on a dark one"
     ownEvents.data = [allDay('Pale', '#fef9c2'), allDay('Deep', '#193cb8')];
     const { container } = await open();
     expect([pill(container, 'Pale'), pill(container, 'Deep')].map((p) => p?.getAttribute('style'))).toEqual([
-        expect.stringMatching(/(^|; )color: #000;/),
-        expect.stringMatching(/(^|; )color: #fff;/),
+        expect.stringMatching(/(^|; )--surface-fg: #000;/),
+        expect.stringMatching(/(^|; )--surface-fg: #fff;/),
     ]);
 });
 

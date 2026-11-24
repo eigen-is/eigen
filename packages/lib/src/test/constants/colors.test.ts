@@ -4,6 +4,7 @@ import {
     EIGEN_ACCENT_COLORS_SHUFFLED,
     eigenColor,
     hexChannels,
+    indicatorColor,
     isHexColor,
     isLightColor,
     lightenColor,
@@ -273,5 +274,17 @@ describe('eigenColor', () => {
         expect(eigenColor('red', 50)).toBe('#fef2f2');
         expect(eigenColor('emerald', 600)).toBe('#009966');
         expect(eigenColor('rose', 950)).toBe('#4d0218');
+    });
+});
+
+describe('indicatorColor', () => {
+    test('a stickies palette color reads as its stronger tone', () => {
+        expect(indicatorColor(eigenColor('orange', 100))).toBe(eigenColor('orange', 400));
+        expect(indicatorColor(eigenColor('sky', 100))).toBe(eigenColor('sky', 400));
+    });
+
+    test("a user's own hex, such as a calendar's accent, is its own indicator", () => {
+        expect(indicatorColor('#123456')).toBe('#123456');
+        expect(indicatorColor(eigenColor('pink', 500))).toBe(eigenColor('pink', 500));
     });
 });
