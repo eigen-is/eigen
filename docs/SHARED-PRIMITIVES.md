@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2413 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2415 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -381,7 +381,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (313)
+## Hooks (314)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -441,6 +441,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCalendarAccess` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarOptions` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useCanReschedule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-can-reschedule.ts |
 | `useCreateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCreateEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useDeleteCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -699,7 +700,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (473)
+## Types (474)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -718,6 +719,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `CalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `EventTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `LaneBar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `TimedBlock` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `ChatRoomState` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |

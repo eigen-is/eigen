@@ -60,3 +60,5 @@ On a phone, **Today** folds into the **⋮** button (**View options**) on the ri
 ## Create an event by clicking the grid
 
 In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+
+With a mouse or a pen you can also drag an existing event to another time or day, or drag its bottom edge to change when it ends. See [Move an event by dragging](/support/calendar/create-event#move-an-event-by-dragging).
