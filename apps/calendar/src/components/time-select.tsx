@@ -3,6 +3,7 @@
 // back into a date, so this file also holds the helpers that write and read that shape, such as a default start.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
@@ -155,7 +156,7 @@ export function endAfter(start: Date, minutes: number): { date: string; time: st
 // The end once the start moves to `start`: it stays while it is at least 15 minutes later, on any day.
 export function endForStart(start: Date, end: { date: string; time: string }): { date: string; time: string } {
     if (new Date(`${end.date}T${end.time}`).getTime() - start.getTime() >= 15 * 60_000) return end;
-    return endAfter(start, 30);
+    return endAfter(start, NEW_EVENT_MINUTES);
 }
 
 export function addMinutes(time: string, minutes: number): string {

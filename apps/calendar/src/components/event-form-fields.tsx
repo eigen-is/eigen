@@ -2,6 +2,7 @@
 // and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
@@ -187,7 +188,7 @@ export function EventFormFields({
                                     setAllDay(isAllDay);
                                     if (!isAllDay) {
                                         const start = toTimeString(roundToNext15Minutes(new Date()));
-                                        const end = endAfter(new Date(`${startDate}T${start}`), 30);
+                                        const end = endAfter(new Date(`${startDate}T${start}`), NEW_EVENT_MINUTES);
                                         setStartTime(start);
                                         setEndTime(end.time);
                                         // An event over several days keeps its last day.

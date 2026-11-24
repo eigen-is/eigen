@@ -1,6 +1,6 @@
 // The New event dialog, opened from the toolbar, a click on a day or a slot, or a drag over a range of the time grid.
 // It starts at the times the view gives, or else at the next quarter hour, on the clicked day when there is one, for
-// half an hour, in the default calendar, and saves through useCreateEvent.
+// a new event's length, in the default calendar, and saves through useCreateEvent.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -12,6 +12,7 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { UsersRound } from 'lucide-react';
@@ -52,7 +53,7 @@ function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 
         const rounded = roundToNext15Minutes(new Date());
         const start = defaultDate ? new Date(defaultDate) : rounded;
         start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-        return { start, end: new Date(start.getTime() + 30 * 60_000), allDay: false };
+        return { start, end: new Date(start.getTime() + NEW_EVENT_MINUTES * 60_000), allDay: false };
     });
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');

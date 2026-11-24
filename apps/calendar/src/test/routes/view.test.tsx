@@ -313,7 +313,7 @@ test('a click on a day opens New event there, and Save creates it in the default
         calendarId: 'work',
         title: 'Dentist',
         startTime: new Date(2026, 9, 9, 10, 15),
-        endTime: new Date(2026, 9, 9, 10, 45),
+        endTime: new Date(2026, 9, 9, 11, 15),
         allDay: false,
         description: null,
         location: null,
@@ -324,16 +324,16 @@ test('a click on a day opens New event there, and Save creates it in the default
     expect(dialogTitle()).toBeUndefined();
 });
 
-test('a new event made in the last half hour of the day ends after midnight, on the next day', async () => {
+test('a new event made in the last hour of the day ends after midnight, on the next day', async () => {
     setSystemTime(new Date(2026, 9, 27, 23, 35));
     const { container } = await open();
     const input = await createOnDay(container, '9');
 
     expect(input?.startTime).toEqual(new Date(2026, 9, 9, 23, 45));
-    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 15));
+    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 45));
 });
 
-test('turning all day off late in the evening gives a half hour that ends on the next day', async () => {
+test('turning all day off late in the evening gives an hour that ends on the next day', async () => {
     setSystemTime(new Date(2026, 9, 27, 10, 7));
     const { container } = await open();
     const allDay = () => document.querySelector('[role="dialog"] [role="checkbox"]');
@@ -345,7 +345,7 @@ test('turning all day off late in the evening gives a half hour that ends on the
 
     expect(input?.allDay).toBe(false);
     expect(input?.startTime).toEqual(new Date(2026, 9, 9, 23, 45));
-    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 15));
+    expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 45));
 });
 
 test("a calendar's options button shows on the row's hover only, and Tab reaches and shows it", async () => {
@@ -865,13 +865,13 @@ test('m goes to the month of the same day, and t to today', async () => {
     expect(path()).toBe('/view/month/2026-11-24');
 });
 
-test('c opens New event at the next quarter hour of today', async () => {
+test('c opens New event at the next quarter hour of today, an hour long', async () => {
     setSystemTime(new Date(2026, 9, 27, 10, 7));
     await open('/view/week/2026-10-14');
     await typeKey('c');
     expect(await savedTimes()).toEqual({
         startTime: new Date(2026, 9, 27, 10, 15),
-        endTime: new Date(2026, 9, 27, 10, 45),
+        endTime: new Date(2026, 9, 27, 11, 15),
         allDay: false,
     });
 });

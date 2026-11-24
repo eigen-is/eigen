@@ -20,7 +20,7 @@ import {
     toLocalDateString,
     weekdayHeader,
 } from '@workspace/lib/calendar';
-import { DEFAULT_CALENDAR_COLOR } from '@workspace/lib/constants/calendar';
+import { DEFAULT_CALENDAR_COLOR, NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import { formatTime } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
@@ -334,7 +334,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                         onClick={(e) => {
                                             if (isOnEvent(e.target)) return;
                                             const top = slotAt(minutesAt(e.currentTarget, e.clientY));
-                                            createTimed(dayIdx, top, top + 60);
+                                            createTimed(dayIdx, top, top + NEW_EVENT_MINUTES);
                                         }}
                                     >
                                         <div className="absolute inset-y-0 left-0 right-1 md:right-2">
