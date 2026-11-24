@@ -3,6 +3,7 @@
 // and closes, and a confirm that fails keeps it open.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { RecurrenceScope } from '@workspace/lib/types/calendar';
+import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -31,7 +32,7 @@ beforeEach(() => {
 
 // The dialog under a parent that owns `open`, as the event dialogs do, so a test can close and reopen it.
 let setOpen = (_open: boolean) => {};
-function Harness({ options }: { options?: RecurrenceScope[] }) {
+function Harness({ options }: { options: readonly RecurrenceScope[] }) {
     const [open, setOpenState] = useState(true);
     setOpen = setOpenState;
     return createElement(RecurringActionDialog, {
@@ -46,7 +47,7 @@ function Harness({ options }: { options?: RecurrenceScope[] }) {
     });
 }
 
-async function open(options?: RecurrenceScope[]) {
+async function open(options: readonly RecurrenceScope[] = RECURRENCE_SCOPES) {
     ({ unmount } = await renderInDocument(createElement(Harness, { options })));
 }
 
