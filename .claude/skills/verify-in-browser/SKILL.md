@@ -59,7 +59,7 @@ Use your own when the running server serves another branch, or a pixel-gate base
 
 ## Mobile and touch
 
-Screenshot at 390×844 and 360×800, with behavioral probes (tap, long-press, scroll, reload). Page-level overflow probes report 0 on portalled layers and `overflow:hidden` clips, so read the pixels. Long-press needs real CDP touch synthesis. The seeded `mobile-audit@eigen.is` account follows the password convention and signs in by cookie injection. The real-device checks still owed are in the Mobile row of [ROADMAP.md](../../../docs/ROADMAP.md).
+Screenshot at 390×844 and 360×800, with behavioral probes (tap, long-press, scroll, reload). Page-level overflow probes report 0 on portalled layers and `overflow:hidden` clips, so read the pixels. Long-press needs real CDP touch synthesis. The seeded `mobile-audit@eigen.is` account follows the password convention and signs in by cookie injection.
 
 ## Sheet editor
 
