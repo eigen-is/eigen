@@ -230,10 +230,6 @@ test('Import to Calendar keeps the dialog contract', async () => {
             await typeName(' ');
         },
         invalidField: 'Calendar name',
-        except: {
-            // Reported against the shared Select.
-            modEnter: "the Select's trigger opens its list on Cmd+Enter as well as submitting",
-        },
     });
 });
 
