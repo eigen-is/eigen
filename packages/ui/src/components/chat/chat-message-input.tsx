@@ -21,7 +21,6 @@ import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { useSuggestions } from '../../hooks/use-suggestions';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
-import { Button } from '../button';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
@@ -255,9 +254,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     rows={1}
                     className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
                 />
-                <Button size="icon" onClick={handleSend} disabled={!canSend} className="shrink-0 h-10 w-10">
-                    <Send className="h-4 w-4" />
-                </Button>
+                <TooltipButton
+                    icon={Send}
+                    tooltipText="Send"
+                    variant="default"
+                    className="shrink-0 h-10 w-10"
+                    onClick={handleSend}
+                    disabled={!canSend}
+                />
             </div>
         </div>
     );
