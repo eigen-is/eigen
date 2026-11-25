@@ -1,0 +1,71 @@
+// The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys and their
+// error focus. Cmd or Ctrl+Enter submits from any field, and Enter on a radio or a checkbox submits too, since Radix
+// swallows it there. Once Save was pressed its fields read useFormSubmitted(), so a missing value shows only then, and a
+// submit whose check refused focuses the first field marked aria-invalid. Apps use the shells, not this.
+
+import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import type { DialogAction } from '../hooks/use-dialog-pending';
+
+type FormShellProps = {
+    // Returns or resolves false when its check refused, so the shell focuses the field that says why.
+    onSubmit: DialogAction;
+    // A react-hook-form form focuses its first error itself.
+    focusesOwnErrors?: boolean;
+    className?: string;
+    children: ReactNode;
+};
+
+const CHOICE = '[role="radio"], [role="checkbox"], input[type="radio"], input[type="checkbox"]';
+
+const FormSubmittedContext = createContext(false);
+
+export function useFormSubmitted(): boolean {
+    return useContext(FormSubmittedContext);
+}
+
+export function FormShell({ onSubmit, focusesOwnErrors = false, className, children }: FormShellProps) {
+    const formRef = useRef<HTMLFormElement>(null);
+    const [submitted, setSubmitted] = useState(false);
+    // Counts refused submits, so the focus moves once the form has rendered the messages it set.
+    const [refusals, setRefusals] = useState(0);
+
+    useEffect(() => {
+        if (refusals > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    }, [refusals]);
+
+    const submit = async () => {
+        setSubmitted(true);
+        if ((await onSubmit()) === false && !focusesOwnErrors) setRefusals((count) => count + 1);
+    };
+
+    return (
+        <form
+            ref={formRef}
+            className={className}
+            // The shells show a field's problem under it. The browser's own check, such as a number field's step,
+            // would refuse 0.001 cm with a bubble.
+            noValidate
+            onSubmit={(event) => {
+                event.preventDefault();
+                // React passes a portaled submit up to a form that holds the dialog, and that form must not submit too.
+                event.stopPropagation();
+                submit();
+            }}
+            onKeyDown={(event) => {
+                const { target, currentTarget: form } = event;
+                // A key from a portal, such as a picker's popover, reaches this form through React alone.
+                if (event.key !== 'Enter' || !(target instanceof Element) || !form.contains(target)) return;
+                const modified = event.metaKey || event.ctrlKey;
+                if (!modified && !target.matches(CHOICE)) return;
+                // A field that took Cmd+Enter for itself, such as a rich-text field's line break, did so for the form.
+                event.preventDefault();
+                // Or a hotkey behind the form, such as Mail's send, would act on the same key.
+                if (modified) event.stopPropagation();
+                form.requestSubmit();
+            }}
+        >
+            <FormSubmittedContext.Provider value={submitted}>{children}</FormSubmittedContext.Provider>
+        </form>
+    );
+}
