@@ -1,7 +1,6 @@
 // expectFormContract passes a form that keeps every rule of its kind, and each probe fails a sample form that breaks
-// its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules today.
-// The dialog and page shells keep the discard and leave-guard rules; a hand-built card sample keeps the card's Esc,
-// whose probe stays off until its shell keeps it.
+// its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules, and
+// hand-built card and page samples prove the card's Esc and the page's leave guard both ways.
 import { expect, mock, test } from 'bun:test';
 import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { FormContract } from './form-contract';
