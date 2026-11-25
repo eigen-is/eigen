@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, columns, board, getting-started]
 related: [stickies/get-started, stickies/add-and-edit-cards]
 order: 20
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 A Stickies board is a kanban board made of columns. You can create as many boards as you like and shape each one with the columns that match your workflow.
@@ -38,7 +38,7 @@ You need write access to the board to add or change columns.
 1. Find the column you want to rename.
 2. Click the pencil icon in the column header. The **Column settings** dialog opens.
 3. Edit the text in the **Title** field.
-4. Click **Save changes**.
+4. Click **Save**.
 
 ## Delete a column
 

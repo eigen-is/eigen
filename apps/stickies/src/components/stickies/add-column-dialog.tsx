@@ -1,10 +1,9 @@
 // The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
 // writes the column into the board's document.
 
-import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
+import { ColumnTitleField } from './column-title-field';
 
 type AddColumnDialogProps = {
     open: boolean;
@@ -24,22 +23,14 @@ export function AddColumnDialog({ open, onOpenChange, onAddColumn }: AddColumnDi
 function AddColumnForm({ onAddColumn }: Pick<AddColumnDialogProps, 'onAddColumn'>) {
     const [title, setTitle] = useState('');
 
+    const handleSubmit = () => {
+        if (!title.trim()) return false;
+        onAddColumn(title.trim());
+    };
+
     return (
-        <FormDialogForm
-            canSubmit={title.trim() !== ''}
-            submitLabel="Add column"
-            onSubmit={() => onAddColumn(title.trim())}
-        >
-            <Field>
-                <FieldLabel htmlFor="column-title">Title</FieldLabel>
-                <Input
-                    id="column-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Enter column title"
-                    autoFocus
-                />
-            </Field>
+        <FormDialogForm changed={title !== ''} submitLabel="Add column" onSubmit={handleSubmit}>
+            <ColumnTitleField value={title} onChange={setTitle} placeholder="Enter column title" />
         </FormDialogForm>
     );
 }
