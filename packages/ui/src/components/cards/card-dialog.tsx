@@ -4,7 +4,6 @@
 // which state a card is in, and it does the writes this dialog asks for.
 
 import { useResolveCardAttachments } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
@@ -12,6 +11,7 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useDialogPending } from '../../hooks/use-dialog-pending';
 import { AttachmentChip } from '../attachment/attachment-chip';
@@ -142,7 +142,7 @@ export function CardDialog({
 
     // The assignee sits in the meta row: a picker when the user may reassign, else a plain chip. A read-only card with
     // no assignee shows nothing there.
-    let assigneeControl: React.ReactNode = null;
+    let assigneeControl: ReactNode = null;
     if (chatName) {
         if (canWrite && onAssign && members && currentUserEmail) {
             assigneeControl = (
@@ -195,7 +195,7 @@ export function CardDialog({
                 mode="edit"
                 initialTitle={card.title}
                 initialDescription={card.description}
-                initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
+                initialColor={card.color}
                 allowAttachments={!!mediaFolderId}
                 initialAttachments={card.attachments}
                 members={members}
@@ -248,7 +248,7 @@ export function CardDialog({
         />
     );
 
-    let body: React.ReactNode;
+    let body: ReactNode;
     if (editForm) {
         // The form scrolls inside on short viewports, and the thread hides while it is open.
         body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col">{editForm}</div>;

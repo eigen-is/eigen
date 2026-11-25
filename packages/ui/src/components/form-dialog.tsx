@@ -1,9 +1,9 @@
 // A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
-// description, and FormDialogForm the fields and the Cancel and submit footer on FormShell's keys. It opens on the
-// first text field, every way to close waits for a running submit, and a failure or a false result keeps it open. Esc,
-// the X and a click outside ask "Discard changes?" once the form says it changed; Cancel drops it. The caller keeps the
-// field state in a child that mounts with the dialog, so every opening starts clean. FormDialog alone is also a titled
-// shell with no form, as Word count uses it.
+// description, and FormDialogForm the fields and the Cancel and submit footer, which the card form shares, on
+// FormShell's keys. It opens on the first text field, every close waits for a running submit, and a failure or a false
+// result keeps it open. Esc, the X and a click outside ask "Discard changes?" once the form changed; Cancel drops it.
+// The caller keeps the field state in a child that mounts with the dialog, so every opening starts clean. FormDialog
+// alone is also a titled shell with no form, as Word count uses it.
 
 import type { ComponentProps, ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
@@ -121,24 +121,50 @@ export function FormDialogForm({
             {readOnly ? (
                 <DialogFooter showCloseButton />
             ) : (
-                <DialogFooter
-                    start={
-                        footerStart && (
-                            <fieldset disabled={pending} className="flex gap-2">
-                                {footerStart}
-                            </fieldset>
-                        )
-                    }
-                >
-                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={!canSubmit} pending={pending}>
-                        {submitLabel}
-                    </Button>
-                </DialogFooter>
+                <FormFooter
+                    start={footerStart}
+                    pending={pending}
+                    onCancel={() => handleOpenChange(false)}
+                    canSubmit={canSubmit}
+                    submitLabel={submitLabel}
+                />
             )}
         </FormShell>
+    );
+}
+
+// The Cancel and submit footer of a form shell, such as a dialog's or a card's, with its tools on the left. Every
+// button waits while the submit runs.
+export function FormFooter({
+    start,
+    pending,
+    onCancel,
+    canSubmit = true,
+    submitLabel,
+}: {
+    start?: ReactNode;
+    pending: boolean;
+    onCancel: () => void;
+    canSubmit?: boolean;
+    submitLabel: string;
+}) {
+    return (
+        <DialogFooter
+            start={
+                start && (
+                    <fieldset disabled={pending} className="flex gap-2">
+                        {start}
+                    </fieldset>
+                )
+            }
+        >
+            <Button variant="outline" onClick={onCancel} disabled={pending}>
+                Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit} pending={pending}>
+                {submitLabel}
+            </Button>
+        </DialogFooter>
     );
 }
 

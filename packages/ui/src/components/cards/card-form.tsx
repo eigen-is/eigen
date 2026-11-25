@@ -8,10 +8,10 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { Button } from '@workspace/ui/components/button';
-import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { FieldError } from '@workspace/ui/components/field';
+import { FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -34,7 +34,6 @@ type CardFormProps = {
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
-    // Attachments are only staged: the host uploads or copies them on save, and Cancel touches nothing.
     allowAttachments?: boolean;
     initialAttachments?: ChatAttachment[];
     // The assignee row shows only with both members and currentUserEmail.
@@ -50,7 +49,6 @@ type CardFormProps = {
     ) => ReturnType<DialogAction>;
     pending: boolean;
     onCancel: () => void;
-    // Whether the fields differ from what the form opened with.
     onChangedChange?: (changed: boolean) => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
@@ -216,7 +214,10 @@ export function CardForm({
                         )}
                     </div>
                 </div>
-                <DialogFooter
+                <FormFooter
+                    pending={pending}
+                    onCancel={onCancel}
+                    submitLabel={submitLabel}
                     start={
                         <>
                             {allowAttachments && (
@@ -242,14 +243,7 @@ export function CardForm({
                             )}
                         </>
                     }
-                >
-                    <Button variant="outline" onClick={onCancel} disabled={pending}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" pending={pending}>
-                        {submitLabel}
-                    </Button>
-                </DialogFooter>
+                />
             </div>
         </FormShell>
     );
