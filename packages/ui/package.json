@@ -85,6 +85,7 @@
     "./test/closing-dialog": "./src/test/closing-dialog.ts",
     "./test/context-menu-event": "./src/test/context-menu-event.ts",
     "./test/drive-path": "./src/test/drive-path.ts",
+    "./test/form-contract": "./src/test/form-contract.ts",
     "./test/happy-dom": "./src/test/happy-dom.ts",
     "./test/hover-reveal": "./src/test/hover-reveal.ts",
     "./test/menu-rows": "./src/test/menu-rows.ts",
