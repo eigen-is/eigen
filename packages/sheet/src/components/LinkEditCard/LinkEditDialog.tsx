@@ -26,7 +26,7 @@ import {
     overlayRegionForCell,
     saveHyperlink,
 } from '../../state';
-import { CellRangeDialog } from '../CellRangeDialog';
+import { CellRangeDialog, NO_RANGE_MESSAGE } from '../CellRangeDialog';
 
 // The range picker opens a few pixels under the link's cell.
 const RANGE_PICKER_GAP = 5;
@@ -183,7 +183,7 @@ function RangeField({
     onPick: () => void;
 }) {
     const missing = useFormSubmitted() && !value;
-    const problem = refusal || (missing ? 'Enter a cell range' : '');
+    const problem = refusal || (missing ? NO_RANGE_MESSAGE : '');
     const problemId = useId();
     return (
         <Field>

@@ -12,6 +12,9 @@ import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { getRangetxt, isLinkValid } from '../../state';
 
+// What a form that takes a range says when it names no cells, such as a link's or a validation rule's.
+export const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
+
 type CellRangeDialogProps = {
     value: string;
     // A link is followed from any sheet, so it is typeable and its text carries the sheet name. A validation range is

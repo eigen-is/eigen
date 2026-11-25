@@ -29,7 +29,7 @@ import {
     validationRange,
     validationValueProblem,
 } from '../../state';
-import { CellRangeDialog } from '../CellRangeDialog';
+import { CellRangeDialog, NO_RANGE_MESSAGE } from '../CellRangeDialog';
 
 // Each rule type with the condition a new rule of it starts on. A list and a tick box have none.
 const VALIDATION_TYPES = [
@@ -75,9 +75,6 @@ const HINT_TOGGLES = [
     { value: 'prohibitInput', label: 'Prohibit input when input data is invalid' },
     { value: 'hintShow', label: 'Show prompt when the cell is selected' },
 ] as const;
-
-// What Apply and Remove validation say when the range names no cells.
-const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 

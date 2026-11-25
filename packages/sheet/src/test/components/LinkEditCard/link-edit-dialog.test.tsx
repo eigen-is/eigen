@@ -62,7 +62,7 @@ test('Apply keeps the dialog while the web address is empty', async () => {
 test('an empty cell range says so once Apply is pressed', async () => {
     const dialog = await renderSheetDialog(openLink('cellrange'), { sheets: SHEETS });
     await dialog.click('Apply');
-    expect(problem()).toBe('Enter a cell range');
+    expect(problem()).toBe('Enter a cell range, such as A1:B10');
     expect(document.activeElement).toBe(dialog.field('Cell range'));
     await dialog.type('Cell range', 'A1:');
     expect(problem()).toBe('Please enter a valid cell range, such as Sheet1!A1:C8');
