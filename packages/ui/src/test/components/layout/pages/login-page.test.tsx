@@ -42,8 +42,13 @@ const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
         { preconnect: fetch.preconnect },
     ),
 );
+// A code that goes through reloads the page into the session.
+const reload = spyOn(window.location, 'reload').mockImplementation(() => {});
+afterAll(() => reload.mockRestore());
+
 afterEach(() => {
     answers = {};
+    reload.mockClear();
     toasts.length = 0;
     fetchSpy.mockClear();
     login.mockClear();
@@ -217,6 +222,17 @@ test('too many wrong codes reads under the code, since only a new one helps', as
     await act(async () => pressEnter(field('One-time code')));
     expect(messageUnder('One-time code')).toBe('Too many wrong attempts — request a new code');
     expect(toasts).toEqual([]);
+});
+
+test('a second Enter after the code went through sends nothing while the page reloads', async () => {
+    await renderPage(<LoginPage email="joris@example.com" />);
+    await act(async () => pressEnter(field('Email')));
+    await type('One-time code', '123456');
+    await act(async () => pressEnter(field('One-time code')));
+    await act(async () => pressEnter(field('One-time code')));
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).endsWith('/verify-otp'))).toHaveLength(1);
 });
 
 const post = (body: object) => ({

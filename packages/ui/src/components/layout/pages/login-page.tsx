@@ -275,8 +275,13 @@ function GuestCodeForm({ email }: { email: string }) {
 
     const onSubmit = async ({ otp }: z.infer<typeof guestCodeSchema>) => {
         const failure = await postGuestAuth('verify-otp', { email, otp }, 'Verification failed', 'include');
-        if (failure) showFailure(form, 'otp', failure, CODE_STATUSES);
-        else window.location.reload();
+        if (failure) {
+            showFailure(form, 'otp', failure, CODE_STATUSES);
+            return;
+        }
+        window.location.reload();
+        // The page goes only after this returns, so the button stays pending and a second Enter sends nothing.
+        await new Promise<never>(() => {});
     };
 
     return (
