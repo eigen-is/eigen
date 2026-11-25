@@ -1,6 +1,9 @@
 // shadcn's Tooltip on Radix: a small label shown on hover or focus of its trigger. Each Tooltip brings
 // its own provider with no delay, so a tooltip shows at once unless its caller passes a delayDuration.
+// A focus shows it only with a focus ring, as from a Tab, so a closing dialog that gives the focus back to a button a
+// mouse clicked opens no tooltip to take the next Esc.
 
+import { hasFocusRing } from '@workspace/ui/hooks/use-focus-return';
 import { cn } from '@workspace/ui/lib/utils';
 import { Tooltip as TooltipPrimitive } from 'radix-ui';
 import type * as React from 'react';
@@ -17,8 +20,19 @@ function Tooltip({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Root
     );
 }
 
-function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-    return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+function TooltipTrigger({ onFocus, ...props }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
+    return (
+        <TooltipPrimitive.Trigger
+            data-slot="tooltip-trigger"
+            // Radix opens on any focus no pointer pressed, a returned one included (radix-ui/primitives#1800). It skips
+            // its own handler once this one prevents the default.
+            onFocus={(event) => {
+                onFocus?.(event);
+                if (!hasFocusRing(event.currentTarget)) event.preventDefault();
+            }}
+            {...props}
+        />
+    );
 }
 
 function TooltipContent({
