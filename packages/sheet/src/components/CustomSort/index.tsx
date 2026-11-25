@@ -4,12 +4,12 @@
 
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useContext, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { toA1 } from '../../engine/a1-notation';
 import { cellDisplay } from '../../engine/format';
@@ -21,6 +21,7 @@ import { clipToUsedExtent, getFlowdata, sortRange } from '../../state';
 export function CustomSort({ selection }: { selection: Selection }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
+    const id = useId();
     const [hasHeaderRow, setHasHeaderRow] = useState(false);
     // The position in the range of the column to sort by, as the Select's value.
     const [sortColumn, setSortColumn] = useState('0');
@@ -49,6 +50,7 @@ export function CustomSort({ selection }: { selection: Selection }) {
         <FormDialog {...dialogProps} title="Custom sort" size="sm">
             <FormDialogForm
                 submitLabel="Sort"
+                changed={hasHeaderRow || sortColumn !== '0' || !ascending}
                 onSubmit={() =>
                     setContext((draftCtx) => {
                         sortRange(draftCtx, selection, ascending, Number(sortColumn), hasHeaderRow);
@@ -59,18 +61,22 @@ export function CustomSort({ selection }: { selection: Selection }) {
                     Sort range from {toA1(range.row[0], columnStart)} to {toA1(range.row[1], columnEnd)}
                 </p>
 
-                <Label className="flex items-center gap-1.5">
-                    <Checkbox checked={hasHeaderRow} onCheckedChange={(v) => setHasHeaderRow(v === true)} />
-                    Data has a header row
-                </Label>
+                <Field orientation="horizontal">
+                    <Checkbox
+                        id={`${id}-header`}
+                        checked={hasHeaderRow}
+                        onCheckedChange={(v) => setHasHeaderRow(v === true)}
+                    />
+                    <FieldLabel htmlFor={`${id}-header`}>Data has a header row</FieldLabel>
+                </Field>
 
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 flex-1">
-                        <FieldLabel htmlFor="custom-sort-column" className="shrink-0">
+                        <FieldLabel htmlFor={`${id}-column`} className="shrink-0">
                             Sort by
                         </FieldLabel>
                         <Select value={sortColumn} onValueChange={setSortColumn}>
-                            <SelectTrigger id="custom-sort-column" className="w-full">
+                            <SelectTrigger id={`${id}-column`} className="w-full">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
