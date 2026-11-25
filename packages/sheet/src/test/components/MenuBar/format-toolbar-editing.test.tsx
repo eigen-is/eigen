@@ -3,6 +3,7 @@
 // so the next keys type there and Enter commits.
 
 import { afterEach, expect, test } from 'bun:test';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { clickRow, openSubmenu } from '@workspace/ui/test/menu-rows';
 
@@ -218,11 +219,8 @@ test('a size typed in the box applies on Enter and hands the focus back to the e
     await select(input, 6, 9);
     const box = sizeBox(container);
     if (!box) throw new Error('no size box');
-    await act(async () => {
-        box.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(box, '18');
-        box.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => box.focus());
+    await type(box, '18');
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     await act(async () => {
         box.dispatchEvent(enter);

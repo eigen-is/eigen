@@ -3,14 +3,14 @@
 // currency from the list takes its symbol and its side of the number. With no symbol, Apply says so under the field.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CustomCurrencies } = await import('../../../components/FormatDialogs/CustomCurrencies');
 type Context = import('../../../state').Context;
 
@@ -45,8 +45,8 @@ test('Custom currencies keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: SYMBOL,
         onSubmit: form.write,
-        makeChanged: () => typeInto(SYMBOL, 'kr'),
-        makeInvalid: () => typeInto(SYMBOL, ''),
+        makeChanged: () => type(SYMBOL, 'kr'),
+        makeInvalid: () => type(SYMBOL, ''),
         invalidField: SYMBOL,
         savesAtOnce: true,
     });

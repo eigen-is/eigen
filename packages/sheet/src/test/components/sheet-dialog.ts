@@ -4,6 +4,7 @@
 // and its buttons in the document. sheetDialogForm hands expectFormContract the same mount as an element.
 
 import { mock } from 'bun:test';
+import { field as namedField, type } from '@workspace/ui/test/form-contract';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { produce } from 'immer';
 import type { ReactNode } from 'react';
@@ -158,24 +159,13 @@ export async function renderSheetDialog(
                 if (!target) throw new Error(`no ${label} button`);
                 target.click();
             }),
-        type: typeInto,
+        type,
     };
 }
 
-// A field by its name: its aria-label, or the text of the label element that points at it.
+// The input a field's name finds, which a test reads the value of.
 function field(label: string) {
-    const labelled = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === label);
-    const input =
-        document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`) ??
-        (labelled instanceof HTMLLabelElement ? labelled.control : null);
+    const input = namedField(label);
     if (!(input instanceof HTMLInputElement)) throw new Error(`no field ${label}`);
     return input;
 }
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-export const typeInto = (label: string, value: string) =>
-    act(async () => {
-        const input = field(label);
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });

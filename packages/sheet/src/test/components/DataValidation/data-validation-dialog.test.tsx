@@ -5,7 +5,7 @@
 // the draft as the user left it, still asking before Esc drops it.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
@@ -13,7 +13,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { REFERENCE_ROW_COUNT } = await import('@workspace/lib/sheets');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { DataValidation } = await import('../../../components/DataValidation');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 type Selection = import('../../../state').Selection;
@@ -66,8 +66,8 @@ test('Data validation keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: 'Cell range',
         onSubmit: form.write,
-        makeChanged: () => typeInto('Options', 'Yes,No'),
-        makeInvalid: () => typeInto('Cell range', ''),
+        makeChanged: () => type('Options', 'Yes,No'),
+        makeInvalid: () => type('Cell range', ''),
         invalidField: 'Cell range',
         savesAtOnce: true,
     });

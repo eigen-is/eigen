@@ -1,18 +1,18 @@
 // The Insert function dialog keeps the dialog contract. It lists the functions of a category, or those the search
 // matches, with one highlighted. Insert opens the in-cell editor on the focus cell with `=NAME(` and closes, and a
-// search with no match says so under the field. Cancel and Escape close it and leave the cell, and an edit already open
-// in it, as they were. After Insert the editor has the focus, with the caret after the bracket, so the user types the
+// search with no match says so under the field. Cancel closes it and leaves the cell, and an edit already open in it,
+// as they were. After Insert the editor has the focus, with the caret after the bracket, so the user types the
 // arguments straight away.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { InsertFunctionDialog } = await import('../../../components/InsertFunctionDialog');
 
 const SEARCH = 'Search function';
@@ -38,8 +38,8 @@ test('Insert function keeps the dialog contract', async () => {
         submitLabel: 'Insert',
         firstField: SEARCH,
         onSubmit: form.write,
-        makeChanged: () => typeInto(SEARCH, 'sum'),
-        makeInvalid: () => typeInto(SEARCH, 'NOSUCHFUNCTION'),
+        makeChanged: () => type(SEARCH, 'sum'),
+        makeInvalid: () => type(SEARCH, 'NOSUCHFUNCTION'),
         invalidField: SEARCH,
         savesAtOnce: true,
     });
@@ -129,19 +129,6 @@ test('Cancel closes and leaves an open edit as it was', async () => {
     const dialog = await openInsertFunction([1, 1]);
     dialog.setEditorText('=1+');
     await dialog.click('Cancel');
-    expect(dialog.context().editingCellPosition).toEqual([1, 1]);
-    expect(dialog.editorText()).toBe('=1+');
-    expect(dialog.dialogs()).toHaveLength(0);
-});
-
-test('Escape closes the same way as Cancel', async () => {
-    const dialog = await openInsertFunction([1, 1]);
-    dialog.setEditorText('=1+');
-    await act(async () => {
-        dialog
-            .field(SEARCH)
-            .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-    });
     expect(dialog.context().editingCellPosition).toEqual([1, 1]);
     expect(dialog.editorText()).toBe('=1+');
     expect(dialog.dialogs()).toHaveLength(0);

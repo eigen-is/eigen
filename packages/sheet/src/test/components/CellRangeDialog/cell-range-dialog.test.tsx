@@ -3,14 +3,14 @@
 // those. Select waits until there is a range, and a typed range Sheets can't read says why under the field.
 
 import { expect, mock, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CellRangeDialog } = await import('../../../components/CellRangeDialog');
 type Dialogs = Parameters<Parameters<typeof sheetDialogForm>[0]>[0];
 
@@ -38,8 +38,8 @@ test('the range picker keeps the dialog contract', async () => {
         submitLabel: 'Select',
         firstField: RANGE,
         onSubmit: select,
-        makeChanged: () => typeInto(RANGE, 'Sheet1!A1:B2'),
-        makeInvalid: () => typeInto(RANGE, 'A1:'),
+        makeChanged: () => type(RANGE, 'Sheet1!A1:B2'),
+        makeInvalid: () => type(RANGE, 'A1:'),
         invalidField: RANGE,
         savesAtOnce: true,
         except: {
