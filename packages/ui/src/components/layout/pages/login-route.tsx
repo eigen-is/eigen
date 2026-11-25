@@ -1,8 +1,10 @@
 // The /login route every app builds from createLoginRouteOptions: it sends a visitor who already has a session on to
 // the page that asked for sign-in, and shows everyone else LoginPage. A guest's address, such as one from a share
-// invite, comes along in the search, either as its own param or inside the redirect URL, and opens the Guest tab.
+// invite, comes along in the search, either as its own param or inside the redirect URL, and opens the Guest tab. A
+// redirect that is no page of Eigen's own becomes the start page.
 
 import { redirect, useSearch } from '@tanstack/react-router';
+import { safeRedirect } from '@workspace/lib/api';
 import { z } from 'zod';
 import { LoginPage } from './login-page';
 
@@ -15,7 +17,11 @@ function LoginRoute() {
 }
 
 const loginSearchSchema = z.object({
-    redirect: z.string().optional().catch(''),
+    redirect: z
+        .string()
+        .optional()
+        .catch('')
+        .transform((target) => target && safeRedirect(target)),
     email: z.string().optional().catch(''),
 });
 

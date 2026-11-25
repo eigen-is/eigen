@@ -1,6 +1,7 @@
 // The two-factor sign-in step keeps the page rules on both its forms, the app code and the backup code. Pinned beside
 // the contract: switching opens the other form on its field, each sends its hook the code and the trust choice, a
-// wrong code reads under the field with no toast, and any other refusal is the hook's toast with no field marked.
+// wrong code reads under the field with no toast, an expired sign-in goes back to sign-in with its way back, and any
+// other refusal is the hook's toast with no field marked.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -123,6 +124,21 @@ test('a wrong code reads under the field, with no toast', async () => {
     expect(toasts).toEqual([]);
 });
 
+test('an expired sign-in goes back to sign-in, keeping the way back', async () => {
+    verifyTotp.mutateAsync.mockImplementation(async () => {
+        throw new AppError({
+            status: 401,
+            error: { status: 401, value: { message: 'Invalid two factor cookie', code: 'INVALID_TWO_FACTOR_COOKIE' } },
+        });
+    });
+    const memory = await renderPage('/box/inbox');
+    await type('Verification code', '123456');
+    await act(async () => pressEnter(field('Verification code')));
+    expect(memory.state.location.pathname).toBe('/login');
+    expect(memory.state.location.search).toEqual({ redirect: '/box/inbox' });
+    expect(messageUnder('Verification code')).toBeUndefined();
+});
+
 // Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
 test('any other refusal is the hook toast, with no field marked', async () => {
     verifyBackupCode.mutateAsync.mockImplementation(async () => {
@@ -138,14 +154,15 @@ test('any other refusal is the hook toast, with no field marked', async () => {
     expect(field('Backup code').getAttribute('aria-invalid')).toBe('false');
 });
 
-async function renderPage() {
-    const root = router.createRootRoute({ component: () => createElement(LoginFa2Page) });
+async function renderPage(redirect?: string) {
+    const root = router.createRootRoute({ component: () => createElement(LoginFa2Page, { redirect }) });
     const memory = router.createRouter({
         routeTree: root,
         history: router.createMemoryHistory({ initialEntries: ['/'] }),
     });
     await memory.load();
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
+    return memory;
 }
 
 function switchButton(label: string): HTMLButtonElement {
