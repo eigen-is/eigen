@@ -286,6 +286,15 @@ test('Share with team sits in the footer after the trash, as in the Share dialog
     ).toEqual(['Delete calendar', 'Share with team', 'Cancel', 'Save']);
 });
 
+test("a phone's footer shows only the icon of Share with team, and a screen reader still reads its name", async () => {
+    myTeams = [{ id: 'crew', name: 'Crew' }];
+    await open(calendar({}));
+    const label = [
+        ...(dialogTitled('Edit calendar')?.querySelectorAll('[data-slot="dialog-footer"] button span') ?? []),
+    ].find((span) => span.textContent === 'Share with team');
+    expect(label?.classList.contains('max-sm:sr-only')).toBe(true);
+});
+
 test('the color swatch sits inside the name field, which its label names', async () => {
     await open(calendar({}));
     expect(

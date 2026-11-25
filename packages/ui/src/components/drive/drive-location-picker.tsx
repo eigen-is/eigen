@@ -177,7 +177,8 @@ function DriveLocationPickerBody({
                     onDownloadInstead && (
                         <Button variant="outline" onClick={onDownloadInstead}>
                             <Download />
-                            Download instead
+                            {/* A phone's footer keeps one row, so only the icon shows there. */}
+                            <span className="max-sm:sr-only">Download instead</span>
                         </Button>
                     )
                 }

@@ -50,9 +50,11 @@ let moveTo = (_folderId: string) => {};
 function Harness({
     mode,
     refuseLocation,
+    onDownloadInstead,
 }: {
     mode: 'create' | 'folder';
     refuseLocation?: (location: DriveLocationValue) => string | undefined;
+    onDownloadInstead?: () => void;
 }) {
     const [open, setOpen] = useState(true);
     const [folderId, setFolderId] = useState('folder');
@@ -69,6 +71,7 @@ function Harness({
         confirmLabel: mode === 'create' ? 'Create' : 'Move here',
         onConfirm,
         refuseLocation,
+        onDownloadInstead,
         defaultFolderId: folderId,
     });
 }
@@ -232,4 +235,12 @@ test('a picker with no name typed closes on Esc at once', async () => {
         expect(onOpenChange.mock.calls).toEqual([[false]]);
         await unmount();
     }
+});
+
+test("a phone's footer shows only the icon of Download instead, and a screen reader still reads its name", async () => {
+    ({ unmount } = await renderInDocument(createElement(Harness, { mode: 'folder', onDownloadInstead: () => {} })));
+    const label = [...document.querySelectorAll('[role="dialog"] [data-slot="dialog-footer"] button span')].find(
+        (span) => span.textContent === 'Download instead',
+    );
+    expect(label?.classList.contains('max-sm:sr-only')).toBe(true);
 });
