@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, labels, organize, filter, groups]
 related: [contacts/add-a-contact, contacts/edit-or-delete]
 order: 50
-updated: 2026-11-02
+updated: 2026-11-25
 ---
 
 Labels let you group contacts however you like. You might use them for work, personal, or project-based groupings. Once a contact has a label you can click that label in the sidebar to see only those contacts.
@@ -18,7 +18,7 @@ Labels live in the sidebar under the **Labels** heading.
 2. Click the **+** button next to **Labels** in the sidebar. The **Add label** dialog opens.
 3. Enter a name in the **Label name** field.
 4. Click the color swatch at the start of the **Label name** field to pick a color for the label.
-5. Click **Save**. The new label appears in the sidebar. **Save** stays off until the label has a name.
+5. Click **Create**, or press Enter. The new label appears in the sidebar. A label needs a name: without one, the dialog says so under the field.
 
 ## Assign a label to a contact
 

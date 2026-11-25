@@ -1,10 +1,11 @@
-// Add label and Edit label: Save and Enter wait for a name with more than spaces, Save hands the trimmed name and the
-// color on and closes, and a save that fails stays open. Delete waits while a save runs, and asks first, on top of the
-// open dialog, so a cancelled delete keeps the edits. The label header's pencil edits its label, and a failed save there
-// stays open too.
+// Add label and Edit label keep the dialog contract. Create or Save with a name of only spaces says "Add a name" under
+// the field and saves nothing; otherwise it hands the trimmed name and the color on and closes. A new color alone
+// counts as a change. Delete waits while a save runs, and asks first, on top of the open dialog, so a cancelled delete
+// keeps the edits. The label header's pencil edits its label, and a failed save there stays open.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -96,37 +97,54 @@ const isDisabled = (target: HTMLButtonElement | undefined) =>
     !!target && (target.disabled || target.closest('fieldset')?.disabled === true);
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('Add label waits for a name with more than spaces, then hands the trimmed label on and closes', async () => {
+test('Add label keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { selectedLabel: null }),
+        submitLabel: 'Create',
+        firstField: 'Label name',
+        onSubmit,
+        makeChanged: () => type('Family'),
+        makeInvalid: () => type('   '),
+        invalidField: 'Label name',
+    });
+});
+
+test('Edit label keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { selectedLabel: urgent }),
+        submitLabel: 'Save',
+        firstField: 'Label name',
+        onSubmit,
+        makeChanged: () => type('Later'),
+        makeInvalid: () => type('  '),
+        invalidField: 'Label name',
+    });
+});
+
+test('Create hands the trimmed name and the next color on and closes', async () => {
     await open(null);
     const dialog = dialogTitled('Add label');
     expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(button(dialog, 'Delete label')).toBeUndefined();
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
-
-    await type('   ');
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
-    await act(async () => pressEnter(nameField()));
-    await settle();
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(onOpenChange).not.toHaveBeenCalled();
-
     await type(' Family ');
-    expect(button(dialog, 'Save')?.disabled).toBe(false);
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(onSubmit.mock.calls).toEqual([[{ name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value }]]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('Edit label refuses a name emptied to spaces', async () => {
+test('a new color alone is a change, so Esc asks before it drops it', async () => {
     await open(urgent);
-    const dialog = dialogTitled('Edit label');
-    expect(button(dialog, 'Save')?.disabled).toBe(false);
-    await type('  ');
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
-    await act(async () => pressEnter(nameField()));
-    await settle();
-    expect(onSubmit).not.toHaveBeenCalled();
+    await click(document.querySelector<HTMLButtonElement>('button[aria-label="Color"]') ?? undefined);
+    // The picker's first color, which is not Urgent's red.
+    await click(document.querySelector<HTMLButtonElement>('button[title]') ?? undefined);
+    expect(dialogTitled('Edit label')).toBeDefined();
+    await act(async () => {
+        nameField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(dialogTitled('Discard changes?')).toBeDefined();
 });
 
 test('a save that fails keeps the dialog open', async () => {
