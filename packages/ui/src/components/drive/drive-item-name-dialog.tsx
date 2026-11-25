@@ -102,9 +102,10 @@ function ItemNameForm({
                 }
             }}
         >
-            <NameField
+            <DriveNameField
                 fieldRef={fieldRef}
-                type={type}
+                label={`${type} name`}
+                placeholder={`Enter ${type.toLowerCase()} name`}
                 value={itemName}
                 onChange={(name) => {
                     setItemName(name);
@@ -120,32 +121,40 @@ function ItemNameForm({
     );
 }
 
-// Inside the form, so it reads whether Save was pressed: an empty field is red only after that.
-function NameField({
+// A name field inside a form shell, such as this dialog's or a location picker's. It reads whether the form was
+// submitted, so an empty name is red only after Save, and shows the server's reason for a taken name.
+export function DriveNameField({
     fieldRef,
-    type,
+    label,
     value,
     onChange,
     taken,
+    placeholder,
+    autoFocus,
+    className,
 }: {
     fieldRef: RefObject<HTMLInputElement | null>;
-    type: ItemType;
+    label: string;
     value: string;
     onChange: (name: string) => void;
     taken: string | undefined;
+    placeholder?: string;
+    autoFocus?: boolean;
+    className?: string;
 }) {
     const id = useId();
     const errorId = useId();
     const error = (useFormSubmitted() && !value.trim() && 'Add a name') || taken;
     return (
-        <Field>
-            <FieldLabel htmlFor={id}>{type} name</FieldLabel>
+        <Field className={className}>
+            <FieldLabel htmlFor={id}>{label}</FieldLabel>
             <Input
                 ref={fieldRef}
                 id={id}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                placeholder={`Enter ${type.toLowerCase()} name`}
+                placeholder={placeholder}
+                autoFocus={autoFocus}
                 aria-invalid={!!error || undefined}
                 aria-describedby={error ? errorId : undefined}
             />

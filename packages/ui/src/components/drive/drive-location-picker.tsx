@@ -1,29 +1,24 @@
 // The dialog that picks a Drive folder, and in create mode a name, such as for a new folder, a new Eigen document, a
 // copy or move, or Save to Drive, which can offer a download instead. Confirm waits for a folder: a picker opened with
-// none confirms its drive's root, once that has loaded. Esc, the X and a click outside ask "Discard changes?" once a
-// name is typed; a pick alone loses nothing typed, so it closes at once.
+// none confirms its drive's root, once that has loaded. A blank name, a name the folder has already, or a folder the
+// host refuses gets its reason under its field. Esc, the X and a click outside ask "Discard changes?" once a name is
+// typed; a pick alone loses nothing typed, so it closes at once.
 
 import { useAuth } from '@workspace/lib/auth';
-import { useResolvedDriveLocation } from '@workspace/lib/drive';
+import { isNameTaken, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
-import { Field, FieldLabel } from '@workspace/ui/components/field';
-import { Input } from '@workspace/ui/components/input';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FormShell } from '@workspace/ui/components/form-shell';
 import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { DriveNameField } from './drive-item-name-dialog';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
@@ -31,6 +26,8 @@ type DriveLocationPickerProps = {
     onOpenChange: (open: boolean) => void;
     mode: 'create' | 'folder';
     onConfirm: (location: DriveLocationValue & { name?: string }) => void | Promise<void>;
+    // Why a folder can't take what the picker is for, such as a move to another drive, shown under the location.
+    refuseLocation?: (location: DriveLocationValue) => string | undefined;
     onDownloadInstead?: () => void;
     title: string;
     defaultOwnerId?: string;
@@ -44,14 +41,11 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     const { pending, run } = useDialogPending(onOpenChange);
     const [named, setNamed] = useState(false);
     const discard = useDiscardChanges({ open, changed: named, pending, onDiscard: () => onOpenChange(false) });
-    // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
-    const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
     return (
         <>
             <Dialog open={open} onOpenChange={discard.onOpenChange}>
                 <DialogContent className="flex flex-col">
                     <DriveLocationPickerBody
-                        key={place}
                         {...body}
                         pending={pending}
                         run={run}
@@ -69,6 +63,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
 function DriveLocationPickerBody({
     mode,
     onConfirm,
+    refuseLocation,
     onDownloadInstead,
     title,
     defaultOwnerId,
@@ -87,28 +82,49 @@ function DriveLocationPickerBody({
     onNamedChange: (named: boolean) => void;
 }) {
     const { user } = useAuth();
+    const nameRef = useRef<HTMLInputElement>(null);
     const [name, setName] = useState('');
+    // The server's reason for the name last sent, until the name changes.
+    const [taken, setTaken] = useState<string>();
     const [expanded, setExpanded] = useState(mode !== 'create');
-    const [location, setLocation] = useState<DriveLocationValue>({
-        ownerId: defaultOwnerId || user?.id || '',
-        mountId: defaultMountId,
-        folderId: defaultFolderId,
-    });
+    const place = { ownerId: defaultOwnerId || user?.id || '', mountId: defaultMountId, folderId: defaultFolderId };
+    const [location, setLocation] = useState<DriveLocationValue>(place);
+    const [locationRefusal, setLocationRefusal] = useState<string>();
     const destination = useResolvedDriveLocation(location);
 
+    // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
+    // The typed name stays.
+    const placeKey = `${defaultOwnerId}/${defaultMountId}/${defaultFolderId}`;
+    const [shownPlace, setShownPlace] = useState(placeKey);
+    if (shownPlace !== placeKey) {
+        setShownPlace(placeKey);
+        setLocation(place);
+    }
+
     const named = name !== '';
-    useEffect(() => onNamedChange(named), [named, onNamedChange]);
+    useEffect(() => {
+        onNamedChange(named);
+        return () => onNamedChange(false);
+    }, [named, onNamedChange]);
 
     const hasName = mode === 'create';
-    const canConfirm = !!destination.folderId && (!hasName || !!name.trim());
 
-    const handleSubmit = () => {
-        if (!canConfirm) return;
-        return run(() => onConfirm({ ...destination, name: hasName ? name.trim() : undefined }));
+    const confirm = async () => {
+        const refusal = refuseLocation?.(destination);
+        setLocationRefusal(refusal);
+        if (refusal || (hasName && !name.trim())) return false;
+        try {
+            await onConfirm({ ...destination, name: hasName ? name.trim() : undefined });
+        } catch (error) {
+            if (!hasName || !isNameTaken(error)) throw error;
+            setTaken(error.message);
+            return false;
+        }
     };
 
     return (
-        <div
+        <FormShell
+            onSubmit={() => (destination.folderId ? run(confirm) : undefined)}
             className={cn(
                 'flex flex-col gap-4 min-h-0',
                 expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
@@ -124,47 +140,49 @@ function DriveLocationPickerBody({
             {/* Edge to edge, so the folder browser's line spans the dialog. */}
             <div className="-mx-6 flex min-h-0 flex-1 flex-col">
                 {hasName && (
-                    <Field className="px-6 pb-2">
-                        <FieldLabel htmlFor="picker-name">{nameLabel}</FieldLabel>
-                        <Input
-                            id="picker-name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && name.trim()) {
-                                    e.preventDefault();
-                                    handleSubmit();
-                                }
-                            }}
-                        />
-                    </Field>
+                    <DriveNameField
+                        fieldRef={nameRef}
+                        label={nameLabel}
+                        autoFocus
+                        className="px-6 pb-2"
+                        value={name}
+                        onChange={(next) => {
+                            setName(next);
+                            setTaken(undefined);
+                        }}
+                        taken={taken}
+                    />
                 )}
                 <DriveLocationField
                     value={location}
-                    onChange={setLocation}
+                    onChange={(next) => {
+                        setLocation(next);
+                        setLocationRefusal(undefined);
+                    }}
                     expanded={expanded}
-                    onExpandedChange={setExpanded}
+                    // The name keeps the focus, so Enter still creates once the folder is picked.
+                    onExpandedChange={(next) => {
+                        setExpanded(next);
+                        nameRef.current?.focus();
+                    }}
+                    error={locationRefusal}
                 />
             </div>
 
-            <DialogFooter
+            <FormFooter
                 start={
                     onDownloadInstead && (
-                        <Button variant="outline" onClick={onDownloadInstead} disabled={pending}>
+                        <Button variant="outline" onClick={onDownloadInstead}>
                             <Download />
                             Download instead
                         </Button>
                     )
                 }
-            >
-                <Button variant="outline" onClick={onCancel} disabled={pending}>
-                    Cancel
-                </Button>
-                <Button onClick={handleSubmit} disabled={!canConfirm} pending={pending}>
-                    {confirmLabel}
-                </Button>
-            </DialogFooter>
-        </div>
+                pending={pending}
+                onCancel={onCancel}
+                canSubmit={!!destination.folderId}
+                submitLabel={confirmLabel}
+            />
+        </FormShell>
     );
 }
