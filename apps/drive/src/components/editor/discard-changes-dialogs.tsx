@@ -1,12 +1,10 @@
 // What a Drive text editor asks before unsaved edits are dropped: its own Cancel opens the discard dialog, and
-// a navigation, reload or closed tab meets the leave guard. Both ask the same question, so the copy lives here.
-// An editor such as the markdown editor renders it with what its save hook says is at risk.
+// a navigation, reload or closed tab meets the leave guard. Both ask what every form asks, "Discard changes?". An
+// editor such as the markdown editor renders it with what its save hook says is at risk.
 
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { LeaveGuard } from '@workspace/ui/components/layout/app';
-
-const title = 'Discard changes?';
-const description = 'You have unsaved changes. Discard them?';
+import { DISCARD_CHANGES_QUESTION } from '@workspace/ui/hooks/use-discard-changes';
 
 type DiscardChangesDialogsProps = {
     atRisk: boolean;
@@ -23,13 +21,11 @@ export function DiscardChangesDialogs({ atRisk, open, onConfirm, onCancel }: Dis
                 onOpenChange={(next) => {
                     if (!next) onCancel();
                 }}
-                title={title}
-                description={description}
-                confirmText="Discard"
+                {...DISCARD_CHANGES_QUESTION}
                 destructive
                 onConfirm={onConfirm}
             />
-            <LeaveGuard active={atRisk} title={title} description={description} />
+            <LeaveGuard active={atRisk} />
         </>
     );
 }

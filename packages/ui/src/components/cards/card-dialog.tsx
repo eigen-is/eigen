@@ -4,7 +4,6 @@
 // which state a card is in, and it does the writes this dialog asks for.
 
 import { useResolveCardAttachments } from '@workspace/lib/comments';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
 import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
@@ -12,7 +11,9 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
+import { useDialogPending } from '../../hooks/use-dialog-pending';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { AttachmentStrip } from '../attachment/attachment-strip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
@@ -49,7 +50,7 @@ type CardDialogProps = {
     copyLinkUrl?: string;
     members?: EffectiveMember[];
     currentUserEmail?: string;
-    onUpdate?: (patch: CardFormPatch & { attachments?: ChatAttachment[] }) => void;
+    onUpdate?: (patch: CardFormPatch & { attachments?: ChatAttachment[] }) => void | Promise<void>;
     onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
     onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
     onDelete?: (cardId: string) => void;
@@ -85,6 +86,8 @@ export function CardDialog({
     const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
     // Whether the edit form holds a change, so the frame's Esc asks before it goes back to the view.
     const [editChanged, setEditChanged] = useState(false);
+    // A save leaves the edit for the view once it lands.
+    const edit = useDialogPending(onEditingChange);
 
     const handleOpenChange = (next: boolean) => {
         if (!next) onEditingChange(false);
@@ -130,16 +133,16 @@ export function CardDialog({
         if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
-            onUpdate(patch);
+            await onUpdate(patch);
             return;
         }
         const attachments = await resolveAttachments(drafts);
-        onUpdate({ ...patch, attachments });
+        await onUpdate({ ...patch, attachments });
     };
 
     // The assignee sits in the meta row: a picker when the user may reassign, else a plain chip. A read-only card with
     // no assignee shows nothing there.
-    let assigneeControl: React.ReactNode = null;
+    let assigneeControl: ReactNode = null;
     if (chatName) {
         if (canWrite && onAssign && members && currentUserEmail) {
             assigneeControl = (
@@ -192,16 +195,14 @@ export function CardDialog({
                 mode="edit"
                 initialTitle={card.title}
                 initialDescription={card.description}
-                initialColor={card.color ?? EIGEN_STICKIES_COLORS[0][1].value}
+                initialColor={card.color}
                 allowAttachments={!!mediaFolderId}
                 initialAttachments={card.attachments}
                 members={members}
                 currentUserEmail={currentUserEmail}
                 initialAssignee={assignee}
-                onSave={async (patch, drafts, assignee) => {
-                    await handleEditSave(patch, drafts, assignee);
-                    onEditingChange(false);
-                }}
+                onSave={(patch, drafts, assignee) => edit.run(() => handleEditSave(patch, drafts, assignee))}
+                pending={edit.pending}
                 onCancel={() => onEditingChange(false)}
                 onChangedChange={setEditChanged}
                 onDelete={onDelete && (() => onDelete(card.id))}
@@ -247,7 +248,7 @@ export function CardDialog({
         />
     );
 
-    let body: React.ReactNode;
+    let body: ReactNode;
     if (editForm) {
         // The form scrolls inside on short viewports, and the thread hides while it is open.
         body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col">{editForm}</div>;
@@ -274,7 +275,9 @@ export function CardDialog({
                     {...action}
                 />
             }
-            editing={editForm && { changed: editChanged, onCancel: () => onEditingChange(false) }}
+            editing={
+                editForm && { changed: editChanged, pending: edit.pending, onCancel: () => onEditingChange(false) }
+            }
         >
             {body}
         </CardDialogFrame>

@@ -3,10 +3,9 @@
 // changed does nothing. While the draft holds a change a LeaveGuard asks before the page is left, standing down while
 // the save runs. A failed save keeps the draft for another try beside its hook's toast.
 
-import { rethrowUntoasted } from '@workspace/lib/api-error';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
 import type { DialogAction } from '../../../hooks/use-dialog-pending';
+import { useDialogPending } from '../../../hooks/use-dialog-pending';
 import { Button } from '../../button';
 import { FormShell } from '../../form-shell';
 import { Separator } from '../../separator';
@@ -22,22 +21,10 @@ type PageFormProps = {
 };
 
 export function PageForm({ onSubmit, changed, onReset, children }: PageFormProps) {
-    const [pending, setPending] = useState(false);
-
-    const submit = async () => {
-        if (pending || !changed) return;
-        setPending(true);
-        try {
-            if ((await onSubmit()) === false) return false;
-        } catch (error) {
-            rethrowUntoasted(error);
-        } finally {
-            setPending(false);
-        }
-    };
+    const { pending, run } = useDialogPending();
 
     return (
-        <FormShell className="space-y-6" onSubmit={submit} autoFocus>
+        <FormShell className="space-y-6" onSubmit={() => (changed ? run(onSubmit) : undefined)} autoFocus>
             {children}
             {changed && (
                 <>
@@ -52,11 +39,7 @@ export function PageForm({ onSubmit, changed, onReset, children }: PageFormProps
                     </div>
                 </>
             )}
-            <LeaveGuard
-                active={changed && !pending}
-                title="Leave without saving?"
-                description="Your changes have not been saved. If you leave now they are lost."
-            />
+            <LeaveGuard active={changed} pending={pending} />
         </FormShell>
     );
 }

@@ -1,5 +1,6 @@
 // A close with nothing changed discards at once. A changed one asks "Discard changes?": Keep editing goes back with
-// nothing discarded, and the red Discard discards. A dialog its host closes while it asks takes the question along.
+// nothing discarded, and the red Discard discards. A close while a save runs does nothing, since the save decides. A
+// dialog its host closes while it asks takes the question along.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../happy-dom';
 import { renderInDocument } from '../render-in-document';
@@ -12,14 +13,14 @@ const { useDiscardChanges } = await import('../../hooks/use-discard-changes');
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function mount(changed: boolean) {
+async function mount(changed: boolean, pending = false) {
     const onDiscard = mock(() => {});
     let onOpenChange = (_open: boolean) => {};
     let setOpen = (_open: boolean) => {};
     function Harness() {
         const [open, setState] = useState(true);
         setOpen = setState;
-        const discard = useDiscardChanges({ open, changed, onDiscard });
+        const discard = useDiscardChanges({ open, changed, pending, onDiscard });
         onOpenChange = discard.onOpenChange;
         return discard.dialog;
     }
@@ -65,6 +66,16 @@ test('with a change Discard discards and the question closes', async () => {
     await click('Discard');
     expect(onDiscard).toHaveBeenCalledTimes(1);
     expect(question()).toBeNull();
+});
+
+test('a close while a save runs neither discards nor asks, changed or not', async () => {
+    for (const changed of [false, true]) {
+        const { onDiscard, requestClose } = await mount(changed, true);
+        await requestClose();
+        expect(onDiscard).not.toHaveBeenCalled();
+        expect(question()).toBeNull();
+        await unmount();
+    }
 });
 
 test('a host that closes the dialog while it asks takes the question along, and a reopening asks nothing', async () => {

@@ -9,6 +9,7 @@ import { installHappyDom } from './happy-dom';
 installHappyDom();
 
 const { createElement, useRef, useState } = await import('react');
+const { rethrowUntoasted } = await import('@workspace/lib/api-error');
 const { expectFormContract, expectFormProbe } = await import('./form-contract');
 const { FormDialog, FormDialogForm } = await import('../components/form-dialog');
 const { FormShell } = await import('../components/form-shell');
@@ -134,6 +135,10 @@ type LooseDialogProps = {
     cancelCloses?: boolean;
     // Submits on Cmd+Enter and lets the key go on, as a form with its own shortcut may.
     modEnter?: boolean;
+    // Ignores a close while the save runs.
+    waits?: boolean;
+    // Closes on a failed save too, where it otherwise stays open.
+    closesOnFailure?: boolean;
 };
 
 // A rename built by hand on a plain <form>, as a dialog off the shell is.
@@ -144,6 +149,8 @@ function LooseDialog({
     content,
     cancelCloses = true,
     modEnter = false,
+    waits = false,
+    closesOnFailure = false,
 }: LooseDialogProps) {
     const [open, setOpen] = useState(true);
     const [name, setName] = useState('Notes');
@@ -155,14 +162,17 @@ function LooseDialog({
         if (guarded && running.current) return;
         running.current = true;
         setPending(true);
-        await onSubmit(name);
+        const failed = await onSubmit(name).then(
+            () => false,
+            () => true,
+        );
         running.current = false;
         setPending(false);
-        setOpen(false);
+        if (!failed || closesOnFailure) setOpen(false);
     };
     return createElement(
         Dialog,
-        { open, onOpenChange: setOpen },
+        { open, onOpenChange: (next: boolean) => (waits && pending) || setOpen(next) },
         createElement(
             DialogContent,
             content ?? {},
@@ -190,7 +200,7 @@ function LooseDialog({
     );
 }
 
-// Saves once at a time and says so on its button, as the card and page shells will.
+// Saves once at a time and says so on its button, as the card and page shells do. A toasted failure ends here.
 function useSave(onSubmit: Save, name: string, setError: (error: string) => void) {
     const [pending, setPending] = useState(false);
     const save = async () => {
@@ -199,13 +209,19 @@ function useSave(onSubmit: Save, name: string, setError: (error: string) => void
             return false;
         }
         setPending(true);
-        await onSubmit(name);
-        setPending(false);
+        try {
+            await onSubmit(name);
+        } catch (error) {
+            rethrowUntoasted(error);
+        } finally {
+            setPending(false);
+        }
     };
     return { pending, save };
 }
 
-// A card that opens in its edit and goes back to its view on Cancel, or on Esc when `escToView` holds.
+// A card that opens in its edit and goes back to its view on Cancel, or on Esc when `escToView` holds. It ignores
+// every close while its save runs.
 function CardSample({ onSubmit, escToView }: { onSubmit: Save; escToView: boolean }) {
     const [open, setOpen] = useState(true);
     const [editing, setEditing] = useState(true);
@@ -220,13 +236,14 @@ function CardSample({ onSubmit, escToView }: { onSubmit: Save; escToView: boolea
     return [
         createElement(
             Dialog,
-            { key: 'card', open, onOpenChange: setOpen },
+            { key: 'card', open, onOpenChange: (next: boolean) => pending || setOpen(next) },
             createElement(
                 DialogContent,
                 {
                     onEscapeKeyDown: (event: KeyboardEvent) => {
                         if (!editing || !escToView) return;
                         event.preventDefault();
+                        if (pending) return;
                         if (name !== 'Notes') setAsking(true);
                         else toView();
                     },
@@ -298,8 +315,6 @@ function PageSample({
                 createElement(LeaveGuard, {
                     key: 'guard',
                     active: name !== 'Notes' && !pending,
-                    title: 'Leave without saving?',
-                    description: 'What you changed is not saved.',
                 }),
         ],
     });
@@ -429,7 +444,7 @@ test('the card Esc probe fails a card whose Esc closes it where Cancel goes back
 });
 
 test('the leave guard probe fails a changed page that leaves without asking', async () => {
-    await expectProbeToFail('leaveGuard', page(false), 'a changed page asks "Leave without saving?"');
+    await expectProbeToFail('leaveGuard', page(false), 'a changed page asks "Discard changes?"');
 });
 
 test('the invalid probe fails a form that saves an invalid value, says nothing, or leaves its bad field unfocused', async () => {
@@ -454,4 +469,14 @@ test('the pending probe fails a Save that hides that it is busy, or that saves a
     await expectProbeToFail('pending', loose({ guarded: true }), 'Save says it is busy while the save runs');
     await expectProbeToFail('pending', loose({ busy: true }), 'a click while the save runs saves nothing more');
     await expectProbeToFail('pending', page(false, false), 'Cmd+Enter while the save runs saves nothing more, ran 2');
+});
+
+test('the pending close probe fails a dialog that closes while its save runs, or on a failed save', async () => {
+    await expectProbeToFail('pendingClose', loose({ guarded: true, busy: true }), 'Esc while the save runs leaves');
+    await expectFormProbe('pendingClose', loose({ guarded: true, waits: true }));
+    await expectProbeToFail(
+        'pendingClose',
+        loose({ guarded: true, waits: true, closesOnFailure: true }),
+        'a failed save keeps the form open',
+    );
 });

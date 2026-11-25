@@ -1,8 +1,8 @@
 // The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys, their
 // first focus and their error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that
-// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed its fields
-// read useFormSubmitted(), so a missing value shows only then, and a refused submit focuses the first field marked
-// aria-invalid while the form still shows. Apps use the shells, not this.
+// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed, and until a
+// submit goes through, its fields read useFormSubmitted(), so a missing value shows only then, and a refused submit
+// focuses the first field marked aria-invalid while the form still shows. Apps use the shells, not this.
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -53,7 +53,10 @@ export function FormShell({
 
     const submit = async () => {
         setSubmitted(true);
-        if ((await onSubmit()) === false && !focusesOwnErrors) setRefusals((count) => count + 1);
+        const refused = (await onSubmit()) === false;
+        // A form that stays after its save, such as a page form, starts clean, so a later edit isn't red before Save.
+        setSubmitted(refused);
+        if (refused && !focusesOwnErrors) setRefusals((count) => count + 1);
     };
 
     return (

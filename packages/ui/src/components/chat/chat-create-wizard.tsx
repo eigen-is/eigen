@@ -130,9 +130,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
     // The chat's name falls back to an address's local part only for an address nobody knows.
-    const contactInput = useContactInput(({ email, displayName = email.split('@')[0] }) => {
-        if (email === myEmail) return;
-        setPicked((prev) => (prev.some((person) => person.email === email) ? prev : [...prev, { email, displayName }]));
+    const contactInput = useContactInput({
+        listed: pickedEmails,
+        onAdd: ({ email, displayName = email.split('@')[0] }) => {
+            if (email === myEmail) return;
+            setPicked((prev) => [...prev, { email, displayName }]);
+        },
     });
 
     // A caller may pass a new array on every render. Its JSON stays the same, so the reset below doesn't run again

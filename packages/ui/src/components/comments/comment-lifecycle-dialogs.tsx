@@ -79,7 +79,9 @@ export function CommentLifecycleDialogs({
                 copyLinkUrl={openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined}
                 members={members}
                 currentUserEmail={user?.email}
-                onUpdate={(patch) => openCard && updateCard(openCard.id, patch)}
+                onUpdate={(patch) => {
+                    if (openCard) updateCard(openCard.id, patch);
+                }}
                 onResolve={(chatName, next, title) => resolveComment.mutate({ chatName, status: next, title })}
                 onAssign={(chatName, assignee, title) => assignComment.mutate({ chatName, assignee, title })}
                 onDelete={requestDelete}

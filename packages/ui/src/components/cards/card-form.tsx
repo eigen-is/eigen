@@ -4,21 +4,21 @@
 // field. It tells its host whether anything changed, so the host's Esc can ask before it drops the edit. Editing can
 // offer Delete, which the host confirms.
 
-import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import { Button } from '@workspace/ui/components/button';
-import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { FieldError } from '@workspace/ui/components/field';
+import { FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
@@ -34,21 +34,21 @@ type CardFormProps = {
     initialTitle?: string;
     initialDescription?: string;
     initialColor?: string;
-    // Attachments are only staged: the host uploads or copies them on save, and Cancel touches nothing.
     allowAttachments?: boolean;
     initialAttachments?: ChatAttachment[];
     // The assignee row shows only with both members and currentUserEmail.
     members?: EffectiveMember[];
     currentUserEmail?: string;
     initialAssignee?: string | null;
+    // The host runs it through its pending lifecycle, which says `pending` while it runs.
     onSave: (
         patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
         // Undefined when untouched, so the host skips the assignment.
         assignee?: string | null,
-    ) => void | Promise<void>;
+    ) => ReturnType<DialogAction>;
+    pending: boolean;
     onCancel: () => void;
-    // Whether the fields differ from what the form opened with. Off while a save runs, which decides the close itself.
     onChangedChange?: (changed: boolean) => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
@@ -70,6 +70,7 @@ export function CardForm({
     currentUserEmail,
     initialAssignee = null,
     onSave,
+    pending,
     onCancel,
     onChangedChange,
     onDelete,
@@ -78,39 +79,45 @@ export function CardForm({
     placeholderDescription = 'Enter description',
     submitLabel = 'Save',
 }: CardFormProps) {
-    const [title, setTitle] = useState(initialTitle);
-    const [description, setDescription] = useState(initialDescription);
-    const [color, setColor] = useState(initialColor);
-    const [assignee, setAssignee] = useState<string | null>(initialAssignee);
-    const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
+    // What the form opened with. A value the host learns later, such as the card's assignee, leaves an open edit alone,
+    // or a fresh edit would read as changed and its Save would undo what the host learned.
+    const [initial] = useState(() => ({
+        title: initialTitle,
+        description: initialDescription,
+        color: initialColor,
+        assignee: initialAssignee,
+        attachments: initialAttachments,
+    }));
+    const [title, setTitle] = useState(initial.title);
+    const [description, setDescription] = useState(initial.description);
+    const [color, setColor] = useState(initial.color);
+    const [assignee, setAssignee] = useState(initial.assignee);
+    const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initial.attachments);
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [pending, setPending] = useState(false);
     // The editor rewrites a plain-text description as HTML as it loads. A save with no edits compares against that
     // form, or it would write the rewrite back.
-    const [loadedDescription, setLoadedDescription] = useState(initialDescription);
+    const [loadedDescription, setLoadedDescription] = useState(initial.description);
     const descriptionLabelId = useId();
 
     // Edit mode seeds the drafts with the card's own attachments, so comparing by identity finds any change.
     const draftsChanged =
-        drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
+        drafts.length !== initial.attachments.length || drafts.some((d, i) => d !== initial.attachments[i]);
     const changed =
-        title !== initialTitle ||
+        title !== initial.title ||
         description !== loadedDescription ||
-        color !== initialColor ||
-        assignee !== initialAssignee ||
+        color !== initial.color ||
+        assignee !== initial.assignee ||
         draftsChanged;
-    const reportsChanged = changed && !pending;
     useEffect(() => {
-        onChangedChange?.(reportsChanged);
+        onChangedChange?.(changed);
         return () => onChangedChange?.(false);
-    }, [reportsChanged, onChangedChange]);
+    }, [changed, onChangedChange]);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
     const { targetProps } = useFileDropTarget(stageFiles, allowAttachments);
     const { onPaste } = useFilePasteTarget(stageFiles, allowAttachments);
 
-    const handleSubmit = async () => {
-        if (pending) return;
+    const handleSubmit = () => {
         if (!title.trim()) return false;
         const patch: CardFormPatch = {};
         let attachments: CardAttachmentDraft[] | undefined;
@@ -122,22 +129,13 @@ export function CardForm({
             if (drafts.length > 0) attachments = drafts;
             assigneeArg = assignee ?? undefined;
         } else {
-            if (title !== initialTitle) patch.title = title;
+            if (title !== initial.title) patch.title = title;
             if (description !== loadedDescription) patch.description = description;
-            if (color !== initialColor) patch.color = color;
+            if (color !== initial.color) patch.color = color;
             if (draftsChanged) attachments = drafts;
-            assigneeArg = assignee !== initialAssignee ? assignee : undefined;
+            assigneeArg = assignee !== initial.assignee ? assignee : undefined;
         }
-        setPending(true);
-        try {
-            await onSave(patch, attachments, assigneeArg);
-        } catch (error) {
-            // A mutation's failure is toasted already, so the form stays open for a retry. Anything else, such as a
-            // Yjs write, has no toast and must surface.
-            rethrowUntoasted(error);
-        } finally {
-            setPending(false);
-        }
+        return onSave(patch, attachments, assigneeArg);
     };
 
     return (
@@ -160,7 +158,7 @@ export function CardForm({
                         <Label id={descriptionLabelId}>Description</Label>
                         <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
                             <LightEditor
-                                content={initialDescription}
+                                content={initial.description}
                                 onChange={setDescription}
                                 onReady={({ html }) => {
                                     setLoadedDescription(html);
@@ -216,7 +214,10 @@ export function CardForm({
                         )}
                     </div>
                 </div>
-                <DialogFooter
+                <FormFooter
+                    pending={pending}
+                    onCancel={onCancel}
+                    submitLabel={submitLabel}
                     start={
                         <>
                             {allowAttachments && (
@@ -242,14 +243,7 @@ export function CardForm({
                             )}
                         </>
                     }
-                >
-                    <Button variant="outline" onClick={onCancel} disabled={pending}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" pending={pending}>
-                        {submitLabel}
-                    </Button>
-                </DialogFooter>
+                />
             </div>
         </FormShell>
     );
@@ -266,6 +260,7 @@ function TitleField({
     placeholder: string;
 }) {
     const id = useId();
+    const errorId = useId();
     const missing = useFormSubmitted() && !value.trim();
     return (
         <div className="grid gap-2">
@@ -277,8 +272,9 @@ function TitleField({
                 placeholder={placeholder}
                 autoFocus
                 aria-invalid={missing || undefined}
+                aria-describedby={missing ? errorId : undefined}
             />
-            {missing && <FieldError>Add a title</FieldError>}
+            {missing && <FieldError id={errorId}>Add a title</FieldError>}
         </div>
     );
 }

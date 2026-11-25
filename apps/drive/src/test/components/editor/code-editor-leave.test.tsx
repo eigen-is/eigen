@@ -1,6 +1,6 @@
 // A text file with unsaved edits asks before Drive leaves it, whichever way: its own Back button, a sidebar link
-// such as Recent files, or a reload or closed tab. Leave goes, Stay keeps the edits. A clean or saved file leaves
-// at once.
+// such as Recent files, or a reload or closed tab. It asks what every form asks: Discard goes, Keep editing keeps the
+// edits. A clean or saved file leaves at once.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { EditorSaveResult } from '@workspace/lib/types/file-kinds';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -111,19 +111,20 @@ test('a clean file leaves for a sidebar link at once', async () => {
     expect(editor.at()).toBe('/recent');
 });
 
-test('unsaved edits ask before a sidebar link leaves, and Stay keeps them', async () => {
+test('unsaved edits ask before a sidebar link leaves, and Keep editing keeps them', async () => {
     const editor = await openEditor();
     await editor.type();
     await editor.leaveForRecent();
     expect(editor.at()).toBe('/edit');
     expect(asking()).toBe(true);
+    expect(document.body.textContent).toContain('What you changed is not saved.');
 
-    await editor.click('Stay');
+    await editor.click('Keep editing');
     expect(editor.at()).toBe('/edit');
     expect(document.querySelector('.cm-content')?.textContent).toBe('more first draft');
 
     await editor.leaveForRecent();
-    await editor.click('Leave');
+    await editor.click('Discard');
     expect(editor.at()).toBe('/recent');
 });
 
@@ -132,7 +133,7 @@ test('Back with unsaved edits asks once, then leaves', async () => {
     await editor.type();
     await editor.click('Back to files');
     expect(editor.at()).toBe('/edit');
-    await editor.click('Leave');
+    await editor.click('Discard');
     expect(editor.at()).toBe('/recent');
     expect(asking()).toBe(false);
 });

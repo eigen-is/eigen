@@ -65,14 +65,15 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
         return emails;
     }, [directList, inheritedList, user?.email]);
 
-    const contactInput = useContactInput((contact) => {
-        if (directList.some((item) => item.id.toLowerCase() === contact.email))
-            return `${contact.email} is already in the list`;
-        setDirectListOverride((prevList) => [
-            ...(prevList ?? baseDirectList),
-            { id: contact.email, read: true, write: true, owner: false },
-        ]);
-        setHasChanges(true);
+    const contactInput = useContactInput({
+        listed: directList.map((item) => item.id),
+        onAdd: (contact) => {
+            setDirectListOverride((prevList) => [
+                ...(prevList ?? baseDirectList),
+                { id: contact.email, read: true, write: true, owner: false },
+            ]);
+            setHasChanges(true);
+        },
     });
 
     useEffect(() => {

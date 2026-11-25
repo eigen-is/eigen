@@ -1,6 +1,7 @@
 // A card's edit keeps the card contract: Esc goes back to the card's view as Cancel does, asking "Discard changes?"
 // first once something changed, and only that edit ends, not the card. The corner X and a click outside close the card,
-// asking the same question first once something changed. While editing, no empty bar sits above the form.
+// asking the same question first once something changed. Every close waits while a save runs. While editing, no empty
+// bar sits above the form. Leaving the edit, by Cancel, Discard or Save, puts the focus on the card's Edit action.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import { expectFormContract } from '../../form-contract';
@@ -19,7 +20,7 @@ const { PreviewProvider } = await import('../../../components/preview-provider')
 
 // No thread, so the view is the card and its line.
 const card: CommentCard = { id: 'card-1', title: 'Audit card', description: '', color: '#fde68a' };
-const update = mock((_patch: CardFormPatch) => {});
+const update = mock(async (_patch: CardFormPatch) => {});
 
 // The card's open state, as its host last set it.
 let cardOpen = true;
@@ -70,9 +71,6 @@ test("a card's edit keeps the card contract", async () => {
         makeInvalid: () => typeTitle(''),
         invalidField: 'Title',
         modEnterFields: ['Description'],
-        except: {
-            pending: 'a card writes to its Y.Doc at once; only an upload leaves Save pending, as Add card shows',
-        },
     });
 });
 
@@ -145,3 +143,31 @@ for (const [way, close] of CLOSES) {
         expect(update).not.toHaveBeenCalled();
     });
 }
+
+const focusedLabel = () => document.activeElement?.getAttribute('aria-label');
+const pressEscape = () =>
+    act(async () => {
+        const target = document.activeElement ?? document.body;
+        target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+
+test("leaving the edit by Cancel, Discard or Save focuses the card's Edit action", async () => {
+    const leaves: [string, () => Promise<void>][] = [
+        ['Cancel', () => click('Cancel')],
+        [
+            'Discard',
+            async () => {
+                await typeTitle('Audit card, checked');
+                await pressEscape();
+                await click('Discard');
+            },
+        ],
+        ['Save', () => click('Save')],
+    ];
+    for (const [way, leave] of leaves) {
+        const { unmount } = await renderInDocument(createElement(EditCard));
+        await leave();
+        expect([way, editing(), focusedLabel()]).toEqual([way, false, 'Edit']);
+        await unmount();
+    }
+});

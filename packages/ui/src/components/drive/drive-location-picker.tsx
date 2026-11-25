@@ -41,13 +41,9 @@ type DriveLocationPickerProps = {
 };
 
 export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending, run } = useDialogPending(onOpenChange);
     const [named, setNamed] = useState(false);
-    const discard = useDiscardChanges({
-        open,
-        changed: named && !pending,
-        onDiscard: () => handleOpenChange(false),
-    });
+    const discard = useDiscardChanges({ open, changed: named, pending, onDiscard: () => onOpenChange(false) });
     // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
     const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
     return (

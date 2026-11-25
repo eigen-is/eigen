@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2426 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2428 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (329)
+## Components (330)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -179,6 +179,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormMessage` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormDialog` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialogForm` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
+| `FormFooter` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormShell` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `HintPill` | `@workspace/ui/components/hint-pill` | packages/ui/src/components/hint-pill.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
@@ -1184,7 +1185,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1278)
+## Utilities & constants (1279)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2438,6 +2439,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
+| `DISCARD_CHANGES_QUESTION` | `@workspace/ui/hooks/use-discard-changes` | packages/ui/src/hooks/use-discard-changes.tsx |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `handFocusReturnTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `hasFocusRing` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
