@@ -250,7 +250,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     return (
         <>
             <Dialog open={open} onOpenChange={discard.onOpenChange}>
-                <DialogContent className="flex flex-col h-[620px] max-h-[85vh]">
+                <DialogContent className="flex flex-col h-[620px] max-h-[85vh]" onFocus={discard.onFocus}>
                     <DialogHeader>
                         <DialogTitle>New chat</DialogTitle>
                         <DialogDescription className="sr-only">

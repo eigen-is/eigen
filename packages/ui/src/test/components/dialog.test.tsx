@@ -129,6 +129,42 @@ test('Escape from a dialog opened by a button gives the focus back to the button
     expect(document.activeElement?.hasAttribute('data-opener')).toBe(true);
 });
 
+test('a dialog whose opener was drawn anew while it was open gives the focus to the one with its focus key', async () => {
+    let open = () => {};
+    let move = () => {};
+    // An event chip, such as one a save moved to another day: a new element in another column, with the same key.
+    function Page() {
+        const [isOpen, setOpen] = useState(false);
+        const [day, setDay] = useState(1);
+        open = () => setOpen(true);
+        move = () => setDay(2);
+        const chip = (column: number) =>
+            createElement(
+                'div',
+                { key: column },
+                day === column && createElement('button', { 'data-focus-key': 'gig' }, 'Gig'),
+            );
+        return createElement(
+            'div',
+            null,
+            chip(1),
+            chip(2),
+            dialog('Edit event', setOpen, createElement('input', { autoFocus: true }), isOpen),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    const before = document.querySelector<HTMLElement>('[data-focus-key="gig"]');
+    before?.focus();
+    await act(async () => open());
+    await settle();
+    await act(async () => move());
+    await pressEscape();
+    await settle();
+    const after = document.querySelector('[data-focus-key="gig"]');
+    expect(after).not.toBe(before);
+    expect(document.activeElement).toBe(after);
+});
+
 test('a dialog opened from a row’s menu gives the focus back to the list', async () => {
     const { ContextMenuAnchor, useContextMenu } = await import('../../components/context-menu');
     const { DropdownMenuItem } = await import('../../components/dropdown-menu');

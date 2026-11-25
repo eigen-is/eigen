@@ -245,6 +245,31 @@ describe('useKeyboardListNavigation and a dialog opened from the list', () => {
         expect(calls).toEqual([]);
         await unmount();
     });
+
+    // As a question over a dialog closes, its Keep editing button goes and the focus falls to <body> for a moment,
+    // before the dialog puts it back in its field. The list takes it back from <body> only while no dialog is open.
+    test('the focus that falls to <body> stays for the open dialog, and comes back to the list once it closed', async () => {
+        const { list, unmount } = await mountList(-1);
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', 'dialog');
+        dialog.dataset.state = 'open';
+        const keepEditing = document.createElement('button');
+        dialog.append(keepEditing);
+        document.body.append(dialog);
+        const dropFocus = () =>
+            act(async () => {
+                keepEditing.focus();
+                keepEditing.blur();
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            });
+        await dropFocus();
+        expect(document.activeElement).toBe(document.body);
+        dialog.dataset.state = 'closed';
+        await dropFocus();
+        expect(document.activeElement).toBe(list);
+        dialog.remove();
+        await unmount();
+    });
 });
 
 // The menu key is Shift+F10 or the ContextMenu key. On Windows and Linux the browser then also sends a contextmenu

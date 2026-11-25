@@ -8,7 +8,7 @@ import { dateFormatter, formatMonth, formatTime, isToday } from '@workspace/lib/
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { cn } from '@workspace/ui/lib/utils';
-import { eventState, eventSurfaceClasses } from './calendar-utils';
+import { eventState, eventSurfaceClasses, occurrenceKey } from './calendar-utils';
 import { EventDot } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
 import { useEventDetailState } from './hooks/use-event-detail-state';
@@ -64,6 +64,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                                     'flex w-full items-center gap-3 px-2 py-1.5 text-left text-sm',
                                                     eventSurfaceClasses('dot', state),
                                                 )}
+                                                data-focus-key={occurrenceKey(event)}
                                                 onClick={(e) => handleEventClick(event, e)}
                                             >
                                                 <EventDot

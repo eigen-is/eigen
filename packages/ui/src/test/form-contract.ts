@@ -160,10 +160,20 @@ async function probeDiscard(form: FormContract) {
     for (const [way, close] of CLOSES) {
         await withForm(form, async () => {
             await form.makeChanged();
+            // The field the change was typed in, or the first one for a change made from outside the form.
+            const active = document.activeElement;
+            const typedIn = active instanceof HTMLElement && active.closest('form') ? active : field(form.firstField);
+            typedIn.focus();
             await close();
             check(asking('Discard changes?') && openForm(form), `${way} on a changed form asks "Discard changes?"`);
             await click(button('Keep editing'));
+            // Radix moves the focus a task after the question is gone.
+            await nextTask();
             check(!asking('Discard changes?') && openForm(form), 'Keep editing goes back to the form');
+            check(
+                document.activeElement === typedIn,
+                `Keep editing after ${way} goes back to ${labelOf(typedIn)}, not ${focused()}`,
+            );
             await close();
             check(asking('Discard changes?'), `${way} asks again after Keep editing`);
             await click(button('Discard'));
@@ -322,6 +332,8 @@ async function clickOutside() {
     const overlay = [...document.querySelectorAll('[data-slot="dialog-overlay"]')].at(-1);
     if (!overlay) throw new Error('no dialog is open');
     await act(() => {
+        // The press on something that takes no focus takes it from the field, as a browser's does.
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
         overlay.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
         overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
