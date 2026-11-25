@@ -101,6 +101,7 @@ async function probeEnter(form: FormContract) {
         const choice = submitButton(form).form?.querySelector(CHOICE);
         if (!choice) return;
         await act(() => pressKey(choice, 'Enter'));
+        await nextTask();
         check(calls(form) === 1, `Enter on ${labelOf(choice)} submits, ran ${calls(form)} times`);
     });
 }
@@ -114,6 +115,7 @@ async function probeModEnter(form: FormContract) {
             await form.makeChanged();
             const target = field(form.firstField);
             await act(() => keydown(target, { key: 'Enter', ...modifier }));
+            await nextTask();
             check(calls(form) === 1, `${key}+Enter in ${form.firstField} submits, ran ${calls(form)} times`);
         });
     }
@@ -284,6 +286,9 @@ async function clickOutside() {
 }
 
 const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+
+// The shell submits a key's form on the next task, once React has rendered what the key changed.
+const nextTask = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
 const CHOICE = '[role="radio"], [role="checkbox"], input[type="radio"], input[type="checkbox"]';
 const MESSAGE = '[data-slot="field-error"], [data-slot="form-message"]';

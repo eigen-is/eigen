@@ -1,7 +1,8 @@
 // The form under every shell submits on Cmd or Ctrl+Enter from any field, a multi-line one and one that took the key
-// for itself included, and on Enter from a radio or a checkbox. It acts only on keys from its own fields, keeps
-// Cmd+Enter from a hotkey behind it, and never shows the browser's bubbles. Its fields learn that Save was pressed,
-// and a refused submit focuses the first field marked invalid unless the form focuses its own errors.
+// for itself included, and on Enter from a radio or a checkbox. It saves what a field commits on that Enter. It acts
+// only on keys from its own fields, keeps Cmd+Enter from a hotkey behind it, and never shows the browser's bubbles. Its
+// fields learn that Save was pressed, and a refused submit focuses the first field marked invalid unless the form
+// focuses its own errors.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
@@ -32,10 +33,13 @@ const byLabel = (label: string) => {
     return found;
 };
 
+// The shell submits on the task after the key, so the press waits for it.
 const keydown = (target: Element, init: KeyboardEventInit) =>
     act(async () => {
         target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+        await nextTask();
     });
+const nextTask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test('Cmd+Enter and Ctrl+Enter submit from a multi-line field, and plain Enter there does not', async () => {
     const onSubmit = await render(createElement('textarea', { 'aria-label': 'Notes' }));
@@ -63,6 +67,31 @@ test('Cmd+Enter submits from a field that took the key for itself, and goes no f
     expect(behind).not.toHaveBeenCalled();
 });
 
+// Sets its time into the form's state only on Enter, as the calendar's time field does.
+function CommitOnEnterForm({ onSave }: { onSave: (time: string) => void }) {
+    const [time, setTime] = useState('09:00');
+    return createElement(FormShell, {
+        onSubmit: () => onSave(time),
+        children: createElement('input', {
+            'aria-label': 'Start',
+            defaultValue: time,
+            onKeyDown: (event: { key: string; currentTarget: HTMLInputElement }) => {
+                if (event.key === 'Enter') setTime(event.currentTarget.value);
+            },
+        }),
+    });
+}
+
+test('Cmd+Enter saves what a field commits on that Enter', async () => {
+    const onSave = mock((_time: string) => {});
+    ({ unmount } = await renderInDocument(createElement(CommitOnEnterForm, { onSave })));
+    const start = byLabel('Start');
+    if (!(start instanceof HTMLInputElement)) throw new Error('Start is no input');
+    start.value = '14:30';
+    await keydown(start, { key: 'Enter', metaKey: true });
+    expect(onSave.mock.calls).toEqual([['14:30']]);
+});
+
 test('Enter on a radio or a checkbox submits once', async () => {
     const onSubmit = await render([
         createElement(
@@ -73,9 +102,15 @@ test('Enter on a radio or a checkbox submits once', async () => {
         ),
         createElement(Checkbox, { key: 'notify', 'aria-label': 'Notify guests' }),
     ]);
-    await act(async () => pressKey(byLabel('This event'), 'Enter'));
+    await act(async () => {
+        pressKey(byLabel('This event'), 'Enter');
+        await nextTask();
+    });
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    await act(async () => pressKey(byLabel('Notify guests'), 'Enter'));
+    await act(async () => {
+        pressKey(byLabel('Notify guests'), 'Enter');
+        await nextTask();
+    });
     expect(onSubmit).toHaveBeenCalledTimes(2);
 });
 

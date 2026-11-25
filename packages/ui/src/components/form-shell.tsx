@@ -1,7 +1,8 @@
 // The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys and their
-// error focus. Cmd or Ctrl+Enter submits from any field, and Enter on a radio or a checkbox submits too, since Radix
-// swallows it there. Once Save was pressed its fields read useFormSubmitted(), so a missing value shows only then, and a
-// submit whose check refused focuses the first field marked aria-invalid. Apps use the shells, not this.
+// error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that key, and Enter on a
+// radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed its fields read
+// useFormSubmitted(), so a missing value shows only then, and a submit whose check refused focuses the first field
+// marked aria-invalid. Apps use the shells, not this.
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -62,7 +63,11 @@ export function FormShell({ onSubmit, focusesOwnErrors = false, className, child
                 event.preventDefault();
                 // Or a hotkey behind the form, such as Mail's send, would act on the same key.
                 if (modified) event.stopPropagation();
-                form.requestSubmit();
+                // A field that commits on this Enter, such as a time field, sets its value in this event. React has
+                // rendered it by the next task, so the submit waits for that and reads what the field committed.
+                setTimeout(() => {
+                    if (form.isConnected) form.requestSubmit();
+                });
             }}
         >
             <FormSubmittedContext.Provider value={submitted}>{children}</FormSubmittedContext.Provider>

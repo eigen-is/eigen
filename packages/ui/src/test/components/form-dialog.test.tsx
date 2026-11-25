@@ -357,6 +357,8 @@ test('Cmd+Enter submits from a multi-line field', async () => {
         byLabel('Notes')?.dispatchEvent(
             new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
         );
+        // The shell submits on the next task.
+        await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(onSubmit).toHaveBeenCalledTimes(1);
 });
