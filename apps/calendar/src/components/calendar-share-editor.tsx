@@ -26,7 +26,6 @@ import {
 } from '@workspace/ui/components/select';
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
-import { useRef } from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -40,23 +39,21 @@ type ShareInput = ReturnType<typeof useContactInput> & {
 
 export function useShareInput({ shares, onChange }: CalendarShareEditorProps): ShareInput {
     const { user } = useAuth();
-    // commitTyped adds through onAdd before a render shows the share, so a save takes the list onAdd built.
-    const built = useRef<CalendarShare[]>(null);
     const currentShares = shares ?? [];
+    const withShare = (email: string): CalendarShare[] => [...currentShares, { targetId: email, permission: 'read' }];
     const input = useContactInput({
         listed: currentShares.map((s) => s.targetId),
         onAdd: ({ email }) => {
             if (email === user?.email?.toLowerCase()) return 'You cannot share a calendar with yourself';
-            built.current = [...currentShares, { targetId: email, permission: 'read' }];
-            onChange(built.current);
+            onChange(withShare(email));
         },
     });
     return {
         ...input,
         commitShares: () => {
-            built.current = null;
-            if (input.commitTyped()) return false;
-            return built.current ?? shares;
+            const typed = input.commitTyped();
+            if ('refused' in typed) return false;
+            return typed.added ? withShare(typed.added.email) : shares;
         },
     };
 }

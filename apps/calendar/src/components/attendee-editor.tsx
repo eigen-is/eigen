@@ -12,7 +12,6 @@ import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserItem } from '@workspace/ui/components/user';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { X as XIcon } from 'lucide-react';
-import { useRef } from 'react';
 
 type GuestList = {
     attendees: readonly Attendee[];
@@ -29,22 +28,23 @@ export function useGuestInput({
     onChange,
     currentUserEmail,
 }: GuestList & { currentUserEmail?: string }): GuestInput {
-    // commitTyped adds through onAdd before a render shows the guest, so a save takes the list onAdd built.
-    const built = useRef<Attendee[]>(null);
+    const withGuest = ({ email, displayName }: { email: string; displayName?: string }): Attendee[] => [
+        ...attendees,
+        { email, name: displayName, status: 'pending', role: 'required' },
+    ];
     const input = useContactInput({
         listed: attendees.map((a) => a.email),
-        onAdd: ({ email, displayName }) => {
-            if (email === currentUserEmail?.toLowerCase()) return 'You cannot invite yourself';
-            built.current = [...attendees, { email, name: displayName, status: 'pending', role: 'required' }];
-            onChange(built.current);
+        onAdd: (contact) => {
+            if (contact.email === currentUserEmail?.toLowerCase()) return 'You cannot invite yourself';
+            onChange(withGuest(contact));
         },
     });
     return {
         ...input,
         commitGuests: () => {
-            built.current = null;
-            if (input.commitTyped()) return undefined;
-            return built.current ?? [...attendees];
+            const typed = input.commitTyped();
+            if ('refused' in typed) return undefined;
+            return typed.added ? withGuest(typed.added) : [...attendees];
         },
     };
 }
