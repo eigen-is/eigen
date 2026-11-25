@@ -1,10 +1,12 @@
 // The second sign-in step for a user with two-factor authentication: a code from their app, or one of their
 // backup codes, each its own form, so switching opens the other on its field. A wrong code reads under the field;
-// any other refusal is its hook's toast. After it, the user goes back to the page that sent them to sign in.
+// any other refusal is its hook's toast. After it, the user goes back to the page that sent them to sign in. A sign-in
+// that expired before its code came starts over at the password, with the same way back.
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from '@tanstack/react-router';
 import { getErrorMessage } from '@workspace/lib/api-error';
-import { isWrongCode, useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
+import { isExpiredSignIn, isWrongCode, useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
 import { Bar, Ket } from '@workspace/ui/components/braket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -89,6 +91,7 @@ function CodeForm({ mode, redirect, onSwitch }: { mode: Mode; redirect?: string;
     const verify = mode === 'totp' ? verifyTotp : verifyBackupCode;
     const { schema, label, placeholder, description, input, submitLabel, switchLabel } = MODES[mode];
     const { pending, run } = useDialogPending();
+    const navigate = useNavigate();
 
     const form = useForm<CodeValues>({
         resolver: zodResolver(schema),
@@ -99,6 +102,10 @@ function CodeForm({ mode, redirect, onSwitch }: { mode: Mode; redirect?: string;
         try {
             await verify.mutateAsync(values);
         } catch (error) {
+            if (isExpiredSignIn(error)) {
+                await navigate({ to: '/login', search: { redirect } });
+                return;
+            }
             if (!isWrongCode(error)) throw error;
             form.setError('code', { message: getErrorMessage(error) }, { shouldFocus: true });
             return;

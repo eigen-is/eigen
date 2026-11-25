@@ -24,13 +24,17 @@ const STATUS_MESSAGES: Record<number, string> = {
 
 export class AppError extends Error {
     public status: number;
+    // The machine-readable reason a body named beside its message, such as better-auth's error codes.
+    public code?: string;
 
     // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
     public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
-        super(messageFromBody(response.error?.value) ?? `${STATUS_MESSAGES[status] ?? 'Request failed'} (${status})`);
+        const value = response.error?.value;
+        super(messageFromBody(value) ?? `${STATUS_MESSAGES[status] ?? 'Request failed'} (${status})`);
         this.status = status;
+        this.code = isRecord(value) ? readString(value, 'code') : undefined;
     }
 }
 
@@ -68,8 +72,11 @@ export async function appErrorFrom(response: Response): Promise<AppError> {
 }
 
 // better-auth's client answers a refusal with a plain object, never an Error. `fallback` is the words when it gave none.
-export function authFailure({ status, message }: { status: number; message?: string }, fallback: string): AppError {
-    return new AppError({ status, error: { status, value: message ?? fallback } });
+export function authFailure(
+    { status, message, code }: { status: number; message?: string; code?: string },
+    fallback: string,
+): AppError {
+    return new AppError({ status, error: { status, value: { message: message ?? fallback, code } } });
 }
 
 // The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"

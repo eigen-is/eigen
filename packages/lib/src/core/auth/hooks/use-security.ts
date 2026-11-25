@@ -1,7 +1,7 @@
 // The user's own security settings, through better-auth's client: changing the password, and turning two-factor
 // authentication on, checking its codes and turning it off. Space's security pages and its two-factor sign-in step
 // call them. A refusal carries better-auth's status and words, and a wrong code is left to the form to show under
-// its field, so its hooks raise no toast for one.
+// its field, so its hooks raise no toast for one. A sign-in step that expired is a toast that says so.
 
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -10,11 +10,17 @@ import { authClient } from './use-auth-client';
 
 // better-auth refuses a code that isn't the current one, or a backup code already used, with a 401.
 export function isWrongCode(error: unknown): boolean {
-    return error instanceof AppError && error.status === 401;
+    return error instanceof AppError && error.status === 401 && !isExpiredSignIn(error);
+}
+
+// The sign-in step waited too long for its code, so better-auth no longer knows whose code it is.
+export function isExpiredSignIn(error: unknown): boolean {
+    return error instanceof AppError && error.code === 'INVALID_TWO_FACTOR_COOKIE';
 }
 
 function onCodeError(error: unknown): void {
-    if (!isWrongCode(error)) onMutationError(error);
+    if (isExpiredSignIn(error)) toast.error('Your sign-in expired. Sign in again.');
+    else if (!isWrongCode(error)) onMutationError(error);
 }
 
 export function useChangePassword() {
