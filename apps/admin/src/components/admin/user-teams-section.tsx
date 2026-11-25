@@ -2,7 +2,7 @@
 // button that takes the user out of it after a confirmation, and an "Add to team" button that opens the team picker. It
 // is the user-side twin of a team's Members section, laid out the same way, and changes membership
 // through the same team-member mutations. The organization's default team, which every user joins,
-// is left out, so the count and the empty state are about the teams an admin chose.
+// is listed with no remove button, as it is in that team's Members section.
 
 import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -22,9 +22,7 @@ export function UserTeamsSection({ user }: { user: AdminUserRow }) {
     const [removing, setRemoving] = useState({ id: '', name: '' });
     const [confirmOpen, setConfirmOpen] = useState(false);
     const { data: config } = usePublicConfig();
-    const teams = user.teams
-        .filter((team) => team.id !== config?.defaultTeamId)
-        .sort((a, b) => a.name.localeCompare(b.name));
+    const teams = [...user.teams].sort((a, b) => a.name.localeCompare(b.name));
 
     return (
         <div className="space-y-3">
@@ -46,15 +44,17 @@ export function UserTeamsSection({ user }: { user: AdminUserRow }) {
                         <div key={team.id} className="flex items-center gap-3 py-2">
                             <UserAvatar userId={teamOwnerId(team.id)} name={team.name} size="sm" />
                             <span className="flex-1 min-w-0 truncate text-sm font-medium">{team.name}</span>
-                            <TooltipButton
-                                icon={X}
-                                tooltipText={`Remove from ${team.name}`}
-                                className="h-7 w-7 shrink-0"
-                                onClick={() => {
-                                    setRemoving(team);
-                                    setConfirmOpen(true);
-                                }}
-                            />
+                            {team.id !== config?.defaultTeamId && (
+                                <TooltipButton
+                                    icon={X}
+                                    tooltipText={`Remove from ${team.name}`}
+                                    className="h-7 w-7 shrink-0"
+                                    onClick={() => {
+                                        setRemoving(team);
+                                        setConfirmOpen(true);
+                                    }}
+                                />
+                            )}
                         </div>
                     ))}
                 </div>

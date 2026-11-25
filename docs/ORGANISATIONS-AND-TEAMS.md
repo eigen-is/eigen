@@ -18,7 +18,7 @@ A user has no username field. The "username" an invite or the admin's new-user f
 
 The org join adds the user to the default team in the same `addMember` call, then reconciles the team's shares itself (`reconcileShares`), because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
 
-The public config carries `defaultTeamId` next to `orgId`, since the client has no other way to tell the default team from a team an admin made. Admin's user detail leaves it out of the user's Teams section, its count included, and the **Add to team** picker never offers it, so "Not in any team yet" means no team besides the one everyone joins. The team's own Members section still lists and removes its members.
+The public config carries `defaultTeamId` next to `orgId`, since the client has no other way to tell the default team from a team an admin made. Admin lists it like any team, in the user's Teams section and the team's own Members section, but neither has a remove button for it, and the **Add to team** picker never offers it, since every member is in it already.
 
 ## The owner holds server settings and admins manage people
 
