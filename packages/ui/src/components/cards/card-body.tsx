@@ -69,7 +69,7 @@ export function CardBody({
     return (
         <div className="app-gutter-x flex flex-col gap-3 pt-1 pb-4">
             <div
-                className={cn('rounded-lg px-4 py-3', surface?.className ?? 'bg-muted text-foreground')}
+                className={cn('eigen-block px-4 py-3', surface?.className ?? 'bg-muted text-foreground')}
                 style={surface?.style}
             >
                 <h2 className="text-lg leading-snug font-medium break-words">{title}</h2>

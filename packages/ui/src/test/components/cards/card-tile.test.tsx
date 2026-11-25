@@ -1,7 +1,7 @@
 // The assignee's avatar on a card is muted like the rest of the footer, unless the card is open and assigned to the
 // person looking at it: then it stands out in full color, ringed in the app's color. The server stores the assignee
 // in lowercase, whatever case the account's email has. The unread dot leads the footer, also on a card with no replies
-// yet, such as one you were just assigned.
+// yet, such as one you were just assigned. A tile is one square eigen-block.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -67,4 +67,13 @@ test('an unread card with no replies still shows the dot, and a read one has no 
     expect(unread.container.querySelector('p > .bg-destructive')).not.toBeNull();
     const read = await renderInDocument(<CardTile title="A card" />);
     expect(read.container.querySelector('p')).toBeNull();
+});
+
+test('a tile is one square eigen-block, with no corner or shadow of its own, colored or not', async () => {
+    for (const color of [undefined, '#fde68a']) {
+        const { container } = await renderInDocument(<CardTile title="A card" color={color} />);
+        const classes = container.firstElementChild?.className.split(' ') ?? [];
+        expect(classes).toContain('eigen-block');
+        expect(classes.filter((c) => /^(rounded|shadow)/.test(c))).toEqual([]);
+    }
 });
