@@ -40,6 +40,8 @@ import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
 import { SwitchRow } from './switch-row';
 
+type PublicConfig = NonNullable<ReturnType<typeof usePublicConfig>['data']>;
+
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
     const { data: config } = usePublicConfig();
@@ -51,13 +53,7 @@ export function ServerSettingsPage() {
 }
 
 // The page's fields, mounted once the settings and the organization have loaded, so every draft starts from them.
-function ServerSettingsForm({
-    settings,
-    config,
-}: {
-    settings: ServerSettings;
-    config: { orgId: string; orgName: string; domain: string; mailDomain: string };
-}) {
+function ServerSettingsForm({ settings, config }: { settings: ServerSettings; config: PublicConfig }) {
     const { data: s3Config } = useServerS3Config();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
@@ -143,14 +139,14 @@ function ServerSettingsForm({
         if (invalid) return false;
         const links = draft.landing?.links;
         const settingsDraft = links ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(links) } } : draft;
-        const saved = await save.mutateAsync({
+        const result = await save.mutateAsync({
             orgName: orgNameChanged ? orgName.trim() : undefined,
             s3Config: s3Changed ? currentS3 : undefined,
             settings: settingsChanged ? settingsDraft : undefined,
         });
         // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
         // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
-        if (saved?.notice || saved?.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
+        if (result?.notice || result?.warning) setBackupNotice({ notice: result.notice, warning: result.warning });
         handleReset();
     };
 
@@ -360,7 +356,7 @@ function ServerSettingsForm({
                     />
                     <SwitchRow
                         label="Email users when added to share"
-                        description="In-app notification + bell already fires. Off by default."
+                        description="They already get a notification in Eigen. Off by default."
                         checked={current.notifications.email.userOnAclAdd}
                         onChange={(v) => updateEmailFlag('userOnAclAdd', v)}
                     />
@@ -372,19 +368,19 @@ function ServerSettingsForm({
                     />
                     <SwitchRow
                         label="Email users when assigned a comment or card"
-                        description="In-app notification + bell already fires. Off by default."
+                        description="They already get a notification in Eigen. Off by default."
                         checked={current.notifications.email.userOnAssign}
                         onChange={(v) => updateEmailFlag('userOnAssign', v)}
                     />
                     <SwitchRow
                         label="Email users for calendar invites"
-                        description="Time-sensitive — matches Google/Outlook behavior."
+                        description="An invitation can't wait, and Google Calendar and Outlook email it too."
                         checked={current.notifications.email.userOnCalendarInvite}
                         onChange={(v) => updateEmailFlag('userOnCalendarInvite', v)}
                     />
                     <SwitchRow
                         label="Email owner on access request"
-                        description="Reaches owners not actively in Eigen."
+                        description="Reaches an owner who doesn't have Eigen open."
                         checked={current.notifications.email.ownerOnAccessRequest}
                         onChange={(v) => updateEmailFlag('ownerOnAccessRequest', v)}
                     />
