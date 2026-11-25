@@ -1,11 +1,10 @@
 // The S3 card's bucket safety dialog asks how many days old versions are kept, starting from the card's days. Enable,
-// Update or Enter hardens the bucket with the days typed there, and the card keeps them. Cancel throws an edited value
-// away. The days stay whole and between 1 and the maximum. A bucket that is safe already gets "Change retention", and a
-// refused harden still closes the dialog and shows its message. Enter in the days field never submits a form around the
-// card, such as the mount dialog's. Once Save was pressed, each required field left empty says so under itself, a saved
-// secret excepted, and the form focuses the first.
+// Save or Enter hardens the bucket with the days typed there, and the card keeps them. Cancel throws an edited value
+// away. A bucket that is safe already gets "Change retention", and a refused harden still closes the dialog and shows
+// its message. Enter in the days field never submits a form around the card, such as the mount dialog's. Once Save was
+// pressed, each required field left empty says so under itself, a saved secret excepted, and the form focuses the
+// first.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
@@ -137,18 +136,7 @@ test('Cancel throws the edited days away, and the next opening starts from the o
     expect(onHarden).not.toHaveBeenCalled();
 });
 
-test('the days stay whole and between 1 and the maximum', async () => {
-    await checkBucket(unsafe);
-    await openSafeDefaults();
-    await typeDays('0');
-    expect(daysField().value).toBe('1');
-    await typeDays('99999');
-    expect(daysField().value).toBe(String(S3_NONCURRENT_DAYS_MAX));
-    await typeDays('7.6');
-    expect(daysField().value).toBe('8');
-});
-
-test("a safe bucket's Change opens Change retention on its own days, and Update saves them", async () => {
+test("a safe bucket's Change opens Change retention on its own days, and Save saves them", async () => {
     await checkBucket(safe);
     expect(findButton(document, 'Enable safe defaults')).toBeUndefined();
     await click(findButton(document, 'Change'));
@@ -156,7 +144,7 @@ test("a safe bucket's Change opens Change retention on its own days, and Update 
     expect(dialog()?.textContent).not.toContain('Turns on bucket versioning');
     expect(daysField().value).toBe('45');
     await typeDays('120');
-    await click(findButton(dialog(), 'Update'));
+    await click(findButton(dialog(), 'Save'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 120]]);
     expect(dialog()).toBeNull();

@@ -12,11 +12,12 @@ import type { S3HardenResult, S3LifecycleState, S3VersioningState } from '@works
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Button } from '../button';
 import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from '../code-block';
-import { Field, FieldDescription, FieldLabel } from '../field';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../field';
 import { FormDialog, FormDialogForm } from '../form-dialog';
+import { useFormSubmitted } from '../form-shell';
 import { Input } from '../input';
 
 export function BucketSafetyPanel({
@@ -175,6 +176,8 @@ function manualSnippet(config: S3Config, days: number, include: { versioning: bo
     return lines.join('\n');
 }
 
+// Mounted with the dialog, so each opening starts from the card's days, and Cancel leaves them as they were. A
+// number of days the rule can't take is refused under the field.
 export function RetentionDialog({
     open,
     onOpenChange,
@@ -200,7 +203,6 @@ export function RetentionDialog({
     );
 }
 
-// Mounted with the dialog, so each opening starts from the card's days, and Cancel leaves them as they were.
 function RetentionForm({
     initialDays,
     changingRetention,
@@ -210,40 +212,62 @@ function RetentionForm({
     changingRetention: boolean;
     onSubmit: (days: number) => Promise<void>;
 }) {
-    const [days, setDays] = useState(initialDays);
+    const [days, setDays] = useState(String(initialDays));
 
     return (
-        <FormDialogForm submitLabel={changingRetention ? 'Update' : 'Enable'} onSubmit={() => onSubmit(days)}>
+        <FormDialogForm
+            changed={days !== String(initialDays)}
+            submitLabel={changingRetention ? 'Save' : 'Enable'}
+            onSubmit={() => (daysFit(days) ? onSubmit(Number(days)) : false)}
+        >
             {!changingRetention && (
                 <p className="text-sm text-muted-foreground">
                     Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning applies to the
                     whole bucket.
                 </p>
             )}
-            <Field>
-                <FieldLabel className="font-normal">
-                    Expire old versions after
-                    <Input
-                        type="number"
-                        min={1}
-                        max={S3_NONCURRENT_DAYS_MAX}
-                        step={1}
-                        className="h-8 w-20"
-                        value={days}
-                        onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
-                    />
-                    days
-                </FieldLabel>
-                <FieldDescription>
-                    Eigen re-uploads whole files on every save, so an often-edited document makes a lot of versions.
-                    More days means more to recover from, and more storage used.
-                </FieldDescription>
-            </Field>
+            <DaysField days={days} onChange={setDays} />
         </FormDialogForm>
     );
 }
 
-// The rule takes whole days, and the route's schema refuses anything else, so the field stays in range.
-function clampDays(value: number): number {
-    return Math.min(S3_NONCURRENT_DAYS_MAX, Math.max(1, Math.round(value) || 1));
+// The rule takes whole days, and the route's schema refuses anything else.
+const daysFit = (days: string) => {
+    const value = Number(days);
+    return days.trim() !== '' && Number.isInteger(value) && value >= 1 && value <= S3_NONCURRENT_DAYS_MAX;
+};
+
+// Inside the form, so it reads whether its Save was pressed.
+function DaysField({ days, onChange }: { days: string; onChange: (days: string) => void }) {
+    const id = useId();
+    const refused = useFormSubmitted() && !daysFit(days);
+    return (
+        <Field>
+            <FieldLabel htmlFor={id} className="font-normal">
+                Expire old versions after{' '}
+                <Input
+                    id={id}
+                    type="number"
+                    min={1}
+                    max={S3_NONCURRENT_DAYS_MAX}
+                    step={1}
+                    className="h-8 w-20"
+                    value={days}
+                    onChange={(e) => onChange(e.target.value)}
+                    aria-invalid={refused || undefined}
+                    aria-describedby={refused ? `${id}-error` : undefined}
+                />
+                days
+            </FieldLabel>
+            {refused && (
+                <FieldError id={`${id}-error`}>
+                    Use a whole number of days from 1 to {S3_NONCURRENT_DAYS_MAX.toLocaleString('en')}
+                </FieldError>
+            )}
+            <FieldDescription>
+                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of versions. More
+                days means more to recover from, and more storage used.
+            </FieldDescription>
+        </Field>
+    );
 }
