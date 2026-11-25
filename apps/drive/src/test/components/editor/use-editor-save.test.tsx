@@ -34,6 +34,7 @@ const { act, createElement } = await import('react');
 const { useEditorSave } = await import('../../../components/editor/use-editor-save');
 
 let content = 'first draft';
+const close = mock(() => {});
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
@@ -41,6 +42,7 @@ beforeEach(() => {
     answers.length = 0;
     held = undefined;
     fileSave.mutateAsync.mockClear();
+    close.mockClear();
 });
 
 async function renderSave() {
@@ -53,8 +55,9 @@ async function renderSave() {
             etag: openedEtag,
             getContent: () => content,
             getFrontmatter: () => 'title: Notes',
+            onCancel: close,
         });
-        return null;
+        return current.save.discardDialog;
     }
     ({ unmount } = await renderInDocument(createElement(Probe)));
     const save = () => {
@@ -63,6 +66,10 @@ async function renderSave() {
     };
     return save;
 }
+
+const asking = () => document.body.textContent?.includes('Discard changes?') ?? false;
+const click = (name: string) =>
+    act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === name)?.click());
 
 test('a file with no change saves nothing', async () => {
     const save = await renderSave();
@@ -132,23 +139,22 @@ test('a save that fails stays unsaved, so the next try sends it again', async ()
     expect(save().saveState).toBe('saved');
 });
 
-test('closing a clean file closes at once, and an unsaved one asks first', async () => {
+test('Cancel on a clean file closes at once, and on an unsaved one asks first', async () => {
     const save = await renderSave();
-    const close = mock(() => {});
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).toHaveBeenCalledTimes(1);
 
     await act(async () => save().markDirty());
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).toHaveBeenCalledTimes(1);
-    expect(save().showDiscardConfirm).toBe(true);
+    expect(asking()).toBe(true);
 
-    await act(async () => save().handleDiscardCancel());
-    expect(save().showDiscardConfirm).toBe(false);
+    await click('Keep editing');
+    expect(asking()).toBe(false);
     expect(close).toHaveBeenCalledTimes(1);
 
-    await act(async () => save().confirmClose(close));
-    await act(async () => save().handleDiscardConfirm());
+    await act(async () => save().cancel());
+    await click('Discard');
     expect(close).toHaveBeenCalledTimes(2);
 });
 
@@ -164,7 +170,6 @@ test('an edit typed while a save is in flight stays unsaved after it lands', asy
         saving = save().doSave();
     });
     expect(save().saveState).toBe('saving');
-    expect(save().unsaved).toBe(false);
 
     content = 'second draft';
     await act(async () => save().markDirty());
@@ -175,15 +180,13 @@ test('an edit typed while a save is in flight stays unsaved after it lands', asy
     });
     expect(saved).toBe(false);
     expect(save().saveState).toBe('unsaved');
-    expect(save().unsaved).toBe(true);
 
-    const close = mock(() => {});
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).not.toHaveBeenCalled();
-    expect(save().showDiscardConfirm).toBe(true);
+    expect(asking()).toBe(true);
 });
 
-test('closing while a save is in flight asks first, since that save may still fail', async () => {
+test('Cancel while a save is in flight asks first, since that save may still fail', async () => {
     held = new Promise(() => {});
     const save = await renderSave();
     await act(async () => save().markDirty());
@@ -192,8 +195,7 @@ test('closing while a save is in flight asks first, since that save may still fa
     });
     expect(save().saveState).toBe('saving');
 
-    const close = mock(() => {});
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).not.toHaveBeenCalled();
-    expect(save().showDiscardConfirm).toBe(true);
+    expect(asking()).toBe(true);
 });
