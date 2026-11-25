@@ -15,7 +15,8 @@ export function useDialogPending(
     { closeOnRefusal = false }: { closeOnRefusal?: boolean } = {},
 ): {
     pending: boolean;
-    run: (action: DialogAction) => Promise<void>;
+    // Resolves false when the action did, so a form can point at the field its check refused.
+    run: (action: DialogAction) => Promise<false | undefined>;
     handleOpenChange: (open: boolean) => void;
 } {
     const [pending, setPending] = useState(false);
@@ -24,7 +25,8 @@ export function useDialogPending(
         if (pending) return;
         setPending(true);
         try {
-            if ((await action()) !== false) onOpenChange(false);
+            if ((await action()) === false) return false;
+            onOpenChange(false);
         } catch (error) {
             if (closeOnRefusal && isRefusal(error)) onOpenChange(false);
             // Swallowing an error no toast has shown would leave the user with a button that does nothing.

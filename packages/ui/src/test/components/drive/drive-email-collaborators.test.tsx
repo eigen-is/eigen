@@ -78,8 +78,11 @@ async function open() {
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
+// A pending button's spinner comes before its label.
 const button = (label: string) =>
-    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => b.lastChild?.textContent === label,
+    );
 const subjectField = () => {
     const input = document.querySelector<HTMLInputElement>('[role="dialog"] input#email-subject');
     if (!input) throw new Error('the dialog has no subject field');
@@ -221,13 +224,13 @@ test('a send that fails stays open with what was typed', async () => {
     expect(button('Send')?.disabled).toBe(false);
 });
 
-test('a slow send keeps the Send label and waits with both buttons', async () => {
+test('a slow send keeps the Send label beside a spinner, and Cancel waits', async () => {
     let finish = () => {};
     sendEmail.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
     await open();
     await typeMessage('Hi. ');
     await act(async () => button('Send')?.click());
-    expect(button('Send')?.disabled).toBe(true);
+    expect(button('Send')?.getAttribute('aria-busy')).toBe('true');
     expect(button('Cancel')?.disabled).toBe(true);
     await act(async () => finish());
     await settle();

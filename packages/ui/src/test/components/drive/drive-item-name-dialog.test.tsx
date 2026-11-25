@@ -79,8 +79,11 @@ async function openNewFolder() {
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
+// A pending button's spinner comes before its label.
 const button = (label: string) =>
-    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (b) => b.lastChild?.textContent === label,
+    );
 const nameField = () => {
     const input = document.querySelector<HTMLInputElement>('[role="dialog"] input');
     if (!input) throw new Error('the dialog has no name field');
@@ -149,13 +152,13 @@ test('Enter in the name field submits like Create', async () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('a slow save keeps the Create label and waits with both buttons', async () => {
+test('a slow save keeps the Create label beside a spinner, and Cancel waits', async () => {
     let finish = () => {};
     onSave.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
     await openNewFolder();
     await type('Invoices');
     await click(button('Create'));
-    expect(button('Create')?.disabled).toBe(true);
+    expect(button('Create')?.getAttribute('aria-busy')).toBe('true');
     expect(button('Cancel')?.disabled).toBe(true);
     await act(async () => finish());
     await settle();

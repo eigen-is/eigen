@@ -15,6 +15,7 @@ const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
+const { RadioGroup, RadioGroupItem } = await import('../../components/radio-group');
 
 let unmount = async () => {};
 const realGetComputedStyle = globalThis.getComputedStyle;
@@ -31,7 +32,11 @@ async function render({
     footerStart,
     readOnly,
     description,
+    onOpenAutoFocus,
+    fields = createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
 }: {
+    onOpenAutoFocus?: (event: Event) => void;
+    fields?: ReactNode;
     onSubmit?: DialogAction;
     canSubmit?: boolean;
     footerStart?: ReactNode;
@@ -45,13 +50,14 @@ async function render({
             onOpenChange,
             title: 'Rename',
             description,
+            onOpenAutoFocus,
             children: createElement(FormDialogForm, {
                 onSubmit,
                 canSubmit,
                 submitLabel: 'Save',
                 footerStart,
                 readOnly,
-                children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+                children: fields,
             }),
         }),
     ));
@@ -62,7 +68,9 @@ const field = () => document.querySelector('[role="dialog"] input');
 const footerButtons = () => [
     ...(dialog()?.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button') ?? []),
 ];
-const button = (label: string) => footerButtons().find((b) => b.textContent === label);
+// A pending button's spinner comes before its label.
+const label = (b: HTMLButtonElement) => b.lastChild?.textContent;
+const button = (name: string) => footerButtons().find((b) => label(b) === name);
 
 const enter = () =>
     act(async () => {
@@ -117,14 +125,19 @@ test('with canSubmit off the submit button is disabled and Enter does nothing', 
     expect(onOpenChange).not.toHaveBeenCalled();
 });
 
-test('a slow submit disables both buttons, keeps its label, and Escape waits for it', async () => {
+test('a slow submit keeps its label beside a spinner, ignores another click, and Cancel and Escape wait for it', async () => {
     let finish = () => {};
-    await render({ onSubmit: () => new Promise<void>((resolve) => (finish = resolve)) });
+    const onSubmit = mock(() => new Promise<void>((resolve) => (finish = resolve)));
+    await render({ onSubmit });
+    button('Save')?.focus();
     await click('Save');
-    expect(footerButtons().map((b) => [b.textContent, b.disabled])).toEqual([
-        ['Cancel', true],
-        ['Save', true],
+    expect(footerButtons().map((b) => [label(b), b.disabled, b.getAttribute('aria-busy')])).toEqual([
+        ['Cancel', true, null],
+        ['Save', false, 'true'],
     ]);
+    expect(document.activeElement).toBe(button('Save') ?? null);
+    await click('Save');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
     await pressEscape();
     expect(onOpenChange).not.toHaveBeenCalled();
     await act(async () => finish());
@@ -275,4 +288,102 @@ test('a dialog opened from inside another form submits only itself', async () =>
     await enter();
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(outerSubmit).not.toHaveBeenCalled();
+});
+
+const byLabel = (name: string) => document.querySelector(`[aria-label="${name}"]`);
+const selected = (name: string) => {
+    const input = byLabel(name);
+    return input instanceof HTMLInputElement
+        ? input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0)
+        : '';
+};
+
+test('it opens on the first text field, not a swatch before it, and selects a lone name', async () => {
+    await render({
+        fields: [
+            createElement('button', { key: 'colour', type: 'button', 'aria-label': 'Colour' }),
+            createElement(Input, { key: 'name', 'aria-label': 'Name', defaultValue: 'Notes' }),
+        ],
+    });
+    expect(document.activeElement).toBe(byLabel('Name'));
+    expect(selected('Name')).toBe('Notes');
+});
+
+test('with several text fields it focuses the first and selects nothing', async () => {
+    await render({
+        fields: [
+            createElement(Input, { key: 'title', 'aria-label': 'Title', defaultValue: 'Standup' }),
+            createElement(Input, { key: 'place', 'aria-label': 'Location', defaultValue: 'Utrecht' }),
+        ],
+    });
+    expect(document.activeElement).toBe(byLabel('Title'));
+    expect(selected('Title')).toBe('');
+});
+
+test('with no text field it focuses the first control, the checked radio of a group', async () => {
+    await render({
+        fields: createElement(
+            RadioGroup,
+            { defaultValue: 'all' },
+            createElement(RadioGroupItem, { value: 'this', 'aria-label': 'This event' }),
+            createElement(RadioGroupItem, { value: 'all', 'aria-label': 'All events' }),
+        ),
+    });
+    expect(document.activeElement).toBe(byLabel('All events'));
+});
+
+test("a caller's own open focus and a field's autoFocus win", async () => {
+    await render({
+        onOpenAutoFocus: (event) => {
+            event.preventDefault();
+            button('Cancel')?.focus();
+        },
+    });
+    expect(document.activeElement).toBe(button('Cancel') ?? null);
+    await unmount();
+    await render({
+        fields: [
+            createElement(Input, { key: 'title', 'aria-label': 'Title' }),
+            createElement(Input, { key: 'place', 'aria-label': 'Location', autoFocus: true }),
+        ],
+    });
+    expect(document.activeElement).toBe(byLabel('Location'));
+});
+
+test('Cmd+Enter submits from a multi-line field', async () => {
+    const onSubmit = mock(() => {});
+    await render({ onSubmit, fields: createElement('textarea', { 'aria-label': 'Notes' }) });
+    await act(async () => {
+        byLabel('Notes')?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+        );
+    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+// Says why under its field and refuses, as a form whose check names a field does.
+function CheckedName() {
+    const [error, setError] = useState('');
+    return createElement(FormDialogForm, {
+        submitLabel: 'Save',
+        onSubmit: () => {
+            setError('Add a name');
+            return false as const;
+        },
+        children: [
+            createElement(Input, { key: 'title', 'aria-label': 'Title' }),
+            createElement(Input, { key: 'name', 'aria-label': 'Name', 'aria-invalid': !!error || undefined }),
+            error && createElement('p', { key: 'error' }, error),
+        ],
+    });
+}
+
+test('a refused submit keeps the dialog open and focuses the field it marked', async () => {
+    onOpenChange.mockClear();
+    ({ unmount } = await renderInDocument(
+        createElement(FormDialog, { open: true, onOpenChange, title: 'Rename', children: createElement(CheckedName) }),
+    ));
+    await click('Save');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(byLabel('Name'));
 });

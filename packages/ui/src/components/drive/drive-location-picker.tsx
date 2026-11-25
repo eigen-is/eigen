@@ -73,7 +73,7 @@ function DriveLocationPickerBody({
     onCancel,
 }: Omit<DriveLocationPickerProps, 'open' | 'onOpenChange'> & {
     pending: boolean;
-    run: (action: DialogAction) => Promise<void>;
+    run: (action: DialogAction) => Promise<false | undefined>;
     onCancel: () => void;
 }) {
     const { user } = useAuth();

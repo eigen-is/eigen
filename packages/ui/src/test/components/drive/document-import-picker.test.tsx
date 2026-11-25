@@ -203,7 +203,9 @@ test('a doc offers no choice: it warns that the file replaces the document, a ve
     await unmount();
 });
 
-const button = (text: string) => [...document.querySelectorAll('button')].find((b) => b.textContent === text);
+// A pending button's spinner comes before its label.
+const button = (text: string) =>
+    [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent === text);
 
 test('the choice waits while the import runs, then closes', async () => {
     const unmount = await pickFromDrive('eigensheets', 'Budget.xlsx');
@@ -211,7 +213,7 @@ test('the choice waits while the import runs, then closes', async () => {
     importEnds = () => new Promise<void>((resolve) => (finish = resolve));
     await click('Import');
     expect(fromDrive).toHaveLength(1);
-    expect(button('Import')?.disabled).toBe(true);
+    expect(button('Import')?.getAttribute('aria-busy')).toBe('true');
     expect(button('Cancel')?.disabled).toBe(true);
     await act(async () => finish());
     expect(dialog()).toBeNull();

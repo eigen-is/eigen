@@ -159,7 +159,8 @@ const dialog = () => document.querySelector('[role="dialog"]');
 const footerButtons = () => [
     ...(dialog()?.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button') ?? []),
 ];
-const button = (label: string) => footerButtons().find((b) => b.textContent === label);
+// A pending button's spinner comes before its label.
+const button = (label: string) => footerButtons().find((b) => b.lastChild?.textContent === label);
 // happy-dom doesn't disable a button inside a disabled fieldset, which a browser does.
 const isDisabled = (target: HTMLButtonElement | undefined) =>
     !!target && (target.disabled || target.closest('fieldset')?.disabled === true);
@@ -306,7 +307,7 @@ test('a save that fails stays open with the edits kept, and Cancel waits while a
     await click(button('Save'));
     await settle();
     expect(isDisabled(button('Cancel'))).toBe(true);
-    expect(isDisabled(button('Save'))).toBe(true);
+    expect(button('Save')?.getAttribute('aria-busy')).toBe('true');
 
     await act(async () => fail());
     await settle();
