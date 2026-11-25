@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
 import { getErrorMessage } from '@workspace/lib/api-error';
 import { isWrongCode, useDisable2FA, useInitialize2FA, useVerifyTotp } from '@workspace/lib/auth';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent } from '@workspace/ui/components/card';
 import { CopyInput } from '@workspace/ui/components/copy-input';
@@ -23,7 +24,7 @@ import { FormShell } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { LeaveGuard } from '@workspace/ui/components/layout/app';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
-import { Check, Copy, InfoIcon } from 'lucide-react';
+import { Copy, InfoIcon } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -205,13 +206,6 @@ export function TwoFactorVerifyStep({ onBack, onVerified }: { onBack: () => void
 
 export function TwoFactorCodesStep({ backupCodes }: { backupCodes: readonly string[] }) {
     const navigate = useNavigate();
-    const [codesCopied, setCodesCopied] = useState(false);
-
-    const copyBackupCodes = () => {
-        navigator.clipboard.writeText(backupCodes.join('\n'));
-        setCodesCopied(true);
-        setTimeout(() => setCodesCopied(false), 2000);
-    };
 
     return (
         <div className="space-y-6">
@@ -232,18 +226,13 @@ export function TwoFactorCodesStep({ backupCodes }: { backupCodes: readonly stri
                 </CardContent>
             </Card>
 
-            <Button variant="outline" className="w-full" onClick={copyBackupCodes}>
-                {codesCopied ? (
-                    <>
-                        <Check className="h-4 w-4 mr-2" />
-                        Copied!
-                    </>
-                ) : (
-                    <>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy all codes
-                    </>
-                )}
+            <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => copyToClipboard(backupCodes.join('\n'), 'Recovery codes copied to clipboard')}
+            >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy all codes
             </Button>
 
             <p className="text-sm text-muted-foreground text-center">
