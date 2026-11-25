@@ -110,7 +110,11 @@ async function open(event: CalendarEventOccurrence = dentist) {
 
 const { colorSurface } = await import('@workspace/ui/lib/color-surface');
 
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+// A dialog's name, not every heading in it: an event's body heads its block with the title too.
+const dialogTitles = () =>
+    [...document.querySelectorAll('[role="dialog"]')].map(
+        (dialog) => document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent,
+    );
 const click = (name: string) =>
     act(async () => {
         const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${name}"]`);

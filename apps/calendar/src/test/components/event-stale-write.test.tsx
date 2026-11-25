@@ -270,7 +270,11 @@ const typeInto = (field: HTMLInputElement | HTMLTextAreaElement, value: string) 
     });
 const typeTitle = (value: string) => typeInto(titleField(), value);
 const typeDescription = (value: string) => typeInto(descriptionField(), value);
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+// A dialog's name, not every heading in it: an event's body heads its block with the title too.
+const dialogTitles = () =>
+    [...document.querySelectorAll('[role="dialog"]')].map(
+        (dialog) => document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent,
+    );
 // Radix opens its Select and picks an option on the pointer events, not on click.
 const pointAt = (element: Element) =>
     act(async () => {

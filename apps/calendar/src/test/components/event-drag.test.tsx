@@ -232,7 +232,11 @@ async function drag(target: Element, from: Point, to: Point, pointerType = 'mous
 // Tuesday 13 October is the week's second column.
 const tuesday = (hour: number): Point => [150, hour * HOUR];
 
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+// A dialog's name, not every heading in it: an event's body heads its block with the title too.
+const dialogTitles = () =>
+    [...document.querySelectorAll('[role="dialog"]')].map(
+        (dialog) => document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent,
+    );
 const scopeOptions = () => [...document.querySelectorAll('[role="dialog"] label')].map((label) => label.textContent);
 const dialogButton = (name: string) => {
     const found = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
