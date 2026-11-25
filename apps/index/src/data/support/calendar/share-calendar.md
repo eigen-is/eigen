@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, sharing, permissions, collaboration, team]
 related: [calendar/show-hide-calendars, calendar/get-started]
 order: 100
-updated: 2026-11-20
+updated: 2026-11-25
 ---
 
 A calendar in Eigen is private to you until you share it. You can share with specific people by email, choose how much they can see or do, and share with a whole team at once.
@@ -20,7 +20,7 @@ The **Sharing** section is below the calendar name and color.
 ## Add a person
 
 1. In the **Sharing** section, type a name or email address into the contact field.
-2. Select the person from the suggestions, or type a full email address and press Enter.
+2. Select the person from the suggestions, or type a full email address and press Enter. You can't add your own address.
 3. They appear under **People with access** with **Can view** permission by default.
 4. To change what they can do, click the dropdown next to their name and choose one of:
    - **Can edit**: they can create, change, and delete events on this calendar.

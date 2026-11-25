@@ -78,7 +78,8 @@ function SharedCalendarConfigForm({
     sharedCalendar: SharedCalendar;
     onRemove: () => void;
 }) {
-    const [color, setColor] = useState(sharedCalendar.color || sharedCalendar.calendarColor);
+    const [openedColor] = useState(sharedCalendar.color || sharedCalendar.calendarColor);
+    const [color, setColor] = useState(openedColor);
 
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const { data: accessData } = useCalendarAccess(sharedCalendar.ownerUserId, sharedCalendar.calendarId);
@@ -87,6 +88,7 @@ function SharedCalendarConfigForm({
 
     return (
         <FormDialogForm
+            changed={color !== openedColor}
             submitLabel="Save"
             onSubmit={async () => {
                 await updateSharedCalendar.mutateAsync({
