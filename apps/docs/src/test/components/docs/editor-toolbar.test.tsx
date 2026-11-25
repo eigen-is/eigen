@@ -1146,7 +1146,7 @@ test('a dialog a menu opens keeps focus', async () => {
 });
 
 // Radix would hand focus back to the Format menu's trigger, which the menu's close left behind.
-test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the editor', async (label) => {
+test.each(['Apply', 'Cancel'])('Page setup closed with %s gives focus back to the editor', async (label) => {
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(1);
     await render(1920, true);
@@ -1205,7 +1205,7 @@ const openToolbarDialog = {
 };
 
 test.each([
-    ['Restart numbering', 'OK'],
+    ['Restart numbering', 'Apply'],
     ['Restart numbering', 'Cancel'],
     ['Custom spacing', 'Apply'],
     ['Custom spacing', 'Cancel'],
@@ -1317,7 +1317,7 @@ test.each([
     expect(submenuDisabled('List options')).toBe(disabled);
 });
 
-// Opens Restart numbering at the caret, types the number and confirms.
+// Opens Restart numbering at the caret, types the number and applies it.
 async function restartAtCaret(startAt: string) {
     await render(1920, true);
     await openMenu('Format');
@@ -1333,10 +1333,10 @@ async function restartAtCaret(startAt: string) {
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, startAt);
         input?.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    const ok = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
-        (button) => button.textContent === 'OK',
+    const apply = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
+        (button) => button.textContent === 'Apply',
     );
-    await act(async () => ok?.click());
+    await act(async () => apply?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 }
 
