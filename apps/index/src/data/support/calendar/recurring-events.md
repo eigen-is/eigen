@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, repeat]
 related: [calendar/create-event]
 order: 80
-updated: 2026-11-21
+updated: 2026-11-25
 ---
 
 A recurring event is one that repeats on a schedule. You set it up once and Calendar generates all the occurrences automatically. You can later edit or delete a single occurrence, all future ones from a given date, or the whole series.
@@ -25,7 +25,7 @@ A recurring event is one that repeats on a schedule. You set it up once and Cale
 
    The day and month labels in the options come from the start date you set. If you change the start date, open the dropdown again to see the updated options.
 
-5. Click **Save**.
+5. Click **Create**.
 
 ## Change the recurrence on an existing event
 

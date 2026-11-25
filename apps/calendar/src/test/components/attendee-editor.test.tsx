@@ -47,11 +47,17 @@ const toastInfo = spyOn(toast, 'info');
 afterAll(() => toastInfo.mockRestore());
 
 const { act, createElement } = await import('react');
-const { AttendeeEditor } = await import('../../components/attendee-editor');
+const { AttendeeEditor, useGuestInput } = await import('../../components/attendee-editor');
+
+// The editor with the field its dialog owns, as New event and Edit event hold it.
+function Editor({ attendees, onChange }: { attendees: Attendee[]; onChange: (attendees: Attendee[]) => void }) {
+    const input = useGuestInput({ attendees, onChange, currentUserEmail: 'Me@example.com' });
+    return createElement(AttendeeEditor, { attendees, onChange, input });
+}
 
 test("a guest's Remove button shows on the row's hover only, and Tab reaches and shows it", async () => {
     const attendees = [{ email: 'ada@example.org', status: 'pending' as const, role: 'required' as const }];
-    await renderInDocument(createElement(AttendeeEditor, { attendees, onChange: () => {} }));
+    await renderInDocument(createElement(Editor, { attendees, onChange: () => {} }));
     const remove = document.querySelector('button[aria-label="Remove ada@example.org"]');
     if (!remove) throw new Error('the guest has no Remove button');
     expectKeyboardReveal(remove);
@@ -61,12 +67,11 @@ test("a guest's Remove button shows on the row's hover only, and Tab reaches and
 async function addGuest(typed: string, attendees: Attendee[] = []): Promise<Attendee[]> {
     let added: Attendee[] = [];
     await renderInDocument(
-        createElement(AttendeeEditor, {
+        createElement(Editor, {
             attendees,
             onChange: (attendees) => {
                 added = attendees;
             },
-            currentUserEmail: 'Me@example.com',
         }),
     );
     const label = [...document.querySelectorAll('label')].find((each) => each.textContent === 'Guests');

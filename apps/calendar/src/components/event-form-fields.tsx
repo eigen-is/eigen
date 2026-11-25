@@ -1,10 +1,13 @@
 // The fields the New event and Edit event dialogs share: title, dates and times, all day, repeat, calendar, place
-// and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
+// and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes, and
+// once Save was pressed says "Add a title" under an empty title.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
 import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
+import { FieldError } from '@workspace/ui/components/field';
+import { useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -15,6 +18,23 @@ import { useId } from 'react';
 import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, toTimeString } from './time-select';
+
+// The times and the repeat as the fields show them. They change together, because a preset rule names the start's
+// weekday and an end means nothing beside another start.
+export type EventFieldTimes = {
+    allDay: boolean;
+    rrule: string | null;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+};
+
+const TIME_FIELDS = ['allDay', 'rrule', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
+
+export function timesDiffer(a: EventFieldTimes, b: EventFieldTimes): boolean {
+    return TIME_FIELDS.some((field) => a[field] !== b[field]);
+}
 
 type EventFormFieldsProps = {
     title: string;
@@ -73,6 +93,7 @@ export function EventFormFields({
     detailsDisabled,
 }: EventFormFieldsProps) {
     const id = useId();
+    const titleMissing = useFormSubmitted() && !detailsDisabled && !title.trim();
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
         const end = endForStart(new Date(`${startDate}T${newStart}`), { date: endDate, time: endTime });
@@ -99,9 +120,15 @@ export function EventFormFields({
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     disabled={detailsDisabled}
-                    autoFocus
+                    aria-invalid={titleMissing || undefined}
+                    aria-describedby={titleMissing ? `${id}-title-error` : undefined}
                     className="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
                 />
+                {titleMissing && (
+                    <FieldError id={`${id}-title-error`} className="mt-1.5">
+                        Add a title
+                    </FieldError>
+                )}
             </div>
 
             <div className="flex items-start gap-3">
