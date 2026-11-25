@@ -1,3 +1,5 @@
+// The canvas properties panel shows the rows each selection can edit: the text rows of an element that holds text, a
+// path's and a chart's sections, a text box's size and spacing in pt on a deck and px in a drawing, and the stroke width.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { MAX_SKETCH_POINTS, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type {
@@ -14,15 +16,14 @@ import {
     textBoxDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { CanvasPropertiesPanel } = await import('../../../components/vector/canvas-properties-panel');
-
-const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 function path(over: Partial<VectorPathElement> = {}): VectorPathElement {
     return {
@@ -162,7 +163,7 @@ describe('the text rows for an element that holds text', () => {
     test('a rectangle with a text box shows one merged set, each write reaching both', async () => {
         const { container, sections, writes } = await renderPanel([rectangle('r'), textBox('t', { fontSize: 88 })]);
         expect(sections.filter((section) => section === 'Text')).toHaveLength(1);
-        await type(rowInput(container, 'Padding'), '7');
+        await focusAndType(rowInput(container, 'Padding'), '7');
         expect(writes).toEqual([
             [
                 { id: 'r', fields: { padding: 7 } },
@@ -198,11 +199,7 @@ describe('the panel for a path', () => {
     test('a typed width resizes the box and leaves the stored path alone', async () => {
         const { container, writes } = await renderPanel(path());
         const width = container.querySelectorAll('input')[2];
-        await act(async () => {
-            width.focus();
-            setValue?.call(width, '300');
-            width.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await focusAndType(width, '300');
         expect(writes).toEqual([[{ id: 'p', fields: { width: 300 } }]]);
     });
 });
@@ -215,12 +212,9 @@ function rowInput(container: HTMLElement, label: string): HTMLInputElement {
     return input;
 }
 
-async function type(input: HTMLInputElement, value: string) {
-    await act(async () => {
-        input.focus();
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+async function focusAndType(input: HTMLInputElement, value: string) {
+    await act(async () => input.focus());
+    await type(input, value);
 }
 
 describe("a text box's rows", () => {
@@ -253,7 +247,7 @@ describe("a text box's rows", () => {
         const deck = await renderPanel(textBox('a', { letterSpacing: 3 }), 960);
         const letter = rowInput(deck.container, 'Letter');
         expect(letter.value).toBe('1.5');
-        await type(letter, '2');
+        await focusAndType(letter, '2');
         expect(deck.writes).toEqual([[{ id: 'a', fields: { letterSpacing: 4 } }]]);
         const drawing = await renderPanel(textBox('b', { letterSpacing: 3 }));
         expect(rowInput(drawing.container, 'Letter').value).toBe('3.0');
@@ -278,7 +272,7 @@ describe('the stroke width', () => {
         const { container, writes } = await renderPanel(path({ strokeWidth: 2.6666666666666665 }), 720);
         const width = rowInput(container, 'Width');
         expect(width.value).toBe('2.67');
-        await type(width, '1.5');
+        await focusAndType(width, '1.5');
         expect(writes).toEqual([[{ id: 'p', fields: { strokeWidth: 1.5 } }]]);
     });
 

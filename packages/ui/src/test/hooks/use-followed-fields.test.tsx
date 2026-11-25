@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import reactCompiler from 'babel-plugin-react-compiler';
 import { createServer } from 'vite';
+import { type } from '../form-contract';
 import { installHappyDom } from '../happy-dom';
 import { renderInDocument } from '../render-in-document';
 
@@ -61,18 +62,12 @@ function input(id: string): HTMLInputElement {
     return element;
 }
 
-const type = (id: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input(id), value);
-        input(id).dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 test('a field typed after the record arrived counts as typed, and stays while the rest follows', async () => {
     const seen = await mount();
     await act(async () => seen.setRecord({ first: 'Ada', last: 'Lovelace' }));
     expect(seen.typing).toBe(false);
 
-    await type('last', 'King');
+    await type(input('last'), 'King');
     expect(seen.typing).toBe(true);
 
     await act(async () => seen.setRecord({ first: 'Augusta', last: 'Lovelace' }));
@@ -84,16 +79,16 @@ test('a field typed after the record arrived counts as typed, and stays while th
 test('a field typed back follows the record while another stays typed, and the last one ends the typing', async () => {
     const seen = await mount();
     await act(async () => seen.setRecord({ first: 'Ada', last: 'Lovelace' }));
-    await type('first', 'Augusta');
-    await type('last', 'King');
+    await type(input('first'), 'Augusta');
+    await type(input('last'), 'King');
     await act(async () => seen.setRecord({ first: 'Ada Augusta', last: 'Lovelace' }));
     expect(input('first').value).toBe('Augusta');
 
-    await type('first', 'Ada');
+    await type(input('first'), 'Ada');
     expect(input('first').value).toBe('Ada Augusta');
     expect(input('last').value).toBe('King');
     expect(seen.typing).toBe(true);
 
-    await type('last', 'Lovelace');
+    await type(input('last'), 'Lovelace');
     expect(seen.typing).toBe(false);
 });

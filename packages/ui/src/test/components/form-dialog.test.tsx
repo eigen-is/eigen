@@ -7,6 +7,7 @@ import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { holdClosingDialogs } from '../closing-dialog';
+import { field } from '../form-contract';
 import { installHappyDom } from '../happy-dom';
 import { pressEnter } from '../press-enter';
 import { renderInDocument } from '../render-in-document';
@@ -68,7 +69,7 @@ async function render({
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
-const field = () => document.querySelector('[role="dialog"] input');
+const firstInput = () => document.querySelector('[role="dialog"] input');
 const footerButtons = () => [
     ...(dialog()?.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button') ?? []),
 ];
@@ -78,7 +79,7 @@ const button = (name: string) => footerButtons().find((b) => label(b) === name);
 
 const enter = () =>
     act(async () => {
-        const input = field();
+        const input = firstInput();
         if (!input) throw new Error('no field');
         pressEnter(input);
     });
@@ -274,9 +275,8 @@ test('a dialog opened from inside another form submits only itself', async () =>
     expect(outerSubmit).not.toHaveBeenCalled();
 });
 
-const byLabel = (name: string) => document.querySelector(`[aria-label="${name}"]`);
 const selected = (name: string) => {
-    const input = byLabel(name);
+    const input = field(name);
     return input instanceof HTMLInputElement
         ? input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0)
         : '';
@@ -289,7 +289,7 @@ test('it opens on the first text field, not a swatch before it, and selects a lo
             createElement(Input, { key: 'name', 'aria-label': 'Name', defaultValue: 'Notes' }),
         ],
     });
-    expect(document.activeElement).toBe(byLabel('Name'));
+    expect(document.activeElement).toBe(field('Name'));
     expect(selected('Name')).toBe('Notes');
 });
 
@@ -300,7 +300,7 @@ test('with several text fields it focuses the first and selects nothing', async 
             createElement(Input, { key: 'place', 'aria-label': 'Location', defaultValue: 'Utrecht' }),
         ],
     });
-    expect(document.activeElement).toBe(byLabel('Title'));
+    expect(document.activeElement).toBe(field('Title'));
     expect(selected('Title')).toBe('');
 });
 
@@ -313,7 +313,7 @@ test('with no text field it focuses the first control, the checked radio of a gr
             createElement(RadioGroupItem, { value: 'all', 'aria-label': 'All events' }),
         ),
     });
-    expect(document.activeElement).toBe(byLabel('All events'));
+    expect(document.activeElement).toBe(field('All events'));
 });
 
 test("a caller's own open focus and a field's autoFocus win", async () => {
@@ -331,14 +331,14 @@ test("a caller's own open focus and a field's autoFocus win", async () => {
             createElement(Input, { key: 'place', 'aria-label': 'Location', autoFocus: true }),
         ],
     });
-    expect(document.activeElement).toBe(byLabel('Location'));
+    expect(document.activeElement).toBe(field('Location'));
 });
 
 test('Cmd+Enter submits from a multi-line field', async () => {
     const onSubmit = mock(() => {});
     await render({ onSubmit, fields: createElement('textarea', { 'aria-label': 'Notes' }) });
     await act(async () => {
-        byLabel('Notes')?.dispatchEvent(
+        field('Notes').dispatchEvent(
             new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
         );
         // The shell submits on the next task.
@@ -372,7 +372,7 @@ test('a refused submit keeps the dialog open and focuses the field it marked', a
     ));
     await click('Save');
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(byLabel('Name'));
+    expect(document.activeElement).toBe(field('Name'));
 });
 
 // A Move dialog with a New folder dialog it opens over itself, both holding a change, as a location picker does.
@@ -429,7 +429,7 @@ test('a changed dialog over another asks for itself only, Esc on the question ke
     await pressEscape();
     await focusReturned();
     expect(titles()).toEqual(['Move', 'New folder']);
-    expect(document.activeElement).toBe(byLabel('Folder name'));
+    expect(document.activeElement).toBe(field('Folder name'));
     await pressEscape();
     await press('Discard');
     await focusReturned();

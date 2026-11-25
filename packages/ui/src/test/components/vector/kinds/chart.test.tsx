@@ -1,3 +1,5 @@
+// A chart on the canvas: newChartElement's size and look for a drawing and a slide, the chart rows of the panel, the
+// Edit data dialog, one undo step for a font or a typed title, and two peers' edits on one chart kept on both.
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartType } from '@workspace/lib/types/chart';
@@ -11,6 +13,7 @@ import {
     writeElementInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { type } from '../../../form-contract';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
@@ -65,8 +68,6 @@ const { ChartEditDialog, ChartPanelSection, newChartElement } = await import(
 );
 const { CanvasPropertiesPanel, useCanvasDoc } = await import('../../../../components/vector');
 
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-
 function chart(id: string, type: ChartType = 'column'): VectorChartElement {
     return {
         ...DEFAULT_ELEMENT_PROPS,
@@ -107,7 +108,7 @@ const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]
 const typeInB2 = async (value: string) => {
     const b2 = dialog()?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
     await act(async () => b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
-    await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]') ?? null, value);
+    await focusAndType(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]') ?? null, value);
 };
 const buttonIn = (scope: ParentNode | undefined, label: string) =>
     [...(scope?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((el) => el.textContent?.trim() === label);
@@ -115,13 +116,10 @@ const click = async (target: HTMLElement | undefined) => {
     if (!target) throw new Error('nothing to click');
     await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 };
-const type = async (input: HTMLInputElement | null, value: string) => {
+const focusAndType = async (input: HTMLInputElement | null, value: string) => {
     if (!input) throw new Error('no field to type in');
-    await act(async () => {
-        input.focus();
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => input.focus());
+    await type(input, value);
 };
 
 describe('newChartElement', () => {
@@ -194,13 +192,13 @@ describe('ChartPanelSection', () => {
 
     test('an edit writes the one part it changed', async () => {
         const { container, writes } = await section([chart('c1')]);
-        await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
+        await focusAndType(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
         expect(writes).toEqual([{ specTitle: '{"text":"Goals"}' }]);
     });
 
     test("a title edit keeps what this build doesn't know in its part", async () => {
         const { container, writes } = await section([{ ...chart('c1'), specTitle: '{"text":"","future":1}' }]);
-        await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
+        await focusAndType(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
         expect(writes).toEqual([{ specTitle: '{"text":"Goals","future":1}' }]);
     });
 
@@ -345,7 +343,7 @@ test('a typed chart title through the panel is one undo step', async () => {
         createElement(PropertyGestureContext.Provider, { value: () => holdCapture(undoManager) }, panel),
     );
     const input = container.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
-    for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
+    for (const typed of ['G', 'Go', 'Goa', 'Goal']) await focusAndType(input, typed);
     await act(async () => input?.dispatchEvent(new Event('focusout', { bubbles: true })));
     expect(readChartSpec({ ...el, ...element.toJSON() }).spec?.title.text).toBe('Goal');
     expect(undoManager.undoStack).toHaveLength(1);
@@ -397,7 +395,7 @@ describe('two peers on one chart, through the panel and the canvas writer', () =
 
     const setTitle = async (panel: HTMLElement, value: string) => {
         const input = panel.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
-        await type(input, value);
+        await focusAndType(input, value);
         await act(async () => input?.dispatchEvent(new Event('focusout', { bubbles: true })));
     };
     // The first palette swatch other than the series' own, so the pick is a change.

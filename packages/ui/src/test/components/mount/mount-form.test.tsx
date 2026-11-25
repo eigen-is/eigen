@@ -3,7 +3,7 @@
 import { expect, mock, test } from 'bun:test';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import type { S3Config } from '@workspace/lib/types/mount';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -53,12 +53,6 @@ const input = (selector: string) => {
     if (!(found instanceof HTMLInputElement)) throw new Error(`no ${selector}`);
     return found;
 };
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (field: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const nameField = () => input('input[placeholder="e.g. shared files"]');
 const sizeField = () => input('input[type="number"]');
 const press = (label: string) =>

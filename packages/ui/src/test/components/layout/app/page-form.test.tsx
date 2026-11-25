@@ -8,7 +8,7 @@
 // the start, and keeps the same contract.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
-import { expectFormContract } from '../../../form-contract';
+import { expectFormContract, type } from '../../../form-contract';
 import { installHappyDom } from '../../../happy-dom';
 import { pressEnter } from '../../../press-enter';
 import { renderInDocument } from '../../../render-in-document';
@@ -81,14 +81,6 @@ function NewNotePage(): ReactNode {
 
 const cancel = mock(() => {});
 
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function type(value: string) {
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
-
 function nameField(): HTMLInputElement {
     const input = document.querySelector('[aria-label="Name"]');
     if (!(input instanceof HTMLInputElement)) throw new Error('no Name field');
@@ -137,8 +129,8 @@ test('a draft page keeps the page contract', async () => {
         submitLabel: 'Save',
         firstField: 'Name',
         onSubmit: save,
-        makeChanged: () => type('Plans'),
-        makeInvalid: () => type(''),
+        makeChanged: () => type('Name', 'Plans'),
+        makeInvalid: () => type('Name', ''),
         invalidField: 'Name',
     });
 });
@@ -150,7 +142,7 @@ test('a page form with no Reset keeps the page contract', async () => {
         submitLabel: 'Send',
         firstField: 'Name',
         onSubmit: save,
-        makeChanged: () => type('Plans'),
+        makeChanged: () => type('Name', 'Plans'),
     });
 });
 
@@ -165,7 +157,7 @@ test('a page form with no Reset shows its button all along, and sends with nothi
 test('Reset and Save show once something changed, and Reset puts back what was saved', async () => {
     await openPage();
     expect(button('Save')).toBeUndefined();
-    await type('Plans');
+    await type('Name', 'Plans');
     expect(button('Save')).toBeDefined();
     await act(async () => button('Reset')?.click());
     expect(nameField().value).toBe('Notes');
@@ -180,7 +172,7 @@ test('Enter on a page with nothing changed saves nothing', async () => {
 
 test('a saved page hides its footer, and a failed save keeps the draft beside its toast', async () => {
     await openPage();
-    await type('Plans');
+    await type('Name', 'Plans');
     await act(async () => pressEnter(nameField()));
     expect(save).toHaveBeenCalledWith('Plans');
     expect(button('Save')).toBeUndefined();
@@ -191,7 +183,7 @@ test('a saved page hides its footer, and a failed save keeps the draft beside it
         onMutationError(failure);
         throw failure;
     });
-    await type('Ideas');
+    await type('Name', 'Ideas');
     await act(async () => pressEnter(nameField()));
     expect(nameField().value).toBe('Ideas');
     expect(button('Save')?.getAttribute('aria-busy')).toBeNull();
@@ -226,7 +218,7 @@ test('an edit opened from a view keeps the page contract', async () => {
         submitLabel: 'Save',
         firstField: 'Name',
         onSubmit: save,
-        makeChanged: () => type('Plans'),
+        makeChanged: () => type('Name', 'Plans'),
     });
 });
 
@@ -234,7 +226,7 @@ test('an edit opened from a view shows Cancel and Save throughout, and Cancel go
     await openPage(NameView);
     expect(button('Reset')).toBeUndefined();
     expect(button('Save')).toBeDefined();
-    await type('Plans');
+    await type('Name', 'Plans');
     await act(async () => button('Cancel')?.click());
     expect(button('Edit')).toBeDefined();
     expect(save).not.toHaveBeenCalled();
@@ -254,8 +246,8 @@ test('a page with Cancel keeps the page contract', async () => {
         submitLabel: 'Create',
         firstField: 'Name',
         onSubmit: save,
-        makeChanged: () => type('Plans'),
-        makeInvalid: () => type(' '),
+        makeChanged: () => type('Name', 'Plans'),
+        makeInvalid: () => type('Name', ' '),
         invalidField: 'Name',
     });
 });
@@ -298,7 +290,7 @@ test('a link while the save runs asks, since a failed save would lose the draft'
     const { promise, resolve } = Promise.withResolvers<void>();
     save.mockImplementation(() => promise);
     const memory = await openPage(CreateAndOpenPage);
-    await type('Plans');
+    await type('Name', 'Plans');
     await act(async () => button('Create')?.click());
     await act(async () => memory.history.push('/elsewhere'));
     expect(memory.state.location.pathname).toBe('/');
@@ -308,7 +300,7 @@ test('a link while the save runs asks, since a failed save would lose the draft'
 
 test("a save's own navigation goes through without asking", async () => {
     const memory = await openPage(CreateAndOpenPage);
-    await type('Plans');
+    await type('Name', 'Plans');
     await act(async () => button('Create')?.click());
     expect(save).toHaveBeenCalledWith('Plans');
     expect(memory.state.location.pathname).toBe('/elsewhere');

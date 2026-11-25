@@ -2,6 +2,7 @@
 // the key. Pinned here: Escape with the suggestion list open closes only the list, and the next Escape closes
 // the dialog. Cmd+Enter in a form picks the row, and the form saves with that person.
 import { expect, mock, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -43,10 +44,7 @@ test('Escape with the suggestion list open closes the list, not the dialog', asy
     );
     const input = document.querySelector('input');
     if (!input) throw new Error('the autosuggest drew no input');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'ad');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(input, 'ad');
     expect(document.querySelectorAll('li')).toHaveLength(1);
 
     const pressEscape = () =>
@@ -76,11 +74,8 @@ test('Cmd+Enter with the list open picks the row, and the form saves with that p
     const { unmount } = await renderInDocument(createElement(AddPeople, { onSave }));
     const input = document.querySelector('input');
     if (!input) throw new Error('the autosuggest drew no input');
-    await act(async () => {
-        input.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, 'ad');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => input.focus());
+    await type(input, 'ad');
     expect(document.querySelectorAll('li')).toHaveLength(1);
     await act(async () => {
         input.dispatchEvent(

@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -88,11 +88,6 @@ const messageEditor = (): Editor => {
     if (!editable?.editor) throw new Error('the dialog has no message editor');
     return editable.editor;
 };
-const typeSubject = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(subjectField(), value);
-        subjectField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const typeMessage = (text: string) =>
     act(async () => {
         messageEditor().chain().focus('start').insertContent(text).run();
@@ -136,7 +131,7 @@ test('the dialog shows a subject, a message seeded with the signature, a copy to
 
 test('Send hands the subject, the message and the copy on, and closes once it is sent', async () => {
     await open();
-    await typeSubject('Notes for Monday');
+    await type('Subject', 'Notes for Monday');
     await typeMessage('Please read this. ');
     await act(async () => button('Send')?.click());
     await settle();
@@ -155,7 +150,7 @@ test('Send hands the subject, the message and the copy on, and closes once it is
 
 test('an emptied subject sends as the file name', async () => {
     await open();
-    await typeSubject('  ');
+    await type('Subject', '  ');
     await typeMessage('Hi. ');
     await act(async () => button('Send')?.click());
     await settle();

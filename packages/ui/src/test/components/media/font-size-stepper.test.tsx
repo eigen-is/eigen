@@ -1,5 +1,6 @@
 // Google's "− [11] +": the buttons step, the box takes a typed size on Enter or blur and drops it on Escape.
 import { afterEach, expect, mock, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -23,12 +24,10 @@ async function render(value: number | undefined) {
     return input;
 }
 
-async function type(input: HTMLInputElement, text: string, key?: string) {
-    await act(async () => {
-        input.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+// Types a size, then presses `key` or, with none, leaves the box.
+async function typeSize(input: HTMLInputElement, text: string, key?: string) {
+    await act(async () => input.focus());
+    await type(input, text);
     await act(async () => {
         if (key) input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
         else input.blur();
@@ -52,27 +51,27 @@ test('the buttons step', async () => {
 
 test("a typed size lands in Google's range, in half points", async () => {
     const input = await render(11);
-    await type(input, '13', 'Enter');
-    await type(input, '10.3', 'Enter');
-    await type(input, '999');
+    await typeSize(input, '13', 'Enter');
+    await typeSize(input, '10.3', 'Enter');
+    await typeSize(input, '999');
     expect(onChange.mock.calls).toEqual([[13], [10.5], [400]]);
 });
 
 test('Escape, a word, a cleared box or no change applies nothing and shows the size again', async () => {
     const input = await render(11);
-    await type(input, '14', 'Escape');
+    await typeSize(input, '14', 'Escape');
     expect(input.value).toBe('11');
-    await type(input, 'big', 'Enter');
+    await typeSize(input, 'big', 'Enter');
     expect(input.value).toBe('11');
-    await type(input, '', 'Enter');
+    await typeSize(input, '', 'Enter');
     expect(input.value).toBe('11');
-    await type(input, '11');
+    await typeSize(input, '11');
     expect(onChange).not.toHaveBeenCalled();
 });
 
 test('a size with a stray letter in it is refused, not read up to the letter', async () => {
     const input = await render(11);
-    await type(input, '1x1', 'Enter');
+    await typeSize(input, '1x1', 'Enter');
     expect(input.value).toBe('11');
     expect(onChange).not.toHaveBeenCalled();
 });
@@ -82,11 +81,8 @@ test('a size with a stray letter in it is refused, not read up to the letter', a
 test('the Enter that applies a size does nothing else', async () => {
     const input = await render(11);
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
-    await act(async () => {
-        input.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '18');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => input.focus());
+    await type(input, '18');
     await act(async () => {
         input.dispatchEvent(enter);
     });

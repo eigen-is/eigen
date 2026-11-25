@@ -2,7 +2,7 @@
 // message", which then takes the focus, and it has no leave guard. The request carries the typed message. The server
 // refuses an access request from a guest, so the view offers none: a guest is told to ask the owner to share instead.
 import { afterAll, expect, mock, test } from 'bun:test';
-import { expectFormContract } from '../../../form-contract';
+import { expectFormContract, type } from '../../../form-contract';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
 
@@ -42,13 +42,9 @@ const messageBox = () => {
     if (!found) throw new Error('no message box');
     return found;
 };
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
 async function addMessage(text: string) {
     await act(async () => button('Add a message').click());
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(messageBox(), text);
-        messageBox().dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type('Message', text);
 }
 
 test('Request access keeps the page form contract', async () => {

@@ -10,7 +10,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { pressKey } from '../../press-key';
@@ -181,15 +181,9 @@ const contactField = () => {
     if (!input) throw new Error('the dialog has no contact field');
     return input;
 };
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeContact = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(contactField(), value);
-        contactField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const fieldError = () => dialog()?.querySelector('[data-slot="field-error"]')?.textContent;
 const addByEnter = async (email: string) => {
-    await typeContact(email);
+    await type('Add people', email);
     await act(async () => pressEnter(contactField()));
     await settle();
 };
@@ -232,7 +226,7 @@ test('Share keeps the dialog contract', async () => {
         firstField: 'Add people',
         onSubmit: updateACL,
         makeChanged: () => click(lock(OPEN_LINK)),
-        makeInvalid: () => typeContact('not-an-email'),
+        makeInvalid: () => type('Add people', 'not-an-email'),
         invalidField: 'Add people',
         except: { enter: 'Enter in the people field adds the person typed, and never saves' },
     });
@@ -257,7 +251,7 @@ test('Share lists who has access, and Save with nothing changed closes and sends
 test('Save adds a person still typed in the field, and saves them with the rest', async () => {
     await open();
     await chooseAccess('bob@example.com', 'Editor');
-    await typeContact('dan@example.com');
+    await type('Add people', 'dan@example.com');
     await click(button('Save'));
     await settle();
     expect(updateACL.mock.calls).toEqual([
@@ -276,7 +270,7 @@ test('Save adds a person still typed in the field, and saves them with the rest'
 
 test('a typed person alone counts as a change, so Esc asks before it drops them', async () => {
     await open();
-    await typeContact('dan@example.com');
+    await type('Add people', 'dan@example.com');
     await act(async () => {
         contactField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });

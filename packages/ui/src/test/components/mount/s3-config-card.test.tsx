@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
+import { field, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -77,11 +78,6 @@ const daysField = () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('the dialog has no days field');
     return input;
 };
-const typeDays = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(daysField(), value);
-        daysField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -105,7 +101,7 @@ test('Make this bucket safe starts from the default days and enables with the da
     expect(dialog()?.textContent).toContain('Turns on bucket versioning');
     expect(daysField().value).toBe('30');
     expect(findButton(dialog(), 'Cancel')).toBeDefined();
-    await typeDays('60');
+    await type('Expire old versions after days', '60');
     await click(findButton(dialog(), 'Enable'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 60]]);
@@ -117,7 +113,7 @@ test('Make this bucket safe starts from the default days and enables with the da
 test('Enter in the days field hardens the bucket, and never submits the form around the card', async () => {
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('14');
+    await type('Expire old versions after days', '14');
     await act(async () => pressEnter(daysField()));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 14]]);
@@ -128,7 +124,7 @@ test('Enter in the days field hardens the bucket, and never submits the form aro
 test('Cancel throws the edited days away, and the next opening starts from the old ones', async () => {
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('90');
+    await type('Expire old versions after days', '90');
     await click(findButton(dialog(), 'Cancel'));
     expect(dialog()).toBeNull();
     await openSafeDefaults();
@@ -143,7 +139,7 @@ test("a safe bucket's Change opens Change retention on its own days, and Save sa
     expect(title()).toBe('Change retention');
     expect(dialog()?.textContent).not.toContain('Turns on bucket versioning');
     expect(daysField().value).toBe('45');
-    await typeDays('120');
+    await type('Expire old versions after days', '120');
     await click(findButton(dialog(), 'Save'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 120]]);
@@ -161,7 +157,7 @@ test('a refused harden closes the dialog, shows its message, and the manual step
     }));
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('21');
+    await type('Expire old versions after days', '21');
     await click(findButton(dialog(), 'Enable'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 21]]);
@@ -182,13 +178,7 @@ function RefusingForm({ initial, secretSaved }: { initial: S3Config; secretSaved
     });
 }
 
-const input = (label: string) => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const field = tag && document.getElementById(tag.htmlFor);
-    if (!(field instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return field;
-};
-const message = (label: string) => document.getElementById(input(label).getAttribute('aria-describedby') ?? '');
+const message = (label: string) => document.getElementById(field(label).getAttribute('aria-describedby') ?? '');
 
 test('a refused save marks each missing field under itself and focuses the first', async () => {
     const blank = { endpoint: '', bucket: 'team-files', prefix: '', accessKeyId: '', secretAccessKey: '' };
@@ -198,12 +188,12 @@ test('a refused save marks each missing field under itself and focuses the first
 
     await click(findButton(document, 'Save'));
     await settle();
-    expect(document.activeElement).toBe(input('Endpoint'));
+    expect(document.activeElement).toBe(field('Endpoint'));
     expect(message('Endpoint')?.textContent).toBe('Add an endpoint');
     expect(message('Access key ID')?.textContent).toBe('Add an access key ID');
     expect(message('Secret access key')?.textContent).toBe('Add the secret access key');
     for (const label of ['Bucket', 'Prefix', 'Region']) {
-        expect(input(label).getAttribute('aria-invalid')).toBeNull();
+        expect(field(label).getAttribute('aria-invalid')).toBeNull();
     }
 });
 
