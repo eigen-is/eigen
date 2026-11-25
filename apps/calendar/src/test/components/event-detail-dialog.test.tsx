@@ -118,6 +118,11 @@ const click = (name: string) =>
         found.click();
     });
 
+test('an event with no title names its dialog (No title)', async () => {
+    await open({ ...dentist, title: '' });
+    expect(dialogTitles()).toEqual(['(No title)']);
+});
+
 test('the button named Edit event opens Edit event', async () => {
     await open();
     await click('Edit event');

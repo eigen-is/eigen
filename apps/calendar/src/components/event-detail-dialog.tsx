@@ -188,7 +188,7 @@ export function EventDetailDialog({
             >
                 <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
-                        <DialogTitle className="sr-only">{event.title}</DialogTitle>
+                        <DialogTitle className="sr-only">{event.title || '(No title)'}</DialogTitle>
                         <DialogDescription className="sr-only">
                             Event time, location, guests and details.
                         </DialogDescription>
