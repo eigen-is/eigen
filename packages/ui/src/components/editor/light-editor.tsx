@@ -22,6 +22,8 @@ type LightEditorProps = {
     placeholder?: string;
     // The id of the label that names the field, such as a form's "Description".
     labelledBy?: string;
+    // The id of the message under the field that says what is wrong with it, which marks the field invalid.
+    errorId?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
     editable?: boolean;
@@ -41,6 +43,7 @@ export function LightEditor({
     onReady,
     placeholder,
     labelledBy,
+    errorId,
     toolbar = 'floating',
     className,
     editable = true,
@@ -85,6 +88,19 @@ export function LightEditor({
             onChangeText?.(e.getText().trim());
         },
     });
+
+    // The attributes above are read once, so a message that comes and goes marks the editable element itself.
+    useEffect(() => {
+        const dom = editor?.view.dom;
+        if (!dom) return;
+        if (errorId) {
+            dom.setAttribute('aria-invalid', 'true');
+            dom.setAttribute('aria-describedby', errorId);
+        } else {
+            dom.removeAttribute('aria-invalid');
+            dom.removeAttribute('aria-describedby');
+        }
+    }, [editor, errorId]);
 
     const readyFiredRef = useRef(false);
     useEffect(() => {

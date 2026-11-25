@@ -1,12 +1,13 @@
-// Email collaborators: a subject seeded with the file's name, a message seeded with the user's signature, and a copy to
-// self. While the settings load, a loader shows above Cancel and a disabled Send, and the signature is there once they
-// arrive. Send waits until the message says more than the signature, and while the subject or the message is too long.
-// Send or Cmd+Enter sends, the message as typed: Enter in the subject does nothing, and Enter in the message starts a
-// new paragraph. A send closes the dialog, and a failed one stays open with what was typed.
+// Email collaborators keeps the dialog contract: a subject seeded with the file's name, a message seeded with the user's
+// signature, and a copy to self. While the settings load, a loader shows above Close, and the signature is there once
+// they arrive. A message that says no more than the signature says "Add a message" once Send is pressed, and one past
+// the limit says so at once. Send, Cmd+Enter or Ctrl+Enter sends, the message as typed: Enter in the subject does
+// nothing, and Enter in the message starts a new paragraph.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -41,14 +42,7 @@ afterAll(() => {
 });
 
 const { act, createElement, useState } = await import('react');
-const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveEmailCollaborators } = await import('../../../components/drive/drive-email-collaborators');
-
-const toasted = (message: string) => {
-    const failure = new Error(message);
-    onMutationError(failure);
-    return failure;
-};
 
 const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
@@ -104,10 +98,28 @@ const typeMessage = (text: string) =>
         messageEditor().chain().focus('start').insertContent(text).run();
     });
 const counter = () =>
-    [...(dialog()?.querySelectorAll('div') ?? [])]
+    [...(dialog()?.querySelectorAll('span') ?? [])]
         .map((d) => d.textContent)
         .find((text) => /^[\d,]+\/10,000$/.test(text ?? ''));
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+const fieldError = () => dialog()?.querySelector('[data-slot="field-error"]')?.textContent;
+
+test('Email collaborators keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness),
+        submitLabel: 'Send',
+        firstField: 'Subject',
+        onSubmit: sendEmail,
+        makeChanged: () => typeMessage('Hi. '),
+        // The signature alone says nothing of the user's own.
+        makeInvalid: async () => {},
+        invalidField: 'Message',
+        modEnterFields: ['Message'],
+        except: { enter: 'An email can’t be taken back, so plain Enter in the subject doesn’t send it' },
+    });
+});
 
 test('the dialog shows a subject, a message seeded with the signature, a copy to self, Cancel and Send', async () => {
     await open();
@@ -119,14 +131,13 @@ test('the dialog shows a subject, a message seeded with the signature, a copy to
     expect(document.querySelector('label[for="email-copy-self"]')?.textContent).toBe('Send copy to self');
     expect(document.querySelector('#email-copy-self')?.getAttribute('aria-checked')).toBe('true');
     expect(button('Cancel')).toBeDefined();
-    expect(button('Send')?.disabled).toBe(true);
+    expect(button('Send')).toBeDefined();
 });
 
 test('Send hands the subject, the message and the copy on, and closes once it is sent', async () => {
     await open();
     await typeSubject('Notes for Monday');
     await typeMessage('Please read this. ');
-    expect(button('Send')?.disabled).toBe(false);
     await act(async () => button('Send')?.click());
     await settle();
     expect(sendEmail.mock.calls).toEqual([
@@ -151,12 +162,13 @@ test('an emptied subject sends as the file name', async () => {
     expect(sendEmail.mock.calls[0]?.[0].subject).toBe('Notes');
 });
 
-test('a first open before the settings arrive shows the loader, Cancel and Send, then the signature', async () => {
+test('a first open before the settings arrive shows the loader and Close alone, then the signature', async () => {
     settingsLoaded = false;
     await open();
     expect(dialog()?.querySelector('[aria-label="Loading"]')).not.toBeNull();
-    expect(button('Cancel')).toBeDefined();
-    expect(button('Send')?.disabled).toBe(true);
+    expect(
+        [...(dialog()?.querySelectorAll('[data-slot="dialog-footer"] button') ?? [])].map((b) => b.textContent),
+    ).toEqual(['Close']);
     await act(async () => settingsArrive());
     await settle();
     expect(messageEditor().getText()).toBe('Reinder');
@@ -189,63 +201,25 @@ test('Enter in the message starts a new paragraph and sends nothing', async () =
     expect(onOpenChange).not.toHaveBeenCalled();
 });
 
-test('Cmd+Enter in the message sends once, with no line break added', async () => {
+test('a message with nothing but the signature says Add a message once Send is pressed', async () => {
     await open();
-    await typeMessage('Hi.');
-    await act(async () => {
-        messageEditor().view.dom.dispatchEvent(
-            new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
-        );
-    });
-    await settle();
-    expect(sendEmail).toHaveBeenCalledTimes(1);
-    expect(sendEmail.mock.calls[0]?.[0].message).toBe('<p>Hi.Reinder</p>');
-});
-
-test('Send waits for more than the signature, and while the subject or the message is too long', async () => {
-    await open();
-    expect(button('Send')?.disabled).toBe(true);
-    await act(async () => pressEnter(subjectField()));
+    expect(fieldError()).toBeUndefined();
+    await act(async () => button('Send')?.click());
     await settle();
     expect(sendEmail).not.toHaveBeenCalled();
-
+    expect(fieldError()).toBe('Add a message');
     await typeMessage('Hi. ');
-    expect(button('Send')?.disabled).toBe(false);
-    await typeSubject('x'.repeat(201));
-    expect(button('Send')?.disabled).toBe(true);
-    await typeSubject('x'.repeat(200));
-    expect(button('Send')?.disabled).toBe(false);
+    expect(fieldError()).toBeUndefined();
+});
 
+test('a message past the limit says so under it at once, and Send sends nothing', async () => {
+    await open();
     await typeMessage('y'.repeat(10000));
-    expect(counter()).toBe('10,011/10,000');
-    expect(button('Send')?.disabled).toBe(true);
-});
-
-test('a send that fails stays open with what was typed', async () => {
-    sendEmail.mockImplementation(async () => {
-        throw toasted('offline');
-    });
-    await open();
-    await typeSubject('Notes for Monday');
-    await typeMessage('Hi. ');
+    expect(counter()).toBe('10,007/10,000');
+    expect(fieldError()).toBe('Shorten the message to 10,000 characters');
+    expect(messageEditor().view.dom.getAttribute('aria-invalid')).toBe('true');
     await act(async () => button('Send')?.click());
     await settle();
-    expect(sendEmail).toHaveBeenCalledTimes(1);
-    expect(onOpenChange).not.toHaveBeenCalled();
-    expect(subjectField().value).toBe('Notes for Monday');
-    expect(messageEditor().getText()).toBe('Hi. Reinder');
-    expect(button('Send')?.disabled).toBe(false);
-});
-
-test('a slow send keeps the Send label beside a spinner, and Cancel waits', async () => {
-    let finish = () => {};
-    sendEmail.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
-    await open();
-    await typeMessage('Hi. ');
-    await act(async () => button('Send')?.click());
-    expect(button('Send')?.getAttribute('aria-busy')).toBe('true');
-    expect(button('Cancel')?.disabled).toBe(true);
-    await act(async () => finish());
-    await settle();
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(messageEditor().view.dom);
 });
