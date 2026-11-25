@@ -68,7 +68,7 @@ function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 
     const [pickedCalKey, setPickedCalKey] = useState<string>();
     const [times, setTimes] = useState(seed);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
-    const guestInput = useGuestInput({ attendees, onChange: setAttendees, currentUserEmail: user?.email });
+    const guestInput = useGuestInput({ attendees, onChange: setAttendees });
     // One user action can set several of these in a row, so each builds on the last.
     const editTimes = (change: Partial<EventFieldTimes>) => setTimes((current) => ({ ...current, ...change }));
 
@@ -93,9 +93,9 @@ function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 
             changed={changed}
             submitLabel="Create"
             onSubmit={async () => {
-                const guests = guestInput.commitGuests();
+                const guests = guestInput.commitGuests() ?? attendees;
                 // A calendar picked here that a refetch dropped shows the picker's placeholder.
-                if (!title.trim() || !guests || !selectedCal) return false;
+                if (!title.trim() || guests === false || !selectedCal) return false;
                 const { start, end } = buildEventTimes(
                     times.allDay,
                     times.startDate,

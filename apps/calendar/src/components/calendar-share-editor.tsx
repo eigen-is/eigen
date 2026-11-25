@@ -33,8 +33,9 @@ type CalendarShareEditorProps = {
 };
 
 type ShareInput = ReturnType<typeof useContactInput> & {
-    // The shares with the typed person added, or false when the field refuses them and says why.
-    commitShares: () => CalendarShare[] | null | false;
+    // The shares with the typed person added, nothing when nothing was typed, or false when the field refuses it and
+    // says why.
+    commitShares: () => CalendarShare[] | undefined | false;
 };
 
 export function useShareInput({ shares, onChange }: CalendarShareEditorProps): ShareInput {
@@ -53,7 +54,7 @@ export function useShareInput({ shares, onChange }: CalendarShareEditorProps): S
         commitShares: () => {
             const typed = input.commitTyped();
             if ('refused' in typed) return false;
-            return typed.added ? withShare(typed.added.email) : shares;
+            return typed.added && withShare(typed.added.email);
         },
     };
 }

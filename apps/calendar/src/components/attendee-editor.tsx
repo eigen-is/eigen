@@ -3,6 +3,7 @@
 // for it, if there is one. Inviting yourself or a guest already listed is refused under the field. The dialog owns the
 // list and, through useGuestInput, the field's text, so its Save counts typed text as a change and adds it first.
 
+import { useAuth } from '@workspace/lib/auth';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Badge } from '@workspace/ui/components/badge';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
@@ -19,15 +20,13 @@ type GuestList = {
 };
 
 type GuestInput = ReturnType<typeof useContactInput> & {
-    // The guests with the typed one added, or nothing when the field refuses them and says why.
-    commitGuests: () => Attendee[] | undefined;
+    // The guests with the typed one added, nothing when nothing was typed, or false when the field refuses it and
+    // says why.
+    commitGuests: () => Attendee[] | undefined | false;
 };
 
-export function useGuestInput({
-    attendees,
-    onChange,
-    currentUserEmail,
-}: GuestList & { currentUserEmail?: string }): GuestInput {
+export function useGuestInput({ attendees, onChange }: GuestList): GuestInput {
+    const { user } = useAuth();
     const withGuest = ({ email, displayName }: { email: string; displayName?: string }): Attendee[] => [
         ...attendees,
         { email, name: displayName, status: 'pending', role: 'required' },
@@ -35,7 +34,7 @@ export function useGuestInput({
     const input = useContactInput({
         listed: attendees.map((a) => a.email),
         onAdd: (contact) => {
-            if (contact.email === currentUserEmail?.toLowerCase()) return 'You cannot invite yourself';
+            if (contact.email === user?.email?.toLowerCase()) return 'You cannot invite yourself';
             onChange(withGuest(contact));
         },
     });
@@ -43,8 +42,8 @@ export function useGuestInput({
         ...input,
         commitGuests: () => {
             const typed = input.commitTyped();
-            if ('refused' in typed) return undefined;
-            return typed.added ? withGuest(typed.added) : [...attendees];
+            if ('refused' in typed) return false;
+            return typed.added && withGuest(typed.added);
         },
     };
 }

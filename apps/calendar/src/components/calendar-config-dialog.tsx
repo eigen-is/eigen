@@ -99,10 +99,11 @@ function CalendarConfigForm({
             changed={changed}
             submitLabel={calendar ? 'Save' : 'Create'}
             onSubmit={async () => {
-                const savedShares = shareInput.commitShares();
-                if (!name.trim() || savedShares === false) return false;
+                const typedShares = shareInput.commitShares();
+                if (!name.trim() || typedShares === false) return false;
                 const data = { name: name.trim(), color };
-                if (calendar) await updateCalendar.mutateAsync({ id: calendar.id, ...data, shares: savedShares });
+                if (calendar)
+                    await updateCalendar.mutateAsync({ id: calendar.id, ...data, shares: typedShares ?? shares });
                 else await createCalendar.mutateAsync(data);
             }}
             footerStart={
