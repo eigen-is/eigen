@@ -1,7 +1,8 @@
 // A draft page on PageForm keeps the page contract: it opens on its first field, Enter and Cmd+Enter save once, a bad
 // value is pointed at, Save shows that it is busy, and leaving with a change asks. Its Reset and Save show only once
 // something changed, Enter on a page with nothing changed saves nothing, Reset puts back what was saved, and a failed
-// save keeps the draft beside its hook's toast.
+// save keeps the draft beside its hook's toast. A page form with no Reset, such as Change password, keeps the contract
+// too, and shows its button all along, so a Save with nothing typed still runs and says what is missing.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { expectFormContract } from '../../../form-contract';
@@ -67,9 +68,24 @@ function nameField(): HTMLInputElement {
 const button = (label: string) =>
     [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
 
-async function openPage() {
+// A page form with no draft to reset, whose one field is a name to send.
+function SendPage(): ReactNode {
+    const [name, setName] = useState('');
+    return createElement(PageForm, {
+        changed: name !== '',
+        submitLabel: 'Send',
+        onSubmit: () => save(name),
+        children: createElement(Input, {
+            'aria-label': 'Name',
+            value: name,
+            onChange: (event: { target: { value: string } }) => setName(event.target.value),
+        }),
+    });
+}
+
+async function openPage(component = NamePage) {
     const root = router.createRootRoute({ component: router.Outlet });
-    const page = router.createRoute({ getParentRoute: () => root, path: '/', component: NamePage });
+    const page = router.createRoute({ getParentRoute: () => root, path: '/', component });
     const memory = router.createRouter({
         routeTree: root.addChildren([page]),
         history: router.createMemoryHistory({ initialEntries: ['/'] }),
@@ -89,6 +105,24 @@ test('a draft page keeps the page contract', async () => {
         makeInvalid: () => type(''),
         invalidField: 'Name',
     });
+});
+
+test('a page form with no Reset keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(SendPage),
+        submitLabel: 'Send',
+        firstField: 'Name',
+        onSubmit: save,
+        makeChanged: () => type('Plans'),
+    });
+});
+
+test('a page form with no Reset shows its button all along, and sends with nothing typed', async () => {
+    await openPage(SendPage);
+    expect(button('Reset')).toBeUndefined();
+    await act(async () => button('Send')?.click());
+    expect(save).toHaveBeenCalledWith('');
 });
 
 test('Reset and Save show once something changed, and Reset puts back what was saved', async () => {
