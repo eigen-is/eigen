@@ -1,8 +1,9 @@
-// Personal info against a server stub that judges etags as the API does, through the real route and hooks. A field the
-// user changed stays, and the others follow the card. A Save answers to the card typing began on, and a refused one
-// keeps the form, so the next Save sends the new etag.
+// Personal info keeps the page contract, against a server stub that judges etags as the API does, through the real
+// route and hooks. A field the user changed stays, and the others follow the card. A Save answers to the card typing
+// began on, and a refused one keeps the form, so the next Save sends the new etag.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Contact, UpdateContactInput } from '@workspace/lib/types/contact';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -26,18 +27,17 @@ const changeElsewhere = (fields: Partial<Contact>) => {
     server.revision += 1;
     server.contact = { ...server.contact, ...fields, etag: `v${server.revision}` };
 };
+const put = mock(async ({ etag, ...fields }: UpdateContactInput) => {
+    server.writes.push(etag);
+    if (etag !== server.contact.etag) {
+        return { data: null, error: { status: 412, value: 'Refused' }, status: 412 };
+    }
+    changeElsewhere(fields);
+    return { data: server.contact, error: null, status: 200 };
+});
 const contactsApi = () => ({
     me: { get: async () => ({ data: { ...server.contact }, error: null, status: 200 }) },
-    contacts: () => ({
-        put: async ({ etag, ...fields }: UpdateContactInput) => {
-            server.writes.push(etag);
-            if (etag !== server.contact.etag) {
-                return { data: null, error: { status: 412, value: 'Refused' }, status: 412 };
-            }
-            changeElsewhere(fields);
-            return { data: server.contact, error: null, status: 200 };
-        },
-    }),
+    contacts: () => ({ put }),
 });
 
 const toasts: string[] = [];
@@ -57,12 +57,13 @@ afterAll(() => {
     mock.module('sonner', () => realSonner);
 });
 
-const { useQueryClient } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, useQueryClient } = await import('@tanstack/react-query');
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
-const { invalidateContactList } = await import('@workspace/lib/contacts');
+const { contactKeys, invalidateContactList } = await import('@workspace/lib/contacts');
 const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
-const { routeTree } = await import('../../routeTree.gen');
+const { ProfileEditor } = await import('../../../components/space/profile-editor');
+const { routeTree } = await import('../../../routeTree.gen');
 
 const auth = {
     isAuthenticated: true,
@@ -133,6 +134,30 @@ const save = async () => {
     });
     await settle();
 };
+
+// The card as it first loaded, so the form shows as it renders, whatever the probes before it saved.
+function LoadedProfileEditor() {
+    const client = new QueryClient();
+    client.setQueryData(contactKeys.me(session.user.id), me);
+    return createElement(
+        QueryClientProvider,
+        { client },
+        createElement(UploadProvider, null, createElement(ProfileEditor)),
+    );
+}
+
+test('Personal info keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(LoadedProfileEditor),
+        submitLabel: 'Save',
+        firstField: 'First name',
+        onSubmit: put,
+        makeChanged: () => type(field('First name'), 'Augusta'),
+        makeInvalid: () => type(field('First name'), ''),
+        invalidField: 'First name',
+    });
+});
 
 test('a refused Save keeps what was typed and follows the rest, and the next Save sends the new etag', async () => {
     const page = await open();
