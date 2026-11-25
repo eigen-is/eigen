@@ -1,6 +1,6 @@
 # Proposal: one detail column across Eigen
 
-Draft for the owner, 25 November 2026, revised after a cold review and the owner's width rulings, not yet ruled on as a whole. It grew out of the calendar's event card ([PROPOSAL_CALENDAR_VIEWS.md](PROPOSAL_CALENDAR_VIEWS.md#cards-and-dialogs)): the owner compared a peek beside the event, a panel at the right and today's dialog, and chose the column for an event's content, with dialogs for edit and create. The owner then asked for one design that comments and a future stickies list view share, and for fewer column widths. It rests on an audit of every side column in Eigen; every code claim below was checked in the code. No route, migration or package is needed.
+Ruled on by the owner, 25 November 2026, after a cold review (section 7 holds the decisions); not built yet. It grew out of the calendar's event card ([PROPOSAL_CALENDAR_VIEWS.md](PROPOSAL_CALENDAR_VIEWS.md#cards-and-dialogs)): the owner compared a peek beside the event, a panel at the right and today's dialog, and chose the column for an event's content, with dialogs for edit and create. The owner then asked for one design that comments and a future stickies list view share, and for fewer column widths. It rests on an audit of every side column in Eigen; every code claim below was checked in the code. No route, migration or package is needed.
 
 ## 1. The rule in one paragraph
 
@@ -32,7 +32,7 @@ Not side columns, and out of scope: the stickies board's kanban columns (`w-[280
 
 - **`flex`**: the main, as today.
 - **`small`, 256**: navigation and tools. The sidebar, properties, the outline and Slides' rail. Four of the nine already are 256, the outline is 240.
-- **`medium`, 320**: a detail beside a work surface. The comments column in Docs, Sheets, Slides, Vector and Stickies, and the calendar's event.
+- **`medium`, 320**: a detail beside a work surface. The comments and activity lists in Docs, Sheets, Slides, Vector and Stickies, and the calendar's event.
 - **`large`, 400, 320 on a tablet**: a list, or a detail beside a list. Mail's list, Contacts', Admin's and the waitlist's lists, Drive's detail.
 
 On a tablet `large` steps down to 320, so there every column that isn't `small` is 320. The sidebar's 64 rail is a mode of the sidebar, not a width a column picks.
@@ -51,7 +51,7 @@ Why a `medium` for a detail beside a surface: a list of rows gives up width easi
 
 At 1440 both work. At 1280, 400 moves Docs' page 81px on every open, shrinks the slide a fifth below what the properties leave it, and cuts a day column to 81px, where a chip shows a cut-off title. 320 keeps Docs' page in place (its clear width is about 1250, so at 1280 it moves about 1px, a few more with a visible scrollbar), costs the slide 64px, and leaves 280px of text inside the 20px gutters: the width of Mail's list on a tablet, room for a thread, its attachment chips and a composer. `small` would leave 216px, too narrow for a thread.
 
-The calendar's event is `medium`, like the editors' and unlike Drive's: its main is a seven-way grid, a surface, where Drive's main is a list of rows that loses nothing at 400. The rule in one line: `large` beside a list, `medium` beside a surface.
+The calendar's event is `medium`, like the editors' and unlike Drive's: its main is a seven-way grid, a surface, where Drive's main is a list of rows that loses nothing at 400. The rule in one line: `large` beside a list, `medium` beside a surface. One exception, the owner's: an open comment thread is `large`. The comments column is `medium` at its list level and grows to `large` when it drills into a thread, since reading and writing a conversation needs the room, and steps back to `medium` on `‹ Comments`. On a tablet both are 320, so nothing grows there.
 
 ### What changes for the user
 
@@ -68,7 +68,8 @@ At 1440 wide unless named.
 | Waitlist list | `large` | 400 → 400, tablet 400 → 320 | on a tablet the detail gains 80px |
 | Drive's detail | `large` | 400 → 400, tablet 400 → 320 | on a tablet the file list gains 80px |
 | Calendar's event detail | `medium` | dialog → 320 | new column; the grid narrows by 320 while it is open (day columns 161 → 115) |
-| Comments and activity | `medium` | 256 → 320 | 64px wider while open: the slide 880 → 816; Docs' page doesn't move at 1440 or 1280 |
+| Comments and activity, list level | `medium` | 256 → 320 | 64px wider while open: the slide 880 → 816; Docs' page doesn't move at 1440 or 1280 |
+| A comment thread | `large` | dialog → 400 | the column grows 80px as a thread opens: the slide 816 → 736 at 1440 (656 → 576 at 1280); Docs' page stays at 1440 and moves about 81px at 1280 |
 
 ### One place for the numbers
 
@@ -179,7 +180,7 @@ Phone, every kind:
 
 **Sheets today, and its step.** Sheets' comments pane and `FloatingObjectPanel` sit beside the whole `Workbook`, bar included, so they run to the top and the bar folds its format row by container width when one opens (`@[1000px]`, `@[1080px]` in `format-toolbar.tsx`). That is today's exception to the rule. The Sheets step moves both into the `Workbook` slot, so the bar stays full width there too. The slot is a `ReactNode` prop on our fork's `Workbook`; the grid already measures its canvas on resize.
 
-**Docs keeps its overlay.** Properties panels and the detail share one right slot in Docs, and both stay an overlay that never reflows the page (`canvasShift`, `canvasScale`): one geometry in the slot. The page moves only by its overlap: once the scroller is wider than `panelClearWidth` the panel clears the page and nothing moves. For the default A4 page (text column ending at 718px) that is about 1122 at 256, so at 1280 and 1440 the page doesn't move today. At 320 (`medium`) it is about 1250: the page doesn't move at 1440 and moves about 1px at 1280 (the scroller is the window less its 32px padding, so 1408 and 1248; a visible scrollbar adds about 8px). At 400 it would be about 1410, and the page would move about 81px at 1280. Made a sibling, a 320 column would shift the centred page 160px on every open, a click on a highlight included.
+**Docs keeps its overlay.** Properties panels and the detail share one right slot in Docs, and both stay an overlay that never reflows the page (`canvasShift`, `canvasScale`): one geometry in the slot. The page moves only by its overlap: once the scroller is wider than `panelClearWidth` the panel clears the page and nothing moves. For the default A4 page (text column ending at 718px) that is about 1122 at 256, so at 1280 and 1440 the page doesn't move today. At 320 (`medium`) it is about 1250: the page doesn't move at 1440 and moves about 1px at 1280 (the scroller is the window less its 32px padding, so 1408 and 1248; a visible scrollbar adds about 8px). At 400, the width of an open thread, it is about 1410: the page stays at 1440 and moves about 81px at 1280 while a thread is open. Made a sibling, a 320 column would shift the centred page 160px on every open, a click on a highlight included.
 
 **Open and close.** A click opens; X, Esc and back close. Esc closes unless something else took it: a dialog or menu is open (the `useDialogOpen` / `useMenuOpen` guard), a text field, editor or canvas has the focus, or a handler before it called `preventDefault` (Drive's list clearing a multi-selection, the canvas deselecting first). A press on empty space closes nothing, except on the calendar grid, where a press closes and swallows the click so it doesn't create, because there the grid is the list.
 
@@ -261,18 +262,18 @@ The design grows the code a little. What it buys is behaviour: links, back, the 
 
 ## 6. Comments specifically
 
-**Recommendation: one column that holds the list and drills into a thread, with a back arrow to the list.** The toolbar's comments icon opens the column at the list (`?panel=comments`). A click on a comment in the list, or on its anchor in the document (a highlight in Docs, a cell marker in Sheets, the corner marker on a canvas), opens the thread in the same column (`?chat=`); `‹ Comments` goes back to the list with its scroll kept. Entered from an anchor, the list is still behind the thread, as Mail's list is behind a message opened from a link. Activity is the same column at another list level; an activity row opens its thread with back to the activity. New comment and Edit stay `CardFormDialog`. The hover card on anchors stays. On the stickies board, an activity row opens the sticky in the board's dialog, as today.
+**One column that holds the list and drills into a thread, with a back arrow to the list** (owner). The column is `medium` at the list and grows to `large` in a thread. The toolbar's comments icon opens the column at the list (`?panel=comments`). A click on a comment in the list, or on its anchor in the document (a highlight in Docs, a cell marker in Sheets, the corner marker on a canvas), opens the thread in the same column (`?chat=`); `‹ Comments` goes back to the list with its scroll kept. Entered from an anchor, the list is still behind the thread, as Mail's list is behind a message opened from a link. Activity is the same column at another list level; an activity row opens its thread with back to the activity. New comment and Edit stay `CardFormDialog`. The hover card on anchors stays. On the stickies board, an activity row opens the sticky in the board's dialog, as today.
 
 Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slides leaves the slide a narrow strip on a laptop. Why not keep the dialog: it is the one item in Eigen that opens in a modal while every other item opens in a column, which is what the owner asked to change.
 
-## 7. Decisions for the owner
+## 7. Decisions (owner, 25 November 2026)
 
-1. **Placement.** A detail sits under the bar that spans the screen: the app bar in Mail, Contacts, Drive and Calendar, the editor bar in the editors, which stays full width. Alternative: the detail runs to the top and the editor bar narrows; cost: Docs folds its formatting row (B, I and U at 1280) when a comment opens, Slides and Vector lose their shape tools up to 1520, and Slides' rail and right column lose their shared top edge.
-2. **Docs' overlay.** Keep it, for properties and the detail alike, so the page doesn't move at 1440 and moves about 1px at 1280. Alternative: the detail becomes a sibling column; cost: the page jumps 160px on every open, and one slot gets two geometries.
-3. **A fourth size for details beside a surface.** Comments in the editors and the calendar's event open at `medium`, 320; `large` (400, the owner's ruling) stays for lists and Drive's detail. At 1280 that leaves the slide 656px wide with comments open, a week's day columns 93px, and Docs' page in place; Drive's share, watch and ⋮ move into its bar either way. Alternative: details at `large` too, three sizes in all; cost: at 1280 the slide 576 (a fifth below what the properties leave it), day columns 81, and Docs' page moving 81px on every open. A detail at `small` (256) is no option: a thread gets 216px of text.
-4. **Comments.** One column, the list drilling into a thread, back to the list. Alternative: the list stays and the thread opens beside it; cost: 576px at the right. Keeping the dialog is the other alternative; cost: the ask unmet.
-5. **Comments' list level in the URL.** `?panel=comments` or `?panel=activity`, beside the existing `?chat=`, so a phone's back closes the column instead of leaving the document, and a link can open the activity. Alternative: React state, as today; cost: on a phone back leaves the whole document, unlike Mail.
-6. **Stickies board.** A sticky on the board keeps opening in its dialog; it opens in the column only in the future list view. Alternative: the board opens a sticky in the column too; cost: the board's sideways scroll loses 320px, and a stickies unit sooner than planned.
+1. **Placement: under the bar that spans the screen.** The app bar in Mail, Contacts, Drive and Calendar; the editor bar in the editors, which stays full width while the detail takes the right slot under it. Not chosen: the detail running to the top, which would fold Docs' formatting row (B, I and U at 1280), hide Slides' and Vector's shape tools up to 1520, and break the shared top edge of Slides' rail and right column.
+2. **Docs keeps its overlay**, for properties and the detail alike, so the page stays centred. Not chosen: a sibling column, which would jump the page 160px on every open.
+3. **Four sizes: `small` 256, `medium` 320, `large` 400 (320 on a tablet), `flex`.** `medium` for a detail beside a surface (the comments list, the calendar's event), `large` for lists and Drive's detail. Slides' rail moves from 208 to `small`. Not chosen: details at `large` too, which at 1280 leaves the slide 576px and a day column 81px.
+4. **Comments: one column, the list drilling into a thread, back to the list.** The column grows from `medium` to `large` while a thread is open. On a phone the column is a screen of its own with a back arrow, as a mail is. New comment and Edit stay `CardFormDialog`. Not chosen: a thread beside the list (576px at the right), or keeping the dialog.
+5. **The list level is in the URL**: `?panel=comments` or `?panel=activity`, beside `?chat=` for the thread, so a phone's back closes the column and a reload keeps it.
+6. **The stickies board keeps its dialog.** A sticky opens in the column only in the future list view.
 
 ## 8. Risks
 
@@ -282,7 +283,8 @@ Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slid
 
 - Focus in collab editors: a thread in a column has no focus trap. Opening a thread focuses its composer. Document keymaps today stand down only while a dialog is open, so Vector's Delete would delete the canvas selection while focus sits on the thread's Resolve button. `useFocusInDetail()` in each keymap and a test per editor (Vector's Delete, Docs' typing, the sheet's cell keys) pin it.
 - Remounting: the editor must not remount as the column opens or closes, or the Y.Doc session and undo go. `PhoneDetail` keeps the main's tree fixed; a test opens and closes the column around a live editor and checks the instance survives.
-- Docs' page at 320: pixel-gate a paged and a pageless doc at 1280 and 1440, the column open and closed, and with a properties panel open before the column; check the find bar's inset.
+- Docs' page at 320 and 400: pixel-gate a paged and a pageless doc at 1280 and 1440, the list and a thread open and closed, and with a properties panel open before the column; check the find bar's inset.
+- The column growing into a thread: the main reflows by 80px as a thread opens and closes (Slides refits its slide, Sheets remeasures, Docs' page moves at 1280). The editor must not remount on either step, and a thread opened straight from an anchor opens at `large` without passing through `medium`.
 - Sheets' slot: the grid must remeasure as the slot opens; the format row no longer folds when a pane opens.
 - History: close goes back only after our own push; a deep link or a reload replaces. Pin both in the route tests, and Drive's arrow keys replacing.
 - Calendar: the grid narrows by 320 on open; month view's "+N more" counts change with it. A save that re-keys the open occurrence must land on the right one.
