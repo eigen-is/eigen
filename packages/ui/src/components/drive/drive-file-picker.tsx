@@ -36,7 +36,7 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
-                <DriveFilePickerBody {...body} onClose={() => onOpenChange(false)} />
+                <DriveFilePickerBody {...body} open={open} onClose={() => onOpenChange(false)} />
             </DialogContent>
         </Dialog>
     );
@@ -44,13 +44,14 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
 
 // Mounted with the dialog's content, so each opening starts at the root of the viewer's drive with nothing picked.
 function DriveFilePickerBody({
+    open,
     onClose,
     onSelect,
     onUploadFromDevice,
     canPick,
     submitLabel = 'Select',
     multiSelect = false,
-}: Omit<DriveFilePickerProps, 'open' | 'onOpenChange' | 'title'> & { onClose: () => void }) {
+}: Omit<DriveFilePickerProps, 'onOpenChange' | 'title'> & { onClose: () => void }) {
     const { user } = useAuth();
     // Seeded from the view preference and kept here, so a sort picked in the dialog never writes it.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -75,7 +76,8 @@ function DriveFilePickerBody({
 
     return (
         <FormShell
-            onSubmit={() => (picked.length > 0 ? confirm(picked) : undefined)}
+            // A closing picker is still drawn as it fades out, and takes no second confirm, as FormDialog's form.
+            onSubmit={() => (open && picked.length > 0 ? confirm(picked) : undefined)}
             className="flex min-h-0 flex-1 flex-col gap-4"
         >
             {/* Edge to edge from sm up. A phone keeps the padding, so the drive select above the folders stays inset. */}

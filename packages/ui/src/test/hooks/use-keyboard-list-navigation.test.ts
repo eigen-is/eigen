@@ -181,6 +181,15 @@ describe('useKeyboardListNavigation Space and Enter', () => {
         await unmount();
     });
 
+    // A picker's form submits on Cmd+Enter, so a row that opened on it too would confirm twice.
+    test('Cmd or Ctrl+Enter opens nothing and is left to the form around the list', async () => {
+        const { calls, list, keydown, unmount } = await mountList(1);
+        expect((await keydown(list, 'Enter', { metaKey: true })).defaultPrevented).toBe(false);
+        expect((await keydown(list, 'Enter', { ctrlKey: true })).defaultPrevented).toBe(false);
+        expect(calls).toEqual([]);
+        await unmount();
+    });
+
     test('on a button inside a row, Enter and Space press the button and leave the row alone', async () => {
         const { calls, menuButton, keydown, unmount } = await mountList(1);
         for (const key of ['Enter', ' ']) {
