@@ -61,7 +61,7 @@ Sign-in, the two-factor step and invite sign-up have no guard: nothing stored is
 
 ## A form opens on its first field and gives the focus back
 
-A dialog or card focuses its first text field as it opens, else its first control, never a colour swatch, a tab or Cancel (`focusFirstField` in `form-shell.tsx`). When the form holds one text field with a value in it, such as a rename or a number to restart a list at, the text is selected, so typing replaces it. `DriveItemNameDialog`, which selects the name without its extension, passes `onOpenAutoFocus`. A page form focuses its first field as it mounts, and a view-first form, such as Team settings or a contact, mounts it when Edit opens it. A section inside a larger page, such as the Mail signature, takes no focus on mount.
+A dialog or card focuses its first text field as it opens, else its first control, never a colour swatch, a tab or Cancel (`focusFirstField` in `form-shell.tsx`). When the form holds one text field with a value in it, such as a rename or a number to restart a list at, the text is selected, so typing replaces it. `DriveItemNameDialog`, which selects the name without its extension, passes `onOpenAutoFocus`. A page form focuses its first field as it mounts, and a view-first form, such as Team settings or a contact, mounts it when Edit opens it. A section with its own Save that is the first field of its page, such as the Mail signature, takes the focus on mount too.
 
 After a save or a close the focus goes back to what opened the form ([LAYOUT.md § A closing dialog gives the focus back](LAYOUT.md#a-closing-dialog-gives-the-focus-back)). A form opened from another dialog that closes as it opens, such as Edit event from the event's detail, hands the focus to the chip the detail came from.
 
