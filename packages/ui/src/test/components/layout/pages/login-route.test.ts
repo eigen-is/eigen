@@ -1,5 +1,6 @@
-// The /login route every app builds: its `redirect` param is the page a sign-in goes on to, so a script URL or another
-// site in it becomes the start page, and a visitor who already has a session lands on a page of Eigen's own.
+// The /login route every app builds: its `redirect` param is the page a sign-in goes on to, the full URL the `_auth`
+// guard wrote, so a script URL or another site in it becomes the start page, and a visitor who already has a session
+// lands on a page of Eigen's own.
 import { expect, test } from 'bun:test';
 import { isRedirect } from '@tanstack/react-router';
 import { installHappyDom } from '../../../happy-dom';
@@ -22,11 +23,22 @@ for (const target of ['javascript:alert(1)', '//evil.example', 'https://evil.exa
     });
 }
 
-test('a path on this origin stays the way back', () => {
+test('a page of Eigen, or a path on this origin, stays the way back', () => {
+    expect(search('http://localhost:3000/mail/box/sent?page=2').redirect).toBe(
+        'http://localhost:3000/mail/box/sent?page=2',
+    );
     expect(search('/box/sent?page=2').redirect).toBe('/box/sent?page=2');
 });
 
-test('a signed-in visitor goes on to the way back, or with none to the app start page', async () => {
+test('a signed-in visitor goes back to the full URL by a page load, basepath and all', async () => {
+    const back = await signedInRedirect('http://localhost:3000/mail/box/inbox');
+    expect(isRedirect(back) && back.options).toMatchObject({
+        href: 'http://localhost:3000/mail/box/inbox',
+        reloadDocument: true,
+    });
+});
+
+test('a signed-in visitor goes on to a path in the app, or with none to the app start page', async () => {
     const back = await signedInRedirect('/box/sent');
     expect(isRedirect(back) && back.options.to).toBe('/box/sent');
     const start = await signedInRedirect();

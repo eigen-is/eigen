@@ -46,6 +46,9 @@ const router = await import('@tanstack/react-router');
 const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { LoginFa2Page } = await import('../../../components/space/login-fa2');
 
+// The way back as Mail's `_auth` guard writes it.
+const MAIL_INBOX = 'http://localhost:3000/mail/box/inbox';
+
 const NO_GUARD = 'the sign-in step stores nothing that leaving would lose, so it has no leave guard';
 
 test('the app code form keeps the page rules', async () => {
@@ -131,12 +134,19 @@ test('an expired sign-in goes back to sign-in, keeping the way back', async () =
             error: { status: 401, value: { message: 'Invalid two factor cookie', code: 'INVALID_TWO_FACTOR_COOKIE' } },
         });
     });
-    const memory = await renderPage('/box/inbox');
+    const memory = await renderPage(MAIL_INBOX);
     await type('Verification code', '123456');
     await act(async () => pressEnter(field('Verification code')));
     expect(memory.state.location.pathname).toBe('/login');
-    expect(memory.state.location.search).toEqual({ redirect: '/box/inbox' });
+    expect(memory.state.location.search).toEqual({ redirect: MAIL_INBOX });
     expect(messageUnder('Verification code')).toBeUndefined();
+});
+
+test('a right code goes back to the page in the app that sent the user to sign in', async () => {
+    await renderPage(MAIL_INBOX);
+    await type('Verification code', '123456');
+    await act(async () => pressEnter(field('Verification code')));
+    expect(window.location.href).toBe(MAIL_INBOX);
 });
 
 // Bun fails a test on an unhandled rejection, as the browser raises a page error on one.

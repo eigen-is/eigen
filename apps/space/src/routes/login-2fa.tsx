@@ -19,9 +19,10 @@ export const Route = createFileRoute('/login-2fa')({
             .transform((target) => target && safeRedirect(target)),
     }),
     beforeLoad: async ({ context, search }) => {
-        if (context.auth.isAuthenticated) {
-            throw redirect({ to: search.redirect || fallback });
-        }
+        if (!context.auth.isAuthenticated) return;
+        const target = search.redirect || fallback;
+        // A full URL, such as Mail's page that sent the user here, leaves by a page load.
+        throw URL.canParse(target) ? redirect({ href: target }) : redirect({ to: target });
     },
 });
 
