@@ -196,6 +196,8 @@ export const CodeEditorView = forwardRef<
         }
         const state = EditorState.create({ doc: content, extensions });
         const view = new EditorView({ state, parent: containerRef.current });
+        // It mounts when Edit or the source toggle is pressed, so typing goes into the text at once.
+        view.focus();
         viewRef.current = view;
         onViewReady?.(view);
         return () => {

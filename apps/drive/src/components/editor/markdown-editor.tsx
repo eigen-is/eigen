@@ -117,6 +117,8 @@ export function MarkdownEditor({
     const editor = useEditor({
         extensions: useMarkdownExtensions(content),
         content,
+        // It mounts when Edit is pressed, so typing goes into the text at once.
+        autofocus: true,
         // No equation node: a pasted equation reads as its linear text.
         editorProps: { transformPastedHTML: mathAsText },
         onUpdate: () => {
