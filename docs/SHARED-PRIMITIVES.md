@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2440 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2446 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (332)
+## Components (334)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -176,6 +176,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormItem` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormLabel` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormMessage` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
+| `FooterTool` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialog` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialogForm` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormFooter` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
@@ -292,6 +293,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ZOrderButtons` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `RadioGroup` | `@workspace/ui/components/radio-group` | packages/ui/src/components/radio-group.tsx |
 | `RadioGroupItem` | `@workspace/ui/components/radio-group` | packages/ui/src/components/radio-group.tsx |
+| `RequiredTextField` | `@workspace/ui/components/required-text-field` | packages/ui/src/components/required-text-field.tsx |
 | `ScrollArea` | `@workspace/ui/components/scroll-area` | packages/ui/src/components/scroll-area.tsx |
 | `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
@@ -385,7 +387,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (319)
+## Hooks (320)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -696,6 +698,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `useFitHeight` | `@workspace/ui/hooks/use-fit-height` | packages/ui/src/hooks/use-fit-height.ts |
 | `useFocusReturn` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `useFollowedFields` | `@workspace/ui/hooks/use-followed-fields` | packages/ui/src/hooks/use-followed-fields.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
@@ -1189,7 +1192,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1287)
+## Utilities & constants (1290)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2067,6 +2070,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CONTROL_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `FIELD_MESSAGES` | `@workspace/lib/validation` | packages/lib/src/validation/field-messages.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isSafeFileName` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
@@ -2467,6 +2471,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
 | `expectFormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `expectFormProbe` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `field` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `type` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 | `expectKeyboardReveal` | `@workspace/ui/test/hover-reveal` | packages/ui/src/test/hover-reveal.ts |
 | `checkRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
