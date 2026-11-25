@@ -34,6 +34,7 @@ import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
+import { usePageDraft } from './hooks/use-page-draft';
 import { ServerBackupSection } from './server-backup-section';
 import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
@@ -66,18 +67,13 @@ function ServerSettingsForm({
     const sendTestMail = useSendTestMail();
     const { data: status } = useServerStatus();
 
-    const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
+    const { draft, setDraft, current, loaded, changed: settingsChanged, reset } = usePageDraft(settings, withDraft);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
     const [orgNameDraft, setOrgNameDraft] = useState<string | null>(null);
     const [backupNotice, setBackupNotice] = useState<Pick<ServerSettingsSaved, 'notice' | 'warning'> | null>(null);
     const fieldId = useId();
 
     const orgName = orgNameDraft ?? config.orgName;
-    const current = withDraft(settings, draft);
-    // Both sides are built the same way, so their keys come in the same order.
-    const saved = withDraft(settings, {});
-    const settingsChanged = JSON.stringify(current) !== JSON.stringify(saved);
-
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
         if (Number.isNaN(value) || value < 0) return;
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
@@ -120,7 +116,7 @@ function ServerSettingsForm({
         current.defaults.mount.storageType === 's3' && JSON.stringify(currentS3) !== JSON.stringify(savedS3);
     const orgNameChanged = orgName !== config.orgName;
     // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
-    const senderChanged = orgNameChanged || JSON.stringify(current.mail) !== JSON.stringify(saved.mail);
+    const senderChanged = orgNameChanged || JSON.stringify(current.mail) !== JSON.stringify(loaded.mail);
     // A server without mailboxes sends its mail through the relay named at setup, if there is one. The status says
     // which, so relayHost is undefined until it loads.
     const relayHost = status?.relayHost;
@@ -159,7 +155,7 @@ function ServerSettingsForm({
     };
 
     const handleReset = () => {
-        setDraft({});
+        reset();
         setS3Draft(null);
         setOrgNameDraft(null);
     };
