@@ -42,7 +42,7 @@ test('invite sign-up keeps the page rules', async () => {
         makeInvalid: async () => {},
         invalidField: 'Name',
         modEnterFields: ['Confirm password'],
-        except: { leaveGuard: 'sign-up stores nothing that leaving would lose, so it has no leave guard' },
+        noDraft: true,
     });
 });
 

@@ -42,10 +42,8 @@ test('the app password form keeps the page rules', async () => {
         makeChanged: () => typeName('Thunderbird'),
         makeInvalid: async () => {},
         invalidField: 'Name',
-        except: {
-            focus: 'the form sits far down the Integrations page, so it takes no focus as the page opens',
-            leaveGuard: 'a name for a password not yet generated loses nothing stored',
-        },
+        noDraft: true,
+        except: { focus: 'the form sits far down the Integrations page, so it takes no focus as the page opens' },
     });
 });
 

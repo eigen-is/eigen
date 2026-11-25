@@ -49,8 +49,6 @@ const { LoginFa2Page } = await import('../../../components/space/login-fa2');
 // The way back as Mail's `_auth` guard writes it.
 const MAIL_INBOX = 'http://localhost:3000/mail/box/inbox';
 
-const NO_GUARD = 'the sign-in step stores nothing that leaving would lose, so it has no leave guard';
-
 test('the app code form keeps the page rules', async () => {
     await expectFormContract({
         kind: 'page',
@@ -61,7 +59,7 @@ test('the app code form keeps the page rules', async () => {
         makeChanged: () => type('Verification code', '123456'),
         makeInvalid: () => type('Verification code', '123'),
         invalidField: 'Verification code',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -75,7 +73,7 @@ test('the backup code form keeps the page rules', async () => {
         makeChanged: () => type('Backup code', 'abcde-fghij'),
         makeInvalid: () => type('Backup code', ''),
         invalidField: 'Backup code',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
