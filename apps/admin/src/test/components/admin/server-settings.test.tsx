@@ -1,12 +1,12 @@
 // Server settings keeps the page contract, and its one save carries only the drafts that changed: a new organization
-// name alone sends the name and nothing else. Send test mail is a button of its own, so Enter in a field saves rather than
+// name alone sends the name and nothing else, and an emptied one says so only once Save was pressed. Send test mail is a button of its own, so Enter in a field saves rather than
 // sending, and a click sends without saving. Each landing link's remove button is named after the link: its title,
 // its URL when the title is empty, or "empty link" for a row with neither, so a screen reader hears which one goes. A
 // save refused for an incomplete bucket says which field under it and focuses that field. Each switch is named by its
 // label and described by its sentence.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -109,18 +109,6 @@ async function openPage() {
     return renderInDocument(createElement(router.RouterProvider, { router: memory }));
 }
 
-// The field a label names, with what a keystroke sets: React reads the value off its own tracker.
-function field(label: string): HTMLInputElement {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-}
-const type = (label: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field(label), value);
-        field(label).dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const button = (label: string) =>
     [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
 
@@ -142,6 +130,18 @@ test('a new organization name alone saves the trimmed name and nothing else', as
     await type('Organization name', ' Acme Labs ');
     await act(async () => pressEnter(field('Organization name')));
     expect(save.mock.calls).toEqual([[{ orgName: 'Acme Labs', s3Config: undefined, settings: undefined }]]);
+});
+
+test('an emptied organization name says so only once Save was pressed', async () => {
+    await openPage();
+    await type('Organization name', '');
+    expect(document.body.textContent).not.toContain('Add a name');
+    await act(async () => button('Save')?.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(save).not.toHaveBeenCalled();
+    const name = field('Organization name');
+    expect(document.getElementById(name.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Add a name');
+    expect(document.activeElement).toBe(name);
 });
 
 test('a change put back by hand leaves nothing to save', async () => {

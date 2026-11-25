@@ -31,6 +31,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Separator } from '@workspace/ui/components/separator';
 import { Plus, Trash2 } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -117,7 +118,6 @@ function ServerSettingsForm({ settings, config }: { settings: ServerSettings; co
     // which, so relayHost is undefined until it loads.
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
-    const orgNameBlank = orgName.trim() === '';
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
     const homeDataTooSmall = current.quotas.homeDataMaxMB < QUOTA_MIN_MB;
     const mountTooSmall = current.quotas.defaultMountMaxSizeMB < QUOTA_MIN_MB;
@@ -127,7 +127,7 @@ function ServerSettingsForm({ settings, config }: { settings: ServerSettings; co
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
 
     const invalid =
-        orgNameBlank ||
+        !orgName.trim() ||
         senderAddressInvalid ||
         homeDataTooSmall ||
         mountTooSmall ||
@@ -159,17 +159,13 @@ function ServerSettingsForm({ settings, config }: { settings: ServerSettings; co
     return (
         <PageForm changed={orgNameChanged || s3Changed || settingsChanged} onSubmit={handleSave} onReset={handleReset}>
             <SettingsSection title="General">
-                <div className="space-y-1.5">
-                    <Label htmlFor={`${fieldId}-org-name`}>Organization name</Label>
-                    <Input
-                        id={`${fieldId}-org-name`}
-                        maxLength={100}
-                        value={orgName}
-                        onChange={(e) => setOrgNameDraft(e.target.value)}
-                        aria-invalid={orgNameBlank || undefined}
-                    />
-                    {orgNameBlank && <FieldError>Add a name</FieldError>}
-                </div>
+                <RequiredTextField
+                    label="Organization name"
+                    maxLength={100}
+                    value={orgName}
+                    onChange={setOrgNameDraft}
+                    message={FIELD_MESSAGES.nameMissing}
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <Label htmlFor={`${fieldId}-domain`}>Web address</Label>
