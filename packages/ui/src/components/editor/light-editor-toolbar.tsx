@@ -1,6 +1,6 @@
 // The row of formatting buttons above or over a LightEditor: bold, italic, lists, quote and a link. The link button
-// opens a small URL field. Enter there sets the link without submitting a form the editor sits in, and Escape closes
-// the field without closing a dialog around it.
+// opens a small URL field. Enter there sets the link without submitting a form the editor sits in, and Escape drops
+// what was typed without closing a dialog around it; both give the focus back to the editor.
 
 import type { Editor } from '@tiptap/react';
 import { Bold, Italic, Link, List, ListChecks, ListOrdered, Quote } from 'lucide-react';
@@ -23,15 +23,21 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
         editor.view.dispatch(editor.state.tr.setMeta(LIGHT_EDITOR_BUBBLE_MENU, 'updatePosition'));
     }, [editor, showLinkInput]);
 
-    const setLink = useCallback(() => {
-        if (linkUrl.trim()) {
-            const url =
-                linkUrl.startsWith('http://') || linkUrl.startsWith('https://') ? linkUrl : `https://${linkUrl}`;
-            editor.chain().focus().setLink({ href: url }).run();
-        }
-        setShowLinkInput(false);
-        setLinkUrl('');
-    }, [editor, linkUrl]);
+    // Enter sets the typed link, Escape drops it; either way the field closes empty and the editor has the focus.
+    const closeLinkField = useCallback(
+        (set: boolean) => {
+            const chain = editor.chain().focus();
+            if (set && linkUrl.trim()) {
+                const url =
+                    linkUrl.startsWith('http://') || linkUrl.startsWith('https://') ? linkUrl : `https://${linkUrl}`;
+                chain.setLink({ href: url });
+            }
+            chain.run();
+            setShowLinkInput(false);
+            setLinkUrl('');
+        },
+        [editor, linkUrl],
+    );
 
     return (
         <div className="flex items-center gap-0.5 p-1 rounded-md border bg-popover text-popover-foreground shadow-md">
@@ -97,11 +103,8 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            setLink();
-                        }
-                        if (e.key === 'Escape') setShowLinkInput(false);
+                        if (e.key === 'Enter') e.preventDefault();
+                        if (e.key === 'Enter' || e.key === 'Escape') closeLinkField(e.key === 'Enter');
                     }}
                 />
             )}
