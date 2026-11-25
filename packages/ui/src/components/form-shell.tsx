@@ -1,7 +1,7 @@
 // The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys, their
 // first focus and their error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that
-// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed, and until a
-// submit goes through, its fields read useFormSubmitted(), so a missing value shows only then, and a refused submit
+// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed, and until
+// a submit goes through, its fields read useFormSubmitted(), so a missing value shows only then, and a refused submit
 // focuses the first field marked aria-invalid while the form still shows. Apps use the shells, not this.
 
 import type { ReactNode } from 'react';

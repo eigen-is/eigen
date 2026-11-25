@@ -1,9 +1,8 @@
 // The probes every form's test runs, so each form proves it keeps the rules its shell owns: focus on open, Enter and
 // Cmd+Enter, closing with and without changes, the leave guard, an invalid submit, the pending button and a close while
-// the save runs. A test
-// renders the real form through `render` and calls expectFormContract once; the probes of its kind each render it
-// afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch, and a form that breaks
-// one on purpose names it in `except` with its reason. Call `installHappyDom()` first.
+// the save runs. A test renders the real form through `render` and calls expectFormContract once; the probes of its
+// kind each render it afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch, and
+// a form that breaks one on purpose names it in `except` with its reason. Call `installHappyDom()` first.
 import type { Mock } from 'bun:test';
 import type { ReactElement } from 'react';
 import { pressEnter } from './press-enter';

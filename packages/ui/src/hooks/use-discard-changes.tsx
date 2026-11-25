@@ -1,8 +1,9 @@
 // The "Discard changes?" question a form shell asks before a close would drop what the user changed, such as Esc, the
 // corner X or a click outside a form dialog. The shell hands Radix its onOpenChange: a close discards at once when
 // nothing changed, and otherwise opens the question, whose red Discard discards and whose Keep editing goes back to the
-// form. While a save runs a close does nothing, since the save decides whether the form closes. The shell renders `dialog` beside its own; a button that says it discards, such as Cancel, skips the question.
-// The question's words are shared, so a page's leave guard and an editor's Cancel ask the same.
+// form. While a save runs a close does nothing, since the save decides whether the form closes. The shell renders
+// `dialog` beside its own; a button that says it discards, such as Cancel, skips the question. The question's words are
+// shared, so a page's leave guard and an editor's Cancel ask the same.
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
