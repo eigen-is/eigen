@@ -1,5 +1,5 @@
 // A Button is a plain button unless it says otherwise: inside a form it submits only with type="submit". A Button with
-// asChild renders its child, such as a link, and puts no button type on it.
+// asChild renders its child, such as a link, and puts no button type on it, nor a pending spinner.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactElement } from 'react';
 import { installHappyDom } from '../happy-dom';
@@ -97,4 +97,17 @@ test('a Button with asChild that is not pending renders its child alone', async 
         createElement(Button, { asChild: true, pending: false }, createElement('a', { href: '/help' }, 'Help')),
     );
     expect(container.querySelector('a')?.textContent).toBe('Help');
+});
+
+test('a Button with asChild ignores pending, so its child keeps the classes and the click', async () => {
+    const onClick = mock(() => {});
+    const container = await render(
+        createElement(Button, { asChild: true, pending: true, onClick }, createElement('a', { href: '#help' }, 'Help')),
+    );
+    const link = container.querySelector('a');
+    expect(link?.className).toContain('inline-flex');
+    expect(link?.textContent).toBe('Help');
+    expect(link?.hasAttribute('aria-busy')).toBe(false);
+    await click(link);
+    expect(onClick).toHaveBeenCalledTimes(1);
 });

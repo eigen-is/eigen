@@ -1,7 +1,7 @@
 // shadcn's Button, in the variants and sizes every app shares. It is a plain button unless the caller says otherwise,
 // so inside a form only a Button with type="submit" submits it. A pending one, such as a form's Save while it saves,
 // shows a spinner before its label and ignores a click. asChild renders the button's look on its child instead, such
-// as a link, and puts no button type on it.
+// as a link, and puts no button type or spinner on it.
 
 import { EigenLoader } from '@workspace/ui/components/braket/eigen-loader';
 import { cn } from '@workspace/ui/lib/utils';
@@ -58,6 +58,8 @@ function Button({
         pending?: boolean;
     }) {
     const Comp = asChild ? Slot.Root : 'button';
+    // Slot takes one child and the spinner would make two, so a Button with asChild ignores pending.
+    const busy = pending && !asChild;
 
     return (
         <Comp
@@ -67,13 +69,12 @@ function Button({
             className={cn(buttonVariants({ variant, size, className }))}
             type={type}
             // Not disabled, which would drop the focus to the page. The prevented click submits no form.
-            aria-disabled={pending || undefined}
-            aria-busy={pending || undefined}
-            onClick={pending ? (event) => event.preventDefault() : onClick}
+            aria-disabled={busy || undefined}
+            aria-busy={busy || undefined}
+            onClick={busy ? (event) => event.preventDefault() : onClick}
             {...props}
         >
-            {/* Slot takes one child, so the spinner joins the label only while it shows. */}
-            {pending ? (
+            {busy ? (
                 <>
                     <EigenLoader className="text-current" />
                     {children}
