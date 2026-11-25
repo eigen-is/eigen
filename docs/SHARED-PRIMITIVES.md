@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2434 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2437 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1186,7 +1186,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1284)
+## Utilities & constants (1287)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1312,6 +1312,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `publicApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `safeRedirect` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `searchApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `SERVER_HOSTNAME` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `serverBackupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1322,6 +1323,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `appErrorFrom` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `appErrorFromBody` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `authFailure` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isRefusal` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isStaleWrite` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
@@ -1334,6 +1336,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `isMailApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
+| `isExpiredSignIn` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `isRefusedAddress` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
 | `isRefusedCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
 | `isWrongCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
