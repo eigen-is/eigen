@@ -37,7 +37,7 @@ export function useTeamSettings(teamId: string) {
 
 // The writes go one after another, so a refusal stops the rest and leaves the form open. Each is idempotent, so a
 // retry sends them again, less the name once the renamed team has reloaded.
-export function useSaveTeamSettings(teamId: string, organizationId?: string) {
+export function useSaveTeamSettings(teamId: string, organizationId: string) {
     const queryClient = useQueryClient();
     const ownerId = teamOwnerId(teamId);
 
@@ -46,7 +46,7 @@ export function useSaveTeamSettings(teamId: string, organizationId?: string) {
             if (name !== undefined) {
                 const { error } = await authClient.organization.updateTeam({ teamId, data: { name } });
                 if (error) throw new Error(error.message ?? 'Failed to rename the team');
-                invalidateTeamRename(queryClient, organizationId ?? '');
+                invalidateTeamRename(queryClient, organizationId);
             }
             if (calendar) {
                 const res = await calendarApi({ ownerId })

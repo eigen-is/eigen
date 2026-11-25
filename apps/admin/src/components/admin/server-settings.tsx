@@ -41,13 +41,28 @@ import { SwitchRow } from './switch-row';
 
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
+    const { data: config } = usePublicConfig();
+
+    if (isLoading || !settings || !config) {
+        return <LoadingState />;
+    }
+    return <ServerSettingsForm settings={settings} config={config} />;
+}
+
+// The page's fields, mounted once the settings and the organization have loaded, so every draft starts from them.
+function ServerSettingsForm({
+    settings,
+    config,
+}: {
+    settings: ServerSettings;
+    config: { orgId: string; orgName: string; domain: string; mailDomain: string };
+}) {
     const { data: s3Config } = useServerS3Config();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
     const homeDataLabel = useHomeDataLabel();
-    const { data: config } = usePublicConfig();
     const mailEnabled = useMailEnabled();
-    const save = useSaveServerSettingsPage(config?.orgId);
+    const save = useSaveServerSettingsPage(config.orgId);
     const sendTestMail = useSendTestMail();
     const { data: status } = useServerStatus();
 
@@ -56,10 +71,6 @@ export function ServerSettingsPage() {
     const [orgNameDraft, setOrgNameDraft] = useState<string | null>(null);
     const [backupNotice, setBackupNotice] = useState<Pick<ServerSettingsSaved, 'notice' | 'warning'> | null>(null);
     const fieldId = useId();
-
-    if (isLoading || !settings || !config) {
-        return <LoadingState />;
-    }
 
     const orgName = orgNameDraft ?? config.orgName;
     const current = withDraft(settings, draft);

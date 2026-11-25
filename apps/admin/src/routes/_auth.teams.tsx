@@ -31,15 +31,15 @@ function TeamsRoute() {
 
     const team = teams.find((t) => t.id === teamId);
 
-    if (isLoading) {
+    if (isLoading || !config) {
         return <LoadingState />;
     }
 
     const listToolbar = (
-        <AdminTeamsToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} organizationId={config?.orgId} />
+        <AdminTeamsToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} organizationId={config.orgId} />
     );
 
-    const detailToolbar = team ? <TeamDetailToolbar team={team} organizationId={config?.orgId} /> : null;
+    const detailToolbar = team ? <TeamDetailToolbar team={team} organizationId={config.orgId} /> : null;
 
     return (
         <ListDetailLayout
@@ -49,7 +49,7 @@ function TeamsRoute() {
                 (team ? (
                     // key: remount per team so per-team state (drafts, avatar ?v= stamp) resets and
                     // an in-flight avatar mutation can't write the previous team's URL into the new one.
-                    <TeamDetail key={team.id} team={team} organizationId={config?.orgId} />
+                    <TeamDetail key={team.id} team={team} organizationId={config.orgId} />
                 ) : (
                     <EmptyState message="Team not found" />
                 ))
