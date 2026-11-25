@@ -9,37 +9,36 @@ import { Label } from '@workspace/ui/components/label';
 import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { useId, useState } from 'react';
-
-type GuestDraft = Partial<ServerSettings['guests']>;
+import { useId } from 'react';
+import { usePageDraft } from './hooks/use-page-draft';
 
 export function GuestSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
-    const updateSettings = useUpdateServerSettings();
-    const [draft, setDraft] = useState<GuestDraft>({});
-    const fieldId = useId();
 
     if (isLoading || !settings) {
         return <LoadingState />;
     }
+    return <GuestSettingsForm guests={settings.guests} />;
+}
 
-    const current = {
-        openSignup: draft.openSignup ?? settings.guests.openSignup,
-        inactivityDays: draft.inactivityDays ?? settings.guests.inactivityDays,
-    };
+// Mounted once the settings have loaded, so the draft starts from them.
+function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
+    const updateSettings = useUpdateServerSettings();
+    const { draft, setDraft, current, changed, reset } = usePageDraft(guests, (loaded, patch) => ({
+        ...loaded,
+        ...patch,
+    }));
+    const fieldId = useId();
 
-    const changed =
-        current.openSignup !== settings.guests.openSignup || current.inactivityDays !== settings.guests.inactivityDays;
-
-    const update = (patch: GuestDraft) => setDraft((prev) => ({ ...prev, ...patch }));
+    const update = (patch: Partial<ServerSettings['guests']>) => setDraft((prev) => ({ ...prev, ...patch }));
 
     const handleSave = async () => {
         await updateSettings.mutateAsync({ guests: draft });
-        setDraft({});
+        reset();
     };
 
     return (
-        <PageForm changed={changed} onSubmit={handleSave} onReset={() => setDraft({})}>
+        <PageForm changed={changed} onSubmit={handleSave} onReset={reset}>
             <SettingsSection
                 title="Open signup"
                 description="When enabled, anyone can request a guest OTP — even if no resource has been shared with their email yet. Disable to require a pending share before issuing OTPs."

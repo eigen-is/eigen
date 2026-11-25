@@ -87,8 +87,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
 
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLSpanElement>) => {
-            // Enter commits the name instead of starting a new line in it, and Escape puts the old name back, so the
-            // blur that follows saves nothing. Either way the next keys go to the grid.
+            // The blur saves, so Escape puts the old name back first. Either way the next keys go to the grid.
             if (e.key === 'Escape' && editable.current) editable.current.innerText = sheet.name;
             if (e.key === 'Enter' || e.key === 'Escape') {
                 e.preventDefault();

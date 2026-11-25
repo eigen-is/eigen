@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { S3Config } from '../../types/mount';
-import { isS3ConfigValid, keepsSavedSecret } from '../../types/mount';
+import { isS3ConfigValid, keepsSavedSecret, missingS3Fields } from '../../types/mount';
 
 const SAVED: S3Config = {
     endpoint: 'https://s3.example.com',
@@ -28,5 +28,16 @@ describe('isS3ConfigValid', () => {
         expect(isS3ConfigValid(blank)).toBe(false);
         expect(isS3ConfigValid(blank, true)).toBe(true);
         expect(isS3ConfigValid({ ...blank, accessKeyId: '' }, true)).toBe(false);
+    });
+});
+
+describe('missingS3Fields', () => {
+    test('names the empty fields a config needs, in form order, and never the prefix or region', () => {
+        expect(missingS3Fields({ ...SAVED, endpoint: '', accessKeyId: '', secretAccessKey: '' })).toEqual([
+            'endpoint',
+            'accessKeyId',
+            'secretAccessKey',
+        ]);
+        expect(missingS3Fields({ ...SAVED, prefix: '', secretAccessKey: '' }, true)).toEqual([]);
     });
 });

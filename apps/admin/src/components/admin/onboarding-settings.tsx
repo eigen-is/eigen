@@ -5,6 +5,7 @@
 import { useMailEnabled } from '@workspace/lib/public';
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
+import type { DeepPartial } from '@workspace/lib/types/util';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -12,31 +13,28 @@ import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/component
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { useId, useState } from 'react';
+import { usePageDraft } from './hooks/use-page-draft';
 
-type OnboardingDraft = {
-    waitlist?: Partial<ServerSettings['onboarding']['waitlist']>;
-    autoAddOwnerContact?: boolean;
-    welcomeMail?: Partial<ServerSettings['onboarding']['welcomeMail']>;
-    inviteEmail?: Partial<ServerSettings['onboarding']['inviteEmail']>;
-};
+type OnboardingDraft = DeepPartial<ServerSettings['onboarding']>;
 
 export function OnboardingSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
-    const updateSettings = useUpdateServerSettings();
-    const mailEnabled = useMailEnabled();
-
-    const [draft, setDraft] = useState<OnboardingDraft>({});
-    // LightEditor reads `content` once, as it mounts, so Reset bumps this key to remount both editors on what was saved.
-    const [editorKey, setEditorKey] = useState(0);
-    const fieldId = useId();
 
     if (isLoading || !settings) {
         return <LoadingState />;
     }
+    return <OnboardingSettingsForm onboarding={settings.onboarding} />;
+}
 
-    const current = withDraft(settings.onboarding, draft);
-    // Both sides are built the same way, so their keys come in the same order.
-    const changed = JSON.stringify(current) !== JSON.stringify(withDraft(settings.onboarding, {}));
+// Mounted once the settings have loaded, so the draft starts from them.
+function OnboardingSettingsForm({ onboarding }: { onboarding: ServerSettings['onboarding'] }) {
+    const updateSettings = useUpdateServerSettings();
+    const mailEnabled = useMailEnabled();
+
+    const { draft, setDraft, current, changed, reset } = usePageDraft(onboarding, withDraft);
+    // LightEditor reads `content` once, as it mounts, so Reset bumps this key to remount both editors on what was saved.
+    const [editorKey, setEditorKey] = useState(0);
+    const fieldId = useId();
 
     const update = (patch: OnboardingDraft) => {
         setDraft((prev) => ({
@@ -50,11 +48,11 @@ export function OnboardingSettingsPage() {
 
     const handleSave = async () => {
         await updateSettings.mutateAsync({ onboarding: draft });
-        setDraft({});
+        reset();
     };
 
     const handleReset = () => {
-        setDraft({});
+        reset();
         setEditorKey((k) => k + 1);
     };
 

@@ -26,7 +26,7 @@ import { useId, useState } from 'react';
 
 type TeamSettingsSectionProps = {
     team: OrgTeam;
-    organizationId?: string;
+    organizationId: string;
 };
 
 export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectionProps) {

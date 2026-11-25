@@ -50,20 +50,24 @@ async function render(element: Parameters<typeof renderInDocument>[0]) {
 }
 
 test('a team an admin made has a delete button and no note', async () => {
-    const toolbar = await render(createElement(TeamDetailToolbar, { team: team('team-1', 'Design') }));
+    const toolbar = await render(
+        createElement(TeamDetailToolbar, { team: team('team-1', 'Design'), organizationId: 'org-1' }),
+    );
     expect(toolbar.querySelectorAll('button')).toHaveLength(1);
 
     await unmount();
-    const detail = await render(createElement(TeamDetail, { team: team('team-1', 'Design') }));
+    const detail = await render(createElement(TeamDetail, { team: team('team-1', 'Design'), organizationId: 'org-1' }));
     expect(detail.textContent).toContain('TeamMembersSection');
     expect(detail.textContent).not.toContain(note);
 });
 
 test('the default team has no delete button, and its detail says it is the default team', async () => {
-    const toolbar = await render(createElement(TeamDetailToolbar, { team: team('team-0', 'Acme') }));
+    const toolbar = await render(
+        createElement(TeamDetailToolbar, { team: team('team-0', 'Acme'), organizationId: 'org-1' }),
+    );
     expect(toolbar.querySelectorAll('button')).toHaveLength(0);
 
     await unmount();
-    const detail = await render(createElement(TeamDetail, { team: team('team-0', 'Acme') }));
+    const detail = await render(createElement(TeamDetail, { team: team('team-0', 'Acme'), organizationId: 'org-1' }));
     expect(detail.textContent).toContain(note);
 });

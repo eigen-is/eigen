@@ -1,4 +1,8 @@
+// The query keys of the Admin app's data, such as the org's teams, the server's users, the waitlist and the backups,
+// with the invalidations the admin hooks share. Server-wide data has no ownerId in its key.
+
 import type { QueryClient } from '@tanstack/react-query';
+import { invalidateMyTeams } from '../../home/hooks/keys';
 
 export const adminKeys = {
     all: ['admin'] as const,
@@ -33,6 +37,14 @@ export function invalidateAdminMembers(queryClient: QueryClient, organizationId:
 
 export function invalidateAdminTeams(queryClient: QueryClient, organizationId: string): void {
     queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId) });
+}
+
+// A team's name shows in the org's team list, in each member's own teams and beside each user on the users page, so a
+// rename, or a removal, refreshes all three.
+export function invalidateTeamRename(queryClient: QueryClient, organizationId: string): void {
+    invalidateAdminTeams(queryClient, organizationId);
+    invalidateMyTeams(queryClient);
+    invalidateAdminUsers(queryClient);
 }
 
 // Backup routes are server-wide (the settings.ts carve-out, no `:ownerId` path segment), but every

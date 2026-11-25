@@ -20,7 +20,7 @@ import { TeamSettingsSection } from './team-settings-section';
 
 type TeamDetailProps = {
     team: OrgTeam;
-    organizationId?: string;
+    organizationId: string;
 };
 
 export function TeamDetailToolbar({ team, organizationId }: TeamDetailProps) {
