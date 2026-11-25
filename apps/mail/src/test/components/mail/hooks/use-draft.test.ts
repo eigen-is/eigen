@@ -290,6 +290,46 @@ describe('closing the composer while a save is in flight', () => {
     });
 });
 
+describe('closing the tab', () => {
+    const unload = () => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+    };
+
+    test('asks while an edit has not reached the server, and not once it has', async () => {
+        const { run, flush } = await openDraft({});
+        expect(unload()).toBe(false);
+        await run((d) => d.setField('body', '<p>The last words</p>'));
+        await run((d) => d.setField('bodyText', 'The last words'));
+        expect(unload()).toBe(true);
+        await flush();
+        expect(unload()).toBe(false);
+    });
+
+    test('lets a draft emptied of everything go, since no save would keep it', async () => {
+        const { run } = await openDraft({ email: savedDraft([]) });
+        await run((d) => d.setField('subject', ''));
+        await run((d) => d.setField('bodyText', ''));
+        expect(unload()).toBe(false);
+    });
+
+    test('asks while a save is on its way', async () => {
+        const answered = Promise.withResolvers<void>();
+        const { run } = await openDraft({
+            onSave: async () => {
+                await answered.promise;
+                return savedDraft([]);
+            },
+        });
+        await run((d) => d.setField('subject', 'Lunch'));
+        await run((d) => void d.flushAndGetDraft());
+        expect(unload()).toBe(true);
+        await act(async () => answered.resolve());
+        expect(unload()).toBe(false);
+    });
+});
+
 describe('a reply opens on an empty line above its quote', () => {
     const quote = '<p>On Mon, Bob wrote:</p><blockquote><p>Lunch?</p></blockquote>';
 

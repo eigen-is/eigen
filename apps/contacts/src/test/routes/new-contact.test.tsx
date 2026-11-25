@@ -1,8 +1,9 @@
 // A new contact needs a first or a last name. Save sends the card with its blank email and phone rows
-// dropped, then opens the new card in the book.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+// dropped, then opens the new card in the book, and the form takes no second Save until it has left.
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
@@ -59,6 +60,7 @@ async function open() {
     );
     unmount = rendered.unmount;
     return {
+        router,
         text: () => rendered.container.textContent ?? '',
         location: () => [router.state.location.pathname, router.state.location.search],
     };
@@ -109,4 +111,23 @@ test('Save creates the card without its blank rows and opens it in the book', as
     const [input] = addContact.mutateAsync.mock.calls[0] ?? [];
     expect(input).toMatchObject({ firstName: '', lastName: 'Lovelace', email: [], phone: [], labels: [] });
     expect(page.location()).toEqual(['/book/all', { contactId: 'c-new' }]);
+});
+
+test('a second Enter while the saved contact opens creates no second contact', async () => {
+    const page = await open();
+    const leaving = Promise.withResolvers<void>();
+    const navigate = page.router.navigate;
+    const held = spyOn(page.router, 'navigate').mockImplementation(async (options) => {
+        await leaving.promise;
+        return navigate(options);
+    });
+    await type(field('First name'), 'Fenna');
+
+    await act(async () => pressEnter(field('First name')));
+    await act(async () => pressEnter(field('First name')));
+    expect(addContact.mutateAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => leaving.resolve());
+    expect(page.location()).toEqual(['/book/all', { contactId: 'c-new' }]);
+    held.mockRestore();
 });

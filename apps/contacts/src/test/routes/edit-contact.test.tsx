@@ -1,9 +1,10 @@
 // Two clients on one contact, through the real route and hooks against a server stub that judges etags as the API does.
 // Edit contact keeps what was typed and follows the rest. A sync moves only the fields nobody touched and can't let
 // typed edits overwrite a change unseen. A refused Save keeps the form, and the next one sends the new etag.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { Contact, UpdateContactInput } from '@workspace/lib/types/contact';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
@@ -114,7 +115,11 @@ async function open(url = '/edit/book/all?contactId=c1') {
     );
     unmount = rendered.unmount;
     await settle();
-    return { text: () => rendered.container.textContent ?? '', pathname: () => router.state.location.pathname };
+    return {
+        router,
+        text: () => rendered.container.textContent ?? '',
+        pathname: () => router.state.location.pathname,
+    };
 }
 
 function field(label: string): HTMLInputElement | HTMLTextAreaElement {
@@ -172,6 +177,28 @@ test('a refused Save keeps what was typed and follows the rest, and the next Sav
     expect(server.writes).toEqual(['v1', 'v2']);
     expect(server.contact).toMatchObject({ notes: 'Met at the conference', company: 'Analytical Engines' });
     expect(page.pathname()).toBe('/book/all');
+});
+
+test('a second Enter while the saved contact opens sends no second write', async () => {
+    const page = await open();
+    const leaving = Promise.withResolvers<void>();
+    const navigate = page.router.navigate;
+    const held = spyOn(page.router, 'navigate').mockImplementation(async (options) => {
+        await leaving.promise;
+        return navigate(options);
+    });
+    await type(field('Company'), 'Analytical Engines');
+
+    await act(async () => pressEnter(field('Company')));
+    await settle();
+    await act(async () => pressEnter(field('Company')));
+    await settle();
+    expect(server.writes).toEqual(['v1']);
+    expect(toasts).toEqual([]);
+
+    await act(async () => leaving.resolve());
+    expect(page.pathname()).toBe('/book/all');
+    held.mockRestore();
 });
 
 test('a sync moves only the fields nobody touched, offers no way to lose the edits, and a Save over it is refused', async () => {

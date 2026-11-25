@@ -1,6 +1,7 @@
 // The composer's state for one draft and its auto-save. A save fires a short while after the fields
-// drift from what the server has, and once more when the composer closes. The prefill of a reply or
-// forward counts as saved, so a draft only reaches Drafts once the user changes something.
+// drift from what the server has, and once more when the composer closes; a tab closed before that
+// asks first. The prefill of a reply or forward counts as saved, so a draft only reaches Drafts once
+// the user changes something.
 
 import { AppError, rethrowUntoasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
@@ -89,7 +90,7 @@ export function useDraft({
         while (inFlightRef.current) await inFlightRef.current.catch(() => {});
         if (disabledRef.current) return;
         const { state: s, user: u, onSave: cb } = latestRef.current;
-        if (!isSaveable(s.fields) || !isDirty(s)) return;
+        if (!hasUnsavedEdit(s)) return;
         const promise = cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields));
         inFlightRef.current = promise;
         try {
@@ -120,6 +121,15 @@ export function useDraft({
             latestRef.current.onDraftIdAssigned = undefined;
             runSave().catch(rethrowUntoasted);
         };
+    }, []);
+
+    // A closed tab runs no closing save, so the browser asks while an edit has not reached the server.
+    useEffect(() => {
+        const ask = (event: BeforeUnloadEvent) => {
+            if (hasUnsavedEdit(latestRef.current.state)) event.preventDefault();
+        };
+        window.addEventListener('beforeunload', ask);
+        return () => window.removeEventListener('beforeunload', ask);
     }, []);
 
     // Once the editor has parsed the seeded body and emitted its canonical HTML/text, snap
@@ -259,6 +269,11 @@ function initFields(
 // A state whose fields the server has, or that the prefill seeded: nothing in it is an edit yet.
 function savedState(fields: DraftFields): DraftState {
     return { fields, lastSavedFingerprint: fingerprintFields(fields) };
+}
+
+// What a save would send: an edit the server hasn't got, to a draft with something in it.
+function hasUnsavedEdit(state: DraftState): boolean {
+    return isSaveable(state.fields) && isDirty(state);
 }
 
 function isDirty(state: DraftState): boolean {

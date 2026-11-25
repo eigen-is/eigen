@@ -17,7 +17,7 @@ function NewContactRoute() {
 
     const handleSave = async (data: CreateContactInput) => {
         const contactId = await addContactMutation.mutateAsync(data);
-        navigate({
+        await navigate({
             to: '/$filterType/$filterId',
             params: { filterType: 'book', filterId: 'all' },
             search: { contactId },
