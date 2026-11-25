@@ -7,7 +7,7 @@ tags: [mail, signature, settings, compose]
 related: [mail/get-started]
 crossSections: [account]
 order: 120
-updated: 2026-06-08
+updated: 2026-11-25
 ---
 
 A signature is a short block of text added to the bottom of your emails, often your name, role, and contact details. You set it up once in your account settings, and Mail adds it to your messages for you. This page shows you how.
@@ -22,7 +22,7 @@ Open [**Mail**](/space/email) in Space. You land on the **Signature** section.
 
 1. Click in the box under **Signature** and type your signature.
 2. Select text to reveal the formatting toolbar, then use it to add **Bold** or **Italic** text, a **Bullet list**, a **Numbered list**, a **Quote**, or a **Link**.
-3. Click **Save**. The button stays grayed out until you have made a change, and shows **Saving...** while it saves.
+3. Click **Save**. The button stays grayed out until you have made a change. A message says when the signature is saved.
 
 That is it. Your signature is ready, and Mail uses it from now on.
 
