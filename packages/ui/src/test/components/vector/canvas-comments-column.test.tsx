@@ -1,0 +1,407 @@
+// A canvas app's comments open in one column beside the canvas: the list at ?panel=comments, 320 wide, and a thread at
+// ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll kept. The toolbar's toggle pushes,
+// close goes back on that push, and X and Esc close the whole column from a thread too. A ?chat= landing opens at once
+// at 400 and loads; one that names nothing lands on the list, a deleted one opens as deleted. The editor beside it never
+// remounts, on a desktop or a phone, and the find bar keeps clear of the column.
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+import { QueryClient } from '@tanstack/react-query';
+import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { DocSearchController } from '@workspace/lib/types/doc-search';
+import { drivePath } from '../../drive-path';
+import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
+
+installHappyDom();
+
+const Y = await import('yjs');
+const { WebsocketProvider } = await import('y-websocket');
+const { act, createElement, useEffect, useRef } = await import('react');
+const router = await import('@tanstack/react-router');
+const { QueryClientProvider } = await import('@tanstack/react-query');
+const realCollab = await import('@workspace/lib/collab');
+const realAuth = { ...(await import('@workspace/lib/auth')) };
+const realThread = { ...(await import('../../../components/comments/comment-thread')) };
+const realGuard = { ...(await import('../../../components/layout/app/unsynced-edits-guard')) };
+
+// What the thread was last drawn with: its chat, and whether its reply box takes the focus.
+const thread: { chatName?: string; autoFocus?: boolean } = {};
+
+let doc = new Y.Doc();
+let provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+// A synced canvas, with no server behind it.
+mock.module('@workspace/lib/collab', () => ({
+    ...realCollab,
+    useCollabDoc: () => {
+        const docRef = useRef(doc);
+        return {
+            doc,
+            docRef,
+            provider,
+            undoManager: null,
+            synced: true,
+            offline: false,
+            loaded: true,
+            storageUnavailable: false,
+            storageGone: false,
+            unsyncedEdits: false,
+        };
+    },
+}));
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: { email: 'me@example.com' } }) }));
+// The thread's chat room fetches; only what the column hands it is under test here.
+mock.module('../../../components/comments/comment-thread', () => ({
+    CommentThread: (props: { chatName: string; autoFocus?: boolean }) => {
+        thread.chatName = props.chatName;
+        thread.autoFocus = props.autoFocus;
+        return createElement('div', { 'data-testid': 'thread' }, props.chatName);
+    },
+}));
+// The guard blocks a leave with unsynced edits, which this canvas never has.
+mock.module('../../../components/layout/app/unsynced-edits-guard', () => ({ UnsyncedEditsGuard: () => null }));
+// Every request hangs, so the comment rows and the chat folder are what the test sets.
+const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(() => new Promise<Response>(() => {}), { preconnect: fetch.preconnect }),
+);
+afterAll(() => {
+    mock.module('@workspace/lib/collab', () => realCollab);
+    mock.module('@workspace/lib/auth', () => realAuth);
+    mock.module('../../../components/comments/comment-thread', () => realThread);
+    mock.module('../../../components/layout/app/unsynced-edits-guard', () => realGuard);
+    fetchSpy.mockRestore();
+    provider.destroy();
+});
+
+const { commentKeys } = await import('@workspace/lib/chat');
+const { driveKeys, MediaResolverProvider } = await import('@workspace/lib/drive');
+const { VECTOR_STYLE_DEFAULTS } = await import('@workspace/lib/vector');
+const { CanvasDocumentShell, useCanvasCommentHost, useCanvasDoc } = await import('../../../components/vector');
+const { eigenDocEditorValidateSearch } = await import('../../../components/drive/eigendoc-config');
+const { LayoutContext } = await import('../../../components/layout/app/layout-context');
+const { PreviewProvider } = await import('../../../components/preview-provider');
+
+const path = drivePath({
+    id: 'v1',
+    ownerId: 'owner',
+    mountId: 'mount',
+    name: 'Plan.eigenvector',
+    mimeType: 'application/eigenvector',
+});
+const searchController: DocSearchController = { search: () => [], reveal: () => {}, highlightAll: () => {} };
+
+beforeEach(() => {
+    provider.destroy();
+    doc = new Y.Doc();
+    provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+    // A document-level comment, which no element anchors.
+    const card = new Y.Map<unknown>();
+    card.set('title', 'The title');
+    card.set('description', '');
+    card.set('chatName', 'thread-1.eigenchat');
+    doc.getMap('comments').set('card-1', card);
+    thread.chatName = undefined;
+    thread.autoFocus = undefined;
+    mounts = 0;
+});
+
+let unmount = async () => {};
+afterEach(() => unmount());
+
+let history = router.createMemoryHistory();
+const search = () => new URLSearchParams(history.location.search);
+const historyIndex = () => history.location.state.__TSR_index;
+
+// The editor beside the column: it counts its mounts, so a remount shows.
+let mounts = 0;
+function Editor() {
+    useEffect(() => {
+        mounts++;
+    }, []);
+    return createElement('div', { 'data-testid': 'editor' });
+}
+
+let openCard: (cardId: string) => void = () => {};
+let toggleComments: () => void = () => {};
+
+// Rows null leave the comment index unanswered, as on a landing before it loads.
+type Options = { isMobile?: boolean; rows?: CommentEntry[] | null; initialSearchTerm?: string };
+
+// The shell and its comments host under a route that reads the editor search, as the slide and vector routes do.
+async function openCanvas(entries: string[], { isMobile = false, rows = [], initialSearchTerm }: Options = {}) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    if (rows) queryClient.setQueryData(commentKeys.list('owner', 'mount', 'v1'), rows);
+    queryClient.setQueryData(driveKeys.effectiveMembers('owner', 'mount', 'v1'), []);
+    queryClient.setQueryData(driveKeys.folder('owner', 'mount', 'chats'), [
+        drivePath({ id: 'chat-1', ownerId: 'owner', mountId: 'mount', name: 'thread-1.eigenchat', mimeType: 'x' }),
+    ]);
+    function Page() {
+        const { chat, panel } = router.useSearch({ strict: false });
+        const canvas = useCanvasDoc('owner', 'mount', 'v1', VECTOR_STYLE_DEFAULTS);
+        const comments = useCanvasCommentHost({
+            ownerId: 'owner',
+            path,
+            canWrite: true,
+            mediaFolderId: null,
+            chatFolderId: 'chats',
+            panel,
+            chat,
+            doc: canvas,
+            onReveal: () => {},
+        });
+        openCard = comments.openCard;
+        toggleComments = comments.column.toggleComments;
+        return createElement(CanvasDocumentShell, {
+            doc: canvas,
+            comments,
+            path,
+            canWrite: true,
+            canEdit: false,
+            mediaFolderId: null,
+            searchController,
+            initialSearchTerm,
+            imagePickerOpen: false,
+            onImagePickerOpenChange: () => {},
+            canvasRef: { current: null },
+            toolbar: null,
+            propertiesPanel: null,
+            children: createElement(Editor),
+        });
+    }
+    const root = router.createRootRoute({ component: router.Outlet });
+    const page = router.createRoute({
+        getParentRoute: () => root,
+        path: '/',
+        validateSearch: eigenDocEditorValidateSearch,
+        component: Page,
+    });
+    history = router.createMemoryHistory({ initialEntries: entries });
+    const memory = router.createRouter({ routeTree: root.addChildren([page]), history });
+    await memory.load();
+    const layout = {
+        appName: '',
+        setAppName: () => {},
+        documentTitle: '',
+        setDocumentTitle: () => {},
+        sidebarOpen: false,
+        setSidebarOpen: () => {},
+        sidebarColumnShown: false,
+        sidebarMode: 'collapsible' as const,
+        sidebarHidden: false,
+        setSidebarHidden: () => {},
+        isMobile,
+        isTablet: false,
+    };
+    ({ unmount } = await renderInDocument(
+        createElement(
+            LayoutContext.Provider,
+            { value: layout },
+            createElement(
+                QueryClientProvider,
+                { client: queryClient },
+                createElement(MediaResolverProvider, {
+                    ownerId: 'owner',
+                    mountId: 'mount',
+                    mediaFolderId: null,
+                    chatFolderId: 'chats',
+                    children: createElement(
+                        PreviewProvider,
+                        null,
+                        createElement(router.RouterProvider, { router: memory }),
+                    ),
+                }),
+            ),
+        ),
+    ));
+    await settle();
+}
+
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+const column = () => document.querySelector<HTMLElement>('[data-slot="detail-column"] > div');
+const columnWidth = () => column()?.style.width;
+const button = (name: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[data-slot="detail-column"] button')].find(
+        (b) => b.getAttribute('aria-label') === name || b.textContent === name,
+    );
+const listRow = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-slot="detail-column"] .cursor-pointer')].find((tile) =>
+        tile.textContent?.includes('The title'),
+    );
+const click = async (element: HTMLElement | null | undefined) => {
+    if (!element) throw new Error('nothing to click');
+    await act(async () => element.click());
+    await settle();
+};
+const pressEscape = async () => {
+    await act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    await settle();
+};
+
+test("the toolbar's toggle pushes ?panel=comments, and closing goes back over that push", async () => {
+    await openCanvas(['/']);
+    await act(async () => toggleComments());
+    await settle();
+    expect(search().get('panel')).toBe('comments');
+    expect(historyIndex()).toBe(1);
+    expect(columnWidth()).toBe('320px');
+    await act(async () => toggleComments());
+    await settle();
+    expect(search().get('panel')).toBeNull();
+    expect(historyIndex()).toBe(0);
+    expect(column()).toBeNull();
+});
+
+test('a click on an anchor opens its thread at 400 straight away and writes ?chat=', async () => {
+    await openCanvas(['/']);
+    const widths: (string | undefined)[] = [];
+    const observer = new MutationObserver(() => widths.push(columnWidth()));
+    observer.observe(document.body, { subtree: true, attributes: true, childList: true });
+    await act(async () => openCard('card-1'));
+    await settle();
+    observer.disconnect();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(widths.filter((w) => w !== undefined).every((w) => w === '400px')).toBe(true);
+    expect(columnWidth()).toBe('400px');
+    expect(thread.chatName).toBe('thread-1.eigenchat');
+    expect(button('Comments')).toBeDefined();
+});
+
+test('"‹ Comments" goes back to the list by replace, with its scroll kept', async () => {
+    await openCanvas(['/', '/?panel=comments']);
+    const list = listRow()?.closest<HTMLElement>('.overflow-y-auto');
+    if (!list) throw new Error('no list scroller');
+    list.scrollTop = 120;
+    await click(listRow());
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(columnWidth()).toBe('400px');
+    expect(historyIndex()).toBe(1);
+    // Under the thread the list keeps the list's width, so its rows don't wrap again.
+    expect(list.classList.contains('invisible')).toBe(true);
+    expect(list.style.right).toBe('80px');
+    await click(button('Comments'));
+    expect(search().get('chat')).toBeNull();
+    expect(search().get('panel')).toBe('comments');
+    expect(historyIndex()).toBe(1);
+    expect(columnWidth()).toBe('320px');
+    const after = listRow()?.closest<HTMLElement>('.overflow-y-auto');
+    expect(after).toBe(list);
+    expect(after?.scrollTop).toBe(120);
+    expect(after?.classList.contains('invisible')).toBe(false);
+});
+
+test('X on a thread closes the whole column, back over the toggle that opened it', async () => {
+    await openCanvas(['/']);
+    await act(async () => toggleComments());
+    await settle();
+    await click(listRow());
+    await click(button('Close'));
+    expect(search().get('chat')).toBeNull();
+    expect(search().get('panel')).toBeNull();
+    expect(historyIndex()).toBe(0);
+    expect(column()).toBeNull();
+});
+
+test('Esc on a thread closes the whole column', async () => {
+    await openCanvas(['/', '/?panel=comments&chat=thread-1.eigenchat']);
+    await pressEscape();
+    expect(search().get('chat')).toBeNull();
+    expect(search().get('panel')).toBeNull();
+    // A link is no push of ours, so the close replaces it.
+    expect(historyIndex()).toBe(1);
+    expect(column()).toBeNull();
+});
+
+test('a ?chat= landing opens at 400 with a loader until the cards sync', async () => {
+    // The comment rows have not come yet, so the lifecycle waits.
+    await openCanvas(['/?chat=thread-1.eigenchat'], { rows: null });
+    expect(columnWidth()).toBe('400px');
+    expect(document.querySelector('[data-slot="detail-column"] [aria-label="Loading"]')).not.toBeNull();
+});
+
+test('a ?chat= that names no comment lands on the list by replace', async () => {
+    await openCanvas(['/', '/?chat=unknown.eigenchat']);
+    expect(search().get('chat')).toBeNull();
+    expect(search().get('panel')).toBe('comments');
+    expect(historyIndex()).toBe(1);
+    expect(columnWidth()).toBe('320px');
+});
+
+test("a deleted comment's ?chat= opens it as deleted", async () => {
+    doc.getMap('comments').delete('card-1');
+    const row: CommentEntry = {
+        chatName: 'thread-1.eigenchat',
+        status: 'open',
+        resolvedBy: null,
+        resolvedAt: null,
+        lastAuthorEmail: null,
+        lastActivityAt: null,
+        messageCount: 0,
+        createdAt: new Date('2026-11-01T09:00:00Z'),
+        assignee: null,
+        title: 'Gone',
+    };
+    await openCanvas(['/?chat=thread-1.eigenchat'], { rows: [row] });
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(columnWidth()).toBe('400px');
+    expect(column()?.textContent).toContain('This comment was deleted');
+});
+
+test('a click opens the thread with its reply box focused, a landing does not', async () => {
+    await openCanvas(['/?chat=thread-1.eigenchat']);
+    expect(thread.autoFocus).toBe(false);
+    await click(button('Comments'));
+    await click(listRow());
+    expect(thread.autoFocus).toBe(true);
+});
+
+test('the editor stays mounted through the list, a thread, back and close', async () => {
+    await openCanvas(['/']);
+    await act(async () => toggleComments());
+    await settle();
+    await click(listRow());
+    await click(button('Comments'));
+    await click(button('Close'));
+    expect(mounts).toBe(1);
+});
+
+test('on a phone the column covers the editor, which stays mounted', async () => {
+    await openCanvas(['/'], { isMobile: true });
+    await act(async () => toggleComments());
+    await settle();
+    const editor = document.querySelector('[data-testid="editor"]');
+    expect(editor?.closest('.hidden')).not.toBeNull();
+    // The list's bar: a lone "‹" back to the document, then its title.
+    expect(button('Back')).toBeDefined();
+    expect(button('Comments')).toBeUndefined();
+    await click(listRow());
+    expect(button('Comments')).toBeDefined();
+    await click(button('Comments'));
+    await click(button('Back'));
+    expect(column()).toBeNull();
+    expect(document.querySelector('[data-testid="editor"]')?.closest('.hidden')).toBeNull();
+    expect(mounts).toBe(1);
+});
+
+test("the find bar's inset follows the column as it grows into a thread", async () => {
+    await openCanvas(['/', '/?panel=comments'], { initialSearchTerm: 'x' });
+    const bar = () => document.querySelector<HTMLElement>('.absolute.right-4.z-10');
+    expect(bar()?.style.right).toBe('336px');
+    await click(listRow());
+    expect(bar()?.style.right).toBe('416px');
+    await click(button('Close'));
+    expect(bar()?.style.right).toBe('');
+});
+
+test("a thread's Edit opens the card's form in a dialog over the column, and Cancel goes back to the thread", async () => {
+    await openCanvas(['/?panel=comments&chat=thread-1.eigenchat']);
+    await click(button('Edit'));
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Edit comment');
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (b) => b.textContent === 'Cancel',
+    );
+    await click(cancel);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(columnWidth()).toBe('400px');
+});

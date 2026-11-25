@@ -10,6 +10,7 @@ import {
     getVectorAppUrl,
 } from '@workspace/lib/api';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
+import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
@@ -78,15 +79,17 @@ export function eigenDocSharedTitle(direction: 'by' | 'with', labelPlural?: stri
     return labelPlural ? `${labelPlural} shared ${direction} me` : `Shared ${direction} me`;
 }
 
-// Every editor route reads ?chat=, ?card= and ?q= here, so they can't drift.
+// Every editor route reads ?chat=, ?card=, ?q= and ?panel= here, so they can't drift.
 export function eigenDocEditorValidateSearch(search: Record<string, unknown>): {
     chat?: string;
     card?: string;
     q?: string;
+    panel?: DocumentPanel;
 } {
     return {
         chat: typeof search.chat === 'string' ? search.chat : undefined,
         card: typeof search.card === 'string' ? search.card : undefined,
         q: typeof search.q === 'string' ? search.q : undefined,
+        panel: search.panel === 'comments' || search.panel === 'activity' ? search.panel : undefined,
     };
 }

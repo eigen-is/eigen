@@ -1,6 +1,7 @@
 // CardDetail hands any host the parts of an opened card, with no dialog around it: the title, whether it is deleted,
 // its actions, its body, and the edit form only while the host edits. The host's Edit action opens the form and the
-// form's Cancel closes it, through the host's own editing state.
+// form's Cancel closes it, through the host's own editing state. With no card open it hands null, so a frame that
+// stays, such as a column over its list, keeps its place.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { CardDetailParts } from '../../../components/cards/card-detail';
@@ -21,16 +22,16 @@ const { PreviewProvider } = await import('../../../components/preview-provider')
 const card: CommentCard = { id: 'card-1', title: 'Audit card', description: '<p>Check the roof</p>', color: '#fde68a' };
 
 // The parts as the host last got them.
-let parts: CardDetailParts | undefined;
+let parts: CardDetailParts | null | undefined;
 
 // A host with no dialog: it lays the parts out in plain sections.
-function Host({ deleted = false }: { deleted?: boolean }) {
+function Host({ deleted = false, open = true }: { deleted?: boolean; open?: boolean }) {
     const [editing, setEditing] = useState(false);
     return createElement(
         PreviewProvider,
         null,
         createElement(CardDetail, {
-            card,
+            card: open ? card : null,
             ownerId: 'owner-1',
             mountId: 'm1',
             pathId: 'board-1',
@@ -38,8 +39,9 @@ function Host({ deleted = false }: { deleted?: boolean }) {
             isEditing: editing,
             onEditingChange: setEditing,
             onUpdate: () => {},
-            children: (handed: CardDetailParts) => {
+            children: (handed: CardDetailParts | null) => {
                 parts = handed;
+                if (!handed) return createElement('main', null, 'Frame');
                 return createElement(
                     'main',
                     null,
@@ -91,5 +93,12 @@ test('a deleted card hands the deleted state, with nothing that acts', async () 
     expect([parts?.title, parts?.deleted, parts?.editForm]).toEqual(['Audit card', true, null]);
     expect(part('body')?.textContent).toContain('This comment was deleted');
     expect(document.querySelectorAll('button').length).toBe(0);
+    await unmount();
+});
+
+test('with no card open it hands null, and the frame still renders', async () => {
+    const { unmount } = await renderInDocument(createElement(Host, { open: false }));
+    expect(parts).toBeNull();
+    expect(document.querySelector('main')?.textContent).toBe('Frame');
     await unmount();
 });

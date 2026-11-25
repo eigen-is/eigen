@@ -1,25 +1,20 @@
-// The comments and activity host a canvas app mounts, such as Vector or Slides: the card read, the panel state, the
-// lifecycle, the hover card's state, and the bookkeeping that ties a card to the element it was raised on. Apps differ
-// in how a reveal moves the view, for example by going to the element's slide first, so that step comes in as
-// `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
+// The comments and activity host a canvas app mounts, such as Vector or Slides: the card read, the comments column with
+// its lifecycle, which the route keeps in the URL, the hover card's state, and the bookkeeping that ties a card to the
+// element it was raised on. Apps differ in how a reveal moves the view, for example by going to the element's slide
+// first, so that step comes in as `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
-import {
-    useCommentCards,
-    useCommentFilter,
-    useCommentHover,
-    useCommentLifecycle,
-    useDocumentPanels,
-} from '@workspace/lib/comments';
-import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
+import type { useCommentLifecycle } from '@workspace/lib/comments';
+import { useCommentCards, useCommentFilter, useCommentHover } from '@workspace/lib/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentHover, DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
 import type { ComponentProps } from 'react';
 import { useCallback, useState } from 'react';
-import type { CommentContextMenuItem, CommentHoverCard, PanelColumn } from '../../comments';
-import { useCommentChatParam } from '../../comments';
+import type { CommentContextMenuItem, CommentHoverCard, CommentsColumn, CommentsColumnState } from '../../comments';
+import { useCommentsColumn } from '../../comments';
 import { useContextMenu } from '../../context-menu';
 import { useCanvasComments } from './use-canvas-comments';
 import type { CanvasDoc } from './use-canvas-doc';
@@ -30,15 +25,17 @@ type CanvasCommentHostArgs = {
     canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
-    // The route's ?chat=, the open thread.
+    // The route's ?panel= and ?chat=: the comments column's list and its open thread.
+    panel: DocumentPanel | undefined;
     chat: string | undefined;
     doc: CanvasDoc;
-    isMobile: boolean;
-    // Bring an element into view before its card opens.
-    onReveal: (el: VectorElement) => void;
+    // Bring an element into view as a list row opens its thread, clear of the `growPx` the column grows by over the
+    // canvas.
+    onReveal: (el: VectorElement, growPx: number) => void;
 };
 
-export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
+export type CanvasCommentHost = {
+    column: CommentsColumnState;
     assignedCount: number;
     lifecycle: ReturnType<typeof useCommentLifecycle>;
     members: EffectiveMember[];
@@ -47,6 +44,7 @@ export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
     addOpen: boolean;
     closeAdd: (open: boolean) => void;
     addCommentTo: (elementId: string) => void;
+    // An anchor's own open, such as its corner mark: the element is in view already, so nothing moves.
     openCard: (cardId: string) => void;
     handleSaveNew: (
         patch: CardFormPatch,
@@ -55,7 +53,7 @@ export type CanvasCommentHost = ReturnType<typeof useDocumentPanels> & {
     ) => Promise<void>;
     deleteCard: (cardId: string) => void;
     onCommentHover: CommentHover['report'];
-    panelProps: Omit<ComponentProps<typeof PanelColumn>, 'activePanel'>;
+    columnProps: ComponentProps<typeof CommentsColumn>;
     hoverCardProps: Omit<ComponentProps<typeof CommentHoverCard>, 'side'>;
 };
 
@@ -65,9 +63,9 @@ export function useCanvasCommentHost({
     canWrite,
     mediaFolderId,
     chatFolderId,
+    panel,
     chat,
     doc,
-    isMobile,
     onReveal,
 }: CanvasCommentHostArgs): CanvasCommentHost {
     const { user } = useAuth();
@@ -76,9 +74,7 @@ export function useCanvasCommentHost({
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
-    const panels = useDocumentPanels(isMobile);
-
-    const lifecycle = useCommentLifecycle({
+    const { lifecycle, column } = useCommentsColumn({
         ownerId,
         mountId: path.mountId,
         pathId: path.id,
@@ -86,19 +82,15 @@ export function useCanvasCommentHost({
         mediaFolderId,
         doc: doc.yjsDoc,
         activeCardIds: activeComments.ids,
-        ...useCommentChatParam(chat),
         ready: doc.synced,
+        panel,
+        chat,
+        reveal: (cardId, growPx) => {
+            const el = elementForCommentCard(doc.elements, cardId);
+            if (el) onReveal(el, growPx);
+        },
     });
-    const {
-        allComments,
-        cards: lifecycleCards,
-        createCard,
-        assignComment,
-        members,
-        assignedCount,
-        setOpenCardId,
-        openChat: openLifecycleChat,
-    } = lifecycle;
+    const { allComments, cards: lifecycleCards, createCard, assignComment, members, assignedCount } = lifecycle;
 
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -106,7 +98,7 @@ export function useCanvasCommentHost({
 
     const [addOpen, setAddOpen] = useState(false);
     // The element the pending new comment anchors to. The canvas menu's Comment row sets it. It is null for a card
-    // raised from the panel, which stays document-level.
+    // raised from the column, which stays document-level.
     const [commentAnchorId, setCommentAnchorId] = useState<string | null>(null);
 
     const addCommentTo = useCallback((elementId: string) => {
@@ -118,21 +110,6 @@ export function useCanvasCommentHost({
         setAddOpen(open);
         if (!open) setCommentAnchorId(null);
     }, []);
-
-    const openCard = useCallback(
-        (cardId: string) => {
-            const el = elementForCommentCard(doc.elements, cardId);
-            if (el) onReveal(el);
-            setOpenCardId(cardId);
-        },
-        [doc.elements, onReveal, setOpenCardId],
-    );
-
-    // A comment an activity row names opens like a tap on its card. One whose card is gone opens as deleted.
-    const openChat = useCallback(
-        (chatName: string) => openLifecycleChat(chatName, openCard),
-        [openCard, openLifecycleChat],
-    );
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
@@ -157,7 +134,7 @@ export function useCanvasCommentHost({
     );
 
     return {
-        ...panels,
+        column,
         assignedCount,
         lifecycle,
         members,
@@ -166,24 +143,20 @@ export function useCanvasCommentHost({
         addOpen,
         closeAdd,
         addCommentTo,
-        openCard,
+        openCard: lifecycle.setOpenCardId,
         handleSaveNew,
         deleteCard: doc.deleteCommentCard,
         onCommentHover: hover.report,
-        panelProps: {
-            onClose: panels.closePanels,
+        columnProps: {
+            column,
+            lifecycle,
             path,
-            cards: lifecycleCards,
-            entries: allComments,
+            canWrite,
             members,
             currentUserEmail: user?.email ?? '',
             filter: commentFilter,
             activeComments,
-            isCardDeleted: lifecycle.isCardDeleted,
             commentContextMenu,
-            // The mobile pane hides the canvas, so its element reveal would go unseen there.
-            onOpenCard: isMobile ? setOpenCardId : openCard,
-            onOpenChat: isMobile ? openLifecycleChat : openChat,
             onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
         },
         hoverCardProps: {
@@ -191,7 +164,7 @@ export function useCanvasCommentHost({
             cards: lifecycleCards,
             entries: allComments,
             isCardDeleted: lifecycle.isCardDeleted,
-            onOpenCard: openCard,
+            onOpenCard: lifecycle.setOpenCardId,
         },
     };
 }

@@ -4,6 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import {
@@ -49,6 +50,7 @@ type SlideEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    panel: DocumentPanel | undefined;
     chat: string | undefined;
     initialSearchTerm?: string;
 };
@@ -62,6 +64,7 @@ export function SlideEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    panel,
     chat,
     initialSearchTerm,
 }: SlideEditorProps) {
@@ -112,7 +115,7 @@ export function SlideEditor({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
-    // Revealing an element goes to its slide first. ⌘F and the comment pane both span the whole deck,
+    // Revealing an element goes to its slide first. ⌘F and the comments column both span the whole deck,
     // so either can land on an element the canvas is not showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
@@ -130,9 +133,9 @@ export function SlideEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
+        panel,
         chat,
         doc,
-        isMobile,
         onReveal: revealElement,
     });
     const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
@@ -371,11 +374,11 @@ export function SlideEditor({
                             className="bg-[var(--app-current-color-soft)] text-[var(--app-current-color)] hover:bg-[var(--app-current-color-soft)] hover:text-[var(--app-current-color)]"
                         />
                     }
-                    onToggleCommentPanel={comments.toggleComments}
-                    commentPanelOpen={comments.commentPanelOpen}
+                    onToggleCommentPanel={comments.column.toggleComments}
+                    commentPanelOpen={comments.column.commentPanelOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.toggleActivity}
-                    activityPanelOpen={comments.activityPanelOpen}
+                    onToggleActivityPanel={comments.column.toggleActivity}
+                    activityPanelOpen={comments.column.activityPanelOpen}
                 />
             }
             propertiesPanel={

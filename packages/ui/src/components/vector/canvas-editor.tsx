@@ -70,6 +70,7 @@ import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen, useMenuOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { useFocusInDetail } from '../../hooks/use-focus-in-detail';
 import { CursorLayer } from '../collab';
 import type { MenuSectionsProps } from '../context-menu';
 import {
@@ -156,6 +157,8 @@ export type CanvasHandle = {
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
     insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
+    // A comment's reveal: the least pan that shows the element, short of the room a column beside it grows into.
+    panIntoView: (el: VectorElement, rightInsetPx: number) => void;
     // Every element the canvas shows, on its background, as the SVG the browser draws, such as for File › Download.
     downloadDrawing: () => void;
     cut: () => void;
@@ -294,6 +297,7 @@ export function CanvasEditor({
         pinch,
         resetZoom,
         centerOn,
+        panIntoView,
         frozenRef,
         zoom,
     } = useViewport({
@@ -474,11 +478,13 @@ export function CanvasEditor({
     };
 
     // Hotkeys stand down for a text editor (ignoreInputs misses a ProseMirror contenteditable), an open dialog (Delete
-    // on its button would delete the selection) and an open menu, except undo and redo.
+    // on its button would delete the selection), the focus in a detail column beside the canvas, which has no focus
+    // trap, and an open menu, except undo and redo.
     const dialogOpen = useDialogOpen();
+    const focusInDetail = useFocusInDetail();
     const menuOpen = useMenuOpen();
     useCanvasKeyboard({
-        enabled: canEdit && !textEditing && !dialogOpen,
+        enabled: canEdit && !textEditing && !dialogOpen && !focusInDetail,
         menuOpen,
         elements: visibleElements,
         selectedIds,
@@ -869,6 +875,7 @@ export function CanvasEditor({
             const box = elementBox(el);
             centerOn(box.x + box.width / 2, box.y + box.height / 2);
         },
+        panIntoView: (el, rightInsetPx) => panIntoView(elementBox(el), rightInsetPx),
         downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
         cut: onMenuCut,
         copy: onMenuCopy,

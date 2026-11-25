@@ -1,7 +1,7 @@
-// An opened comment card in whatever frame its host gives it, such as the card dialog: its link, edit and resolve
-// actions for the host's bar, then the card's title, description, attachments and assignee with its thread below in
-// one scroll, and the edit form while the card is edited. A deleted comment gives the deleted state, with nothing that
-// acts. The host's comment lifecycle decides which state a card is in, and it does the writes this asks for.
+// An opened comment card in whatever frame its host gives it, such as the card dialog or the comments column: its
+// link, edit and resolve actions for the host's bar, then the card's title, description, attachments and assignee with
+// its thread below in one scroll, and the edit form while the card is edited. A deleted comment gives the deleted
+// state, with nothing that acts. The host's comment lifecycle decides which state a card is in, and does the writes.
 
 import { useResolveCardAttachments } from '@workspace/lib/comments';
 import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
@@ -32,11 +32,13 @@ import { CardDialogActions } from './card-dialog-actions';
 import { CardForm } from './card-form';
 
 // What the frame around the edit form gives it: the frame's own save lifecycle, which ends the edit once a save lands,
-// and an ear for whether the form changed, so the frame's closes can ask "Discard changes?".
+// an ear for whether the form changed, so the frame's closes can ask "Discard changes?", and the title a dialog of its
+// own names the form with.
 export type CardEditFrame = {
     pending: boolean;
     run: (action: DialogAction) => Promise<false | undefined>;
     onChangedChange: (changed: boolean) => void;
+    dialogTitle?: string;
 };
 
 export type CardDetailParts = {
@@ -67,8 +69,11 @@ export type CardDetailProps = {
     onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
     onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
     onDelete?: (cardId: string) => void;
-    // The frame. Nothing renders while no card is open.
-    children: (parts: CardDetailParts) => ReactNode;
+    // Whether the thread's reply box takes the focus as it shows.
+    autoFocus?: boolean;
+    // The frame, given null while no card is open, so a frame that stays, such as a column over its list, keeps its
+    // place.
+    children: (parts: CardDetailParts | null) => ReactNode;
 };
 
 export function CardDetail({
@@ -88,6 +93,7 @@ export function CardDetail({
     onResolve,
     onAssign,
     onDelete,
+    autoFocus,
     children,
 }: CardDetailProps) {
     const { mediaFolderId } = useMediaResolver();
@@ -105,7 +111,7 @@ export function CardDetail({
         return children({ title, deleted, actions: null, body: <DeletedComment title={title} />, editForm: null });
     }
 
-    if (!card) return null;
+    if (!card) return children(null);
 
     // A thread without an index row reads as open and unassigned, as the comment filter reads it. Its first message or
     // assignment creates the row on the server.
@@ -189,10 +195,11 @@ export function CardDetail({
     const canEdit = !!onUpdate && canWrite;
     const editForm =
         canEdit && isEditing
-            ? ({ pending, run, onChangedChange }: CardEditFrame) => (
+            ? ({ pending, run, onChangedChange, dialogTitle }: CardEditFrame) => (
                   <CardForm
                       key={card.id}
                       mode="edit"
+                      dialogTitle={dialogTitle}
                       initialTitle={card.title}
                       initialDescription={card.description}
                       initialColor={card.color}
@@ -251,7 +258,16 @@ export function CardDetail({
 
     let body: ReactNode;
     if (chatName) {
-        body = <CommentThread ownerId={ownerId} mountId={mountId} pathId={pathId} chatName={chatName} lead={content} />;
+        body = (
+            <CommentThread
+                ownerId={ownerId}
+                mountId={mountId}
+                pathId={pathId}
+                chatName={chatName}
+                lead={content}
+                autoFocus={autoFocus}
+            />
+        );
     } else {
         body = (
             <div className="min-h-0 flex-1 overflow-y-auto">

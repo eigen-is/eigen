@@ -29,8 +29,10 @@ export function CardDialog({ open, onOpenChange, ...detail }: CardDialogProps) {
 
     return (
         <CardDetail {...detail}>
-            {({ title, deleted, actions, body, editForm }) =>
-                deleted ? (
+            {(parts) => {
+                if (!parts) return null;
+                const { title, deleted, actions, body, editForm } = parts;
+                return deleted ? (
                     <Dialog open={open} onOpenChange={handleOpenChange}>
                         <DialogContent size="sm" aria-describedby={undefined}>
                             <DialogTitle className="sr-only">Deleted comment</DialogTitle>
@@ -62,8 +64,8 @@ export function CardDialog({ open, onOpenChange, ...detail }: CardDialogProps) {
                             body
                         )}
                     </CardDialogFrame>
-                )
-            }
+                );
+            }}
         </CardDetail>
     );
 }

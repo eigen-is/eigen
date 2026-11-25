@@ -30,6 +30,18 @@ const COMMIT_DELAY_MS = 120;
 const same = (a: CanvasViewport, b: CanvasViewport) =>
     a.zoom === b.zoom && a.scrollX === b.scrollX && a.scrollY === b.scrollY;
 
+// A revealed box keeps this much room from the container's edge, so its corner mark and handles show too.
+const REVEAL_MARGIN_PX = 24;
+
+// How far a span of screen px at `start` must move to sit inside [margin, end - margin], 0 when it already does. A
+// span too long for the room keeps its start in view.
+const shortfall = (start: number, size: number, end: number) => {
+    const low = REVEAL_MARGIN_PX - start;
+    if (low > 0) return low;
+    const high = end - REVEAL_MARGIN_PX - (start + size);
+    return high < 0 ? Math.max(high, low) : 0;
+};
+
 // Zoom to `nextZoom`, keeping the scene point under the container-relative (px, py) fixed.
 const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): CanvasViewport => ({
     zoom: nextZoom,
@@ -172,7 +184,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // Opening view: the scene origin at the container center (infinite), or the frame letterboxed
     // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan, and on every
     // change of the frame's size). Waits for a real size: a mobile comment deep link mounts the canvas
-    // inside a hidden wrapper, which measures 0 until the pane closes. Frame mode keeps observing — a
+    // inside a hidden wrapper, which measures 0 until the column closes. Frame mode keeps observing — a
     // letterboxed page must stay letterboxed across a resize; infinite mode centers once and disconnects.
     useLayoutEffect(() => {
         const el = containerRef.current;
@@ -269,6 +281,22 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         [containerExtent, settle, set],
     );
 
+    // Pan the least distance that brings a scene box into the container, short of `rightInsetPx` at its right edge,
+    // such as the room a column beside the canvas is about to grow into (a comment's reveal). A box already in view
+    // stays put, and on a bounded page this settles back to the fit.
+    const panIntoView = useCallback(
+        (box: Box, rightInsetPx: number) => {
+            const { width, height } = containerExtent();
+            if (width === 0 || height === 0) return;
+            const v = viewportRef.current;
+            const dx = shortfall((box.x + v.scrollX) * v.zoom, box.width * v.zoom, width - rightInsetPx);
+            const dy = shortfall((box.y + v.scrollY) * v.zoom, box.height * v.zoom, height);
+            if (dx === 0 && dy === 0) return;
+            set(settle({ ...v, scrollX: v.scrollX + dx / v.zoom, scrollY: v.scrollY + dy / v.zoom }));
+        },
+        [containerExtent, settle, set],
+    );
+
     // Non-passive wheel: pan by default, zoom-at-cursor on ctrl/meta (trackpad pinch sends ctrl).
     // Bound once; reads the live viewport through `write` and the container rect at call time.
     useEffect(() => {
@@ -311,6 +339,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         pinch,
         resetZoom,
         centerOn,
+        panIntoView,
         frozenRef,
         zoom,
     };

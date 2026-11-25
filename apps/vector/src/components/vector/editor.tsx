@@ -3,6 +3,7 @@
 // canvas. The vector route renders it for one vector file.
 
 import { useAuth } from '@workspace/lib/auth';
+import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
@@ -31,6 +32,7 @@ type VectorEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    panel: DocumentPanel | undefined;
     chat: string | undefined;
     initialSearchTerm?: string;
 };
@@ -42,6 +44,7 @@ export function VectorEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    panel,
     chat,
     initialSearchTerm,
 }: VectorEditorProps) {
@@ -71,12 +74,21 @@ export function VectorEditor({
 
     const canvasRef = useRef<CanvasHandle | null>(null);
 
-    // A reveal, such as a ⌘F match or a comment card, selects the element and brings it to the center. The infinite
-    // canvas has no slide to go to first, but the element may sit anywhere.
+    // A ⌘F match's reveal selects the element and brings it to the center. The infinite canvas has no slide to go to
+    // first, but the element may sit anywhere.
     const revealElement = useCallback(
         (el: VectorElement) => {
             setSelectedIds([el.id]);
             canvasRef.current?.centerOn(el);
+        },
+        [setSelectedIds],
+    );
+    // A comment's element moves only as far as it must to clear the comments column, which grows over the canvas's
+    // right edge as a thread opens.
+    const revealCommentElement = useCallback(
+        (el: VectorElement, growPx: number) => {
+            setSelectedIds([el.id]);
+            canvasRef.current?.panIntoView(el, growPx);
         },
         [setSelectedIds],
     );
@@ -87,10 +99,10 @@ export function VectorEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
+        panel,
         chat,
         doc,
-        isMobile,
-        onReveal: revealElement,
+        onReveal: revealCommentElement,
     });
     const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 
@@ -145,11 +157,11 @@ export function VectorEditor({
                     createLabel="New vector"
                     createIcon={Diamond}
                     createType="vector"
-                    onToggleCommentPanel={comments.toggleComments}
-                    commentPanelOpen={comments.commentPanelOpen}
+                    onToggleCommentPanel={comments.column.toggleComments}
+                    commentPanelOpen={comments.column.commentPanelOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.toggleActivity}
-                    activityPanelOpen={comments.activityPanelOpen}
+                    onToggleActivityPanel={comments.column.toggleActivity}
+                    activityPanelOpen={comments.column.activityPanelOpen}
                 />
             }
             propertiesPanel={

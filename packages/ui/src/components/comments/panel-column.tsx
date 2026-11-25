@@ -1,7 +1,8 @@
-// A document's comments or activity pane, one component for every viewport: a Column whose toolbar carries the
-// title, the filter and the close button, so the panels below stay plain bodies. Column gives the back on
-// mobile and the fixed-width sibling on desktop. Mount it outside any <ColumnLayout mobileColumn="…">: a Column
-// whose id doesn't match hides itself, so a host that wraps this one silently gets no pane at all.
+// A document's comments or activity pane where the comments column hasn't come yet, such as Docs' or a sheet's, one
+// component for every viewport: a Column whose toolbar carries the title, the filter and the close button, over the
+// list it scrolls. Column gives the back on mobile and the fixed-width sibling on desktop. Mount it outside any
+// <ColumnLayout mobileColumn="…">: a Column whose id doesn't match hides itself, so a host that wraps this one silently
+// gets no pane at all.
 
 import type { useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -9,7 +10,7 @@ import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { cn } from '@workspace/ui/lib/utils';
-import { Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { useContextMenu } from '../context-menu';
 import { Column } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
@@ -39,9 +40,6 @@ type PanelColumnProps = {
     onOpenCard: (cardId: string) => void;
     // Opens an activity row's comment by its chat name, live or as deleted, such as the lifecycle's openChat.
     onOpenChat: (chatName: string) => void;
-    // A canvas host, such as slides, adds a document-level comment from the panel, anchored to no element. A host
-    // that anchors each comment to its own content, such as docs, leaves it out.
-    onAddComment?: () => void;
 };
 
 export function PanelColumn({
@@ -58,7 +56,6 @@ export function PanelColumn({
     commentContextMenu,
     onOpenCard,
     onOpenChat,
-    onAddComment,
 }: PanelColumnProps) {
     const { isMobile } = useLayout();
     const showComments = activePanel === 'comments';
@@ -74,9 +71,6 @@ export function PanelColumn({
                 <>
                     <ToolbarTitle>{showComments ? 'Comments' : 'Activity'}</ToolbarTitle>
                     <div className="ml-auto flex items-center gap-1">
-                        {showComments && onAddComment && (
-                            <TooltipButton icon={Plus} tooltipText="New comment" onClick={onAddComment} />
-                        )}
                         {showComments && (
                             <CommentFilterButton
                                 filter={filter}
@@ -90,28 +84,26 @@ export function PanelColumn({
                 </>
             }
         >
-            {showComments ? (
-                <CommentPanel
-                    cards={cards}
-                    entries={entries}
-                    activeCardIds={activeComments.ids}
-                    titlePrefixes={activeComments.titlePrefixes}
-                    isCardDeleted={isCardDeleted}
-                    pathId={path.id}
-                    currentUserEmail={currentUserEmail}
-                    filter={filter}
-                    className="w-full border-l-0"
-                    onCommentClick={onOpenCard}
-                    onCommentContextMenu={(e, card, entry) => commentContextMenu.handleContextMenu(e, { card, entry })}
-                />
-            ) : (
-                <ActivityPanel
-                    path={path}
-                    className="w-full border-l-0"
-                    onOpenCard={onOpenCard}
-                    onOpenChat={onOpenChat}
-                />
-            )}
+            <div className="h-full overflow-y-auto">
+                {showComments ? (
+                    <CommentPanel
+                        cards={cards}
+                        entries={entries}
+                        activeCardIds={activeComments.ids}
+                        titlePrefixes={activeComments.titlePrefixes}
+                        isCardDeleted={isCardDeleted}
+                        pathId={path.id}
+                        currentUserEmail={currentUserEmail}
+                        filter={filter}
+                        onCommentClick={onOpenCard}
+                        onCommentContextMenu={(e, card, entry) =>
+                            commentContextMenu.handleContextMenu(e, { card, entry })
+                        }
+                    />
+                ) : (
+                    <ActivityPanel path={path} onOpenCard={onOpenCard} onOpenChat={onOpenChat} />
+                )}
+            </div>
         </Column>
     );
 }

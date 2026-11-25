@@ -35,6 +35,8 @@ type ChatMessageInputProps = {
     onAttachClick: () => void;
     driveAttachments: readonly ChatAttachment[];
     onRemoveDriveAttachment: (attachment: ChatAttachment) => void;
+    // Off, the box never takes the focus by itself, such as in a comment thread a link opened beside a document.
+    autoFocus?: boolean;
 };
 
 export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageInputProps>(function ChatMessageInput(
@@ -50,6 +52,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         onAttachClick,
         driveAttachments,
         onRemoveDriveAttachment,
+        autoFocus = true,
     },
     ref,
 ) {
@@ -68,11 +71,12 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     }, [readOnly]);
 
     useEffect(() => {
+        if (!autoFocus) return;
         focusTextarea();
         const onFocus = () => focusTextarea();
         window.addEventListener('focus', onFocus);
         return () => window.removeEventListener('focus', onFocus);
-    }, [messageCount, focusTextarea]);
+    }, [autoFocus, messageCount, focusTextarea]);
 
     useFitHeight(textareaRef, content);
 

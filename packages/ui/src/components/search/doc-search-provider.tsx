@@ -52,6 +52,8 @@ export type DocSearchProviderProps = {
     // Where the bar floats. By default it sits at the top right of the wrapped content, and a surface passes offsets
     // to clear its own chrome, such as Docs' toolbar and side panel. It is merged over the default with cn.
     barClassName?: string;
+    // An offset that follows a live width, which a class can't, such as the right inset that clears an open column.
+    barStyle?: React.CSSProperties;
     // Tells the host when the bar opens or closes. Slides uses it to know which layer an Escape closes, and an app
     // may use it to close its phone pane, so a find session never opens inside a hidden editor. The bar closes
     // itself.
@@ -73,6 +75,7 @@ export function DocSearchProvider({
     initialSearchTerm,
     children,
     barClassName,
+    barStyle,
     onOpenChange,
     onUndo,
     onRedo,
@@ -404,7 +407,7 @@ export function DocSearchProvider({
                     30, never share a stacking context with the bar. */}
                 <div className="isolate flex-1 min-h-0">{children}</div>
                 {open && (
-                    <div className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)}>
+                    <div className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)} style={barStyle}>
                         <FindReplaceBar
                             query={query}
                             options={options}

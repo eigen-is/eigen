@@ -1,7 +1,7 @@
 // The vector editor decides who edits the scene: a writer on a wide screen edits, a phone only views, and
 // a reader never edits. Adding an image needs the media folder and a comment needs the chat folder. A
-// reveal selects the element and centers the infinite canvas on it, and the empty selection's panel sets
-// the scene's background.
+// ⌘F reveal selects the element and centers the infinite canvas on it, a comment's reveal moves it only
+// clear of the comments column, and the empty selection's panel sets the scene's background.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { VectorElement } from '@workspace/lib/vector';
 import { drivePath } from '@workspace/ui/test/drive-path';
@@ -13,10 +13,18 @@ installHappyDom();
 
 // The props each part of the shell was last rendered with, read by the tests below.
 type Props = Record<string, unknown>;
-const seen: { shell?: Props; toolbar?: Props; canvas?: Props; panel?: Props; comments?: Props; docArgs?: unknown[] } =
-    {};
+const seen: {
+    shell?: Props;
+    toolbar?: Props;
+    canvas?: Props;
+    panel?: Props;
+    comments?: Props;
+    search?: Props;
+    docArgs?: unknown[];
+} = {};
 const layout = { isMobile: false };
 const centerOn = mock((_el: VectorElement) => {});
+const panIntoView = mock((_el: VectorElement, _rightInsetPx: number) => {});
 const updateMeta = mock((_meta: { background: string | null }) => {});
 // One object per hook, so the editor's memos and effects see stable values.
 const doc = {
@@ -33,11 +41,13 @@ const doc = {
     updateMeta,
 };
 const comments = {
-    toggleComments: () => {},
-    commentPanelOpen: false,
+    column: {
+        toggleComments: () => {},
+        commentPanelOpen: false,
+        toggleActivity: () => {},
+        activityPanelOpen: false,
+    },
     assignedCount: 0,
-    toggleActivity: () => {},
-    activityPanelOpen: false,
     openCard: () => {},
     lifecycle: { cards: [] },
     addCommentTo: () => {},
@@ -62,7 +72,10 @@ mock.module('@workspace/ui/components/vector', () => ({
         seen.comments = props;
         return comments;
     },
-    useCanvasDocSearch: () => search,
+    useCanvasDocSearch: (props: Props) => {
+        seen.search = props;
+        return search;
+    },
     CanvasDocumentShell: (props: Props & { toolbar: ReactNode; propertiesPanel: ReactNode; children: ReactNode }) => {
         seen.shell = props;
         return (
@@ -79,7 +92,7 @@ mock.module('@workspace/ui/components/vector', () => ({
     },
     CanvasEditor: (props: Props & { canvasRef: { current: unknown } }) => {
         seen.canvas = props;
-        props.canvasRef.current = { centerOn };
+        props.canvasRef.current = { centerOn, panIntoView };
         return null;
     },
     CanvasPropertiesPanel: (props: Props & { emptySection: ReactNode }) => {
@@ -120,6 +133,7 @@ afterEach(() => unmount());
 beforeEach(() => {
     layout.isMobile = false;
     centerOn.mockClear();
+    panIntoView.mockClear();
     updateMeta.mockClear();
 });
 
@@ -127,6 +141,7 @@ async function renderEditor(options: {
     canWrite?: boolean;
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
+    panel?: 'comments' | 'activity';
     chat?: string;
 }) {
     ({ unmount } = await renderInDocument(
@@ -137,6 +152,7 @@ async function renderEditor(options: {
             mediaFolderId: options.mediaFolderId === undefined ? 'media-1' : options.mediaFolderId,
             chatFolderId: options.chatFolderId === undefined ? 'chat-1' : options.chatFolderId,
             onAccessDialogOpen: () => {},
+            panel: options.panel,
             chat: options.chat,
         }),
     ));
@@ -179,9 +195,9 @@ test('an image is offered only with a media folder, and opens the picker', async
     expect(seen.shell?.imagePickerOpen).toBe(true);
 });
 
-test("the route's ?chat= reaches the comments host as the open thread", async () => {
-    await renderEditor({ chat: 'thread-1.eigenchat' });
-    expect(seen.comments?.chat).toBe('thread-1.eigenchat');
+test("the route's ?panel= and ?chat= reach the comments host as its list and open thread", async () => {
+    await renderEditor({ panel: 'activity', chat: 'thread-1.eigenchat' });
+    expect(seen.comments).toMatchObject({ panel: 'activity', chat: 'thread-1.eigenchat' });
 });
 
 test('a comment needs the chat folder', async () => {
@@ -196,15 +212,26 @@ test('a comment needs the chat folder', async () => {
     expect(seen.toolbar?.onAddComment).toBe(comments.addCommentTo);
 });
 
-test('a reveal selects the element and centers the canvas on it', async () => {
+test('a ⌘F reveal selects the element and centers the canvas on it', async () => {
     await renderEditor({});
-    const reveal = seen.comments?.onReveal;
-    if (typeof reveal !== 'function') throw new Error('the comments host gets no reveal');
+    const reveal = seen.search?.onReveal;
+    if (typeof reveal !== 'function') throw new Error('the find bar gets no reveal');
     const element = { id: 'shape-7' };
     await act(async () => reveal(element));
     expect(seen.canvas?.selectedIds).toEqual(['shape-7']);
     expect(seen.toolbar?.selectedIds).toEqual(['shape-7']);
     expect(centerOn).toHaveBeenCalledWith(element);
+});
+
+test("a comment's reveal selects the element and pans it only clear of the column", async () => {
+    await renderEditor({});
+    const reveal = seen.comments?.onReveal;
+    if (typeof reveal !== 'function') throw new Error('the comments host gets no reveal');
+    const element = { id: 'shape-7' };
+    await act(async () => reveal(element, 80));
+    expect(seen.canvas?.selectedIds).toEqual(['shape-7']);
+    expect(panIntoView).toHaveBeenCalledWith(element, 80);
+    expect(centerOn).not.toHaveBeenCalled();
 });
 
 test("the empty selection's Background sets the scene's color, and None clears it", async () => {

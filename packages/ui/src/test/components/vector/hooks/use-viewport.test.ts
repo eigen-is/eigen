@@ -156,4 +156,20 @@ describe('useViewport on the infinite canvas', () => {
         expect(h.state.viewportRef.current).toEqual({ zoom, scrollX: 800 / zoom - 300, scrollY: 500 / zoom + 200 });
         h.unmount();
     });
+
+    // The opening view puts the scene origin at the container center, 800 by 500, so a box's screen x is 800 more.
+    test('panIntoView leaves a box alone that is clear of the inset', () => {
+        const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
+        act(() => h.state.panIntoView({ x: 100, y: 0, width: 100, height: 100, angle: 0 }, 80));
+        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 800, scrollY: 500 });
+        h.unmount();
+    });
+
+    test('panIntoView moves a box under the inset by the least distance that clears it', () => {
+        const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
+        // Its right edge at 1550, past the 1520 the inset leaves and the 24px margin before it.
+        act(() => h.state.panIntoView({ x: 650, y: 0, width: 100, height: 100, angle: 0 }, 80));
+        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 746, scrollY: 500 });
+        h.unmount();
+    });
 });

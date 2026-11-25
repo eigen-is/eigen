@@ -122,6 +122,7 @@ function handle(log: string[] = []) {
         insertDrivePaths: async () => {},
         insertChart: () => {},
         centerOn: () => {},
+        panIntoView: () => {},
         downloadDrawing: () => {},
         cut: () => log.push('cut'),
         copy: () => log.push('copy'),
