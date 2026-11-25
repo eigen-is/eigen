@@ -219,16 +219,18 @@ test('a send with neither a subject nor a message says so under Subject and focu
     expect(sendDraft).not.toHaveBeenCalled();
 });
 
-test('Cmd+Enter sends, and does nothing while a dialog is open over the draft', async () => {
+test('Cmd+Enter sends, and does nothing while a dialog or an alert dialog is open over the draft', async () => {
     const sendDraft = await openNewMail('bob@test.eigen.is');
     await type('subject', 'Lunch');
-    const dialog = document.createElement('div');
-    dialog.setAttribute('role', 'dialog');
-    await act(async () => document.body.append(dialog));
-    await pressModEnter();
-    expect(sendDraft).not.toHaveBeenCalled();
+    for (const role of ['dialog', 'alertdialog']) {
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', role);
+        await act(async () => document.body.append(dialog));
+        await pressModEnter();
+        expect(sendDraft).not.toHaveBeenCalled();
+        await act(async () => dialog.remove());
+    }
 
-    await act(async () => dialog.remove());
     await pressModEnter();
     expect(sendDraft).toHaveBeenCalledTimes(1);
 });
