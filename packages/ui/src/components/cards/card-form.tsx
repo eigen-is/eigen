@@ -1,8 +1,10 @@
 // The form that adds or edits a card, a comment's or a board's: title, description, attachments, color and
 // assignee. It only stages them; the host saves them on submit and uploads the attachments, and Cancel touches
-// nothing. Editing can offer Delete, which the host confirms.
+// nothing. It is on FormShell's keys, so Cmd+Enter saves from any field, and Save with no title says so under the
+// field. It tells its host whether anything changed, so the host's Esc can ask before it drops the edit. Editing can
+// offer Delete, which the host confirms.
 
-import { wasToasted } from '@workspace/lib/api-error';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
@@ -10,11 +12,13 @@ import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
+import { FieldError } from '@workspace/ui/components/field';
+import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Paperclip, Trash2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
@@ -44,6 +48,8 @@ type CardFormProps = {
         assignee?: string | null,
     ) => void | Promise<void>;
     onCancel: () => void;
+    // Whether the fields differ from what the form opened with. Off while a save runs, which decides the close itself.
+    onChangedChange?: (changed: boolean) => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
     // A title above the form. A host that has its own, such as the card dialog, omits it.
@@ -65,6 +71,7 @@ export function CardForm({
     initialAssignee = null,
     onSave,
     onCancel,
+    onChangedChange,
     onDelete,
     dialogTitle,
     placeholderTitle = 'Enter title',
@@ -77,22 +84,35 @@ export function CardForm({
     const [assignee, setAssignee] = useState<string | null>(initialAssignee);
     const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [pending, setPending] = useState(false);
     // The editor rewrites a plain-text description as HTML as it loads. A save with no edits compares against that
     // form, or it would write the rewrite back.
-    const canonicalInitialDescription = useRef(initialDescription);
+    const [loadedDescription, setLoadedDescription] = useState(initialDescription);
+    const descriptionLabelId = useId();
+
+    // Edit mode seeds the drafts with the card's own attachments, so comparing by identity finds any change.
+    const draftsChanged =
+        drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
+    const changed =
+        title !== initialTitle ||
+        description !== loadedDescription ||
+        color !== initialColor ||
+        assignee !== initialAssignee ||
+        draftsChanged;
+    const reportsChanged = changed && !pending;
+    useEffect(() => {
+        onChangedChange?.(reportsChanged);
+        return () => onChangedChange?.(false);
+    }, [reportsChanged, onChangedChange]);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
     const { targetProps } = useFileDropTarget(stageFiles, allowAttachments);
     const { onPaste } = useFilePasteTarget(stageFiles, allowAttachments);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!title.trim()) return;
+    const handleSubmit = async () => {
+        if (pending) return;
+        if (!title.trim()) return false;
         const patch: CardFormPatch = {};
-        // Edit mode seeds the drafts with the card's own attachments, so comparing by identity finds any change.
-        const draftsChanged =
-            drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
         let attachments: CardAttachmentDraft[] | undefined;
         let assigneeArg: string | null | undefined;
         if (mode === 'create') {
@@ -103,139 +123,162 @@ export function CardForm({
             assigneeArg = assignee ?? undefined;
         } else {
             if (title !== initialTitle) patch.title = title;
-            if (description !== canonicalInitialDescription.current) patch.description = description;
+            if (description !== loadedDescription) patch.description = description;
             if (color !== initialColor) patch.color = color;
             if (draftsChanged) attachments = drafts;
             assigneeArg = assignee !== initialAssignee ? assignee : undefined;
         }
-        setIsSubmitting(true);
+        setPending(true);
         try {
             await onSave(patch, attachments, assigneeArg);
         } catch (error) {
             // A mutation's failure is toasted already, so the form stays open for a retry. Anything else, such as a
             // Yjs write, has no toast and must surface.
-            if (!wasToasted(error)) throw error;
+            rethrowUntoasted(error);
         } finally {
-            setIsSubmitting(false);
+            setPending(false);
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} onPaste={onPaste} className="flex min-h-0 flex-1 flex-col" {...targetProps}>
-            {dialogTitle && (
-                <DialogHeader>
-                    <DialogTitle>{dialogTitle}</DialogTitle>
-                    {/* Radix requires a description on every DialogContent; the fields carry their own labels. */}
-                    <DialogDescription className="sr-only">
-                        Set the card's title, description and color.
-                    </DialogDescription>
-                </DialogHeader>
-            )}
-            {/* Fields scroll so the footer stays pinned on short viewports. */}
-            <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto py-4">
-                <div className="grid gap-2">
-                    <Label htmlFor="card-title">Title</Label>
-                    <Input
-                        id="card-title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder={placeholderTitle}
-                        autoFocus
-                        required
-                    />
-                </div>
-                <div className="grid gap-2">
-                    <Label>Description</Label>
-                    <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
-                        <LightEditor
-                            content={initialDescription}
-                            onChange={setDescription}
-                            onReady={({ html }) => {
-                                canonicalInitialDescription.current = html;
-                                setDescription(html);
-                            }}
-                            taskList
-                            placeholder={placeholderDescription}
-                            containerClassName="relative flex flex-col"
-                            className="min-h-[120px]"
-                        />
-                    </div>
-                </div>
-                <AttachmentDraftChips
-                    items={drafts}
-                    onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
-                />
-                {/* min-w-0 keeps this row from widening the grid past the dialog, and on a phone the assignee wraps
-                    to its own line. */}
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
-                    <div className="flex shrink-0 items-center gap-2">
-                        <Label>Color</Label>
-                        <ColorPicker
-                            value={color}
-                            onChange={setColor}
-                            colors={EIGEN_STICKIES_COLORS}
-                            columns={EIGEN_STICKIES_COLORS[0].length}
-                            showReset={false}
-                        />
-                    </div>
-                    {members && currentUserEmail && (
-                        <div className="flex min-w-0 items-center gap-2">
-                            <Label>Assignee</Label>
-                            <AssigneePicker
-                                value={assignee}
-                                onChange={setAssignee}
-                                members={members}
-                                currentUserEmail={currentUserEmail}
-                            >
-                                <button
-                                    type="button"
-                                    className="flex w-fit min-w-0 max-w-48 items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm hover:bg-muted"
-                                >
-                                    {assignee ? (
-                                        <AssigneeChip email={assignee} />
-                                    ) : (
-                                        <span className="text-muted-foreground">Unassigned</span>
-                                    )}
-                                </button>
-                            </AssigneePicker>
+        <FormShell onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            {/* The drop and paste targets take files anywhere on the form. */}
+            <div onPaste={onPaste} className="flex min-h-0 flex-1 flex-col" {...targetProps}>
+                {dialogTitle && (
+                    <DialogHeader>
+                        <DialogTitle>{dialogTitle}</DialogTitle>
+                        {/* Radix requires a description on every DialogContent; the fields carry their own labels. */}
+                        <DialogDescription className="sr-only">
+                            Set the card's title, description and color.
+                        </DialogDescription>
+                    </DialogHeader>
+                )}
+                {/* Fields scroll so the footer stays pinned on short viewports. */}
+                <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto py-4">
+                    <TitleField value={title} onChange={setTitle} placeholder={placeholderTitle} />
+                    <div className="grid gap-2">
+                        <Label id={descriptionLabelId}>Description</Label>
+                        <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
+                            <LightEditor
+                                content={initialDescription}
+                                onChange={setDescription}
+                                onReady={({ html }) => {
+                                    setLoadedDescription(html);
+                                    setDescription(html);
+                                }}
+                                labelledBy={descriptionLabelId}
+                                submitOnModEnter
+                                taskList
+                                placeholder={placeholderDescription}
+                                containerClassName="relative flex flex-col"
+                                className="min-h-[120px]"
+                            />
                         </div>
-                    )}
+                    </div>
+                    <AttachmentDraftChips
+                        items={drafts}
+                        onRemove={(i) => setDrafts((prev) => prev.filter((_, j) => j !== i))}
+                    />
+                    {/* min-w-0 keeps this row from widening the grid past the dialog, and on a phone the assignee wraps
+                        to its own line. */}
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
+                        <div className="flex shrink-0 items-center gap-2">
+                            <Label>Color</Label>
+                            <ColorPicker
+                                value={color}
+                                onChange={setColor}
+                                colors={EIGEN_STICKIES_COLORS}
+                                columns={EIGEN_STICKIES_COLORS[0].length}
+                                showReset={false}
+                            />
+                        </div>
+                        {members && currentUserEmail && (
+                            <div className="flex min-w-0 items-center gap-2">
+                                <Label>Assignee</Label>
+                                <AssigneePicker
+                                    value={assignee}
+                                    onChange={setAssignee}
+                                    members={members}
+                                    currentUserEmail={currentUserEmail}
+                                >
+                                    <button
+                                        type="button"
+                                        className="flex w-fit min-w-0 max-w-48 items-center gap-1.5 rounded-md border border-input bg-transparent px-2 py-1.5 text-sm hover:bg-muted"
+                                    >
+                                        {assignee ? (
+                                            <AssigneeChip email={assignee} />
+                                        ) : (
+                                            <span className="text-muted-foreground">Unassigned</span>
+                                        )}
+                                    </button>
+                                </AssigneePicker>
+                            </div>
+                        )}
+                    </div>
                 </div>
+                <DialogFooter
+                    start={
+                        <>
+                            {allowAttachments && (
+                                <>
+                                    <TooltipButton
+                                        icon={Paperclip}
+                                        tooltipText="Add attachment"
+                                        onClick={() => setPickerOpen(true)}
+                                        type="button"
+                                    />
+                                    <DrivePickerWithUpload
+                                        open={pickerOpen}
+                                        onOpenChange={setPickerOpen}
+                                        multiSelect
+                                        multiple
+                                        onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
+                                        onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
+                                    />
+                                </>
+                            )}
+                            {onDelete && (
+                                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} type="button" />
+                            )}
+                        </>
+                    }
+                >
+                    <Button variant="outline" onClick={onCancel} disabled={pending}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" pending={pending}>
+                        {submitLabel}
+                    </Button>
+                </DialogFooter>
             </div>
-            <DialogFooter
-                start={
-                    <>
-                        {allowAttachments && (
-                            <>
-                                <TooltipButton
-                                    icon={Paperclip}
-                                    tooltipText="Add attachment"
-                                    onClick={() => setPickerOpen(true)}
-                                    type="button"
-                                />
-                                <DrivePickerWithUpload
-                                    open={pickerOpen}
-                                    onOpenChange={setPickerOpen}
-                                    multiSelect
-                                    multiple
-                                    onPickFromDrive={(paths) => setDrafts((prev) => [...prev, ...paths])}
-                                    onPickFromDevice={(files) => setDrafts((prev) => [...prev, ...files])}
-                                />
-                            </>
-                        )}
-                        {onDelete && (
-                            <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} type="button" />
-                        )}
-                    </>
-                }
-            >
-                <Button type="button" variant="outline" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button type="submit" disabled={!title.trim() || isSubmitting}>
-                    {isSubmitting ? 'Saving...' : submitLabel}
-                </Button>
-            </DialogFooter>
-        </form>
+        </FormShell>
+    );
+}
+
+// The title a card can't do without. Once Save was pressed, an empty one says so under the field.
+function TitleField({
+    value,
+    onChange,
+    placeholder,
+}: {
+    value: string;
+    onChange: (title: string) => void;
+    placeholder: string;
+}) {
+    const id = useId();
+    const missing = useFormSubmitted() && !value.trim();
+    return (
+        <div className="grid gap-2">
+            <Label htmlFor={id}>Title</Label>
+            <Input
+                id={id}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                autoFocus
+                aria-invalid={missing || undefined}
+            />
+            {missing && <FieldError>Add a title</FieldError>}
+        </div>
     );
 }

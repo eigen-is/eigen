@@ -12,7 +12,7 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Check, RotateCcw } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { AttachmentStrip } from '../attachment/attachment-strip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
@@ -83,6 +83,8 @@ export function CardDialog({
     const attachmentSubjects = useMemo(() => subjectsOf(card?.attachments), [card?.attachments, subjectsOf]);
     // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
     const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
+    // Whether the edit form holds a change, so the frame's Esc asks before it goes back to the view.
+    const [editChanged, setEditChanged] = useState(false);
 
     const handleOpenChange = (next: boolean) => {
         if (!next) onEditingChange(false);
@@ -201,6 +203,7 @@ export function CardDialog({
                     onEditingChange(false);
                 }}
                 onCancel={() => onEditingChange(false)}
+                onChangedChange={setEditChanged}
                 onDelete={onDelete && (() => onDelete(card.id))}
             />
         ) : undefined;
@@ -265,14 +268,13 @@ export function CardDialog({
             onOpenChange={handleOpenChange}
             title={card.title}
             actions={
-                !editForm && (
-                    <CardDialogActions
-                        copyLinkUrl={copyLinkUrl}
-                        onEdit={canEdit ? () => onEditingChange(true) : undefined}
-                        {...action}
-                    />
-                )
+                <CardDialogActions
+                    copyLinkUrl={copyLinkUrl}
+                    onEdit={canEdit ? () => onEditingChange(true) : undefined}
+                    {...action}
+                />
             }
+            editing={editForm && { changed: editChanged, onCancel: () => onEditingChange(false) }}
         >
             {body}
         </CardDialogFrame>

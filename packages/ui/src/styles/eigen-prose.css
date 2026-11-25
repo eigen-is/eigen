@@ -504,6 +504,16 @@
         margin-top: 0.5em;
     }
 
+    /* LightEditor's placeholder, while the editor holds only its empty first line. It floats with no height, so the
+       caret stays where typing starts. */
+    &[data-placeholder]:has(> p:only-child > br.ProseMirror-trailingBreak:only-child)::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        pointer-events: none;
+        color: var(--color-muted-foreground);
+    }
+
     /* Links — editors use underline + cursor by default */
 
     a {

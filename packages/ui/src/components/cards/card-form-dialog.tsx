@@ -1,10 +1,12 @@
 // The dialog that adds a card, to a document as a comment or to a board's column: the card form under the host's
 // title, such as "Add comment" in docs or "Add card" on a board. It is as wide as the dialog an existing card opens
 // into, so a card looks the same being made as being read. The host saves the card; the dialog closes once that
-// resolves.
+// resolves. Esc, the X and a click outside ask "Discard changes?" once the form changed; Cancel drops it.
 
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
+import { useState } from 'react';
+import { useDiscardChanges } from '../../hooks/use-discard-changes';
 import { Dialog, DialogContent } from '../dialog';
 import { CardForm } from './card-form';
 
@@ -25,20 +27,26 @@ type CardFormDialogProps = {
 };
 
 export function CardFormDialog({ open, onOpenChange, onSave, ...rest }: CardFormDialogProps) {
+    const [changed, setChanged] = useState(false);
+    const discard = useDiscardChanges({ open, changed, onDiscard: () => onOpenChange(false) });
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                {open && (
-                    <CardForm
-                        {...rest}
-                        onSave={async (patch, attachments, assignee) => {
-                            await onSave(patch, attachments, assignee);
-                            onOpenChange(false);
-                        }}
-                        onCancel={() => onOpenChange(false)}
-                    />
-                )}
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={open} onOpenChange={discard.onOpenChange}>
+                <DialogContent>
+                    {open && (
+                        <CardForm
+                            {...rest}
+                            onSave={async (patch, attachments, assignee) => {
+                                await onSave(patch, attachments, assignee);
+                                onOpenChange(false);
+                            }}
+                            onCancel={() => onOpenChange(false)}
+                            onChangedChange={setChanged}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+            {discard.dialog}
+        </>
     );
 }
