@@ -256,7 +256,7 @@ test('a closed folder picker reads no root', async () => {
 test('New folder creates in the folder shown, and the browser moves into the new folder', async () => {
     await openFolderPicker({ defaultFolderId: 'docs' });
     await click(buttonNamed('New folder'));
-    const name = document.querySelector<HTMLInputElement>('#itemName');
+    const name = document.querySelector<HTMLInputElement>('input[placeholder="Enter folder name"]');
     if (!name) throw new Error('New folder asked for no name');
     await act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Drafts');
@@ -265,7 +265,7 @@ test('New folder creates in the folder shown, and the browser moves into the new
     await act(async () => buttonNamed('Create').click());
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(created).toEqual([{ ownerId: ME, mountId: 'default', parentId: 'docs', folderName: 'Drafts' }]);
-    expect(document.querySelector('#itemName')).toBeNull();
+    expect(document.querySelector('input[placeholder="Enter folder name"]')).toBeNull();
     expect(crumbs()).toEqual(['Drive', 'Docs', 'Drafts']);
     expect(rowNames()).toEqual([]);
     expect(await confirmed()).toEqual([{ ownerId: ME, mountId: 'default', folderId: 'made' }]);

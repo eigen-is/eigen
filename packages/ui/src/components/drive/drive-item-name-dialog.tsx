@@ -1,16 +1,17 @@
 // The small dialog that asks for one name, such as a new folder's in a Drive picker or the new name Rename gives an
-// item. It shows the folder it works in under the field. Its submit button, Create unless the caller names it, waits
-// for a name with more than spaces and hands the name on as typed. The field opens with its name selected, or the
-// start of it the caller asks for, so typing replaces it. The caller's promise decides the rest: a save closes the
-// dialog, and a failure keeps it open with the typed name, beside the mutation's toast.
+// item. It shows the folder it works in under the field. Its submit button, Create unless the caller names it, hands
+// the name on as typed; a name of only spaces, or one a sibling has already, gets its reason under the field instead.
+// The field opens with its name selected, or the start of it the caller asks for, so typing replaces it. The caller's
+// promise decides the rest: a save closes the dialog, and a failure keeps it open with the typed name.
 
-import { useBreadcrumb } from '@workspace/lib/drive';
+import { isNameTaken } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Field, FieldDescription, FieldLabel, FieldTitle } from '@workspace/ui/components/field';
+import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import type { RefObject } from 'react';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 // The word the title, the label and the placeholder use for the item.
 type ItemType = 'Folder' | 'File';
@@ -21,7 +22,8 @@ type DriveItemNameDialogProps = {
     // Rejects when the save fails, which keeps the dialog open.
     onSave: (itemName: string) => Promise<unknown>;
     type: ItemType;
-    path: DrivePath;
+    // The crumbs of the folder the item is or goes in, from the drive's root.
+    folder: readonly DrivePath[];
     title?: string;
     defaultValue?: string;
     selectionEnd?: number;
@@ -33,13 +35,12 @@ export function DriveItemNameDialog({
     onOpenChange,
     onSave,
     type,
-    path,
+    folder,
     title,
     defaultValue = '',
     selectionEnd = defaultValue.length,
     submitLabel = 'Create',
 }: DriveItemNameDialogProps) {
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
     const fieldRef = useRef<HTMLInputElement>(null);
     return (
         <FormDialog
@@ -59,7 +60,7 @@ export function DriveItemNameDialog({
                 type={type}
                 defaultValue={defaultValue}
                 submitLabel={submitLabel}
-                location={breadcrumbPaths.map((crumb) => crumb.name || 'Drive').join(' > ')}
+                location={folder.map((crumb) => crumb.name || 'Drive').join(' > ')}
                 onSave={onSave}
             />
         </FormDialog>
@@ -83,29 +84,72 @@ function ItemNameForm({
     onSave: (itemName: string) => Promise<unknown>;
 }) {
     const [itemName, setItemName] = useState(defaultValue);
+    // The server's reason for the name last sent, until the name changes.
+    const [taken, setTaken] = useState<string>();
 
     return (
         <FormDialogForm
-            canSubmit={itemName.trim() !== ''}
+            changed={itemName !== defaultValue}
             submitLabel={submitLabel}
             onSubmit={async () => {
-                await onSave(itemName);
+                if (!itemName.trim()) return false;
+                try {
+                    await onSave(itemName);
+                } catch (error) {
+                    if (!isNameTaken(error)) throw error;
+                    setTaken(error.message);
+                    return false;
+                }
             }}
         >
-            <Field>
-                <FieldLabel htmlFor="itemName">{type} name</FieldLabel>
-                <Input
-                    ref={fieldRef}
-                    id="itemName"
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    placeholder={`Enter ${type.toLowerCase()} name`}
-                />
-            </Field>
+            <NameField
+                fieldRef={fieldRef}
+                type={type}
+                value={itemName}
+                onChange={(name) => {
+                    setItemName(name);
+                    setTaken(undefined);
+                }}
+                taken={taken}
+            />
             <Field>
                 <FieldTitle>Location</FieldTitle>
                 <FieldDescription className="truncate">{location}</FieldDescription>
             </Field>
         </FormDialogForm>
+    );
+}
+
+// Inside the form, so it reads whether Save was pressed: an empty field is red only after that.
+function NameField({
+    fieldRef,
+    type,
+    value,
+    onChange,
+    taken,
+}: {
+    fieldRef: RefObject<HTMLInputElement | null>;
+    type: ItemType;
+    value: string;
+    onChange: (name: string) => void;
+    taken: string | undefined;
+}) {
+    const id = useId();
+    const errorId = useId();
+    const error = (useFormSubmitted() && !value.trim() && 'Add a name') || taken;
+    return (
+        <Field>
+            <FieldLabel htmlFor={id}>{type} name</FieldLabel>
+            <Input
+                ref={fieldRef}
+                id={id}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={`Enter ${type.toLowerCase()} name`}
+                aria-invalid={!!error || undefined}
+                aria-describedby={error ? errorId : undefined}
+            />
+            {error && <FieldError id={errorId}>{error}</FieldError>}
+        </Field>
     );
 }

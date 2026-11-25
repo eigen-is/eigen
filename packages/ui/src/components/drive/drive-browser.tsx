@@ -161,7 +161,7 @@ export function DriveBrowser({
                         openFolder(await createFolder.mutateAsync({ ownerId, mountId, parentId: folderId, folderName }))
                     }
                     type="Folder"
-                    path={currentPath}
+                    folder={breadcrumbPaths}
                 />
             )}
         </div>

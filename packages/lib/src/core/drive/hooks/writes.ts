@@ -20,7 +20,7 @@ import { invalidateItemCreated, invalidateItemsDeleted, invalidatePathRenamed, i
 import { folderContentQueryConfig } from './reads';
 
 // The server's answer to a create or rename whose name a sibling has already.
-export function isNameTaken(error: unknown): boolean {
+export function isNameTaken(error: unknown): error is AppError {
     return error instanceof AppError && error.status === 409;
 }
 
