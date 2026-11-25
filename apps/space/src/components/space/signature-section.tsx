@@ -60,7 +60,7 @@ function SignatureForm({ id, existing }: { id: string; existing?: EmailSignature
                 />
             </div>
             <div className="flex justify-end">
-                <Button type="submit" pending={pending} disabled={!isDirty}>
+                <Button type="submit" pending={pending}>
                     Save
                 </Button>
             </div>
