@@ -1,6 +1,7 @@
 // A location picker whose create or save fails stays open with the typed name, even when the server refused it: a
 // read-only folder (403) or a name it won't take (422) is fixed by picking another folder or editing the name, which
-// a closed dialog would throw away. Only a yes/no ConfirmDialog closes on a refusal (confirm-dialog.test.tsx).
+// a closed dialog would throw away. Only a yes/no ConfirmDialog closes on a refusal (confirm-dialog.test.tsx). Esc with
+// a typed name asks before it drops the name, and a picker with nothing typed closes at once.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -23,20 +24,25 @@ const { DriveLocationPicker } = await import('../../../components/drive/drive-lo
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// Opens the New folder picker and types a name, as a keystroke does.
-async function openWithName(onConfirm: () => Promise<void>) {
+async function open(mode: 'create' | 'folder', onConfirm: () => Promise<void> = async () => {}) {
     const onOpenChange = mock((_open: boolean) => {});
     ({ unmount } = await renderInDocument(
         createElement(DriveLocationPicker, {
             open: true,
             onOpenChange,
-            mode: 'create',
+            mode,
             title: 'New folder',
             confirmLabel: 'Create',
             onConfirm,
             defaultFolderId: 'folder',
         }),
     ));
+    return onOpenChange;
+}
+
+// Opens the New folder picker and types a name, as a keystroke does.
+async function openWithName(onConfirm: () => Promise<void>) {
+    const onOpenChange = await open('create', onConfirm);
     const input = document.querySelector('#picker-name');
     if (!(input instanceof HTMLInputElement)) throw new Error('no name input');
     // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
@@ -84,4 +90,33 @@ test('while the create runs its button shows a spinner and ignores another click
     expect(onConfirm).toHaveBeenCalledTimes(1);
     await act(async () => finish());
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+const pressEscape = () =>
+    act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+const titles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+
+test('Esc with a typed name asks before it drops the name, and Cancel drops it at once', async () => {
+    const { onOpenChange } = await openWithName(async () => {});
+    await pressEscape();
+    expect(titles()).toEqual(['New folder', 'Discard changes?']);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await pressEscape();
+    const cancel = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Cancel');
+    await act(async () => cancel?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(titles()).toEqual(['New folder']);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a picker with no name typed closes on Esc at once', async () => {
+    for (const mode of ['create', 'folder'] as const) {
+        const onOpenChange = await open(mode);
+        await pressEscape();
+        expect(onOpenChange.mock.calls).toEqual([[false]]);
+        await unmount();
+    }
 });
