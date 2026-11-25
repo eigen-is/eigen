@@ -10,7 +10,7 @@ import { appErrorFrom } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
@@ -59,10 +59,10 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
             formContent = (
                 <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
                     <TabsList className="w-full mb-6">
-                        <TabsTrigger value="signin" className="flex-1">
+                        <TabsTrigger value="signin" className="flex-1" onClick={focusPanelField}>
                             Sign in
                         </TabsTrigger>
-                        <TabsTrigger value="guest" className="flex-1">
+                        <TabsTrigger value="guest" className="flex-1" onClick={focusPanelField}>
                             Guest
                         </TabsTrigger>
                     </TabsList>
@@ -100,6 +100,12 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
             </Card>
         </div>
     );
+}
+
+// The press on a tab focuses the tab after its panel mounted, so the panel's autoFocus field loses it again.
+function focusPanelField(event: MouseEvent<HTMLButtonElement>) {
+    const panel = document.getElementById(event.currentTarget.getAttribute('aria-controls') ?? '');
+    panel?.querySelector('input')?.focus();
 }
 
 function PasswordLoginForm() {

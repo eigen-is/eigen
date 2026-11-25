@@ -1,6 +1,6 @@
 // The sign-in page keeps the page rules on its three forms: username and password, a guest's email, and the code the
-// guest was sent. Pinned beside the contract: a refusal reads under the field it is about rather than in a banner, and
-// each form still sends the auth routes exactly what it sent before.
+// guest was sent. Pinned beside the contract: a click on a tab goes on into its first field, a refusal reads under the
+// field it is about rather than in a banner, and each form still sends the auth routes exactly what it sent before.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { ReactElement } from 'react';
 import { installHappyDom } from '../../../happy-dom';
@@ -85,6 +85,14 @@ test("the guest's email form keeps the page rules", async () => {
     });
 });
 
+test('a click on a tab goes on into its first field', async () => {
+    await renderPage(<LoginPage />);
+    await clickTab('Guest');
+    expect(document.activeElement).toBe(field('Email'));
+    await clickTab('Sign in');
+    expect(document.activeElement).toBe(field('Username'));
+});
+
 test('sends the username at the mail domain, and a wrong password reads under the password', async () => {
     login.mockImplementationOnce(async () => ({ success: false, error: { status: 401, message: 'Invalid' } }));
     await renderPage(<LoginPage />);
@@ -143,6 +151,19 @@ async function renderPage(element: ReactElement) {
     });
     await memory.load();
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
+}
+
+// As a browser clicks: Radix switches the tab on the press, then the press focuses the tab, then the click lands.
+async function clickTab(label: string) {
+    const tab = [...document.querySelectorAll('[role="tab"]')].find((element) => element.textContent === label);
+    if (!(tab instanceof HTMLElement)) throw new Error(`no ${label} tab`);
+    await act(async () => {
+        tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await act(async () => {
+        tab.focus();
+        tab.click();
+    });
 }
 
 function field(label: string): HTMLInputElement {
