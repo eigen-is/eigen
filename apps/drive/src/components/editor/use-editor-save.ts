@@ -93,14 +93,14 @@ export function useEditorSave({
 
     const confirmClose = useCallback(
         (onClose: () => void) => {
-            if (!unsaved) {
+            if (!atRisk) {
                 onClose();
                 return;
             }
             pendingCloseRef.current = onClose;
             setShowDiscardConfirm(true);
         },
-        [unsaved],
+        [atRisk],
     );
 
     const handleDiscardConfirm = useCallback(() => {

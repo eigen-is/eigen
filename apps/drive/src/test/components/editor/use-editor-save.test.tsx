@@ -182,3 +182,18 @@ test('an edit typed while a save is in flight stays unsaved after it lands', asy
     expect(close).not.toHaveBeenCalled();
     expect(save().showDiscardConfirm).toBe(true);
 });
+
+test('closing while a save is in flight asks first, since that save may still fail', async () => {
+    held = new Promise(() => {});
+    const save = await renderSave();
+    await act(async () => save().markDirty());
+    await act(async () => {
+        save().doSave();
+    });
+    expect(save().saveState).toBe('saving');
+
+    const close = mock(() => {});
+    await act(async () => save().confirmClose(close));
+    expect(close).not.toHaveBeenCalled();
+    expect(save().showDiscardConfirm).toBe(true);
+});
