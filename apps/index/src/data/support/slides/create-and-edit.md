@@ -67,7 +67,7 @@ The properties panel also has an **Arrange** section with the same buttons, show
 
 ## Change the slide background
 
-With no object selected, the properties panel shows the background for the active slide. You can set a solid color, a gradient, or an image. Use the **Apply to** dropdown to choose **This slide**, **This and following**, or **All slides**, then click **Apply**.
+With no object selected, the properties panel shows the background for the active slide. You can set a solid color, a gradient, or an image. A change lands on the current slide at once. To copy the background on, click **Apply to following slides** or **Apply to all slides**.
 
 ## Change the slide size
 

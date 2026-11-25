@@ -1,7 +1,7 @@
-// The slide's own background, plus the scope it applies to. Mounted in the engine panel's
-// no-selection slot (CanvasPropertiesPanel's `emptySection`), because "this and following" is deck
-// vocabulary the engine must not speak. The paint itself is the shared BackgroundFillBlock — a frame
-// background is the same BackgroundFill an element fill is, one codec, one editor.
+// The current slide's background, with two buttons that copy it to the following slides or to all of them. The
+// editor mounts it in the side panel's slot for when nothing is selected, because "following slides" is deck
+// vocabulary the canvas engine must not speak. The paint itself is the shared BackgroundFillBlock, since a slide
+// background is the same BackgroundFill an element fill is.
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -10,8 +10,7 @@ import type { VectorFrame } from '@workspace/lib/vector';
 import { serializeBackgroundFill } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { BackgroundFillBlock, PropertySection } from '@workspace/ui/components/properties-panel';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { BackgroundFillBlock } from '@workspace/ui/components/properties-panel';
 import { useCallback, useState } from 'react';
 import type { ApplyTo } from './apply-to';
 import { targetFrameIds } from './apply-to';
@@ -35,11 +34,9 @@ export function SlideBackgroundPanel({
     onUploadImage,
     onPickImageFromDrive,
 }: SlideBackgroundPanelProps) {
-    const [applyTo, setApplyTo] = useState<ApplyTo>('this');
     const [pickerOpen, setPickerOpen] = useState(false);
 
-    // Editing paints THIS slide; the Apply button re-sends the current paint at the chosen scope, so
-    // "all slides" is an explicit act rather than something a color drag does to the whole deck.
+    // A pick paints this slide only, so a color drag never repaints the deck; a button copies the paint on.
     const write = useCallback(
         (next: BackgroundFill | null, scope: ApplyTo) => {
             const value = serializeBackgroundFill(next);
@@ -65,25 +62,25 @@ export function SlideBackgroundPanel({
                 onChange={(next) => write(next, 'this')}
                 onPickImage={() => setPickerOpen(true)}
                 imagePreviewUrl={backgroundImageUrl}
-            />
-
-            <PropertySection title="Apply to">
-                <div className="flex gap-2">
-                    <Select value={applyTo} onValueChange={(value) => setApplyTo(toApplyTo(value))}>
-                        <SelectTrigger size="xs" className="flex-1">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="this">This slide</SelectItem>
-                            <SelectItem value="this-and-following">This and following</SelectItem>
-                            <SelectItem value="all">All slides</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button size="sm" className="h-7 text-xs" onClick={() => write(background, applyTo)}>
-                        Apply
-                    </Button>
-                </div>
-            </PropertySection>
+                keepChildren
+            >
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-full text-xs"
+                    onClick={() => write(background, 'this-and-following')}
+                >
+                    Apply to following slides
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 w-full text-xs"
+                    onClick={() => write(background, 'all')}
+                >
+                    Apply to all slides
+                </Button>
+            </BackgroundFillBlock>
 
             <DrivePickerWithUpload
                 open={pickerOpen}
@@ -96,9 +93,4 @@ export function SlideBackgroundPanel({
             />
         </>
     );
-}
-
-// Radix hands back a plain string; narrow it rather than casting.
-function toApplyTo(value: string): ApplyTo {
-    return value === 'all' || value === 'this-and-following' ? value : 'this';
 }

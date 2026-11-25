@@ -8,7 +8,7 @@ So the shell adds only what the engine has no word for: a deck as an ordered lis
 
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
-- A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
+- A background reaches other slides only through an explicit button ([§ A background reaches other slides only through a button](#a-background-reaches-other-slides-only-through-a-button)).
 - The deck writer, which a pptx Convert and Import… write through, inserts an update under fresh ids and rewrites nothing the deck holds; only an Import… that replaces clears the deck ([§ The deck writer inserts under fresh ids](#the-deck-writer-inserts-under-fresh-ids-and-only-a-replace-clears-the-deck)).
 - A slide size change moves no element, so a 4:3 deck switched to 16:9 hides what sits below the new edge ([§ A deck has one slide size, and a change moves nothing](#a-deck-has-one-slide-size-and-a-change-moves-nothing)).
 - A text size is stored in px and shown in pt, at the deck's own width, so a pptx's 44 pt title stays 44 pt ([§ A deck has a physical width, so its text sizes read in pt](#a-deck-has-a-physical-width-so-its-text-sizes-read-in-pt)).
@@ -61,9 +61,9 @@ The comment pane and ⌘F span the whole deck while the canvas shows one slide. 
 
 A click moves forward and a right-click back, and a clicker's arrow, Page and space keys do the same. A click past the last slide leaves present mode. A right-click on the first slide stays put, because leaving on a backward mis-click would be a surprise. Links in a text box or a shape work, because present mode is the one place the layers take pointer events. `deckOwnsClick` keeps a press on a link from also moving the deck.
 
-## A background reaches other slides only through Apply
+## A background reaches other slides only through a button
 
-The background panel (`slide-background-panel.tsx`) mounts in the engine panel's no-selection slot (`emptySection`), because "this and following" is a slides idea the engine doesn't have. Editing paints the current slide. The Apply button sends that paint to this slide, this and following, or all slides (`targetFrameIds` in `apply-to.ts`). So recoloring the deck is an explicit act, never a side effect of a color drag. A stale slide id applies to nothing, never to the deck.
+The background panel (`slide-background-panel.tsx`) mounts in the engine panel's no-selection slot (`emptySection`), because "following slides" is a slides idea the engine doesn't have. A pick paints the current slide at once. Two buttons under it, Apply to following slides and Apply to all slides, copy that paint on (`targetFrameIds` in `apply-to.ts`), each in one `updateFrames` write, so one press is one undo step. So recoloring the deck is an explicit act, never a side effect of a color drag. A stale slide id applies to nothing, never to the deck.
 
 A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
 

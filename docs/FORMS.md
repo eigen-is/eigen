@@ -29,7 +29,7 @@ What surprises people: in a dialog Esc asks before it drops a change, but Cancel
 
 Text a user types waits for the form's button. A switch, a select, a colour or a panel control that stands alone writes on each pick. One section never mixes the two: a switch inside a form with a Save button is part of the draft and waits too, and a control that writes at once sits outside any form with a button. One look tells the user whether a section saves itself. The one select that waits is the role in Admin's user detail, with its own Save and Cancel: a role grants or takes away admin rights, so a slip in the select must not do that.
 
-Space's Mail page shows both, as two sections with their own headings: the signature waits for its Save, the keyboard switches below it save themselves. An action inside a draft page that acts at once, such as Send test mail in Server settings, is a button that says what it does, never a field, and Enter on it does that action. Slides' background panel paints the current slide live, and its Apply button sends that paint to the slides its "Apply to" select names, so a colour drag never repaints the whole deck.
+Space's Mail page shows both, as two sections with their own headings: the signature waits for its Save, the keyboard switches below it save themselves. An action inside a draft page that acts at once, such as Send test mail in Server settings, is a button that says what it does, never a field, and Enter on it does that action. Slides' background panel paints the current slide live, and its Apply to following slides and Apply to all slides buttons copy that paint on, so a color drag never repaints the whole deck.
 
 ## Enter submits, and Cmd or Ctrl+Enter submits from any field
 
