@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2429 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2434 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -383,7 +383,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (317)
+## Hooks (319)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -435,8 +435,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useInitialize2FA` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `useInviteRegister` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-invite-signup.ts |
 | `useIsGuest` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-is-guest.ts |
+| `useRequestGuestCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
 | `useValidateInviteToken` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-invite-signup.ts |
 | `useVerifyBackupCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
+| `useVerifyGuestCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
 | `useVerifyTotp` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `useAllSharedCalendarEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarAccess` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -1185,7 +1187,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1280)
+## Utilities & constants (1283)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1333,6 +1335,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `isMailApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
+| `isRefusedAddress` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
+| `isRefusedCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-guest-sign-in.ts |
+| `isWrongCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
