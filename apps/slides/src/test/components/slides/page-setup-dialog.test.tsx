@@ -1,6 +1,7 @@
-// Page setup is Google Slides' slide size, 16:9 or 4:3. A writer changes the deck's size with OK; a viewer reads it.
+// Page setup is Google Slides' slide size, 16:9 or 4:3. A writer changes the deck's size with Apply; a viewer reads it.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { SlideSize } from '@workspace/lib/vector';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -42,9 +43,19 @@ let setStored = (_size: SlideSize) => {};
 
 // The deck's stored size as live state, so a test can change it the way a peer's write reaches the open dialog.
 function Deck({ initial, canWrite }: { initial: SlideSize; canWrite: boolean }) {
+    const [open, setOpen] = useState(true);
     const [slideSize, setSlideSize] = useState(initial);
     setStored = setSlideSize;
-    return createElement(PageSetupDialog, { open: true, onOpenChange, slideSize, canWrite, onSlideSizeChange });
+    return createElement(PageSetupDialog, {
+        open,
+        onOpenChange: (next: boolean) => {
+            onOpenChange(next);
+            setOpen(next);
+        },
+        slideSize,
+        canWrite,
+        onSlideSizeChange,
+    });
 }
 
 async function render(slideSize: SlideSize = '16:9', canWrite = true) {
@@ -55,6 +66,21 @@ async function render(slideSize: SlideSize = '16:9', canWrite = true) {
 
 const peerSets = (size: SlideSize) => act(async () => setStored(size));
 
+test('Page setup keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Deck, { initial: '16:9', canWrite: true }),
+        submitLabel: 'Apply',
+        firstField: 'Widescreen 16:9',
+        onSubmit: onSlideSizeChange,
+        makeChanged: () => click(document.getElementById(radio('Standard 4:3'))),
+        except: {
+            pending: 'the size is written to the deck at once, with nothing to wait for',
+            pendingClose: 'the size is written to the deck at once, with nothing to wait for',
+        },
+    });
+});
+
 test("a writer sees the deck's size among Google's two, both enabled", async () => {
     await render();
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Page setup');
@@ -62,20 +88,20 @@ test("a writer sees the deck's size among Google's two, both enabled", async () 
         { label: 'Widescreen 16:9', checked: true, disabled: false },
         { label: 'Standard 4:3', checked: false, disabled: false },
     ]);
-    expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'OK']);
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'Apply']);
 });
 
-test('OK writes the picked size once and closes', async () => {
+test('Apply writes the picked size once and closes', async () => {
     await render();
     await click(document.getElementById(radio('Standard 4:3')));
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSlideSizeChange.mock.calls).toEqual([['4:3']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('OK on the size the deck already has writes nothing', async () => {
+test('Apply on the size the deck already has writes nothing', async () => {
     await render('4:3');
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSlideSizeChange).not.toHaveBeenCalled();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
@@ -88,28 +114,20 @@ test('Cancel closes without a change', async () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('the corner X closes without a change', async () => {
-    await render();
-    await click(document.getElementById(radio('Standard 4:3')));
-    await click(dialog()?.querySelector(':scope > [data-slot="dialog-close"]'));
-    expect(onSlideSizeChange).not.toHaveBeenCalled();
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
-});
-
-test("a peer's change shows in the open dialog, and OK then keeps it", async () => {
+test("a peer's change shows in the open dialog, and Apply then keeps it", async () => {
     await render();
     await peerSets('4:3');
     expect(radios().map(({ checked }) => checked)).toEqual([false, true]);
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSlideSizeChange).not.toHaveBeenCalled();
 });
 
-test("a pick outlives a peer's change, and OK writes it", async () => {
+test("a pick outlives a peer's change, and Apply writes it", async () => {
     await render();
     await click(document.getElementById(radio('Standard 4:3')));
     await peerSets('16:9');
     expect(radios().map(({ checked }) => checked)).toEqual([false, true]);
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSlideSizeChange.mock.calls).toEqual([['4:3']]);
 });
 
