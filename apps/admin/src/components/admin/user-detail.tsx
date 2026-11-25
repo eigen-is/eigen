@@ -57,7 +57,7 @@ export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
 type UserDetailProps = {
     user: AdminUserRow;
     usage?: HomeSizeResponse;
-    organizationId?: string;
+    organizationId: string;
     // A guest has no role, teams, storage or backup: it only reaches what others shared with it.
     guest?: boolean;
 };
