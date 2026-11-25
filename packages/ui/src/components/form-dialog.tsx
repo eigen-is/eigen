@@ -33,7 +33,6 @@ type FormDialogFormProps = {
     // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
     // click outside then ask before they drop it. One form per dialog at a time: the last one mounted wins.
     changed?: boolean;
-    canSubmit?: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
     // <button> there needs type="button": it comes before the submit button, so Enter in a field would click it.
@@ -95,7 +94,6 @@ export function FormDialog({
 export function FormDialogForm({
     onSubmit,
     changed = false,
-    canSubmit = true,
     submitLabel,
     footerStart,
     readOnly = false,
@@ -113,10 +111,7 @@ export function FormDialogForm({
     }, [asks, setChanged]);
 
     return (
-        <FormShell
-            className="flex flex-col gap-4"
-            onSubmit={() => (canSubmit && !readOnly ? submit(onSubmit) : undefined)}
-        >
+        <FormShell className="flex flex-col gap-4" onSubmit={() => (readOnly ? undefined : submit(onSubmit))}>
             {children}
             {readOnly ? (
                 <DialogFooter showCloseButton />
@@ -125,7 +120,6 @@ export function FormDialogForm({
                     start={footerStart}
                     pending={pending}
                     onCancel={() => handleOpenChange(false)}
-                    canSubmit={canSubmit}
                     submitLabel={submitLabel}
                 />
             )}
@@ -145,6 +139,7 @@ export function FormFooter({
     start?: ReactNode;
     pending: boolean;
     onCancel: () => void;
+    // Off only in a picker until something is picked: it has no field to show a message under.
     canSubmit?: boolean;
     submitLabel: string;
 }) {
