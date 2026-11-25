@@ -16,7 +16,7 @@ A write past a size cap always throws `payloadTooLarge()` ("Upload too large") a
 
 An app must not wrap a mutation in `try/catch` + `toast.error()`: the hook already toasted, and the user would see it twice. An app catches only when it has extra work to do on failure, such as resetting UI state, and then it shows no toast.
 
-A caller that awaits `mutateAsync` and must still see other rejections asks `wasToasted(error)`: `onMutationError` records every error it toasts, so the caller swallows exactly those (`CardForm` does this).
+A caller that awaits `mutateAsync` and must still see other rejections asks `wasToasted(error)`: `onMutationError` records every error it toasts, so the caller swallows exactly those (`useDialogPending` does this).
 
 A dialog whose action fails stays open beside the toast, so the user can try again (`useDialogPending`, which `ConfirmDialog`, `FormDialog` and the pickers use). Only a yes/no confirm closes on a refusal (`ConfirmDialog` catches it around its action): an `AppError` with a 400, 403, 404, 422 or 423 (`isRefusal`), such as the organization's default team that can't be deleted, gets the same answer on every try. A picker with input, such as `DriveLocationPicker` or `ShareAndSendDialog`, stays open on a refusal, because a 403 on a read-only folder or a 422 on a name is fixed by changing what the user typed or picked. A hook whose dialog should close on a refusal throws an `AppError` carrying the server's status, as the admin and team hooks do with better-auth's error through `authFailure`. An error no toast has shown, such as a bug in a synchronous Docs submit, is not swallowed: `useDialogPending` rethrows it, so it reaches the console instead of leaving a button that does nothing.
 
