@@ -2,9 +2,10 @@
 // into a number format with buildCurrencyPattern and applied to the selection.
 
 import { numberDisplay } from '@workspace/formula/format';
+import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { CURRENCIES, MENU_CURRENCY } from '../../state';
 import { FormatDialog, PresetList, PresetRow } from './format-dialog';
 import type { CurrencyVariantId } from './format-pattern';
@@ -36,6 +37,7 @@ export function CustomCurrencies() {
     // The field holds the active symbol, and only text the user typed filters the list. A prefilled or picked symbol
     // keeps the whole list in view.
     const [query, setQuery] = useState('');
+    const problemId = useId();
 
     const needle = query.trim().toLowerCase();
     const currencies = needle
@@ -55,49 +57,63 @@ export function CustomCurrencies() {
     };
 
     return (
-        <FormatDialog title="Custom currencies" pattern={buildCurrencyPattern(symbol, variantId)} canSubmit={!!symbol}>
-            <div className="flex items-center gap-2">
-                <Input
-                    className="flex-1"
-                    aria-label="Currency symbol"
-                    value={symbol}
-                    onChange={(e) => {
-                        setSymbol(e.target.value);
-                        setQuery(e.target.value);
-                        setSelectedName(null);
-                    }}
-                />
-                <Select
-                    value={variantId}
-                    onValueChange={(value) => {
-                        const id = CURRENCY_VARIANT_IDS.find((variant) => variant === value);
-                        if (id) setVariantId(id);
-                    }}
-                >
-                    <SelectTrigger className="w-40">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {CURRENCY_VARIANT_IDS.map((id) => (
-                            <SelectItem value={id} key={id}>
-                                {symbol ? numberDisplay(1000, buildCurrencyPattern(symbol, id)) : ''}
-                            </SelectItem>
+        <FormatDialog
+            title="Custom currencies"
+            pattern={buildCurrencyPattern(symbol, variantId)}
+            changed={symbol !== MENU_CURRENCY || variantId !== 'symbolFirst'}
+            missing={symbol ? undefined : 'Enter a currency symbol'}
+        >
+            {(problem) => (
+                <>
+                    <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                            <Input
+                                className="flex-1"
+                                aria-label="Currency symbol"
+                                aria-invalid={problem !== undefined}
+                                aria-describedby={problem && problemId}
+                                value={symbol}
+                                onChange={(e) => {
+                                    setSymbol(e.target.value);
+                                    setQuery(e.target.value);
+                                    setSelectedName(null);
+                                }}
+                            />
+                            <Select
+                                value={variantId}
+                                onValueChange={(value) => {
+                                    const id = CURRENCY_VARIANT_IDS.find((variant) => variant === value);
+                                    if (id) setVariantId(id);
+                                }}
+                            >
+                                <SelectTrigger className="w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {CURRENCY_VARIANT_IDS.map((id) => (
+                                        <SelectItem value={id} key={id}>
+                                            {symbol ? numberDisplay(1000, buildCurrencyPattern(symbol, id)) : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {problem && <FieldError id={problemId}>{problem}</FieldError>}
+                    </div>
+                    <PresetList>
+                        {currencies.map((currency) => (
+                            <PresetRow
+                                key={currency.name}
+                                active={currency.name === selectedName}
+                                onPick={() => selectCurrency(currency)}
+                            >
+                                <span>{currency.name}</span>
+                                <span className="text-muted-foreground">{currency.example}</span>
+                            </PresetRow>
                         ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <PresetList>
-                {currencies.map((currency) => (
-                    <PresetRow
-                        key={currency.name}
-                        active={currency.name === selectedName}
-                        onPick={() => selectCurrency(currency)}
-                    >
-                        <span>{currency.name}</span>
-                        <span className="text-muted-foreground">{currency.example}</span>
-                    </PresetRow>
-                ))}
-            </PresetList>
+                    </PresetList>
+                </>
+            )}
         </FormatDialog>
     );
 }
