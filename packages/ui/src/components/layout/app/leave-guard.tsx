@@ -13,11 +13,13 @@ type LeaveGuardProps = {
     active: boolean;
     // For work that is not a form's draft, such as edits made offline.
     question?: Pick<ComponentProps<typeof ConfirmDialog>, 'title' | 'description' | 'cancelText' | 'confirmText'>;
+    // For work that outlives a change of the page's search, such as an editor's document under its ?chat=.
+    allowSearchChange?: boolean;
 };
 
-export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION }: LeaveGuardProps) {
+export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION, allowSearchChange }: LeaveGuardProps) {
     const blocker = useBlocker({
-        shouldBlockFn: () => active,
+        shouldBlockFn: ({ current, next }) => active && !(allowSearchChange && current.pathname === next.pathname),
         enableBeforeUnload: () => active,
         withResolver: true,
     });
