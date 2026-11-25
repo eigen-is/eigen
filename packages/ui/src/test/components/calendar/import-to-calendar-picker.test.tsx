@@ -7,7 +7,7 @@
 // deleting a new calendar is the hook's, pinned in packages/lib's use-transfer test.
 import { expect, mock, test } from 'bun:test';
 import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, field } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 
@@ -242,8 +242,7 @@ test('the dialog names the file and offers a calendar under Add to calendar, wit
     expect(dialog().querySelector('input')).toBeNull();
 
     await chooseCalendar('New calendar');
-    expect(dialog().querySelector('label[for="import-calendar-name"]')?.textContent).toBe('Calendar name');
-    expect(dialog().querySelector('input')?.id).toBe('import-calendar-name');
+    expect(dialog().contains(field('Calendar name'))).toBe(true);
     await cleanup();
 });
 

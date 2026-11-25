@@ -8,14 +8,14 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
-import { FieldError } from '@workspace/ui/components/field';
 import { FormFooter } from '@workspace/ui/components/form-dialog';
-import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { Input } from '@workspace/ui/components/input';
+import { FormShell } from '@workspace/ui/components/form-shell';
 import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
@@ -153,7 +153,15 @@ export function CardForm({
                 )}
                 {/* Fields scroll so the footer stays pinned on short viewports. */}
                 <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto py-4">
-                    <TitleField value={title} onChange={setTitle} placeholder={placeholderTitle} />
+                    <RequiredTextField
+                        label="Title"
+                        className="gap-2"
+                        value={title}
+                        onChange={setTitle}
+                        placeholder={placeholderTitle}
+                        autoFocus
+                        message={FIELD_MESSAGES.titleMissing}
+                    />
                     <div className="grid gap-2">
                         <Label id={descriptionLabelId}>Description</Label>
                         <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
@@ -246,35 +254,5 @@ export function CardForm({
                 />
             </div>
         </FormShell>
-    );
-}
-
-// The title a card can't do without. Once Save was pressed, an empty one says so under the field.
-function TitleField({
-    value,
-    onChange,
-    placeholder,
-}: {
-    value: string;
-    onChange: (title: string) => void;
-    placeholder: string;
-}) {
-    const id = useId();
-    const errorId = useId();
-    const missing = useFormSubmitted() && !value.trim();
-    return (
-        <div className="grid gap-2">
-            <Label htmlFor={id}>Title</Label>
-            <Input
-                id={id}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
-                autoFocus
-                aria-invalid={missing || undefined}
-                aria-describedby={missing ? errorId : undefined}
-            />
-            {missing && <FieldError id={errorId}>Add a title</FieldError>}
-        </div>
     );
 }

@@ -6,12 +6,12 @@
 
 import { isNameTaken } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@workspace/ui/components/field';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
+import { Field, FieldDescription, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { Input } from '@workspace/ui/components/input';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import type { RefObject } from 'react';
-import { useId, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 // The word the title, the label and the placeholder use for the item.
 type ItemType = 'Folder' | 'File';
@@ -102,8 +102,8 @@ function ItemNameForm({
                 }
             }}
         >
-            <DriveNameField
-                fieldRef={fieldRef}
+            <RequiredTextField
+                ref={fieldRef}
                 label={`${type} name`}
                 placeholder={`Enter ${type.toLowerCase()} name`}
                 value={itemName}
@@ -111,54 +111,13 @@ function ItemNameForm({
                     setItemName(name);
                     setTaken(undefined);
                 }}
-                taken={taken}
+                message={FIELD_MESSAGES.nameMissing}
+                error={taken}
             />
             <Field>
                 <FieldTitle>Location</FieldTitle>
                 <FieldDescription className="truncate">{location}</FieldDescription>
             </Field>
         </FormDialogForm>
-    );
-}
-
-// A name field inside a form shell, such as this dialog's or a location picker's. It reads whether the form was
-// submitted, so an empty name is red only after Save, and shows the server's reason for a taken name.
-export function DriveNameField({
-    fieldRef,
-    label,
-    value,
-    onChange,
-    taken,
-    placeholder,
-    autoFocus,
-    className,
-}: {
-    fieldRef: RefObject<HTMLInputElement | null>;
-    label: string;
-    value: string;
-    onChange: (name: string) => void;
-    taken: string | undefined;
-    placeholder?: string;
-    autoFocus?: boolean;
-    className?: string;
-}) {
-    const id = useId();
-    const errorId = useId();
-    const error = (useFormSubmitted() && !value.trim() && 'Add a name') || taken;
-    return (
-        <Field className={className}>
-            <FieldLabel htmlFor={id}>{label}</FieldLabel>
-            <Input
-                ref={fieldRef}
-                id={id}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder}
-                autoFocus={autoFocus}
-                aria-invalid={!!error || undefined}
-                aria-describedby={error ? errorId : undefined}
-            />
-            {error && <FieldError id={errorId}>{error}</FieldError>}
-        </Field>
     );
 }

@@ -17,6 +17,7 @@ import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -32,21 +33,21 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
-import { Input } from '@workspace/ui/components/input';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Label } from '@workspace/ui/components/label';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
-import type { ReactNode, Ref } from 'react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { DriveLocationField } from '../drive/drive-location-field';
-import { FormShell, useFormSubmitted } from '../form-shell';
+import { FormShell } from '../form-shell';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { RequiredTextField } from '../required-text-field';
 import { UserItem } from '../user/user-item';
 
 const MATCH_DEBOUNCE_MS = 300;
@@ -86,7 +87,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     });
     const [locationTouched, setLocationTouched] = useState(false);
     const [locationExpanded, setLocationExpanded] = useState(false);
-    const [createError, setCreateError] = useState<string | null>(null);
+    const [createError, setCreateError] = useState<string>();
     const destination = useResolvedDriveLocation(location);
     const nameRef = useRef<HTMLInputElement>(null);
     const { pending, run } = useDialogPending();
@@ -173,7 +174,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setLocation({ ownerId: myOwnerId, mountId: DEFAULT_MOUNT_ID, folderId: '' });
         setLocationTouched(false);
         setLocationExpanded(false);
-        setCreateError(null);
+        setCreateError(undefined);
     }, [open, seeded, myOwnerId, contactInput.setValue]);
 
     // Step 2 opens on the name, selected, so typing replaces the one made from the people.
@@ -372,15 +373,19 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             </div>
                         ) : (
                             <div className="-mx-6 flex flex-1 flex-col min-h-0">
-                                <NameField
-                                    inputRef={nameRef}
+                                <RequiredTextField
+                                    ref={nameRef}
+                                    id="chat-wizard-name"
+                                    label="Name"
+                                    className="shrink-0 px-6 pb-2"
                                     value={name}
                                     onChange={(value) => {
                                         setNameDirty(true);
                                         setName(value);
-                                        setCreateError(null);
+                                        setCreateError(undefined);
                                     }}
-                                    taken={createError}
+                                    message={FIELD_MESSAGES.nameMissing}
+                                    error={createError}
                                 />
 
                                 {teamMode ? (
@@ -472,7 +477,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         variant="outline"
                                         disabled={pending}
                                         onClick={() => {
-                                            setCreateError(null);
+                                            setCreateError(undefined);
                                             setStep(1);
                                         }}
                                     >
@@ -510,37 +515,6 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
             </Dialog>
             {discard.dialog}
         </>
-    );
-}
-
-// Once Create was pressed, an empty name says so, and a name another chat here has says that instead.
-function NameField({
-    inputRef,
-    value,
-    onChange,
-    taken,
-}: {
-    inputRef: Ref<HTMLInputElement>;
-    value: string;
-    onChange: (value: string) => void;
-    taken: string | null;
-}) {
-    const errorId = useId();
-    const submitted = useFormSubmitted();
-    const error = taken ?? (submitted && !value.trim() ? 'Add a name' : null);
-    return (
-        <Field className="shrink-0 px-6 pb-2">
-            <FieldLabel htmlFor="chat-wizard-name">Name</FieldLabel>
-            <Input
-                ref={inputRef}
-                id="chat-wizard-name"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                aria-invalid={!!error || undefined}
-                aria-describedby={error ? errorId : undefined}
-            />
-            {error && <FieldError id={errorId}>{error}</FieldError>}
-        </Field>
     );
 }
 

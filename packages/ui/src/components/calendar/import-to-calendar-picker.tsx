@@ -16,13 +16,14 @@ import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { useState } from 'react';
 import { Button } from '../button';
 import { Field, FieldError, FieldLabel } from '../field';
 import { FormDialog, FormDialogForm } from '../form-dialog';
 import { useFormSubmitted } from '../form-shell';
-import { Input } from '../input';
 import { ErrorState } from '../layout/app/error-state';
+import { RequiredTextField } from '../required-text-field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
 // The leading colon keeps this out of the target space: every real value is a home and a calendar id joined by one.
@@ -144,9 +145,7 @@ function TargetFields({
     name: string | undefined;
     onNameChange: (name: string) => void;
 }) {
-    const submitted = useFormSubmitted();
-    const noTarget = submitted && !target;
-    const noName = submitted && name !== undefined && !name.trim();
+    const noTarget = useFormSubmitted() && !target;
     return (
         <>
             <Field>
@@ -178,17 +177,12 @@ function TargetFields({
             </Field>
 
             {name !== undefined && (
-                <Field>
-                    <FieldLabel htmlFor="import-calendar-name">Calendar name</FieldLabel>
-                    <Input
-                        id="import-calendar-name"
-                        value={name}
-                        onChange={(e) => onNameChange(e.target.value)}
-                        aria-invalid={noName || undefined}
-                        aria-describedby={noName ? 'import-calendar-name-error' : undefined}
-                    />
-                    {noName && <FieldError id="import-calendar-name-error">Add a name</FieldError>}
-                </Field>
+                <RequiredTextField
+                    label="Calendar name"
+                    value={name}
+                    onChange={onNameChange}
+                    message={FIELD_MESSAGES.nameMissing}
+                />
             )}
         </>
     );
