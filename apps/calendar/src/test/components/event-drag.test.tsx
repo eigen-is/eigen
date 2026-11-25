@@ -235,8 +235,9 @@ const tuesday = (hour: number): Point => [150, hour * HOUR];
 const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
 const scopeOptions = () => [...document.querySelectorAll('[role="dialog"] label')].map((label) => label.textContent);
 const dialogButton = (name: string) => {
+    // A pending button's spinner comes before its label.
     const found = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-        (button) => button.textContent === name,
+        (button) => button.lastChild?.textContent === name,
     );
     if (!found) throw new Error(`no dialog has a button named ${name}`);
     return found;
@@ -404,6 +405,27 @@ test('Send saves the move of an event with guests', async () => {
     await open([withGuests]);
     await drag(block('Planning'), tuesday(10.2), tuesday(11.2));
     await click('Send');
+    expect(server.writes).toEqual([{ write: 'update', etag: 'v1', startTime: at(13, 11), endTime: at(13, 12) }]);
+    expect(dialogTitles()).toEqual([]);
+});
+
+test('Send stays busy until the move is saved, and Esc and Cancel wait for it', async () => {
+    await open([withGuests]);
+    let answer = () => {};
+    server.held = new Promise((resolve) => {
+        answer = resolve;
+    });
+    await drag(block('Planning'), tuesday(10.2), tuesday(11.2));
+    await click('Send');
+    expect(dialogButton('Send').getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+        dialogButton('Send').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await click('Cancel');
+    expect(dialogTitles()).toEqual(['Send update emails to guests?']);
+
+    await act(async () => answer());
+    await settle();
     expect(server.writes).toEqual([{ write: 'update', etag: 'v1', startTime: at(13, 11), endTime: at(13, 12) }]);
     expect(dialogTitles()).toEqual([]);
 });
