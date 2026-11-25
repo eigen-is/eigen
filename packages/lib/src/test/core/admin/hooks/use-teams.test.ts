@@ -17,7 +17,7 @@ mock.module('../../../../core/auth/hooks/use-auth-client', () => ({
         organization: {
             ...authClient.organization,
             addTeamMember: async ({ teamId, userId }: { teamId: string; userId: string }) => {
-                if (userId === 'u2') return { data: null, error: { message: 'User is not a member' } };
+                if (userId === 'u2') return { data: null, error: { status: 400, message: 'User is not a member' } };
                 added.push(`${teamId}:${userId}`);
                 return { data: { id: `tm-${userId}` }, error: null };
             },
@@ -58,8 +58,8 @@ test('adding a selection to a team adds every user it can, reports the one it co
     });
 
     expect(added).toEqual(['t1:u1', 't1:u3']);
-    expect(failure).toBeInstanceOf(Error);
-    expect(String(failure)).toContain('User is not a member');
+    expect(isRefusal(failure)).toBe(true);
+    expect(getErrorMessage(failure)).toBe('User is not a member');
     expect(wasToasted(failure)).toBe(true);
     expect(invalidated.filter((key) => key.join() === adminKeys.users().join())).toHaveLength(1);
     await unmount();

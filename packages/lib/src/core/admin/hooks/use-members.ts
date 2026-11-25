@@ -7,7 +7,7 @@ import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgMember, OrgRole } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
 import { settingsApi } from '../../api';
-import { AppError, onMutationError } from '../../api-error';
+import { AppError, authFailure, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { adminKeys, invalidateAdminMembers, invalidateAdminUsers } from './keys';
@@ -54,7 +54,7 @@ async function setMemberRole(
         role,
         organizationId,
     });
-    if (error) throw new Error(error.message ?? 'Failed to update member role');
+    if (error) throw authFailure(error, 'Failed to update member role');
     // Keep user.role in sync so useIsAdmin works without an API call
     await authClient.admin.setRole({ userId, role: role === 'member' ? 'user' : 'admin' });
     return data;
@@ -120,14 +120,15 @@ export function useCreateUser(organizationId?: string) {
             role: Exclude<OrgRole, 'owner'>;
         }) => {
             const { data, error } = await authClient.admin.createUser({ name, email, password });
-            if (error) throw new Error(error.message ?? 'Failed to create user');
+            if (error) throw authFailure(error, 'Failed to create user');
             // The user-create hook joins the organization as a member; an admin is then promoted like the Role select does.
             if (role === 'admin') {
                 const { data: found, error: listError } = await authClient.organization.listMembers({
                     query: { organizationId, filterField: 'userId', filterValue: data.user.id },
                 });
+                if (listError) throw authFailure(listError, 'Failed to find the new member');
                 const member = found?.members[0];
-                if (!member) throw new Error(listError?.message ?? 'Failed to find the new member');
+                if (!member) throw new Error('Failed to find the new member');
                 await setMemberRole(organizationId, { memberId: member.id, userId: data.user.id, role });
             }
             return data;

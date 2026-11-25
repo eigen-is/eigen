@@ -7,7 +7,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgTeam } from '@workspace/lib/types/admin';
-import { AppError, getErrorMessage, onMutationError } from '../../api-error';
+import { authFailure, getErrorMessage, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
@@ -43,7 +43,7 @@ export function useCreateTeam(organizationId: string) {
                 name,
                 organizationId,
             });
-            if (error) throw new Error(error.message ?? 'Failed to create team');
+            if (error) throw authFailure(error, 'Failed to create team');
             return data;
         },
         onSuccess: () => {
@@ -63,9 +63,7 @@ export function useRemoveTeam(organizationId: string) {
                 organizationId,
             });
             // The status says whether the server refused, as it does the default team and the last one.
-            if (error) {
-                throw new AppError({ error: { status: error.status, value: error.message }, status: error.status });
-            }
+            if (error) throw authFailure(error, 'Failed to remove team');
             return data;
         },
         onSuccess: () => {
@@ -85,13 +83,15 @@ export function useAddTeamMembers() {
             const results = await Promise.allSettled(
                 userIds.map(async (userId) => {
                     const { error } = await authClient.organization.addTeamMember({ teamId, userId });
-                    if (error) throw new Error(error.message ?? 'Failed to add team member');
+                    if (error) throw authFailure(error, 'Failed to add team member');
                 }),
             );
-            const reasons = results.flatMap((r) => (r.status === 'rejected' ? [getErrorMessage(r.reason)] : []));
-            if (reasons.length === 1) throw new Error(reasons[0]);
-            if (reasons.length > 1)
-                throw new Error(`${reasons.length} of ${userIds.length} users were not added: ${reasons[0]}`);
+            const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+            if (failures.length === 1) throw failures[0];
+            if (failures.length > 1) {
+                const first = getErrorMessage(failures[0]);
+                throw new Error(`${failures.length} of ${userIds.length} users were not added: ${first}`);
+            }
         },
         onSettled: (_data, _error, variables) => {
             invalidateTeamMembers(queryClient, variables.teamId);
@@ -110,7 +110,7 @@ export function useRemoveTeamMember() {
                 teamId,
                 userId,
             });
-            if (error) throw new Error(error.message ?? 'Failed to remove team member');
+            if (error) throw authFailure(error, 'Failed to remove team member');
             return data;
         },
         onSuccess: (_data, variables) => {

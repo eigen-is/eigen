@@ -32,7 +32,9 @@ mock.module('../../../../core/auth/hooks/use-auth-client', () => ({
             ...authClient.organization,
             updateTeam: async ({ data }: { data: { name: string } }) => {
                 writes.push(`name ${data.name}`);
-                return refuse === 'name' ? { data: null, error: { message: 'Name taken' } } : { data: {}, error: null };
+                return refuse === 'name'
+                    ? { data: null, error: { status: 400, message: 'Name taken' } }
+                    : { data: {}, error: null };
             },
         },
     },
@@ -51,6 +53,7 @@ afterAll(() => {
 });
 
 const { act } = await import('react');
+const { isRefusal } = await import('../../../../core/api-error');
 const { adminKeys } = await import('../../../../core/admin/hooks/keys');
 const { calendarKeys } = await import('../../../../core/calendar/hooks/keys');
 const { teamKeys } = await import('../../../../core/team/hooks/keys');
@@ -118,14 +121,18 @@ test('a refused rename stops the share and settings writes and toasts only its e
     refuse = 'name';
     const { queryClient, invalidated } = trackingClient();
     const { latest, unmount } = await renderHook(() => useSaveTeamSettings(TEAM, 'org-1'), queryClient);
+    let failure: unknown;
     await act(async () => {
         await latest
             .mutateAsync({ name: 'Design', calendar: { id: 'cal-1', shares: null }, settings: SETTINGS })
-            .catch(() => {});
+            .catch((error) => {
+                failure = error;
+            });
     });
     await unmount();
 
     expect(writes).toEqual(['name Design']);
+    expect(isRefusal(failure)).toBe(true);
     expect(toasts).toEqual(['error: Name taken']);
     expect(hasKey(invalidated, teamKeys.settings(TEAM))).toBe(false);
 });
