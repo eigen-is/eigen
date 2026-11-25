@@ -254,7 +254,7 @@ export function CardDialog({
         body = (
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {content}
-                <p className="app-gutter-x pb-4 text-sm text-muted-foreground">No chat available for this card.</p>
+                <p className="app-gutter-x py-4 text-sm text-muted-foreground">No chat available for this card.</p>
             </div>
         );
     }

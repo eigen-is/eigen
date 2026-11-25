@@ -1,7 +1,8 @@
 // Ticking the last box of a card's checklist celebrates: once per opening, only for a list of two or more,
 // only on the tick itself, and never with the setting off. The chance is forced to win throughout. Each click
 // is saved and drawn again, as a card's parent does, which replaces the boxes in the page. A closed card is an
-// unmounted one, as in a dialog.
+// unmounted one, as in a dialog. An opened card reads as every opened item does: its block, its meta line, then its
+// sections.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { installHappyDom } from '../../happy-dom';
@@ -139,4 +140,25 @@ test('the setting off does not celebrate', () => {
 test("the card's actions are named buttons", () => {
     act(() => root.render(createElement(CardDialogActions, { onEdit: () => {} })));
     expect(document.querySelector('button[aria-label="Edit"]')).not.toBeNull();
+});
+
+test('an opened card is its block with title and text, then its meta line, then its attachments under a caption', () => {
+    act(() =>
+        root.render(
+            createElement(CardBody, {
+                title: 'Shed',
+                description: '<p>Paint it green</p>',
+                meta: 'Created by Ada',
+                attachments: createElement('span', null, 'plan.pdf'),
+            }),
+        ),
+    );
+    const body = document.body.firstElementChild?.firstElementChild;
+    const [block, meta, attachments] = [...(body?.children ?? [])];
+    expect(block?.className).toContain('eigen-block');
+    expect(block?.querySelector('h2')?.textContent).toBe('Shed');
+    expect(block?.textContent).toBe('ShedPaint it green');
+    expect(meta?.textContent).toBe('Created by Ada');
+    expect(attachments?.tagName).toBe('SECTION');
+    expect(attachments?.textContent).toBe('Attachmentsplan.pdf');
 });
