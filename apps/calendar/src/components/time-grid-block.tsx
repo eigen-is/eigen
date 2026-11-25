@@ -21,7 +21,7 @@ export const HOUR_HEIGHT = 48;
 const LINE_HEIGHT = 16;
 const BLOCK_PADDING = 4;
 // A button centers its content, so the lines stack from the top as a column.
-const BLOCK = cn('absolute flex flex-col justify-start rounded px-1 py-0.5', STRIPE_INSET);
+const BLOCK = cn('absolute flex flex-col justify-start px-1 py-0.5', STRIPE_INSET);
 
 export function atMinutes(day: Date, minutes: number): Date {
     return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
@@ -80,7 +80,7 @@ export function DraftBlock({ day, top, bottom, color }: { day: Date; top: number
     return (
         <div
             className={cn(
-                'pointer-events-none inset-x-0 overflow-hidden text-xs leading-4 shadow-md',
+                'eigen-block pointer-events-none inset-x-0 overflow-hidden text-xs leading-4',
                 BLOCK,
                 surface.className,
             )}

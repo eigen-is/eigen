@@ -10,7 +10,6 @@ import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Paperclip } from 'lucide-react';
 import type { HTMLAttributes } from 'react';
-import { Card, CardContent } from '../card';
 import { DeletedComment } from '../comments/deleted-comment';
 import { MemberAvatar } from '../comments/member-avatar';
 import { Progress } from '../progress';
@@ -56,12 +55,11 @@ export function CardTile({
     const onMyPlate = !resolved && assigneeEmail === user?.email.toLowerCase();
 
     return (
-        <Card
+        <div
             ref={ref}
             className={cn(
-                'p-0 w-full shadow-md select-none rounded-none',
-                surface ? 'border-0' : 'border',
-                surface?.className,
+                'eigen-block w-full select-none p-3 text-sm',
+                surface?.className ?? 'border bg-card text-card-foreground',
                 onClick && 'cursor-pointer',
                 className,
             )}
@@ -70,66 +68,64 @@ export function CardTile({
             onContextMenu={onContextMenu}
             {...rest}
         >
-            <CardContent className="p-3 text-sm">
-                {deleted ? (
-                    <DeletedComment title={title} />
-                ) : (
-                    <>
-                        {coverThumbnailUrl && (
-                            <img
-                                src={coverThumbnailUrl}
-                                alt=""
-                                draggable={false}
-                                className="mb-2 h-20 w-full object-cover rounded-sm"
+            {deleted ? (
+                <DeletedComment title={title} />
+            ) : (
+                <>
+                    {coverThumbnailUrl && (
+                        <img
+                            src={coverThumbnailUrl}
+                            alt=""
+                            draggable={false}
+                            className="mb-2 h-20 w-full object-cover"
+                        />
+                    )}
+                    <span className="line-clamp-2">{title}</span>
+                    {description && (
+                        <div
+                            className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+                            dangerouslySetInnerHTML={{ __html: description }}
+                        />
+                    )}
+                    {total > 0 && (
+                        <div className="mt-2 flex items-center gap-2 opacity-60">
+                            <Progress
+                                value={(checked / total) * 100}
+                                className="flex-1 h-1 bg-current/20"
+                                indicatorClassName="bg-current"
                             />
-                        )}
-                        <span className="line-clamp-2">{title}</span>
-                        {description && (
-                            <div
-                                className="text-xs mt-1 max-h-24 overflow-hidden opacity-70 pointer-events-none [&>*+*]:mt-1.5 [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
-                                dangerouslySetInnerHTML={{ __html: description }}
-                            />
-                        )}
-                        {total > 0 && (
-                            <div className="mt-2 flex items-center gap-2 opacity-60">
-                                <Progress
-                                    value={(checked / total) * 100}
-                                    className="flex-1 h-1 bg-current/20"
-                                    indicatorClassName="bg-current"
-                                />
-                                <span className="text-xs tabular-nums">
-                                    {checked}/{total}
+                            <span className="text-xs tabular-nums">
+                                {checked}/{total}
+                            </span>
+                        </div>
+                    )}
+                    {(unread || !!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
+                        <p className="text-xs mt-2 flex items-center gap-2">
+                            {unread && <UnreadDot className="static shrink-0" />}
+                            {!!replyCount && (
+                                <span className="opacity-50">
+                                    {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
                                 </span>
-                            </div>
-                        )}
-                        {(unread || !!replyCount || !!attachmentCount || resolved || assigneeEmail) && (
-                            <p className="text-xs mt-2 flex items-center gap-2">
-                                {unread && <UnreadDot className="static shrink-0" />}
-                                {!!replyCount && (
-                                    <span className="opacity-50">
-                                        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
-                                    </span>
-                                )}
-                                {!!attachmentCount && (
-                                    <span className="flex items-center gap-0.5 opacity-50">
-                                        <Paperclip className="h-3 w-3" /> {attachmentCount}
-                                    </span>
-                                )}
-                                {resolved && <Check className="h-3 w-3 ml-auto opacity-50" />}
-                                {assigneeEmail && (
-                                    <MemberAvatar
-                                        email={assigneeEmail}
-                                        className={cn(
-                                            !resolved && 'ml-auto',
-                                            onMyPlate ? 'ring-1 ring-(--app-current-color)' : 'opacity-50',
-                                        )}
-                                    />
-                                )}
-                            </p>
-                        )}
-                    </>
-                )}
-            </CardContent>
-        </Card>
+                            )}
+                            {!!attachmentCount && (
+                                <span className="flex items-center gap-0.5 opacity-50">
+                                    <Paperclip className="h-3 w-3" /> {attachmentCount}
+                                </span>
+                            )}
+                            {resolved && <Check className="h-3 w-3 ml-auto opacity-50" />}
+                            {assigneeEmail && (
+                                <MemberAvatar
+                                    email={assigneeEmail}
+                                    className={cn(
+                                        !resolved && 'ml-auto',
+                                        onMyPlate ? 'ring-1 ring-(--app-current-color)' : 'opacity-50',
+                                    )}
+                                />
+                            )}
+                        </p>
+                    )}
+                </>
+            )}
+        </div>
     );
 }

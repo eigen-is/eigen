@@ -61,7 +61,7 @@ export function ScheduleView({ days, events, calendars, sharedCalendars, initial
                                             <button
                                                 type="button"
                                                 className={cn(
-                                                    'flex w-full items-center gap-3 rounded px-2 py-1.5 text-left text-sm',
+                                                    'flex w-full items-center gap-3 px-2 py-1.5 text-left text-sm',
                                                     eventSurfaceClasses('dot', state),
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}

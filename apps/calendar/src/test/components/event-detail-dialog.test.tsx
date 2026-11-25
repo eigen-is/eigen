@@ -1,9 +1,11 @@
 // The event detail panel's icon buttons carry their names, so a screen reader can find Edit event and Delete event,
-// and each opens its dialog.
+// and each opens its dialog. Its body is the event's title and time with no
+// block, the calendar under them, then the event's sections.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { dialogTitles } from '../dialog-titles';
 
 installHappyDom();
 
@@ -107,7 +109,6 @@ async function open(event: CalendarEventOccurrence = dentist) {
     ));
 }
 
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
 const click = (name: string) =>
     act(async () => {
         const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${name}"]`);
@@ -185,6 +186,11 @@ test('a reply to an invitation keeps the panel open with its button busy until t
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
+test('an event with no title names its dialog (No title)', async () => {
+    await open({ ...dentist, title: '' });
+    expect(dialogTitles()).toEqual(['(No title)']);
+});
+
 test('the button named Edit event opens Edit event', async () => {
     await open();
     await click('Edit event');
@@ -233,4 +239,13 @@ test('deleting a changed occurrence offers no this and following, as it has no r
     expect(dialogTitles()).toEqual(['Delete recurring event']);
     const options = [...document.querySelectorAll('[role="dialog"] [role="radio"]')].map((radio) => radio.id);
     expect(options).toEqual(['recurring-this', 'recurring-all']);
+});
+
+test("the event has no block, in its calendar's color or not, and the calendar is in the line under it", async () => {
+    await open({ ...dentist, location: 'Grote Markt' });
+    expect(document.querySelector('[role="dialog"] .eigen-block')).toBeNull();
+    const title = document.querySelector<HTMLElement>('[role="dialog"] h2:not(.sr-only)');
+    expect(title?.textContent).toBe('Dentist');
+    expect(title?.nextElementSibling?.nextElementSibling?.textContent).toBe('Work');
+    expect(title?.parentElement?.querySelector('section h3')?.textContent).toBe('Location');
 });

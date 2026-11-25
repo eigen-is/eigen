@@ -357,7 +357,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                                                     key={block.top}
                                                     block={block}
                                                     {...surfaceProps}
-                                                    className="pointer-events-none shadow-md"
+                                                    className="pointer-events-none"
                                                 />
                                             ))}
                                             {draft?.dayIdx === dayIdx && (

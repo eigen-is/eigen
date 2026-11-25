@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, comments, cards, discussion, collaboration]
 related: [stickies/add-and-edit-cards, stickies/get-started]
 order: 80
-updated: 2026-11-24
+updated: 2026-11-25
 ---
 
 Every card on a Stickies board has a built-in comment thread. You can use it to ask questions, post updates, or keep a record of decisions, all in one place alongside the card itself.
@@ -37,4 +37,4 @@ See [Share a board and manage access](/support/stickies/share-board) for how to 
 
 ## Share a link to a specific card
 
-To send someone directly to a card's thread, open the card and click the link icon (**Copy link**) in the strip below the description. Eigen copies a link to your clipboard. Anyone with access to the board can open that link and land straight on the card.
+To send someone directly to a card's thread, open the card and click the link icon (**Copy link**) in the bar at the top of the dialog. Eigen copies a link to your clipboard. Anyone with access to the board can open that link and land straight on the card.

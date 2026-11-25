@@ -13,6 +13,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { dialogTitles } from '../dialog-titles';
 
 installHappyDom();
 
@@ -270,7 +271,6 @@ const typeInto = (field: HTMLInputElement | HTMLTextAreaElement, value: string) 
     });
 const typeTitle = (value: string) => typeInto(titleField(), value);
 const typeDescription = (value: string) => typeInto(descriptionField(), value);
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
 // Radix opens its Select and picks an option on the pointer events, not on click.
 const pointAt = (element: Element) =>
     act(async () => {
