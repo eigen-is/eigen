@@ -5,6 +5,7 @@ import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { dialogTitles } from '../dialog-titles';
 
 installHappyDom();
 
@@ -110,11 +111,6 @@ async function open(event: CalendarEventOccurrence = dentist) {
 
 const { colorSurface } = await import('@workspace/ui/lib/color-surface');
 
-// A dialog's name, not every heading in it: an event's body heads its block with the title too.
-const dialogTitles = () =>
-    [...document.querySelectorAll('[role="dialog"]')].map(
-        (dialog) => document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')?.textContent,
-    );
 const click = (name: string) =>
     act(async () => {
         const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${name}"]`);
