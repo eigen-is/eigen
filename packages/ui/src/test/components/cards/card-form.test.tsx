@@ -1,6 +1,7 @@
 // The card form tells its host whether it changed, so the host's Esc knows when to ask, and a value typed back to what
 // it was counts as no change. It compares with what it opened with, so a value the host learns late, such as the
-// card's assignee, is no change and Save leaves it alone. Its Description is a named field that shows its placeholder.
+// card's assignee, is no change and Save leaves it alone. Its Description is a named field that shows its placeholder,
+// and a missing title's message describes the Title field.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -96,4 +97,13 @@ test('an assignee the host learns after the edit opened is no change, and Save l
     await act(async () => save?.click());
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0]?.[2]).toBeUndefined();
+});
+
+test('Save with no title says so under the field, and the message describes it', async () => {
+    await renderInDocument(createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {} }));
+    const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
+    await act(async () => save?.click());
+    const message = document.querySelector('[data-slot="field-error"]');
+    expect(message?.textContent).toBe('Add a title');
+    expect(titleField().getAttribute('aria-describedby')).toBe(message?.id ?? 'no message');
 });

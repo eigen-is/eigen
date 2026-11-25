@@ -260,6 +260,7 @@ function TitleField({
     placeholder: string;
 }) {
     const id = useId();
+    const errorId = useId();
     const missing = useFormSubmitted() && !value.trim();
     return (
         <div className="grid gap-2">
@@ -271,8 +272,9 @@ function TitleField({
                 placeholder={placeholder}
                 autoFocus
                 aria-invalid={missing || undefined}
+                aria-describedby={missing ? errorId : undefined}
             />
-            {missing && <FieldError>Add a title</FieldError>}
+            {missing && <FieldError id={errorId}>Add a title</FieldError>}
         </div>
     );
 }
