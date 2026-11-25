@@ -2,7 +2,7 @@
 // error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that key, and Enter on a
 // radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed its fields read
 // useFormSubmitted(), so a missing value shows only then, and a submit whose check refused focuses the first field
-// marked aria-invalid. Apps use the shells, not this.
+// marked aria-invalid while the form still shows. Apps use the shells, not this.
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -18,6 +18,7 @@ type FormShellProps = {
 };
 
 const CHOICE = '[role="radio"], [role="checkbox"], input[type="radio"], input[type="checkbox"]';
+const HIDDEN = '[hidden], [aria-hidden="true"], [role="dialog"][data-state="closed"]';
 
 const FormSubmittedContext = createContext(false);
 
@@ -31,8 +32,11 @@ export function FormShell({ onSubmit, focusesOwnErrors = false, className, child
     // Counts refused submits, so the focus moves once the form has rendered the messages it set.
     const [refusals, setRefusals] = useState(0);
 
+    // A form that refused as it hid itself, such as Edit event opening a question over it, leaves the focus to that.
     useEffect(() => {
-        if (refusals > 0) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+        const form = formRef.current;
+        if (refusals === 0 || !form?.isConnected || form.closest(HIDDEN)) return;
+        form.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
     }, [refusals]);
 
     const submit = async () => {

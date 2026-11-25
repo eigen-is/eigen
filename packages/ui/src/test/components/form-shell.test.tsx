@@ -2,7 +2,7 @@
 // for itself included, and on Enter from a radio or a checkbox. It saves what a field commits on that Enter. It acts
 // only on keys from its own fields, keeps Cmd+Enter from a hotkey behind it, and never shows the browser's bubbles. Its
 // fields learn that Save was pressed, and a refused submit focuses the first field marked invalid unless the form
-// focuses its own errors.
+// focuses its own errors or hid itself.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
@@ -162,6 +162,39 @@ test('a refused submit focuses the field it marked invalid', async () => {
     ({ unmount } = await renderInDocument(createElement(CheckedForm, { focusesOwnErrors: false })));
     await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
     expect(document.activeElement).toBe(byLabel('End'));
+});
+
+// Refuses and hides itself as it opens another dialog over it, as Edit event does for a recurring event's choice.
+function HidingForm({ hides }: { hides: Record<string, string | boolean> }) {
+    const [hidden, setHidden] = useState(false);
+    return createElement(
+        'div',
+        hidden ? hides : {},
+        createElement(FormShell, {
+            onSubmit: async () => {
+                setHidden(true);
+                return false as const;
+            },
+            children: [
+                createElement('input', { key: 'title', 'aria-label': 'Title' }),
+                createElement('input', { key: 'end', 'aria-label': 'End', 'aria-invalid': true }),
+            ],
+        }),
+    );
+}
+
+test('a refused submit from a form that hid itself moves no focus into it', async () => {
+    const ways: Record<string, string | boolean>[] = [
+        { hidden: true },
+        { 'aria-hidden': 'true' },
+        { role: 'dialog', 'data-state': 'closed' },
+    ];
+    for (const hides of ways) {
+        ({ unmount } = await renderInDocument(createElement(HidingForm, { hides })));
+        await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
+        expect(document.activeElement === byLabel('End')).toBe(false);
+        await unmount();
+    }
 });
 
 test('a form that focuses its own errors keeps the focus where it put it', async () => {
