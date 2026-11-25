@@ -51,7 +51,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 **A wide dialog's footer has a line above it and stays in view.** `DialogFooter` in an `lg` dialog runs edge to edge under a top border and sticks to the bottom of the box while the body scrolls; the header has no line under it. A narrow dialog has no lines. The content box says its width as `data-size`, and the footer reads it through the `group/dialog` variant, so no caller passes a class for it. A wide box that holds a footer drops its bottom padding, and the footer's own padding takes its place. The footer has no negative bottom margin: a sticky box is kept inside its parent, so one that hangs 24px below a form's bottom is pushed 24px back up, over the last field. Content that should run edge to edge too, such as a picker's browser, takes `-mx-6` against the box's padding. On a phone the file picker's browser keeps the padding, as the location field's does, so the drive select above its folders doesn't touch the sides.
 
-**There is one footer.** Its right side holds Cancel and the main button, as `DialogFooter`'s children. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, as its `start`, which `FormDialogForm` fills from `footerStart`. The footer is that one row at every width, its buttons at their normal size, phones included. A row too wide for the box wraps: the tools stay at the left and the right buttons move to the next line together, at the right, because the footer keeps them in one group. The title sits on the left at every width.
+**There is one footer.** Its right side holds Cancel and the main button, as `DialogFooter`'s children. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, as its `start`, which `FormDialogForm` fills from `footerStart`. The footer is that one row at every width, its buttons at their normal size, phones included. A footer tool with a text label, such as the Share dialog's Share with team, shows only its icon below the `sm` breakpoint (`max-sm:sr-only` on the label), so the row fits a phone and the label still names the button for a screen reader. A row that is still too wide wraps: the tools stay at the left and the right buttons move to the next line together, at the right, because the footer keeps them in one group. The title sits on the left at every width. How a form in a dialog behaves, its keys, its close with changes and its errors, is [FORMS.md](FORMS.md).
 
 ## A dialog never grows to fit what a user typed
 
@@ -59,7 +59,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 ## Every yes or no is one `ConfirmDialog`
 
-A question with only a yes and a no, such as Delete calendar, Move to trash or Leave without saving, is `ConfirmDialog`, with no wrapper per kind. Its caller writes the whole description as sentences, the item's name in bold where it reads naturally (`<>Delete <strong>{name}</strong>? All events in it will be lost.</>`), and names its own button. The dialog adds nothing to the text, so a sentence never ends in a stray name or a doubled question mark. `destructive` makes the yes red where it loses work or access: delete, trash, empty trash, remove, delete history, leave a share, and a restore that replaces an account's live data. A restore of a document version saves the current state as a version first, so it stays plain.
+A question with only a yes and a no, such as Delete calendar, Move to trash or Discard changes, is `ConfirmDialog`, with no wrapper per kind. Its caller writes the whole description as sentences, the item's name in bold where it reads naturally (`<>Delete <strong>{name}</strong>? All events in it will be lost.</>`), and names its own button. The dialog adds nothing to the text, so a sentence never ends in a stray name or a doubled question mark. `destructive` makes the yes red where it loses work or access: delete, trash, empty trash, remove, delete history, leave a share, and a restore that replaces an account's live data. A restore of a document version saves the current state as a version first, so it stays plain.
 
 ## A closing dialog gives the focus back
 
@@ -70,6 +70,10 @@ A menu row that opens a dialog is gone a moment later, so the menu names the tar
 A dropdown menu that closes with no dialog over it focuses its trigger itself, whatever holds the focus by then. `returnFocusTo` is the wrong call there: it leaves the focus with whatever took it meanwhile, and Drive's list takes it the moment a closing menu leaves the page (`useKeyboardListNavigation`), so New, the avatar and the detail ⋮ would never get it back. A context menu and a closing dialog do go through `returnFocusTo`, so in Drive they end on the list.
 
 A target still on the page is never replaced, and an element inside an open dialog never becomes one, so a dialog opened over another can't steal its target. A caller's `onCloseAutoFocus` that calls `preventDefault`, such as the sheet's grid refocus, decides for itself. Something that took the focus as the dialog closed, such as a Rename dialog a palette row opened, keeps it.
+
+A target a save drew anew, such as an event chip that moved to another day, is found again by its `data-focus-key`: the calendar's event buttons carry their occurrence (`occurrenceKey`), so Edit event gives the focus to the chip on its new day. With no element of that key left, such as an event moved out of the shown week, the focus stays on `<body>`, where the calendar's keys still work.
+
+"Discard changes?" gives the focus back itself on Keep editing (`useDiscardChanges`). The press that asked focused the X, or nothing for a click outside, so Radix's return would land there; the form dialog's content reports every focus in its form through the hook's `onFocus`, and Keep editing goes back to the last of those fields, or to the first field once it is gone. While a dialog is open, `useKeyboardListNavigation` takes no focus from `<body>`: Chrome fires `focusout` when the question's focused button leaves the page, and Drive's list would otherwise grab the focus before the dialog returns it.
 
 The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened gives its trigger the focus with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
 
@@ -310,6 +314,7 @@ Each looks like a bug in our own code:
 
 ## See also
 
+- [FORMS.md](FORMS.md): how a form in a dialog, a card or a page behaves
 - [MOBILE.md](MOBILE.md): the breakpoints and how the shell behaves on phones and touch
 - [COMMAND-PALETTE.md](COMMAND-PALETTE.md): the ⌘K palette the shell mounts
 - [COMMENTS.md](COMMENTS.md): the comments and activity pane

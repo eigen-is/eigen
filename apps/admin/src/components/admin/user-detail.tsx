@@ -57,7 +57,7 @@ export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
 type UserDetailProps = {
     user: AdminUserRow;
     usage?: HomeSizeResponse;
-    organizationId?: string;
+    organizationId: string;
     // A guest has no role, teams, storage or backup: it only reaches what others shared with it.
     guest?: boolean;
 };
@@ -88,7 +88,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
 
     const handleDelete = async () => {
         await deleteUser.mutateAsync(user.id);
-        navigate({ to: guest ? '/guests' : '/users', search: {} });
+        await navigate({ to: guest ? '/guests' : '/users', search: {} });
     };
 
     return (
@@ -145,7 +145,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
             {!guest && user.role !== null && (
                 <>
                     <Separator />
-                    <UserTeamsSection user={user} organizationId={organizationId} />
+                    <UserTeamsSection user={user} />
                 </>
             )}
 

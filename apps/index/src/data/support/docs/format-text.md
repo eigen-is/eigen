@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, font size, headings, normal text, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -143,7 +143,7 @@ A numbered list inside another numbered list counts 1. a. i. by level, as in Goo
 
 1. Click in the list item where the new count should begin.
 2. Open **Format**, then **Bullets and numbering**, then **List options**, and choose **Restart numbering**.
-3. Enter the first number in **Start at** and click **OK**.
+3. Enter the first number in **Start at** and click **Apply**.
 
 On the first item, the whole list starts at that number. On a later item, the list splits in two there, and the second list counts on from your number. **List options** works only when the cursor is in a numbered list.
 

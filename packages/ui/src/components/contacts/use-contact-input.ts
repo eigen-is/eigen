@@ -1,32 +1,90 @@
 // The typed value of a people-picking field, such as a guest list, a share dialog or a new chat. It parses the
-// "Name <email>" text a picked suggestion arrives as, and names a typed address by the user's contact for it, so
-// every field reads a known address the same way. The caller's `onAdd` decides whether the person is taken.
+// "Name <email>" text a suggestion arrives as and names a typed address by the user's contact for it. A person already
+// in the list is refused in every field alike, and the caller's `onAdd` decides the rest; a refusal keeps the text,
+// with the reason ContactAddRow shows under it. Its form counts typed text as a change and commits it on Save, so the
+// person typed is saved in the same submit.
 
 import { useContacts } from '@workspace/lib/contacts';
 import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import type { ParsedContactInput } from '@workspace/lib/validation';
-import { parseContactInput } from '@workspace/lib/validation';
-import { useState } from 'react';
+import { FIELD_MESSAGES, parseContactInput } from '@workspace/lib/validation';
+import { useCallback, useState } from 'react';
 
-// `onAdd` returns false to refuse the person, which keeps the raw text in the field for editing.
-export function useContactInput(onAdd: (contact: NonNullable<ParsedContactInput>) => boolean) {
+type Contact = NonNullable<ParsedContactInput>;
+
+// The person a commit added, nobody when the field was empty, or the reason it refused, which the field shows too.
+type Committed = { added?: Contact } | { refused: string };
+
+type ContactInput = {
+    value: string;
+    setValue: (value: string) => void;
+    handleChange: (input: string) => void;
+    submit: () => void;
+    error: string | undefined;
+    hasText: boolean;
+    commitTyped: () => Committed;
+};
+
+export function useContactInput({
+    listed,
+    onAdd,
+}: {
+    // The addresses the field's list holds already.
+    listed: readonly string[];
+    // Returns the reason it refuses the person, or nothing to take them.
+    onAdd: (contact: Contact) => string | undefined;
+}): ContactInput {
     const { data: contacts } = useContacts();
     const [value, setValue] = useState('');
+    // A reason holds until the text changes, so an edit or the caller's reset clears it, and retyping the same text
+    // brings no old reason back before it is submitted again.
+    const [refusal, setRefusal] = useState<string>();
 
-    const trySubmit = (input: string): boolean => {
-        const parsed = parseContactInput(input);
-        if (!parsed) return false;
-        const known = contacts && findContactByEmail(contacts, parsed.email);
-        const displayName = parsed.displayName ?? ((known && contactFullName(known)) || undefined);
-        if (!onAdd({ email: parsed.email, displayName })) return false;
-        setValue('');
-        return true;
+    const refuse = (reason: string) => {
+        setRefusal(reason);
+        return { refused: reason };
     };
 
+    const add = (input: string): Committed => {
+        const parsed = parseContactInput(input);
+        if (!parsed) return refuse(FIELD_MESSAGES.invalidEmail);
+        if (listed.some((email) => email.toLowerCase() === parsed.email)) {
+            return refuse(`${parsed.email} is already in the list`);
+        }
+        const known = contacts && findContactByEmail(contacts, parsed.email);
+        const added = {
+            email: parsed.email,
+            displayName: parsed.displayName ?? ((known && contactFullName(known)) || undefined),
+        };
+        const reason = onAdd(added);
+        if (reason) return refuse(reason);
+        setValue('');
+        return { added };
+    };
+
+    const commitTyped = (): Committed => (value.trim() ? add(value) : {});
+
+    // Stable, since callers reset the field from an effect that lists it.
+    const reset = useCallback((next: string) => {
+        setRefusal(undefined);
+        setValue(next);
+    }, []);
+
     const handleChange = (input: string) => {
-        if (input.includes('<') && input.includes('>') && trySubmit(input)) return;
+        setRefusal(undefined);
+        if (input.includes('<') && input.includes('>') && 'added' in add(input)) return;
         setValue(input);
     };
 
-    return { value, setValue, handleChange, submit: () => trySubmit(value) };
+    return {
+        value,
+        setValue: reset,
+        handleChange,
+        submit: () => {
+            commitTyped();
+        },
+        error: refusal,
+        hasText: !!value.trim(),
+        commitTyped,
+    };
 }

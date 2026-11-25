@@ -1,7 +1,8 @@
-// Insert link, or the link card's pencil, opens the link dialog in the sheet's dialog slot. OK, or Enter in the
-// address, saves the link and closes. An address Sheets can't open disables OK and says why, and Cancel, Escape, the X
-// or a click outside close it with the cell as it was. However it closes, the focus goes back to the grid. The range
-// picker takes the dialog's place, and its OK, Cancel or Escape brings it back with the draft, on the link's sheet.
+// Insert link, or the link card's pencil, opens the link dialog in the sheet's dialog slot. Apply, or Enter in the
+// address, saves the link and closes. An address Sheets can't open says why and Apply keeps the dialog, and Cancel,
+// Escape, the X or a click outside close it with the cell as it was. However it closes, the focus goes back to the
+// grid. The range picker takes the dialog's place, and its Select, Cancel or Escape brings it back with the draft, on
+// the link's sheet.
 
 import { describe, expect, mock, test } from 'bun:test';
 import type { CellLinkType } from '@workspace/lib/sheets';
@@ -160,16 +161,16 @@ test('the card goes when its cell loses the link, such as under a paste', async 
     expect(shownCard()).toBeUndefined();
 });
 
-test('OK saves the link, writes the display text and closes', async () => {
+test('Apply saves the link, writes the display text and closes', async () => {
     const dialog = await openCard();
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Insert link');
-    expect(dialog.footer()).toEqual(['Cancel', 'OK']);
-    expect(dialog.button('OK')?.dataset.size).toBe('default');
+    expect(dialog.footer()).toEqual(['Cancel', 'Apply']);
+    expect(dialog.button('Apply')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     await dialog.type('Display text', 'Eigen');
     await dialog.type('Link address', 'https://eigen.is');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(link(dialog.context())).toEqual({ type: 'webpage', address: 'https://eigen.is' });
     expect(dialog.context().sheets[0].data?.[0]?.[0]?.v).toBe('Eigen');
     expect(dialog.context().linkCard).toBeUndefined();
@@ -184,10 +185,9 @@ test('Enter in the address submits', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('an address Sheets cannot open disables OK, says why, and keeps what was typed', async () => {
+test('an address Sheets cannot open says why, and Enter keeps it as typed', async () => {
     const dialog = await openCard();
     await dialog.type('Link address', 'javascript:alert(1)');
-    expect(dialog.button('OK')?.disabled).toBe(true);
     const describedBy = dialog.field('Link address').getAttribute('aria-describedby');
     const reason = describedBy ? document.getElementById(describedBy) : null;
     expect(reason?.textContent).toBe('Please enter a valid link');
@@ -231,10 +231,10 @@ test("a mouse press in the dialog doesn't reach the grid", async () => {
 describe('the focus goes back to the grid', () => {
     const closes: [string, (dialog: Awaited<ReturnType<typeof openCard>>) => Promise<unknown>][] = [
         [
-            'OK',
+            'Apply',
             async (dialog) => {
                 await dialog.type('Link address', 'https://eigen.is/docs');
-                await dialog.click('OK');
+                await dialog.click('Apply');
             },
         ],
         [
@@ -285,10 +285,10 @@ describe('the range picker', () => {
         return dialog;
     };
 
-    test('OK brings the dialog back with the picked range and the text as typed', async () => {
+    test('Select brings the dialog back with the picked range and the text as typed', async () => {
         const dialog = await openPicker();
         await dialog.type('Cell range', 'Sheet1!C2');
-        await dialog.click('OK');
+        await dialog.click('Select');
         expect(dialog.title()).toBe('Edit link');
         expect(dialog.field('Display text').value).toBe('Totals');
         expect(dialog.field('Cell range').value).toBe('Sheet1!C2');
@@ -348,9 +348,9 @@ describe('the range picker', () => {
             ctx.currentSheetId = 'id_2';
         });
         await dialog.type('Cell range', 'Sheet2!A1');
-        await dialog.click('OK');
+        await dialog.click('Select');
         expect(dialog.context().currentSheetId).toBe('id_1');
-        await dialog.click('OK');
+        await dialog.click('Apply');
         expect(link(dialog.context())).toEqual({ type: 'cellrange', address: 'Sheet2!A1' });
     });
 });

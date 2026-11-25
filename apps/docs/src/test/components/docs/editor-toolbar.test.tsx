@@ -3,6 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -335,13 +336,8 @@ test("the size box shows the selection's size, and a typed size replaces Small",
     await act(async () => editor.commands.setTextSelection({ from: 1, to: 10 }));
     expect(box()?.value).toBe('');
 
-    await act(async () => {
-        const input = box();
-        if (!input) return;
-        input.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '14');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => box()?.focus());
+    await type('Font size', '14');
     await act(async () => box()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(editor.getJSON().content?.[0]?.content).toEqual([
         {
@@ -1146,7 +1142,7 @@ test('a dialog a menu opens keeps focus', async () => {
 });
 
 // Radix would hand focus back to the Format menu's trigger, which the menu's close left behind.
-test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the editor', async (label) => {
+test.each(['Apply', 'Cancel'])('Page setup closed with %s gives focus back to the editor', async (label) => {
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(1);
     await render(1920, true);
@@ -1205,7 +1201,7 @@ const openToolbarDialog = {
 };
 
 test.each([
-    ['Restart numbering', 'OK'],
+    ['Restart numbering', 'Apply'],
     ['Restart numbering', 'Cancel'],
     ['Custom spacing', 'Apply'],
     ['Custom spacing', 'Cancel'],
@@ -1317,7 +1313,7 @@ test.each([
     expect(submenuDisabled('List options')).toBe(disabled);
 });
 
-// Opens Restart numbering at the caret, types the number and confirms.
+// Opens Restart numbering at the caret, types the number and applies it.
 async function restartAtCaret(startAt: string) {
     await render(1920, true);
     await openMenu('Format');
@@ -1328,15 +1324,13 @@ async function restartAtCaret(startAt: string) {
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Restart numbering');
 
     const input = document.querySelector<HTMLInputElement>('[role="dialog"] input');
-    expect(input?.value).toBe('1');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, startAt);
-        input?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    const ok = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
-        (button) => button.textContent === 'OK',
+    if (!input) throw new Error('no Start at field');
+    expect(input.value).toBe('1');
+    await type(input, startAt);
+    const apply = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
+        (button) => button.textContent === 'Apply',
     );
-    await act(async () => ok?.click());
+    await act(async () => apply?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 }
 

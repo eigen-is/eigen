@@ -1,50 +1,42 @@
 // The admin's Onboarding page: the landing page's waitlist, the email an accepted person gets with their invite,
-// and what a new user starts with, such as a welcome mail. It edits the server settings and saves them as one form.
+// and what a new user starts with, such as a welcome mail. It edits the server settings as a draft on a PageForm and
+// saves them together.
 
 import { useMailEnabled } from '@workspace/lib/public';
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
+import type { DeepPartial } from '@workspace/lib/types/util';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui/components/layout/app';
+import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { usePageDraft } from './hooks/use-page-draft';
 
-type OnboardingDraft = {
-    waitlist?: Partial<ServerSettings['onboarding']['waitlist']>;
-    autoAddOwnerContact?: boolean;
-    welcomeMail?: Partial<ServerSettings['onboarding']['welcomeMail']>;
-    inviteEmail?: Partial<ServerSettings['onboarding']['inviteEmail']>;
-};
+type OnboardingDraft = DeepPartial<ServerSettings['onboarding']>;
 
 export function OnboardingSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
-    const updateSettings = useUpdateServerSettings();
-    const mailEnabled = useMailEnabled();
-
-    const [draft, setDraft] = useState<OnboardingDraft>({});
-    const [dirty, setDirty] = useState(false);
-    // LightEditor reads `content` once at init and ignores later prop changes. Bumping this
-    // key remounts both editors so Reset re-seeds them from server state.
-    const [editorKey, setEditorKey] = useState(0);
 
     if (isLoading || !settings) {
         return <LoadingState />;
     }
+    return <OnboardingSettingsForm onboarding={settings.onboarding} />;
+}
 
-    const onboarding = settings.onboarding;
+// Mounted once the settings have loaded, so the draft starts from them.
+function OnboardingSettingsForm({ onboarding }: { onboarding: ServerSettings['onboarding'] }) {
+    const updateSettings = useUpdateServerSettings();
+    const mailEnabled = useMailEnabled();
 
-    const current = {
-        waitlist: { ...onboarding.waitlist, ...draft.waitlist },
-        autoAddOwnerContact: draft.autoAddOwnerContact ?? onboarding.autoAddOwnerContact,
-        welcomeMail: { ...onboarding.welcomeMail, ...draft.welcomeMail },
-        inviteEmail: { ...onboarding.inviteEmail, ...draft.inviteEmail },
-    };
+    const { draft, setDraft, current, changed, reset } = usePageDraft(onboarding, withDraft);
+    // LightEditor reads `content` once, as it mounts, so Reset bumps this key to remount both editors on what was saved.
+    const [editorKey, setEditorKey] = useState(0);
+    const fieldId = useId();
 
     const update = (patch: OnboardingDraft) => {
-        setDirty(true);
         setDraft((prev) => ({
             ...prev,
             ...patch,
@@ -56,28 +48,27 @@ export function OnboardingSettingsPage() {
 
     const handleSave = async () => {
         await updateSettings.mutateAsync({ onboarding: draft });
-        setDraft({});
-        setDirty(false);
+        reset();
     };
 
     const handleReset = () => {
-        setDraft({});
-        setDirty(false);
+        reset();
         setEditorKey((k) => k + 1);
     };
 
     return (
-        <div className="space-y-6">
+        <PageForm changed={changed} onSubmit={handleSave} onReset={handleReset}>
             <SettingsSection
                 title="Waitlist"
                 description='When enabled, the landing page shows a "Join waitlist" form.'
             >
                 <div className="flex items-center gap-3">
                     <Switch
+                        id={`${fieldId}-waitlist`}
                         checked={current.waitlist.enabled}
                         onCheckedChange={(enabled) => update({ waitlist: { enabled } })}
                     />
-                    <Label>Enable waitlist</Label>
+                    <Label htmlFor={`${fieldId}-waitlist`}>Enable waitlist</Label>
                 </div>
             </SettingsSection>
 
@@ -87,19 +78,22 @@ export function OnboardingSettingsPage() {
                     description="Email sent to waitlist members when their application is accepted."
                 >
                     <div className="space-y-1.5">
-                        <Label>Subject</Label>
+                        <Label htmlFor={`${fieldId}-invite-subject`}>Subject</Label>
                         <Input
+                            id={`${fieldId}-invite-subject`}
                             value={current.inviteEmail.subject}
                             onChange={(e) => update({ inviteEmail: { subject: e.target.value } })}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Body</Label>
+                        <Label id={`${fieldId}-invite-body`}>Body</Label>
                         <div className="border rounded-md p-3 min-h-[160px] bg-background">
                             <LightEditor
                                 key={`invite-${editorKey}`}
+                                labelledBy={`${fieldId}-invite-body`}
                                 content={current.inviteEmail.body}
                                 onChange={(body) => update({ inviteEmail: { body } })}
+                                submitOnModEnter
                                 toolbar="floating"
                                 containerClassName="relative flex flex-col"
                             />
@@ -119,14 +113,15 @@ export function OnboardingSettingsPage() {
             >
                 <div className="flex items-center gap-3">
                     <Switch
+                        id={`${fieldId}-owner-contact`}
                         checked={current.autoAddOwnerContact}
                         onCheckedChange={(autoAddOwnerContact) => update({ autoAddOwnerContact })}
                     />
-                    <Label>Add owner to new user contacts</Label>
+                    <Label htmlFor={`${fieldId}-owner-contact`}>Add owner to new user contacts</Label>
                 </div>
             </SettingsSection>
 
-            {/* Never sent without hosted mail (welcome.ts), so there is nothing to set. */}
+            {/* Never sent without hosted mail, so there is nothing to set. */}
             {mailEnabled && (
                 <>
                     <Separator />
@@ -137,28 +132,32 @@ export function OnboardingSettingsPage() {
                     >
                         <div className="flex items-center gap-3">
                             <Switch
+                                id={`${fieldId}-welcome`}
                                 checked={current.welcomeMail.enabled}
                                 onCheckedChange={(enabled) => update({ welcomeMail: { enabled } })}
                             />
-                            <Label>Send welcome email</Label>
+                            <Label htmlFor={`${fieldId}-welcome`}>Send welcome email</Label>
                         </div>
 
                         {current.welcomeMail.enabled && (
                             <>
                                 <div className="space-y-1.5">
-                                    <Label>Subject</Label>
+                                    <Label htmlFor={`${fieldId}-welcome-subject`}>Subject</Label>
                                     <Input
+                                        id={`${fieldId}-welcome-subject`}
                                         value={current.welcomeMail.subject}
                                         onChange={(e) => update({ welcomeMail: { subject: e.target.value } })}
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Body</Label>
+                                    <Label id={`${fieldId}-welcome-body`}>Body</Label>
                                     <div className="border rounded-md p-3 min-h-[160px] bg-background">
                                         <LightEditor
                                             key={`welcome-${editorKey}`}
+                                            labelledBy={`${fieldId}-welcome-body`}
                                             content={current.welcomeMail.body}
                                             onChange={(body) => update({ welcomeMail: { body } })}
+                                            submitOnModEnter
                                             toolbar="floating"
                                             containerClassName="relative flex flex-col"
                                         />
@@ -172,8 +171,15 @@ export function OnboardingSettingsPage() {
                     </SettingsSection>
                 </>
             )}
-
-            <SettingsFooter dirty={dirty} saving={updateSettings.isPending} onSave={handleSave} onReset={handleReset} />
-        </div>
+        </PageForm>
     );
+}
+
+function withDraft(onboarding: ServerSettings['onboarding'], draft: OnboardingDraft): ServerSettings['onboarding'] {
+    return {
+        waitlist: { ...onboarding.waitlist, ...draft.waitlist },
+        autoAddOwnerContact: draft.autoAddOwnerContact ?? onboarding.autoAddOwnerContact,
+        welcomeMail: { ...onboarding.welcomeMail, ...draft.welcomeMail },
+        inviteEmail: { ...onboarding.inviteEmail, ...draft.inviteEmail },
+    };
 }

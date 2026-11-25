@@ -1,7 +1,8 @@
 // The editable half of the Share dialog: add people or a team, change or remove each one's access, set the link's
 // general access and, for the owner, whether editors may share. It is the dialog's form, and mounts with it, so each
-// opening starts from the item as it is. Save sends only what changed, so a dialog opened a while ago can't undo what
-// another sharer added since.
+// opening starts from the item as it is. Save adds a person still typed in the field first, then sends only what
+// changed, so a dialog opened a while ago can't undo what another sharer added since; with nothing changed it closes.
+// Adding a person set to Remove, yourself included, takes the Remove back.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -19,7 +20,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import {
     Select,
     SelectContent,
@@ -31,7 +32,7 @@ import {
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -65,15 +66,26 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
         return emails;
     }, [directList, inheritedList, user?.email]);
 
-    // Rejecting a duplicate returns false so the raw text stays in the field for the user to edit.
-    const contactInput = useContactInput((contact) => {
-        if (directList.some((item) => item.id.toLowerCase() === contact.email)) return false;
-        setDirectListOverride((prevList) => [
-            ...(prevList ?? baseDirectList),
-            { id: contact.email, read: true, write: true, owner: false },
-        ]);
-        setHasChanges(true);
-        return true;
+    const contactFieldId = useId();
+
+    // A person set to Remove comes back with the access they had, your own entry included.
+    const withPerson = (email: string): DirectAccessItem[] => {
+        const removed = directList.find((item) => item.id.toLowerCase() === email);
+        const restored = baseDirectList.find((item) => item.id === removed?.id && item.read);
+        return removed
+            ? directList.map((item) => (item === removed ? (restored ?? { ...item, read: true, write: true }) : item))
+            : [...directList, { id: email, read: true, write: true, owner: false }];
+    };
+
+    const contactInput = useContactInput({
+        // A person set to Remove may be added again.
+        listed: directList.filter((item) => item.read).map((item) => item.id),
+        onAdd: ({ email }) => {
+            const listed = directList.some((item) => item.id.toLowerCase() === email);
+            if (!listed && email === user?.email?.toLowerCase()) return 'You already have access';
+            setDirectListOverride(withPerson(email));
+            setHasChanges(true);
+        },
     });
 
     useEffect(() => {
@@ -107,11 +119,16 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     };
 
     const handleSave = async () => {
+        // A person still typed in the field is saved with the rest, built here since the state update hasn't rendered yet.
+        const typed = contactInput.commitTyped();
+        if ('refused' in typed) return false;
+        if (!hasChanges && !typed.added) return;
+        const list = typed.added ? withPerson(typed.added.email) : directList;
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
         const add: DriveACL[] = [];
         const remove: string[] = [];
 
-        for (const item of directList) {
+        for (const item of list) {
             if (item.owner) continue;
             const prev = base.get(item.id.toLowerCase());
             if (item.read || item.write) {
@@ -141,17 +158,14 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     return (
         <FormDialogForm
             submitLabel="Save"
-            canSubmit={hasChanges}
+            changed={hasChanges || contactInput.hasText}
             onSubmit={handleSave}
             footerStart={
                 myTeams &&
                 myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                <Users />
-                                Share with team
-                            </Button>
+                            <FooterTool icon={Users} label="Share with team" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
                             {myTeams.map((team) => (
@@ -169,12 +183,16 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                 )
             }
         >
+            <label htmlFor={contactFieldId} className="sr-only">
+                Add people
+            </label>
             {/* Enter here adds the person typed, and never submits. */}
             <ContactAddRow
-                id="new-contact"
+                id={contactFieldId}
                 value={contactInput.value}
                 onChange={contactInput.handleChange}
                 onSubmit={contactInput.submit}
+                error={contactInput.error}
                 excludeEmails={excludeEmails}
                 className="mt-2"
             />
@@ -223,7 +241,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                             <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
                         ) : (
                             <Select
-                                defaultValue={access.write ? 'editor' : 'viewer'}
+                                value={access.read ? (access.write ? 'editor' : 'viewer') : 'remove'}
                                 onValueChange={(value) => handlePermissionChange(access.id, value)}
                             >
                                 <SelectTrigger className="h-7 w-28">

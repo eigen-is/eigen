@@ -1,17 +1,24 @@
+// The leave guard of a collaborative editor, such as Docs or Sheets. Edits made while offline live only in the tab's
+// document until the server takes them, so leaving the page, reloading it or closing the tab would drop them. The
+// editor renders it with useCollabDoc's `unsyncedEdits`.
+
 import { LeaveGuard } from './leave-guard';
 
 type UnsyncedEditsGuardProps = {
-    // From useCollabDoc's `unsyncedEdits` — edits are waiting for a socket that can carry them.
     active: boolean;
 };
 
-// Collab edits live only in the tab's Y.Doc until the server acknowledges them, so leaving drops them.
 export function UnsyncedEditsGuard({ active }: UnsyncedEditsGuardProps) {
     return (
         <LeaveGuard
             active={active}
-            title="Leave without syncing?"
-            description="Edits made while offline have not reached the server yet. If you leave now they are lost."
+            question={{
+                title: 'Leave without syncing?',
+                description:
+                    'Edits made while offline have not reached the server yet. If you leave now they are lost.',
+                cancelText: 'Stay',
+                confirmText: 'Leave',
+            }}
         />
     );
 }

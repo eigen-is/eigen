@@ -1,8 +1,9 @@
 // The Edit event dialog: every field of an existing event and its guests. A change to a repeating event first asks
 // which occurrences it applies to, and a move to another owner's calendar that loses something warns first. An
 // invitation from someone else only lets you pick the calendar that holds it. It opens over an event, such as from the
-// event detail dialog, which mounts it anew for each opening. A field shows what the user changed, else the event as it
-// is now, so a refetch or a refused Save moves only what nobody touched.
+// event detail dialog, which mounts it anew for each opening, and shows a series once its master has loaded. A
+// field shows what the user changed, else the event as it is now, so a refetch or a refused Save moves only what
+// nobody touched.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -26,11 +27,13 @@ import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { LoadingState } from '@workspace/ui/components/layout/app';
 import { UsersRound } from 'lucide-react';
 import { useState } from 'react';
-import { AttendeeEditor } from './attendee-editor';
+import { AttendeeEditor, useGuestInput } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
-import { EventFormFields } from './event-form-fields';
+import type { EventFieldTimes } from './event-form-fields';
+import { EventFormFields, timesDiffer } from './event-form-fields';
 import { RecurringActionDialog } from './recurring-action-dialog';
 import { toTimeString } from './time-select';
 
@@ -42,13 +45,12 @@ type EditEventDialogProps = {
     ownerId: string;
 };
 
-// What the user changed, and nothing else. The times and the repeat are one entry, because a preset rule names the
-// start's weekday and an end means nothing beside another event's start.
+// What the user changed, and nothing else.
 type TypedFields = {
     title?: string;
     description?: string;
     location?: string;
-    times?: ReturnType<typeof fieldTimes>;
+    times?: EventFieldTimes;
     attendees?: Attendee[];
     calendarKey?: string;
 };
@@ -78,13 +80,14 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
     const times = typed.times ?? fieldTimes(event);
     const edit = (change: TypedFields) => setTyped((current) => ({ ...current, ...change }));
     // One user action can set several of these in a row, so each builds on the last.
-    const editTimes = (change: Partial<typeof times>) => {
+    const editTimes = (change: Partial<EventFieldTimes>) => {
         setTyped((current) => ({ ...current, times: { ...(current.times ?? times), ...change } }));
     };
 
     const currentCal =
         calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === ownerId) ?? calendarOptions[0];
-    const selectedCalKey = typed.calendarKey ?? (currentCal ? calendarKey(currentCal) : '');
+    const currentCalKey = currentCal ? calendarKey(currentCal) : '';
+    const selectedCalKey = typed.calendarKey ?? currentCalKey;
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
     const calendarChanged = selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== ownerId;
 
@@ -107,11 +110,13 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
     const { allDay, startDate, startTime, endDate, endTime, rrule: rruleString } = times;
     // A list the user edited says who is on it, and each guest's reply stays the server's.
     const serverAttendees = event.data?.attendees ?? [];
-    const attendees =
-        typed.attendees?.map(
+    const withReplies = (typedGuests: readonly Attendee[] | undefined) =>
+        typedGuests?.map(
             (guest) =>
                 serverAttendees.find((stored) => stored.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
         ) ?? serverAttendees;
+    const attendees = withReplies(typed.attendees);
+    const guestInput = useGuestInput({ attendees, onChange: (value) => edit({ attendees: value }) });
     const isRecurring = !!event.rrule;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isFromOthers(event);
@@ -125,16 +130,28 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
     else if (attendees.length) moveLossReasons.push('guests will be notified it was canceled and re-invited');
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
-    const write = async (scope: RecurrenceScope) => {
+    const changed =
+        title !== event.title ||
+        description !== (event.description ?? '') ||
+        location !== (event.location ?? '') ||
+        timesDiffer(times, fieldTimes(event)) ||
+        attendees.length !== serverAttendees.length ||
+        attendees.some((guest, index) => guest !== serverAttendees[index]) ||
+        selectedCalKey !== currentCalKey ||
+        guestInput.hasText;
+
+    // A guest the Save just added is in `typedGuests` before a render puts them in `typed`.
+    const write = async (scope: RecurrenceScope, typedGuests: readonly Attendee[] | undefined) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
+        const savedGuests = withReplies(typedGuests);
 
         const seriesGuests = (own: readonly Attendee[]) => {
             const emails = (guests: readonly Attendee[]) => new Set(guests.map((guest) => guest.email.toLowerCase()));
             const shown = emails(serverAttendees);
-            const listed = emails(attendees);
+            const listed = emails(savedGuests);
             const owned = emails(own);
             const kept = own.filter(({ email }) => !shown.has(email.toLowerCase()) || listed.has(email.toLowerCase()));
-            const joined = attendees.filter(
+            const joined = savedGuests.filter(
                 ({ email }) => !shown.has(email.toLowerCase()) && !owned.has(email.toLowerCase()),
             );
             return [...kept, ...joined];
@@ -148,11 +165,11 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
             endTime: end,
             rrule: rruleString,
             timezone: allDay ? null : (event.timezone ?? viewerTimeZone()),
-            data: { ...event.data, attendees },
+            data: { ...event.data, attendees: savedGuests },
         };
         // The series' guests are its own list plus or minus the guests changed here, so one this date leaves out stays.
         const seriesData =
-            master && typed.attendees ? { attendees: seriesGuests(master.data?.attendees ?? []) } : undefined;
+            master && typedGuests ? { attendees: seriesGuests(master.data?.attendees ?? []) } : undefined;
         const occurrenceSave = { occurrence: event, edited, seriesData };
 
         const targetId = event.parentEventId || event.id;
@@ -186,13 +203,13 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
     };
 
     // A cross-home copy made by a form already behind the event would only stand beside the original.
-    const save = async (scope: RecurrenceScope): Promise<false | undefined> => {
+    const save = async (scope: RecurrenceScope, typedGuests = typed.attendees): Promise<false | undefined> => {
         if (crossHomeMove && heldEtag !== event.etag) {
             refuseStaleEvent();
             refuse();
             return false;
         }
-        await saveHeld(() => write(scope));
+        await saveHeld(() => write(scope, typedGuests));
     };
 
     // Edit event is hidden while the recurring choice or the move warning is up, so their save closes it too.
@@ -207,78 +224,85 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
                 onOpenChange={onOpenChange}
                 title="Edit event"
             >
-                <FormDialogForm
-                    canSubmit={title.trim() !== '' && (!isPartOfSeries || !!master)}
-                    submitLabel="Save"
-                    readOnly={!canSave}
-                    onSubmit={async () => {
-                        if (crossHomeMove && moveLossReasons.length > 0) {
-                            setShowMoveConfirm(true);
-                            return false;
-                        }
-                        if (isPartOfSeries && !calendarChanged) {
-                            setShowRecurringDialog(true);
-                            return false;
-                        }
-                        return save('all');
-                    }}
-                >
-                    {isLinkedEvent && (
-                        <p className="text-xs text-muted-foreground">
-                            You were invited to this event. Only the organizer can change its details.
-                        </p>
-                    )}
+                {isPartOfSeries && !master ? (
+                    <LoadingState />
+                ) : (
+                    <FormDialogForm
+                        changed={changed}
+                        submitLabel="Save"
+                        readOnly={!canSave}
+                        onSubmit={async () => {
+                            const guests = guestInput.commitGuests();
+                            // An invitation's title is the organizer's, so its copy moves whatever the title holds.
+                            if ((!isLinkedEvent && !title.trim()) || guests === false) return false;
+                            if (crossHomeMove && moveLossReasons.length > 0) {
+                                setShowMoveConfirm(true);
+                                return false;
+                            }
+                            if (isPartOfSeries && !calendarChanged) {
+                                setShowRecurringDialog(true);
+                                return false;
+                            }
+                            return save('all', guests);
+                        }}
+                    >
+                        {isLinkedEvent && (
+                            <p className="text-xs text-muted-foreground">
+                                You were invited to this event. Only the organizer can change its details.
+                            </p>
+                        )}
 
-                    <EventFormFields
-                        title={title}
-                        setTitle={(value) => edit({ title: value })}
-                        allDay={allDay}
-                        setAllDay={(value) => editTimes({ allDay: value })}
-                        startDate={startDate}
-                        setStartDate={(value) => editTimes({ startDate: value })}
-                        endDate={endDate}
-                        setEndDate={(value) => editTimes({ endDate: value })}
-                        startTime={startTime}
-                        setStartTime={(value) => editTimes({ startTime: value })}
-                        endTime={endTime}
-                        setEndTime={(value) => editTimes({ endTime: value })}
-                        location={location}
-                        setLocation={(value) => edit({ location: value })}
-                        description={description}
-                        setDescription={(value) => edit({ description: value })}
-                        rruleString={rruleString}
-                        setRruleString={(value) => editTimes({ rrule: value })}
-                        selectedCalKey={selectedCalKey}
-                        setSelectedCalKey={(value) => edit({ calendarKey: value })}
-                        calendarOptions={calendarOptions}
-                        recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
-                        timezone={event.timezone || viewerTimeZone()}
-                        detailsDisabled={isLinkedEvent}
-                        attendeesSection={
-                            isLinkedEvent ? (
-                                attendees.length ? (
+                        <EventFormFields
+                            title={title}
+                            setTitle={(value) => edit({ title: value })}
+                            allDay={allDay}
+                            setAllDay={(value) => editTimes({ allDay: value })}
+                            startDate={startDate}
+                            setStartDate={(value) => editTimes({ startDate: value })}
+                            endDate={endDate}
+                            setEndDate={(value) => editTimes({ endDate: value })}
+                            startTime={startTime}
+                            setStartTime={(value) => editTimes({ startTime: value })}
+                            endTime={endTime}
+                            setEndTime={(value) => editTimes({ endTime: value })}
+                            location={location}
+                            setLocation={(value) => edit({ location: value })}
+                            description={description}
+                            setDescription={(value) => edit({ description: value })}
+                            rruleString={rruleString}
+                            setRruleString={(value) => editTimes({ rrule: value })}
+                            selectedCalKey={selectedCalKey}
+                            setSelectedCalKey={(value) => edit({ calendarKey: value })}
+                            calendarOptions={calendarOptions}
+                            recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
+                            timezone={event.timezone || viewerTimeZone()}
+                            detailsDisabled={isLinkedEvent}
+                            attendeesSection={
+                                isLinkedEvent ? (
+                                    attendees.length ? (
+                                        <div className="flex items-start gap-3">
+                                            <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                                            <div className="flex-1">
+                                                <AttendeeList attendees={attendees} organizer={event.data?.organizer} />
+                                            </div>
+                                        </div>
+                                    ) : null
+                                ) : (
                                     <div className="flex items-start gap-3">
-                                        <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                                        <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                                         <div className="flex-1">
-                                            <AttendeeList attendees={attendees} organizer={event.data?.organizer} />
+                                            <AttendeeEditor
+                                                attendees={attendees}
+                                                onChange={(value) => edit({ attendees: value })}
+                                                input={guestInput}
+                                            />
                                         </div>
                                     </div>
-                                ) : null
-                            ) : (
-                                <div className="flex items-start gap-3">
-                                    <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
-                                    <div className="flex-1">
-                                        <AttendeeEditor
-                                            attendees={attendees}
-                                            onChange={(value) => edit({ attendees: value })}
-                                            currentUserEmail={user?.email}
-                                        />
-                                    </div>
-                                </div>
-                            )
-                        }
-                    />
-                </FormDialogForm>
+                                )
+                            }
+                        />
+                    </FormDialogForm>
+                )}
             </FormDialog>
 
             <RecurringActionDialog
@@ -302,7 +326,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
 }
 
 // An all-day event runs from UTC midnight to the UTC midnight after its last day.
-function fieldTimes(event: CalendarEventOccurrence) {
+function fieldTimes(event: CalendarEventOccurrence): EventFieldTimes {
     const { allDay, rrule } = event;
     if (!allDay) {
         return {

@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, rooms, create, teams, personal]
 related: [chat/get-started, chat/personal-and-team-chats, chat/share-room]
 order: 70
-updated: 2026-09-13
+updated: 2026-11-25
 ---
 
 A chat room is a named space where you and other people can send messages and share files. You can create as many rooms as you like, each with its own name and access list.
@@ -15,9 +15,9 @@ A chat room is a named space where you and other people can send messages and sh
 1. Open Chat. The sidebar on the left lists your rooms.
 2. Click **New chat** at the top of the sidebar.
 3. In the **New chat** dialog, type a name or email address and pick the person from the list. Repeat for everyone you want in the room.
-4. Click **Let's chat**. If you already have a chat with exactly these people, that chat opens instead. Click **Create new chat** if you want a second one.
+4. Click **Next**. If you already have a chat with exactly these people, the button says **Open** and opens that chat instead. Click **Create new chat** if you want a second one.
 5. Check the **Name** and the **Location**. By default the room is saved to the `chats` folder in your Drive. To save it somewhere else, click **Change** and pick the folder you want.
-6. Click **Let's chat** again. The new room opens straight away.
+6. Click **Create**. The new room opens straight away.
 
 ## Create your first room
 

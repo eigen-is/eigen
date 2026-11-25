@@ -1,7 +1,10 @@
+// The paint sections of a chart or shape: label color, fill and its hatch, stroke and sketch. Each row writes its own
+// field, a host can leave rows out, the stroke width shows to the hundredth, and a sketch says when the data draws flat.
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { MAX_SKETCH_POINTS } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '@workspace/lib/vector';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -46,16 +49,11 @@ function row(container: HTMLElement, section: string, label: string): HTMLElemen
     return control;
 }
 
-const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-
-async function type(container: HTMLElement, section: string, label: string, value: string) {
+async function typeInRow(container: HTMLElement, section: string, label: string, value: string) {
     const input = row(container, section, label).querySelector('input');
     if (!input) throw new Error(`no field under ${section} › ${label}`);
-    await act(async () => {
-        input.focus();
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => input.focus());
+    await type(input, value);
 }
 
 async function choose(container: HTMLElement, section: string, label: string, option: string) {
@@ -106,7 +104,7 @@ describe('PaintSections', () => {
     test('each row writes its own field', async () => {
         const { container, onChange, onFill } = await mount();
         await choose(container, 'Sketch', 'Style', 'Cartoonist');
-        await type(container, 'Stroke', 'Width', '1.5');
+        await typeInRow(container, 'Stroke', 'Width', '1.5');
         await choose(container, 'Stroke', 'Style', 'Dashed');
         expect(onChange.mock.calls.map(([patch]) => patch)).toEqual([
             { roughness: 2 },

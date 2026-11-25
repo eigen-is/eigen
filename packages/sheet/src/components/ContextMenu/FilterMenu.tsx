@@ -1,6 +1,6 @@
 // The popover a filtered column's header button opens: sort ascending or descending, and filter the column by color,
-// by a condition or by its values, with a tree of dates for a date column. Each choice saves the column's filter
-// through the filter module, which hides the rows that fail it.
+// by a condition or by its values, with a tree of dates for a date column. Apply saves the column's filter through the
+// filter module, which hides the rows that fail it.
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -436,7 +436,7 @@ export const FilterMenu: React.FC = () => {
                                                     });
                                                 }}
                                             >
-                                                Confirm
+                                                Apply
                                             </Button>
                                         </div>
                                     )}
@@ -464,7 +464,12 @@ export const FilterMenu: React.FC = () => {
                                     <div className="px-2 pt-1 pb-1.5 space-y-1.5">
                                         <Select
                                             value={conditionName}
-                                            onValueChange={(v) => setConditionName(v as FilterConditionName | 'none')}
+                                            onValueChange={(v) =>
+                                                setConditionName(
+                                                    FILTER_CONDITION_ITEMS.find((item) => item.name === v)?.name ??
+                                                        'none',
+                                                )
+                                            }
                                         >
                                             <SelectTrigger size="sm" className="w-full">
                                                 <SelectValue />
@@ -654,7 +659,7 @@ export const FilterMenu: React.FC = () => {
                                 });
                             }}
                         >
-                            Confirm
+                            Apply
                         </Button>
                     </div>
                 </div>

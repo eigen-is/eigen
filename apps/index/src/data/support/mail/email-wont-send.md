@@ -6,22 +6,22 @@ category: Troubleshooting
 tags: [mail, sending, attachments, errors, troubleshooting]
 related: [mail/compose-and-send, mail/attach-files]
 order: 200
-updated: 2026-11-14
+updated: 2026-11-25
 ---
 
 When you click **Send** and the message doesn't go, Mail tells you why. Some checks happen before the message leaves your screen, and some come back from the mail server as a short message at the bottom of the window. This page covers the usual causes and what to do about each one.
 
 A message that fails to send is not lost. It stays in your **Drafts** folder, so you can fix the problem and try again.
 
-## "Please specify at least one recipient"
+## "Add at least one recipient"
 
-You need at least one address in the **To** field. Mail shows a **Cannot send** box with this message when the **To** field is empty.
+You need at least one address in the **To** field. When it is empty, Mail shows this message under **To** and puts your cursor there.
 
 Add an address in the **To** field and click **Send** again. As you type, Mail suggests matching people from your contacts and team; pick one, or type the full address yourself.
 
-## "Please add a subject or message"
+## "Add a subject or a message"
 
-A message with no **Subject** and no body has nothing to send. Add a subject, or write something in the message area, then send.
+A message with no **Subject** and no body has nothing to send, and Mail shows this message under **Subject**. Add a subject, or write something in the message area, then send.
 
 If you fill in the body but leave the subject blank, Mail doesn't block you. It asks **Send without subject?** first. Click **Send** to send it anyway, or close the box to go back and add a subject.
 

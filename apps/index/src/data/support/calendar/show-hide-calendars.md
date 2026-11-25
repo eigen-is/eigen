@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, calendars, visibility, shared, team]
 related: [calendar/get-started, calendar/share-calendar, calendar/export-events]
 order: 60
-updated: 2026-11-02
+updated: 2026-11-25
 ---
 
 You can have several calendars in Calendar, for example one for work and one for personal events, plus calendars that other people have shared with you. The sidebar lets you show or hide any of them without deleting anything.
@@ -32,7 +32,7 @@ Each calendar has a **⋮** button on the right that appears when you hover over
 - Change the calendar's name in the **Calendar name** field.
 - Pick a new color by clicking the color swatch at the start of the **Calendar name** field.
 
-Click **Save** when you are done. **Save** stays grayed out while the name is empty.
+Click **Save** when you are done. With an empty name, Calendar says so under the field.
 
 For calendars under **Shared with me** or **Team calendars**, the same **Edit calendar** item opens **Shared calendar settings**. You can choose a different display color for that calendar. This only affects how the calendar looks for you; it does not change the color the owner set.
 

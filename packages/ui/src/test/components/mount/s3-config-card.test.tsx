@@ -1,12 +1,13 @@
 // The S3 card's bucket safety dialog asks how many days old versions are kept, starting from the card's days. Enable,
-// Update or Enter hardens the bucket with the days typed there, and the card keeps them. Cancel throws an edited value
-// away. The days stay whole and between 1 and the maximum. A bucket that is safe already gets "Change retention", and a
-// refused harden still closes the dialog and shows its message. Enter in the days field never submits a form around the
-// card, such as the mount dialog's.
+// Save or Enter hardens the bucket with the days typed there, and the card keeps them. Cancel throws an edited value
+// away. A bucket that is safe already gets "Change retention", and a refused harden still closes the dialog and shows
+// its message. Enter in the days field never submits a form around the card, such as the mount dialog's. Once Save was
+// pressed, each required field left empty says so under itself, a saved secret excepted, and the form focuses the
+// first.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
+import { field, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -15,6 +16,7 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { S3ConfigCard } = await import('../../../components/mount/s3-config-card');
+const { FormShell } = await import('../../../components/form-shell');
 
 const bucket: S3Config = {
     endpoint: 'https://s3.example.org',
@@ -76,11 +78,6 @@ const daysField = () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('the dialog has no days field');
     return input;
 };
-const typeDays = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(daysField(), value);
-        daysField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -104,7 +101,7 @@ test('Make this bucket safe starts from the default days and enables with the da
     expect(dialog()?.textContent).toContain('Turns on bucket versioning');
     expect(daysField().value).toBe('30');
     expect(findButton(dialog(), 'Cancel')).toBeDefined();
-    await typeDays('60');
+    await type('Expire old versions after days', '60');
     await click(findButton(dialog(), 'Enable'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 60]]);
@@ -116,7 +113,7 @@ test('Make this bucket safe starts from the default days and enables with the da
 test('Enter in the days field hardens the bucket, and never submits the form around the card', async () => {
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('14');
+    await type('Expire old versions after days', '14');
     await act(async () => pressEnter(daysField()));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 14]]);
@@ -127,7 +124,7 @@ test('Enter in the days field hardens the bucket, and never submits the form aro
 test('Cancel throws the edited days away, and the next opening starts from the old ones', async () => {
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('90');
+    await type('Expire old versions after days', '90');
     await click(findButton(dialog(), 'Cancel'));
     expect(dialog()).toBeNull();
     await openSafeDefaults();
@@ -135,26 +132,15 @@ test('Cancel throws the edited days away, and the next opening starts from the o
     expect(onHarden).not.toHaveBeenCalled();
 });
 
-test('the days stay whole and between 1 and the maximum', async () => {
-    await checkBucket(unsafe);
-    await openSafeDefaults();
-    await typeDays('0');
-    expect(daysField().value).toBe('1');
-    await typeDays('99999');
-    expect(daysField().value).toBe(String(S3_NONCURRENT_DAYS_MAX));
-    await typeDays('7.6');
-    expect(daysField().value).toBe('8');
-});
-
-test("a safe bucket's Change opens Change retention on its own days, and Update saves them", async () => {
+test("a safe bucket's Change opens Change retention on its own days, and Save saves them", async () => {
     await checkBucket(safe);
     expect(findButton(document, 'Enable safe defaults')).toBeUndefined();
     await click(findButton(document, 'Change'));
     expect(title()).toBe('Change retention');
     expect(dialog()?.textContent).not.toContain('Turns on bucket versioning');
     expect(daysField().value).toBe('45');
-    await typeDays('120');
-    await click(findButton(dialog(), 'Update'));
+    await type('Expire old versions after days', '120');
+    await click(findButton(dialog(), 'Save'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 120]]);
     expect(dialog()).toBeNull();
@@ -171,11 +157,51 @@ test('a refused harden closes the dialog, shows its message, and the manual step
     }));
     await checkBucket(unsafe);
     await openSafeDefaults();
-    await typeDays('21');
+    await type('Expire old versions after days', '21');
     await click(findButton(dialog(), 'Enable'));
     await settle();
     expect(onHarden.mock.calls).toEqual([[bucket, 21]]);
     expect(dialog()).toBeNull();
     expect(document.body.textContent).toContain('This key may not change bucket settings');
     expect(document.querySelector('[data-slot="code-block-content"]')?.textContent).toContain('"NoncurrentDays":21');
+});
+
+// The card on a form whose save refuses a config the card marks, as Server settings holds it.
+function RefusingForm({ initial, secretSaved }: { initial: S3Config; secretSaved?: boolean }) {
+    const [value, setValue] = useState(initial);
+    return createElement(FormShell, {
+        onSubmit: (): false => false,
+        children: [
+            createElement(S3ConfigCard, { key: 'card', value, onChange: setValue, onCheck, secretSaved }),
+            createElement('button', { key: 'save', type: 'submit' }, 'Save'),
+        ],
+    });
+}
+
+const message = (label: string) => document.getElementById(field(label).getAttribute('aria-describedby') ?? '');
+
+test('a refused save marks each missing field under itself and focuses the first', async () => {
+    const blank = { endpoint: '', bucket: 'team-files', prefix: '', accessKeyId: '', secretAccessKey: '' };
+    ({ unmount } = await renderInDocument(createElement(RefusingForm, { initial: blank })));
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(document.querySelector('[data-slot="field-error"]')).toBeNull();
+
+    await click(findButton(document, 'Save'));
+    await settle();
+    expect(document.activeElement).toBe(field('Endpoint'));
+    expect(message('Endpoint')?.textContent).toBe('Add an endpoint');
+    expect(message('Access key ID')?.textContent).toBe('Add an access key ID');
+    expect(message('Secret access key')?.textContent).toBe('Add the secret access key');
+    for (const label of ['Bucket', 'Prefix', 'Region']) {
+        expect(field(label).getAttribute('aria-invalid')).toBeNull();
+    }
+});
+
+test('a saved secret may stay empty', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(RefusingForm, { initial: { ...bucket, secretAccessKey: '' }, secretSaved: true }),
+    ));
+    await click(findButton(document, 'Save'));
+    await settle();
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
 });

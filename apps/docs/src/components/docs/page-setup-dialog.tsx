@@ -23,7 +23,7 @@ import { numberAtStep } from '@workspace/ui/components/properties-panel';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { TEXT_WIDTHS } from './page-setup';
 
 // The reader's text width and its write; none on a phone, whose column is the screen.
@@ -93,7 +93,7 @@ const PAGES = 'pages';
 const PAGELESS = 'pageless';
 
 // Mounted with the dialog, so each opening starts from the doc's page as it was then. A viewer can't change the doc's
-// format, but on a page-less doc still picks their own text width, which OK saves.
+// format, but on a page-less doc still picks their own text width, which Apply saves.
 function PageSetupForm({ setup, canWrite, onSetupChange, textWidth, onTextWidthChange }: PageSetupFormProps) {
     const [initial] = useState(setup);
     const [pageless, setPageless] = useState(initial.pageless);
@@ -118,7 +118,15 @@ function PageSetupForm({ setup, canWrite, onSetupChange, textWidth, onTextWidthC
     };
     // Valid is what the stored page would read back unchanged.
     const read = readPageSetup(pageRecord(candidate));
-    const valid = MARGIN_FIELDS.every(({ side }) => read.margin[side] === candidate.margin[side]);
+    const invalid = (side: keyof PageMargin) => read.margin[side] !== candidate.margin[side];
+    const valid = !MARGIN_FIELDS.some(({ side }) => invalid(side));
+    const errorId = useId();
+    const changed =
+        pageless !== initial.pageless ||
+        width !== textWidth ||
+        paper.width !== initial.width ||
+        paper.height !== initial.height ||
+        MARGIN_FIELDS.some(({ side }) => candidate.margin[side] !== initial.margin[side]);
     const widthShown = pageless && width !== undefined && onTextWidthChange !== undefined;
     const editable = canWrite || widthShown;
 
@@ -131,10 +139,11 @@ function PageSetupForm({ setup, canWrite, onSetupChange, textWidth, onTextWidthC
 
     return (
         <FormDialogForm
-            canSubmit={valid}
-            submitLabel="OK"
+            submitLabel="Apply"
+            changed={changed}
             readOnly={!editable}
             onSubmit={() => {
+                if (!valid) return false;
                 if (canWrite) onSetupChange(initial, candidate);
                 if (widthShown && width !== textWidth) onTextWidthChange(width);
             }}
@@ -211,11 +220,13 @@ function PageSetupForm({ setup, canWrite, onSetupChange, textWidth, onTextWidthC
                                         value={text[side]}
                                         onValueChange={(value) => setText({ ...text, [side]: value })}
                                         disabled={!canWrite}
+                                        invalid={invalid(side)}
+                                        errorId={errorId}
                                     />
                                 </Field>
                             ))}
                             {!valid && (
-                                <FieldError>
+                                <FieldError id={errorId}>
                                     Margins must be 0 cm or more and leave at least {cmText(MIN_TEXT_MM, 1)} cm for the
                                     text.
                                 </FieldError>
@@ -311,10 +322,22 @@ function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps
     };
     // Valid is what the stored page would read back unchanged: each band between the paper's edge and its margin.
     const read = readPageSetup(pageRecord(candidate));
-    const valid = DISTANCE_FIELDS.every(({ key }) => read[key] === candidate[key]);
+    const invalid = (key: DistanceKey) => read[key] !== candidate[key];
+    const valid = !DISTANCE_FIELDS.some(({ key }) => invalid(key));
+    const errorId = useId();
+    const changed =
+        differentFirstPage !== initial.differentFirstPage ||
+        DISTANCE_FIELDS.some(({ key }) => candidate[key] !== initial[key]);
 
     return (
-        <FormDialogForm canSubmit={valid} submitLabel="Apply" onSubmit={() => onSetupChange(initial, candidate)}>
+        <FormDialogForm
+            submitLabel="Apply"
+            changed={changed}
+            onSubmit={() => {
+                if (!valid) return false;
+                onSetupChange(initial, candidate);
+            }}
+        >
             <div className="flex flex-col gap-6">
                 <FieldSet className="gap-3">
                     <FieldLegend variant="label">Margins</FieldLegend>
@@ -325,11 +348,13 @@ function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps
                                 id={`headers-and-footers-${key}`}
                                 value={text[key]}
                                 onValueChange={(value) => setText({ ...text, [key]: value })}
+                                invalid={invalid(key)}
+                                errorId={errorId}
                             />
                         </Field>
                     ))}
                     {!valid && (
-                        <FieldError>
+                        <FieldError id={errorId}>
                             The header must be 0 to {marginText(initial.margin.top)} cm from the top and the footer 0 to{' '}
                             {marginText(initial.margin.bottom)} cm from the bottom, within their margins.
                         </FieldError>
@@ -354,9 +379,17 @@ function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps
     );
 }
 
-type CmInputProps = { id: string; value: string; onValueChange: (value: string) => void; disabled?: boolean };
+type CmInputProps = {
+    id: string;
+    value: string;
+    onValueChange: (value: string) => void;
+    disabled?: boolean;
+    invalid: boolean;
+    // The message under the fields that says why.
+    errorId: string;
+};
 
-function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
+function CmInput({ id, value, onValueChange, disabled, invalid, errorId }: CmInputProps) {
     const [typing, setTyping] = useState(false);
     const number = Number(value);
     const shown = typing || value.trim() === '' || !Number.isFinite(number) ? value : numberAtStep(number, CM_STEP);
@@ -373,6 +406,8 @@ function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
             }}
             onBlur={() => setTyping(false)}
             disabled={disabled}
+            aria-invalid={invalid || undefined}
+            aria-describedby={invalid ? errorId : undefined}
         />
     );
 }

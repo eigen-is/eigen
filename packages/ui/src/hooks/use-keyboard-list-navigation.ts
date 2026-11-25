@@ -1,12 +1,15 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
 // arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
-// ⌘A selects every row. The list spreads the returned handleKeyDown on its focusable container.
-// The hook keeps the focus on that container while nothing else holds it, and takes it back from a row's own button
-// when a key moves the cursor.
+// ⌘A selects every row. Cmd or Ctrl+Enter is left to a form around the list. The list spreads the returned
+// handleKeyDown on its focusable container.
+// The hook keeps the focus on that container while nothing else holds it and no dialog is open, and takes it back from
+// a row's own button when a key moves the cursor.
 
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { isKeyboardContextMenu } from '../components/context-menu/use-context-menu';
+import { isTypingTarget } from './is-typing-target';
+import { isDialogOpen } from './use-dialog-open';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
@@ -92,13 +95,17 @@ export function useKeyboardListNavigation<T>({
     // A click on something that can't take focus, such as the detail panel or a toolbar, leaves nothing focused, and
     // so does a page restored from the back/forward cache. Every key here would then do nothing until the user
     // clicked a row again. Turning reclaimFocus back on starts the timer again. That also covers a closed composer
-    // that held the focus, because a focused element that unmounts fires no focusout.
+    // that held the focus: its focusout fires as it unmounts, before this effect listens again. An open dialog owns the
+    // focus, such as a Rename whose question just went and whose field gets the focus back a moment later.
     useEffect(() => {
         if (!reclaimFocus) return;
-        const focusList = () => containerRef.current?.focus({ preventScroll: true });
+        const focusList = () => {
+            if (!isDialogOpen()) containerRef.current?.focus({ preventScroll: true });
+        };
 
+        // A field the user types in keeps it, such as a picker's name while its folder list opens.
         const timer = setTimeout(() => {
-            if (!containerRef.current?.contains(document.activeElement)) focusList();
+            if (!containerRef.current?.contains(document.activeElement) && !isTypingTarget()) focusList();
         }, 100);
 
         const reclaim = () => {
@@ -257,6 +264,8 @@ export function useKeyboardListNavigation<T>({
             }
 
             case 'Enter': {
+                // Cmd or Ctrl+Enter is the form's submit, such as a file picker's, which confirms the picked row once.
+                if (e.metaKey || e.ctrlKey) break;
                 e.preventDefault();
                 const index = targetIndex();
                 if (index >= 0) {

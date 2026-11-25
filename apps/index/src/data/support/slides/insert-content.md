@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -48,7 +48,7 @@ Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets
 1. Double-click the chart, or click **Edit data** in the properties panel.
 2. The **Edit data** dialog shows the data as a small spreadsheet: categories down column A, series across row 1, and the category axis title in A1. Click a cell and type to replace it, or double-click it (or press **F2**) to change part of it. Press **Enter** to move down or **Tab** to move right. **Escape** cancels what you typed in a cell. A cell left empty leaves a gap in the chart.
 3. Type in an empty row or column after the data to add a category or a series. To remove one, click its row number or column letter and press **Delete**. **Delete** on selected cells empties them.
-4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
+4. Click **Apply** to update the chart, or **Cancel** to leave it as it was.
 
 You can paste cells copied from a spreadsheet into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values. When a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them. A chart with more data than that, for example from an imported file, opens its data read-only.
 

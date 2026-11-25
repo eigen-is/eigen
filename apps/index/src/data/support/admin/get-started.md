@@ -6,7 +6,7 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-11-03
+updated: 2026-11-25
 ---
 
 The setup wizard creates your admin account and gets the server ready for everyone else. It opens from the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
@@ -39,7 +39,7 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 ### Completing setup
 
-Click **Complete setup**. Eigen creates the organization and the admin account, then shows a **Setup complete!** confirmation. Click **Go to login** to reach the sign-in page.
+Click **Complete setup**. A field that is empty or wrong says so under it, and nothing is sent until you fix it. Eigen creates the organization and the admin account, then shows a **Setup complete!** confirmation. Click **Go to login** to reach the sign-in page.
 
 ## What you can do after signing in
 

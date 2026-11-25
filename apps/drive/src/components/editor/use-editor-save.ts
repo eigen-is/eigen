@@ -1,10 +1,12 @@
-// The save story of Drive's inline editors: Mod+S, the dirty state and the discard dialog their Cancel
-// opens. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
-// changed since answers a conflict, which opens the conflict dialog. `unsaved` says whether there is
-// work to save; `atRisk` adds a save in flight, which a leave guard must not drop since that save may fail.
+// The save story of Drive's inline editors: Mod+S, the dirty state and the "Discard changes?" their Cancel
+// asks. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
+// changed since answers a conflict, which opens the conflict dialog. `atRisk` says a close would lose work:
+// unsaved edits, or a save in flight, which may still fail. Cancel and the editor's leave guard ask while it holds.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
+import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
+import type { ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'conflict';
@@ -16,20 +18,18 @@ type EditorSaveOptions = {
     etag: string;
     getContent: () => string;
     getFrontmatter?: () => string | undefined;
+    onCancel: () => void;
 };
 
 type EditorSave = {
     saveState: SaveState;
-    unsaved: boolean;
     atRisk: boolean;
     showConflict: boolean;
     setShowConflict: (open: boolean) => void;
     markDirty: () => void;
     doSave: (force?: boolean) => Promise<boolean>;
-    confirmClose: (onClose: () => void) => void;
-    showDiscardConfirm: boolean;
-    handleDiscardConfirm: () => void;
-    handleDiscardCancel: () => void;
+    cancel: () => void;
+    discardDialog: ReactNode;
 };
 
 export function useEditorSave({
@@ -39,6 +39,7 @@ export function useEditorSave({
     etag,
     getContent,
     getFrontmatter,
+    onCancel,
 }: EditorSaveOptions): EditorSave {
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [showConflict, setShowConflict] = useState(false);
@@ -88,43 +89,17 @@ export function useEditorSave({
         doSave();
     });
 
-    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-    const pendingCloseRef = useRef<(() => void) | null>(null);
-
-    const confirmClose = useCallback(
-        (onClose: () => void) => {
-            if (!unsaved) {
-                onClose();
-                return;
-            }
-            pendingCloseRef.current = onClose;
-            setShowDiscardConfirm(true);
-        },
-        [unsaved],
-    );
-
-    const handleDiscardConfirm = useCallback(() => {
-        setShowDiscardConfirm(false);
-        pendingCloseRef.current?.();
-        pendingCloseRef.current = null;
-    }, []);
-
-    const handleDiscardCancel = useCallback(() => {
-        setShowDiscardConfirm(false);
-        pendingCloseRef.current = null;
-    }, []);
+    // The editor is open while it is mounted, and a save in flight asks rather than waits, since it may fail.
+    const discard = useDiscardChanges({ open: true, changed: atRisk, pending: false, onDiscard: onCancel });
 
     return {
         saveState,
-        unsaved,
         atRisk,
         showConflict,
         setShowConflict,
         markDirty,
         doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
+        cancel: () => discard.onOpenChange(false),
+        discardDialog: discard.dialog,
     };
 }

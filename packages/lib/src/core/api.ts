@@ -1,6 +1,7 @@
 // The browser's way to the API and to the other apps. It resolves the API host, builds the Eden Treaty clients every
 // domain hook calls, and spells the URLs that Eden can't serve, such as downloads, uploads, previews and the
-// WebSocket for collaboration. It also builds the links between apps, such as openDocument for a Drive item.
+// WebSocket for collaboration. It also builds the links between apps, such as openDocument for a Drive item, and
+// checks that the page a sign-in goes on to is one of them.
 
 import type { app } from '@apps/api';
 import { treaty } from '@elysiajs/eden';
@@ -152,6 +153,34 @@ export const getSupportUrl = () => getIndexAppUrl('support');
 export const getLicensesUrl = () => getIndexAppUrl('licenses');
 export const getChangelogUrl = () => getIndexAppUrl('changelog');
 export const getSpaceLogin2faUrl = (search: string = '') => `${getSpaceAppUrl('login-2fa')}${search}`;
+
+// The page a sign-in goes on to, from a `redirect` param anyone can write: a path on this origin, or a page of one of
+// Eigen's apps. Anything else, such as a `javascript:` URL or another site, becomes the start page. A path resolves
+// against this origin, where `//evil` and `/\evil` turn out to name another host.
+export function safeRedirect(target: string): string {
+    const here = window.location.origin;
+    const base = target.startsWith('/') ? here : undefined;
+    if (!URL.canParse(target, base)) return '/';
+    // An unset app URL is a link on this origin.
+    const appOrigins = new Set(
+        [
+            SPACE_APP_URL,
+            MAIL_APP_URL,
+            CONTACTS_APP_URL,
+            DRIVE_APP_URL,
+            DOCS_APP_URL,
+            STICKIES_APP_URL,
+            CHAT_APP_URL,
+            SLIDES_APP_URL,
+            SHEETS_APP_URL,
+            VECTOR_APP_URL,
+            CALENDAR_APP_URL,
+            ADMIN_APP_URL,
+            INDEX_APP_URL,
+        ].map((url) => new URL(url || '/', here).origin),
+    );
+    return appOrigins.has(new URL(target, base).origin) ? target : '/';
+}
 
 export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/${encodeURIComponent(emailOrId)}`;
 // Demo-instance entry: mints a random seeded persona session and 302s into the app.

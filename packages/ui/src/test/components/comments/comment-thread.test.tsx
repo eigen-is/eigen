@@ -2,6 +2,7 @@
 // thread it was typed in. Its messages sit under an Activity caption, a section of the card above them.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -67,10 +68,7 @@ test('a draft stays behind when the thread moves to another card', async () => {
 
     const box = document.querySelector('textarea');
     if (!box) throw new Error('the thread drew no composer');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(box, 'For the first card');
-        box.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(box, 'For the first card');
 
     await act(async () => root.render(thread('second')));
     expect(document.querySelector('textarea')?.value).toBe('');

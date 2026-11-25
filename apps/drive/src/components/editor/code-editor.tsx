@@ -15,7 +15,7 @@ import { sql } from '@codemirror/lang-sql';
 import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
     drawSelection,
@@ -26,13 +26,12 @@ import {
     lineNumbers,
 } from '@codemirror/view';
 import { downloadBlob } from '@workspace/lib/download';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ConflictDialog } from './conflict-dialog';
-import { DiscardChangesDialogs } from './discard-changes-dialogs';
 import { EditToolbar } from './editor-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
@@ -145,7 +144,7 @@ function cmThemeExtensions(isDark: boolean) {
     ];
 }
 
-function cmBaseExtensions(language: string | null, isDark: boolean) {
+function cmBaseExtensions(language: string | null) {
     return [
         lineNumbers(),
         highlightActiveLine(),
@@ -156,7 +155,6 @@ function cmBaseExtensions(language: string | null, isDark: boolean) {
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         getLanguageExtension(language),
-        ...cmThemeExtensions(isDark),
     ];
 }
 
@@ -177,6 +175,9 @@ export const CodeEditorView = forwardRef<
 >(function CodeEditorView({ content, language, onChange, onViewReady }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
+    // The theme sits in its own compartment, so a light or dark switch reconfigures the live view and keeps its
+    // text, selection and undo history. Rebuilding the view would reset it to the content it opened with.
+    const [themeCompartment] = useState(() => new Compartment());
     const isDark = useDarkMode();
 
     useImperativeHandle(ref, () => ({
@@ -186,7 +187,7 @@ export const CodeEditorView = forwardRef<
 
     useEffect(() => {
         if (!containerRef.current) return;
-        const extensions = [...cmBaseExtensions(language, isDark)];
+        const extensions = [...cmBaseExtensions(language), themeCompartment.of(cmThemeExtensions(isDark))];
         if (onChange) {
             extensions.push(
                 EditorView.updateListener.of((update) => {
@@ -196,12 +197,18 @@ export const CodeEditorView = forwardRef<
         }
         const state = EditorState.create({ doc: content, extensions });
         const view = new EditorView({ state, parent: containerRef.current });
+        // It mounts when Edit or the source toggle is pressed, so typing goes into the text at once.
+        view.focus();
         viewRef.current = view;
         onViewReady?.(view);
         return () => {
             view.destroy();
             onViewReady?.(null);
         };
+    }, []);
+
+    useEffect(() => {
+        viewRef.current?.dispatch({ effects: themeCompartment.reconfigure(cmThemeExtensions(isDark)) });
     }, [isDark]);
 
     return <div ref={containerRef} className="h-full overflow-hidden" />;
@@ -242,24 +249,15 @@ export function CodeEditor({
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const {
-        saveState,
-        atRisk,
-        showConflict,
-        setShowConflict,
-        markDirty,
-        doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
-    } = useEditorSave({
-        ownerId,
-        mountId,
-        pathId,
-        etag,
-        getContent,
-    });
+    const { saveState, atRisk, showConflict, setShowConflict, markDirty, doSave, cancel, discardDialog } =
+        useEditorSave({
+            ownerId,
+            mountId,
+            pathId,
+            etag,
+            getContent,
+            onCancel,
+        });
 
     const handleChange = useCallback(
         (value: string) => {
@@ -281,12 +279,7 @@ export function CodeEditor({
     };
 
     const toolbar = (
-        <EditToolbar
-            onBack={onBack}
-            onCancel={() => confirmClose(onCancel)}
-            onSave={handleSave}
-            isSaving={saveState === 'saving'}
-        >
+        <EditToolbar onBack={onBack} onCancel={cancel} onSave={handleSave} isSaving={saveState === 'saving'}>
             <TooltipButton icon={Undo} tooltipText="Undo" onClick={() => editorViewRef.current?.undo()} />
             <TooltipButton icon={Redo} tooltipText="Redo" onClick={() => editorViewRef.current?.redo()} />
         </EditToolbar>
@@ -322,12 +315,8 @@ export function CodeEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <DiscardChangesDialogs
-                    atRisk={atRisk}
-                    open={showDiscardConfirm}
-                    onConfirm={handleDiscardConfirm}
-                    onCancel={handleDiscardCancel}
-                />
+                {discardDialog}
+                <LeaveGuard active={atRisk} />
             </Column>
         </DocSearchProvider>
     );

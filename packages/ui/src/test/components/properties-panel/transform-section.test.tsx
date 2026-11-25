@@ -1,8 +1,11 @@
+// The transform section wraps a typed angle, clamps a width below its minimum, and keeps an aspect-locked width at the
+// ratio the edit started with. Typing a value is one undo step, and the aspect lock sticks to its element.
 import { expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -10,10 +13,6 @@ const { holdCapture, sealed } = await import('../../../components/properties-pan
 const { PropertyGestureContext } = await import('../../../components/properties-panel/property-gesture');
 const { TransformSection } = await import('../../../components/properties-panel/transform-section');
 const { useAspectLock } = await import('../../../components/properties-panel/use-aspect-lock');
-
-// React tracks an input's value on the instance, so assigning `input.value` looks like no change to it.
-// Writing through the prototype setter leaves React's tracker stale, which is what a real keystroke does.
-const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 // Types `typed` into one of the section's inputs and returns every field write it produced.
 async function typeInto(label: 'W' | 'Angle', typed: string) {
@@ -37,11 +36,8 @@ async function typeInto(label: 'W' | 'Angle', typed: string) {
     const inputs = [...container.querySelectorAll('input')];
     const input = label === 'Angle' ? inputs[inputs.length - 1] : inputs[2];
     if (!input) throw new Error('the transform section did not render its inputs');
-    await act(async () => {
-        input.focus();
-        nativeValueSetter?.call(input, typed);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => input.focus());
+    await type(input, typed);
     await act(async () => root.unmount());
     container.remove();
     return writes;
@@ -94,11 +90,8 @@ test('an aspect-locked width keeps the ratio it started the edit with', async ()
     const input = [...container.querySelectorAll('input')][2];
     if (!input) throw new Error('the transform section did not render its inputs');
     for (const typed of ['2', '25', '250']) {
-        await act(async () => {
-            input.focus();
-            nativeValueSetter?.call(input, typed);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => input.focus());
+        await type(input, typed);
         await render();
     }
     expect(box).toEqual({ width: 250, height: 125 });
@@ -141,11 +134,8 @@ test('typing three digits into a transform field is one undo step', async () => 
     const input = [...container.querySelectorAll('input')][2];
     if (!input) throw new Error('the transform section did not render its inputs');
     for (const typed of ['2', '25', '250']) {
-        await act(async () => {
-            input.focus();
-            nativeValueSetter?.call(input, typed);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => input.focus());
+        await type(input, typed);
     }
     expect(box.get('width')).toBe(250);
     expect(undoManager.undoStack.length).toBe(1);

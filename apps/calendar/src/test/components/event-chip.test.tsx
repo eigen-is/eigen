@@ -1,6 +1,6 @@
 // Every event the calendar draws on a color, and the draft and ghosts a gesture draws, is one square eigen-block, the
 // same shape and shadow as a card on a board, with no corner or shadow class of its own. A dot chip, the "N more" and a
-// schedule row are square too, as list rows are.
+// schedule row are square too, as list rows are. Each event button carries its occurrence as a focus key.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -108,4 +108,32 @@ test('a dot chip and the "N more" are square, with no block of their own', async
     expect(chip).not.toContain('eigen-block');
     expect(ownShape(chip)).toEqual([]);
     expect(ownShape(MORE_BUTTON.split(' '))).toEqual([]);
+});
+
+// A dialog that closes after a save that moved the event finds the event's new button by this key.
+test('a block, a bar and a dot chip carry their occurrence as a focus key, a repeat with its date', async () => {
+    const keyOf = async (element: React.ReactElement) => {
+        const { container, unmount } = await renderInDocument(element);
+        const key = container.querySelector<HTMLElement>('button')?.dataset.focusKey;
+        await unmount();
+        return key;
+    };
+    const weekly = event({ id: 'e1-1', parentEventId: 'e1', occurrenceDate: '2026-10-16' });
+    expect(
+        await keyOf(
+            <TimedEventBlock
+                block={{ event: event({}), top: 840, bottom: 870, column: 0, columns: 1, span: 1 }}
+                {...surfaceProps}
+            />,
+        ),
+    ).toBe('e1');
+    expect(
+        await keyOf(
+            <EventBar
+                bar={{ event: trip, lane: 0, start: 0, span: 3, continuesBefore: true, continuesAfter: true }}
+                {...surfaceProps}
+            />,
+        ),
+    ).toBe('e1');
+    expect(await keyOf(<EventChip event={weekly} {...surfaceProps} />)).toBe('e1@2026-10-16');
 });

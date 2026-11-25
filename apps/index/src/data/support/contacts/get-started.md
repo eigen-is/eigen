@@ -7,7 +7,7 @@ tags: [contacts, getting-started, people, address-book]
 related: [contacts/add-a-contact, contacts/edit-or-delete, contacts/search-contacts]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 Contacts is where you keep the people you work with. You store names, email addresses, phone numbers, job titles, addresses, birthdays, and notes, and reach someone in Mail straight from their contact page.
@@ -37,7 +37,7 @@ If a contact has an email address, you can click it to open a new message to the
 
 ## Add a contact
 
-Click **Create contact** in the sidebar. A form opens with fields for name, email, phone, address, and more. At least one name field is required before you can save. When you're done, click **Save**. The new contact appears in **My contacts** straight away.
+Click **Create contact** in the sidebar. A form opens with fields for name, email, phone, address, and more. At least one name field is required before you can save. When you're done, click **Create**. The new contact appears in **My contacts** straight away.
 
 See [Add a contact](/support/contacts/add-a-contact) for a step-by-step walkthrough of the form.
 

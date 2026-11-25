@@ -12,7 +12,7 @@ import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@wor
 import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
 import type { CSSProperties, ReactNode } from 'react';
-import { eventState, eventSurfaceClasses } from './calendar-utils';
+import { eventState, eventSurfaceClasses, occurrenceKey } from './calendar-utils';
 
 export type EventSurfaceProps = {
     calendars: readonly CalendarItem[];
@@ -58,6 +58,7 @@ export function EventSurface({
                 eventSurfaceClasses('block', state),
             )}
             style={{ ...surface.style, ...style }}
+            data-focus-key={occurrenceKey(event)}
             onClick={(e) => onClick(event, e)}
             onPointerDown={onDragStart && ((e) => onDragStart(event, e))}
             title={event.title}
@@ -105,6 +106,7 @@ export function EventChip({ className, ...props }: PlacedEventProps) {
                 className,
             )}
             style={style}
+            data-focus-key={occurrenceKey(event)}
             onClick={(e) => onClick(event, e)}
             onPointerDown={onDragStart && ((e) => onDragStart(event, e))}
             title={event.title}

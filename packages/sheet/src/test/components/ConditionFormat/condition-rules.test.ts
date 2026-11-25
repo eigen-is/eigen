@@ -1,8 +1,10 @@
-// A conditional-format rule's dialog adds its rule over the selection on OK or Enter and closes. A value the rule
+// A conditional-format rule's dialog keeps the dialog contract, and adds its rule over the selection on Apply and
+// closes. A value the rule
 // refuses keeps the dialog open with the reason under the field and the typed value in place, and saves nothing. A
 // click in a color swatch's popover picks the color and leaves the dialog open, as a click outside it does not.
 
 import { expect, test } from 'bun:test';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { formatList } from '../../state/factories/validations';
@@ -10,7 +12,7 @@ import { formatList } from '../../state/factories/validations';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { ConditionRules } = await import('../../../components/ConditionFormat/ConditionRules');
 
 type RuleType = import('../../../state').ConditionRuleType;
@@ -18,23 +20,24 @@ type RuleType = import('../../../state').ConditionRuleType;
 const cell = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
 
 // A1 holds 5, and B2:C3 is selected.
+const SHEET = {
+    sheets: [
+        {
+            name: 'sheet',
+            id: 'id_1',
+            order: 0,
+            config: {},
+            data: [
+                [cell(5), null, null],
+                [null, null, null],
+                [null, null, null],
+            ],
+        },
+    ],
+    selections: [{ row: [1, 2], column: [1, 2] }],
+};
 const openRule = (type: RuleType) =>
-    renderSheetDialog((d) => d.showDialog(createElement(ConditionRules, { type })), {
-        sheets: [
-            {
-                name: 'sheet',
-                id: 'id_1',
-                order: 0,
-                config: {},
-                data: [
-                    [cell(5), null, null],
-                    [null, null, null],
-                    [null, null, null],
-                ],
-            },
-        ],
-        selections: [{ row: [1, 2], column: [1, 2] }],
-    });
+    renderSheetDialog((d) => d.showDialog(createElement(ConditionRules, { type })), SHEET);
 
 const rules = (context: import('../../../state').Context) => formatList(context.sheets[0]?.conditionalFormats);
 const values = (context: import('../../../state').Context) =>
@@ -52,16 +55,31 @@ const press = async (target: Element) => {
     });
 };
 
-test('it adds a Greater than rule over the selection on OK and closes', async () => {
+test('a rule dialog keeps the dialog contract', async () => {
+    const form = sheetDialogForm((d) => d.showDialog(createElement(ConditionRules, { type: 'greaterThan' })), SHEET);
+    await expectFormContract({
+        kind: 'dialog',
+        render: form.render,
+        submitLabel: 'Apply',
+        firstField: 'Value',
+        onSubmit: form.write,
+        makeChanged: () => type('Value', '3'),
+        makeInvalid: () => type('Value', 'abc'),
+        invalidField: 'Value',
+        savesAtOnce: true,
+    });
+});
+
+test('it adds a Greater than rule over the selection on Apply and closes', async () => {
     const dialog = await openRule('greaterThan');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Greater than');
     expect(dialog.dialogs()[0]?.textContent).toContain('Format cells greater than');
-    expect(dialog.footer()).toEqual(['Cancel', 'OK']);
-    expect(dialog.button('OK')?.dataset.size).toBe('default');
+    expect(dialog.footer()).toEqual(['Cancel', 'Apply']);
+    expect(dialog.button('Apply')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     await dialog.type('Value', '3');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(rules(dialog.context())).toEqual([
         {
             type: 'default',
@@ -86,7 +104,7 @@ test('Enter in the value field submits, and a cell typed with = stays a referenc
 test('a refused value stays open with the reason under the field and the typed value kept', async () => {
     const dialog = await openRule('greaterThan');
     await dialog.type('Value', 'abc');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Value').value).toBe('abc');
@@ -107,13 +125,13 @@ test('a refused value stays open with the reason under the field and the typed v
 test('Between takes two values, and refuses an empty second one', async () => {
     const dialog = await openRule('between');
     await dialog.type('Lower value', '1');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Lower value').value).toBe('1');
     expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeTruthy();
     await dialog.type('Upper value', '9');
     expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeNull();
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(values(dialog.context())).toEqual([['1', '9']]);
     expect(dialog.dialogs()).toHaveLength(0);
 });
@@ -121,7 +139,7 @@ test('Between takes two values, and refuses an empty second one', async () => {
 test('Top 10 refuses a count past 1000 and keeps it', async () => {
     const dialog = await openRule('top10');
     await dialog.type('Number of cells', '1001');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(alert()).toBe('Enter a whole number from 1 to 1000');
     expect(dialog.field('Number of cells').value).toBe('1001');
     expect(dialog.field('Number of cells').getAttribute('aria-invalid')).toBe('true');
@@ -136,17 +154,7 @@ test('a color picked in the swatch popover keeps the dialog open and colors the 
     if (!swatch) throw new Error('no color in the popover');
     await press(swatch);
     expect(document.querySelectorAll('[data-slot="dialog-content"]')).toHaveLength(1);
-    await dialog.click('OK');
+    await dialog.click('Apply');
     const [rule] = rules(dialog.context());
     expect(rule?.type === 'default' && rule.format.textColor).toBe(swatch.title);
-});
-
-test('a click outside the dialog closes it and saves nothing', async () => {
-    const dialog = await openRule('greaterThan');
-    await dialog.type('Value', '3');
-    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
-    if (!overlay) throw new Error('no overlay');
-    await press(overlay);
-    expect(dialog.dialogs()).toHaveLength(0);
-    expect(rules(dialog.context())).toEqual([]);
 });

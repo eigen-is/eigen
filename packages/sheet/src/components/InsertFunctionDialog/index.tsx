@@ -1,14 +1,14 @@
 // The Insert function dialog of the spreadsheet, opened from the Insert menu: a search and a category dropdown over the
-// list of functions, with one highlighted. OK opens the in-cell editor on the focus cell with that function's name and
-// an open bracket, so the user types its arguments next.
+// list of functions, with one highlighted. Insert opens the in-cell editor on the focus cell with that function's name
+// and an open bracket, so the user types its arguments next. A search that matches nothing says so under the field.
 
-import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useScrollToIndex } from '@workspace/ui/hooks/use-scroll-to-index';
 import { cn } from '@workspace/ui/lib/utils';
-import { useContext, useMemo, useRef, useState } from 'react';
+import { useContext, useId, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
@@ -28,6 +28,7 @@ export function InsertFunctionDialog() {
     const [highlight, setHighlight] = useState(0);
     const [searchText, setSearchText] = useState('');
     const listRef = useRef<HTMLDivElement>(null);
+    const noMatchId = useId();
     useScrollToIndex(listRef, highlight);
 
     const functions = useMemo(() => {
@@ -47,6 +48,7 @@ export function InsertFunctionDialog() {
 
     // The caret goes after the bracket, and the function's hint shows. An edit already open in the cell is replaced.
     const insert = () => {
+        if (functions.length === 0) return false;
         const name = functions[highlight].n;
         setContext((ctx) => {
             const last = ctx.selections?.at(-1);
@@ -65,14 +67,20 @@ export function InsertFunctionDialog() {
 
     return (
         <FormDialog {...dialogProps} title="Select a function">
-            <FormDialogForm submitLabel="OK" canSubmit={functions.length > 0} onSubmit={insert}>
-                <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+            <FormDialogForm
+                submitLabel="Insert"
+                changed={searchText !== '' || category !== 0 || highlight !== 0}
+                onSubmit={insert}
+            >
+                <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
                     <Field>
                         <FieldLabel htmlFor="search-function">Search function</FieldLabel>
                         <Input
                             id="search-function"
                             placeholder="Function name or brief description of function"
                             spellCheck={false}
+                            aria-invalid={functions.length === 0}
+                            aria-describedby={functions.length === 0 ? noMatchId : undefined}
                             onChange={(e) => {
                                 setSearchText(e.target.value);
                                 setHighlight(0);
@@ -85,6 +93,7 @@ export function InsertFunctionDialog() {
                                 setHighlight((i) => Math.max(0, Math.min(i + step, functions.length - 1)));
                             }}
                         />
+                        {functions.length === 0 && <FieldError id={noMatchId}>No function matches</FieldError>}
                     </Field>
                     <Field className="w-[160px]">
                         <FieldLabel htmlFor="function-category">Or select a category</FieldLabel>

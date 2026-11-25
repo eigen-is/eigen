@@ -1,15 +1,18 @@
 // A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
-// description, and FormDialogForm the fields and the Cancel and submit footer. Enter in a field submits, every way to
-// close waits for a running submit, and a failure or a false result keeps the dialog open. The caller keeps the field
-// state in a child that mounts with the dialog, so every opening starts clean. FormDialog alone is also a titled shell
-// with no form, as Word count uses it.
+// description, and FormDialogForm the fields and the Cancel and submit footer on FormShell's keys. It opens on the
+// first text field, every close waits for a running submit, and a failure or a false result keeps it open. Esc, the X
+// and a click outside ask "Discard changes?" once the form changed; Cancel drops it. The caller's fields mount with the
+// dialog, so every opening starts clean. FormDialog alone is a titled shell with no form, as Word count uses it.
 
+import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { DialogAction } from '../hooks/use-dialog-pending';
 import { useDialogPending } from '../hooks/use-dialog-pending';
+import { useDiscardChanges } from '../hooks/use-discard-changes';
 import { Button } from './button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
+import { FormShell, focusFirstField } from './form-shell';
 
 type FormDialogProps = {
     open: boolean;
@@ -18,15 +21,17 @@ type FormDialogProps = {
     description?: string;
     // Wide unless the form is small and has nothing to type in, such as the calendar's recurring choice.
     size?: ComponentProps<typeof DialogContent>['size'];
+    // Replaces the focus on the first field, such as Rename's selection of the name without its extension.
     onOpenAutoFocus?: (event: Event) => void;
     onCloseAutoFocus?: (event: Event) => void;
     children: ReactNode;
 };
 
 type FormDialogFormProps = {
-    // Returns or resolves false to stay open without an error, such as a react-hook-form check that failed.
+    // Returns or resolves false to stay open, such as a check that marked a field invalid, which then gets the focus.
     onSubmit: DialogAction;
-    canSubmit?: boolean;
+    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty.
+    changed: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
     // <button> there needs type="button": it comes before the submit button, so Enter in a field would click it.
@@ -38,11 +43,12 @@ type FormDialogFormProps = {
 
 type FormDialogContextValue = {
     pending: boolean;
-    submit: (onSubmit: DialogAction) => void;
+    submit: (onSubmit: DialogAction) => Promise<false | undefined>;
     handleOpenChange: (open: boolean) => void;
+    setChanged: (changed: boolean) => void;
 };
 
-// The shell owns the dialog's close and the form starts the submit, so both share one pending state.
+// The shell owns the dialog's close and the form starts the submit and knows what changed, so both share this.
 const FormDialogContext = createContext<FormDialogContextValue | null>(null);
 
 export function FormDialog({
@@ -55,31 +61,36 @@ export function FormDialog({
     onCloseAutoFocus,
     children,
 }: FormDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
-
-    const submit = (onSubmit: DialogAction) => {
-        // A closing dialog stays mounted while it animates out, with the focus still in its field.
-        if (open) run(onSubmit);
-    };
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange });
+    const [changed, setChanged] = useState(false);
+    const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size={size} onOpenAutoFocus={onOpenAutoFocus} onCloseAutoFocus={onCloseAutoFocus}>
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                    {description && <DialogDescription>{description}</DialogDescription>}
-                </DialogHeader>
-                <FormDialogContext.Provider value={{ pending, submit, handleOpenChange }}>
-                    {children}
-                </FormDialogContext.Provider>
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={open} onOpenChange={discard.onOpenChange}>
+                <DialogContent
+                    size={size}
+                    onOpenAutoFocus={onOpenAutoFocus ?? focusOnOpen}
+                    onCloseAutoFocus={onCloseAutoFocus}
+                    onFocus={discard.onFocus}
+                >
+                    <DialogHeader>
+                        <DialogTitle>{title}</DialogTitle>
+                        {description && <DialogDescription>{description}</DialogDescription>}
+                    </DialogHeader>
+                    <FormDialogContext.Provider value={{ pending, submit: run, handleOpenChange, setChanged }}>
+                        {children}
+                    </FormDialogContext.Provider>
+                </DialogContent>
+            </Dialog>
+            {discard.dialog}
+        </>
     );
 }
 
 export function FormDialogForm({
     onSubmit,
-    canSubmit = true,
+    changed,
     submitLabel,
     footerStart,
     readOnly = false,
@@ -87,41 +98,85 @@ export function FormDialogForm({
 }: FormDialogFormProps) {
     const context = useContext(FormDialogContext);
     if (!context) throw new Error('FormDialogForm renders inside a FormDialog');
-    const { pending, submit, handleOpenChange } = context;
+    const { pending, submit, handleOpenChange, setChanged } = context;
+
+    // A form that goes, such as one a loading state replaces, leaves nothing to ask about.
+    const asks = changed && !readOnly;
+    useEffect(() => {
+        setChanged(asks);
+        return () => setChanged(false);
+    }, [asks, setChanged]);
 
     return (
-        <form
-            className="flex flex-col gap-4"
-            // canSubmit is the check. The browser's own, such as a number field's step, would refuse 0.001 cm.
-            noValidate
-            onSubmit={(e) => {
-                e.preventDefault();
-                // React passes a portaled submit up to a form that holds the dialog, and that form must not submit too.
-                e.stopPropagation();
-                if (canSubmit && !readOnly) submit(onSubmit);
-            }}
-        >
+        <FormShell className="flex flex-col gap-4" onSubmit={() => (readOnly ? undefined : submit(onSubmit))}>
             {children}
             {readOnly ? (
                 <DialogFooter showCloseButton />
             ) : (
-                <DialogFooter
-                    start={
-                        footerStart && (
-                            <fieldset disabled={pending} className="flex gap-2">
-                                {footerStart}
-                            </fieldset>
-                        )
-                    }
-                >
-                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={!canSubmit || pending}>
-                        {submitLabel}
-                    </Button>
-                </DialogFooter>
+                <FormFooter
+                    start={footerStart}
+                    pending={pending}
+                    onCancel={() => handleOpenChange(false)}
+                    submitLabel={submitLabel}
+                />
             )}
-        </form>
+        </FormShell>
     );
+}
+
+// The Cancel and submit footer of a form shell, such as a dialog's or a card's, with its tools on the left. Every
+// button waits while the submit runs.
+export function FormFooter({
+    start,
+    pending,
+    onCancel,
+    canSubmit = true,
+    submitLabel,
+}: {
+    start?: ReactNode;
+    pending: boolean;
+    onCancel: () => void;
+    // Off only in a picker until something is picked: it has no field to show a message under.
+    canSubmit?: boolean;
+    submitLabel: string;
+}) {
+    return (
+        <DialogFooter
+            start={
+                start && (
+                    <fieldset disabled={pending} className="flex gap-2">
+                        {start}
+                    </fieldset>
+                )
+            }
+        >
+            <Button variant="outline" onClick={onCancel} disabled={pending}>
+                Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit} pending={pending}>
+                {submitLabel}
+            </Button>
+        </DialogFooter>
+    );
+}
+
+// A footer tool with a text label, such as Share with team. A phone's footer keeps one row, so only its icon shows
+// there, and a screen reader still reads the label.
+export function FooterTool({
+    icon: Icon,
+    label,
+    ...props
+}: { icon: LucideIcon; label: string } & ComponentProps<'button'>) {
+    return (
+        <Button variant="outline" {...props}>
+            <Icon />
+            <span className="max-sm:sr-only">{label}</span>
+        </Button>
+    );
+}
+
+// Radix focuses the dialog itself unless the form took the focus.
+function focusOnOpen(event: Event) {
+    const form = event.target instanceof Element ? event.target.querySelector('form') : null;
+    if (form && focusFirstField(form, { selectLone: true })) event.preventDefault();
 }

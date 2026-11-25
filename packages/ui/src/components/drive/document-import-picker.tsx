@@ -74,6 +74,7 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
                 open={open}
                 onOpenChange={onOpenChange}
                 title={title}
+                submitLabel="Select"
                 accept={`.${format}`}
                 canPick={(item) => isConvertSource(item.name, target)}
                 onDeviceFile={(file) => choice.openDialog({ name: file.name, file })}
@@ -111,7 +112,8 @@ function ImportModeForm({
     const [mode, setMode] = useState<ImportMode>(choices[0]?.mode ?? 'replace');
 
     return (
-        <FormDialogForm submitLabel="Import" onSubmit={() => onImport(mode)}>
+        // A pick is not typed input, so Esc drops it without asking.
+        <FormDialogForm changed={false} submitLabel="Import" onSubmit={() => onImport(mode)}>
             {choices.length > 0 && (
                 <RadioGroup
                     value={mode}
@@ -119,11 +121,18 @@ function ImportModeForm({
                 >
                     {choices.map((choice) => (
                         <div key={choice.mode} className="flex items-start gap-2">
-                            <RadioGroupItem value={choice.mode} id={`import-${choice.mode}`} className="mt-0.5" />
-                            <Label htmlFor={`import-${choice.mode}`} className="flex flex-col items-start gap-1">
-                                {choice.label}
-                                <span className="text-muted-foreground font-normal">{choice.detail}</span>
-                            </Label>
+                            <RadioGroupItem
+                                value={choice.mode}
+                                id={`import-${choice.mode}`}
+                                aria-describedby={`import-${choice.mode}-detail`}
+                                className="mt-0.5"
+                            />
+                            <div className="flex flex-col gap-1">
+                                <Label htmlFor={`import-${choice.mode}`}>{choice.label}</Label>
+                                <span id={`import-${choice.mode}-detail`} className="text-sm text-muted-foreground">
+                                    {choice.detail}
+                                </span>
+                            </div>
                         </div>
                     ))}
                 </RadioGroup>

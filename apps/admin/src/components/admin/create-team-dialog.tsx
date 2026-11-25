@@ -1,16 +1,17 @@
 // The dialog that creates a team from a name. The teams page opens it from the + button in its
-// toolbar. The new team joins the list, where the admin opens it to add members and drives.
+// toolbar. The new team joins the list, where the admin opens it to add members and drives. A
+// name of only spaces is refused under the field, and the name is saved trimmed.
 
 import { useCreateTeam } from '@workspace/lib/admin';
-import { Field, FieldContent, FieldLabel } from '@workspace/ui/components/field';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { useState } from 'react';
 
 type CreateTeamDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    organizationId?: string;
+    organizationId: string;
 };
 
 export function CreateTeamDialog({ open, onOpenChange, organizationId }: CreateTeamDialogProps) {
@@ -22,25 +23,20 @@ export function CreateTeamDialog({ open, onOpenChange, organizationId }: CreateT
 }
 
 // Mounted with the dialog, so each opening starts with an empty name.
-function CreateTeamForm({ organizationId }: { organizationId?: string }) {
+function CreateTeamForm({ organizationId }: { organizationId: string }) {
     const [name, setName] = useState('');
     const createTeam = useCreateTeam(organizationId);
-    const trimmed = name.trim();
 
     return (
         <FormDialogForm
-            canSubmit={trimmed !== ''}
+            changed={name !== ''}
             submitLabel="Create"
             onSubmit={async () => {
-                await createTeam.mutateAsync(trimmed);
+                if (!name.trim()) return false;
+                await createTeam.mutateAsync(name.trim());
             }}
         >
-            <Field>
-                <FieldLabel htmlFor="team-name">Team name</FieldLabel>
-                <FieldContent>
-                    <Input id="team-name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
-                </FieldContent>
-            </Field>
+            <RequiredTextField label="Team name" value={name} onChange={setName} message={FIELD_MESSAGES.nameMissing} />
         </FormDialogForm>
     );
 }

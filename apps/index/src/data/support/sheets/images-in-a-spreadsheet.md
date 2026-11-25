@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, images, pictures, media]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 145
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 You can put a picture on top of a spreadsheet. It floats over the grid rather than living inside a cell, and you move and size it with the mouse or with the panel on the right.
@@ -14,7 +14,7 @@ You can put a picture on top of a spreadsheet. It floats over the grid rather th
 
 1. Click the cell you want the image to start at.
 2. Open the **Insert** menu and click **Image**. Right-clicking a cell and choosing **Insert image** does the same thing.
-3. In the **Insert image** dialog, pick a picture from your Drive and click **Select**, or click **Upload from device** and choose a file from your computer.
+3. In the **Insert image** dialog, pick a picture from your Drive and click **Select**, or click **Upload from device** and choose a file from your computer. On a phone, the button shows only its icon.
 
 The image appears at the top-left corner of the cell you selected, scaled down if needed to fit the part of the grid you can see. Sheets keeps its own copy with the spreadsheet, so changing or deleting the original in Drive later leaves the image here untouched.
 

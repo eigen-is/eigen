@@ -6,7 +6,7 @@ category: Basics
 tags: [contacts, import, vcard, vcf]
 related: [contacts/export-contacts, contacts/get-started, connect/contacts-client, drive/preview-a-file]
 order: 90
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 Most address books can save contacts as a vCard file, which has the extension `.vcf`. Contacts reads those files, so you can bring people over from a phone, from another mail provider, or from a colleague who sent you a card.
@@ -17,8 +17,8 @@ Most address books can save contacts as a vCard file, which has the extension `.
 2. Click the **⋮** button at the top of the list.
 3. Click **Import contacts…**. The **Import contacts** dialog opens.
 4. Pick the file in one of two ways:
-   - Click **Upload from device**, then choose a `.vcf` file from your computer.
-   - Or browse your Drive, click a `.vcf` file, and click **Select**.
+   - Click **Upload from device**, then choose a `.vcf` file from your computer. On a phone, the button shows only its icon.
+   - Or browse your Drive, click a `.vcf` file, and click **Import**.
 
 An **Importing contacts** dialog shows while the file imports. When it closes, Eigen tells you what it did, for example "Imported 12 contacts, skipped 3 duplicates". The new contacts appear in the list straight away.
 

@@ -1,27 +1,44 @@
-// The Row height and Column width dialog opens on the selected rows' or columns' shared size, sets each of them to the
-// typed size on OK or Enter and closes. A size the engine refuses disables OK, shows why, and keeps what was typed.
+// The Row height and Column width dialog keeps the dialog contract. It opens on the selected rows' or columns' shared
+// size and sets each of them to the typed size on Apply. A size the engine refuses says why under the field and keeps
+// what was typed, an empty one says so once Apply is pressed, and Apply stays live.
 
 import { expect, test } from 'bun:test';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { ResizeDialog } = await import('../../../components/ResizeDialog');
 const { getSheetConfig } = await import('../../../state');
 
 const ROW_HEIGHT = 'Row height in pixels';
 
 // Rows 1 and 2 selected, both 30 px high.
-const openRowHeight = () =>
-    renderSheetDialog((d) => d.showDialog(createElement(ResizeDialog, { mode: 'row' })), {
-        config: { rowlen: { 0: 30, 1: 30 } },
-        selections: [{ row: [0, 1], column: [0, 3], row_focus: 0, column_focus: 0, row_select: true }],
-    });
+const ROWS = {
+    config: { rowlen: { 0: 30, 1: 30 } },
+    selections: [{ row: [0, 1], column: [0, 3], row_focus: 0, column_focus: 0, row_select: true }],
+};
+const openRowHeight = () => renderSheetDialog((d) => d.showDialog(createElement(ResizeDialog, { mode: 'row' })), ROWS);
 
-test('it opens on the shared size, sets every selected row on OK and closes', async () => {
+test('Row height keeps the dialog contract', async () => {
+    const form = sheetDialogForm((d) => d.showDialog(createElement(ResizeDialog, { mode: 'row' })), ROWS);
+    await expectFormContract({
+        kind: 'dialog',
+        render: form.render,
+        submitLabel: 'Apply',
+        firstField: ROW_HEIGHT,
+        onSubmit: form.write,
+        makeChanged: () => type(ROW_HEIGHT, '48'),
+        makeInvalid: () => type(ROW_HEIGHT, ''),
+        invalidField: ROW_HEIGHT,
+        savesAtOnce: true,
+    });
+});
+
+test('it opens on the shared size, sets every selected row on Apply and closes', async () => {
     const dialog = await openRowHeight();
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Row height');
@@ -30,23 +47,15 @@ test('it opens on the shared size, sets every selected row on OK and closes', as
     expect(dialog.button('Cancel')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     await dialog.type(ROW_HEIGHT, '48');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(getSheetConfig(dialog.context())?.rowlen).toEqual({ 0: 48, 1: 48 });
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('Enter in the field submits', async () => {
-    const dialog = await openRowHeight();
-    await dialog.type(ROW_HEIGHT, '25');
-    await act(async () => pressEnter(dialog.field(ROW_HEIGHT)));
-    expect(getSheetConfig(dialog.context())?.rowlen).toEqual({ 0: 25, 1: 25 });
-    expect(dialog.dialogs()).toHaveLength(0);
-});
-
-test('a size past the limit disables OK, says why, and keeps the typed value', async () => {
+test('a size past the limit says why, refuses Apply, and keeps the typed value', async () => {
     const dialog = await openRowHeight();
     await dialog.type(ROW_HEIGHT, '600');
-    expect(dialog.button('OK')?.disabled).toBe(true);
+    expect(dialog.button('Apply')?.disabled).toBe(false);
     const describedBy = dialog.field(ROW_HEIGHT).getAttribute('aria-describedby');
     const reason = describedBy ? document.getElementById(describedBy) : null;
     expect(reason?.textContent).toBe('Enter a value between 1 and 545.');
@@ -63,6 +72,6 @@ test('a column takes a width past the row limit', async () => {
     });
     expect(dialog.title()).toBe('Column width');
     await dialog.type('Column width in pixels', '1200');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(getSheetConfig(dialog.context())?.columnlen).toEqual({ 2: 1200 });
 });

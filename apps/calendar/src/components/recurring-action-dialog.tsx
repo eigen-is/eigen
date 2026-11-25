@@ -40,7 +40,8 @@ function RecurringActionForm({
     const [selected, setSelected] = useState(options[0]);
 
     return (
-        <FormDialogForm submitLabel="OK" onSubmit={() => onConfirm(selected)}>
+        // A pick is not typed input, so Esc drops it without asking.
+        <FormDialogForm changed={false} submitLabel="OK" onSubmit={() => onConfirm(selected)}>
             {/* Radix keeps the dialog title's id to itself, so the group repeats the title as its name. */}
             <RadioGroup
                 aria-label={title}

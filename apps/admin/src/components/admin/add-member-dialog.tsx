@@ -1,8 +1,11 @@
-// The dialog that adds a user to a team. It searches the users who are not members yet and hands the pick to
-// the team's members section, which saves it.
+// The dialog that adds users to a team one click at a time, from a team's Members section. It searches the users
+// who are not members yet, and a click adds that one through useAddTeamMembers while the dialog stays open for the
+// next.
 
+import { useAddTeamMembers } from '@workspace/lib/admin';
 import type { OrgMember } from '@workspace/lib/types/admin';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Button } from '@workspace/ui/components/button';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { UserItem } from '@workspace/ui/components/user';
 import { Plus } from 'lucide-react';
@@ -11,12 +14,27 @@ import { useMemo, useState } from 'react';
 type AddMemberDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    availableMembers: OrgMember[];
-    onAdd: (userId: string) => void;
+    teamId: string;
+    availableMembers: readonly OrgMember[];
 };
 
-export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }: AddMemberDialogProps) {
+export function AddMemberDialog({ open, onOpenChange, teamId, availableMembers }: AddMemberDialogProps) {
+    return (
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Add member to team"
+            description="Search your users and add one to the team."
+        >
+            {/* Mounted with the dialog, so each opening starts with an empty search. */}
+            <MemberPicker teamId={teamId} availableMembers={availableMembers} />
+        </FormDialog>
+    );
+}
+
+function MemberPicker({ teamId, availableMembers }: { teamId: string; availableMembers: readonly OrgMember[] }) {
     const [search, setSearch] = useState('');
+    const addMembers = useAddTeamMembers();
 
     const filtered = useMemo(() => {
         const sorted = [...availableMembers].sort((a, b) => a.name.localeCompare(b.name));
@@ -26,51 +44,43 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
     }, [availableMembers, search]);
 
     return (
-        <Dialog
-            open={open}
-            onOpenChange={(v) => {
-                onOpenChange(v);
-                if (!v) setSearch('');
-            }}
-        >
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Add member to team</DialogTitle>
-                    <DialogDescription className="sr-only">
-                        Search your users and add one to the team.
-                    </DialogDescription>
-                </DialogHeader>
-                <Input
-                    placeholder="Search by name or email..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    autoFocus
-                />
-                <div className="app-gutter-bleed max-h-64 overflow-y-auto">
-                    {filtered.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                            {availableMembers.length === 0
-                                ? 'All members are already in this team.'
-                                : 'No members match your search.'}
-                        </p>
-                    ) : (
-                        filtered.map((m) => (
-                            <button
+        <>
+            <Input
+                aria-label="Search users"
+                placeholder="Search by name or email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+            />
+            <div className="app-gutter-bleed max-h-64 overflow-y-auto">
+                {filtered.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                        {availableMembers.length === 0
+                            ? 'All members are already in this team.'
+                            : 'No members match your search.'}
+                    </p>
+                ) : (
+                    filtered.map((m) => {
+                        const adding = addMembers.isPending && !!addMembers.variables?.userIds.includes(m.userId);
+                        return (
+                            <Button
                                 key={m.userId}
-                                type="button"
-                                className="flex w-full items-center gap-3 px-2 py-2 rounded-md cursor-pointer text-left hover:bg-accent"
+                                variant="ghost"
+                                pending={adding}
+                                disabled={addMembers.isPending && !adding}
+                                className="h-auto w-full justify-start gap-3 px-2 py-2 text-left font-normal"
                                 onClick={() => {
-                                    onAdd(m.userId);
+                                    addMembers.mutate({ teamId, userIds: [m.userId] });
                                     setSearch('');
                                 }}
                             >
                                 <UserItem name={m.name} email={m.email} userId={m.userId} className="flex-1 min-w-0" />
-                                <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-                            </button>
-                        ))
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
+                                {!adding && <Plus className="text-muted-foreground" />}
+                            </Button>
+                        );
+                    })
+                )}
+            </div>
+        </>
     );
 }

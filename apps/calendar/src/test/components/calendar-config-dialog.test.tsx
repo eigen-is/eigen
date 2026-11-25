@@ -1,10 +1,13 @@
-// New calendar and Edit calendar: Save and Enter wait for a name with more than spaces, Save creates or updates the
-// calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection.
+// Edit calendar keeps the dialog contract, opening on its name rather than the color beside it. New calendar says
+// Create and Edit calendar Save, a name of only spaces says "Add a name" under the field, and the button creates or
+// updates the calendar with the name trimmed and closes. A person typed but not added is shared with on Save, and
+// your own address is refused with the reason. A save the server refuses stays open with no unhandled rejection.
 // Delete asks first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has
 // no Delete. Share with team sits in the footer after the trash, as in the Share dialog.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -126,11 +129,6 @@ const nameField = () => {
     if (!input) throw new Error('the dialog has no name field');
     return input;
 };
-const type = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -138,22 +136,35 @@ const click = (target: HTMLButtonElement | undefined) =>
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('New calendar waits for a name with more than spaces, then creates the trimmed calendar and closes', async () => {
+test('Edit calendar keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { item: calendar({}) }),
+        submitLabel: 'Save',
+        firstField: 'Calendar name',
+        onSubmit: updateCalendar.mutateAsync,
+        makeChanged: () => type(nameField(), 'Office'),
+        makeInvalid: () => type(nameField(), '  '),
+        invalidField: 'Calendar name',
+    });
+});
+
+test('New calendar says Create, refuses a name of only spaces under the field, then creates it trimmed', async () => {
     await open(null);
     const dialog = dialogTitled('New calendar');
     expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(button(dialog, 'Delete calendar')).toBeUndefined();
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    expect(document.activeElement).toBe(nameField());
 
-    await type('   ');
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    await type(nameField(), '   ');
     await act(async () => pressEnter(nameField()));
     await settle();
+    expect(dialog?.querySelector('[data-slot="field-error"]')?.textContent).toBe('Add a name');
     expect(createCalendar.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await type(' Gym ');
-    await act(async () => pressEnter(nameField()));
+    await type(nameField(), ' Gym ');
+    await click(button(dialog, 'Create'));
     await settle();
     expect(createCalendar.mutateAsync.mock.calls).toEqual([
         [{ name: 'Gym', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].value }],
@@ -161,14 +172,37 @@ test('New calendar waits for a name with more than spaces, then creates the trim
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('Edit calendar refuses a name emptied to spaces', async () => {
+const shareField = () => {
+    const input = document.querySelector<HTMLInputElement>('[role="dialog"] #share-contact');
+    if (!input) throw new Error('the dialog has no share field');
+    return input;
+};
+
+test('a person typed but not added is shared with on Save', async () => {
     await open(calendar({}));
-    const dialog = dialogTitled('Edit calendar');
-    await type('  ');
-    expect(button(dialog, 'Save')?.disabled).toBe(true);
-    await act(async () => pressEnter(nameField()));
+    await type(shareField(), 'bea@example.org');
+    await click(button(dialogTitled('Edit calendar'), 'Save'));
+    await settle();
+    expect(updateCalendar.mutateAsync.mock.calls.at(-1)?.[0]).toMatchObject({
+        shares: [
+            { targetId: 'ada@example.org', permission: 'read' },
+            { targetId: 'bea@example.org', permission: 'read' },
+        ],
+    });
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('your own address is refused under the share field, and Save stays open with it', async () => {
+    await open(calendar({}));
+    await type(shareField(), 'Me@test.eigen.is');
+    await act(async () => pressEnter(shareField()));
+    const message = () => dialogTitled('Edit calendar')?.querySelector('[data-slot="field-error"]')?.textContent;
+    expect(message()).toBe('You cannot share a calendar with yourself');
+    await click(button(dialogTitled('Edit calendar'), 'Save'));
     await settle();
     expect(updateCalendar.mutateAsync).not.toHaveBeenCalled();
+    expect(message()).toBe('You cannot share a calendar with yourself');
+    expect(document.activeElement).toBe(shareField());
 });
 
 test('Edit calendar starts from the calendar and saves its name, color and shares', async () => {
@@ -176,7 +210,7 @@ test('Edit calendar starts from the calendar and saves its name, color and share
     const dialog = dialogTitled('Edit calendar');
     expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(nameField().value).toBe('Work');
-    await type('Office');
+    await type(nameField(), 'Office');
     await click(button(dialog, 'Save'));
     await settle();
     expect(updateCalendar.mutateAsync.mock.calls).toEqual([
@@ -207,7 +241,7 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes and closes', async () => {
     await open(calendar({}));
-    await type('Office');
+    await type(nameField(), 'Office');
     expect(button(dialogTitled('Edit calendar'), 'Delete calendar')?.dataset.variant).toBe('ghost');
     await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     expect(dialogTitled('Delete calendar')?.querySelector('p')?.innerHTML).toBe(
@@ -240,6 +274,15 @@ test('Share with team sits in the footer after the trash, as in the Share dialog
     expect(
         [...(footer?.querySelectorAll('button') ?? [])].map((b) => b.textContent || b.getAttribute('aria-label')),
     ).toEqual(['Delete calendar', 'Share with team', 'Cancel', 'Save']);
+});
+
+test("a phone's footer shows only the icon of Share with team, and a screen reader still reads its name", async () => {
+    myTeams = [{ id: 'crew', name: 'Crew' }];
+    await open(calendar({}));
+    const label = [
+        ...(dialogTitled('Edit calendar')?.querySelectorAll('[data-slot="dialog-footer"] button span') ?? []),
+    ].find((span) => span.textContent === 'Share with team');
+    expect(label?.classList.contains('max-sm:sr-only')).toBe(true);
 });
 
 test('the color swatch sits inside the name field, which its label names', async () => {

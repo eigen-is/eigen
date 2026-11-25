@@ -1,23 +1,33 @@
 // Rename shows a plain file's whole name with the part before the extension selected, and saves what the user typed,
 // so the extension can change. An Eigen document's extension stays hidden and comes back on save, once, even when the
 // user typed it. A folder keeps the name as typed. The save closes the dialog and reports the rename, and a failed save
-// stays open with the typed name.
+// stays open with the typed name. The Location under the field is the folder the item is in, read once Rename opens.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC, DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
+const ROOT = drivePath({ id: 'root', name: '', type: 'folder', mimeType: DRIVE_MIME_FOLDER });
+const PROJECTS = drivePath({ id: 'projects', name: 'Projects', type: 'folder', mimeType: DRIVE_MIME_FOLDER });
+const breadcrumbsRead: (string | undefined)[] = [];
 const renamePath = mock(async (_variables: { path: DrivePath; newName: string }) => {});
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useBreadcrumb: () => ({ data: [] }),
+    // The item's crumbs end with the item itself.
+    useBreadcrumb: (_ownerId: string, _mountId: string, pathId: string | undefined) => {
+        breadcrumbsRead.push(pathId);
+        return {
+            data: pathId ? [ROOT, PROJECTS, drivePath({ id: pathId, name: 'item', mimeType: 'text/plain' })] : [],
+        };
+    },
     useRenamePath: () => ({ mutateAsync: renamePath, isPending: false }),
 }));
 afterAll(() => {
@@ -43,6 +53,7 @@ beforeEach(() => {
     renamePath.mockImplementation(async () => {});
     onOpenChange.mockClear();
     onAfterAction.mockClear();
+    breadcrumbsRead.length = 0;
 });
 
 const notes = drivePath({ id: 'notes', name: 'Notes.eigendoc', type: 'doc', mimeType: DRIVE_MIME_DOC });
@@ -75,12 +86,32 @@ const nameField = () => {
     return input;
 };
 const fieldLabel = () => document.querySelector(`label[for="${nameField().id}"]`)?.textContent;
-const type = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+test('Rename keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { path: notes }),
+        submitLabel: 'Rename',
+        firstField: 'File name',
+        onSubmit: renamePath,
+        makeChanged: () => type(nameField(), 'Minutes'),
+        makeInvalid: () => type(nameField(), '  '),
+        invalidField: 'File name',
+    });
+});
+
+test('the Location is the folder the item is in, read only once Rename opens', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(DriveRenameItem, { path: notes, open: false, onOpenChange, onAfterAction }),
+    ));
+    expect(breadcrumbsRead.filter(Boolean)).toEqual([]);
+    await unmount();
+    await open(notes);
+    expect(breadcrumbsRead.at(-1)).toBe('notes');
+    expect(dialog()?.textContent).toContain('LocationDrive > Projects');
+    expect(dialog()?.textContent).not.toContain('item');
+});
 
 test("a document's rename asks for its name without the extension", async () => {
     await open(notes);
@@ -106,7 +137,7 @@ test("a folder's rename asks for the whole folder name", async () => {
 
 test('Rename puts the extension back once, closes, and reports the rename', async () => {
     await open(notes);
-    await type('Minutes.eigendoc');
+    await type(nameField(), 'Minutes.eigendoc');
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(renamePath.mock.calls).toEqual([[{ path: notes, newName: 'Minutes.eigendoc' }]]);
@@ -116,7 +147,7 @@ test('Rename puts the extension back once, closes, and reports the rename', asyn
 
 test("a document's typed name gets its extension back", async () => {
     await open(notes);
-    await type('Renamed');
+    await type(nameField(), 'Renamed');
     await act(async () => button('Rename')?.click());
     await settle();
     expect(renamePath.mock.calls).toEqual([[{ path: notes, newName: 'Renamed.eigendoc' }]]);
@@ -125,7 +156,7 @@ test("a document's typed name gets its extension back", async () => {
 test('a plain file is renamed to the name as typed, so its extension can change or go', async () => {
     for (const newName of ['notes.md', 'notes']) {
         await open(text);
-        await type(newName);
+        await type(nameField(), newName);
         await act(async () => button('Rename')?.click());
         await settle();
         await unmount();
@@ -135,7 +166,7 @@ test('a plain file is renamed to the name as typed, so its extension can change 
 
 test('a folder is renamed to the name as typed', async () => {
     await open(folder);
-    await type('c.d');
+    await type(nameField(), 'c.d');
     await act(async () => button('Rename')?.click());
     await settle();
     expect(renamePath.mock.calls).toEqual([[{ path: folder, newName: 'c.d' }]]);
@@ -146,7 +177,7 @@ test('a rename that fails stays open with the typed name', async () => {
         throw toasted('taken');
     });
     await open(notes);
-    await type('Minutes');
+    await type(nameField(), 'Minutes');
     await act(async () => button('Rename')?.click());
     await settle();
     expect(renamePath).toHaveBeenCalledTimes(1);

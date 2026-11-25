@@ -1,15 +1,16 @@
+// A property number field shows its value at its step's decimals, or the value's own up to two, rounding the decimal
+// the value was written as. While focused it shows what was typed, and leaving shows the step again.
 import { afterEach, expect, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { numberAtStep, PropertyNumberInput } = await import(
     '../../../components/properties-panel/property-number-input'
 );
-
-const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -79,10 +80,7 @@ test('while focused the field shows what was typed, and leaving it shows the ste
     await act(async () => {
         input.focus();
     });
-    await act(async () => {
-        nativeValueSetter?.call(input, '16.5');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(input, '16.5');
     expect(input.value).toBe('16.5');
     expect(writes).toEqual([16.5]);
     await act(async () => {

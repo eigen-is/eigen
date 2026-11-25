@@ -2,6 +2,7 @@
 // panel must draw the new value though the selection didn't change. Its W and H fields show and take cm, store px
 // and clamp as the grips do, coupled while Keep aspect ratio is on.
 import { afterEach, expect, test } from 'bun:test';
+import { type as typeInto } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -85,14 +86,16 @@ async function mount(attrs: object = {}, { band = false, note = false, inCell = 
     return editor;
 }
 
+const type = async (input: HTMLInputElement, value: string) => {
+    await act(async () => input.focus());
+    await typeInto(input, value);
+};
+
 const field = (placeholder: string) => {
     const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
     if (!input) throw new Error(`no ${placeholder} field`);
     return input;
 };
-
-// React tracks an input's value on the instance; the prototype setter leaves its tracker stale, as a keystroke does.
-const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 // The Style toggles, own line, wrap left and wrap right, come before Align's.
 const styleToggles = () => [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].slice(0, 3);
@@ -154,12 +157,8 @@ test.each([
     const editor = await mount();
     const input = field(placeholder);
 
-    await act(async () => {
-        input.focus();
-        nativeValueSetter?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
+    await type(input, value);
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
 
     expect(editor.state.doc.nodeAt(2)?.attrs[attribute]).toBe(value);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
@@ -173,11 +172,7 @@ test.each(['Alt text', 'Caption'])(
     async (placeholder) => {
         const editor = await mount();
         const input = field(placeholder);
-        await act(async () => {
-            input.focus();
-            nativeValueSetter?.call(input, 'A ch');
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(input, 'A ch');
 
         await act(async () => {
             editor.view.dispatch(editor.state.tr.insertText('x', 1));
@@ -226,12 +221,6 @@ const aspectBox = () => {
     return box;
 };
 
-const type = (input: HTMLInputElement, value: string) =>
-    act(async () => {
-        input.focus();
-        nativeValueSetter?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const key = (input: HTMLInputElement, key: string) =>
     act(async () => {
         input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));

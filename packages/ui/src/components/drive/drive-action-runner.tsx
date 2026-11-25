@@ -18,10 +18,9 @@ import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
-import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import type { DriveCapabilities, DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import type { ReactNode } from 'react';
-import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
@@ -109,15 +108,12 @@ export function useDriveActionRunner({
     // A move never leaves its item's drive, so its picker starts there. A copy starts in the view's drive.
     const pickerDrive = copyMove?.mode === 'move' ? copyMove.items[0] : { ownerId, mountId };
 
-    const handlePickDestination = async (
-        { items, mode }: CopyMove,
-        location: { ownerId: string; mountId: string; folderId: string },
-    ) => {
-        const leavesDrive = (item: DrivePath) => item.ownerId !== location.ownerId || item.mountId !== location.mountId;
-        if (mode === 'move' && items.some(leavesDrive)) {
-            toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
-            return;
-        }
+    const refuseMove = ({ items, mode }: CopyMove, location: DriveLocationValue) =>
+        mode === 'move' && items.some((item) => item.ownerId !== location.ownerId || item.mountId !== location.mountId)
+            ? 'Moving across drives isn’t supported yet. Use Copy to… instead.'
+            : undefined;
+
+    const handlePickDestination = async ({ items, mode }: CopyMove, location: DriveLocationValue) => {
         const done =
             mode === 'move'
                 ? movePathsMutation.mutateAsync({ paths: items, targetParentId: location.folderId })
@@ -263,6 +259,7 @@ export function useDriveActionRunner({
                                 ? currentPath.id
                                 : undefined
                         }
+                        refuseLocation={(location) => refuseMove(copyMove, location)}
                         onConfirm={(location) => handlePickDestination(copyMove, location)}
                     />
                 )}

@@ -1,13 +1,14 @@
 // The Location field of a folder picker, such as Save to Drive or a chat's new room: a bar that shows the chosen
 // folder as a crumb row, with a Drive browser under it to pick another. The host owns the value and whether the
-// browser is open. Open, the crumbs and New folder act on the browser, and the bar's toggle closes it.
+// browser is open. Open, the crumbs and New folder act on the browser, and the bar's toggle closes it. A folder the
+// host refuses shows the reason under the bar.
 
 import { useBreadcrumb, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
-import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
@@ -25,6 +26,7 @@ type DriveLocationFieldProps = {
     onExpandedChange: (expanded: boolean) => void;
     // Shows only the user's own drive, without team or shared mounts.
     ownMountsOnly?: boolean;
+    error?: string;
 };
 
 export function DriveLocationField({
@@ -33,7 +35,9 @@ export function DriveLocationField({
     expanded,
     onExpandedChange,
     ownMountsOnly,
+    error,
 }: DriveLocationFieldProps) {
+    const errorId = useId();
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const { ownerId, mountId, folderId } = useResolvedDriveLocation(value);
     const mountLabel = useMountLabel(ownerId, mountId);
@@ -72,6 +76,8 @@ export function DriveLocationField({
                             type="button"
                             aria-label="Change location"
                             aria-expanded={expanded}
+                            aria-invalid={!!error || undefined}
+                            aria-describedby={error ? errorId : undefined}
                             className={cn(STRETCHED_TRIGGER_CLASS, 'flex items-center gap-0.5', expanded && 'relative')}
                             onClick={() => onExpandedChange(!expanded)}
                         >
@@ -85,6 +91,7 @@ export function DriveLocationField({
                         </button>
                     </div>
                 </InfoBlock>
+                {error && <FieldError id={errorId}>{error}</FieldError>}
             </Field>
 
             {expanded && (

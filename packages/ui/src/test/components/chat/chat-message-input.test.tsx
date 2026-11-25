@@ -4,6 +4,7 @@
 // once, and a failed one puts its text and files back unless the user has started the next message, and one no toast
 // told the user about still surfaces. A send that takes no files, a slash command that runs here, puts its files back too.
 import { expect, mock, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -54,23 +55,17 @@ async function mount() {
     const textarea = document.querySelector('textarea');
     if (!textarea) throw new Error('the input drew no textarea');
 
-    const type = async (value: string) => {
-        await act(async () => {
-            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, value);
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    };
     const pressEscape = async () => {
         await act(async () => {
             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         });
     };
-    return { closed, textarea, type, pressEscape, cleanup: unmount };
+    return { closed, textarea, pressEscape, cleanup: unmount };
 }
 
 test('Escape with the @-mention list open closes the list and keeps the text, not the dialog', async () => {
-    const { closed, textarea, type, pressEscape, cleanup } = await mount();
-    await type('hi @a');
+    const { closed, textarea, pressEscape, cleanup } = await mount();
+    await type(textarea, 'hi @a');
     expect(document.querySelectorAll('li')).toHaveLength(1);
 
     await pressEscape();
@@ -79,10 +74,10 @@ test('Escape with the @-mention list open closes the list and keeps the text, no
     expect(document.querySelectorAll('li')).toHaveLength(0);
 
     // The list stays closed while that mention is typed on, and the next one opens it again.
-    await type('hi @ad');
+    await type(textarea, 'hi @ad');
     expect(document.querySelectorAll('li')).toHaveLength(0);
-    await type('hi @ad ');
-    await type('hi @ad @');
+    await type(textarea, 'hi @ad ');
+    await type(textarea, 'hi @ad @');
     expect(document.querySelectorAll('li')).toHaveLength(1);
     await pressEscape();
 
@@ -92,8 +87,8 @@ test('Escape with the @-mention list open closes the list and keeps the text, no
 });
 
 test('Escape with the slash command list open closes the list and keeps the text', async () => {
-    const { closed, textarea, type, pressEscape, cleanup } = await mount();
-    await type('/wh');
+    const { closed, textarea, pressEscape, cleanup } = await mount();
+    await type(textarea, '/wh');
     expect(document.querySelectorAll('li').length).toBeGreaterThan(0);
     await pressEscape();
     expect(closed.count).toBe(0);
@@ -103,8 +98,8 @@ test('Escape with the slash command list open closes the list and keeps the text
 });
 
 test('Escape on an @-mention with no matches closes the dialog', async () => {
-    const { closed, type, pressEscape, cleanup } = await mount();
-    await type('hi @zed');
+    const { closed, textarea, pressEscape, cleanup } = await mount();
+    await type(textarea, 'hi @zed');
     await pressEscape();
     expect(closed.count).toBe(1);
     await cleanup();
@@ -143,12 +138,6 @@ async function mountSending() {
     const textarea = document.querySelector('textarea');
     if (!textarea) throw new Error('the input drew no textarea');
 
-    const type = async (value: string) => {
-        await act(async () => {
-            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, value);
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    };
     const pressEnter = async () => {
         await act(async () => {
             textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -157,15 +146,15 @@ async function mountSending() {
     const stage = async (file: File) => {
         await act(async () => input.current?.addFiles([file]));
     };
-    return { sends, textarea, type, pressEnter, stage, cleanup: unmount };
+    return { sends, textarea, pressEnter, stage, cleanup: unmount };
 }
 
 const photo = new File(['pixels'], 'photo.png', { type: 'image/png' });
 const stagedText = () => document.body.textContent ?? '';
 
 test('a send clears the box at once, so a second Enter on a slow network sends nothing', async () => {
-    const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
-    await type('hello');
+    const { sends, textarea, pressEnter, stage, cleanup } = await mountSending();
+    await type(textarea, 'hello');
     await stage(photo);
     await pressEnter();
     expect(textarea.value).toBe('');
@@ -177,8 +166,8 @@ test('a send clears the box at once, so a second Enter on a slow network sends n
 });
 
 test('a local command clears its text and keeps the staged files', async () => {
-    const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
-    await type('/help');
+    const { sends, textarea, pressEnter, stage, cleanup } = await mountSending();
+    await type(textarea, '/help');
     await stage(photo);
     await pressEnter();
     await act(async () => sends[0].resolve(false));
@@ -188,8 +177,8 @@ test('a local command clears its text and keeps the staged files', async () => {
 });
 
 test('a failed send puts the text and files back, and they send again', async () => {
-    const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
-    await type('hello');
+    const { sends, textarea, pressEnter, stage, cleanup } = await mountSending();
+    await type(textarea, 'hello');
     await stage(photo);
     await pressEnter();
     await act(async () => sends[0].reject());
@@ -203,8 +192,8 @@ test('a failed send puts the text and files back, and they send again', async ()
 });
 
 test('a failed send no toast told the user about puts the text back and surfaces', async () => {
-    const { sends, textarea, type, pressEnter, cleanup } = await mountSending();
-    await type('hello');
+    const { sends, textarea, pressEnter, cleanup } = await mountSending();
+    await type(textarea, 'hello');
     await pressEnter();
     const bug = new Error('a bug in the send handler');
     const surfaced = WatchedSend.lastLink?.catch((error: unknown) => error);
@@ -215,11 +204,11 @@ test('a failed send no toast told the user about puts the text back and surfaces
 });
 
 test('a failed send leaves the next message alone when the user has started typing it', async () => {
-    const { sends, textarea, type, pressEnter, stage, cleanup } = await mountSending();
-    await type('first');
+    const { sends, textarea, pressEnter, stage, cleanup } = await mountSending();
+    await type(textarea, 'first');
     await stage(photo);
     await pressEnter();
-    await type('second');
+    await type(textarea, 'second');
     const otherPhoto = new File(['pixels'], 'other.png', { type: 'image/png' });
     await stage(otherPhoto);
     await act(async () => sends[0].reject());
@@ -230,8 +219,8 @@ test('a failed send leaves the next message alone when the user has started typi
 });
 
 test('a send that succeeds leaves the box empty', async () => {
-    const { sends, textarea, type, pressEnter, cleanup } = await mountSending();
-    await type('hello');
+    const { sends, textarea, pressEnter, cleanup } = await mountSending();
+    await type(textarea, 'hello');
     await pressEnter();
     await act(async () => sends[0].resolve(true));
     expect(textarea.value).toBe('');
@@ -239,9 +228,9 @@ test('a send that succeeds leaves the box empty', async () => {
 });
 
 test('text put back after a failed send grows the box to fit, as typing does', async () => {
-    const { sends, textarea, type, pressEnter, cleanup } = await mountSending();
+    const { sends, textarea, pressEnter, cleanup } = await mountSending();
     Object.defineProperty(textarea, 'scrollHeight', { get: () => (textarea.value.includes('\n') ? 80 : 40) });
-    await type('one\ntwo\nthree');
+    await type(textarea, 'one\ntwo\nthree');
     expect(textarea.style.height).toBe('80px');
     await pressEnter();
     expect(textarea.style.height).toBe('40px');
@@ -258,5 +247,13 @@ test('the attach button is a named, flat icon button in the text color', async (
     const attach = document.querySelector('button[aria-label="Add attachment"]');
     expect(attach).not.toBeNull();
     expect(attach?.className).not.toContain('text-muted-foreground');
+    await unmount();
+});
+
+test('the send button is named for what it does', async () => {
+    const { unmount } = await renderInDocument(
+        createElement(ChatMessageInput, { ...inputProps, onSend: async () => true }),
+    );
+    expect(document.querySelector('button[aria-label="Send"]')).not.toBeNull();
     await unmount();
 });

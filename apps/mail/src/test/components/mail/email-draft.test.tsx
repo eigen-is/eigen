@@ -1,9 +1,12 @@
 // A forward's parts are fetched and attached once, while the forward has no saved draft: a composer that
 // opens on the saved draft already holds them, so it fetches none of them again. The route drops them from
-// history state only once a saved draft holds them all.
-import { afterEach, expect, jest, test } from 'bun:test';
+// history state only once a saved draft holds them all. A send with no recipient, or with neither a subject nor a
+// message, says so under To or Subject and focuses it. Cmd+Enter sends, except while a dialog is open over the draft, and
+// a running send keeps Send's label beside a spinner.
+import { afterEach, expect, jest, mock, test } from 'bun:test';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import type { ReactElement } from 'react';
@@ -13,7 +16,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
-const { EmailDraft } = await import('../../../components/mail/email-draft');
+const { EmailDraft, EmailDraftToolbar } = await import('../../../components/mail/email-draft');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -135,10 +138,7 @@ test('a forward whose first save ran while its part uploaded reports the parts s
         );
         const subject = document.querySelector('#subject');
         if (!(subject instanceof HTMLInputElement)) throw new Error('no subject field');
-        await act(async () => {
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(subject, 'FW: Lunch!');
-            subject.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(subject, 'FW: Lunch!');
         await act(async () => void jest.advanceTimersByTime(3000));
         expect(saves).toEqual([undefined]);
         expect(partsSaved).toBe(0);
@@ -154,4 +154,93 @@ test('a forward whose first save ran while its part uploaded reports the parts s
             throw new TypeError('A component test has no network');
         };
     }
+});
+
+async function openNewMail(to = '') {
+    const sendDraft = mock(async () => {});
+    await renderUnderRoute(
+        createElement(EmailDraft, {
+            email: null,
+            to,
+            sendDraft,
+            onAutoSave: async () => savedForward,
+            isSending: false,
+            onPreparingSendChange: () => {},
+            filePickerOpen: false,
+            onFilePickerOpenChange: () => {},
+        }),
+    );
+    return sendDraft;
+}
+
+const send = () =>
+    act(async () => {
+        document.querySelector('#draft-form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+function input(id: string): HTMLInputElement {
+    const element = document.getElementById(id);
+    if (!(element instanceof HTMLInputElement)) throw new Error(`no ${id} field`);
+    return element;
+}
+
+// Off a Mac, which happy-dom says it is not, Mod is Ctrl.
+const pressModEnter = () =>
+    act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    });
+
+test('a send with no recipient says so under To and focuses it, with no alert', async () => {
+    const sendDraft = await openNewMail();
+    await send();
+    expect(input('to').getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement?.id).toBe('to');
+    expect(document.body.textContent).toContain('Add at least one recipient');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(sendDraft).not.toHaveBeenCalled();
+
+    await type(input('to'), 'bob@test.eigen.is');
+    expect(input('to').getAttribute('aria-invalid')).toBeNull();
+});
+
+test('a send with neither a subject nor a message says so under Subject and focuses it', async () => {
+    const sendDraft = await openNewMail('bob@test.eigen.is');
+    await send();
+    expect(input('subject').getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement?.id).toBe('subject');
+    expect(document.body.textContent).toContain('Add a subject or a message');
+    expect(sendDraft).not.toHaveBeenCalled();
+});
+
+test('Cmd+Enter sends, and does nothing while a dialog or an alert dialog is open over the draft', async () => {
+    const sendDraft = await openNewMail('bob@test.eigen.is');
+    await type(input('subject'), 'Lunch');
+    for (const role of ['dialog', 'alertdialog']) {
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', role);
+        await act(async () => document.body.append(dialog));
+        await pressModEnter();
+        expect(sendDraft).not.toHaveBeenCalled();
+        await act(async () => dialog.remove());
+    }
+
+    await pressModEnter();
+    expect(sendDraft).toHaveBeenCalledTimes(1);
+});
+
+test("a running send keeps Send's label beside a spinner and ignores another click", async () => {
+    const submitted = mock((event: Event) => event.preventDefault());
+    const form = document.createElement('form');
+    form.id = 'draft-form';
+    form.addEventListener('submit', submitted);
+    document.body.append(form);
+    ({ unmount } = await renderInDocument(
+        createElement(EmailDraftToolbar, { onDelete: () => {}, onAttach: () => {}, isSending: true, hasId: false }),
+    ));
+    // A pending button's spinner comes before its label.
+    const sendButton = [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent === 'Send');
+    expect(sendButton?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => sendButton?.click());
+    expect(submitted).not.toHaveBeenCalled();
+    form.remove();
 });

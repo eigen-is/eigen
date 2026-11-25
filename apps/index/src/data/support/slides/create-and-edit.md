@@ -6,7 +6,7 @@ category: Basics
 tags: [slides, presentation, editing, text, images]
 related: [slides/get-started, slides/add-slides, slides/insert-content]
 order: 20
-updated: 2026-10-23
+updated: 2026-11-25
 ---
 
 Create a presentation in Slides, place text and images on its slides, and adjust everything from the properties panel on the right.
@@ -75,7 +75,7 @@ A presentation is **Widescreen 16:9** or **Standard 4:3**, and all its slides sh
 
 1. Click **File** in the toolbar and choose **Page setup…**.
 2. Pick **Widescreen 16:9** or **Standard 4:3**.
-3. Click **OK**.
+3. Click **Apply**.
 
 Everything on your slides keeps its position and size, and the slides keep their width. Going from 16:9 to 4:3 adds empty space at the bottom of each slide. Going from 4:3 to 16:9 makes each slide shorter, so anything near the bottom can fall outside the slide and is hidden. It isn't deleted: undo the change, or switch back to 4:3, and it shows again.
 

@@ -1,3 +1,5 @@
+// The chart editor of the properties panel: its types, stacking, font, titles, axes, legend, gridlines, series and
+// slice colors, data labels and Edit data each write one change, and a typed title is one gesture until left or undone.
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
     applyChartSpecChange,
@@ -15,6 +17,7 @@ import type {
     ChartType,
     StoredChartSpec,
 } from '@workspace/lib/types/chart';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -23,9 +26,6 @@ const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { PropertyGestureContext, PropertyHistoryContext } = await import('../../../components/properties-panel');
 const { ChartEditor } = await import('../../../components/charts');
-
-// React reads an input's value off its own tracker, so the native setter is what a keystroke looks like.
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 let cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -87,13 +87,10 @@ async function mount(
         if (!found) throw new Error(`no "${placeholder}" field; saw ${rowLabels().join(', ')}`);
         return found;
     };
-    const type = async (placeholder: string, value: string) => {
+    const typeIn = async (placeholder: string, value: string) => {
         const field = input(placeholder);
-        await act(async () => {
-            field.focus();
-            setValue?.call(field, value);
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => field.focus());
+        await type(field, value);
     };
     // The keydown, returned so a test can see whether the browser's own handling of it was prevented.
     const press = async (placeholder: string, init: KeyboardEventInit) => {
@@ -194,7 +191,7 @@ async function mount(
         rowLabels,
         boxLabels,
         input,
-        type,
+        type: typeIn,
         press,
         blur,
         row,
@@ -342,23 +339,14 @@ describe('ChartEditor', () => {
         const editor = await mount(bounded('column', { max: 0.07 }, 'percent'));
         const [min, max] = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Auto"]')];
         expect(max.value).toBe('7');
-        await act(async () => {
-            max.focus();
-            setValue?.call(max, '100');
-            max.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => max.focus());
+        await type(max, '100');
         expect(editor.last().axes.y.scale.max).toBe(1);
-        await act(async () => {
-            min.focus();
-            setValue?.call(min, '-20');
-            min.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => min.focus());
+        await type(min, '-20');
         expect(editor.last().axes.y.scale).toMatchObject({ min: -0.2, max: 1 });
         // 33.3 / 100 is 0.33299999999999996 in floating point.
-        await act(async () => {
-            setValue?.call(max, '33.3');
-            max.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(max, '33.3');
         expect(editor.last().axes.y.scale.max).toBe(0.333);
     });
 
@@ -387,16 +375,10 @@ describe('ChartEditor', () => {
         const editor = await mount(bounded('line', { min: 50 }));
         const max = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Auto"]')].at(-1);
         if (!max) throw new Error('no Max field');
-        await act(async () => {
-            max.focus();
-            setValue?.call(max, '40');
-            max.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => max.focus());
+        await type(max, '40');
         expect(editor.changes).toEqual([]);
-        await act(async () => {
-            setValue?.call(max, '400');
-            max.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(max, '400');
         expect(editor.last().axes.y.scale).toMatchObject({ min: 50, max: 400 });
     });
 
@@ -457,14 +439,14 @@ describe('ChartEditor', () => {
         expect(editor.rowLabels()).not.toContain('Sun');
     });
 
-    test("inline data offers Edit data, whose Save is one write; a host's own Edit data opens nothing here", async () => {
+    test("inline data offers Edit data, whose Apply is one write; a host's own Edit data opens nothing here", async () => {
         const editor = await mount(sample('column'));
         const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
         const press = (target: HTMLElement | null | undefined) =>
             act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         await press(editor.button('Edit data'));
         const save = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
-            (el) => el.textContent?.trim() === 'Save',
+            (el) => el.textContent?.trim() === 'Apply',
         );
         await press(save);
         expect(editor.changes).toHaveLength(1);

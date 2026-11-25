@@ -7,6 +7,7 @@ import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -228,20 +229,13 @@ function messageInput(): HTMLTextAreaElement {
     return input;
 }
 
-const typeInto = (input: HTMLTextAreaElement, value: string) =>
-    act(async () => {
-        const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 test('a readable chat shows its messages, and Enter sends what was typed', async () => {
     const page = await open('/me@test.eigen.is/default/c1');
     expect(page.text()).toContain('Morning all');
     expect(page.text()).toContain('Lunch at noon?');
 
     const input = messageInput();
-    await typeInto(input, '  On my way  ');
+    await type(input, '  On my way  ');
     await act(async () => {
         input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
     });
@@ -250,7 +244,7 @@ test('a readable chat shows its messages, and Enter sends what was typed', async
 
 test('a draft stays behind when the user changes room, so Enter sends nothing there', async () => {
     const page = await open('/me@test.eigen.is/default/c1');
-    await typeInto(messageInput(), 'For General only');
+    await type(messageInput(), 'For General only');
 
     await page.goToRoom('c2');
     const input = messageInput();

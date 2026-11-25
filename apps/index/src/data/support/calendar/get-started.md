@@ -7,7 +7,7 @@ tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-24
+updated: 2026-11-25
 ---
 
 Calendar is where you keep your schedule in Eigen. You create events, invite other people, and see your team's calendars and the ones others share with you beside your own.
@@ -53,7 +53,7 @@ In the dialog:
 4. To invite people, type a name or email address into the **Add guests** field and click the **+** button. Each person appears in the list below with a **Pending** status until they respond.
 5. Add an optional **Add location** or **Add description**.
 6. If you have more than one calendar, use the calendar picker at the bottom to choose which calendar the event belongs to.
-7. Click **Save**.
+7. Click **Create**.
 
 The event appears in the grid straight away. Click it to see its details.
 

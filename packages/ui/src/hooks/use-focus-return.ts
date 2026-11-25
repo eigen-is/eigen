@@ -4,6 +4,8 @@
 // its onCloseAutoFocus. A closing menu calls returnFocusTo or handFocusReturnTo, which hand its list or its trigger to
 // a dialog one of its rows opened. The focus comes back with a focus ring only if its target had one as it left, so a
 // button a mouse clicked, such as a row's hover-revealed ⋮, doesn't draw one, and stays hidden once the pointer leaves.
+// A target that a save drew anew, such as a calendar event's chip on the day it moved to, is found again by its
+// data-focus-key.
 
 import type { RefObject } from 'react';
 import { useLayoutEffect, useState } from 'react';
@@ -59,11 +61,18 @@ export function useFocusReturn(
     // Radix calls this a moment after the dialog is gone.
     return (event: Event) => {
         onCloseAutoFocus?.(event);
-        const { target, ring } = entry;
-        if (event.defaultPrevented || !target?.isConnected) return;
+        const { ring } = entry;
+        const target = entry.target?.isConnected ? entry.target : redrawn(entry.target);
+        if (event.defaultPrevented || !target) return;
         event.preventDefault();
         returnFocusTo(target, ring);
     };
+}
+
+// The element that now stands where a removed one did.
+function redrawn(removed: HTMLElement | null): HTMLElement | null {
+    const key = removed?.dataset.focusKey;
+    return key ? document.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(key)}"]`) : null;
 }
 
 // Gives the focus back to `target` as a dialog or a menu closes. Whatever took the focus meanwhile keeps it, such as a

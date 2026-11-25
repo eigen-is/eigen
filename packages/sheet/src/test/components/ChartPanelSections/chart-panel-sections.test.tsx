@@ -12,6 +12,7 @@ import {
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { parseFill } from '@workspace/lib/vector';
+import { type as typeText } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -58,9 +59,6 @@ const inlineChart = (): SheetChart => ({ ...rangeChart(), ...newChartSpecParts(s
 const cell = (r: number, c: number, v: string | number) => ({ r, c, v: { v, m: String(v) } });
 const table = [cell(0, 0, 'Team'), cell(0, 1, 'Points'), cell(1, 0, 'Ajax'), cell(1, 1, 42)];
 const rows = [cell(2, 0, 'PSV'), cell(2, 1, 65), cell(3, 0, 'AZ'), cell(3, 1, 30)];
-
-// React reads an input's value off its own tracker, so the native setter is what a keystroke looks like.
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 function Host({ data, workbook }: { data: Sheet[]; workbook: RefObject<WorkbookInstance | null> }) {
     const [panel, setPanel] = useState<ChartPanelState | null>(null);
@@ -131,9 +129,8 @@ async function mount(chart: SheetChart) {
         await act(async () => {
             input.focus();
             input.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-            setValue?.call(input, value);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
         });
+        await typeText(input, value);
         await act(async () => {
             if (end === 'Enter') input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
             else input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
@@ -293,12 +290,7 @@ test('a title typed letter by letter is one undo step', async () => {
         title.focus();
         title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
-    for (const text of ['P', 'Po', 'Pos']) {
-        await act(async () => {
-            setValue?.call(title, text);
-            title.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    }
+    for (const text of ['P', 'Po', 'Pos']) await typeText(title, text);
     await act(async () => title.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
     expect(spec()?.title.text).toBe('Pos');
     await undo();
@@ -309,7 +301,9 @@ test("a peer's colour landing after the panel rendered survives a title typed in
     const { workbook, spec, field } = await mount(rangeChart());
     const value = JSON.stringify({ 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } });
     const title = field('input[placeholder="Chart title"]');
-    // One act, so the title's handler is the one the panel rendered before the peer's write.
+    // One act, so the title's handler is the one the panel rendered before the peer's write. The native setter is what
+    // a keystroke looks like to React.
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     await act(async () => {
         workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'specSeries'], value }]);
         title.focus();
@@ -329,7 +323,7 @@ test('an inline chart edits its data in the grid dialog instead of a data range'
     );
 });
 
-test("Edit data's Save keeps a peer's colours and title written while it was open", async () => {
+test("Edit data's Apply keeps a peer's colours and title written while it was open", async () => {
     const { container, workbook, spec } = await mount(inlineChart());
     const click = (target: Element | undefined) =>
         act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -348,12 +342,9 @@ test("Edit data's Save keeps a peer's colours and title written while it was ope
     const b2 = dialog?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
     await act(async () => b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
     const input = dialog?.querySelector<HTMLInputElement>('input[data-cell-editor]');
-    await act(async () => {
-        if (!input) throw new Error('no cell editor');
-        setValue?.call(input, '7');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await click(buttonIn(dialog, 'Save'));
+    if (!input) throw new Error('no cell editor');
+    await typeText(input, '7');
+    await click(buttonIn(dialog, 'Apply'));
     const saved = spec();
     expect(saved?.title.text).toBe('Peer title');
     expect(saved?.points).toEqual({ [first.id]: { 1: { color: '#000002' } } });

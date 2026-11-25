@@ -31,7 +31,7 @@ Use your Eigen **email address** as the username in the external client, and the
 
 1. Open the [**Integrations**](/space/services) page in Space.
 2. Scroll to **App passwords**. The list shows every password you have created, along with when it was created and when it was last used.
-3. Click the trash icon in the row for the password you want to remove.
+3. Click the trash icon in the row for the password you want to remove, then click **Delete** to confirm. A deleted password can't be brought back.
 
 The password stops working immediately. Any client that was using it will be asked to sign in again.
 

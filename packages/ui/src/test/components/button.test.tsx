@@ -1,5 +1,5 @@
 // A Button is a plain button unless it says otherwise: inside a form it submits only with type="submit". A Button with
-// asChild renders its child, such as a link, and puts no button type on it.
+// asChild renders its child, such as a link, and puts no button type on it, nor a pending spinner.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactElement } from 'react';
 import { installHappyDom } from '../happy-dom';
@@ -62,4 +62,52 @@ test('inside a form, only a Button with type="submit" submits it', async () => {
     expect(onSubmit).not.toHaveBeenCalled();
     await click(save);
     expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+test('a pending Button shows a spinner before its label, says it is busy and ignores a click', async () => {
+    const onClick = mock(() => {});
+    const container = await render(createElement(Button, { pending: true, onClick }, 'Save'));
+    const button = container.querySelector('button');
+    expect(button?.firstElementChild?.tagName.toLowerCase()).toBe('svg');
+    expect(button?.lastChild?.textContent).toBe('Save');
+    expect(button?.getAttribute('aria-busy')).toBe('true');
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
+    // Not disabled, so the focus stays on it instead of falling to the page.
+    expect(button?.disabled).toBe(false);
+    await click(button);
+    expect(onClick).not.toHaveBeenCalled();
+});
+
+test('a pending submit Button submits nothing, and once done it submits again', async () => {
+    const onSubmit = mock((event: { preventDefault: () => void }) => event.preventDefault());
+    const form = (pending: boolean) =>
+        createElement('form', { onSubmit }, createElement(Button, { type: 'submit', pending }, 'Save'));
+    const container = await render(form(true));
+    await click(container.querySelector('button'));
+    expect(onSubmit).not.toHaveBeenCalled();
+    await unmount();
+    const done = await render(form(false));
+    expect(done.querySelector('button')?.hasAttribute('aria-busy')).toBe(false);
+    await click(done.querySelector('button'));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+});
+
+test('a Button with asChild that is not pending renders its child alone', async () => {
+    const container = await render(
+        createElement(Button, { asChild: true, pending: false }, createElement('a', { href: '/help' }, 'Help')),
+    );
+    expect(container.querySelector('a')?.textContent).toBe('Help');
+});
+
+test('a Button with asChild ignores pending, so its child keeps the classes and the click', async () => {
+    const onClick = mock(() => {});
+    const container = await render(
+        createElement(Button, { asChild: true, pending: true, onClick }, createElement('a', { href: '#help' }, 'Help')),
+    );
+    const link = container.querySelector('a');
+    expect(link?.className).toContain('inline-flex');
+    expect(link?.textContent).toBe('Help');
+    expect(link?.hasAttribute('aria-busy')).toBe(false);
+    await click(link);
+    expect(onClick).toHaveBeenCalledTimes(1);
 });

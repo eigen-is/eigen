@@ -13,7 +13,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { downloadBlob } from '@workspace/lib/download';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
@@ -23,7 +23,6 @@ import type { MarkdownStorage } from 'tiptap-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { CodeEditorView } from './code-editor';
 import { ConflictDialog } from './conflict-dialog';
-import { DiscardChangesDialogs } from './discard-changes-dialogs';
 import { EditToolbar } from './editor-toolbar';
 import { MarkdownToolbarButtons } from './markdown-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
@@ -117,6 +116,8 @@ export function MarkdownEditor({
     const editor = useEditor({
         extensions: useMarkdownExtensions(content),
         content,
+        // It mounts when Edit is pressed, so typing goes into the text at once.
+        autofocus: true,
         // No equation node: a pasted equation reads as its linear text.
         editorProps: { transformPastedHTML: mathAsText },
         onUpdate: () => {
@@ -140,25 +141,16 @@ export function MarkdownEditor({
 
     const getFrontmatter = useCallback(() => frontmatter ?? undefined, [frontmatter]);
 
-    const {
-        saveState,
-        atRisk,
-        showConflict,
-        setShowConflict,
-        markDirty,
-        doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
-    } = useEditorSave({
-        ownerId,
-        mountId,
-        pathId,
-        etag,
-        getContent,
-        getFrontmatter,
-    });
+    const { saveState, atRisk, showConflict, setShowConflict, markDirty, doSave, cancel, discardDialog } =
+        useEditorSave({
+            ownerId,
+            mountId,
+            pathId,
+            etag,
+            getContent,
+            getFrontmatter,
+            onCancel,
+        });
 
     const handleToggleSource = useCallback(() => {
         if (sourceMode) {
@@ -183,12 +175,7 @@ export function MarkdownEditor({
     };
 
     const toolbar = (
-        <EditToolbar
-            onBack={onBack}
-            onCancel={() => confirmClose(onCancel)}
-            onSave={handleSave}
-            isSaving={saveState === 'saving'}
-        >
+        <EditToolbar onBack={onBack} onCancel={cancel} onSave={handleSave} isSaving={saveState === 'saving'}>
             <MarkdownToolbarButtons editor={editor} sourceMode={sourceMode} onToggleSource={handleToggleSource} />
         </EditToolbar>
     );
@@ -231,12 +218,8 @@ export function MarkdownEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <DiscardChangesDialogs
-                    atRisk={atRisk}
-                    open={showDiscardConfirm}
-                    onConfirm={handleDiscardConfirm}
-                    onCancel={handleDiscardCancel}
-                />
+                {discardDialog}
+                <LeaveGuard active={atRisk} />
             </Column>
         </DocSearchProvider>
     );

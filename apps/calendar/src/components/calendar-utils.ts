@@ -1,5 +1,6 @@
 // Small helpers the Calendar app's views and event dialogs share, such as the color and state an event draws in and
-// the classes that state lays over its color surface, which occurrence a refetched list holds for one on screen, whose
+// the classes that state lays over its color surface, which occurrence a refetched list holds for one on screen and the
+// key its buttons carry, whose
 // Home an event is saved in, the day cell under a dragging pointer, an event's start and end from the form's fields,
 // and the key a picker names a calendar by.
 
@@ -61,6 +62,13 @@ export function isSameOccurrence(a: CalendarEventOccurrence, b: CalendarEventOcc
         (a.parentEventId || a.id) === (b.parentEventId || b.id) &&
         (!isSeriesOccurrence(a) || !isSeriesOccurrence(b) || a.occurrenceDate === b.occurrenceDate)
     );
+}
+
+// The same occurrence as a string, which a view's event buttons carry, so a dialog that closes after a save that moved
+// the event gives the focus to its button on the new day.
+export function occurrenceKey(event: CalendarEventOccurrence): string {
+    const series = event.parentEventId || event.id;
+    return isSeriesOccurrence(event) ? `${series}@${event.occurrenceDate}` : series;
 }
 
 // An event on none of the viewer's own calendars sits on a calendar shared with them, so its owner is the sharer.

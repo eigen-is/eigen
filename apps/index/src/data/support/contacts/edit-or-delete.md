@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, edit, delete]
 related: [contacts/add-a-contact]
 order: 30
-updated: 2026-11-08
+updated: 2026-11-25
 ---
 
 You can update any of a contact's details at any time, and delete contacts you no longer need.
@@ -20,7 +20,7 @@ You can update any of a contact's details at any time, and delete contacts you n
    - **Additional information**: **Birthday** and **Notes**.
 4. Click **Save**. You are returned to the contact's detail view.
 
-To cancel without saving, click **Cancel**.
+To cancel without saving, click **Cancel**: your changes are dropped. If you changed anything and leave the page any other way, such as with the back arrow, Contacts first asks **Discard changes?**.
 
 If the contact changes elsewhere while you have it open, for example on your phone, what you typed stays in the form and the fields you haven't changed switch to the newer version. If you have typed something, your next save is refused and a message tells you the contact changed elsewhere. Check the form and click **Save** again.
 

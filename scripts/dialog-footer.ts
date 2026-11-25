@@ -10,18 +10,13 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/calendar/src/components/event-detail-dialog.tsx', // actions, no fields
     'apps/docs/src/components/docs/word-count-dialog.tsx', // information only, in a FormDialog shell
     'apps/drive/src/components/editor/conflict-dialog.tsx', // three actions
-    'apps/mail/src/components/mail/email-draft.tsx', // an alert with one OK button
     'apps/mail/src/components/mail/mail-shortcuts-dialog.tsx', // information only
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
-    'packages/sheet/src/components/CellRangeDialog/index.tsx', // a non-modal range picker over the grid
     'packages/sheet/src/components/ConditionFormat/ManageRules.tsx', // a list, in a FormDialog shell
-    'packages/ui/src/components/cards/card-form.tsx', // the edit view a card dialog swaps in for its view
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid
     'packages/ui/src/components/chat/chat-create-wizard.tsx', // several steps
     'packages/ui/src/components/confirm-dialog.tsx', // a yes or no
     'packages/ui/src/components/drive/drive-access-dialog.tsx', // a read-only list, in a FormDialog shell
-    'packages/ui/src/components/drive/drive-file-picker.tsx', // a picker
-    'packages/ui/src/components/drive/drive-location-picker.tsx', // a picker
     'packages/ui/src/components/layout/app/about-dialog.tsx', // information only
 ]);
 

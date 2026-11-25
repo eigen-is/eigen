@@ -1,6 +1,7 @@
 // The dialog that imports an .ics file into a calendar: one of the viewer's own, a team calendar they may write in, or
-// a new one named after the file. Enter in the name submits, and a failed import stays open for another try. A file
-// action, such as Import to Calendar on a mail attachment, opens it.
+// a new one named after the file. Enter in the name submits, a missing calendar or name says so under its field, and
+// a failed import stays open for another try. Until the calendars load it offers only Close. A file action, such as
+// Import to Calendar on a mail attachment, opens it.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -15,12 +16,14 @@ import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { useState } from 'react';
 import { Button } from '../button';
-import { Field, FieldLabel } from '../field';
+import { Field, FieldError, FieldLabel } from '../field';
 import { FormDialog, FormDialogForm } from '../form-dialog';
-import { Input } from '../input';
+import { useFormSubmitted } from '../form-shell';
 import { ErrorState } from '../layout/app/error-state';
+import { RequiredTextField } from '../required-text-field';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
 // The leading colon keeps this out of the target space: every real value is a home and a calendar id joined by one.
@@ -77,13 +80,15 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
     const chosen = options.find((option) => targetValue(option) === picked);
     const isNew = picked === NEW_CALENDAR;
     const target = chosen || isNew ? picked : '';
-    const [name, setName] = useState(fileName.replace(/\.ics$/i, '') || 'Imported calendar');
+    const [defaultName] = useState(fileName.replace(/\.ics$/i, '') || 'Imported calendar');
+    const [name, setName] = useState(defaultName);
 
     const handleSubmit = async () => {
         if (chosen) {
             await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });
             return;
         }
+        if (!isNew || !name.trim()) return false;
         // A new calendar is always made in the viewer's own home; a team home is only ever written into.
         const color =
             EIGEN_ACCENT_COLORS_SHUFFLED[(calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
@@ -93,7 +98,8 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
     return (
         <FormDialogForm
             onSubmit={handleSubmit}
-            canSubmit={!isError && (chosen !== undefined || (isNew && name.trim() !== ''))}
+            changed={isNew && name !== defaultName}
+            readOnly={isError || !calendars}
             submitLabel="Import"
         >
             {isError ? (
@@ -106,38 +112,79 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                     }
                 />
             ) : (
-                <>
-                    <Field>
-                        <FieldLabel htmlFor="import-calendar-target">Add to calendar</FieldLabel>
-                        <Select value={target} onValueChange={setChosenTarget} disabled={!calendars}>
-                            <SelectTrigger id="import-calendar-target" className="w-full">
-                                <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup>
-                                    <SelectLabel>My calendars</SelectLabel>
-                                    {ownTargets.map(renderTarget)}
-                                </SelectGroup>
-                                {teamTargets.length > 0 && (
-                                    <SelectGroup>
-                                        <SelectLabel>Team calendars</SelectLabel>
-                                        {teamTargets.map(renderTarget)}
-                                    </SelectGroup>
-                                )}
-                                <SelectItem value={NEW_CALENDAR}>New calendar</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </Field>
-
-                    {isNew && (
-                        <Field>
-                            <FieldLabel htmlFor="import-calendar-name">Calendar name</FieldLabel>
-                            <Input id="import-calendar-name" value={name} onChange={(e) => setName(e.target.value)} />
-                        </Field>
-                    )}
-                </>
+                <TargetFields
+                    target={target}
+                    onTargetChange={setChosenTarget}
+                    loading={!calendars}
+                    ownTargets={ownTargets}
+                    teamTargets={teamTargets}
+                    name={isNew ? name : undefined}
+                    onNameChange={setName}
+                />
             )}
         </FormDialogForm>
+    );
+}
+
+// The calendar to add to, and the name of a new one. Once Import was pressed, a missing one says so under its field.
+function TargetFields({
+    target,
+    onTargetChange,
+    loading,
+    ownTargets,
+    teamTargets,
+    name,
+    onNameChange,
+}: {
+    target: string;
+    onTargetChange: (target: string) => void;
+    loading: boolean;
+    ownTargets: readonly CalendarOption[];
+    teamTargets: readonly CalendarOption[];
+    // Only a new calendar has one.
+    name: string | undefined;
+    onNameChange: (name: string) => void;
+}) {
+    const noTarget = useFormSubmitted() && !target;
+    return (
+        <>
+            <Field>
+                <FieldLabel htmlFor="import-calendar-target">Add to calendar</FieldLabel>
+                <Select value={target} onValueChange={onTargetChange} disabled={loading}>
+                    <SelectTrigger
+                        id="import-calendar-target"
+                        className="w-full"
+                        aria-invalid={noTarget || undefined}
+                        aria-describedby={noTarget ? 'import-calendar-target-error' : undefined}
+                    >
+                        <SelectValue placeholder={loading ? 'Loading calendars…' : 'Select calendar'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectLabel>My calendars</SelectLabel>
+                            {ownTargets.map(renderTarget)}
+                        </SelectGroup>
+                        {teamTargets.length > 0 && (
+                            <SelectGroup>
+                                <SelectLabel>Team calendars</SelectLabel>
+                                {teamTargets.map(renderTarget)}
+                            </SelectGroup>
+                        )}
+                        <SelectItem value={NEW_CALENDAR}>New calendar</SelectItem>
+                    </SelectContent>
+                </Select>
+                {noTarget && <FieldError id="import-calendar-target-error">Pick a calendar</FieldError>}
+            </Field>
+
+            {name !== undefined && (
+                <RequiredTextField
+                    label="Calendar name"
+                    value={name}
+                    onChange={onNameChange}
+                    message={FIELD_MESSAGES.nameMissing}
+                />
+            )}
+        </>
     );
 }
 

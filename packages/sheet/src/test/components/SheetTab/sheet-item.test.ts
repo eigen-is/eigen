@@ -1,7 +1,7 @@
 // A sheet tab's Hide hides its sheet, unless it is the last one shown: the workbook always shows one, so Hide then
 // warns that it can't and leaves the sheet as it was. Delete asks first, and refuses the same way, also when a peer's
 // delete made its sheet the last one shown while its confirm was open. A name the rename refuses, such as an empty one,
-// shows an error toast with the reason and puts the old name back.
+// shows an error toast with the reason and puts the old name back, and so does Escape, without the toast.
 
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -69,6 +69,23 @@ test('an empty name shows an error toast with the reason and keeps the old name'
     expect(dialog.dialogs()).toHaveLength(0);
     expect(dialog.context().sheets[0]?.name).toBe('First');
     expect(name.innerText).toBe('First');
+});
+
+test('Escape in a rename puts the old name back, saves nothing and gives the keys to the grid', async () => {
+    const dialog = await renderTabs([sheet('a', 'First')]);
+    const name = document.querySelector<HTMLElement>('[role="button"] span');
+    if (!name) throw new Error('no tab name');
+    await act(async () => name.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+    await act(async () => {
+        name.innerText = 'Typed';
+        name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(name.innerText).toBe('First');
+    expect(name.contentEditable).toBe('false');
+    expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    await act(async () => name.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(dialog.context().sheets[0]?.name).toBe('First');
+    expect(toastError).not.toHaveBeenCalled();
 });
 
 // Picks a row of the first tab's menu, and waits out the tick after which Radix runs its close focus.

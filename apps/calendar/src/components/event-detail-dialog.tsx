@@ -1,6 +1,7 @@
 // The panel that opens when you click an event in a calendar view, such as the month view. It shows the event's time,
 // place, guests and calendar. A guest of an invitation can reply to it here. Its buttons edit, delete or export the
-// event, and a delete or a reply on a repeating event first asks which occurrences it applies to.
+// event, and a delete or a reply on a repeating event first asks which occurrences it applies to. A reply keeps the
+// panel open, its button busy, until the write ends.
 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
@@ -20,6 +21,7 @@ import type {
     CalendarEventOccurrence,
     CalendarItem,
     RecurrenceScope,
+    RsvpStatus,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
@@ -38,6 +40,7 @@ import { ProgressDialog } from '@workspace/ui/components/drive';
 import { DetailSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserName } from '@workspace/ui/components/user';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
@@ -72,7 +75,9 @@ export function EventDetailDialog({
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
-    const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
+    const [rsvpAwaitingScope, setRsvpAwaitingScope] = useState<RsvpStatus | null>(null);
+    const [sentRsvpStatus, setSentRsvpStatus] = useState<RsvpStatus>();
+    const { pending: replying, run: runReply, handleOpenChange } = useDialogPending({ open, onOpenChange });
     const [editOpen, setEditOpen] = useState(false);
     // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
     const [editMount, setEditMount] = useState(0);
@@ -161,29 +166,41 @@ export function EventDetailDialog({
 
     const handleDeleteClick = () => (isPartOfSeries ? setShowRecurringDeleteDialog(true) : setShowDeleteDialog(true));
 
-    const handleRsvpScopeConfirm = (scope: RecurrenceScope) => {
-        if (!pendingRsvpStatus) return;
+    const handleRsvpScopeConfirm = async (scope: RecurrenceScope) => {
+        if (!rsvpAwaitingScope) return;
         const eventId = event.parentEventId || event.id;
         if (scope === 'this') {
-            rsvp.mutate({
+            await rsvp.mutateAsync({
                 calendarId: event.calendarId,
                 eventId,
-                status: pendingRsvpStatus,
+                status: rsvpAwaitingScope,
                 scope: 'this',
                 recurrenceDate: event.occurrenceDate,
             });
         } else {
-            rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });
+            await rsvp.mutateAsync({ calendarId: event.calendarId, eventId, status: rsvpAwaitingScope });
         }
-        setPendingRsvpStatus(null);
+        setRsvpAwaitingScope(null);
         onOpenChange(false);
+    };
+
+    const handleRsvp = (status: RsvpStatus) => {
+        if (isPartOfSeries) {
+            setRsvpAwaitingScope(status);
+            setShowRsvpScopeDialog(true);
+            return;
+        }
+        setSentRsvpStatus(status);
+        void runReply(async () => {
+            await rsvp.mutateAsync({ calendarId: event.calendarId, eventId: event.id, status });
+        });
     };
 
     return (
         <>
             <Dialog
                 open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
             >
                 <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
@@ -230,19 +247,9 @@ export function EventDetailDialog({
                                             key={status}
                                             size="sm"
                                             variant={myAttendeeStatus === status ? 'default' : 'outline'}
-                                            onClick={() => {
-                                                if (isPartOfSeries) {
-                                                    setPendingRsvpStatus(status);
-                                                    setShowRsvpScopeDialog(true);
-                                                } else {
-                                                    rsvp.mutate({
-                                                        calendarId: event.calendarId,
-                                                        eventId: event.id,
-                                                        status,
-                                                    });
-                                                    onOpenChange(false);
-                                                }
-                                            }}
+                                            pending={replying && sentRsvpStatus === status}
+                                            disabled={replying && sentRsvpStatus !== status}
+                                            onClick={() => handleRsvp(status)}
                                             className="gap-1"
                                         >
                                             <Icon className="h-3 w-3" /> {label}
@@ -291,7 +298,7 @@ export function EventDetailDialog({
                             )
                         }
                     >
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={replying}>
                             Close
                         </Button>
                     </DialogFooter>

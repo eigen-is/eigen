@@ -69,6 +69,7 @@ Globals and the DOM:
 - happy-dom lays nothing out, so a virtualized list draws no row until the test sets `clientHeight`. It runs an animation frame at once, before React has drawn: a Docs test wraps the action in `withBrowserFrames` or waits for async work with `waitUntil(holds, what)` (both in `apps/docs/src/test/fixtures/`), never a fixed sleep.
 - A module that keeps the first DOM object it made keeps the first stub too: stub the vector text measurer through `stubCanvasMeasure` (`packages/ui/src/test/canvas-measure.ts`).
 - Enter in a form field is `pressEnter(field)`, which clicks the form's first submit button, so nothing submits while it is disabled.
+- A form's test renders the real form and calls `expectFormContract` (`@workspace/ui/test/form-contract`) once, then tests only what is special about that form ([FORMS.md § Each rule is tested at its shell](FORMS.md#each-rule-is-tested-at-its-shell-and-every-form-proves-it-uses-it)).
 - A failed `toBeNull()` on an element prints its whole tree, which takes seconds: assert on labels or titles.
 
 ## Resource bounds measure the child, and scale rather than time

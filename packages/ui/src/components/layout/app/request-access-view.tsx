@@ -1,3 +1,7 @@
+// The page a person sees on a link to a file, folder or chat they may not open: who owns it, and a form that asks the
+// owner for access with an optional message. Drive, Chat and the document editors show it when the server says no.
+// Cmd+Enter sends from the message box. A guest can't ask, so a guest is told to ask the owner to share instead.
+
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useRequestAccess } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
@@ -5,6 +9,8 @@ import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useDialogPending } from '../../../hooks/use-dialog-pending';
+import { FormShell } from '../../form-shell';
 import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from './layout-context';
 
@@ -22,15 +28,12 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
     const requestAccess = useRequestAccess(ownerId, mountId, pathId);
     const [message, setMessage] = useState('');
     const [showMessage, setShowMessage] = useState(false);
+    const { pending, run } = useDialogPending();
 
     useEffect(() => {
         setSidebarHidden(true);
         return () => setSidebarHidden(false);
     }, [setSidebarHidden]);
-
-    const handleSubmit = () => {
-        requestAccess.mutate({ message: message || undefined });
-    };
 
     return (
         <div className="flex flex-col items-center justify-center h-full w-full gap-6 p-8 text-center">
@@ -48,14 +51,23 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
             {isGuest ? (
                 <p className="text-sm text-muted-foreground">Ask the owner to share it with you.</p>
             ) : (
-                <div className="flex flex-col items-center gap-3 w-full max-w-sm">
+                <FormShell
+                    className="flex flex-col items-center gap-3 w-full max-w-sm"
+                    onSubmit={() =>
+                        run(async () => {
+                            await requestAccess.mutateAsync({ message: message || undefined });
+                        })
+                    }
+                >
                     {showMessage ? (
                         <Textarea
+                            aria-label="Message"
                             placeholder="Add a message (optional)"
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
                             rows={3}
                             className="w-full"
+                            autoFocus
                         />
                     ) : (
                         !requestAccess.isSuccess && (
@@ -69,10 +81,10 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
                         )
                     )}
 
-                    <Button onClick={handleSubmit} disabled={requestAccess.isPending || requestAccess.isSuccess}>
+                    <Button type="submit" pending={pending} disabled={requestAccess.isSuccess}>
                         {requestAccess.isSuccess ? 'Access requested' : 'Request access'}
                     </Button>
-                </div>
+                </FormShell>
             )}
 
             {auth.user?.email && <p className="text-xs text-muted-foreground">Signed in as {auth.user.email}</p>}

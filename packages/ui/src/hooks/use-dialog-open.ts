@@ -1,6 +1,7 @@
 // Whether a dialog or a menu is open, read from the DOM. A document-level keymap folds these into its
 // `enabled`, such as the canvas's or the mail list's: the hotkey lib's own guard covers text fields only,
-// so a key pressed on a dialog button or in an open menu would otherwise act on the document behind it.
+// so a key pressed on a dialog button or in an open menu would otherwise act on the document behind it. A handler
+// that asks once, as it runs, such as a list taking the focus back, reads isDialogOpen.
 
 import { useSyncExternalStore } from 'react';
 
@@ -36,8 +37,10 @@ function subscribe(onChange: () => void): () => void {
 
 const getServerSnapshot = () => false;
 
+export const isDialogOpen = () => document.querySelector(OPEN_DIALOG) !== null;
+
 export function useDialogOpen(): boolean {
-    return useSyncExternalStore(subscribe, () => document.querySelector(OPEN_DIALOG) !== null, getServerSnapshot);
+    return useSyncExternalStore(subscribe, isDialogOpen, getServerSnapshot);
 }
 
 // Is a menu open? A bar menu leaves the page live, so its arrow keys, Delete and letters reach the

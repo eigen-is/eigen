@@ -39,6 +39,7 @@ function Rename({ onSubmit = () => {} }: { onSubmit?: DialogAction }) {
         ...useDialogProps(),
         title: 'Rename',
         children: createElement(FormDialogForm, {
+            changed: false,
             submitLabel: 'Save',
             onSubmit,
             children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),

@@ -1,7 +1,9 @@
 // shadcn's Button, in the variants and sizes every app shares. It is a plain button unless the caller says otherwise,
-// so inside a form only a Button with type="submit" submits it. asChild renders the button's look on its child
-// instead, such as a link, and puts no button type on it.
+// so inside a form only a Button with type="submit" submits it. A pending one, such as a form's Save while it saves,
+// shows a spinner before its label and ignores a click. asChild renders the button's look on its child instead, such
+// as a link, and puts no button type or spinner on it.
 
+import { EigenLoader } from '@workspace/ui/components/braket/eigen-loader';
 import { cn } from '@workspace/ui/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
 import { cva } from 'class-variance-authority';
@@ -9,7 +11,7 @@ import { Slot } from 'radix-ui';
 import type * as React from 'react';
 
 const buttonVariants = cva(
-    "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+    "inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-busy:pointer-events-none aria-busy:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
     {
         variants: {
             variant: {
@@ -46,12 +48,18 @@ function Button({
     size = 'default',
     asChild = false,
     type = asChild ? undefined : 'button',
+    pending = false,
+    onClick,
+    children,
     ...props
 }: React.ComponentProps<'button'> &
     VariantProps<typeof buttonVariants> & {
         asChild?: boolean;
+        pending?: boolean;
     }) {
     const Comp = asChild ? Slot.Root : 'button';
+    // Slot takes one child and the spinner would make two, so a Button with asChild ignores pending.
+    const busy = pending && !asChild;
 
     return (
         <Comp
@@ -60,8 +68,21 @@ function Button({
             data-size={size}
             className={cn(buttonVariants({ variant, size, className }))}
             type={type}
+            // Not disabled, which would drop the focus to the page. The prevented click submits no form.
+            aria-disabled={busy || undefined}
+            aria-busy={busy || undefined}
+            onClick={busy ? (event) => event.preventDefault() : onClick}
             {...props}
-        />
+        >
+            {busy ? (
+                <>
+                    <EigenLoader className="text-current" />
+                    {children}
+                </>
+            ) : (
+                children
+            )}
+        </Comp>
     );
 }
 

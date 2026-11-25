@@ -1,8 +1,11 @@
+// A merged slider holds one undo gesture while its number field is typed in, until the field is left, and a gesture cut
+// short by an unmount still releases its capture hold.
 import { expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -51,7 +54,7 @@ test('a gesture cut short by unmount still releases the capture hold', () => {
 
 // Typing an exact number is one edit, not one per digit: without a held gesture, "100" seals three
 // undo steps (1, 10, 100) and ⌘Z walks back through the digits.
-test('typing in the number field holds ONE undo gesture until the field is left', () => {
+test('typing in the number field holds ONE undo gesture until the field is left', async () => {
     const doc = new Y.Doc();
     const undoManager = new Y.UndoManager(doc.getMap('elements'));
     const original = undoManager.captureTimeout;
@@ -81,16 +84,9 @@ test('typing in the number field holds ONE undo gesture until the field is left'
         ),
     );
 
-    const field = container.querySelector('input[type="number"]');
+    const field = container.querySelector<HTMLInputElement>('input[type="number"]');
     if (!field) throw new Error('the slider did not render its number field');
-    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    if (!setValue) throw new Error('no native value setter to type through');
-    for (const typed of ['1', '10', '100']) {
-        act(() => {
-            setValue.call(field, typed);
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    }
+    for (const typed of ['1', '10', '100']) await type(field, typed);
     expect(gestures).toBe(1);
     expect(undoManager.captureTimeout).toBe(Number.POSITIVE_INFINITY);
 

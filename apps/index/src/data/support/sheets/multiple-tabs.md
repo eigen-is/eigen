@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
 order: 100
-updated: 2026-11-20
+updated: 2026-11-25
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
@@ -28,7 +28,7 @@ To see all sheets at once, click the grid icon (next to the **+** button) to ope
 
 ## Rename a sheet
 
-Double-click a tab to edit its name inline. Type the new name, then press **Enter** or click anywhere else to save.
+Double-click a tab to edit its name inline. Type the new name, then press **Enter** or click anywhere else to save. Press **Esc** to keep the old name.
 
 A name has 1 to 31 characters, and spaces alone don't count as a name. It can't contain `\ / ? * [ ] :`, and it can't start or end with an apostrophe (`'`). The fullwidth `：` and `？` are fine. If a name breaks these rules, Sheets keeps the old name and tells you why.
 

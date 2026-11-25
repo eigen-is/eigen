@@ -43,7 +43,7 @@ export function ShareAndSendDialog({
     onShareAndSend,
     onSendWithoutAccess,
 }: ShareAndSendDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange });
     // Radix would focus Cancel, the first button, so the dialog focuses the primary instead: a reflexive Enter
     // shares rather than sending without access.
     const primaryRef = useRef<HTMLButtonElement>(null);

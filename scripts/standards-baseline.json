@@ -14,11 +14,9 @@
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/sheets/snapshot-codec.ts": 4,
-    "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,
     "packages/sheet/src/engine/parser/evaluate-by-operator/operator/formula-function.ts": 1,
     "packages/ui/src/components/collab/use-awareness-peers.ts": 1,
-    "packages/ui/src/components/layout/pages/login-route.tsx": 1,
     "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1
   },
   "non-null-assertions": {

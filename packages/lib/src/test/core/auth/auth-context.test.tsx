@@ -5,7 +5,8 @@ import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const realClient = await import('../../../core/auth/hooks/use-auth-client');
+// A copy, because mock.module rewrites a loaded module's exports in place, and afterAll puts the original back.
+const realClient = { ...(await import('../../../core/auth/hooks/use-auth-client')) };
 mock.module('../../../core/auth/hooks/use-auth-client', () => ({
     ...realClient,
     authClient: { getSession: () => new Promise(() => {}) },

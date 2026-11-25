@@ -92,7 +92,7 @@ afterAll(() => {
     mock.module('@workspace/lib/contacts', () => realContacts);
 });
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { EventDetailDialog } = await import('../../components/event-detail-dialog');
 
 let unmount = async () => {};
@@ -115,6 +115,76 @@ const click = (name: string) =>
         if (!found) throw new Error(`the panel has no button named ${name}`);
         found.click();
     });
+
+// A chip that opens the panel, as a calendar view's does.
+function Chip() {
+    const [open, setOpen] = useState(false);
+    return createElement(
+        'div',
+        null,
+        createElement('button', { type: 'button', onClick: () => setOpen(true) }, 'Dentist chip'),
+        createElement(EventDetailDialog, {
+            open,
+            onOpenChange: setOpen,
+            event: dentist,
+            calendar: work,
+            ownerId: 'u1',
+        }),
+    );
+}
+
+const press = (element: HTMLElement | null | undefined) =>
+    act(async () => {
+        if (!element) throw new Error('nothing to press');
+        element.focus();
+        element.click();
+    });
+// Radix gives the focus back a tick after the dialog is gone.
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+const chip = () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Dentist chip');
+const dialogButton = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (b) => b.lastChild?.textContent === label || b.getAttribute('aria-label') === label,
+    );
+
+test('closing Edit event gives the focus back to the chip the panel opened from', async () => {
+    for (const close of ['Cancel', 'Save']) {
+        ({ unmount } = await renderInDocument(createElement(Chip)));
+        await press(chip());
+        await press(dialogButton('Edit event'));
+        await settle();
+        await press(dialogButton(close));
+        await settle();
+        expect([close, document.querySelectorAll('[role="dialog"]').length]).toEqual([close, 0]);
+        expect([close, document.activeElement?.textContent]).toEqual([close, 'Dentist chip']);
+        await unmount();
+    }
+});
+
+test('a reply to an invitation keeps the panel open with its button busy until the write ends', async () => {
+    isFromOthers = () => true;
+    let finish = () => {};
+    rsvp.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve(undefined))));
+    const onOpenChange = mock((_open: boolean) => {});
+    const invite = {
+        ...dentist,
+        data: { attendees: [{ email: session.user.email, status: 'pending' as const, role: 'required' as const }] },
+    };
+    ({ unmount } = await renderInDocument(
+        createElement(EventDetailDialog, { open: true, onOpenChange, event: invite, calendar: work, ownerId: 'u1' }),
+    ));
+    await press(dialogButton('Accept'));
+    expect(dialogButton('Accept')?.getAttribute('aria-busy')).toBe('true');
+    await press(dialogButton('Decline'));
+    await press(dialogButton('Close'));
+    expect(rsvp.mutateAsync.mock.calls.map(([input]) => input)).toEqual([
+        { calendarId: 'work', eventId: 'e1', status: 'accepted' },
+    ]);
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    await act(async () => finish());
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
 
 test('an event with no title names its dialog (No title)', async () => {
     await open({ ...dentist, title: '' });
