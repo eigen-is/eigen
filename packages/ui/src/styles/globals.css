@@ -614,6 +614,17 @@
         border-radius: calc(var(--radius) - 3px);
     }
 
+    /* LightEditor's placeholder, while the editor holds only its empty first line. Here, not in eigen-prose.css, since
+       that sheet is a document's look and export reuses it. It floats with no height, so the caret stays where typing
+       starts. */
+    .tiptap[data-placeholder]:has(> p:only-child > br.ProseMirror-trailingBreak:only-child)::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        pointer-events: none;
+        color: var(--color-muted-foreground);
+    }
+
     /* Ring variants of the search highlight — same --warning token, for overlay surfaces
        (slides objects/thumbnails, stickies cards/columns) where a background wash would
        obscure content. `outline` (not box-shadow) so it never fights a card's own shadow.
