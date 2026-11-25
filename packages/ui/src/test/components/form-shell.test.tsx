@@ -1,7 +1,7 @@
 // The form under every shell submits on Cmd or Ctrl+Enter from any field, a multi-line one and one that took the key
 // for itself included, and on Enter from a radio or a checkbox. It saves what a field commits on that Enter. It acts
 // only on keys from its own fields, keeps Cmd+Enter from a hotkey behind it, and never shows the browser's bubbles. Its
-// fields learn that Save was pressed, and a refused submit focuses the first field marked invalid unless the form
+// fields learn that Save was pressed until a submit goes through, and a refused submit focuses the first field marked invalid unless the form
 // focuses its own errors or hid itself.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
@@ -21,7 +21,10 @@ const { Checkbox } = await import('../../components/checkbox');
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function render(children: ReactNode, { onSubmit = () => {}, focusesOwnErrors = false } = {}) {
+async function render(
+    children: ReactNode,
+    { onSubmit = (): ReturnType<DialogAction> => undefined, focusesOwnErrors = false } = {},
+) {
     const submit = mock<DialogAction>(onSubmit);
     ({ unmount } = await renderInDocument(createElement(FormShell, { onSubmit: submit, focusesOwnErrors, children })));
     return submit;
@@ -135,11 +138,17 @@ function Title() {
     return createElement('input', { 'aria-label': 'Title', 'aria-invalid': submitted || undefined });
 }
 
-test('a field learns that Save was pressed, and not before', async () => {
-    await render(createElement(Title));
+test('a field learns that Save was pressed and refused, and not before', async () => {
+    await render(createElement(Title), { onSubmit: () => false });
     expect(byLabel('Title').hasAttribute('aria-invalid')).toBe(false);
     await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
     expect(byLabel('Title').getAttribute('aria-invalid')).toBe('true');
+});
+
+test('a submit that went through starts the form clean again, so a page that stays is not red', async () => {
+    await render(createElement(Title), { onSubmit: async () => {} });
+    await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
+    expect(byLabel('Title').hasAttribute('aria-invalid')).toBe(false);
 });
 
 // Marks its second field invalid as its check refuses, as a form whose submit names a field does.
