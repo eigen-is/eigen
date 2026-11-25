@@ -1,7 +1,7 @@
 // A click away from a page with something at risk waits on "Discard changes?", the question a form asks before a close
 // drops what was typed. Once nothing is at risk while it asks, such as after a save landed or the page went away, the
-// click goes on by itself instead of being dropped. While a save runs it asks nothing, so the save's own navigation
-// goes through.
+// click goes on by itself instead of being dropped. A navigation that passes ignoreBlocker, as a save's own does, goes
+// at once.
 import { expect, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { installHappyDom } from '../../../happy-dom';
@@ -15,19 +15,17 @@ const { LeaveGuard } = await import('../../../../components/layout/app/leave-gua
 
 let setActive: (active: boolean) => void = () => {};
 let setShown: (shown: boolean) => void = () => {};
-let startsPending = false;
 
 // The guard on a page at /, where something is at risk from the start, and a page at /elsewhere to leave for.
 function GuardedPage(): ReactNode {
     const [active, setActiveState] = useState(true);
     const [shown, setShownState] = useState(true);
-    const [pending] = useState(startsPending);
     setActive = setActiveState;
     setShown = setShownState;
-    return shown ? createElement(LeaveGuard, { active, pending }) : null;
+    return shown ? createElement(LeaveGuard, { active }) : null;
 }
 
-async function openPage() {
+async function openPage({ ignoreBlocker = false } = {}) {
     const root = router.createRootRoute({ component: router.Outlet });
     const here = router.createRoute({ getParentRoute: () => root, path: '/', component: GuardedPage });
     const elsewhere = router.createRoute({ getParentRoute: () => root, path: '/elsewhere', component: () => 'Away' });
@@ -38,7 +36,7 @@ async function openPage() {
     await memory.load();
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
     await act(async () => {
-        memory.navigate({ to: '/elsewhere' });
+        memory.navigate({ to: '/elsewhere', ignoreBlocker });
     });
     return () => memory.state.location.pathname;
 }
@@ -67,10 +65,8 @@ test('the click goes on once the guard goes away while the question is open', as
     expect(at()).toBe('/elsewhere');
 });
 
-test('a click away while a save runs goes at once', async () => {
-    startsPending = true;
-    const at = await openPage();
-    startsPending = false;
+test('a navigation that passes ignoreBlocker goes at once', async () => {
+    const at = await openPage({ ignoreBlocker: true });
     expect(asking()).toBe(false);
     expect(at()).toBe('/elsewhere');
 });

@@ -116,12 +116,18 @@ function SendPage(): ReactNode {
 async function openPage(component: () => ReactNode = NamePage) {
     const root = router.createRootRoute({ component: router.Outlet });
     const page = router.createRoute({ getParentRoute: () => root, path: '/', component });
+    const elsewhere = router.createRoute({
+        getParentRoute: () => root,
+        path: '/elsewhere',
+        component: () => 'Elsewhere',
+    });
     const memory = router.createRouter({
-        routeTree: root.addChildren([page]),
+        routeTree: root.addChildren([page, elsewhere]),
         history: router.createMemoryHistory({ initialEntries: ['/'] }),
     });
     await memory.load();
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
+    return memory;
 }
 
 test('a draft page keeps the page contract', async () => {
@@ -264,4 +270,47 @@ test('a page with Cancel shows Cancel and its label from the start, and its subm
     await act(async () => button('Cancel')?.click());
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
+});
+
+// A page that opens what it made once the save lands, as Create contact opens the new contact.
+function CreateAndOpenPage(): ReactNode {
+    const navigate = router.useNavigate();
+    const [name, setName] = useState('');
+    return createElement(PageForm, {
+        changed: name !== '',
+        submitLabel: 'Create',
+        onSubmit: async () => {
+            await save(name);
+            await navigate({ to: '/elsewhere', ignoreBlocker: true });
+        },
+        children: createElement(Input, {
+            'aria-label': 'Name',
+            value: name,
+            onChange: (event: { target: { value: string } }) => setName(event.target.value),
+        }),
+    });
+}
+
+const asking = () =>
+    [...document.querySelectorAll('[role="dialog"] h2')].some((h) => h.textContent === 'Discard changes?');
+
+test('a link while the save runs asks, since a failed save would lose the draft', async () => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    save.mockImplementation(() => promise);
+    const memory = await openPage(CreateAndOpenPage);
+    await type('Plans');
+    await act(async () => button('Create')?.click());
+    await act(async () => memory.history.push('/elsewhere'));
+    expect(memory.state.location.pathname).toBe('/');
+    expect(asking()).toBe(true);
+    await act(async () => resolve());
+});
+
+test("a save's own navigation goes through without asking", async () => {
+    const memory = await openPage(CreateAndOpenPage);
+    await type('Plans');
+    await act(async () => button('Create')?.click());
+    expect(save).toHaveBeenCalledWith('Plans');
+    expect(memory.state.location.pathname).toBe('/elsewhere');
+    expect(asking()).toBe(false);
 });

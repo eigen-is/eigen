@@ -1,10 +1,8 @@
-// The form of a page, such as Admin's Server settings, Space's Change password or a contact's edit: its fields on
-// FormShell's keys, focused on the first as it mounts, with its footer below them. A draft page passes `onReset` and
-// shows Reset and Save once something changed, and with nothing changed Enter does nothing. Any other page names its
-// submit, such as Create, and shows it from the start, with Cancel beside it when it passes `onCancel`; its submit runs
-// even with nothing changed, and the caller decides what that means, such as going back or saying what is missing.
-// While the form holds a change a LeaveGuard asks before the page is left, standing down while the save runs, a save's
-// own navigation included. A failed save keeps what was typed for another try beside its hook's toast.
+// The form of a page, such as Admin's Server settings or a contact's edit, on FormShell's keys and focused on its first
+// field as it mounts. A draft page passes `onReset` and shows Reset and Save once something changed; any other names
+// its submit, such as Create, shows it from the start and leaves to the caller what a Save with nothing changed means.
+// While the form holds a change, a save that runs included, a LeaveGuard asks before the page is left, so the save's
+// own navigation and Cancel's pass ignoreBlocker.
 
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../../hooks/use-dialog-pending';
@@ -27,7 +25,7 @@ type PageFormProps = {
           submitLabel?: never;
       }
     | {
-          // Leaves the page, through the leave guard like any other way out.
+          // Drops the draft without asking, as Cancel does everywhere: a navigation here passes ignoreBlocker.
           onCancel?: () => void;
           submitLabel: string;
           onReset?: never;
@@ -57,7 +55,7 @@ export function PageForm({ onSubmit, changed, onReset, onCancel, submitLabel = '
                     </div>
                 </>
             )}
-            <LeaveGuard active={changed} pending={pending} />
+            <LeaveGuard active={changed} />
         </FormShell>
     );
 }
