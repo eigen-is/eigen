@@ -1,19 +1,17 @@
-// The form that edits the user's name and avatar. Space's Personal info page shows it. It saves them to the
-// user's own contact card and returns to Space's start page, where a toast says it saved. A field the user changed
+// The form that edits the user's name and avatar, on PageForm. Space's Personal info page shows it. It saves them to
+// the user's own contact card and returns to Space's start page, where a toast says it saved. A field the user changed
 // stays, and every other field follows the card, so a sync or a refused Save moves only what nobody touched.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
-import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useMeContact, useUpdateProfile } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
-import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { ErrorState, LoadingState, PageForm } from '@workspace/ui/components/layout/app';
 import { useContactAvatarUpload } from '@workspace/ui/components/use-contact-avatar-upload';
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { InfoIcon } from 'lucide-react';
@@ -62,7 +60,7 @@ export function ProfileEditor() {
                 etag: heldEtag,
             });
             await navigate({ to: '/' });
-        }).catch(rethrowUntoasted);
+        });
     });
 
     if (isLoading && !contact) {
@@ -75,7 +73,7 @@ export function ProfileEditor() {
 
     return (
         <Form {...form}>
-            <form onSubmit={handleSubmit} className="space-y-8">
+            <PageForm changed={typing} onSubmit={handleSubmit} submitLabel="Save">
                 <div className="flex justify-center mb-8">
                     <AvatarEditor
                         name={contact ? contactFullName(contact) : ''}
@@ -127,12 +125,7 @@ export function ProfileEditor() {
                         </div>
                     </div>
                 </div>
-                <div className="flex justify-end">
-                    <Button type="submit" disabled={updateProfile.isPending} className="w-full sm:w-auto">
-                        {updateProfile.isPending ? 'Saving...' : 'Save'}
-                    </Button>
-                </div>
-            </form>
+            </PageForm>
         </Form>
     );
 }

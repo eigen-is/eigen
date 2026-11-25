@@ -1,6 +1,7 @@
 // Team settings, opened with Edit, keeps the page contract and saves its name, calendar access and settings through
 // one save, then goes back to the view. An empty name and a quota below the minimum are refused under their fields and
-// nothing is written, a name put back to the saved one is left out of the save, and Cancel goes back unsaved.
+// nothing is written, a name put back to the saved one is left out of the save, and Cancel, or Save with nothing
+// changed, goes back unsaved.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import type { OrgTeam } from '@workspace/lib/types/admin';
@@ -139,6 +140,13 @@ test('Cancel goes back to the view and writes nothing', async () => {
     await openForm();
     await type('Team name', 'Studio');
     await click('Cancel');
+    expect(save).not.toHaveBeenCalled();
+    expect(button('Edit')).toBeDefined();
+});
+
+test('Save with nothing changed goes back to the view and writes nothing', async () => {
+    await openForm();
+    await click('Save');
     expect(save).not.toHaveBeenCalled();
     expect(button('Edit')).toBeDefined();
 });

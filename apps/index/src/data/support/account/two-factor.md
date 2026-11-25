@@ -33,6 +33,7 @@ Recovery codes let you sign in if you ever lose access to your authenticator app
 
 - Click **Copy all codes** to copy them to your clipboard, then paste them somewhere safe, such as a password manager.
 - Once you have saved them, click **I've saved my recovery codes** to finish.
+- If you leave the page before that, Eigen asks first, since it shows the codes only once.
 
 <div class="eigen-callout">
 

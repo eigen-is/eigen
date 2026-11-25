@@ -1,19 +1,19 @@
 // The sign-in page every app shows a visitor with no session: a member signs in with username and password, a guest
-// asks for a one-time code by email and types it in. The password form goes through useAuth; the guest forms post to
-// the public guest sign-in routes themselves. A refusal of what was typed shows under the field it is about, in the
-// server's own words where it gave some; a rate limit, a server error or no connection is a toast.
+// asks for a one-time code by email and types it in. The password form goes through useAuth, the guest forms through
+// their sign-in hooks. A refusal of what was typed shows under the field it is about, in the server's own words where
+// it gave some; a rate limit, a server error or no connection is a toast.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
-import { API_HOST, getDemoEnterUrl } from '@workspace/lib/api';
-import { AppError, appErrorFrom, getErrorMessage } from '@workspace/lib/api-error';
-import { useAuth } from '@workspace/lib/auth';
+import { getDemoEnterUrl } from '@workspace/lib/api';
+import { AppError, getErrorMessage, rethrowUntoasted } from '@workspace/lib/api-error';
+import { isRefusedAddress, isRefusedCode, useAuth, useRequestGuestCode, useVerifyGuestCode } from '@workspace/lib/auth';
 import { isRecord } from '@workspace/lib/guards';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import type { FieldValues, Path, SubmitHandler, UseFormReturn } from 'react-hook-form';
+import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -123,7 +123,13 @@ function PasswordLoginForm() {
 
     const onSubmit = async ({ email, password }: z.infer<typeof loginFormSchema>) => {
         const { success, error } = await login(`${email.toLowerCase().split('@')[0]}@${loginDomain}`, password);
-        if (!success) showFailure(form, 'password', loginFailure(error), CREDENTIAL_STATUSES);
+        if (success) return;
+        const failure = loginFailure(error);
+        if (failure instanceof AppError && CREDENTIAL_STATUSES.has(failure.status)) {
+            form.setError('password', { message: failure.message }, { shouldFocus: true });
+        } else {
+            toast.error(getErrorMessage(failure));
+        }
     };
 
     useEffect(() => {
@@ -179,23 +185,8 @@ function loginFailure(error: unknown): AppError | string {
     return new AppError({ status: error.status, error: { status: error.status, value: error } });
 }
 
-// A no to what was typed reads under its field. Any other failure is a toast that marks no field, since typing it again
-// gets the same answer.
-function showFailure<Values extends FieldValues>(
-    form: UseFormReturn<Values>,
-    name: Path<Values>,
-    failure: AppError | string,
-    fieldStatuses: ReadonlySet<number>,
-) {
-    if (failure instanceof AppError && fieldStatuses.has(failure.status)) {
-        form.setError(name, { message: failure.message }, { shouldFocus: true });
-    } else {
-        toast.error(getErrorMessage(failure));
-    }
-}
-
 // The form and its full-width submit button, which spins while the sign-in runs. A second Enter or Cmd+Enter in that
-// time sends nothing.
+// time sends nothing. A failure its hook toasted ends here.
 function SignInForm<Values extends FieldValues>({
     form,
     onSubmit,
@@ -214,7 +205,7 @@ function SignInForm<Values extends FieldValues>({
                 focusesOwnErrors
                 className="space-y-6"
                 onSubmit={async () => {
-                    if (!isSubmitting) await form.handleSubmit(onSubmit)();
+                    if (!isSubmitting) await form.handleSubmit(onSubmit)().catch(rethrowUntoasted);
                 }}
             >
                 {children}
@@ -242,10 +233,17 @@ function GuestEmailForm({ initialEmail = '', onSent }: { initialEmail?: string; 
         defaultValues: { email: initialEmail },
     });
 
+    const requestCode = useRequestGuestCode();
+
     const onSubmit = async ({ email }: z.infer<typeof guestEmailSchema>) => {
-        const failure = await postGuestAuth('request-otp', { email }, 'Failed to send code');
-        if (failure) showFailure(form, 'email', failure, ADDRESS_STATUSES);
-        else onSent(email);
+        try {
+            await requestCode.mutateAsync(email);
+        } catch (error) {
+            if (!isRefusedAddress(error)) throw error;
+            form.setError('email', { message: getErrorMessage(error) }, { shouldFocus: true });
+            return;
+        }
+        onSent(email);
     };
 
     return (
@@ -273,10 +271,14 @@ function GuestCodeForm({ email }: { email: string }) {
         defaultValues: { otp: '' },
     });
 
+    const verifyCode = useVerifyGuestCode();
+
     const onSubmit = async ({ otp }: z.infer<typeof guestCodeSchema>) => {
-        const failure = await postGuestAuth('verify-otp', { email, otp }, 'Verification failed', 'include');
-        if (failure) {
-            showFailure(form, 'otp', failure, CODE_STATUSES);
+        try {
+            await verifyCode.mutateAsync({ email, otp });
+        } catch (error) {
+            if (!isRefusedCode(error)) throw error;
+            form.setError('otp', { message: getErrorMessage(error) }, { shouldFocus: true });
             return;
         }
         window.location.reload();
@@ -311,31 +313,4 @@ function GuestCodeForm({ email }: { email: string }) {
             />
         </SignInForm>
     );
-}
-
-// An address that is no guest's or has nothing shared with it. A rate limit on asking is no reason to retype it.
-const ADDRESS_STATUSES = new Set([400]);
-
-// A wrong or expired code, and too many wrong tries (429), which only a new code gets past.
-const CODE_STATUSES = new Set([400, 429]);
-
-// Resolves the server's refusal, the offline sentence when no answer came, or null once the route took it.
-// `credentials` lets the answer set the session cookie.
-async function postGuestAuth(
-    route: string,
-    body: object,
-    offline: string,
-    credentials?: RequestCredentials,
-): Promise<AppError | string | null> {
-    try {
-        const res = await fetch(`${API_HOST}/guest-auth/${route}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials,
-            body: JSON.stringify(body),
-        });
-        return res.ok ? null : await appErrorFrom(res);
-    } catch {
-        return offline;
-    }
 }

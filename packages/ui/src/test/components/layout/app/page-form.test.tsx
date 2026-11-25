@@ -1,8 +1,10 @@
 // A draft page on PageForm keeps the page contract: it opens on its first field, Enter and Cmd+Enter save once, a bad
 // value is pointed at, Save shows that it is busy, and leaving with a change asks. Its Reset and Save show only once
 // something changed, Enter on a page with nothing changed saves nothing, Reset puts back what was saved, and a failed
-// save keeps the draft beside its hook's toast. An edit opened from a view shows Cancel and Save throughout, and
-// Cancel, or Save with nothing changed, goes back to the view.
+// save keeps the draft beside its hook's toast. A page form with no Reset, such as Change password, keeps the contract
+// too, and shows its button all along, so a Save with nothing typed still runs and says what is missing. An edit opened
+// from a view shows Cancel and Save throughout, Cancel goes back to the view, and its Save runs with nothing changed,
+// leaving the caller to go back.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { expectFormContract } from '../../../form-contract';
@@ -68,6 +70,21 @@ function nameField(): HTMLInputElement {
 const button = (label: string) =>
     [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
 
+// A page form with no draft to reset, whose one field is a name to send.
+function SendPage(): ReactNode {
+    const [name, setName] = useState('');
+    return createElement(PageForm, {
+        changed: name !== '',
+        submitLabel: 'Send',
+        onSubmit: () => save(name),
+        children: createElement(Input, {
+            'aria-label': 'Name',
+            value: name,
+            onChange: (event: { target: { value: string } }) => setName(event.target.value),
+        }),
+    });
+}
+
 async function openPage(component: () => ReactNode = NamePage) {
     const root = router.createRootRoute({ component: router.Outlet });
     const page = router.createRoute({ getParentRoute: () => root, path: '/', component });
@@ -90,6 +107,25 @@ test('a draft page keeps the page contract', async () => {
         makeInvalid: () => type(''),
         invalidField: 'Name',
     });
+});
+
+test('a page form with no Reset keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(SendPage),
+        submitLabel: 'Send',
+        firstField: 'Name',
+        onSubmit: save,
+        makeChanged: () => type('Plans'),
+    });
+});
+
+test('a page form with no Reset shows its button all along, and sends with nothing typed', async () => {
+    await openPage(SendPage);
+    expect(button('Reset')).toBeUndefined();
+    expect(button('Cancel')).toBeUndefined();
+    await act(async () => button('Send')?.click());
+    expect(save).toHaveBeenCalledWith('');
 });
 
 test('Reset and Save show once something changed, and Reset puts back what was saved', async () => {
@@ -135,8 +171,10 @@ function NameView(): ReactNode {
     return createElement(PageForm, {
         changed: name !== 'Notes',
         onCancel: () => setEditing(false),
+        submitLabel: 'Save',
+        // Saves only a change, and goes back either way, as Team settings does.
         onSubmit: async () => {
-            await save(name);
+            if (name !== 'Notes') await save(name);
             setEditing(false);
         },
         children: createElement(Input, {
@@ -168,7 +206,7 @@ test('an edit opened from a view shows Cancel and Save throughout, and Cancel go
     expect(save).not.toHaveBeenCalled();
 });
 
-test('Save with nothing changed goes back to the view and saves nothing', async () => {
+test('Save with nothing changed runs the submit, which here goes back and saves nothing', async () => {
     await openPage(NameView);
     await act(async () => pressEnter(nameField()));
     expect(button('Edit')).toBeDefined();

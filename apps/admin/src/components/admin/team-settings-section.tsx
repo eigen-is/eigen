@@ -1,7 +1,7 @@
 // The settings section of a team's admin page: its name and avatar, whether it has a calendar, and the quota
 // overrides that raise its members' storage limits above the server's defaults. Edit opens them on a PageForm. The
 // avatar saves as it changes; the rest saves through one Save, which toasts once, and a refused save is toasted there
-// and keeps the form open with what was typed.
+// and keeps the form open with what was typed. Save with nothing changed goes back like Cancel.
 
 import { useCalendars } from '@workspace/lib/calendar';
 import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
@@ -157,7 +157,13 @@ function TeamSettingsForm({
     const homeDataTooSmall = draft.homeDataMaxMB !== '' && Number(draft.homeDataMaxMB) < QUOTA_MIN_MB;
     const mountTooSmall = draft.mountMaxMB !== '' && Number(draft.mountMaxMB) < QUOTA_MIN_MB;
 
+    const changed = JSON.stringify(draft) !== JSON.stringify(initial);
+
     const handleSave = async () => {
+        if (!changed) {
+            onDone();
+            return;
+        }
         if (nameBlank || homeDataTooSmall || mountTooSmall) return false;
         const existingShares = (defaultCalendar?.shares ?? []).filter((s) => s.targetId !== ownerId);
         // Members read their team's calendar without a share row, so Can view drops the team's row.
@@ -184,11 +190,7 @@ function TeamSettingsForm({
 
     return (
         <div className="border rounded-lg p-4">
-            <PageForm
-                changed={JSON.stringify(draft) !== JSON.stringify(initial)}
-                onSubmit={handleSave}
-                onCancel={onDone}
-            >
+            <PageForm changed={changed} onSubmit={handleSave} onCancel={onDone} submitLabel="Save">
                 <div className="space-y-1.5">
                     <Label>Avatar</Label>
                     <AvatarEditor
