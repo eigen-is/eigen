@@ -1,5 +1,5 @@
-// Excel's rule for a sheet name: not blank, a length limit, characters it refuses, and no quote at either end. The
-// editor's rename, the xlsx importer's renaming and the op validator all hold a name to it, so a name a formula prints
+// Excel's rule for a sheet name: not blank, a length limit, characters it refuses, and no quote at either end. Every
+// place a name enters a workbook, such as a rename or a peer's op, holds it to this rule, so a name a formula prints
 // reads back as the same sheet.
 
 export const MAX_SHEET_NAME_LENGTH = 31;
