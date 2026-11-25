@@ -37,7 +37,7 @@ function EditContactRoute() {
 
     const handleSave = async (data: CreateContactInput, etag: string) => {
         await updateContactMutation.mutateAsync({ id: contactId, ...data, etag });
-        backToContact();
+        await backToContact();
     };
 
     if (contactsLoading) {
