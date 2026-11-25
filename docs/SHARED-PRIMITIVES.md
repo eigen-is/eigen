@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2424 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2425 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -382,7 +382,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (316)
+## Hooks (317)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -685,6 +685,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `useDialogValue` | `@workspace/ui/hooks/use-dialog-value` | packages/ui/src/hooks/use-dialog-value.ts |
+| `useDiscardChanges` | `@workspace/ui/hooks/use-discard-changes` | packages/ui/src/hooks/use-discard-changes.tsx |
 | `useDragScroll` | `@workspace/ui/hooks/use-drag-scroll` | packages/ui/src/hooks/use-drag-scroll.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
