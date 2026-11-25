@@ -1,7 +1,7 @@
 // The sign-in page keeps the page rules on its three forms: username and password, a guest's email, and the code the
 // guest was sent. Pinned beside the contract: a click on a tab goes on into its first field, a refusal reads under the
 // field it is about rather than in a banner while a rate limit, a server error or no connection is a toast, and each
-// form still sends the auth routes exactly what it sent before.
+// form still sends exactly what it sent before.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { ReactElement } from 'react';
 import { installHappyDom } from '../../../happy-dom';
@@ -10,9 +10,8 @@ import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
 
-type LoginResult = { success: boolean; error?: unknown };
-
-const login = mock(async (_email: string, _password: string): Promise<LoginResult> => ({ success: true }));
+// The password hook's mutateAsync, which signs in by default.
+const signIn = mock(async (_input: { email: string; password: string }) => {});
 
 const toasts: string[] = [];
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -22,7 +21,11 @@ mock.module('sonner', () => ({
     ...realSonner,
     toast: { ...realSonner.toast, error: (message: string) => toasts.push(message) },
 }));
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ login, isAuthenticated: false }) }));
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ isAuthenticated: false }),
+    usePasswordSignIn: () => ({ mutateAsync: signIn }),
+}));
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
     usePublicConfig: () => ({ data: { mailDomain: 'tuimel.example', demoMode: false }, isPending: false }),
@@ -51,7 +54,8 @@ afterEach(() => {
     reload.mockClear();
     toasts.length = 0;
     fetchSpy.mockClear();
-    login.mockClear();
+    signIn.mockReset();
+    signIn.mockImplementation(async () => {});
 });
 afterAll(() => fetchSpy.mockRestore());
 
@@ -66,10 +70,9 @@ const offline = () => {
 
 const { act, createElement, useEffect } = await import('react');
 const router = await import('@tanstack/react-router');
-const { expectFormContract } = await import('../../../form-contract');
+const { AppError, onMutationError } = await import('@workspace/lib/api-error');
+const { expectFormContract, field, type } = await import('../../../form-contract');
 const { LoginPage } = await import('../../../../components/layout/pages/login-page');
-
-const NO_GUARD = 'sign-in stores nothing that leaving would lose, so it has no leave guard';
 
 test('the password form keeps the page rules', async () => {
     await expectFormContract({
@@ -77,7 +80,7 @@ test('the password form keeps the page rules', async () => {
         render: () => <LoginPage />,
         submitLabel: 'Sign in',
         firstField: 'Username',
-        onSubmit: login,
+        onSubmit: signIn,
         makeChanged: async () => {
             await type('Username', 'anouk');
             await type('Password', 'secret');
@@ -85,7 +88,7 @@ test('the password form keeps the page rules', async () => {
         makeInvalid: async () => {},
         invalidField: 'Username',
         modEnterFields: ['Password'],
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -101,7 +104,7 @@ test("the guest's email form keeps the page rules", async () => {
         makeChanged: () => type('Email', 'ada@example.com'),
         makeInvalid: () => type('Email', 'nobody'),
         invalidField: 'Email',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -117,7 +120,7 @@ test("the guest's code form keeps the page rules", async () => {
         makeChanged: () => type('One-time code', '123456'),
         makeInvalid: () => type('One-time code', '123'),
         invalidField: 'One-time code',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -136,46 +139,40 @@ test('a click on a tab goes on into its first field', async () => {
 });
 
 test('sends the username at the mail domain, and a wrong password reads under the password', async () => {
-    login.mockImplementationOnce(async () => ({ success: false, error: { status: 401, message: 'Invalid' } }));
+    // The hook raises no toast for wrong credentials, and the form shows better-auth's words.
+    signIn.mockImplementation(async () => {
+        throw new AppError({ status: 401, error: { status: 401, value: { message: 'Invalid' } } });
+    });
     await renderPage(<LoginPage />);
     await type('Username', 'Anouk');
     await type('Password', 'wrong');
     await act(async () => pressEnter(field('Password')));
 
-    expect(login.mock.calls).toEqual([['anouk@tuimel.example', 'wrong']]);
+    expect(signIn.mock.calls).toEqual([[{ email: 'anouk@tuimel.example', password: 'wrong' }]]);
     expect(messageUnder('Password')).toBe('Invalid');
     expect(field('Password').getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(field('Password'));
     expect(messageUnder('Username')).toBeUndefined();
+    expect(toasts).toEqual([]);
 });
 
-// better-auth answers with a plain object, and better-fetch throws when there is no connection at all.
-for (const [what, error, toast] of [
-    [
-        'a rate limit',
-        { status: 429, statusText: 'Too Many Requests', message: 'Too many requests' },
-        'Too many requests',
-    ],
-    [
-        'a server error',
-        { status: 500, statusText: 'Internal Server Error', message: 'Database locked' },
-        'Database locked',
-    ],
-    ['no connection', new TypeError('Failed to fetch'), 'Login failed'],
-] as const) {
-    test(`${what} on sign-in is a toast, with no field marked`, async () => {
-        login.mockImplementationOnce(async () => ({ success: false, error }));
-        await renderPage(<LoginPage />);
-        await type('Username', 'anouk');
-        await type('Password', 'secret');
-        await act(async () => pressEnter(field('Password')));
-
-        expect(toasts).toEqual([toast]);
-        expect(messageUnder('Password')).toBeUndefined();
-        expect(field('Password').getAttribute('aria-invalid')).toBe('false');
-        expect(field('Username').getAttribute('aria-invalid')).toBe('false');
+// Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
+test("any other sign-in refusal is the hook's toast, with no field marked", async () => {
+    signIn.mockImplementation(async () => {
+        const limited = new AppError({ status: 429, error: { status: 429, value: 'Too many requests' } });
+        onMutationError(limited);
+        throw limited;
     });
-}
+    await renderPage(<LoginPage />);
+    await type('Username', 'anouk');
+    await type('Password', 'secret');
+    await act(async () => pressEnter(field('Password')));
+
+    expect(toasts).toEqual(['Too many requests']);
+    expect(messageUnder('Password')).toBeUndefined();
+    expect(field('Password').getAttribute('aria-invalid')).toBe('false');
+    expect(field('Username').getAttribute('aria-invalid')).toBe('false');
+});
 
 test("a guest's code goes to the address it was sent to, and each refusal reads under its field", async () => {
     answers['request-otp'] = refusal('No shared resources found for this email');
@@ -296,24 +293,8 @@ function theTab(label: string): HTMLElement {
     return tab;
 }
 
-function field(label: string): HTMLInputElement {
-    const tag = [...document.querySelectorAll('label')].find((element) => element.textContent === label);
-    const input = tag?.htmlFor ? document.getElementById(tag.htmlFor) : null;
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-}
-
 function messageUnder(label: string): string | undefined {
     const id = field(label).getAttribute('aria-describedby')?.split(' ').at(-1);
     const message = id ? document.getElementById(id) : null;
     return message?.dataset.slot === 'form-message' ? (message.textContent ?? undefined) : undefined;
-}
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function type(label: string, value: string) {
-    const input = field(label);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 }

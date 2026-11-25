@@ -1,22 +1,29 @@
 // The sign-in page every app shows a visitor with no session: a member signs in with username and password, a guest
-// asks for a one-time code by email and types it in. The password form goes through useAuth, the guest forms through
-// their sign-in hooks. A refusal of what was typed shows under the field it is about, in the server's own words where
-// it gave some; a rate limit, a server error or no connection is a toast.
+// asks for a one-time code by email and types it in. Each form goes through its sign-in hook. A refusal of what was
+// typed shows under the field it is about, in the server's own words where it gave some; a rate limit, a server error
+// or no connection is the hook's toast.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
 import { getDemoEnterUrl } from '@workspace/lib/api';
-import { AppError, getErrorMessage, rethrowUntoasted } from '@workspace/lib/api-error';
-import { isRefusedAddress, isRefusedCode, useAuth, useRequestGuestCode, useVerifyGuestCode } from '@workspace/lib/auth';
-import { isRecord } from '@workspace/lib/guards';
+import { getErrorMessage } from '@workspace/lib/api-error';
+import {
+    isRefusedAddress,
+    isRefusedCode,
+    isRefusedCredentials,
+    useAuth,
+    usePasswordSignIn,
+    useRequestGuestCode,
+    useVerifyGuestCode,
+} from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form';
+import type { FieldValues, UseFormReturn } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import { z } from 'zod';
+import { useDialogPending } from '../../../hooks/use-dialog-pending';
 import { Bar } from '../../braket/bar';
 import { Ket } from '../../braket/ket';
 import { Button } from '../../button';
@@ -123,7 +130,8 @@ function focusPanelField(event: MouseEvent<HTMLButtonElement>) {
 }
 
 function PasswordLoginForm() {
-    const { login, isAuthenticated } = useAuth();
+    const { isAuthenticated } = useAuth();
+    const signIn = usePasswordSignIn();
     const router = useRouter();
     const { data: config } = usePublicConfig();
     const loginDomain = config?.mailDomain ?? window.location.hostname;
@@ -134,13 +142,11 @@ function PasswordLoginForm() {
     });
 
     const onSubmit = async ({ email, password }: z.infer<typeof loginFormSchema>) => {
-        const { success, error } = await login(`${email.toLowerCase().split('@')[0]}@${loginDomain}`, password);
-        if (success) return;
-        const failure = loginFailure(error);
-        if (failure instanceof AppError && CREDENTIAL_STATUSES.has(failure.status)) {
-            form.setError('password', { message: failure.message }, { shouldFocus: true });
-        } else {
-            toast.error(getErrorMessage(failure));
+        try {
+            await signIn.mutateAsync({ email: `${email.toLowerCase().split('@')[0]}@${loginDomain}`, password });
+        } catch (error) {
+            if (!isRefusedCredentials(error)) throw error;
+            form.setError('password', { message: getErrorMessage(error) }, { shouldFocus: true });
         }
     };
 
@@ -188,15 +194,6 @@ function PasswordLoginForm() {
     );
 }
 
-// Wrong credentials and an unverified email. A rate limit, a server error or no connection is no reason to retype them.
-const CREDENTIAL_STATUSES = new Set([400, 401]);
-
-// better-auth answers a refusal with a plain object, never an Error; better-fetch throws when there is no connection.
-function loginFailure(error: unknown): AppError | string {
-    if (!isRecord(error) || typeof error.status !== 'number') return 'Login failed';
-    return new AppError({ status: error.status, error: { status: error.status, value: error } });
-}
-
 // The form and its full-width submit button, which spins while the sign-in runs. A second Enter or Cmd+Enter in that
 // time sends nothing. A failure its hook toasted ends here.
 function SignInForm<Values extends FieldValues>({
@@ -206,22 +203,16 @@ function SignInForm<Values extends FieldValues>({
     children,
 }: {
     form: UseFormReturn<Values>;
-    onSubmit: SubmitHandler<Values>;
+    onSubmit: (values: Values) => Promise<void>;
     submitLabel: string;
     children: ReactNode;
 }) {
-    const { isSubmitting } = form.formState;
+    const { pending, run } = useDialogPending();
     return (
         <Form {...form}>
-            <FormShell
-                focusesOwnErrors
-                className="space-y-6"
-                onSubmit={async () => {
-                    if (!isSubmitting) await form.handleSubmit(onSubmit)().catch(rethrowUntoasted);
-                }}
-            >
+            <FormShell focusesOwnErrors className="space-y-6" onSubmit={() => run(form.handleSubmit(onSubmit))}>
                 {children}
-                <Button type="submit" className="w-full" pending={isSubmitting}>
+                <Button type="submit" className="w-full" pending={pending}>
                     {submitLabel}
                 </Button>
             </FormShell>
