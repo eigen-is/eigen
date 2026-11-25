@@ -385,13 +385,6 @@
         @apply text-2xs font-medium uppercase tracking-[0.08em] text-muted-foreground;
     }
 
-    /* An item drawn as a block of its own, such as a card on a board, a calendar event or the block atop an opened
-       card: square like a list row, with one faint shadow. It sets Tailwind's shadow variable, so a ring on the block
-       adds to it, and in dark mode the color stripe of colorSurface takes its place. */
-    .eigen-block {
-        @apply rounded-none shadow-[0_1px_2px_0_rgb(0_0_0/0.08)];
-    }
-
     /* Title shown in a content toolbar (drive filter views, chat name, plain
        page titles). Thin weight to match the breadcrumb page; callsites add
        any wrapping layout. */
@@ -638,6 +631,14 @@
         outline: 2px solid color-mix(in oklab, var(--warning) 90%, transparent);
         outline-offset: 2px;
         border-radius: calc(var(--radius) - 3px);
+    }
+
+    /* An item drawn as a block of its own, such as a card on a board, a calendar event or the block atop an opened
+       card: square like a list row, with one faint shadow. It sets Tailwind's shadow variable, so a ring on the block
+       adds to it, and in dark mode the color stripe of colorSurface takes its place. It comes after the search ring,
+       which rounds what it rings, so a searched card stays square. */
+    .eigen-block {
+        @apply rounded-none shadow-[0_1px_2px_0_rgb(0_0_0/0.08)];
     }
 
     .eigen-search-flash {
