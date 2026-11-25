@@ -65,7 +65,7 @@ export function CardBody({
     };
 
     return (
-        <div className="app-gutter-x pt-1">
+        <div className="app-gutter-x pt-1 pb-4">
             <DetailItemBlock title={title} color={color}>
                 {description && (
                     <div
