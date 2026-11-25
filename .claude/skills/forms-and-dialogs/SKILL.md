@@ -11,7 +11,7 @@ The rules live in [docs/FORMS.md](../../../docs/FORMS.md), how a form behaves, a
 
 - **Width**: `lg`, the default, unless the dialog is small and has nothing to type in; then `size="sm"`.
 - **Footer**: one row. Tools about the item at the left (`footerStart`), Cancel and the main button at the right. A text tool is a `FooterTool`, which hides its label below `sm`.
-- **Label**: Save edits a stored thing, Create makes a new one, unless the job has its own verb (Send, Import, Rename, Sort, Insert, Move here). An editor's format dialog says Apply; the calendar's recurring choice says OK. Never "Save changes" or "Saving...".
+- **Label**: Save edits a stored thing, Create makes a new one that stands on its own (an event, a folder, a team, a calendar), Add puts an item into what holds it (a card on a board, a comment on a document, a person on a list), unless the job has its own verb (Send, Import, Rename, Sort, Insert, Move here). An editor's format dialog says Apply; the calendar's recurring choice says OK. Never "Save changes" or "Saving...".
 - **Enter and Cmd+Enter**: the shell submits on both; a rich-text field passes `submitOnModEnter`. Add no key handler of your own.
 - **Esc and Discard**: pass `changed` (react-hook-form: `formState.isDirty`; otherwise compare with what it loaded). Esc, the X and an outside click then ask "Discard changes?"; Cancel never asks. A typed people field ORs `hasText` into `changed` and calls `commitTyped()` first in the submit. A page form's leave guard asks even while it saves, so its own navigation after the save, and Cancel's, pass `ignoreBlocker: true`.
 - **Focus**: the first text field takes it by itself; pass `onOpenAutoFocus` only for a special selection, as Rename does.

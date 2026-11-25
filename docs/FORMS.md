@@ -92,12 +92,13 @@ One verb per job lets a user predict what a button will do before pressing it.
 | Job | Label |
 |---|---|
 | Edit a stored thing | Save |
-| Make a new thing | Create |
+| Make a new thing that stands on its own, such as an event, a folder, a team or a calendar | Create |
+| Put an item into something that holds it, such as a card on a board, a comment on a document, a column on a board or a person on a list | Add |
 | A job with its own verb | Send, Import, Rename, Sort, Insert, Select, Reset password, Move here, Copy here, Save here |
 | A format dialog in an editor, such as Page setup, a link, Data validation or a chart's data | Apply |
 | The calendar's recurring choice | OK |
 
-One word per job, so a label never says "Save changes", "Save settings" or "Let's chat". Import events and Import contacts say Import, Edit calendar says Save where New calendar says Create, and a form whose create and edit share one component switches the label with its mode. The card dialogs say Add card, Add comment and Add column, the verb the boards and comment threads use.
+One word per job, so a label never says "Save changes", "Save settings" or "Let's chat". Import events and Import contacts say Import, Edit calendar says Save where New calendar says Create, and a form whose create and edit share one component switches the label with its mode. Add is not a softer Create: a card, a comment or a column lives inside its board or document, so its dialog says Add card, Add comment or Add column, while the dialogs that make an event, a folder or a team say Create.
 
 ## Delete asks unless it can be undone
 
