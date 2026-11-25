@@ -3,9 +3,9 @@
 // selection. Its opener decides what Select and Cancel do, such as opening its own dialog again with the pick. Its
 // form takes Enter and Cmd+Enter as a dialog form does, and Select waits until there is a range.
 
-import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { FieldError } from '@workspace/ui/components/field';
+import { FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { useContext, useEffect, useId, useRef, useState } from 'react';
@@ -83,14 +83,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                         value={rangeTxt}
                     />
                 )}
-                <DialogFooter>
-                    <Button variant="outline" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={!rangeTxt}>
-                        Select
-                    </Button>
-                </DialogFooter>
+                <FormFooter pending={false} onCancel={onCancel} canSubmit={!!rangeTxt} submitLabel="Select" />
             </FormShell>
         </>
     );
