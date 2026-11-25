@@ -65,18 +65,24 @@ function CalendarView() {
     // The last save of an event, until the render after it, which reads the list the save refetched.
     const [save, setSave] = useState<EventSave | null>(null);
 
-    const { data: calendars = [] } = useCalendars(ownerId);
-    const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
+    const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
+    const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
 
     const days = useMemo(() => viewDays(mode, focus), [mode, focus]);
     const { from, to } = viewRange(mode, focus);
     const { data: ownEvents = [], isLoading } = useEvents(ownerId, from, to);
-    const { data: sharedEvents = [] } = useAllSharedCalendarEvents(sharedCalendars, from, to);
+    const { data: sharedEvents = [], isLoading: sharedEventsLoading } = useAllSharedCalendarEvents(
+        sharedCalendars,
+        from,
+        to,
+    );
 
     const allEvents = useMemo(() => {
         const visibleCalendarIds = new Set(calendars.filter((c) => c.visible).map((c) => c.id));
         return [...ownEvents.filter((e) => visibleCalendarIds.has(e.calendarId)), ...sharedEvents];
     }, [calendars, ownEvents, sharedEvents]);
+
+    const listsLoading = isLoading || calendarsLoading || sharedLoading || sharedEventsLoading;
 
     const openEvent = eventId ? { eventId, occurrence } : undefined;
     const detailHistory = useDetailHistory<EventKey>(openEvent, (next, { replace, state }) =>
@@ -133,7 +139,7 @@ function CalendarView() {
         />
     ) : (
         <DetailColumn width="medium" actions={null} onClose={detailHistory.close}>
-            {isLoading ? <LoadingState /> : <EmptyState message="This event isn't in this view" />}
+            {listsLoading ? <LoadingState /> : <EmptyState message="This event isn't in this view" />}
         </DetailColumn>
     );
 

@@ -89,14 +89,24 @@ const calendars = {
 };
 const sharedCalendars = { data: [shared] };
 let ownEvents: { data: CalendarEventOccurrence[]; isLoading: boolean } = { data: [], isLoading: false };
-// A refetch: the route reads the list through a store, so a new answer renders it again.
+// A refetch: the route reads the lists through a store, so a new answer renders it again.
 const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+};
 const refetchOwnEvents = (data: CalendarEventOccurrence[]) =>
     act(async () => {
         ownEvents = { ...ownEvents, data };
         for (const listener of listeners) listener();
     });
-const sharedEvents = { data: [event({ title: 'Team sync', calendarId: 'team-cal', startTime: at(14, 9) })] };
+const teamSync = event({ title: 'Team sync', calendarId: 'team-cal', startTime: at(14, 9) });
+let sharedEvents: { data: CalendarEventOccurrence[]; isLoading: boolean } = { data: [teamSync], isLoading: false };
+const loadSharedEvents = (data: CalendarEventOccurrence[]) =>
+    act(async () => {
+        sharedEvents = { data, isLoading: false };
+        for (const listener of listeners) listener();
+    });
 // A save answers with the event the server stored, and may change the list first, as the refetch it awaits does.
 const createEvent = {
     mutateAsync: mock(async (_input: CreateEventInput): Promise<CalendarEventOccurrence | undefined> => undefined),
@@ -118,15 +128,8 @@ mock.module('@workspace/lib/calendar', () => ({
     ...realCalendar,
     useCalendars: () => calendars,
     useSharedCalendars: () => sharedCalendars,
-    useEvents: () =>
-        useSyncExternalStore(
-            (listener) => {
-                listeners.add(listener);
-                return () => listeners.delete(listener);
-            },
-            () => ownEvents,
-        ),
-    useAllSharedCalendarEvents: () => sharedEvents,
+    useEvents: () => useSyncExternalStore(subscribe, () => ownEvents),
+    useAllSharedCalendarEvents: () => useSyncExternalStore(subscribe, () => sharedEvents),
     useCreateEvent: (ownerId: string) => {
         createOwners.push(ownerId);
         return createEvent;
@@ -156,6 +159,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     ownEvents = { data: [], isLoading: false };
+    sharedEvents = { data: [teamSync], isLoading: false };
     createEvent.mutateAsync.mockClear();
     updateEvent.mutateAsync.mockClear();
     master = { data: undefined };
@@ -769,6 +773,15 @@ test('while the events load the column waits with its X', async () => {
     await open('/view/week/2026-10-14?eventId=Weekly');
     expect(detail()?.textContent).not.toContain("This event isn't in this view");
     expect(barButton('Close')).not.toBeNull();
+});
+
+test('a link to a shared event waits while the shared events load, then opens it', async () => {
+    sharedEvents = { data: [], isLoading: true };
+    await open('/view/week/2026-10-14?eventId=Team%20sync');
+    expect(detail()?.textContent).not.toContain("This event isn't in this view");
+    expect(barButton('Close')).not.toBeNull();
+    await loadSharedEvents([teamSync]);
+    expect(detailTitle()).toBe('Team sync');
 });
 
 test('a refetch that no longer holds the open event keeps it in the column', async () => {
