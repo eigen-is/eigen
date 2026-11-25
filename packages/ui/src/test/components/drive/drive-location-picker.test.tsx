@@ -1,8 +1,8 @@
 // The location picker keeps the dialog contract in create mode, as New folder and New doc use it. A folder the server
 // refuses (403) or a name it won't take (422) keeps it open with the typed name, since a closed dialog would throw it
 // away; only a yes/no ConfirmDialog closes on a refusal. A name the folder has already, and a folder the host
-// refuses, show their reasons under their fields. A host that moves the place keeps what was typed, and a pick alone
-// closes on Esc at once. In folder mode, as Move to uses it, Cmd+Enter confirms.
+// refuses, show their reasons under their fields, until the name or the place changes. A host that moves the place
+// keeps what was typed, and a pick alone closes on Esc at once. In folder mode, as Move to uses it, Cmd+Enter confirms.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { expectFormContract } from '../../form-contract';
@@ -158,6 +158,28 @@ test('a name the folder has already shows the reason under the field until the n
     expect(fieldError()).toBeUndefined();
 });
 
+// The name was taken in the folder it was sent to, not in the one picked or moved to since.
+test('a name the folder has already loses its reason once another folder is picked or the host moves', async () => {
+    const taken = 'A file or folder named "Plans" already exists in this directory';
+    for (const move of [
+        () => field.pick({ ownerId: 'owner-1', mountId: 'default', folderId: 'other' }),
+        () => moveTo('team-folder'),
+    ]) {
+        await open('create');
+        onConfirm.mockImplementation(() =>
+            Promise.reject(new AppError({ status: 409, error: { status: 409, value: taken } })),
+        );
+        await typeName('Plans');
+        await click('Create');
+        await settle();
+        expect(fieldError()).toBe(taken);
+        await act(async () => move());
+        expect(fieldError()).toBeUndefined();
+        expect(nameField().value).toBe('Plans');
+        await unmount();
+    }
+});
+
 test('a host that moves the place keeps the typed name and shows the new place', async () => {
     await open('create');
     await typeName('Plans');
@@ -178,6 +200,15 @@ test('a folder the host refuses is named under the location until another is pic
     await click('Move here');
     await settle();
     expect(onConfirm.mock.calls).toEqual([[{ ownerId: 'owner-1', mountId: 'default', folderId: 'other' }]]);
+});
+
+test('a folder the host refused loses its reason once the host moves the picker', async () => {
+    await open('folder', (location) => (location.folderId === 'folder' ? 'Pick another folder' : undefined));
+    await click('Move here');
+    await settle();
+    expect(field.error).toBe('Pick another folder');
+    await act(async () => moveTo('team-folder'));
+    expect(field.error).toBeUndefined();
 });
 
 test('Cmd+Enter in a folder picker confirms the folder shown', async () => {

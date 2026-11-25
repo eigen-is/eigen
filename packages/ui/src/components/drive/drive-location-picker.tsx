@@ -84,13 +84,19 @@ function DriveLocationPickerBody({
     const { user } = useAuth();
     const nameRef = useRef<HTMLInputElement>(null);
     const [name, setName] = useState('');
-    // The server's reason for the name last sent, until the name changes.
+    // The server's reason for the name last sent, until the name or the folder changes.
     const [taken, setTaken] = useState<string>();
     const [expanded, setExpanded] = useState(mode !== 'create');
     const place = { ownerId: defaultOwnerId || user?.id || '', mountId: defaultMountId, folderId: defaultFolderId };
     const [location, setLocation] = useState<DriveLocationValue>(place);
     const [locationRefusal, setLocationRefusal] = useState<string>();
     const destination = useResolvedDriveLocation(location);
+    // Both reasons were about the folder left, so neither stays.
+    const moveTo = (next: DriveLocationValue) => {
+        setLocation(next);
+        setTaken(undefined);
+        setLocationRefusal(undefined);
+    };
 
     // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
     // The typed name stays.
@@ -98,7 +104,7 @@ function DriveLocationPickerBody({
     const [shownPlace, setShownPlace] = useState(placeKey);
     if (shownPlace !== placeKey) {
         setShownPlace(placeKey);
-        setLocation(place);
+        moveTo(place);
     }
 
     const named = name !== '';
@@ -155,10 +161,7 @@ function DriveLocationPickerBody({
                 )}
                 <DriveLocationField
                     value={location}
-                    onChange={(next) => {
-                        setLocation(next);
-                        setLocationRefusal(undefined);
-                    }}
+                    onChange={moveTo}
                     expanded={expanded}
                     // The name keeps the focus, so Enter still creates once the folder is picked.
                     onExpandedChange={(next) => {
