@@ -1,7 +1,8 @@
 // Add mount and Edit mount, as a team's storage section opens them. Each shows the name, the storage type, the size
 // and, for a bucket, the S3 fields, and its submit waits for a name, a size of at least 10 MB and a full S3 config. A
 // save hands the trimmed name, the size and the S3 config to the mount hook and closes. A save the server refuses keeps
-// the dialog open with what was typed. Enter in a field submits, and never clicks a button inside the S3 card first.
+// the dialog open with what was typed. Enter in a field submits, and never clicks a button inside the S3 card first. Its
+// submit stays disabled until the S3 config is full, so the card never marks a field there.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -205,6 +206,7 @@ test('the submit waits for a name, a size of at least 10 MB and a full S3 config
     await settle();
     expect(addMount.mutateAsync).not.toHaveBeenCalled();
     expect(dialog()).not.toBeNull();
+    expect(dialog()?.querySelector('[aria-invalid="true"]')).toBeNull();
 });
 
 test('Enter in an S3 field submits the mount, and never clicks Copy or another button in the card', async () => {

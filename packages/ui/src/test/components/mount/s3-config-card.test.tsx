@@ -2,7 +2,8 @@
 // Update or Enter hardens the bucket with the days typed there, and the card keeps them. Cancel throws an edited value
 // away. The days stay whole and between 1 and the maximum. A bucket that is safe already gets "Change retention", and a
 // refused harden still closes the dialog and shows its message. Enter in the days field never submits a form around the
-// card, such as the mount dialog's.
+// card, such as the mount dialog's. Once Save was pressed, each required field left empty says so under itself, a saved
+// secret excepted, and the form focuses the first.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -15,6 +16,7 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { S3ConfigCard } = await import('../../../components/mount/s3-config-card');
+const { FormShell } = await import('../../../components/form-shell');
 
 const bucket: S3Config = {
     endpoint: 'https://s3.example.org',
@@ -178,4 +180,49 @@ test('a refused harden closes the dialog, shows its message, and the manual step
     expect(dialog()).toBeNull();
     expect(document.body.textContent).toContain('This key may not change bucket settings');
     expect(document.querySelector('[data-slot="code-block-content"]')?.textContent).toContain('"NoncurrentDays":21');
+});
+
+// The card on a form whose save refuses a config the card marks, as Server settings holds it.
+function RefusingForm({ initial, secretSaved }: { initial: S3Config; secretSaved?: boolean }) {
+    const [value, setValue] = useState(initial);
+    return createElement(
+        FormShell,
+        { onSubmit: () => false },
+        createElement(S3ConfigCard, { value, onChange: setValue, onCheck, secretSaved }),
+        createElement('button', { type: 'submit' }, 'Save'),
+    );
+}
+
+const input = (label: string) => {
+    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
+    const field = tag && document.getElementById(tag.htmlFor);
+    if (!(field instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
+    return field;
+};
+const message = (label: string) => document.getElementById(input(label).getAttribute('aria-describedby') ?? '');
+
+test('a refused save marks each missing field under itself and focuses the first', async () => {
+    const blank = { endpoint: '', bucket: 'team-files', prefix: '', accessKeyId: '', secretAccessKey: '' };
+    ({ unmount } = await renderInDocument(createElement(RefusingForm, { initial: blank })));
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(document.querySelector('[data-slot="field-error"]')).toBeNull();
+
+    await click(findButton(document, 'Save'));
+    await settle();
+    expect(document.activeElement).toBe(input('Endpoint'));
+    expect(message('Endpoint')?.textContent).toBe('Add an endpoint');
+    expect(message('Access key ID')?.textContent).toBe('Add an access key ID');
+    expect(message('Secret access key')?.textContent).toBe('Add the secret access key');
+    for (const label of ['Bucket', 'Prefix', 'Region']) {
+        expect(input(label).getAttribute('aria-invalid')).toBeNull();
+    }
+});
+
+test('a saved secret may stay empty', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(RefusingForm, { initial: { ...bucket, secretAccessKey: '' }, secretSaved: true }),
+    ));
+    await click(findButton(document, 'Save'));
+    await settle();
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull();
 });

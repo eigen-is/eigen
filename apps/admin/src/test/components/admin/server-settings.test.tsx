@@ -1,7 +1,8 @@
 // Server settings keeps the page contract, and its one save carries only the drafts that changed: a new organization
 // name alone sends the name and nothing else. Send test mail is a button of its own, so Enter in a field saves rather than
 // sending, and a click sends without saving. Each landing link's remove button is named after the link: its title,
-// its URL when the title is empty, or "empty link" for a row with neither, so a screen reader hears which one goes.
+// its URL when the title is empty, or "empty link" for a row with neither, so a screen reader hears which one goes. A
+// save refused for an incomplete bucket says which field under it and focuses that field.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { expectFormContract } from '@workspace/ui/test/form-contract';
@@ -48,10 +49,12 @@ const SETTINGS: ServerSettings = {
         },
     },
 };
+let settings = SETTINGS;
 const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
 const save = mock(async (_parts: object) => null);
 const sendTestMail = mock(() => {});
 afterEach(() => {
+    settings = SETTINGS;
     save.mockClear();
     sendTestMail.mockClear();
 });
@@ -62,7 +65,7 @@ afterEach(() => {
 const realSettings = { ...(await import('@workspace/lib/settings')) };
 mock.module('@workspace/lib/settings', () => ({
     ...realSettings,
-    useServerSettings: () => ({ data: SETTINGS, isLoading: false }),
+    useServerSettings: () => ({ data: settings, isLoading: false }),
     useServerS3Config: () => ({ data: undefined }),
     useServerStatus: () => ({ data: undefined }),
     useSaveServerSettingsPage: () => ({ ...mutation, mutateAsync: save }),
@@ -83,14 +86,11 @@ const realBackup = { ...(await import('../../../components/admin/server-backup-s
 mock.module('../../../components/admin/server-backup-section', () => ({ ServerBackupSection: () => null }));
 const realStatus = { ...(await import('../../../components/admin/server-status-section')) };
 mock.module('../../../components/admin/server-status-section', () => ({ ServerStatusSection: () => null }));
-const realPicker = { ...(await import('../../../components/admin/storage-type-picker')) };
-mock.module('../../../components/admin/storage-type-picker', () => ({ StorageTypePicker: () => null }));
 afterAll(() => {
     mock.module('@workspace/lib/settings', () => realSettings);
     mock.module('@workspace/lib/public', () => realPublic);
     mock.module('../../../components/admin/server-backup-section', () => realBackup);
     mock.module('../../../components/admin/server-status-section', () => realStatus);
-    mock.module('../../../components/admin/storage-type-picker', () => realPicker);
 });
 
 const { act, createElement } = await import('react');
@@ -179,4 +179,17 @@ test("each landing link's remove button is named after the link's title, else it
     if (!addButton) throw new Error('the page drew no Add button');
     await act(async () => addButton.click());
     expect(buttonNamed('Remove empty link')).not.toBeNull();
+});
+
+test('a save refused for an incomplete bucket says so under the field and focuses it', async () => {
+    settings = { ...SETTINGS, defaults: { mount: { storageType: 's3' } } };
+    await openPage();
+    await type('Organization name', 'Acme Labs');
+    await act(async () => button('Save')?.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(save).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(field('Endpoint'));
+    expect(document.getElementById(field('Endpoint').getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+        'Add an endpoint',
+    );
 });
