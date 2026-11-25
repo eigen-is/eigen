@@ -88,7 +88,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
 
     const handleDelete = async () => {
         await deleteUser.mutateAsync(user.id);
-        navigate({ to: guest ? '/guests' : '/users', search: {} });
+        await navigate({ to: guest ? '/guests' : '/users', search: {} });
     };
 
     return (
@@ -145,7 +145,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
             {!guest && user.role !== null && (
                 <>
                     <Separator />
-                    <UserTeamsSection user={user} organizationId={organizationId} />
+                    <UserTeamsSection user={user} />
                 </>
             )}
 

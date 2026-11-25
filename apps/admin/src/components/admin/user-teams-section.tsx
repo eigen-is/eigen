@@ -1,5 +1,5 @@
 // The Teams section of a user's detail in the Admin app: the teams the user belongs to, each with a
-// button that takes the user out of it, and an "Add to team" button that opens the team picker. It
+// button that takes the user out of it after a confirmation, and an "Add to team" button that opens the team picker. It
 // is the user-side twin of a team's Members section, laid out the same way, and changes membership
 // through the same team-member mutations. The organization's default team, which every user joins,
 // is left out, so the count and the empty state are about the teams an admin chose.
@@ -9,6 +9,7 @@ import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Button } from '@workspace/ui/components/button';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserAvatar } from '@workspace/ui/components/user';
@@ -16,13 +17,11 @@ import { Plus, UsersRound, X } from 'lucide-react';
 import { useState } from 'react';
 import { AddToTeamDialog } from './add-to-team-dialog';
 
-type UserTeamsSectionProps = {
-    user: AdminUserRow;
-    organizationId?: string;
-};
-
-export function UserTeamsSection({ user, organizationId }: UserTeamsSectionProps) {
+export function UserTeamsSection({ user }: { user: AdminUserRow }) {
     const [showAddDialog, setShowAddDialog] = useState(false);
+    // Kept after the question closes, so it still names the team while it fades out.
+    const [removing, setRemoving] = useState({ id: '', name: '' });
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const removeMember = useRemoveTeamMember();
     const { data: config } = usePublicConfig();
     const teams = user.teams
@@ -39,12 +38,7 @@ export function UserTeamsSection({ user, organizationId }: UserTeamsSectionProps
                 </Button>
             </div>
 
-            <AddToTeamDialog
-                open={showAddDialog}
-                onOpenChange={setShowAddDialog}
-                users={[user]}
-                organizationId={organizationId}
-            />
+            <AddToTeamDialog open={showAddDialog} onOpenChange={setShowAddDialog} users={[user]} />
 
             {teams.length === 0 ? (
                 <EmptyState icon={<UsersRound className="h-6 w-6" />} message="Not in any team yet" />
@@ -58,12 +52,32 @@ export function UserTeamsSection({ user, organizationId }: UserTeamsSectionProps
                                 icon={X}
                                 tooltipText={`Remove from ${team.name}`}
                                 className="h-7 w-7 shrink-0"
-                                onClick={() => removeMember.mutate({ teamId: team.id, userId: user.id })}
+                                onClick={() => {
+                                    setRemoving(team);
+                                    setConfirmOpen(true);
+                                }}
                             />
                         </div>
                     ))}
                 </div>
             )}
+
+            <ConfirmDialog
+                open={confirmOpen}
+                onOpenChange={setConfirmOpen}
+                title="Remove from team"
+                description={
+                    <>
+                        Remove <strong>{user.name}</strong> from <strong>{removing.name}</strong>? They lose access to
+                        what is shared with the team.
+                    </>
+                }
+                onConfirm={async () => {
+                    await removeMember.mutateAsync({ teamId: removing.id, userId: user.id });
+                }}
+                confirmText="Remove"
+                destructive
+            />
         </div>
     );
 }

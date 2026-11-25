@@ -128,19 +128,10 @@ type AdminUsersTableProps = {
     searchQuery: string;
     activeUserId?: string;
     onRowClick: (userId: string) => void;
-    organizationId?: string;
     guests?: boolean;
 };
 
-export function AdminUsersTable({
-    users,
-    usage,
-    searchQuery,
-    activeUserId,
-    onRowClick,
-    organizationId,
-    guests,
-}: AdminUsersTableProps) {
+export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRowClick, guests }: AdminUsersTableProps) {
     const [sort, setSort] = useState<SortState>({ col: 'name', dir: 'asc' });
     const [teamPickOpen, setTeamPickOpen] = useState(false);
     const [teamPickUsers, setTeamPickUsers] = useState<AdminUserRow[]>([]);
@@ -337,12 +328,7 @@ export function AdminUsersTable({
                             Add to team…
                         </DropdownMenuItem>
                     </ContextMenuAnchor>
-                    <AddToTeamDialog
-                        open={teamPickOpen}
-                        onOpenChange={setTeamPickOpen}
-                        users={teamPickUsers}
-                        organizationId={organizationId}
-                    />
+                    <AddToTeamDialog open={teamPickOpen} onOpenChange={setTeamPickOpen} users={teamPickUsers} />
                 </>
             )}
         </div>

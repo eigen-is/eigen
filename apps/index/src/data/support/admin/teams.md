@@ -42,6 +42,7 @@ Everyone you selected joins that team. An account marked **no organization** can
 1. On the **Teams** page, click the team in the list.
 2. In the **Members** section, find the person you want to remove.
 3. Click the **×** button to the right of their name.
+4. Click **Remove** to confirm.
 
 The team named after your organization has no **×** button, because every user is in it.
 
@@ -50,7 +51,7 @@ The team named after your organization has no **×** button, because every user 
 1. On the [**Users**](/admin/users) page, click the person's name to open their detail panel.
 2. The **Teams** section, under **Role**, lists the teams the person is in. The team named after your organization, which everyone joins, is not listed or counted, so **Not in any team yet** means the person is in no other team.
 3. To add them to a team, click **Add to team**, then click the team in the **Add to team** dialog. Teams the person is already in are not listed, and neither is the team named after your organization.
-4. To take them out of a team, click the **×** button to the right of the team's name.
+4. To take them out of a team, click the **×** button to the right of the team's name, then click **Remove** to confirm.
 
 An account marked **no organization** has no **Teams** section.
 

@@ -46,7 +46,6 @@ async function renderTable(props: { users?: AdminUserRow[]; searchQuery?: string
                 usage,
                 searchQuery: props.searchQuery ?? '',
                 onRowClick: () => {},
-                organizationId: 'org-1',
                 guests: props.guests,
             }),
         ),
