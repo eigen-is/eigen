@@ -12,6 +12,7 @@ import { DriveBreadcrumb } from '@workspace/ui/components/drive/drive-breadcrumb
 import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { FindInDocumentButton } from '@workspace/ui/components/search/find-in-document-button';
 import { ArrowLeft } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 type ViewToolbarProps = {
     path: DrivePath;
@@ -58,7 +59,7 @@ type EditToolbarProps = {
     onCancel: () => void;
     onSave: () => void;
     isSaving: boolean;
-    children?: React.ReactNode;
+    children?: ReactNode;
 };
 
 export function EditToolbar({ onBack, onCancel, onSave, isSaving, children }: EditToolbarProps) {
@@ -73,8 +74,8 @@ export function EditToolbar({ onBack, onCancel, onSave, isSaving, children }: Ed
                 <Button size="sm" variant="secondary" onClick={onCancel}>
                     Cancel
                 </Button>
-                <Button size="sm" disabled={isSaving} onClick={onSave}>
-                    {isSaving ? 'Saving...' : 'Save'}
+                <Button size="sm" pending={isSaving} onClick={onSave}>
+                    Save
                 </Button>
             </div>
         </Toolbar>
