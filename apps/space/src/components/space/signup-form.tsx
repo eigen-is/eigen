@@ -16,7 +16,7 @@ import { z } from 'zod';
 
 const signupSchema = z
     .object({
-        name: z.string().min(1, 'Name is required'),
+        name: z.string().min(1, FIELD_MESSAGES.nameMissing),
         username: z.string().superRefine((username, context) => {
             const problem = validateUsername(username.toLowerCase());
             if (problem) context.addIssue({ code: 'custom', message: problem });

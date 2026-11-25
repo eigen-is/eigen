@@ -2,7 +2,7 @@
 // runs, and each problem reads under its own field instead of a browser bubble or a banner. Pinned beside the
 // contract: it sends the invite route the name, the username in lower case and the password, as before.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -57,38 +57,21 @@ test('sends the name, the username in lower case and the password', async () => 
 
 test('each problem reads under its own field, and nothing is sent', async () => {
     await renderInDocument(form());
-    await type('Name', 'Ada Lovelace');
     await type('Username', 'a');
     await type('Password', 'short');
     await type('Confirm password', 'other');
-    await act(async () => pressEnter(field('Name')));
+    await act(async () => pressEnter(field('Username')));
 
-    expect(messageUnder('Name')).toBeUndefined();
+    expect(messageUnder('Name')).toBe('Add a name');
     expect(messageUnder('Username')).toBe('Username must be 2-30 characters');
     expect(messageUnder('Password')).toBe('Password must be at least 8 characters');
     expect(messageUnder('Confirm password')).toBe("Passwords don't match");
-    expect(document.activeElement).toBe(field('Username'));
+    expect(document.activeElement).toBe(field('Name'));
     expect(register.mutateAsync).not.toHaveBeenCalled();
 });
-
-function field(label: string): HTMLInputElement {
-    const tag = [...document.querySelectorAll('label')].find((element) => element.textContent === label);
-    const input = tag?.htmlFor ? document.getElementById(tag.htmlFor) : null;
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-}
 
 function messageUnder(label: string): string | undefined {
     const id = field(label).getAttribute('aria-describedby')?.split(' ').at(-1);
     const message = id ? document.getElementById(id) : null;
     return message?.dataset.slot === 'form-message' ? (message.textContent ?? undefined) : undefined;
-}
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function type(label: string, value: string) {
-    const input = field(label);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 }
