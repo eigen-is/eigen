@@ -1,6 +1,6 @@
 // A user's Teams section reads like a team's Members section: a header with the count and the add
-// button on the right, then one row per team, or the empty state. The default team every user joins
-// is neither listed nor counted, and each team's remove button is named after the team and asks before it removes.
+// button on the right, then one row per team, or the empty state. The default team every user joins is listed
+// with no remove button, and each other team's remove button is named after the team and asks before it removes.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -69,19 +69,20 @@ test("a user's teams are listed by name under the count", async () => {
     expect([...section.querySelectorAll('.divide-y > div')].map((row) => row.textContent)).toEqual(['Design', 'Sales']);
 });
 
-test('the default team is neither listed nor counted, so a user only in it is in no team yet', async () => {
+test('the default team is listed and counted like any other, with no remove button', async () => {
     const section = await renderSection([
-        { id: 't0', name: 'Acme' },
         { id: 't1', name: 'Design' },
+        { id: 't0', name: 'Acme' },
     ]);
-    expect(section.querySelector('h3')?.textContent).toBe('Teams (1)');
-    expect([...section.querySelectorAll('.divide-y > div')].map((row) => row.textContent)).toEqual(['Design']);
+    expect(section.querySelector('h3')?.textContent).toBe('Teams (2)');
+    expect([...section.querySelectorAll('.divide-y > div')].map((row) => row.textContent)).toEqual(['Acme', 'Design']);
+    expect(section.querySelector('button[aria-label="Remove from Acme"]')).toBeNull();
+    expect(section.querySelector('button[aria-label="Remove from Design"]')).not.toBeNull();
 
     await unmount();
     const onlyDefault = await renderSection([{ id: 't0', name: 'Acme' }]);
-    expect(onlyDefault.querySelector('h3')?.textContent).toBe('Teams (0)');
-    expect(onlyDefault.textContent).toContain('Not in any team yet');
-    expect(onlyDefault.textContent).not.toContain('Acme');
+    expect(onlyDefault.querySelector('h3')?.textContent).toBe('Teams (1)');
+    expect(onlyDefault.textContent).not.toContain('Not in any team yet');
 });
 
 test("each team's remove button is named after the team", async () => {

@@ -49,9 +49,9 @@ The team named after your organization has no **×** button, because every user 
 ## Change one person's teams
 
 1. On the [**Users**](/admin/users) page, click the person's name to open their detail panel.
-2. The **Teams** section, under **Role**, lists the teams the person is in. The team named after your organization, which everyone joins, is not listed or counted, so **Not in any team yet** means the person is in no other team.
+2. The **Teams** section, under **Role**, lists the teams the person is in, the team named after your organization included, since everyone joins it.
 3. To add them to a team, click **Add to team**, then click the team in the **Add to team** dialog. Teams the person is already in are not listed, and neither is the team named after your organization.
-4. To take them out of a team, click the **×** button to the right of the team's name, then click **Remove** to confirm.
+4. To take them out of a team, click the **×** button to the right of the team's name, then click **Remove** to confirm. The team named after your organization has no **×** button.
 
 An account marked **no organization** has no **Teams** section.
 

@@ -27,9 +27,9 @@ What surprises people: in a dialog Esc asks before it drops a change, but Cancel
 
 ## A typed field waits for Save, a single control saves at once
 
-Text a user types waits for the form's button. A switch, a select, a colour or a panel control that stands alone writes on each pick. One section never mixes the two: a switch inside a form with a Save button is part of the draft and waits too, and a control that writes at once sits outside any form with a button. One look tells the user whether a section saves itself.
+Text a user types waits for the form's button. A switch, a select, a colour or a panel control that stands alone writes on each pick. One section never mixes the two: a switch inside a form with a Save button is part of the draft and waits too, and a control that writes at once sits outside any form with a button. One look tells the user whether a section saves itself. The one select that waits is the role in Admin's user detail, with its own Save and Cancel: a role grants or takes away admin rights, so a slip in the select must not do that.
 
-Space's Mail page shows both, as two sections with their own headings: the signature waits for its Save, the keyboard switches below it save themselves. An action inside a draft page that acts at once, such as Send test mail in Server settings, is a button that says what it does, never a field, and Enter on it does that action. Slides' background panel paints the current slide live, and its Apply button sends that paint to the slides its "Apply to" select names, so a colour drag never repaints the whole deck.
+Space's Mail page shows both, as two sections with their own headings: the signature waits for its Save, the keyboard switches below it save themselves. An action inside a draft page that acts at once, such as Send test mail in Server settings, is a button that says what it does, never a field, and Enter on it does that action. Slides' background panel paints the current slide live, and its Apply to following slides and Apply to all slides buttons copy that paint on, so a color drag never repaints the whole deck.
 
 ## Enter submits, and Cmd or Ctrl+Enter submits from any field
 
@@ -92,12 +92,13 @@ One verb per job lets a user predict what a button will do before pressing it.
 | Job | Label |
 |---|---|
 | Edit a stored thing | Save |
-| Make a new thing | Create |
+| Make a new thing that stands on its own, such as an event, a folder, a team or a calendar | Create |
+| Put an item into something that holds it, such as a card on a board, a comment on a document, a column on a board or a person on a list | Add |
 | A job with its own verb | Send, Import, Rename, Sort, Insert, Select, Reset password, Move here, Copy here, Save here |
 | A format dialog in an editor, such as Page setup, a link, Data validation or a chart's data | Apply |
 | The calendar's recurring choice | OK |
 
-One word per job, so a label never says "Save changes", "Save settings" or "Let's chat". Import events and Import contacts say Import, Edit calendar says Save where New calendar says Create, and a form whose create and edit share one component switches the label with its mode. The card dialogs say Add card, Add comment and Add column, the verb the boards and comment threads use.
+One word per job, so a label never says "Save changes", "Save settings" or "Let's chat". Import events and Import contacts say Import, Edit calendar says Save where New calendar says Create, and a form whose create and edit share one component switches the label with its mode. Add is not a softer Create: a card, a comment or a column lives inside its board or document, so its dialog says Add card, Add comment or Add column, while the dialogs that make an event, a folder or a team say Create.
 
 ## Delete asks unless it can be undone
 

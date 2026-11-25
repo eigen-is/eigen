@@ -6,10 +6,10 @@ category: Editing
 tags: [slides, background, colors, images]
 related: [slides/add-slides, slides/create-and-edit, slides/style-objects]
 order: 35
-updated: 2026-09-11
+updated: 2026-11-25
 ---
 
-Every new slide starts plain white. You can give a slide a solid color, a gradient, or an image behind your text and pictures, and choose whether the change lands on one slide, the slides that follow, or the whole presentation.
+Every new slide starts plain white. You can give a slide a solid color, a gradient, or an image behind your text and pictures, then copy it to the slides that follow or to the whole presentation.
 
 You need editor access to change a background. If you can only view the presentation, the controls below are not available.
 
@@ -19,7 +19,7 @@ You need editor access to change a background. If you can only view the presenta
 2. Click an empty part of the canvas so nothing is selected, or press **Escape** to clear the selection.
 3. The properties panel on the right now shows the **Background** section for that slide, with a row of buttons for the background type: no fill, solid color, gradient, and image.
 
-Whatever you set here changes the current slide straight away. To spread it to other slides, use **Apply to** at the bottom, described below.
+Whatever you set here changes the current slide straight away. To copy it to other slides, use the two buttons at the bottom of the **Background** section, described below.
 
 ## Set a solid color
 
@@ -43,19 +43,20 @@ Whatever you set here changes the current slide straight away. To spread it to o
 
 ## Apply to more than one slide
 
-By default a background change affects only the current slide. To reuse it across the presentation:
+A background change affects only the current slide. To reuse it across the presentation:
 
 1. Set the background you want on the current slide.
-2. Open the **Apply to** dropdown and choose **This slide**, **This and following**, or **All slides**.
-3. Click **Apply**. The background copies to every slide in the range you picked.
+2. At the bottom of the **Background** section, click one of the two buttons:
+   - **Apply to following slides** copies the background to every slide after this one.
+   - **Apply to all slides** copies it to every slide in the presentation.
 
-Applying to all slides is a deliberate step, so dragging a color never changes the whole presentation by accident.
+Copying to other slides is a deliberate step, so dragging a color never changes the whole presentation by accident. One press of **Undo** puts all those slides back.
 
 ## Remove a background
 
 To return a slide to plain white, click the no fill button (the crossed-out circle) at the start of the **Background** row. To remove an image but keep a background type set, click the trash icon next to **Replace**.
 
-To clear the background from several slides at once, remove it on one slide, then choose the range in **Apply to** and click **Apply**.
+To clear the background from several slides at once, remove it on one slide, then click **Apply to following slides** or **Apply to all slides**.
 
 <div class="eigen-callout">
 
