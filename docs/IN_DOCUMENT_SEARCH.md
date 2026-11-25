@@ -26,7 +26,7 @@ A surface sets `canReplace` from its write access. A read-only document gets sea
 
 A surface wraps its editor in `DocSearchProvider` and passes its controller. `⌘F` opens the bar or refocuses it, `⇧⌘H` opens it in replace mode, as in Google Docs, whose `⌥⌘F` inserts a footnote (`Ctrl+H` works too off macOS, where `⌘H` hides the app), `⌘G` and `⇧⌘G` step, and `Esc` closes. `⌘G` with the bar closed and a query kept reopens it without focusing the input. Every key is off while a dialog is open, because the bar would open unseen behind it. The query debounces 150 ms.
 
-`⌘Z` and `⇧⌘Z` inside the bar's inputs go to the surface's own undo (`onUndo`, `onRedo`), so a replace is undoable without leaving the bar. `barClassName` moves the bar clear of a surface's chrome, and `onOpenChange` lets slides fit the bar into its layered `Escape` (present, edit, bar, deselect). Toolbar buttons and Edit-menu items read `useOptionalDocSearchBar()`, so a read-only surface hides "Find and replace".
+`⌘Z` and `⇧⌘Z` inside the bar's inputs go to the surface's own undo (`onUndo`, `onRedo`), so a replace is undoable without leaving the bar. `barClassName` moves the bar clear of a surface's chrome, and `barStyle` follows a width a class can't, such as the canvas's right inset, which is the open comments column's live width plus the bar's gutter. `onOpenChange` lets slides fit the bar into its layered `Escape` (present, edit, bar, deselect). Toolbar buttons and Edit-menu items read `useOptionalDocSearchBar()`, so a read-only surface hides "Find and replace".
 
 ## The count stays live while collaborators type
 

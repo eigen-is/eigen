@@ -31,6 +31,14 @@ A list whose items open a detail is `ListDetailLayout`, as on the contacts and a
 
 Slides' slide rail is the one side column with its own width: 208 (`w-52`), and 256 from 1920 wide, where it matches the properties panel across from it. Its thumbnails read no better wider, so the slide keeps the room.
 
+## A detail column opens at the right, under the bar that spans the screen
+
+**A detail column shows one thing the user opened, such as a calendar event or a document's comments, at the right of the page, under the bar that spans the screen.** `DetailColumn` (`layout/app/detail-column.tsx`) draws it. Its bar names a list, never an item: a title over a list, "‹" with the list's name once it drilled into one item, the item's actions, then X. It is `medium` beside a work surface, such as a slide, a drawing or the calendar grid, and `large` beside a list; a comment thread is the one detail that grows to `large` beside a surface ([COMMENTS.md](COMMENTS.md#in-slides-and-vector-comments-open-in-a-column-the-url-names)).
+
+The URL names what is open, so a link and a reload show it. `useDetailHistory` (`packages/ui/src/hooks/use-detail-history.ts`) gives every detail one history rule: an open from closed pushes an entry flagged as its own, a switch to another item replaces, and close goes back over that entry and replaces anywhere else, such as on a link. So X and back do the same, and back after X never reopens the item. X, Esc and back close it. The column hears Esc on `window`, after every `document` listener, so a handler that uses an Esc, such as a canvas deselecting, calls `preventDefault` and the column closes on the next one.
+
+In an editor the bar that spans the screen is the editor bar. The detail takes the right slot under it and a right tool, such as the properties panel, yields while it is open; a left tool, such as Slides' rail, stays, with one top edge across. Under the bar no bar refolds as a detail opens, and the editor never remounts as the column opens, grows or closes, since it holds the document's collab session and undo. On a phone `PhoneDetail` gives the detail the whole screen and hides the main with a class, never a wrapper swap, so an editor or a grid stays mounted, and the bar's lone "‹" at the left closes it in place of X.
+
 ## A properties panel's sections come in one order
 
 Every properties panel, in Vector, Slides, Docs and Sheets, writes its sections in one order: geometry (Transform, Layout), content (Text, Spacing, Image), paint (Fill, Color, Background, Stroke, Border, Shape, Arrowheads, Sketch), appearance, actions (Arrange, Align), then Delete. It is a convention, not a sort: a panel's titles are literals and its guards only filter, so the written order is the drawn order, and the tab order follows what the eye sees. A new section slots into its group, and a group a panel lacks is absent.
@@ -279,7 +287,7 @@ A touch device has no hover, so a hover reveal adds the matching `pointer-coarse
 
 Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for labels. Manual listeners stay for list navigation and for editors that own their keys. Mod+K is a raw window listener, so the palette opens from inside a text field too. A `'*'` chord needs a capture-phase listener, and `'Shift+8'` never matches.
 
-**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key on a dialog button would act on the document behind it: Delete on a confirm button deleting the canvas selection. The hook watches the DOM for an open `role="dialog"` or `alertdialog`, so it keeps no registry. A bar menu leaves the page live, so the canvas also folds in `useMenuOpen()`, or ArrowRight in File would nudge the selected shape.
+**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key on a dialog button would act on the document behind it: Delete on a confirm button deleting the canvas selection. The hook watches the DOM for an open `role="dialog"` or `alertdialog`, so it keeps no registry. A bar menu leaves the page live, so the canvas also folds in `useMenuOpen()`, or ArrowRight in File would nudge the selected shape. A detail column has no focus trap, so the canvas folds in `useFocusInDetail()` too: Delete on a comment thread's Resolve or ⌘Z in its reply box would otherwise act on the drawing.
 
 Two keymaps may register one key, such as the canvas's nudges and the file preview's paging, and their gates keep them apart. The hotkeys library warns on every second registration of a key, a disabled one included, so `EigenApp` passes `conflictBehavior: 'allow'`. A new keymap that shares a key needs a gate of its own: nothing warns about the overlap.
 
@@ -329,7 +337,7 @@ Each looks like a bug in our own code:
 - [FORMS.md](FORMS.md): how a form in a dialog, a card or a page behaves
 - [MOBILE.md](MOBILE.md): the breakpoints and how the shell behaves on phones and touch
 - [COMMAND-PALETTE.md](COMMAND-PALETTE.md): the ⌘K palette the shell mounts
-- [COMMENTS.md](COMMENTS.md): the comments and activity pane
+- [COMMENTS.md](COMMENTS.md): the comments column and the comments and activity pane
 - [PREVIEWS.md](PREVIEWS.md): the quick-look overlay, file subjects and file actions
 - [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md): every shared component, hook and type, generated
 - [TYPOGRAPHY.md](TYPOGRAPHY.md): type scale and fonts

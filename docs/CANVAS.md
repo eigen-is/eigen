@@ -186,7 +186,7 @@ Double-click, or Enter on the one selected element, opens the text of any elemen
 
 Enter does what a double-click on the element does, so it also opens an arrow's label and a chart's data dialog. `useCanvasKeyboard` acts, and takes the key, only for a sole selection and only when focus is on the canvas or the page, so a focused button or rail thumbnail keeps its own Enter.
 
-During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. The viewport freezes so the editor stays on its element.
+During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. It is off while the focus sits in the comments column too, which has no focus trap, so Delete there or ⌘Z in a reply box leaves the canvas alone. The viewport freezes so the editor stays on its element.
 
 Outside a text editor the canvas cancels every `dragstart`. With text selected over the scene, Safari drags that selection from a press anywhere on the canvas, and Chrome from selectable text; the page then gets no pointerup, so the shape never moves and the text shows as a ghost image.
 
@@ -194,7 +194,7 @@ A text box's height only grows (`textBoxFitHeight`): the stored height is the us
 
 ## Escape is layered per host, on purpose
 
-On the canvas Escape goes to the innermost active mode: rich-text editing, then a mid-gesture cancel, then deselect, then the select tool. The text editor stops propagation. `ObjectTransform` claims a resize in the capture phase. The canvas' bubble-phase listener handles the rest. Slides adds present mode as the outer layer. Don't extract a shared Escape router: the per-host phase ordering is what makes the innermost mode win.
+On the canvas Escape goes to the innermost active mode: rich-text editing, then a mid-gesture cancel, then deselect, then the select tool. The text editor stops propagation. `ObjectTransform` claims a resize in the capture phase. The canvas' bubble-phase listener handles the rest, and calls `preventDefault` on an Escape it used, so the comments column beside it, which hears Escape last, closes only on one with nothing left to cancel. Slides adds present mode as the outer layer. Don't extract a shared Escape router: the per-host phase ordering is what makes the innermost mode win.
 
 ## Touch policy lives beside the canvas
 

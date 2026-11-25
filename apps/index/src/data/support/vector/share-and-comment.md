@@ -6,7 +6,7 @@ category: Sharing
 tags: [vector, sharing, permissions, comments, collaboration]
 related: [vector/get-started, drive/share-a-file]
 order: 70
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 Drawings are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you can edit a drawing, you can also leave comments, either on a single object or on the drawing as a whole.
@@ -65,24 +65,28 @@ A small colored triangle appears in the top-right corner of the object to show i
 
 ### Open and reply to a comment
 
-Click the colored triangle on an object to open that comment's thread. You can read the messages, add a reply, and mark the comment as resolved.
+Click the colored triangle on an object to open that comment's thread in the comments column on the right. You can read the messages, add a reply, and mark the comment as resolved. The drawing narrows to make room.
 
 To read a comment without opening it, rest your mouse on the triangle. The comment's card appears beside it, and a click on the card opens the thread.
 
+To change a comment's title, description or color, click **Edit** (pencil icon) at the top of its thread. The comment opens in an **Edit comment** dialog. Click **Save** when you are done.
+
 ### View all comments
 
-Click the **Comments** button (speech bubble icon) in the toolbar to open the comments panel on the right. The panel lists every comment on the drawing, and the **New comment** button at the top of the panel adds one that belongs to the drawing as a whole rather than to an object. Use the filter button (funnel icon) at the top of the panel to narrow the list by who a comment is **Assigned to**, by color, or by **Status**: **Open**, **Resolved**, or **All**.
+Click the **Comments** button (speech bubble icon) in the toolbar to open the comments column on the right, in place of the properties panel. It lists every comment on the drawing, and the **New comment** button (plus icon) at the top adds one that belongs to the drawing as a whole rather than to an object. Use the filter button (funnel icon) at the top of the column to narrow the list by who a comment is **Assigned to**, by color, or by **Status**: **Open**, **Resolved**, or **All**.
 
-Click a comment in the panel to jump to the object it is attached to and open its thread.
+Click a comment in the list to select the object it is attached to and open its thread. If the object would sit behind the column, the drawing moves just enough to show it. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
+
+Click the X (**Close**) to close the column, from the list or from a thread. **Esc** closes it too, unless you are typing a reply. If an object is selected, the first **Esc** deselects it and the next one closes the column.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 
 ### Resolve a comment
 
-Open a comment and mark it as resolved. Resolved comments are hidden by default. Set the status filter to **Resolved** or **All** to see them again.
+Open a comment and mark it as resolved. Resolved comments are hidden by default in the list. Set the status filter to **Resolved** or **All** to see them again.
 
 ### Copy a link to a comment
 
-Open a comment and click the link icon (**Copy link**) near the top of the dialog. The link opens the drawing with that comment's thread already visible.
+Open a comment and click the link icon (**Copy link**) at the top of its thread. The link opens the drawing with that comment's thread already open in the column, and reloading the page keeps it open.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned. The same goes for a notification about it.

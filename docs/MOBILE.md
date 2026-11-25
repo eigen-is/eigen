@@ -22,11 +22,13 @@ The media hooks answer `false` during a prerender, so a build-time render and th
 
 `ColumnLayout`'s `mobileColumn` picks the one `Column` a phone renders, and the first column's `onBack="sidebar"` arrow opens the sidebar as a column ([LAYOUT.md](LAYOUT.md#on-a-phone-only-the-mobilecolumn-renders)). The sidebar column closes on every navigation, including one that changes only the search params, such as Mail's `?mode=compose`.
 
-What steps aside is hidden, not unmounted: `<main>` under the sidebar column, and docs, sheets and the canvas under the comments pane ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection and undo history across the visit.
+What steps aside is hidden, not unmounted: `<main>` under the sidebar column, docs and sheets under the comments pane, and slides and vector under the comments column, through `PhoneDetail` ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection and undo history across the visit.
+
+The comments column is a screen of its own, as a mail is. Its list's bar shows a lone "‹" back to the document beside the title Comments, never "‹ Comments", which only a thread's bar shows, back to the list. The system back closes the column from either, since the list and a thread share one history entry ([LAYOUT.md](LAYOUT.md#a-detail-column-opens-at-the-right-under-the-bar-that-spans-the-screen)).
 
 ## A hidden surface can't be scrolled or focused
 
-A scroll or a focus call on a `display: none` subtree does nothing. So a phone opens a comment card with plain `setOpenCardId` instead of revealing its anchor first, and opening find (⌘F, an in-document palette hit) closes the comments pane through `useDocumentPanels`' `onSearchOpenChange`, because the find bar floats inside the hidden editor. The sheet re-measures its canvas when its container shows again ([SHEETS.md](SHEETS.md#comments-are-eigen-comment-cards)).
+A scroll or a focus call on a `display: none` subtree does nothing. So a phone opens a comment card without revealing its anchor first, and opening find (⌘F, an in-document palette hit) closes the comments pane or column through its `onSearchOpenChange`, because the find bar floats inside the hidden editor. The sheet re-measures its canvas when its container shows again ([SHEETS.md](SHEETS.md#comments-are-eigen-comment-cards)).
 
 ## Docs panels need 769px
 
