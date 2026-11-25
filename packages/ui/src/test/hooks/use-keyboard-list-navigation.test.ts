@@ -205,6 +205,27 @@ describe('useKeyboardListNavigation Space and Enter', () => {
     });
 });
 
+// The list takes the focus a moment after it mounts, so its keys work without a click, but never from a field the user
+// types in, such as a picker's name while the picker's folder list opens.
+describe('useKeyboardListNavigation focus on mount', () => {
+    const afterTheTimer = () => act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+
+    test('the list takes the focus when nothing holds it', async () => {
+        const { list, unmount } = await mountList(-1);
+        await afterTheTimer();
+        expect(document.activeElement).toBe(list);
+        await unmount();
+    });
+
+    test('a field the user types in keeps the focus', async () => {
+        const { field, unmount } = await mountList(-1);
+        if (field instanceof HTMLElement) field.focus();
+        await afterTheTimer();
+        expect(document.activeElement).toBe(field);
+        await unmount();
+    });
+});
+
 describe('useKeyboardListNavigation and a dialog opened from the list', () => {
     test('a key pressed in a portaled field is the field’s, and the list neither acts nor claims it', async () => {
         const { calls, field, keydown, unmount } = await mountList(1, selectionOf(['b']));

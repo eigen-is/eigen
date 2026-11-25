@@ -7,6 +7,7 @@
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { isKeyboardContextMenu } from '../components/context-menu/use-context-menu';
+import { isTypingTarget } from './is-typing-target';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
@@ -97,8 +98,9 @@ export function useKeyboardListNavigation<T>({
         if (!reclaimFocus) return;
         const focusList = () => containerRef.current?.focus({ preventScroll: true });
 
+        // A field the user types in keeps it, such as a picker's name while its folder list opens.
         const timer = setTimeout(() => {
-            if (!containerRef.current?.contains(document.activeElement)) focusList();
+            if (!containerRef.current?.contains(document.activeElement) && !isTypingTarget()) focusList();
         }, 100);
 
         const reclaim = () => {

@@ -8,6 +8,7 @@ import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
+import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -392,4 +393,36 @@ test('the file picker opens at the root again after Upload from device closed it
     await act(async () => reopen());
     expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
     expect(activeMount()).toBe('Drive');
+});
+
+// The folder list takes the focus as it opens, so a name typed before Change location lost it, and Enter then created
+// nothing until the name was clicked again.
+test('a picker with a name keeps the focus in the name as its folders open, so Enter still creates', async () => {
+    onConfirm.mockClear();
+    ({ unmount } = await renderInDocument(
+        createElement(DriveLocationPicker, {
+            open: true,
+            onOpenChange: () => {},
+            mode: 'create',
+            title: 'New folder',
+            nameLabel: 'Folder name',
+            confirmLabel: 'Create',
+            onConfirm,
+        }),
+    ));
+    const name = document.querySelector<HTMLInputElement>('[role="dialog"] input');
+    if (!name) throw new Error('New folder asked for no name');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Plans');
+        name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // A click focuses the button it presses, as Chrome's does.
+    const change = buttonNamed('Change location');
+    change.focus();
+    await click(change);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
+    expect(document.activeElement).toBe(name);
+    await act(async () => pressEnter(name));
+    expect(onConfirm.mock.calls).toEqual([[{ ownerId: ME, mountId: 'default', folderId: 'root', name: 'Plans' }]]);
 });
