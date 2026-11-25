@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2452 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2456 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (335)
+## Components (337)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -206,6 +206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CollabDocumentGate` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/collab-document-gate.tsx |
 | `Column` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
+| `DetailColumn` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-column.tsx |
 | `DetailItemBlock` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
 | `DetailMeta` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
 | `DetailSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
@@ -219,6 +220,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ListDetailLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/list-detail-layout.tsx |
 | `LoadingState` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/loading-state.tsx |
 | `PageForm` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/page-form.tsx |
+| `PhoneDetail` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/phone-detail.tsx |
 | `RequestAccessView` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/request-access-view.tsx |
 | `SettingsPage` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-page.tsx |
 | `SettingsSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-section.tsx |
@@ -388,7 +390,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (321)
+## Hooks (323)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -690,6 +692,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCanvasPresence` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `useSelection` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-selection.ts |
 | `useTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
+| `useDetailHistory` | `@workspace/ui/hooks/use-detail-history` | packages/ui/src/hooks/use-detail-history.ts |
 | `useDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
@@ -701,6 +704,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFitHeight` | `@workspace/ui/hooks/use-fit-height` | packages/ui/src/hooks/use-fit-height.ts |
+| `useFocusInDetail` | `@workspace/ui/hooks/use-focus-in-detail` | packages/ui/src/hooks/use-focus-in-detail.ts |
 | `useFocusReturn` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `useFollowedFields` | `@workspace/ui/hooks/use-followed-fields` | packages/ui/src/hooks/use-followed-fields.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
