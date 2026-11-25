@@ -1,12 +1,13 @@
 // A guest's Remove button shows to a mouse user on the row's hover only, and Tab reaches it and shows it. A guest added
 // by address, in the field a screen reader names Guests, takes their name from the user's contacts, and an address
-// nobody knows is stored with no name at all.
-import { afterAll, expect, mock, test } from 'bun:test';
+// nobody knows is stored with no name at all. Inviting yourself is refused under the field, with no toast.
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Contact } from '@workspace/lib/types/contact';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { toast } from 'sonner';
 
 installHappyDom();
 
@@ -41,6 +42,9 @@ afterAll(() => {
     mock.module('@workspace/lib/public', () => realPublic);
 });
 
+const toastInfo = spyOn(toast, 'info');
+afterAll(() => toastInfo.mockRestore());
+
 const { act, createElement } = await import('react');
 const { AttendeeEditor } = await import('../../components/attendee-editor');
 
@@ -61,6 +65,7 @@ async function addGuest(typed: string): Promise<Attendee[]> {
             onChange: (attendees) => {
                 added = attendees;
             },
+            currentUserEmail: 'Me@example.com',
         }),
     );
     const label = [...document.querySelectorAll('label')].find((each) => each.textContent === 'Guests');
@@ -91,4 +96,14 @@ test('a name typed beside the address is the one stored', async () => {
     expect(await addGuest('Amazing Grace <grace@example.com>')).toEqual([
         { email: 'grace@example.com', name: 'Amazing Grace', status: 'pending', role: 'required' },
     ]);
+});
+
+test('inviting yourself adds no guest, keeps the address and says why under the field, with no toast', async () => {
+    expect(await addGuest('me@example.com')).toEqual([]);
+    const input = document.querySelector<HTMLInputElement>('input#attendee-input');
+    const message = document.querySelector('[data-slot="field-error"]');
+    expect(input?.value).toBe('me@example.com');
+    expect(input?.getAttribute('aria-invalid')).toBe('true');
+    expect(message?.textContent).toBe('You cannot invite yourself');
+    expect(toastInfo).not.toHaveBeenCalled();
 });

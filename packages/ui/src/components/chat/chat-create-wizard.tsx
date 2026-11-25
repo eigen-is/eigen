@@ -131,9 +131,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     // The chat's name falls back to an address's local part only for an address nobody knows.
     const contactInput = useContactInput(({ email, displayName = email.split('@')[0] }) => {
-        if (email === myEmail) return true;
+        if (email === myEmail) return;
         setPicked((prev) => (prev.some((person) => person.email === email) ? prev : [...prev, { email, displayName }]));
-        return true;
     });
 
     // A caller may pass a new array on every render. Its JSON stays the same, so the reset below doesn't run again
@@ -267,6 +266,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                         value={contactInput.value}
                                         onChange={contactInput.handleChange}
                                         onSubmit={contactInput.submit}
+                                        error={contactInput.error}
                                         onEmptyEnter={advanceOrOpen}
                                         excludeEmails={excludeEmails}
                                         placeholder="Add people by name or email…"

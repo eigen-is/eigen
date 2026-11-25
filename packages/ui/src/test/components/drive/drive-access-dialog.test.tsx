@@ -1,5 +1,6 @@
 // The Share dialog lists who has access and saves only what changed, then closes. Save waits for a change, Enter in
-// the contact field adds that person and saves nothing, and a save that fails stays open with the edits kept. Cancel
+// the contact field adds that person and saves nothing, a person already listed is refused under the field, and a
+// save that fails stays open with the edits kept. Cancel
 // waits while a save runs. The lock and the read-only list's header are buttons the keyboard reaches. The owner gets
 // the Share with team menu, and a viewer who may only look gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
@@ -245,6 +246,17 @@ test('Enter in the contact field adds the person and saves nothing', async () =>
     await settle();
     expect(updateACL).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('a person already in the list stays in the field, refused under it', async () => {
+    await open();
+    await addByEnter('ada@example.com');
+    expect(contactField().value).toBe('ada@example.com');
+    expect(contactField().getAttribute('aria-invalid')).toBe('true');
+    expect(dialog()?.querySelector('[data-slot="field-error"]')?.textContent).toBe(
+        'ada@example.com is already in the list',
+    );
+    expect(button('Save')?.disabled).toBe(true);
 });
 
 test('Save sends exactly what changed and closes once it is saved', async () => {

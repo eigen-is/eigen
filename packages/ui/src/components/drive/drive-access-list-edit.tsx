@@ -65,15 +65,14 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
         return emails;
     }, [directList, inheritedList, user?.email]);
 
-    // Rejecting a duplicate returns false so the raw text stays in the field for the user to edit.
     const contactInput = useContactInput((contact) => {
-        if (directList.some((item) => item.id.toLowerCase() === contact.email)) return false;
+        if (directList.some((item) => item.id.toLowerCase() === contact.email))
+            return `${contact.email} is already in the list`;
         setDirectListOverride((prevList) => [
             ...(prevList ?? baseDirectList),
             { id: contact.email, read: true, write: true, owner: false },
         ]);
         setHasChanges(true);
-        return true;
     });
 
     useEffect(() => {
@@ -175,6 +174,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                 value={contactInput.value}
                 onChange={contactInput.handleChange}
                 onSubmit={contactInput.submit}
+                error={contactInput.error}
                 excludeEmails={excludeEmails}
                 className="mt-2"
             />
