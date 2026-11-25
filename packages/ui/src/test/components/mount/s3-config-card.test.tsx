@@ -185,12 +185,13 @@ test('a refused harden closes the dialog, shows its message, and the manual step
 // The card on a form whose save refuses a config the card marks, as Server settings holds it.
 function RefusingForm({ initial, secretSaved }: { initial: S3Config; secretSaved?: boolean }) {
     const [value, setValue] = useState(initial);
-    return createElement(
-        FormShell,
-        { onSubmit: () => false },
-        createElement(S3ConfigCard, { value, onChange: setValue, onCheck, secretSaved }),
-        createElement('button', { type: 'submit' }, 'Save'),
-    );
+    return createElement(FormShell, {
+        onSubmit: (): false => false,
+        children: [
+            createElement(S3ConfigCard, { key: 'card', value, onChange: setValue, onCheck, secretSaved }),
+            createElement('button', { key: 'save', type: 'submit' }, 'Save'),
+        ],
+    });
 }
 
 const input = (label: string) => {
