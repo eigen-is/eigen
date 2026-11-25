@@ -27,6 +27,8 @@ export function ContactAutosuggest({
     id,
     name,
     required,
+    'aria-invalid': ariaInvalid,
+    'aria-describedby': ariaDescribedBy,
     inputRef: externalInputRef,
     onSubmit,
     onEmptyEnter,
@@ -155,6 +157,8 @@ export function ContactAutosuggest({
                 disabled={disabled}
                 autoComplete={autoComplete}
                 required={required}
+                aria-invalid={ariaInvalid}
+                aria-describedby={ariaDescribedBy}
             />
 
             {isOpen && (

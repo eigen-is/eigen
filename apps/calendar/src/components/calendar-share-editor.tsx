@@ -39,10 +39,8 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
     if (user?.email) excludeEmails.push(user.email);
 
     const contactInput = useContactInput(({ email }) => {
-        if (!currentShares.some((s) => s.targetId.toLowerCase() === email.toLowerCase())) {
-            onChange([...currentShares, { targetId: email, permission: 'read' }]);
-        }
-        return true;
+        if (currentShares.some((s) => s.targetId.toLowerCase() === email)) return;
+        onChange([...currentShares, { targetId: email, permission: 'read' }]);
     });
 
     const handlePermissionChange = (targetId: string, permission: string) => {
@@ -63,6 +61,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                 value={contactInput.value}
                 onChange={contactInput.handleChange}
                 onSubmit={contactInput.submit}
+                error={contactInput.error}
                 excludeEmails={excludeEmails}
             />
 

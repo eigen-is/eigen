@@ -16,6 +16,8 @@ export type ContactAutosuggestProps = {
     id?: string;
     name?: string;
     required?: boolean;
+    'aria-invalid'?: boolean;
+    'aria-describedby'?: string;
     inputRef?: Ref<HTMLInputElement>;
     onSubmit?: (value: string) => void;
     // Empty-input Enter runs the caller's primary action instead of a no-op submit.
