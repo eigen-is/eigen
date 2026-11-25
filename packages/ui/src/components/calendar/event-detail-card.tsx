@@ -1,4 +1,4 @@
-// One event as it reads when nobody is editing it, such as a stored occurrence in the calendar's detail dialog or an
+// One event as it reads when nobody is editing it, such as a stored occurrence in the calendar's detail column or an
 // event an .ics file holds in its quick look: its title and time as plain rows, with no block, a meta line the surface
 // may give, such as its calendar, then its place, guests and description, each under its caption. It is data alone:
 // the surface around it owns answering, editing and deleting, and may add sections of its own, such as the reply to

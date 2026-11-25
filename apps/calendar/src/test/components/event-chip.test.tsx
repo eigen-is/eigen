@@ -63,7 +63,7 @@ afterAll(() => {
 const { EventBar, EventChip, LaneGhost, MORE_BUTTON } = await import('../../components/event-chip');
 const { DraftBlock, TimedEventBlock } = await import('../../components/time-grid-block');
 
-const surfaceProps = { calendars: [work], sharedCalendars: [], onClick: () => {} };
+const surfaceProps = { calendars: [work], sharedCalendars: [], onClick: () => {}, openKey: undefined };
 
 async function rootClasses(element: React.ReactElement): Promise<string[]> {
     const { container, unmount } = await renderInDocument(element);

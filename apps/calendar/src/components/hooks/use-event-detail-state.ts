@@ -1,82 +1,75 @@
-// The event-detail selection the calendar views share, such as the month view: the clicked occurrence, the dialog's open
-// flag, the once-only ?eventId deep-link auto-open, and the calendar and owner the dialog needs. The dialog always gets
-// the occurrence as the current list has it, so what it shows and the etag it writes with follow every refetch.
+// Which event the calendar view's detail column shows: the one its URL names, as the current list has it, so what the
+// column shows and the etag it writes with follow every refetch. The URL names an event by its series' id, or by the
+// uid or organizer's id a link carries, and an occurrence of a series by its date; a link with no date opens the
+// occurrence nearest the view's day. While the list lacks it, such as during a save or a refetch, the column keeps the
+// last copy it found. The view route calls it with the URL's pair and the events it loaded.
 
 import { useAuth } from '@workspace/lib/auth';
-import { isFreeBusyEvent } from '@workspace/lib/calendar';
+import { isFreeBusyEvent, isSeriesOccurrence } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { useEffect, useRef, useState } from 'react';
-import { isSameOccurrence } from '../calendar-utils';
+import { useState } from 'react';
+
+export type EventKey = { eventId: string; occurrence?: string };
 
 type UseEventDetailStateOptions = {
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
     sharedCalendars?: readonly SharedCalendar[];
-    initialEventId?: string;
+    open: EventKey | undefined;
+    focus: Date;
 };
 
 type UseEventDetailStateReturn = {
-    handleEventClick: (event: CalendarEventOccurrence, e: React.MouseEvent) => void;
-    detailDialogProps: {
-        open: boolean;
-        onOpenChange: (open: boolean) => void;
-        event: CalendarEventOccurrence | null;
-        calendar: CalendarItem | null;
-        sharedCalendar: SharedCalendar | null;
-        ownerId: string;
-    };
+    event: CalendarEventOccurrence | null;
+    calendar: CalendarItem | null;
+    sharedCalendar: SharedCalendar | null;
+    // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
+    ownerId: string;
 };
+
+export function eventKey(event: CalendarEventOccurrence): EventKey {
+    return {
+        eventId: event.parentEventId || event.id,
+        occurrence: isSeriesOccurrence(event) ? event.occurrenceDate : undefined,
+    };
+}
 
 export function useEventDetailState({
     events,
     calendars,
     sharedCalendars,
-    initialEventId,
+    open,
+    focus,
 }: UseEventDetailStateOptions): UseEventDetailStateReturn {
     const { user } = useAuth();
-    const [clicked, setClicked] = useState<CalendarEventOccurrence | null>(null);
-    const [detailOpen, setDetailOpen] = useState(false);
+    const [kept, setKept] = useState<CalendarEventOccurrence | null>(null);
 
-    // Gone from the list, it stays on screen as clicked: a save of two writes is still running, or the event left this
-    // view, and the next write's answer says what became of it.
-    const current = clicked && events.find((e) => isSameOccurrence(e, clicked));
-    const selectedEvent = current ?? clicked;
+    let found: CalendarEventOccurrence | null = null;
+    for (const e of events) {
+        if (!open || isFreeBusyEvent(e) || !isNamedBy(e, open)) continue;
+        if (!found || distance(e, focus) < distance(found, focus)) found = e;
+    }
+    if (found && found !== kept) setKept(found);
+    const event = found ?? (kept && open && isNamedBy(kept, open) ? kept : null);
 
-    const didAutoOpen = useRef(false);
-    useEffect(() => {
-        if (!initialEventId || events.length === 0 || didAutoOpen.current) return;
-        const match = events.find(
-            (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
-        );
-        if (match && !isFreeBusyEvent(match)) {
-            didAutoOpen.current = true;
-            setClicked(match);
-            setDetailOpen(true);
-        }
-    }, [initialEventId, events]);
+    const calendar = event ? (calendars.find((c) => c.id === event.calendarId) ?? null) : null;
+    const sharedCalendar =
+        event && !calendar ? (sharedCalendars?.find((s) => s.calendarId === event.calendarId) ?? null) : null;
 
-    const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isFreeBusyEvent(event)) return;
-        setClicked(event);
-        setDetailOpen(true);
-    };
+    return { event, calendar, sharedCalendar, ownerId: sharedCalendar?.ownerUserId ?? user?.id ?? '' };
+}
 
-    const selectedCalendar = selectedEvent ? calendars.find((c) => c.id === selectedEvent.calendarId) || null : null;
-    const selectedSharedCalendar =
-        selectedEvent && !selectedCalendar
-            ? sharedCalendars?.find((s) => s.calendarId === selectedEvent.calendarId) || null
-            : null;
+// An occurrence stays itself through a new override, which carries its series as the parent and keeps its date, and a
+// lone event, or a series whose rule went, stays itself on any date.
+function isNamedBy(event: CalendarEventOccurrence, { eventId, occurrence }: EventKey): boolean {
+    const named =
+        event.id === eventId ||
+        event.parentEventId === eventId ||
+        event.uid === eventId ||
+        event.data?.organizerEventId === eventId;
+    return named && (!occurrence || !isSeriesOccurrence(event) || event.occurrenceDate === occurrence);
+}
 
-    return {
-        handleEventClick,
-        detailDialogProps: {
-            open: detailOpen,
-            onOpenChange: setDetailOpen,
-            event: selectedEvent,
-            calendar: selectedCalendar,
-            sharedCalendar: selectedSharedCalendar,
-            ownerId: selectedSharedCalendar?.ownerUserId ?? user?.id ?? '',
-        },
-    };
+function distance(event: CalendarEventOccurrence, focus: Date): number {
+    return Math.abs(event.startTime.getTime() - focus.getTime());
 }

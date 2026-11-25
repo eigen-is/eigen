@@ -157,12 +157,15 @@ const { MonthView } = await import('../../components/month-view');
 const { TimeGrid } = await import('../../components/time-grid');
 
 const WEEK = viewDays('week', at(14, 0));
+// What a click hands the route, which opens the event's detail.
+const opened = mock((_event: CalendarEventOccurrence) => {});
+const openedTitles = () => opened.mock.calls.map(([event]) => event.title);
 const OCTOBER = at(1, 0);
 // The list as a view gets it, with a free/busy block a shared calendar adds.
 function Page({ month }: { month: boolean }) {
     const { data = [] } = useEvents(USER, 1, 2);
     const events = [...data, freeBusy];
-    const props = { events, calendars: [work], sharedCalendars: [busyShare] };
+    const props = { events, calendars: [work], sharedCalendars: [busyShare], onEventClick: opened, openKey: undefined };
     return month
         ? createElement(MonthView, { focus: OCTOBER, ...props, onDayClick: () => {} })
         : createElement(TimeGrid, { days: WEEK, ...props, onCreateEvent: () => {} });
@@ -183,6 +186,7 @@ beforeEach(() => {
     server.writes = [];
     server.held = Promise.resolve();
     toasts.length = 0;
+    opened.mockClear();
 });
 
 const settle = () =>
@@ -288,7 +292,7 @@ test("a block's lines stack from its top, as Google draws them", async () => {
 test('a press that never travels opens the detail and saves nothing', async () => {
     await open([review]);
     await drag(block('Review'), tuesday(10.2), tuesday(10.2));
-    expect(dialogTitles()).toEqual(['Review']);
+    expect(openedTitles()).toEqual(['Review']);
     expect(server.writes).toEqual([]);
 });
 
@@ -446,7 +450,8 @@ test("a free/busy block and someone else's invitation don't drag, and the invita
     await drag(block('Offsite'), tuesday(10.2), tuesday(12.2));
     expect(shown('Offsite').length).toBe(1);
     expect(server.writes).toEqual([]);
-    expect(dialogTitles()).toEqual(['Offsite']);
+    // The route opens nothing for the free/busy block's click.
+    expect(openedTitles()).toEqual(['Busy', 'Offsite']);
 });
 
 test("a finger doesn't drag: its tap opens the detail", async () => {
@@ -457,7 +462,7 @@ test("a finger doesn't drag: its tap opens the detail", async () => {
     });
     expect(blocks).toBe(1);
     expect(server.writes).toEqual([]);
-    expect(dialogTitles()).toEqual(['Review']);
+    expect(openedTitles()).toEqual(['Review']);
 });
 
 // The month starts on Monday 28 September, so 13 October is the third row's second day.

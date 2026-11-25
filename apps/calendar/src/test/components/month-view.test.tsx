@@ -98,6 +98,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = a
 const { MonthView } = await import('../../components/month-view');
 
 const onDayClick = mock((_date: Date) => {});
+const onEventClick = mock((_event: CalendarEventOccurrence) => {});
 const realRect = HTMLElement.prototype.getBoundingClientRect;
 // A week row of 116px holds four lanes under its dates.
 let rowHeight = 116;
@@ -108,6 +109,7 @@ let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     onDayClick.mockClear();
+    onEventClick.mockClear();
     resizeCallbacks.length = 0;
     rowHeight = 116;
     HTMLElement.prototype.getBoundingClientRect = realRect;
@@ -121,6 +123,8 @@ async function renderMonth(events: CalendarEventOccurrence[]) {
             calendars: [work],
             sharedCalendars: [],
             onDayClick,
+            onEventClick,
+            openKey: undefined,
         });
     const router = createRouter({
         routeTree: createRootRoute({ component: month }),
@@ -213,5 +217,5 @@ test('an event picked from the list opens its detail and closes the list', async
     });
     expect(onDayClick).not.toHaveBeenCalled();
     expect(popover()).toBeNull();
-    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Drinks');
+    expect(onEventClick.mock.calls.map(([event]) => event.title)).toEqual(['Drinks']);
 });

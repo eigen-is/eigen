@@ -1,6 +1,6 @@
 // Two clients on one event, through the real hooks and dialogs against a server stub that judges etags as the API does.
 // A write on a stale etag is refused, says so, and the next try goes through on what was reloaded, with the dialog still
-// open. Edit event keeps what was typed and follows the rest: a refetch moves only the fields nobody touched, and typed
+// open. A save keeps the detail column open on the saved event, and a delete closes it. Edit event keeps what was typed and follows the rest: a refetch moves only the fields nobody touched, and typed
 // edits can't overwrite a change unseen. So a guest's reply costs a form nothing, and a second Save doesn't revert it. A
 // save of two writes sends the second with the etag the first answered, and a cross-home redo copies all of the form.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
@@ -184,17 +184,19 @@ afterAll(() => {
 });
 
 const { useQueryClient } = await import('@tanstack/react-query');
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { invalidateEventList, useEvents } = await import('@workspace/lib/calendar');
-const { EventDetailDialog } = await import('../../components/event-detail-dialog');
-const { useEventDetailState } = await import('../../components/hooks/use-event-detail-state');
+const { EventDetail } = await import('../../components/event-detail');
+const { eventKey, useEventDetailState } = await import('../../components/hooks/use-event-detail-state');
+type EventKey = ReturnType<typeof eventKey>;
 
-// What a calendar view does around the dialog. The hidden button stands for clicking the event, and the other for the
-// stream's refetch after a change elsewhere.
+// What the view route does around the column, with the URL's pair in state. The hidden button stands for clicking the
+// event, and the other for the stream's refetch after a change elsewhere.
 function CalendarPage() {
     const queryClient = useQueryClient();
     const { data: events = [] } = useEvents(USER, 1, 2);
-    const { handleEventClick, detailDialogProps } = useEventDetailState({ events, calendars: [work, personal] });
+    const [open, setOpen] = useState<EventKey>();
+    const detail = useEventDetailState({ events, calendars: [work, personal], open, focus: dentist.startTime });
     const first = events[0];
     return createElement(
         'div',
@@ -203,14 +205,16 @@ function CalendarPage() {
             createElement('button', {
                 type: 'button',
                 'data-testid': 'event',
-                onClick: (e: React.MouseEvent) => handleEventClick(first, e),
+                onClick: () => setOpen(eventKey(first)),
             }),
         createElement('button', {
             type: 'button',
             'data-testid': 'refetch',
             onClick: () => invalidateEventList(queryClient, USER),
         }),
-        createElement(EventDetailDialog, detailDialogProps),
+        open &&
+            detail.event &&
+            createElement(EventDetail, { ...detail, event: detail.event, onClose: () => setOpen(undefined) }),
     );
 }
 
@@ -235,10 +239,12 @@ const clickTestId = async (id: string) => {
     await settle();
 };
 const refetch = () => clickTestId('refetch');
+// The detail column's heading: the event it shows, or undefined once it closed.
+const columnTitle = () => document.querySelector('[data-slot="detail-column"] h2')?.textContent;
 const dialogButton = (name: string) => {
-    const found = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-        (button) => button.textContent === name || button.getAttribute('aria-label') === name,
-    );
+    const found = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button, [data-slot="detail-column"] button'),
+    ].find((button) => button.textContent === name || button.getAttribute('aria-label') === name);
     if (!found) throw new Error(`no dialog has a button named ${name}`);
     return found;
 };
@@ -316,13 +322,14 @@ test('a delete refused on a stale etag says so, and the same open dialog then de
         { write: 'delete', etag: 'v2' },
     ]);
     expect(dialogTitles()).toEqual([]);
+    expect(columnTitle()).toBeUndefined();
 });
 
-test('the panel shows and deletes the event as the latest refetch has it', async () => {
+test('the column shows and deletes the event as the latest refetch has it', async () => {
     await openPanel();
     changeElsewhere('Dentist, moved by a colleague');
     await refetch();
-    expect(dialogTitles()).toEqual(['Dentist, moved by a colleague']);
+    expect(columnTitle()).toBe('Dentist, moved by a colleague');
 
     await click('Delete event');
     await click('Delete');
@@ -340,6 +347,7 @@ test('a refetch that changes nothing keeps typed edits, and Save sends them', as
     expect(server.writes).toEqual([{ write: 'update', etag: 'v1' }]);
     expect(server.event.title).toBe('Dentist at noon');
     expect(dialogTitles()).toEqual([]);
+    expect(columnTitle()).toBe('Dentist at noon');
 });
 
 test('a change elsewhere keeps typed edits on screen, but saving them over it is refused', async () => {

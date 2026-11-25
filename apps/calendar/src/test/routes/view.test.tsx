@@ -85,7 +85,14 @@ const calendars = {
     data: [calendar('personal', 'Personal', true), calendar('work', 'Work', true), calendar('hidden', 'Hidden', false)],
 };
 const sharedCalendars = { data: [shared] };
-const ownEvents: { data: CalendarEventOccurrence[]; isLoading: boolean } = { data: [], isLoading: false };
+let ownEvents: { data: CalendarEventOccurrence[]; isLoading: boolean } = { data: [], isLoading: false };
+// A refetch: the route reads the list through a store, so a new answer renders it again.
+const listeners = new Set<() => void>();
+const refetchOwnEvents = (data: CalendarEventOccurrence[]) =>
+    act(async () => {
+        ownEvents = { ...ownEvents, data };
+        for (const listener of listeners) listener();
+    });
 const sharedEvents = { data: [event({ title: 'Team sync', calendarId: 'team-cal', startTime: at(14, 9) })] };
 const createEvent = { mutateAsync: mock(async (_input: CreateEventInput) => {}), isPending: false };
 const createOwners: string[] = [];
@@ -99,7 +106,14 @@ mock.module('@workspace/lib/calendar', () => ({
     ...realCalendar,
     useCalendars: () => calendars,
     useSharedCalendars: () => sharedCalendars,
-    useEvents: () => ownEvents,
+    useEvents: () =>
+        useSyncExternalStore(
+            (listener) => {
+                listeners.add(listener);
+                return () => listeners.delete(listener);
+            },
+            () => ownEvents,
+        ),
     useAllSharedCalendarEvents: () => sharedEvents,
     useCreateEvent: (ownerId: string) => {
         createOwners.push(ownerId);
@@ -112,7 +126,7 @@ afterAll(() => {
     mock.module('@workspace/lib/calendar', () => realCalendar);
 });
 
-const { act, createElement } = await import('react');
+const { act, createElement, useSyncExternalStore } = await import('react');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { routeTree } = await import('../../routeTree.gen');
 
@@ -127,8 +141,7 @@ const auth = {
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
-    ownEvents.data = [];
-    ownEvents.isLoading = false;
+    ownEvents = { data: [], isLoading: false };
     createEvent.mutateAsync.mockClear();
     deleteEvent.mutateAsync.mockClear();
     createOwners.length = 0;
@@ -157,6 +170,11 @@ async function open(url = OCTOBER) {
         container: rendered.container,
         path: () => router.state.location.pathname,
         search: () => router.state.location.search,
+        index: () => router.history.location.state.__TSR_index,
+        back: async () => {
+            await act(async () => router.history.back());
+            await settle();
+        },
     };
 }
 
@@ -173,6 +191,12 @@ const pills = (container: HTMLElement) =>
     [...container.querySelectorAll('.grid-cols-7 [title]')].map((pill) => pill.getAttribute('title'));
 const pill = (container: HTMLElement, title: string) => container.querySelector(`[title="${title}"]`);
 const dialogTitle = () => document.querySelector('[role="dialog"] h2')?.textContent;
+// A back settles on the history's next tick, then the router loads the entry it lands on.
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+// The detail column at the right, its event's title, and a button of its bar by name.
+const detail = () => document.querySelector('[data-slot="detail-column"]');
+const detailTitle = () => detail()?.querySelector('h2')?.textContent;
+const barButton = (name: string) => detail()?.querySelector(`button[aria-label="${name}"]`);
 const button = (label: string) =>
     [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === label);
 
@@ -246,14 +270,14 @@ test("a deep link opens the event it names, by its organizer's id too", async ()
         event({ title: 'Review', startTime: at(22, 14), data: { organizerEventId: 'organizer-event-1' } }),
     ];
     await open(`${OCTOBER}?eventId=organizer-event-1`);
-    expect(dialogTitle()).toBe('Review');
+    expect(detailTitle()).toBe('Review');
 });
 
 test('a free/busy block opens no detail', async () => {
     ownEvents.data = [event({ id: '', title: 'Busy until 10:00', startTime: at(22, 9) })];
     const { container } = await open();
     await click(pill(container, 'Busy until 10:00'));
-    expect(dialogTitle()).toBeUndefined();
+    expect(detail()).toBeNull();
 });
 
 test('deleting one occurrence of a series cancels that day and keeps the series', async () => {
@@ -262,7 +286,7 @@ test('deleting one occurrence of a series cancels that day and keeps the series'
     ];
     const { container } = await open();
     await click(pill(container, 'Weekly'));
-    await click(document.querySelector('[role="dialog"] .lucide-trash-2')?.closest('button'));
+    await click(barButton('Delete event'));
     expect(dialogTitle()).toBe('Delete recurring event');
     await click(button('OK'));
 
@@ -532,7 +556,7 @@ test("a click on a schedule row opens the event's detail", async () => {
     ownEvents.data = [event({ title: 'Review', startTime: at(22, 14) })];
     await open('/view/schedule/2026-10-13');
     await click(scheduleRow('Review'));
-    expect(dialogTitle()).toBe('Review');
+    expect(detailTitle()).toBe('Review');
 });
 
 test('a schedule with no events in its 28 days says nothing is planned', async () => {
@@ -558,7 +582,14 @@ test('the start page opens a week on the linked day, and the event it names', as
     const { path, search } = await open('/?date=2026-10-22&eventId=organizer-event-1');
     expect(path()).toBe('/view/week/2026-10-22');
     expect(search()).toEqual({ eventId: 'organizer-event-1' });
-    expect(dialogTitle()).toBe('Review');
+    expect(detailTitle()).toBe('Review');
+});
+
+test('the start page keeps the occurrence a link names', async () => {
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { path, search } = await open('/?date=2026-10-14&eventId=Weekly&occurrence=2026-10-16');
+    expect(path()).toBe('/view/week/2026-10-14');
+    expect(search()).toEqual({ eventId: 'Weekly', occurrence: '2026-10-16' });
 });
 
 test('the start page opens today without a date, and on a phone 3 days', async () => {
@@ -653,8 +684,106 @@ test("a click on a block opens the event's detail", async () => {
     ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
     const { container } = await open('/view/day/2026-10-13');
     await click(pill(container, 'Review'));
-    expect(dialogTitle()).toBe('Review');
+    expect(detailTitle()).toBe('Review');
 });
+
+// Two occurrences of a weekly series in the week of 12 October.
+const weekly = (day: number) =>
+    event({ title: 'Weekly', startTime: at(day, 9), rrule: 'FREQ=WEEKLY', occurrenceDate: `2026-10-${day}` });
+const weeklyBlocks = (container: HTMLElement) => [...container.querySelectorAll('[title="Weekly"]')];
+const ringed = (element: Element | undefined) => element?.classList.contains('ring-2');
+
+test('a click on an occurrence names it in the URL, opens it in the column and rings its block', async () => {
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { container, search } = await open('/view/week/2026-10-14');
+    expect(weeklyBlocks(container).map(ringed)).toEqual([false, false]);
+    await click(weeklyBlocks(container)[1]);
+    expect(search()).toEqual({ eventId: 'Weekly', occurrence: '2026-10-16' });
+    expect(detailTitle()).toBe('Weekly');
+    expect(weeklyBlocks(container).map(ringed)).toEqual([false, true]);
+});
+
+test('X after a click closes the column by going back, and back after a click closes it too', async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+    const { container, search, index, back } = await open('/view/day/2026-10-13');
+    await click(pill(container, 'Review'));
+    expect([search(), index()]).toEqual([{ eventId: 'Review' }, 1]);
+
+    await click(barButton('Close'));
+    await settle();
+    expect(detail()).toBeNull();
+    expect([search(), index()]).toEqual([{}, 0]);
+
+    await click(pill(container, 'Review'));
+    await back();
+    expect(detail()).toBeNull();
+    expect(search()).toEqual({});
+});
+
+test('X on a deep link replaces its entry and clears the event from the URL', async () => {
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { search, index } = await open('/view/week/2026-10-14?eventId=Weekly&occurrence=2026-10-13');
+    expect(detailTitle()).toBe('Weekly');
+    await click(barButton('Close'));
+    expect(detail()).toBeNull();
+    expect([search(), index()]).toEqual([{}, 0]);
+});
+
+test('a link with no date on a series opens the occurrence nearest the view day and writes its date', async () => {
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { container, search, index } = await open('/view/week/2026-10-16?eventId=Weekly');
+    expect([search(), index()]).toEqual([{ eventId: 'Weekly', occurrence: '2026-10-16' }, 0]);
+    expect(weeklyBlocks(container).map(ringed)).toEqual([false, true]);
+});
+
+test("an event the view doesn't hold says so, and the column stays until X", async () => {
+    const { search } = await open('/view/week/2026-10-21?eventId=Weekly');
+    expect(detail()?.textContent).toContain("This event isn't in this view");
+    expect(search()).toEqual({ eventId: 'Weekly' });
+    await click(barButton('Close'));
+    expect(detail()).toBeNull();
+});
+
+test('while the events load the column waits with its X', async () => {
+    ownEvents.isLoading = true;
+    await open('/view/week/2026-10-14?eventId=Weekly');
+    expect(detail()?.textContent).not.toContain("This event isn't in this view");
+    expect(barButton('Close')).not.toBeNull();
+});
+
+test('a refetch that no longer holds the open event keeps it in the column', async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+    const { container } = await open('/view/day/2026-10-13');
+    await click(pill(container, 'Review'));
+    await refetchOwnEvents([]);
+    expect(pill(container, 'Review')).toBeNull();
+    expect(detailTitle()).toBe('Review');
+});
+
+test('deleting the open event closes the column', async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+    const { container, search } = await open('/view/day/2026-10-13');
+    await click(pill(container, 'Review'));
+    await click(barButton('Delete event'));
+    await click(button('Delete'));
+    expect(deleteEvent.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(detail()).toBeNull();
+    expect(search()).toEqual({});
+});
+
+test('on a phone the event covers the grid, which stays mounted under it, and the lone back closes it', () =>
+    onPhone(async () => {
+        ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+        const { container } = await open('/view/day/2026-10-13');
+        const grid = dayColumn(container);
+        await click(pill(container, 'Review'));
+        expect(detailTitle()).toBe('Review');
+        expect(grid.closest('.hidden')).not.toBeNull();
+
+        await click(barButton('Back'));
+        expect(detail()).toBeNull();
+        expect([grid.isConnected, grid === dayColumn(container), grid.closest('.hidden')]).toEqual([true, true, null]);
+    }));
 
 test('a declined invitation is struck through', async () => {
     ownEvents.data = [

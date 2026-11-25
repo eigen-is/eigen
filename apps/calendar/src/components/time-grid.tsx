@@ -1,8 +1,8 @@
 // The Calendar app's day, 3-day and week views: a column per day under its date, an all-day lane of bars across their
 // days, and a scrolling day of hours with each timed event as a block at its minutes, side by side where they overlap.
-// A click on an event opens its detail, and a click or a mouse or pen drag on empty time asks the route to open New
-// event there. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a bar to
-// other days, and the drop saves it; the route picks the days and the events.
+// A click on an event asks the route to open its detail, and a click or a mouse or pen drag on empty time asks it to
+// open New event there. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a
+// bar to other days, and the drop saves it; the route picks the days, the events and the one it has open.
 
 import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';
@@ -29,10 +29,9 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cellAt, isDragPointer } from './calendar-utils';
 import type { NewEventTimes } from './create-event-dialog';
+import type { EventSurfaceProps } from './event-chip';
 import { EventBar, LaneGhost, MORE_BUTTON } from './event-chip';
-import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
-import { useEventDetailState } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
 import { useViewDrag } from './hooks/use-view-drag';
 import { atMinutes, DraftBlock, HOUR_HEIGHT, minutesToPx, TimedEventBlock } from './time-grid-block';
@@ -42,7 +41,8 @@ type TimeGridProps = {
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
     sharedCalendars: readonly SharedCalendar[];
-    initialEventId?: string;
+    onEventClick: EventSurfaceProps['onClick'];
+    openKey: string | undefined;
     onCreateEvent: (times: NewEventTimes) => void;
 };
 
@@ -59,13 +59,15 @@ const NUDGE_EDGE_PX = 24;
 const NUDGE_STEP_PX = 6;
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => formatTime(new Date(2026, 0, 1, hour)));
 
-export function TimeGrid({ days, events, calendars, sharedCalendars, initialEventId, onCreateEvent }: TimeGridProps) {
-    const { handleEventClick, detailDialogProps } = useEventDetailState({
-        events,
-        calendars,
-        sharedCalendars,
-        initialEventId,
-    });
+export function TimeGrid({
+    days,
+    events,
+    calendars,
+    sharedCalendars,
+    onEventClick,
+    openKey,
+    onCreateEvent,
+}: TimeGridProps) {
     const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
     const [allDayExpanded, setAllDayExpanded] = useState(false);
     const [now, setNow] = useState(() => new Date());
@@ -110,7 +112,7 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
     const todayIndex = days.findIndex((day) => toLocalDateString(day) === todayKey);
     const nowTop = minutesToPx(now.getHours() * 60 + now.getMinutes());
     const columns = { gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` };
-    const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
+    const surfaceProps = { calendars, sharedCalendars, onClick: onEventClick, openKey };
     const draftColor = defaultCalendar(calendars)?.color ?? DEFAULT_CALENDAR_COLOR;
 
     const createTimed = (dayIdx: number, top: number, bottom: number) =>
@@ -385,7 +387,6 @@ export function TimeGrid({ days, events, calendars, sharedCalendars, initialEven
                 </div>
             </div>
 
-            <EventDetailDialog {...detailDialogProps} />
             {dropHostProps && <EventDropHost {...dropHostProps} />}
         </>
     );
