@@ -19,7 +19,7 @@ Start from the calendar the events should go into, the same way you import conta
 2. Hover over its name and click the **⋮** button on the right.
 3. Click **Import events…**. The **Import events** dialog opens.
 4. Pick the file in one of two ways:
-   - Click **Upload from device**, then choose an `.ics` file from your computer.
+   - Click **Upload from device**, then choose an `.ics` file from your computer. On a phone, the button shows only its icon.
    - Or browse your Drive, click an `.ics` file, and click **Import**.
 
 An **Importing events** dialog shows while the file imports. When it closes, the events are in your calendar, and a message tells you what happened, for example "Imported 12 events. 3 were already in your calendars."

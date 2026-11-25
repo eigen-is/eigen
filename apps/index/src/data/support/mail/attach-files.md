@@ -6,7 +6,7 @@ category: Writing
 tags: [mail, attachments, files, drive, compose]
 related: [drive/share-a-file]
 order: 100
-updated: 2026-09-13
+updated: 2026-11-25
 ---
 
 You can send files with your email, either from your computer or straight from your Drive. This page shows how to add them, where they appear, and how to take one off again before you send.
@@ -16,7 +16,7 @@ Start a new email with the **Compose** button at the top of the sidebar, or open
 ## Attach a file from your computer
 
 1. In the composer toolbar, click the paperclip button (**Attach file**).
-2. In the **Attach file** dialog, click **Upload from device** at the bottom.
+2. In the **Attach file** dialog, click **Upload from device** at the bottom. On a phone, the button shows only its icon.
 3. Pick one or more files in the chooser that opens, then confirm.
 
 The files appear as chips just above the message, where you write your text. You can keep adding more the same way.
