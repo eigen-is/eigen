@@ -1,9 +1,10 @@
 // The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
 // writes the column into the board's document.
 
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { useState } from 'react';
-import { ColumnTitleField } from './column-title-field';
 
 type AddColumnDialogProps = {
     open: boolean;
@@ -30,7 +31,13 @@ function AddColumnForm({ onAddColumn }: Pick<AddColumnDialogProps, 'onAddColumn'
 
     return (
         <FormDialogForm changed={title !== ''} submitLabel="Add column" onSubmit={handleSubmit}>
-            <ColumnTitleField value={title} onChange={setTitle} placeholder="Enter column title" />
+            <RequiredTextField
+                label="Title"
+                value={title}
+                onChange={setTitle}
+                placeholder="Enter column title"
+                message={FIELD_MESSAGES.titleMissing}
+            />
         </FormDialogForm>
     );
 }
