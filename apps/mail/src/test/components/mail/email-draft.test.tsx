@@ -87,15 +87,7 @@ async function openComposer(email: EmailDraftType | null) {
         filePickerOpen: false,
         onFilePickerOpenChange: () => {},
     });
-    // The composer lives under a route, as in the app.
-    const router = createRouter({
-        routeTree: createRootRoute({ component: () => composer }),
-        history: createMemoryHistory(),
-    });
-    await router.load();
-    ({ unmount } = await renderInDocument(
-        createElement(AuthProvider, null, createElement(RouterProvider, { router })),
-    ));
+    await renderUnderRoute(composer);
     await act(async () => {});
     return fetched.filter((url) => url.includes('/attachment/0/menu.pdf'));
 }
