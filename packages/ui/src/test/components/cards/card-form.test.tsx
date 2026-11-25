@@ -1,12 +1,13 @@
 // The card form tells its host whether it changed, so the host's Esc knows when to ask, and a value typed back to what
-// it was counts as no change. Its Description is a named field that shows its placeholder.
+// it was counts as no change. It compares with what it opened with, so a value the host learns late, such as the
+// card's assignee, is no change and Save leaves it alone. Its Description is a named field that shows its placeholder.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { CardForm } = await import('../../../components/cards/card-form');
 
 const titleField = () => {
@@ -68,4 +69,31 @@ test('Description is named by its label and shows its placeholder', async () => 
     const label = document.getElementById(editor?.getAttribute('aria-labelledby') ?? '');
     expect(label?.textContent).toBe('Description');
     expect(editor?.getAttribute('data-placeholder')).toBe('Add details');
+});
+
+test('an assignee the host learns after the edit opened is no change, and Save leaves it alone', async () => {
+    const onChangedChange = mock((_changed: boolean) => {});
+    const onSave = mock((..._args: unknown[]) => {});
+    let learn = (_assignee: string) => {};
+    function LateEntry() {
+        const [assignee, setAssignee] = useState<string | null>(null);
+        learn = setAssignee;
+        return createElement(CardForm, {
+            mode: 'edit',
+            initialTitle: 'Audit card',
+            initialAssignee: assignee,
+            onSave,
+            pending: false,
+            onCancel: () => {},
+            onChangedChange,
+        });
+    }
+    await renderInDocument(createElement(LateEntry));
+    await act(async () => learn('ada@example.org'));
+    expect(onChangedChange.mock.calls.at(-1)?.[0]).toBe(false);
+    await typeTitle('Audit card, checked');
+    const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
+    await act(async () => save?.click());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[2]).toBeUndefined();
 });

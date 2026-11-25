@@ -81,25 +81,34 @@ export function CardForm({
     placeholderDescription = 'Enter description',
     submitLabel = 'Save',
 }: CardFormProps) {
-    const [title, setTitle] = useState(initialTitle);
-    const [description, setDescription] = useState(initialDescription);
-    const [color, setColor] = useState(initialColor);
-    const [assignee, setAssignee] = useState<string | null>(initialAssignee);
-    const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
+    // What the form opened with. A value the host learns later, such as the card's assignee, leaves an open edit alone,
+    // or a fresh edit would read as changed and its Save would undo what the host learned.
+    const [initial] = useState(() => ({
+        title: initialTitle,
+        description: initialDescription,
+        color: initialColor,
+        assignee: initialAssignee,
+        attachments: initialAttachments,
+    }));
+    const [title, setTitle] = useState(initial.title);
+    const [description, setDescription] = useState(initial.description);
+    const [color, setColor] = useState(initial.color);
+    const [assignee, setAssignee] = useState(initial.assignee);
+    const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initial.attachments);
     const [pickerOpen, setPickerOpen] = useState(false);
     // The editor rewrites a plain-text description as HTML as it loads. A save with no edits compares against that
     // form, or it would write the rewrite back.
-    const [loadedDescription, setLoadedDescription] = useState(initialDescription);
+    const [loadedDescription, setLoadedDescription] = useState(initial.description);
     const descriptionLabelId = useId();
 
     // Edit mode seeds the drafts with the card's own attachments, so comparing by identity finds any change.
     const draftsChanged =
-        drafts.length !== initialAttachments.length || drafts.some((d, i) => d !== initialAttachments[i]);
+        drafts.length !== initial.attachments.length || drafts.some((d, i) => d !== initial.attachments[i]);
     const changed =
-        title !== initialTitle ||
+        title !== initial.title ||
         description !== loadedDescription ||
-        color !== initialColor ||
-        assignee !== initialAssignee ||
+        color !== initial.color ||
+        assignee !== initial.assignee ||
         draftsChanged;
     useEffect(() => {
         onChangedChange?.(changed);
@@ -122,11 +131,11 @@ export function CardForm({
             if (drafts.length > 0) attachments = drafts;
             assigneeArg = assignee ?? undefined;
         } else {
-            if (title !== initialTitle) patch.title = title;
+            if (title !== initial.title) patch.title = title;
             if (description !== loadedDescription) patch.description = description;
-            if (color !== initialColor) patch.color = color;
+            if (color !== initial.color) patch.color = color;
             if (draftsChanged) attachments = drafts;
-            assigneeArg = assignee !== initialAssignee ? assignee : undefined;
+            assigneeArg = assignee !== initial.assignee ? assignee : undefined;
         }
         return onSave(patch, attachments, assigneeArg);
     };
@@ -151,7 +160,7 @@ export function CardForm({
                         <Label id={descriptionLabelId}>Description</Label>
                         <div className="rounded-md border border-input bg-transparent px-3 py-2 text-sm focus-within:ring-[3px] focus-within:ring-ring/50">
                             <LightEditor
-                                content={initialDescription}
+                                content={initial.description}
                                 onChange={setDescription}
                                 onReady={({ html }) => {
                                     setLoadedDescription(html);
