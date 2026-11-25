@@ -38,6 +38,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
+- **Saving a contact twice** — pressing Enter twice on New contact or Edit contact no longer creates the contact twice
+- **Change password in Space** — it can't be sent twice, a refused change leaves no error behind, and the "at least 8 characters" message clears once the password is long enough
+- **Drafts in Mail** — closing or reloading the tab before the last change of a draft is saved asks first
+- **Sheet names in Sheets** — a blank or spaces-only name is refused and the old name stays
+- **Leaving a text file in Drive** — leaving the text or markdown editor with unsaved edits asks "Discard changes?", from a sidebar link, Back, a reload, a closed tab or while a save is still running. Edits typed during a save are no longer marked saved
+- **Mentions and commands in Chat** — Escape closes the list and keeps what you typed, in comment threads too
 - **Refused imports and downloads** — when Eigen refuses an import or a download in Calendar, Contacts, Mail, Docs, Sheets or Slides, the message gives its reason instead of raw code
 - **Guest sign-in** — when a guest's code is wrong or can't be sent, the sign-in page says why instead of showing raw code or only "Verification failed"
 - **Deleting a comment in Docs** — **Delete comment** in the menu of an image, chart, text box, table or equation asks first, as every other comment menu does
