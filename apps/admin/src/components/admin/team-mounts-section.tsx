@@ -69,7 +69,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                 onS3Check={handleS3Check}
                 onS3Harden={handleS3Harden}
                 title="Add mount"
-                submitLabel="Create mount"
+                submitLabel="Create"
                 defaultStorageType={serverSettings && mapStorageType(serverSettings.defaults.mount.storageType)}
                 defaultMaxSizeMB={serverSettings?.quotas.defaultMountMaxSizeMB}
                 defaultS3Config={serverSettings?.defaults.mount.s3Config}
@@ -89,7 +89,7 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                         s3Config: editing.mount.s3Config,
                     }}
                     title="Edit mount"
-                    submitLabel="Save changes"
+                    submitLabel="Save"
                     isEdit
                 />
             )}
