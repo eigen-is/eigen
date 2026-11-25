@@ -1,11 +1,11 @@
 // The two fields every link dialog shares, such as the Sheets cell link's and the Docs text link's: the text the link
-// shows and the address it opens. The address field says so under itself when webLinkHref refuses what was typed, or
-// when it is empty once the form's button was pressed, and each dialog keeps its own button and what it stores.
+// shows and the address it opens. The address field says so under itself when webLinkHref refuses what was typed, and
+// each dialog keeps its own OK and what it stores.
 
 import { webLinkHref } from '@workspace/lib/validation';
 import { useId } from 'react';
+import { cn } from '../lib/utils';
 import { Field, FieldError, FieldLabel } from './field';
-import { useFormSubmitted } from './form-shell';
 import { Input } from './input';
 
 type LinkFieldProps = {
@@ -31,7 +31,6 @@ export function LinkTextField({ value, onValueChange, autoFocus, disabled }: Lin
 }
 
 export function LinkAddressField({ value, onValueChange, autoFocus }: LinkFieldProps) {
-    const missing = useFormSubmitted() && value.trim() === '';
     const refused = value.trim() !== '' && webLinkHref(value) == null;
     const refusalId = useId();
     return (
@@ -40,14 +39,13 @@ export function LinkAddressField({ value, onValueChange, autoFocus }: LinkFieldP
             <Input
                 id="link-address"
                 autoFocus={autoFocus}
-                aria-invalid={refused || missing}
-                aria-describedby={refused || missing ? refusalId : undefined}
+                aria-describedby={refused ? refusalId : undefined}
+                className={cn(refused && 'border-destructive')}
                 spellCheck="false"
                 value={value}
                 onChange={(e) => onValueChange(e.target.value)}
             />
             {refused && <FieldError id={refusalId}>Please enter a valid link</FieldError>}
-            {missing && <FieldError id={refusalId}>Enter a link address</FieldError>}
         </Field>
     );
 }
