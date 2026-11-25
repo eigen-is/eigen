@@ -1,4 +1,4 @@
-// A form dialog submits on Enter as on its submit button, and only when the caller says the fields are valid. While a
+// A form dialog submits on Enter as on its submit button, and a submit that returns false keeps it open. While a
 // submit runs, its buttons and every way to close it wait. It closes once the submit succeeds and stays open when it
 // fails or returns false, for another try. A dialog that is closing takes no second submit, and a dialog opened from
 // inside another form never submits that form. A changed form asks before Esc drops it, a dialog stacked on another
@@ -31,8 +31,7 @@ const onOpenChange = mock((_open: boolean) => {});
 
 async function render({
     onSubmit = () => {},
-    changed,
-    canSubmit,
+    changed = false,
     footerStart,
     readOnly,
     description,
@@ -43,7 +42,6 @@ async function render({
     fields?: ReactNode;
     onSubmit?: DialogAction;
     changed?: boolean;
-    canSubmit?: boolean;
     footerStart?: ReactNode;
     readOnly?: boolean;
     description?: string;
@@ -59,7 +57,6 @@ async function render({
             children: createElement(FormDialogForm, {
                 onSubmit,
                 changed,
-                canSubmit,
                 submitLabel: 'Save',
                 footerStart,
                 readOnly,
@@ -120,15 +117,6 @@ test('Escape closes it while no submit runs', async () => {
     await render();
     await pressEscape();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
-});
-
-test('with canSubmit off the submit button is disabled and Enter does nothing', async () => {
-    const onSubmit = mock(() => {});
-    await render({ onSubmit, canSubmit: false });
-    expect(button('Save')?.disabled).toBe(true);
-    await enter();
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('a slow submit keeps its label beside a spinner, ignores another click, and Cancel and Escape wait for it', async () => {
@@ -207,6 +195,7 @@ test('a second Enter while the dialog animates out submits nothing', async () =>
             onOpenChange: setOpen,
             title: 'Rename',
             children: createElement(FormDialogForm, {
+                changed: false,
                 onSubmit,
                 submitLabel: 'Save',
                 children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
@@ -284,6 +273,7 @@ test('a dialog opened from inside another form submits only itself', async () =>
                 onOpenChange,
                 title: 'Rename',
                 children: createElement(FormDialogForm, {
+                    changed: false,
                     onSubmit,
                     submitLabel: 'Save',
                     children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
@@ -373,6 +363,7 @@ test('Cmd+Enter submits from a multi-line field', async () => {
 function CheckedName() {
     const [error, setError] = useState('');
     return createElement(FormDialogForm, {
+        changed: false,
         submitLabel: 'Save',
         onSubmit: () => {
             setError('Add a name');

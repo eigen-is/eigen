@@ -42,7 +42,7 @@ function EmailCollaboratorsBody({ path }: { path: DrivePath }) {
     const { data: spaceSettings, isLoading } = useSpaceSettings();
     if (isLoading) {
         return (
-            <FormDialogForm readOnly submitLabel="Send" onSubmit={() => {}}>
+            <FormDialogForm readOnly changed={false} submitLabel="Send" onSubmit={() => {}}>
                 <LoadingState />
             </FormDialogForm>
         );

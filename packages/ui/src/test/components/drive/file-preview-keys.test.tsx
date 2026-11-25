@@ -195,6 +195,7 @@ async function mountStickiesChain() {
                 },
                 title: 'Save to Drive',
                 children: createElement(FormDialogForm, {
+                    changed: false,
                     onSubmit: () => {},
                     submitLabel: 'Save here',
                     children: createElement(

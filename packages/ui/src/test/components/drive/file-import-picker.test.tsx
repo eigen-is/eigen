@@ -81,3 +81,12 @@ test('a pick before the import names its own verb', async () => {
     expect(labels()).toEqual(['Upload from device', 'Cancel', 'Select']);
     await unmount();
 });
+
+test("a phone's footer shows only the icon of Upload from device, and a screen reader still reads its name", async () => {
+    const { footer, unmount } = await open();
+    const label = [...(footer()[0]?.querySelectorAll('span') ?? [])].find(
+        (span) => span.textContent === 'Upload from device',
+    );
+    expect(label?.classList.contains('max-sm:sr-only')).toBe(true);
+    await unmount();
+});

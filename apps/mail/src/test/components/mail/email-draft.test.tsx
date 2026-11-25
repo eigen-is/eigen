@@ -1,7 +1,8 @@
 // A forward's parts are fetched and attached once, while the forward has no saved draft: a composer that
 // opens on the saved draft already holds them, so it fetches none of them again. The route drops them from
 // history state only once a saved draft holds them all. A send with no recipient, or with neither a subject nor a
-// message, says so under To or Subject and focuses it. Cmd+Enter sends, except while a dialog is open over the draft.
+// message, says so under To or Subject and focuses it. Cmd+Enter sends, except while a dialog is open over the draft, and
+// a running send keeps Send's label beside a spinner.
 import { afterEach, expect, jest, mock, test } from 'bun:test';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
@@ -14,7 +15,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
-const { EmailDraft } = await import('../../../components/mail/email-draft');
+const { EmailDraft, EmailDraftToolbar } = await import('../../../components/mail/email-draft');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -219,16 +220,35 @@ test('a send with neither a subject nor a message says so under Subject and focu
     expect(sendDraft).not.toHaveBeenCalled();
 });
 
-test('Cmd+Enter sends, and does nothing while a dialog is open over the draft', async () => {
+test('Cmd+Enter sends, and does nothing while a dialog or an alert dialog is open over the draft', async () => {
     const sendDraft = await openNewMail('bob@test.eigen.is');
     await type('subject', 'Lunch');
-    const dialog = document.createElement('div');
-    dialog.setAttribute('role', 'dialog');
-    await act(async () => document.body.append(dialog));
-    await pressModEnter();
-    expect(sendDraft).not.toHaveBeenCalled();
+    for (const role of ['dialog', 'alertdialog']) {
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', role);
+        await act(async () => document.body.append(dialog));
+        await pressModEnter();
+        expect(sendDraft).not.toHaveBeenCalled();
+        await act(async () => dialog.remove());
+    }
 
-    await act(async () => dialog.remove());
     await pressModEnter();
     expect(sendDraft).toHaveBeenCalledTimes(1);
+});
+
+test("a running send keeps Send's label beside a spinner and ignores another click", async () => {
+    const submitted = mock((event: Event) => event.preventDefault());
+    const form = document.createElement('form');
+    form.id = 'draft-form';
+    form.addEventListener('submit', submitted);
+    document.body.append(form);
+    ({ unmount } = await renderInDocument(
+        createElement(EmailDraftToolbar, { onDelete: () => {}, onAttach: () => {}, isSending: true, hasId: false }),
+    ));
+    // A pending button's spinner comes before its label.
+    const sendButton = [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent === 'Send');
+    expect(sendButton?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => sendButton?.click());
+    expect(submitted).not.toHaveBeenCalled();
+    form.remove();
 });

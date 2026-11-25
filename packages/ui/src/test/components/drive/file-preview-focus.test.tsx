@@ -106,6 +106,7 @@ async function mountListing() {
                 onOpenChange: setSaveOpen,
                 title: 'Save to Drive',
                 children: createElement(FormDialogForm, {
+                    changed: false,
                     onSubmit: () => {},
                     submitLabel: 'Save here',
                     children: createElement('input', { autoFocus: true, 'aria-label': 'Folder' }),

@@ -112,7 +112,8 @@ function ImportModeForm({
     const [mode, setMode] = useState<ImportMode>(choices[0]?.mode ?? 'replace');
 
     return (
-        <FormDialogForm submitLabel="Import" onSubmit={() => onImport(mode)}>
+        // A pick is not typed input, so Esc drops it without asking.
+        <FormDialogForm changed={false} submitLabel="Import" onSubmit={() => onImport(mode)}>
             {choices.length > 0 && (
                 <RadioGroup
                     value={mode}

@@ -52,7 +52,7 @@ export function EmailDraftToolbar({
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
-                <Button type="submit" form="draft-form" disabled={isSending} size="sm">
+                <Button type="submit" form="draft-form" pending={isSending} size="sm">
                     <Send className="h-4 w-4" />
                     Send
                 </Button>

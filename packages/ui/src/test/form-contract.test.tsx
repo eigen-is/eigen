@@ -454,6 +454,7 @@ test('the invalid probe fails a form that saves an invalid value, says nothing, 
             onOpenChange: () => {},
             title: 'Rename',
             children: createElement(FormDialogForm, {
+                changed: false,
                 submitLabel: 'Save',
                 onSubmit: () => onSubmit(''),
                 children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),

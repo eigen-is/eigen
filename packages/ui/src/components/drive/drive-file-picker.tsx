@@ -101,7 +101,8 @@ function DriveFilePickerBody({
                     onUploadFromDevice && (
                         <Button variant="outline" onClick={onUploadFromDevice}>
                             <Upload />
-                            Upload from device
+                            {/* A phone's footer keeps one row, so only the icon shows there. */}
+                            <span className="max-sm:sr-only">Upload from device</span>
                         </Button>
                     )
                 }

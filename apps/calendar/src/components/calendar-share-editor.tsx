@@ -131,7 +131,8 @@ export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorPro
             <DropdownMenuTrigger asChild>
                 <Button variant="outline">
                     <Users />
-                    Share with team
+                    {/* A phone's footer keeps one row, so only the icon shows there. */}
+                    <span className="max-sm:sr-only">Share with team</span>
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
