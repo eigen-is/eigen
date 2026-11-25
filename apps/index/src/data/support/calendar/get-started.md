@@ -55,7 +55,7 @@ In the dialog:
 6. If you have more than one calendar, use the calendar picker at the bottom to choose which calendar the event belongs to.
 7. Click **Create**.
 
-The event appears in the grid straight away. Click it to see its details.
+The event appears in the grid straight away. Click it to see its details in a panel at the right, where **Edit event**, **Delete event** and **Export event** sit in the bar at the top. The panel stays open while you move to another week or view, and **Close** (the X) or Escape closes it. On a phone the details fill the screen, and **‹** takes you back.
 
 ## What's next
 

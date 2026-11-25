@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, navigation, day, week, month, schedule]
 related: [calendar/get-started, calendar/create-event, calendar/keyboard-shortcuts]
 order: 20
-updated: 2026-11-24
+updated: 2026-11-25
 ---
 
 Calendar opens in the week view on a computer and in the 3-day view on a phone. You can switch to a single day, 3 days, a week, a whole month or a schedule list, and use the navigation controls in the toolbar to move between periods.
@@ -67,6 +67,6 @@ On a computer, single keys do the same as the toolbar: **t** for today, **j** an
 
 ## Create an event by clicking the grid
 
-In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. While an event's details are open, a click on an empty part of the grid only closes them, and a drag over a range still starts a new event. See [Create and edit an event](/support/calendar/create-event) for the full steps.
 
 With a mouse or a pen you can also drag an existing event to another time or day, or drag its bottom edge to change when it ends. See [Move an event by dragging](/support/calendar/create-event#move-an-event-by-dragging).

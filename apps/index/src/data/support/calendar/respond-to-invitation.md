@@ -13,9 +13,9 @@ When someone invites you to an event, it appears in your calendar straight away.
 ## Respond to an invitation
 
 1. Open [Calendar](/calendar) and find the event in your calendar. An invitation you have not answered yet stands out: an all-day one gets a dashed outline, and a timed one gets a hollow dot instead of a filled one. An event you declined appears faded.
-2. Click the event to open its detail dialog.
-3. Scroll down to the **RSVP** section, which appears near the bottom of the dialog. You will see three buttons: **Accept**, **Maybe**, and **Decline**.
-4. Click the button that reflects your answer. The button shows a spinner while your reply is sent, and the dialog closes once it is saved. The organizer's attendee list updates to match.
+2. Click the event. Its details open in a panel at the right, or fill the screen on a phone.
+3. Scroll down to the **RSVP** section at the bottom of the panel. You will see three buttons: **Accept**, **Maybe**, and **Decline**.
+4. Click the button that reflects your answer. The button shows a spinner while your reply is sent, and the panel stays open with your answer selected. The organizer's attendee list updates to match.
 
 <div class="eigen-callout">
 
