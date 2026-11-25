@@ -1,6 +1,7 @@
 // The link field of the light editor's toolbar, inside a form such as the card form or Email collaborators. Enter in
-// the field sets the link and leaves the form alone. Escape closes the field, and inside a dialog only the field: Radix
-// hears Escape on the document before the field does. Opening the field in the floating toolbar places the toolbar
+// the field sets the link and leaves the form alone. Escape closes the field, drops what was typed in it and gives the
+// focus back to the editor, and inside a dialog closes only the field: Radix hears Escape on the document before the
+// field does. Opening the field in the floating toolbar places the toolbar
 // again, and the focus does not scroll the dialog.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
@@ -93,13 +94,23 @@ test('Enter in the link field sets the link and does not submit the form around 
     expect(onSubmit).not.toHaveBeenCalled();
 });
 
-test('Escape closes the link field and sets no link', async () => {
+test('Escape closes the link field, sets no link, and gives the focus back to the editor', async () => {
     await open();
     await openLinkField();
     await type('example.com');
     await pressKey('Escape');
     expect(linkField()).toBeNull();
     expect(editor().getHTML()).not.toContain('href');
+    expect(document.activeElement === document.querySelector('.ProseMirror')).toBe(true);
+});
+
+test('the link field opens empty after an Escape, so the next link is only what is typed then', async () => {
+    await open();
+    await openLinkField();
+    await type('example.com/run');
+    await pressKey('Escape');
+    await openLinkField();
+    expect(linkField()?.value).toBe('');
 });
 
 test('Escape in the link field inside a dialog closes the field and leaves the dialog open', async () => {

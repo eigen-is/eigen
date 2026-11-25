@@ -15,7 +15,7 @@ import { sql } from '@codemirror/lang-sql';
 import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
     drawSelection,
@@ -145,7 +145,7 @@ function cmThemeExtensions(isDark: boolean) {
     ];
 }
 
-function cmBaseExtensions(language: string | null, isDark: boolean) {
+function cmBaseExtensions(language: string | null) {
     return [
         lineNumbers(),
         highlightActiveLine(),
@@ -156,7 +156,6 @@ function cmBaseExtensions(language: string | null, isDark: boolean) {
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         getLanguageExtension(language),
-        ...cmThemeExtensions(isDark),
     ];
 }
 
@@ -177,6 +176,9 @@ export const CodeEditorView = forwardRef<
 >(function CodeEditorView({ content, language, onChange, onViewReady }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
+    // The theme sits in its own compartment, so a light or dark switch reconfigures the live view and keeps its
+    // text, selection and undo history. Rebuilding the view would reset it to the content it opened with.
+    const [themeCompartment] = useState(() => new Compartment());
     const isDark = useDarkMode();
 
     useImperativeHandle(ref, () => ({
@@ -186,7 +188,7 @@ export const CodeEditorView = forwardRef<
 
     useEffect(() => {
         if (!containerRef.current) return;
-        const extensions = [...cmBaseExtensions(language, isDark)];
+        const extensions = [...cmBaseExtensions(language), themeCompartment.of(cmThemeExtensions(isDark))];
         if (onChange) {
             extensions.push(
                 EditorView.updateListener.of((update) => {
@@ -196,12 +198,18 @@ export const CodeEditorView = forwardRef<
         }
         const state = EditorState.create({ doc: content, extensions });
         const view = new EditorView({ state, parent: containerRef.current });
+        // It mounts when Edit or the source toggle is pressed, so typing goes into the text at once.
+        view.focus();
         viewRef.current = view;
         onViewReady?.(view);
         return () => {
             view.destroy();
             onViewReady?.(null);
         };
+    }, []);
+
+    useEffect(() => {
+        viewRef.current?.dispatch({ effects: themeCompartment.reconfigure(cmThemeExtensions(isDark)) });
     }, [isDark]);
 
     return <div ref={containerRef} className="h-full overflow-hidden" />;

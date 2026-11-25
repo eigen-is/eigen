@@ -208,7 +208,7 @@ describe('ChartPanelSection', () => {
         const { container, writes } = await section([chart('c1')]);
         await click(buttonIn(container, 'Edit data'));
         await typeInB2('7');
-        await click(buttonIn(dialog(), 'Save'));
+        await click(buttonIn(dialog(), 'Apply'));
         expect(writes.map(Object.keys)).toEqual([['specData']]);
         const { spec } = readChartSpec({ ...chart('c1'), ...writes[0] });
         expect(spec?.data.source === 'inline' && spec.data.series[0].values[0]).toBe(7);
@@ -237,10 +237,10 @@ describe('ChartEditDialog', () => {
         return { writes, closed: () => closed };
     };
 
-    test('opens the data grid at once; Save writes the chart and closes', async () => {
+    test('opens the data grid at once; Apply writes the chart and closes', async () => {
         const { writes, closed } = await open();
         expect(dialog()?.textContent).toContain('Edit data');
-        await click(buttonIn(dialog(), 'Save'));
+        await click(buttonIn(dialog(), 'Apply'));
         expect(writes).toHaveLength(1);
         expect(closed()).toBe(1);
     });
@@ -252,7 +252,7 @@ describe('ChartEditDialog', () => {
         expect(closed()).toBe(1);
     });
 
-    test("Save applies onto the element as it is then, so a peer's colours and title while it was open stay", async () => {
+    test("Apply applies onto the element as it is then, so a peer's colours and title while it was open stay", async () => {
         const writes: Record<string, unknown>[] = [];
         const container = document.createElement('div');
         document.body.append(container);
@@ -282,7 +282,7 @@ describe('ChartEditDialog', () => {
         const peerParts = { ...chart('c1'), ...newChartSpecParts(peer) };
         await show(peerParts);
         await typeInB2('7');
-        await click(buttonIn(dialog(), 'Save'));
+        await click(buttonIn(dialog(), 'Apply'));
         const saved = readChartSpec({ ...peerParts, ...writes[0] }).spec;
         expect(saved?.title.text).toBe('Peer title');
         expect(saved?.points).toEqual({ 's-1': { 1: { color: '#000002' } } });
@@ -467,7 +467,7 @@ describe('two peers on one chart, through the panel and the canvas writer', () =
         await act(async () =>
             editor?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })),
         );
-        await click(buttonIn(dialog(), 'Save'));
+        await click(buttonIn(dialog(), 'Apply'));
         const color = await recolor(panelB, 'Bulb (incandescent)');
         await sync();
         for (const doc of [a, b]) {

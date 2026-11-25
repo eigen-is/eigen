@@ -457,14 +457,14 @@ describe('ChartEditor', () => {
         expect(editor.rowLabels()).not.toContain('Sun');
     });
 
-    test("inline data offers Edit data, whose Save is one write; a host's own Edit data opens nothing here", async () => {
+    test("inline data offers Edit data, whose Apply is one write; a host's own Edit data opens nothing here", async () => {
         const editor = await mount(sample('column'));
         const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
         const press = (target: HTMLElement | null | undefined) =>
             act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         await press(editor.button('Edit data'));
         const save = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
-            (el) => el.textContent?.trim() === 'Save',
+            (el) => el.textContent?.trim() === 'Apply',
         );
         await press(save);
         expect(editor.changes).toHaveLength(1);

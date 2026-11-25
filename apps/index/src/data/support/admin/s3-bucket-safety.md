@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, storage, s3, settings, backup]
 related: [admin/storage-quotas, admin/server-settings]
 order: 70
-updated: 2026-11-02
+updated: 2026-11-25
 ---
 
 When Eigen stores files in an S3 bucket, it writes the whole file again on every save. If the bucket has no versioning, the previous copy is replaced and nothing can bring it back. The **Bucket safety** panel tells you where the bucket stands and can set it right for you.
@@ -62,7 +62,7 @@ More days means a longer window to recover from, and more storage to pay for. Th
 
 ## Change how long versions are kept
 
-Once both lines have a tick, the button is gone. Click **Change** at the end of the **Old-version cleanup** line, set a new number of days in the window that opens, and click **Update**.
+Once both lines have a tick, the button is gone. Click **Change** at the end of the **Old-version cleanup** line, set a new number of days in the window that opens, and click **Save**.
 
 ## Set the bucket up by hand
 

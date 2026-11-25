@@ -1,16 +1,17 @@
 // The fields of a Drive mount's dialog: its name, its storage type and its maximum size, with the S3 fields when a
 // bucket is picked. It renders inside a FormDialog, such as the admin's Add mount and Edit mount, and mounts with it,
-// so each opening starts from the saved or default values. Its submit hands the values on, and the dialog waits for the
-// save.
+// so each opening starts from the saved or default values. A missing name, a size below the minimum or a missing S3
+// field shows under its field once Save was pressed; otherwise the submit hands the values on and the dialog waits.
 
 import { isStorageType, STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
-import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
+import { EMPTY_S3, isS3ConfigValid, mountStorageIdentity } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
-import { useState } from 'react';
-import { Field, FieldDescription, FieldLabel } from '../field';
+import { useId, useState } from 'react';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../field';
 import { FormDialogForm } from '../form-dialog';
+import { useFormSubmitted } from '../form-shell';
 import { Input } from '../input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
 import { S3ConfigCard } from './s3-config-card';
@@ -45,40 +46,94 @@ export function MountForm({
     submitLabel,
     isEdit = false,
 }: MountFormProps) {
-    const [name, setName] = useState(initialValues?.name ?? '');
-    const [storageType, setStorageType] = useState<MountStorageType>(initialValues?.storageType ?? defaultStorageType);
-    const [maxSizeMB, setMaxSizeMB] = useState(initialValues?.maxSizeMB ?? defaultMaxSizeMB);
-    const [s3Config, setS3Config] = useState(initialValues?.s3Config ?? defaultS3Config ?? EMPTY_S3);
-
-    const isS3 = storageType === 's3';
+    const [initial] = useState(
+        (): MountDraft => ({
+            name: initialValues?.name ?? '',
+            storageType: initialValues?.storageType ?? defaultStorageType,
+            size: String(initialValues?.maxSizeMB ?? defaultMaxSizeMB),
+            s3Config: initialValues?.s3Config ?? defaultS3Config ?? EMPTY_S3,
+        }),
+    );
+    const [draft, setDraft] = useState(initial);
+    const isS3 = draft.storageType === 's3';
 
     return (
         <FormDialogForm
-            canSubmit={name.trim() !== '' && maxSizeMB >= QUOTA_MIN_MB && (!isS3 || isS3ConfigValid(s3Config))}
-            submitLabel={submitLabel}
-            onSubmit={() =>
-                onSubmit({ name: name.trim(), storageType, maxSizeMB, s3Config: isS3 ? s3Config : undefined })
+            changed={
+                draft.name !== initial.name ||
+                draft.size !== initial.size ||
+                mountStorageIdentity(draft) !== mountStorageIdentity(initial)
             }
+            submitLabel={submitLabel}
+            onSubmit={() => {
+                const { name, storageType, size, s3Config } = draft;
+                if (!name.trim() || !sizeFits(size) || (isS3 && !isS3ConfigValid(s3Config))) return false;
+                return onSubmit({
+                    name: name.trim(),
+                    storageType,
+                    maxSizeMB: Number(size),
+                    s3Config: isS3 ? s3Config : undefined,
+                });
+            }}
         >
+            <MountFields
+                draft={draft}
+                onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+                onS3Check={onS3Check}
+                onS3Harden={onS3Harden}
+                isEdit={isEdit}
+            />
+        </FormDialogForm>
+    );
+}
+
+// What the fields hold while they are edited: the size as typed, so a value below the minimum stays to be corrected.
+type MountDraft = { name: string; storageType: MountStorageType; size: string; s3Config: S3Config };
+
+const sizeFits = (size: string) => Number(size) >= QUOTA_MIN_MB;
+
+// Inside the form, so it reads whether its Save was pressed and a missing name or a small size says so.
+function MountFields({
+    draft,
+    onChange,
+    onS3Check,
+    onS3Harden,
+    isEdit,
+}: {
+    draft: MountDraft;
+    onChange: (patch: Partial<MountDraft>) => void;
+    onS3Check: MountFormProps['onS3Check'];
+    onS3Harden: MountFormProps['onS3Harden'];
+    isEdit: boolean;
+}) {
+    const id = useId();
+    const submitted = useFormSubmitted();
+    const nameMissing = submitted && !draft.name.trim();
+    const sizeRefused = submitted && !sizeFits(draft.size);
+
+    return (
+        <>
             <Field>
-                <FieldLabel htmlFor="mount-name">Name</FieldLabel>
+                <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
                 <Input
-                    id="mount-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    id={`${id}-name`}
+                    value={draft.name}
+                    onChange={(e) => onChange({ name: e.target.value })}
                     placeholder="e.g. shared files"
-                    autoFocus={!isEdit}
+                    aria-invalid={nameMissing || undefined}
+                    aria-describedby={nameMissing ? `${id}-name-error` : undefined}
                 />
+                {nameMissing && <FieldError id={`${id}-name-error`}>Add a name</FieldError>}
             </Field>
 
             <Field>
-                <FieldLabel htmlFor="mount-storage-type">Storage type</FieldLabel>
+                <FieldLabel htmlFor={`${id}-type`}>Storage type</FieldLabel>
                 <Select
-                    value={storageType}
-                    onValueChange={(value) => isStorageType(value) && setStorageType(value)}
+                    value={draft.storageType}
+                    onValueChange={(value) => isStorageType(value) && onChange({ storageType: value })}
                     disabled={isEdit}
                 >
-                    <SelectTrigger id="mount-storage-type">
+                    <SelectTrigger id={`${id}-type`}>
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -89,29 +144,32 @@ export function MountForm({
                         ))}
                     </SelectContent>
                 </Select>
-                <FieldDescription>{STORAGE_TYPE_HINTS[storageType]}</FieldDescription>
+                <FieldDescription>{STORAGE_TYPE_HINTS[draft.storageType]}</FieldDescription>
             </Field>
 
             <Field>
-                <FieldLabel htmlFor="mount-max-size">Max size (MB)</FieldLabel>
+                <FieldLabel htmlFor={`${id}-size`}>Max size (MB)</FieldLabel>
                 <Input
-                    id="mount-max-size"
+                    id={`${id}-size`}
                     type="number"
                     min={QUOTA_MIN_MB}
-                    value={maxSizeMB}
-                    onChange={(e) => setMaxSizeMB(e.target.valueAsNumber || QUOTA_MIN_MB)}
+                    value={draft.size}
+                    onChange={(e) => onChange({ size: e.target.value })}
+                    aria-invalid={sizeRefused || undefined}
+                    aria-describedby={sizeRefused ? `${id}-size-error` : undefined}
                 />
+                {sizeRefused && <FieldError id={`${id}-size-error`}>Use at least {QUOTA_MIN_MB} MB</FieldError>}
             </Field>
 
-            {isS3 && (
+            {draft.storageType === 's3' && (
                 <S3ConfigCard
-                    value={s3Config}
-                    onChange={setS3Config}
+                    value={draft.s3Config}
+                    onChange={(s3Config) => onChange({ s3Config })}
                     onCheck={onS3Check}
                     onHarden={onS3Harden}
                     isEdit={isEdit}
                 />
             )}
-        </FormDialogForm>
+        </>
     );
 }

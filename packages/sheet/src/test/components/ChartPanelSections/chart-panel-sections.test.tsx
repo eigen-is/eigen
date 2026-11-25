@@ -329,7 +329,7 @@ test('an inline chart edits its data in the grid dialog instead of a data range'
     );
 });
 
-test("Edit data's Save keeps a peer's colours and title written while it was open", async () => {
+test("Edit data's Apply keeps a peer's colours and title written while it was open", async () => {
     const { container, workbook, spec } = await mount(inlineChart());
     const click = (target: Element | undefined) =>
         act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -353,7 +353,7 @@ test("Edit data's Save keeps a peer's colours and title written while it was ope
         setValue?.call(input, '7');
         input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await click(buttonIn(dialog, 'Save'));
+    await click(buttonIn(dialog, 'Apply'));
     const saved = spec();
     expect(saved?.title.text).toBe('Peer title');
     expect(saved?.points).toEqual({ [first.id]: { 1: { color: '#000002' } } });

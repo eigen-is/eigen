@@ -1,8 +1,8 @@
 // Add mount and Edit mount, as a team's storage section opens them. Each shows the name, the storage type, the size
-// and, for a bucket, the S3 fields, and its submit waits for a name, a size of at least 10 MB and a full S3 config. A
-// save hands the trimmed name, the size and the S3 config to the mount hook and closes. A save the server refuses keeps
-// the dialog open with what was typed. Enter in a field submits, and never clicks a button inside the S3 card first. Its
-// submit stays disabled until the S3 config is full, so the card never marks a field there.
+// and, for a bucket, the S3 fields. A save hands the trimmed name, the size and the S3 config to the mount hook and
+// closes; a missing name, a small size or a missing S3 field says so under its field instead. A save the server
+// refuses keeps the dialog open with what was typed. Enter in a field submits, and never clicks a button inside the S3
+// card first.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -147,7 +147,7 @@ async function openEdit(mountName: string) {
     await click(row?.querySelector('button[aria-label="Mount settings"]'));
 }
 
-test('Add mount shows a name, the storage type and the size, and starts disabled', async () => {
+test('Add mount shows a name, the storage type and the size', async () => {
     await openAdd();
     expect(title()).toBe('Add mount');
     expect(nameField().value).toBe('');
@@ -155,7 +155,7 @@ test('Add mount shows a name, the storage type and the size, and starts disabled
     expect(sizeField().value).toBe('500');
     expect(dialog()?.textContent).not.toContain('S3 configuration');
     expect(button('Cancel')?.disabled).toBe(false);
-    expect(button('Create mount')?.disabled).toBe(true);
+    expect(button('Create')?.disabled).toBe(false);
 });
 
 test('Enter in the name field adds a local mount with the trimmed name, and the dialog closes', async () => {
@@ -177,7 +177,7 @@ test('Add mount on an S3 default hands the bucket on with the size', async () =>
     await type(nameField(), 'Media');
     await type(sizeField(), '2500');
     await type(s3Field('my-bucket'), 'media-bucket');
-    await click(button('Create mount'));
+    await click(button('Create'));
     await settle();
     expect(addMount.mutateAsync.mock.calls).toEqual([
         [{ name: 'Media', storageType: 's3', maxSizeMB: 2500, s3Config: { ...bucket, bucket: 'media-bucket' } }],
@@ -185,28 +185,18 @@ test('Add mount on an S3 default hands the bucket on with the size', async () =>
     expect(dialog()).toBeNull();
 });
 
-test('the submit waits for a name, a size of at least 10 MB and a full S3 config', async () => {
+test('a missing name, a size under 10 MB and an empty S3 field each say so under the field, and nothing saves', async () => {
     serverSettings = { data: s3Defaults };
     await openAdd();
-    const create = () => button('Create mount');
-    expect(create()?.disabled).toBe(true);
-    await enter(nameField());
-    await type(nameField(), '   ');
-    expect(create()?.disabled).toBe(true);
-    await type(nameField(), 'Media');
-    expect(create()?.disabled).toBe(false);
     await type(sizeField(), '9');
-    expect(create()?.disabled).toBe(true);
-    await enter(sizeField());
-    await type(sizeField(), '10');
-    expect(create()?.disabled).toBe(false);
     await type(s3Field('my-bucket'), '');
-    expect(create()?.disabled).toBe(true);
     await enter(nameField());
     await settle();
     expect(addMount.mutateAsync).not.toHaveBeenCalled();
-    expect(dialog()).not.toBeNull();
-    expect(dialog()?.querySelector('[aria-invalid="true"]')).toBeNull();
+    expect(title()).toBe('Add mount');
+    const messages = [...(dialog()?.querySelectorAll('[data-slot="field-error"]') ?? [])].map((m) => m.textContent);
+    expect(messages).toEqual(['Add a name', 'Use at least 10 MB', 'Add a bucket']);
+    expect(document.activeElement).toBe(nameField());
 });
 
 test('Enter in an S3 field submits the mount, and never clicks Copy or another button in the card', async () => {
@@ -265,13 +255,13 @@ test('a save the server refuses keeps the dialog open with what was typed, and n
     await openAdd();
     await type(nameField(), 'Shared');
     await type(sizeField(), '800');
-    await click(button('Create mount'));
+    await click(button('Create'));
     await settle();
     expect(addMount.mutateAsync).toHaveBeenCalledTimes(1);
     expect(title()).toBe('Add mount');
     expect(nameField().value).toBe('Shared');
     expect(sizeField().value).toBe('800');
-    expect(button('Create mount')?.disabled).toBe(false);
+    expect(button('Create')?.disabled).toBe(false);
     expect(unhandled).toEqual([]);
 });
 
@@ -296,7 +286,7 @@ test('Edit mount on a bucket shows its S3 fields and the warning, and saves the 
     expect(s3Field('https://s3.amazonaws.com').value).toBe(bucket.endpoint);
     expect(s3Field('my-bucket').value).toBe(bucket.bucket);
     await type(s3Field('optional/path'), 'old');
-    await click(button('Save changes'));
+    await click(button('Save'));
     await settle();
     expect(updateMount.mutateAsync.mock.calls).toEqual([
         [{ mountId: 'archive', maxSizeMB: 2000, name: 'Archive', s3Config: { ...bucket, prefix: 'old' } }],
@@ -310,7 +300,7 @@ test('an edit the server refuses keeps the dialog open with the edited values', 
     });
     await openEdit('Shared');
     await type(nameField(), 'Team files');
-    await click(button('Save changes'));
+    await click(button('Save'));
     await settle();
     expect(updateMount.mutateAsync).toHaveBeenCalledTimes(1);
     expect(title()).toBe('Edit mount');
