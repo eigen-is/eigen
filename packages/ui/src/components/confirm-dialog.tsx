@@ -31,7 +31,7 @@ export function ConfirmDialog({
     destructive = false,
     onCloseAutoFocus,
 }: ConfirmDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange, { closeOnRefusal: true });
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange, closeOnRefusal: true });
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>

@@ -20,7 +20,7 @@ async function mount(closeOnRefusal: boolean) {
     const onOpenChange = mock((_open: boolean) => {});
     let latest: ReturnType<typeof useDialogPending> | null = null;
     function Harness() {
-        latest = useDialogPending(onOpenChange, { closeOnRefusal });
+        latest = useDialogPending({ onOpenChange, closeOnRefusal });
         return null;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));

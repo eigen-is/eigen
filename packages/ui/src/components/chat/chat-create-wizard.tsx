@@ -90,7 +90,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const [createError, setCreateError] = useState<string>();
     const destination = useResolvedDriveLocation(location);
     const nameRef = useRef<HTMLInputElement>(null);
-    const { pending, run } = useDialogPending();
+    const { pending, run } = useDialogPending({ open });
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
@@ -261,7 +261,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
                     <FormShell
                         className="flex flex-1 flex-col min-h-0"
-                        onSubmit={() => (step === 1 ? advance(true) : run(createChat))}
+                        onSubmit={() => run(step === 1 ? () => advance(true) : createChat)}
                     >
                         {step === 1 ? (
                             <div className="-mx-6 flex flex-1 flex-col min-h-0">

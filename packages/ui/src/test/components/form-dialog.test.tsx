@@ -21,10 +21,11 @@ const { Input } = await import('../../components/input');
 const { RadioGroup, RadioGroupItem } = await import('../../components/radio-group');
 
 let unmount = async () => {};
-const realGetComputedStyle = globalThis.getComputedStyle;
+let letGo = () => {};
 afterEach(async () => {
     await unmount();
-    globalThis.getComputedStyle = realGetComputedStyle;
+    letGo();
+    letGo = () => {};
 });
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -173,20 +174,7 @@ test('a submit that returned false leaves Escape closing the dialog', async () =
 });
 
 test('a second Enter while the dialog animates out submits nothing', async () => {
-    // Radix keeps a closing dialog mounted while its animation runs. happy-dom computes no animation from a style
-    // sheet and never ends one, so the content reports a fade-out once it closes and stays.
-    globalThis.getComputedStyle = (element, pseudo) => {
-        const style = realGetComputedStyle(element, pseudo);
-        if (!(element instanceof HTMLElement) || element.dataset.slot !== 'dialog-content') return style;
-        return new Proxy(style, {
-            get: (target, key) =>
-                key === 'animationName'
-                    ? element.dataset.state === 'closed'
-                        ? 'fade-out'
-                        : 'fade-in'
-                    : Reflect.get(target, key),
-        });
-    };
+    letGo = holdClosingDialogs();
     const onSubmit = mock(() => {});
     function Harness() {
         const [open, setOpen] = useState(true);

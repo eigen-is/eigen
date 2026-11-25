@@ -44,7 +44,7 @@ type FormDialogFormProps = {
 
 type FormDialogContextValue = {
     pending: boolean;
-    submit: (onSubmit: DialogAction) => Promise<false | undefined> | undefined;
+    submit: (onSubmit: DialogAction) => Promise<false | undefined>;
     handleOpenChange: (open: boolean) => void;
     setChanged: (changed: boolean) => void;
 };
@@ -62,12 +62,9 @@ export function FormDialog({
     onCloseAutoFocus,
     children,
 }: FormDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange });
     const [changed, setChanged] = useState(false);
     const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
-
-    // A closing dialog stays mounted while it animates out, with the focus still in its field.
-    const submit = (onSubmit: DialogAction) => (open ? run(onSubmit) : undefined);
 
     return (
         <>
@@ -81,7 +78,7 @@ export function FormDialog({
                         <DialogTitle>{title}</DialogTitle>
                         {description && <DialogDescription>{description}</DialogDescription>}
                     </DialogHeader>
-                    <FormDialogContext.Provider value={{ pending, submit, handleOpenChange, setChanged }}>
+                    <FormDialogContext.Provider value={{ pending, submit: run, handleOpenChange, setChanged }}>
                         {children}
                     </FormDialogContext.Provider>
                 </DialogContent>

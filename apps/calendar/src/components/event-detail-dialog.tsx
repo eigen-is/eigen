@@ -78,7 +78,7 @@ export function EventDetailDialog({
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [rsvpAwaitingScope, setRsvpAwaitingScope] = useState<RsvpStatus | null>(null);
     const [sentRsvpStatus, setSentRsvpStatus] = useState<RsvpStatus>();
-    const { pending: replying, run: runReply, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending: replying, run: runReply, handleOpenChange } = useDialogPending({ open, onOpenChange });
     const [editOpen, setEditOpen] = useState(false);
     // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
     const [editMount, setEditMount] = useState(0);

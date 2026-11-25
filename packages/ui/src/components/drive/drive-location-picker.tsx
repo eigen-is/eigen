@@ -39,7 +39,7 @@ type DriveLocationPickerProps = {
 };
 
 export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
-    const { pending, run } = useDialogPending(onOpenChange);
+    const { pending, run } = useDialogPending({ open, onOpenChange });
     const [named, setNamed] = useState(false);
     const discard = useDiscardChanges({ open, changed: named, pending, onDiscard: () => onOpenChange(false) });
     return (

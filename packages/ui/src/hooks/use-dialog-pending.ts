@@ -11,10 +11,16 @@ import { useState } from 'react';
 // Two promise types rather than Promise<void | false>, which Biome flags as a confusing use of void.
 export type DialogAction = () => void | false | Promise<void> | Promise<false | undefined>;
 
-export function useDialogPending(
-    onOpenChange?: (open: boolean) => void,
-    { closeOnRefusal = false }: { closeOnRefusal?: boolean } = {},
-): {
+// A page form passes nothing: it is always open and has nothing to close.
+export function useDialogPending({
+    open = true,
+    onOpenChange,
+    closeOnRefusal = false,
+}: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    closeOnRefusal?: boolean;
+} = {}): {
     pending: boolean;
     // Resolves false when the action did, so a form can point at the field its check refused.
     run: (action: DialogAction) => Promise<false | undefined>;
@@ -23,7 +29,8 @@ export function useDialogPending(
     const [pending, setPending] = useState(false);
 
     const run = async (action: DialogAction) => {
-        if (pending) return;
+        // A closing dialog stays mounted while it fades out, with the focus still in its field.
+        if (pending || !open) return;
         setPending(true);
         try {
             if ((await action()) === false) return false;

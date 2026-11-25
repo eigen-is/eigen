@@ -5,8 +5,10 @@
 // keeps what was typed, and a pick alone closes on Esc at once. In folder mode, as Move to uses it, Cmd+Enter confirms.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
+import { closingDialog, holdClosingDialogs } from '../../closing-dialog';
 import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
+import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -222,6 +224,22 @@ test('Cmd+Enter in a folder picker confirms the folder shown', async () => {
     });
     await settle();
     expect(onConfirm.mock.calls).toEqual([[{ ownerId: 'owner-1', mountId: 'default', folderId: 'folder' }]]);
+});
+
+test('a second Enter while the picker fades out confirms nothing more, as a second Copy to would copy twice', async () => {
+    const letGo = holdClosingDialogs();
+    try {
+        await open('create');
+        await typeName('Plans');
+        await act(async () => pressEnter(nameField()));
+        await settle();
+        expect(closingDialog()).not.toBeNull();
+        await act(async () => pressEnter(nameField()));
+        await settle();
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+    } finally {
+        letGo();
+    }
 });
 
 test('a picker with no name typed closes on Esc at once', async () => {
