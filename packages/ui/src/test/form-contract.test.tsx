@@ -1,7 +1,7 @@
 // expectFormContract passes a form that keeps every rule of its kind, and each probe fails a sample form that breaks
 // its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules today.
-// Hand-built card and page samples keep the card's Esc and the page's leave guard, whose probes stay off until their
-// shells keep them, and the dialog sample that asks before it drops a change keeps the discard probe, which the shell
+// A hand-built page sample keeps the leave guard, a card sample keeps the card's Esc, whose probe stays off until its
+// shell keeps it, and the dialog sample that asks before it drops a change keeps the discard probe, which the shell
 // fails until then.
 import { expect, mock, test } from 'bun:test';
 import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
@@ -344,9 +344,9 @@ test('a card that goes back to its view on Esc keeps the card contract and its E
     await expectFormProbe('cardEsc', card(true));
 });
 
-test('a page with a leave guard keeps the page contract and its guard probe', async () => {
+test('a page with a leave guard keeps the page contract, and one without fails it', async () => {
     await expectFormContract(page(true));
-    await expectFormProbe('leaveGuard', page(true));
+    await expect(expectFormContract(page(false))).rejects.toThrow('leaveGuard: a changed page asks');
 });
 
 test('the focus probe fails a form that opens with nothing focused, or with a lone name not selected', async () => {

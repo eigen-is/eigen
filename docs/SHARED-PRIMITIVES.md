@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2424 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2425 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -214,8 +214,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LeaveGuard` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/leave-guard.tsx |
 | `ListDetailLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/list-detail-layout.tsx |
 | `LoadingState` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/loading-state.tsx |
+| `PageForm` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/page-form.tsx |
 | `RequestAccessView` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/request-access-view.tsx |
-| `SettingsFooter` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-footer.tsx |
 | `SettingsPage` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-page.tsx |
 | `SettingsSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-section.tsx |
 | `Topbar` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/topbar.tsx |
@@ -1183,7 +1183,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1277)
+## Utilities & constants (1278)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2402,6 +2402,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `browseCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `focusFirstField` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `STRETCHED_TRIGGER_CLASS` | `@workspace/ui/components/info-block` | packages/ui/src/components/info-block.tsx |
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |

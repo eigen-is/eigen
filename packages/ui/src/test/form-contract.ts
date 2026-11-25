@@ -56,8 +56,7 @@ const PROBES: Record<ProbeName, Probe> = {
     discard: { kinds: ['dialog'], on: false, run: probeDiscard },
     // Off until the card shell goes back to its view on Esc.
     cardEsc: { kinds: ['card'], on: false, run: probeCardEsc },
-    // Off until the page shell guards its changes.
-    leaveGuard: { kinds: ['page'], on: false, run: probeLeaveGuard },
+    leaveGuard: { kinds: ['page'], on: true, run: probeLeaveGuard },
     invalid: { kinds: ['dialog', 'card', 'page'], on: true, run: probeInvalid },
     pending: { kinds: ['dialog', 'card', 'page'], on: true, run: probePending },
 };
@@ -275,10 +274,8 @@ async function withForm(
     const { unmount } = await renderInDocument(createElement(router.RouterProvider, { router: memory }));
     try {
         await body({
-            leave: () =>
-                act(() => {
-                    memory.navigate({ to: ELSEWHERE });
-                }),
+            // Through the history, since an app's registered routes type the router's `to` and refuse ELSEWHERE.
+            leave: () => act(() => memory.history.push(ELSEWHERE)),
             at: () => memory.state.location.pathname,
         });
     } finally {

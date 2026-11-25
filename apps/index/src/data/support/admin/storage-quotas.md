@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -19,7 +19,7 @@ Storage quotas control how much space each user and team can use. You set server
    - **Default mount (MB)**: the storage limit for each user's primary Drive.
    - **Max upload (MB)**: the largest single file any user can upload, at most 1023 MB.
    - **Trash retention (days)**: how long deleted files stay in the Trash before they are permanently removed. Set it to 0 to keep them until the Trash is emptied.
-4. Click **Save**.
+4. Click **Save**, or press Enter in a field.
 
 The **Save** and **Reset** buttons appear only when you have unsaved changes. Click **Reset** to discard changes you have not yet saved.
 

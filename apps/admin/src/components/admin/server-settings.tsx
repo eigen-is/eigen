@@ -1,5 +1,6 @@
 // The admin's Server settings page, in sections such as the organization's name, the sender of the server's mail,
-// the storage quotas and defaults, and the landing page's links. It saves through the server-settings hooks.
+// the storage quotas and defaults, and the landing page's links. Its changes collect in drafts on a PageForm, and Save
+// writes the ones that changed through the server-settings hooks once every field is valid.
 
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
@@ -27,14 +28,14 @@ import type { LandingLink, ServerSettings, ServerSettingsSaved } from '@workspac
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
+import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui/components/layout/app';
+import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
-import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { ServerBackupSection } from './server-backup-section';
 import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
@@ -55,70 +56,44 @@ export function ServerSettingsPage() {
     const { data: status } = useServerStatus();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
-    const [dirty, setDirty] = useState(false);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
-    const [s3Dirty, setS3Dirty] = useState(false);
     const [orgNameDraft, setOrgNameDraft] = useState<string | null>(null);
     const [backupNotice, setBackupNotice] = useState<Pick<ServerSettingsSaved, 'notice' | 'warning'> | null>(null);
+    const fieldId = useId();
 
     if (isLoading || !settings || !config) {
         return <LoadingState />;
     }
 
     const orgName = orgNameDraft ?? config.orgName;
-    const current = {
-        mail: { ...settings.mail, ...draft.mail },
-        quotas: { ...settings.quotas, ...draft.quotas },
-        defaults: {
-            mount: { ...settings.defaults.mount, ...draft.defaults?.mount },
-        },
-        notifications: {
-            email: { ...settings.notifications.email, ...draft.notifications?.email },
-        },
-        landing: {
-            links: draft.landing?.links ?? settings.landing.links,
-            showInstall: draft.landing?.showInstall ?? settings.landing.showInstall,
-        },
-        backups: {
-            schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
-            upload: {
-                ...settings.backups.upload,
-                ...draft.backups?.upload,
-                s3: { ...settings.backups.upload.s3, ...draft.backups?.upload?.s3 },
-            },
-        },
-    };
+    const current = withDraft(settings, draft);
+    // Both sides are built the same way, so their keys come in the same order.
+    const saved = withDraft(settings, {});
+    const settingsChanged = JSON.stringify(current) !== JSON.stringify(saved);
 
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
         if (Number.isNaN(value) || value < 0) return;
-        setDirty(true);
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
     };
 
     const updateEmailFlag = (key: keyof ServerSettings['notifications']['email'], value: boolean) => {
-        setDirty(true);
         setDraft((prev) => ({
             ...prev,
             notifications: { email: { ...prev.notifications?.email, [key]: value } },
         }));
     };
 
-    const updateMail = (patch: Partial<ServerSettings['mail']>) => {
-        setDirty(true);
+    const updateMail = (patch: Partial<ServerSettings['mail']>) =>
         setDraft((prev) => ({ ...prev, mail: { ...prev.mail, ...patch } }));
-    };
 
-    const updateLanding = (patch: Partial<ServerSettings['landing']>) => {
-        setDirty(true);
+    const updateLanding = (patch: Partial<ServerSettings['landing']>) =>
         setDraft((prev) => ({ ...prev, landing: { ...prev.landing, ...patch } }));
-    };
 
     const updateLinks = (links: LandingLink[]) => updateLanding({ links });
 
     // The draft keeps only the half of the backup settings the owner changed. The server checks the bucket only when a
     // save carries the upload half, so a change to the schedule alone skips that check.
     const updateBackups = (patch: DeepPartial<ServerSettings['backups']>) => {
-        setDirty(true);
         setDraft((prev) => ({
             ...prev,
             backups: {
@@ -132,15 +107,18 @@ export function ServerSettingsPage() {
     const patchLink = (index: number, patch: Partial<LandingLink>) =>
         updateLinks(current.landing.links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
 
-    const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
-    const anyDirty = dirty || s3Dirty || orgNameDraft !== null;
-    const saving = updateSettings.isPending || updateS3Config.isPending || updateOrgName.isPending;
+    const savedS3 = s3Config ?? EMPTY_S3;
+    const currentS3 = s3Draft ?? savedS3;
+    const s3Changed =
+        current.defaults.mount.storageType === 's3' && JSON.stringify(currentS3) !== JSON.stringify(savedS3);
+    const orgNameChanged = orgName !== config.orgName;
     // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
-    const senderDirty = draft.mail !== undefined || orgNameDraft !== null;
+    const senderChanged = orgNameChanged || JSON.stringify(current.mail) !== JSON.stringify(saved.mail);
     // A server without mailboxes sends its mail through the relay named at setup, if there is one. The status says
     // which, so relayHost is undefined until it loads.
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
+    const orgNameBlank = orgName.trim() === '';
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
     const homeDataTooSmall = current.quotas.homeDataMaxMB < QUOTA_MIN_MB;
     const mountTooSmall = current.quotas.defaultMountMaxSizeMB < QUOTA_MIN_MB;
@@ -149,11 +127,20 @@ export function ServerSettingsPage() {
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
 
+    const invalid =
+        orgNameBlank ||
+        senderAddressInvalid ||
+        homeDataTooSmall ||
+        mountTooSmall ||
+        uploadOutOfRange ||
+        (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)) ||
+        (current.backups.upload.enabled && !isS3ConfigValid(current.backups.upload.s3, backupSecretSaved));
+
     const handleSave = async () => {
-        if (orgNameDraft !== null) await updateOrgName.mutateAsync(orgNameDraft.trim());
-        if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
-            await updateS3Config.mutateAsync(s3Draft);
-        if (dirty) {
+        if (invalid) return false;
+        if (orgNameChanged) await updateOrgName.mutateAsync(orgName.trim());
+        if (s3Changed) await updateS3Config.mutateAsync(currentS3);
+        if (settingsChanged) {
             const saved = await updateSettings.mutateAsync(
                 draft.landing?.links
                     ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(draft.landing.links) } }
@@ -168,27 +155,32 @@ export function ServerSettingsPage() {
 
     const handleReset = () => {
         setDraft({});
-        setDirty(false);
         setS3Draft(null);
-        setS3Dirty(false);
         setOrgNameDraft(null);
     };
 
     return (
-        <div className="space-y-6">
+        <PageForm changed={orgNameChanged || s3Changed || settingsChanged} onSubmit={handleSave} onReset={handleReset}>
             <SettingsSection title="General">
                 <div className="space-y-1.5">
-                    <Label>Organization name</Label>
-                    <Input maxLength={100} value={orgName} onChange={(e) => setOrgNameDraft(e.target.value)} />
+                    <Label htmlFor={`${fieldId}-org-name`}>Organization name</Label>
+                    <Input
+                        id={`${fieldId}-org-name`}
+                        maxLength={100}
+                        value={orgName}
+                        onChange={(e) => setOrgNameDraft(e.target.value)}
+                        aria-invalid={orgNameBlank || undefined}
+                    />
+                    {orgNameBlank && <FieldError>Add a name</FieldError>}
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label>Web address</Label>
-                        <Input value={config.domain} disabled />
+                        <Label htmlFor={`${fieldId}-domain`}>Web address</Label>
+                        <Input id={`${fieldId}-domain`} value={config.domain} disabled />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Mail domain</Label>
-                        <Input value={config.mailDomain} disabled />
+                        <Label htmlFor={`${fieldId}-mail-domain`}>Mail domain</Label>
+                        <Input id={`${fieldId}-mail-domain`} value={config.mailDomain} disabled />
                     </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -204,10 +196,11 @@ export function ServerSettingsPage() {
                 title="Mail"
                 description="The sender of the notifications, codes and invitations this server sends. Leave a field empty for the default shown."
             >
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label>Sender name</Label>
+                        <Label htmlFor={`${fieldId}-sender-name`}>Sender name</Label>
                         <Input
+                            id={`${fieldId}-sender-name`}
                             maxLength={100}
                             placeholder={orgName}
                             value={current.mail.senderName}
@@ -215,16 +208,16 @@ export function ServerSettingsPage() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Sender address</Label>
+                        <Label htmlFor={`${fieldId}-sender-address`}>Sender address</Label>
                         <Input
+                            id={`${fieldId}-sender-address`}
                             type="email"
                             placeholder={defaultSenderAddress(config.mailDomain)}
                             value={current.mail.senderAddress}
                             onChange={(e) => updateMail({ senderAddress: e.target.value.trim() })}
+                            aria-invalid={senderAddressInvalid || undefined}
                         />
-                        {senderAddressInvalid && (
-                            <p className="text-xs text-destructive">This is not an email address</p>
-                        )}
+                        {senderAddressInvalid && <FieldError>This is not an email address</FieldError>}
                     </div>
                 </div>
                 {relayHost && (
@@ -245,12 +238,13 @@ export function ServerSettingsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => sendTestMail.mutate()}
-                            disabled={sendTestMail.isPending || senderDirty}
+                            pending={sendTestMail.isPending}
+                            disabled={senderChanged}
                         >
-                            {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
+                            Send test mail
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                            {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                            {senderChanged ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
                         </p>
                     </div>
                 )}
@@ -259,43 +253,56 @@ export function ServerSettingsPage() {
             <Separator />
 
             <SettingsSection title="Storage quotas">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label>{homeDataLabel} (MB)</Label>
+                        <Label htmlFor={`${fieldId}-home-data`}>{homeDataLabel} (MB)</Label>
                         <Input
+                            id={`${fieldId}-home-data`}
                             type="number"
                             min={QUOTA_MIN_MB}
                             value={current.quotas.homeDataMaxMB}
                             onChange={(e) => updateQuota('homeDataMaxMB', e.target.valueAsNumber)}
+                            aria-invalid={homeDataTooSmall || undefined}
                         />
-                        {homeDataTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
+                        {homeDataTooSmall && <FieldError>At least {QUOTA_MIN_MB} MB</FieldError>}
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Default mount (MB)</Label>
+                        <Label htmlFor={`${fieldId}-mount`}>Default mount (MB)</Label>
                         <Input
+                            id={`${fieldId}-mount`}
                             type="number"
                             min={QUOTA_MIN_MB}
                             value={current.quotas.defaultMountMaxSizeMB}
                             onChange={(e) => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
+                            aria-invalid={mountTooSmall || undefined}
                         />
-                        {mountTooSmall && <p className="text-xs text-destructive">At least {QUOTA_MIN_MB} MB</p>}
+                        {mountTooSmall && <FieldError>At least {QUOTA_MIN_MB} MB</FieldError>}
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Max upload (MB)</Label>
+                        <Label htmlFor={`${fieldId}-upload`}>Max upload (MB)</Label>
                         <Input
+                            id={`${fieldId}-upload`}
                             type="number"
                             min={1}
                             max={UPLOAD_CAP_MAX_MB}
                             value={current.quotas.maxUploadSizeMB}
                             onChange={(e) => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
+                            aria-invalid={uploadOutOfRange || undefined}
                         />
-                        <p className={cn('text-xs', uploadOutOfRange ? 'text-destructive' : 'text-muted-foreground')}>
-                            At most {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes.
-                        </p>
+                        {uploadOutOfRange ? (
+                            <FieldError>
+                                Between 1 and {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes
+                            </FieldError>
+                        ) : (
+                            <p className="text-xs text-muted-foreground">
+                                At most {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes.
+                            </p>
+                        )}
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Trash retention (days)</Label>
+                        <Label htmlFor={`${fieldId}-trash`}>Trash retention (days)</Label>
                         <Input
+                            id={`${fieldId}-trash`}
                             type="number"
                             min={0}
                             value={current.quotas.trashRetentionDays}
@@ -316,15 +323,11 @@ export function ServerSettingsPage() {
             >
                 <StorageTypePicker
                     storageType={current.defaults.mount.storageType}
-                    onStorageTypeChange={(type) => {
-                        setDirty(true);
-                        setDraft((prev) => ({ ...prev, defaults: { mount: { storageType: type } } }));
-                    }}
+                    onStorageTypeChange={(type) =>
+                        setDraft((prev) => ({ ...prev, defaults: { mount: { storageType: type } } }))
+                    }
                     s3Config={currentS3}
-                    onS3ConfigChange={(config) => {
-                        setS3Dirty(true);
-                        setS3Draft(config);
-                    }}
+                    onS3ConfigChange={setS3Draft}
                     checkS3={(config) => s3Check.mutateAsync(config)}
                     hardenS3={(config, noncurrentDays) => s3Harden.mutateAsync({ ...config, noncurrentDays })}
                 />
@@ -433,24 +436,33 @@ export function ServerSettingsPage() {
                     )}
                 </div>
             </SettingsSection>
-
-            <SettingsFooter
-                dirty={anyDirty}
-                saving={saving}
-                disabled={
-                    orgName.trim() === '' ||
-                    senderAddressInvalid ||
-                    homeDataTooSmall ||
-                    mountTooSmall ||
-                    uploadOutOfRange ||
-                    (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)) ||
-                    (current.backups.upload.enabled && !isS3ConfigValid(current.backups.upload.s3, backupSecretSaved))
-                }
-                onSave={handleSave}
-                onReset={handleReset}
-            />
-        </div>
+        </PageForm>
     );
+}
+
+function withDraft(settings: ServerSettings, draft: DeepPartial<ServerSettings>) {
+    return {
+        mail: { ...settings.mail, ...draft.mail },
+        quotas: { ...settings.quotas, ...draft.quotas },
+        defaults: {
+            mount: { ...settings.defaults.mount, ...draft.defaults?.mount },
+        },
+        notifications: {
+            email: { ...settings.notifications.email, ...draft.notifications?.email },
+        },
+        landing: {
+            links: draft.landing?.links ?? settings.landing.links,
+            showInstall: draft.landing?.showInstall ?? settings.landing.showInstall,
+        },
+        backups: {
+            schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
+            upload: {
+                ...settings.backups.upload,
+                ...draft.backups?.upload,
+                s3: { ...settings.backups.upload.s3, ...draft.backups?.upload?.s3 },
+            },
+        },
+    };
 }
 
 // The server refuses an empty title or URL and a URL without http:// or https://, so a save mends what it can first.

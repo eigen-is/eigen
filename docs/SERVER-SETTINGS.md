@@ -97,7 +97,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## The settings page asks before it drops changes
 
-The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) edits a draft and saves every section with one `SettingsFooter`, whose `LeaveGuard` asks before the page is left with unsaved changes. What each section does for the owner is in the help center: [Server settings](../apps/index/src/data/support/admin/server-settings.md) and [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md). The hooks are in `packages/lib/src/core/settings/hooks/`.
+The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) edits a draft on one `PageForm`, which saves every section together and whose `LeaveGuard` asks before the page is left with unsaved changes. What each section does for the owner is in the help center: [Server settings](../apps/index/src/data/support/admin/server-settings.md) and [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md). The hooks are in `packages/lib/src/core/settings/hooks/`.
 
 ## Hosted mail and the relay are environment, not settings
 
