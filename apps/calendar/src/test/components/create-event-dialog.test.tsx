@@ -5,7 +5,7 @@
 // starts empty, and there is no form until the calendars have loaded.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Attendee, CalendarItem, CreateEventInput } from '@workspace/lib/types/calendar';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -133,12 +133,6 @@ const named = (label: string) => {
     return found;
 };
 
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (field: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const enter = (field: HTMLInputElement) => act(async () => pressEnter(field));
 const guests = () => [...(dialog()?.querySelectorAll('.group') ?? [])].map((row) => row.textContent);
 const errorText = () => dialog()?.querySelector('[data-slot="field-error"]')?.textContent;

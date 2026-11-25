@@ -5,6 +5,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Contact } from '@workspace/lib/types/contact';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -81,10 +82,7 @@ async function addGuest(typed: string, attendees: Attendee[] = []): Promise<Atte
     const input = document.querySelector<HTMLInputElement>(`input#${label?.htmlFor}`);
     const add = document.querySelector<HTMLButtonElement>('button[aria-label="Add"]');
     if (!input || !add) throw new Error('the editor drew no guest field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, typed);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(input, typed);
     await act(async () => add.click());
     return added;
 }
