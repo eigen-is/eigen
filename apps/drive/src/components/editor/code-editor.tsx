@@ -27,7 +27,7 @@ import {
 } from '@codemirror/view';
 import { downloadBlob } from '@workspace/lib/download';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
@@ -283,7 +283,7 @@ export function CodeEditor({
 
     const toolbar = (
         <EditToolbar
-            onBack={() => confirmClose(onBack)}
+            onBack={onBack}
             onCancel={() => confirmClose(onCancel)}
             onSave={handleSave}
             isSaving={saveState === 'saving'}
@@ -333,6 +333,11 @@ export function CodeEditor({
                     confirmText="Discard"
                     destructive
                     onConfirm={handleDiscardConfirm}
+                />
+                <LeaveGuard
+                    active={saveState !== 'saved'}
+                    title="Discard changes?"
+                    description="You have unsaved changes. Discard them?"
                 />
             </Column>
         </DocSearchProvider>

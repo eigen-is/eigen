@@ -14,7 +14,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { downloadBlob } from '@workspace/lib/download';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
@@ -183,7 +183,7 @@ export function MarkdownEditor({
 
     const toolbar = (
         <EditToolbar
-            onBack={() => confirmClose(onBack)}
+            onBack={onBack}
             onCancel={() => confirmClose(onCancel)}
             onSave={handleSave}
             isSaving={saveState === 'saving'}
@@ -240,6 +240,11 @@ export function MarkdownEditor({
                     confirmText="Discard"
                     destructive
                     onConfirm={handleDiscardConfirm}
+                />
+                <LeaveGuard
+                    active={saveState !== 'saved'}
+                    title="Discard changes?"
+                    description="You have unsaved changes. Discard them?"
                 />
             </Column>
         </DocSearchProvider>
