@@ -10,7 +10,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/calendar/src/components/event-detail-dialog.tsx', // actions, no fields
     'apps/docs/src/components/docs/word-count-dialog.tsx', // information only, in a FormDialog shell
     'apps/drive/src/components/editor/conflict-dialog.tsx', // three actions
-    'apps/mail/src/components/mail/email-draft.tsx', // an alert with one OK button
     'apps/mail/src/components/mail/mail-shortcuts-dialog.tsx', // information only
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
     'packages/sheet/src/components/CellRangeDialog/index.tsx', // a non-modal range picker over the grid
