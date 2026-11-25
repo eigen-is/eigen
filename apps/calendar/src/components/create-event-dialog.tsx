@@ -52,7 +52,14 @@ function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 
     const calendarOptions = useCalendarOptions(ownerId, calendars ?? [], sharedCalendars);
 
     const [seed] = useState((): EventFieldTimes => {
-        const { start, end, allDay } = initial ?? nextSlot(defaultDate);
+        const rounded = roundToNext15Minutes(new Date());
+        const slotStart = defaultDate ? new Date(defaultDate) : rounded;
+        slotStart.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
+        const { start, end, allDay } = initial ?? {
+            start: slotStart,
+            end: new Date(slotStart.getTime() + NEW_EVENT_MINUTES * 60_000),
+            allDay: false,
+        };
         return {
             allDay,
             rrule: null,
@@ -152,12 +159,4 @@ function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 
             />
         </FormDialogForm>
     );
-}
-
-// The next quarter hour, on the clicked day when there is one, for a new event's length.
-function nextSlot(day: Date | undefined): NewEventTimes {
-    const rounded = roundToNext15Minutes(new Date());
-    const start = day ? new Date(day) : rounded;
-    start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-    return { start, end: new Date(start.getTime() + NEW_EVENT_MINUTES * 60_000), allDay: false };
 }
