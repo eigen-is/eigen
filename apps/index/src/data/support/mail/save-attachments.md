@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, attachments, files, drive]
 related: [mail/attach-files, mail/read-and-reply, drive/get-started]
 order: 105
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 When someone sends you a file, you can keep it in Drive rather than in your mailbox. Attachments appear as chips above the message in the reading pane. Click one to look at it first, or save it straight to a folder of your choosing.
@@ -41,4 +41,4 @@ Every attachment on the message is saved to that folder together. On a message w
 
 ## Download to your computer instead
 
-If you would rather have the file on your own machine, click **Download instead** in the bottom-left corner of the same dialog. The dialog closes and your browser downloads the files. Nothing is written to Drive.
+If you would rather have the file on your own machine, click **Download instead** in the bottom-left corner of the same dialog. The dialog closes and your browser downloads the files. Nothing is written to Drive. On a phone the button shows only its download icon.

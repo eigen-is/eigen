@@ -36,6 +36,6 @@ Open the **Edit calendar** dialog for the calendar, find the person under **Peop
 
 ## Share with a team
 
-If you belong to one or more teams, a **Share with team** button appears in the bottom-left corner of **Edit calendar**. Click it to open a menu of your teams, then click the team you want to add. The team appears in the **People with access** list. Click **Save**.
+If you belong to one or more teams, a **Share with team** button appears in the bottom-left corner of **Edit calendar**. Click it to open a menu of your teams, then click the team you want to add. The team appears in the **People with access** list. Click **Save**. On a phone the button shows only its people icon.
 
 Everyone in that team will see the calendar under **Shared with me** in their sidebar.
