@@ -22,24 +22,28 @@ export const Route = createFileRoute('/_auth/teams')({
 });
 
 function TeamsRoute() {
+    const { data: config } = usePublicConfig();
+    if (!config) return <LoadingState />;
+    return <TeamsPage organizationId={config.orgId} />;
+}
+
+function TeamsPage({ organizationId }: { organizationId: string }) {
     const { teamId } = Route.useSearch();
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
-
-    const { data: config } = usePublicConfig();
-    const { data: teams = [], isLoading } = useTeams(config?.orgId);
+    const { data: teams = [], isLoading } = useTeams(organizationId);
 
     const team = teams.find((t) => t.id === teamId);
 
-    if (isLoading || !config) {
+    if (isLoading) {
         return <LoadingState />;
     }
 
     const listToolbar = (
-        <AdminTeamsToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} organizationId={config.orgId} />
+        <AdminTeamsToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} organizationId={organizationId} />
     );
 
-    const detailToolbar = team ? <TeamDetailToolbar team={team} organizationId={config.orgId} /> : null;
+    const detailToolbar = team ? <TeamDetailToolbar team={team} organizationId={organizationId} /> : null;
 
     return (
         <ListDetailLayout
@@ -49,7 +53,7 @@ function TeamsRoute() {
                 (team ? (
                     // key: remount per team so per-team state (drafts, avatar ?v= stamp) resets and
                     // an in-flight avatar mutation can't write the previous team's URL into the new one.
-                    <TeamDetail key={team.id} team={team} organizationId={config.orgId} />
+                    <TeamDetail key={team.id} team={team} organizationId={organizationId} />
                 ) : (
                     <EmptyState message="Team not found" />
                 ))

@@ -19,7 +19,7 @@ import { CreateTeamDialog } from './create-team-dialog';
 type AdminTeamsToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    organizationId?: string;
+    organizationId: string;
 };
 
 export function AdminTeamsToolbar({ searchQuery, onSearchChange, organizationId }: AdminTeamsToolbarProps) {
