@@ -2,11 +2,11 @@
 
 Ruled on by the owner, 25 November 2026, after a cold review (section 7 holds the decisions); not built yet. It grew out of the calendar's event card ([PROPOSAL_CALENDAR_VIEWS.md](PROPOSAL_CALENDAR_VIEWS.md#cards-and-dialogs)): the owner compared a peek beside the event, a panel at the right and today's dialog, and chose the column for an event's content, with dialogs for edit and create. The owner then asked for one design that comments and a future stickies list view share, and for fewer column widths. It rests on an audit of every side column in Eigen. The code claims below were checked against `develop` and the prototype on 25 November 2026, after a cold read caught some that were wrong; the build checks each one again as it reaches it. No route, migration or package is needed.
 
-A throwaway prototype validated the design on 25 November 2026: the widths, the Docs overlay, and the column in Calendar, Slides, Vector and Docs. Its numbers match the tables below (Docs' page left edge at 1440: 323 closed, 323 with the list, 322 with a thread; at 1280: 243, 242, 162). It changed the calendar's not-found case, the history rule's "our own push", the grid's press rule, the Esc order, the `CardDetail` shape and the single source for the open thread, and it found the gaps the sections below now name. The build redoes it on a new branch from this text.
+A throwaway prototype validated the design on 25 November 2026: the widths, the Docs overlay, and the column in Calendar, Slides, Vector and Docs. Its numbers match the tables below (Docs' page left edge at 1440: 323 closed, 323 with the list, 322 with a thread; at 1280: 243, 242, 162). It changed the calendar's not-found case, the history rule's "our own push", the grid's press rule, the Esc order, the `CardDetail` shape and the single source for the open thread, and it found the gaps the sections below now name. A second round the same day made the details look like one design: one body anatomy for an event and a comment (section 3), one shared tile class so board cards and calendar events look the same, "‹" as the one back in every column bar, and Slides' rail back at 208. The owner looked at it in the browser and accepted all four, with the fixes section 3 names (section 7, decisions 7 to 12). The build redoes it on a new branch from this text.
 
 ## 1. The rule in one paragraph
 
-A **detail column** shows one thing the user opened: a message, a contact, a file, an event, a sticky, or a document's conversation (its comments, down to one thread). It opens from a click, the URL names it, and X, Esc or back closes it. It sits at the right, **under the bar that spans the screen**, and carries its own bar. On a phone it replaces the screen with a back arrow, exactly as Mail does. It is not the **sidebar** (navigation, AppShell's), not an **always-on tool** (Slides' rail, Slides' and Vector's properties, which frame the editor and have no close), not a **selection tool** (Docs' and Sheets' properties panels, which follow the cursor) and not a **toggled document tool** (the Docs outline). A detail is opened, closed and linked; a tool is part of the editor.
+A **detail column** shows one thing the user opened: a message, a contact, a file, an event, a sticky, or a document's conversation (its comments, down to one thread). It opens from a click, the URL names it, and X, Esc or back closes it. It sits at the right, **under the bar that spans the screen**, and carries its own bar. On a phone it replaces the screen with a back chevron ("‹"), exactly as Mail does. It is not the **sidebar** (navigation, AppShell's), not an **always-on tool** (Slides' rail, Slides' and Vector's properties, which frame the editor and have no close), not a **selection tool** (Docs' and Sheets' properties panels, which follow the cursor) and not a **toggled document tool** (the Docs outline). A detail is opened, closed and linked; a tool is part of the editor.
 
 The one move this makes: comments and activity leave the tool family and become a detail. The owner grouped "comments and calendar info" with Drive, Mail and Contacts, and their behaviour fits: they are opened, closed and linked, never selection-driven.
 
@@ -33,7 +33,8 @@ Not side columns, and out of scope: the stickies board's kanban columns (`w-[280
 ### Three sizes and `flex`
 
 - **`flex`**: the main, as today.
-- **`small`, 256**: navigation and tools. The sidebar, properties, the outline and Slides' rail. Three of the nine already are 256 (the sidebar, the properties panels and the comments pane); the outline is 240 and Slides' rail 208.
+- **`small`, 256**: navigation and tools. The sidebar, properties and the outline. Three of the nine already are 256 (the sidebar, the properties panels and the comments pane); the outline is 240.
+- Slides' rail is not a token (the owner's ruling): it keeps a slides-only width, 208 (`w-52`) on normal screens and 256 from 1920 wide (`min-[120rem]:w-64`), where it matches the properties column across from it. Thumbnails read no better wider, so the slide keeps the room.
 - **`medium`, 320**: a detail beside a work surface. The comments and activity lists in Docs, Sheets, Slides, Vector and Stickies, and the calendar's event.
 - **`large`, 400, 320 on a tablet**: a list, or a detail beside a list. Mail's list, Contacts', Admin's and the waitlist's lists, Drive's detail.
 
@@ -46,12 +47,12 @@ Why a `medium` for a detail beside a surface: a list of rows gives up width easi
 | Beside the detail | Today (256 pane or none) | Detail at 320 | Detail at 400 |
 |---|---|---|---|
 | Docs, the page moves by (A4, overlay, section 4) | 0 / 0 | 0 / about 1px | about 1px / about 81px |
-| Slides, slide width (`fitFrameViewport`, 24px padding, 256 rail; 880 / 720 with properties) | 880 / 720 with a 256 pane | 816 / 656 | 736 / 576 |
+| Slides, slide width (`fitFrameViewport`, 24px padding, 208 rail; 928 / 768 with properties) | 928 / 768 with a 256 pane | 864 / 704 | 784 / 624 |
 | Vector, canvas width (1184 / 1024 with properties) | 1184 / 1024 with a 256 pane | 1120 / 960 | 1040 / 880 |
 | Sheets, default 100px columns in view (about, beside the row header) | 11.4 / 9.8 with a 256 pane | 10.7 / 9.1 | 9.9 / 8.3 |
 | Calendar week, a day column (grid less the 56px hour gutter, over seven; no detail today) | 161 / 138 | 115 / 93 | 104 / 81 |
 
-At 1440 both work. At 1280, 400 moves Docs' page 81px on every open, shrinks the slide a fifth below what the properties leave it, and cuts a day column to 81px, where a chip shows a cut-off title. 320 keeps Docs' page in place (its clear width is about 1250, so at 1280 it moves about 1px, a few more with a visible scrollbar), costs the slide 64px, and leaves 280px of text inside the 20px gutters: the width of Mail's list on a tablet, room for a thread, its attachment chips and a composer. `small` would leave 216px, too narrow for a thread.
+At 1440 both work. At 1280, 400 moves Docs' page 81px on every open, shrinks the slide a fifth below what the properties leave it, and cuts a day column to 81px, where a chip shows a cut-off title. 320 keeps Docs' page in place, the column over its right margin and clear of its text (its clear width is about 1250, so at 1280 it moves about 1px, a few more with a visible scrollbar), costs the slide 64px, and leaves 280px of text inside the 20px gutters: the width of Mail's list on a tablet, room for a thread, its attachment chips and a composer. `small` would leave 216px, too narrow for a thread.
 
 The calendar's event is `medium`, like the editors' and unlike Drive's: its main is a seven-way grid, a surface, where Drive's main is a list of rows that loses nothing at 400. The rule in one line: `large` beside a list, `medium` beside a surface. One exception, the owner's: an open comment thread is `large`. The comments column is `medium` at its list level and grows to `large` when it drills into a thread, since reading and writing a conversation needs the room, and steps back to `medium` on `‹ Comments`. On a tablet both are 320, so nothing grows there.
 
@@ -64,41 +65,64 @@ At 1440 wide unless named.
 | App sidebar | `small` | 256 → 256 (rail 64) | nothing |
 | Properties panels | `small` | 256 → 256 | nothing |
 | Docs outline | `small` | 240 → 256 | the outline is 16px wider; it still lies over the page and moves nothing |
-| Slides' rail | `small` | 208 → 256 | decided by the owner. Thumbnails grow; the slide is 48px narrower (928 → 880, about 5%) and sits centred between rail and properties instead of 24px left of centre |
+| Slides' rail | none, its own | 208 → 208, 256 from 1920 wide | decided by the owner: nothing below 1920; from 1920 the rail matches the properties column across from it |
 | Mail's list | `large` | 400 → 400, tablet 320 → 320 | nothing |
 | Contacts, Admin users and teams | `large` | 350 → 400, tablet 350 → 320 | the detail loses 50px; on a tablet it gains 30 |
 | Waitlist list | `large` | 400 → 400, tablet 400 → 320 | on a tablet the detail gains 80px |
 | Drive's detail | `large` | 400 → 400, tablet 400 → 320 | on a tablet the file list gains 80px |
 | Calendar's event detail | `medium` | dialog → 320 | new column; the grid narrows by 320 while it is open (day columns 161 → 115) |
-| Comments and activity, list level | `medium` | 256 → 320 | 64px wider while open: the slide 880 → 816; Docs' page doesn't move at 1440 and moves about 1px at 1280 |
-| A comment thread | `large` | dialog → 400 | the column grows 80px as a thread opens: the slide 816 → 736 at 1440 (656 → 576 at 1280); Docs' page stays at 1440 and moves about 81px at 1280 |
+| Comments and activity, list level | `medium` | 256 → 320 | 64px wider while open: the slide 928 → 864; in Docs the column lies over the page's right margin, never its text: the page doesn't move at 1440 and moves about 1px at 1280 |
+| A comment thread | `large` | dialog → 400 | the column grows 80px as a thread opens: the slide 864 → 784 at 1440 (704 → 624 at 1280); in Docs it still lies over the right margin, never the text: the page stays at 1440 and moves about 81px at 1280 |
 
 ### One place for the numbers
 
-`packages/ui/src/components/layout/app/column-widths.ts` holds the three numbers and `large`'s tablet step. `Column` takes a strict `width: 'flex' | 'small' | 'medium' | 'large'` and reads `isTablet` from `useLayout()` itself, so no page writes a pixel value or its own tablet branch. A strict type leaves no caller behind, so the step that makes it strict converts every `Column` that passes a pixel value, each in one line: Mail's `listWidth` (`large`), `ListDetailLayout`'s `'350px'` (`large`), the waitlist's `'400px'` (`large`), `DriveLayout`'s `'400px'` (`large`), `PanelColumn`'s `PROPERTIES_PANEL_WIDTH_PX` (`small` until `CommentsColumn` replaces it), the Docs outline's `OUTLINE_WIDTH_PX` (`small`) and Docs' editor's `'w-full'`, which was never a valid width (`flex`). `columnWidthPx(size, isTablet)` and `useColumnWidthPx(size)` give the number to the few hosts that lay out around a column. It replaces Mail's `listWidth`, the literals in `ListDetailLayout`, `WaitlistRoute` and `DriveLayout`, `PROPERTIES_PANEL_WIDTH_PX`, `OUTLINE_WIDTH_PX` and Slides' `w-52`. Three widths are classes on plain elements, not a `Column`: the `w-64` in `PropertiesPanel`, the `w-64` in `SidebarContainer` (its `w-16` rail stays, a mode of the sidebar) and Slides' `w-52` rail. Each takes its width from `small` as an inline `style`, so one number moves them all; the prototype left the first two as `w-64` and wrote the third as `w-64`, a second copy of 256. Docs' `PANEL_INTRUSION_PX` becomes the open right column's live width from `useColumnWidthPx` minus its 16px gutter, so the overlay maths follows a properties panel at `small`, the list at `medium` and a thread at `large`; the outline's `roomStart` reads `small`. The find bar's `right-68` inset (Docs, `CanvasDocumentShell`) becomes that width plus the bar's gutter, through a new `barStyle` on `DocSearchProvider`, since a class can't follow a live width.
+`packages/ui/src/components/layout/app/column-widths.ts` holds the three numbers and `large`'s tablet step. `Column` takes a strict `width: 'flex' | 'small' | 'medium' | 'large'` and reads `isTablet` from `useLayout()` itself, so no page writes a pixel value or its own tablet branch. A strict type leaves no caller behind, so the step that makes it strict converts every `Column` that passes a pixel value, each in one line: Mail's `listWidth` (`large`), `ListDetailLayout`'s `'350px'` (`large`), the waitlist's `'400px'` (`large`), `DriveLayout`'s `'400px'` (`large`), `PanelColumn`'s `PROPERTIES_PANEL_WIDTH_PX` (`small` until `CommentsColumn` replaces it), the Docs outline's `OUTLINE_WIDTH_PX` (`small`) and Docs' editor's `'w-full'`, which was never a valid width (`flex`). `columnWidthPx(size, isTablet)` and `useColumnWidthPx(size)` give the number to the few hosts that lay out around a column. It replaces Mail's `listWidth`, the literals in `ListDetailLayout`, `WaitlistRoute` and `DriveLayout`, `PROPERTIES_PANEL_WIDTH_PX` and `OUTLINE_WIDTH_PX`. Two widths are classes on plain elements, not a `Column`: the `w-64` in `PropertiesPanel` and the `w-64` in `SidebarContainer` (its `w-16` rail stays, a mode of the sidebar). Each takes its width from `small` as an inline `style`, so one number moves them all; the prototype left both as `w-64`. Slides' rail keeps its own classes in `SlidePanel`, `w-52 min-[120rem]:w-64`, a slides-only width and no token. Docs' `PANEL_INTRUSION_PX` becomes the open right column's live width from `useColumnWidthPx` minus its 16px gutter, so the overlay maths follows a properties panel at `small`, the list at `medium` and a thread at `large`; the outline's `roomStart` reads `small`. The find bar's `right-68` inset (Docs, `CanvasDocumentShell`) becomes that width plus the bar's gutter, through a new `barStyle` on `DocSearchProvider`, since a class can't follow a live width.
 
 ## 3. The design, visual
 
 ### The bar
 
-The rule: **the bar names a list; the body names an item.** A detail bar holds no item title. The item's name is the body's heading, as Mail, Drive and Contacts already do. A bar over a list (the comments list, the activity feed) shows its title at the left, as every list column does.
+The rule: **the bar names a list; the body names an item.** A detail bar holds no item title. The item's name is in the body (the item's block, below; Mail's subject and Drive's name as today). A bar over a list (the comments list, the activity feed) shows its title at the left, as every list column does.
 
-- Left, on a phone: `Column`'s back arrow, which is the in-column back. From a thread it goes to the list; from the list, or from a column with no list level, it closes the column, back to the document or the list beside it.
-- Left, off the phone: an in-column back (`‹ Comments`) when the column has drilled from its list into one item. It shows only off the phone, where the arrow already does the job.
-- Right: the item's icon actions, then a ⋮ for the rest, then a gap, then X off the phone. On a phone the back arrow closes, so no X. X always means Close, never Reject.
+- Back is "‹" everywhere: one `BackButton({ onClick, label? })` in `packages/ui` layout/toolbar, a lone chevron with the tooltip "Back", or a chevron with the name of the list it returns to. `Column`'s phone back uses it, so every app's phone back becomes "‹" (it was "←"). Drive's text editor's "Back to files" arrow (`EditToolbar` in `editor-toolbar.tsx`) becomes `‹ Files`, a `BackButton` with the label of where it goes, as `‹ Comments` does; `code-editor-leave.test.tsx`, which clicks it by its old name, follows.
+- Left, in a column that has drilled from its list into one item: `‹ Comments`, on a desktop and on a phone alike. It goes to the list.
+- Left, on a phone, with no list behind: a lone "‹" that closes the column, back to the document or the list beside it, then the bar's title if it has one. So the comments column's own list shows "‹" and the title "Comments", never "‹ Comments". The prototype labelled that back with the title (`DetailColumn` passes `label={title}` whenever it shows a back); the build labels it only when `onBack` is set.
+- Right: the item's icon actions, then a ⋮ for the rest, then a gap, then X off the phone. On a phone the back closes, so no X. X always means Close, never Reject.
 - Height `h-12`, `app-gutter-x`, bottom border fading in on scroll (`toolbarBorder="auto"`), as Drive and Mail.
 
-Where today disagrees, this picks: Mail gets its X (it is the only detail without one; a small fix that can ship any time). The calendar's actions move from the dialog footer into the bar, and the body's heading says "Lunch". Its RSVP stays in the body, under an `eigen-section-label`: Decline's icon is an X, and in a bar an X only ever means Close. Drive's share, watch and ⋮ move from the body into the bar; its filled Open stays under the heading as the one text button. The comments bar keeps today's order at its list level: "Comments", then `+` (New comment), then the filter, then X. New is there only on a canvas host (Slides, Vector), which adds a comment anchored to no element (`onAddComment` on `PanelColumn` today). Docs and Sheets anchor each comment to their content, so their bar has no New: Docs makes a comment from the Insert menu or the selection's context menu, Sheets from the Insert menu or a cell's context menu.
+Where today disagrees, this picks: Mail gets its X (it is the only detail without one; a small fix that can ship any time). The calendar's actions move from the dialog footer into the bar, and the body's block says "Lunch". Its RSVP stays in the body, under an `eigen-section-label`: Decline's icon is an X, and in a bar an X only ever means Close. Drive's share, watch and ⋮ move from the body into the bar; its filled Open stays under the heading as the one text button. The comments bar keeps today's order at its list level: "Comments", then `+` (New comment), then the filter, then X. New is there only on a canvas host (Slides, Vector), which adds a comment anchored to no element (`onAddComment` on `PanelColumn` today). Docs and Sheets anchor each comment to their content, so their bar has no New: Docs makes a comment from the Insert menu or the selection's context menu, Sheets from the Insert menu or a cell's context menu.
 
 ### The body
 
 - Inset `app-gutter-x`, `pt-4 pb-6`; one scroller, the body. A thread scrolls above a composer pinned to the bottom with a `border-t`; that composer is the thread's own, so the column has no footer slot (section 5).
-- Heading `text-xl font-medium`, as Mail's subject and Drive's name already are. The card's `text-lg` comes in line.
-- A meta line under it in `text-sm text-muted-foreground` (date, sender, author).
+- The item's title, meta line and sections follow the one anatomy below. Mail's subject and Drive's name keep their `text-xl font-medium` heading, the size the block's title takes.
 - Section captions are `eigen-section-label` (small caps), already used by the sidebar sections, Drive's table header, Drive's detail and the comment thread. Contacts' `text-lg` headings with a rule under them are the outlier and change.
-- Rows `text-sm`, an icon row (16px muted icon, value, an optional muted second line) for facts like time and calendar, and Drive's label/value rows for metadata.
+- Rows `text-sm`, an icon row (16px muted icon, value, an optional muted second line) for facts, and Drive's label/value rows for metadata.
 - Loading: the bar is there at once with its X; the body shows `LoadingState`. Not found: `EmptyState` with the X still there; the calendar's reads "This event isn't in this view". Nothing selected: no column at all (the waitlist's placeholder column goes).
 - One 1px `border-l`, top to bottom, bar included. Background `bg-background` in both themes. A document beside it stays white, as LAYOUT.md rules.
+
+### One body anatomy
+
+Every opened item's body is built from three parts in `packages/ui/src/components/layout/app/detail-item.tsx`, so an event and a comment side by side read as one design, in a column or a dialog:
+
+- `DetailItemBlock({ title, color?, children? })`: the item as it looks on its surface, an event on the grid or a card on the board. Square, in its `colorSurface` tile tint, muted (`bg-muted`) without a color. The title is `text-xl font-medium` inside the block; under it the block carries what the item is, such as an event's time or a comment's text.
+- `DetailMeta`: one muted `text-xs` line under the block, such as who made it.
+- `DetailSection({ label })`: an `eigen-section-label` caption, 24px above, over `text-sm` rows. With no children it is a caption alone over a list its host draws, such as a thread's messages.
+
+What each detail puts where:
+
+| Detail | Block | Meta | Sections |
+|---|---|---|---|
+| Calendar event | title, when, time zone, repeat, the Canceled badge | the calendar, and "created by" on a shared calendar | Location, Guests, Description, RSVP |
+| Comment thread | title and text | created by … on …, the assignee at the right | Attachments; an Activity caption over the messages; the composer pinned in the `fill` body |
+| The board's card dialog | the same anatomy, in a white dialog | | |
+| The .ics preview | the event's anatomy | | |
+
+A contact and the future stickies list view follow it too. Known polish for the build: `AttendeeList`'s own "N guests" toggle repeats the Guests caption, so the toggle drops its label.
+
+Every block, tile and event reads one shared class, `.eigen-block`, in `packages/ui/src/styles/globals.css` beside `eigen-section-label` (`eigen-tile` is taken by Drive's grid): square corners and one flat shadow, `0 1px 2px 0 rgb(0 0 0 / 0.08)`, set through Tailwind's shadow variable so a ring adds to it. In dark mode `colorSurface`'s 2px colored stripe stands in for it. No component keeps its own corner or shadow class: `CardTile` (board cards, the comments list, the hover card, the drag overlay) drops shadcn's `Card`, whose rounding and shadow it only overrode; `EventSurface` (time-grid blocks, all-day and month bars, chips), the drafts and ghosts (`DraftBlock`, `LaneGhost`) and `DetailItemBlock` read it too. So calendar items and board cards look exactly the same; list rows already were square. The owner chose it flat: in light mode the shadow is barely visible, by design. Drag ghosts and the board's drag overlay no longer look lifted; accepted.
+
+One tint: `colorSurface(color)` loses its tone parameter, and the `'panel'` 0.5 tone goes. An opened item's block takes the tint of its tile. The owner confirmed (25 November 2026) that an opened sticky is a white dialog with the card's tile-tinted block on top, as a comment and an event are in their columns. This supersedes the "open card 0.5" ruling in [PROPOSAL_CALENDAR_VIEWS.md](PROPOSAL_CALENDAR_VIEWS.md) (the owner's answer 5).
 
 ### Where it sits: under the bar that spans the screen
 
@@ -132,9 +156,11 @@ Grid and detail, Calendar (the grid is its list):
 ```
 │ nav 256   │ grid flex                                │ detail 320         │
 │ Create    │ [Today ‹ › 30 Nov – 6 Dec       Week ▾ ] │ [   ✎  🗑  ⤓    ✕ ]│
-│ calendars │  MON  TUE  WED  THU  FRI  SAT  SUN       │ Lunch              │
-│ mini month│                 ▌Lunch                   │ 🕒 Thu 3 Dec 12:30 │
+│ calendars │  MON  TUE  WED  THU  FRI  SAT  SUN       │ ┌ Lunch ─────────┐ │
+│ mini month│                 ▌Lunch                   │ │ Thu 3 Dec 12:30│ │
+│           │                                          │ └────────────────┘ │
 │           │                                          │ 📅 Personal        │
+│           │                                          │ GUESTS             │
 ```
 
 Slides with the comments open: the editor bar spans the screen with its shape tools; rail and detail hang under it with one top edge, the detail in place of the properties:
@@ -142,20 +168,21 @@ Slides with the comments open: the editor bar spans the screen with its shape to
 ```
 ┌ topbar ────────────────────────────────────────────────────────────────────────┐
 │ [File Edit Insert     ▭ ◇ ○ ↗ T ▶ 🖼                       🔍 ∿ 🔔 💬 👤+ ] │
-│ rail 256 │ slide canvas flex                           │ [Comments    +  ≡  ✕ ] │
+│ rail 208 │ slide canvas flex                           │ [Comments    +  ≡  ✕ ] │
 │  ▢ 1     │      ┌──────────────────────────┐           │ ┌ test ──────────────┐ │
 │  ▢ 2     │      │                          │           │ │ test comment       │ │
 │          │      └──────────────────────────┘           │ └ 1 reply ───────────┘ │
 ```
 
-Closed, Slides is today's layout: the bar over rail, canvas and properties. Docs, thread level: the detail lies over the page's right, as the properties panels do today, and the page stays put:
+Closed, Slides is today's layout: the bar over rail, canvas and properties. Docs, thread level: the detail lies over the page's right margin, never its text, as the properties panels do today, and the page stays put:
 
 ```
 │ [File Edit Insert Format Tools  Normal ▾  B I U …                 🔍 ∿ 🔔 💬 👤+ ] │
 │              ┌──────── page, where it was ─────────┐           │[‹ Comments 🔗 ✎ ✓ ✕]│
-│              │ adsf                                │           │ fghjfhgj            │
-│              │ ▒fghjfhgj▒                          │           │ “quoted anchor”     │
-│              │                                     │           │ THREAD  …replies    │
+│              │ adsf                                │           │ ┌ fghjfhgj ───────┐ │
+│              │ ▒fghjfhgj▒                          │           │ └ comment text ───┘ │
+│              │                                     │           │ Ann · 2 Nov         │
+│              │                                     │           │ ACTIVITY  …replies  │
 │              └─────────────────────────────────────┘           │ [Reply…          ➤] │
 ```
 
@@ -172,10 +199,13 @@ Phone, every kind:
 
 ```
 ┌ topbar ─────────────┐        ┌ topbar ─────────────┐
-│ [≡  list toolbar  ] │  tap → │ [←       ✎  🗑  ⤓ ] │
-│ rows / grid / doc   │ ← back │ Lunch               │
+│ [≡  list toolbar  ] │  tap → │ [‹       ✎  🗑  ⤓ ] │
+│ rows / grid / doc   │ ‹ back │ ┌ Lunch ──────────┐ │
+│                     │        │ └ Thu 3 Dec 12:30 ┘ │
 └─────────────────────┘        └─────────────────────┘
 ```
+
+On a phone a comment thread's bar reads `[‹ Comments  🔗 ✎ ✓ ]` and the comments list's own bar `[‹  Comments  ≡ ]`: a lone "‹" back to the document, then the title, not a `‹ Comments` button.
 
 ## 4. Behaviour
 
@@ -183,7 +213,7 @@ Phone, every kind:
 
 **Sheets today, and its step.** Sheets' comments pane and `FloatingObjectPanel` sit beside the whole `Workbook`, bar included, so they run to the top and the bar folds its format row by container width when one opens (`@[1000px]`, `@[1080px]` in `format-toolbar.tsx`). That is today's exception to the rule. The Sheets step moves both into the `Workbook` slot, so the bar stays full width there too. The slot is a `ReactNode` prop on our fork's `Workbook`; the grid already measures its canvas on resize.
 
-**Docs keeps its overlay.** Properties panels and the detail share one right slot in Docs, and both stay an overlay that never reflows the page (`canvasShift`, `canvasScale`): one geometry in the slot. The page moves only by its overlap: once the scroller is wider than `panelClearWidth` the panel clears the page and nothing moves. For the default A4 page (text column ending at 718px) that is about 1122 at 256, so at 1280 and 1440 the page doesn't move today. At 320 (`medium`) it is about 1250: the page doesn't move at 1440 and moves about 1px at 1280 (the scroller is the window less its 32px padding, so 1408 and 1248; a visible scrollbar adds about 8px). At 400, the width of an open thread, it is about 1410: the page stays at 1440 and moves about 81px at 1280 while a thread is open. Made a sibling, a 320 column would shift the centred page 160px on every open, a click on a highlight included. At 1280 with a thread open the column covers the page's right margin; that comes with the owner's choice to grow a thread to `large`, and is accepted.
+**Docs keeps its overlay.** Properties panels and the detail share one right slot in Docs, and both stay an overlay that never reflows the page (`canvasShift`, `canvasScale`): one geometry in the slot. The column may lie over the page's right margin, never its text: that is what `panelClearWidth` guarantees, since it is worked out from the text column's right edge (`textColumnRight`), not the page's. The page moves only as far as the column would otherwise cover text: once the scroller is wider than `panelClearWidth` the panel clears the text and nothing moves. Every "the page doesn't move" below means that. For the default A4 page (text column ending at 718px) that is about 1122 at 256, so at 1280 and 1440 the page doesn't move today. At 320 (`medium`) it is about 1250: the page doesn't move at 1440 and moves about 1px at 1280 (the scroller is the window less its 32px padding, so 1408 and 1248; a visible scrollbar adds about 8px). At 400, the width of an open thread, it is about 1410: the page stays at 1440 and moves about 81px at 1280 while a thread is open. Made a sibling, a 320 column would shift the centred page 160px on every open, a click on a highlight included. At 1280 with a thread open the page moves and the column still covers its right margin; that comes with the owner's choice to grow a thread to `large`, and is accepted.
 
 **Docs' comment text.** A click on a comment's own text in the page opens its thread and leaves the caret where it landed. It does not select the anchor, as the list and the activity do: a selected anchor would make the next keystroke replace the commented text.
 
@@ -197,9 +227,9 @@ A press on empty space closes nothing, except on the calendar grid, where the gr
 
 **Calendar.** The URL is the open state: `?eventId=` and, for an occurrence of a series, `?occurrence=` with its `occurrenceDate`, the key that stays when that occurrence moves. The detail shows the occurrence the current list holds for that pair. While the URL names it, the detail keeps the last copy it found when the list lacks it: during a save, during a refetch and after a week change to a range that doesn't hold it. Only a landing or a reload that never found it shows the not-found state below. A bare `?eventId=` on a series, with no `?occurrence=`, is what Mail's invitation link and a notification's link write today (`calendarEventLink` names only the event and a day): it opens the occurrence in the loaded view nearest the view's `$date` (the day the link's `?date=` becomes) and replaces the URL with that occurrence's key, since the link's day is the only hint of which occurrence was meant; with none in view it shows the not-found state, as any event does. After a drag of the open event the URL stays valid (the id and the key don't change) and the detail follows the list. After an edit or an RSVP the detail stays open on the saved event, where today the dialog closes; a delete closes it. A save that re-keys the occurrence (a series moved at "all", or a split at "this and following", which creates a new series) replaces the URL with the saved event: `EditEventDialog` and `EventDropHost` hand it back through an `onSaved`, and the route writes its key, or closes the detail if nothing matches. After a week change the detail stays while the URL names it: every view navigation keeps `eventId` and `occurrence`. Today each one drops the search, and the build fixes them all: `useShowView` (the toolbar's arrows, Today and view switch, its keyboard shortcuts, and the mini month's day click inside a view), the day-header `Link` in `TimeGrid`, the day-number `Link` in `MonthView`, and the sidebar's view items in `CalendarSidebar` (`SidebarItem` to `/view/$mode/$date`). The start page's redirect in `routes/index.tsx` keeps `eventId` but knows no `occurrence`, so its `validateSearch` and its redirect take `occurrence` too. The mini month outside a view navigates to `/` with only a `?date=`, but no detail is open there. A column is a place you read while you look around, such as checking next week against an invitation; Google closes its peek, but a peek covers the grid and a column doesn't. An event the view can't find, such as on a reload on a week without it, shows the not-found `EmptyState` in the column ("This event isn't in this view"); it doesn't close itself, because shared calendars load separately and the event may still arrive. The open event's block carries a ring in its calendar's colour, so the user sees which block the column describes.
 
-**Phone.** Exactly as Mail: the detail replaces the screen, with the back arrow, and the system back gesture closes it. A main that must survive (an editor, the calendar grid, the board) stays mounted and is hidden with CSS, so an editor keeps its Y.Doc. Lists may keep unmounting, as they do today. Docs keeps its own phone hide rather than `PhoneDetail`, because its outline pane shares that hide.
+**Phone.** Exactly as Mail: the detail replaces the screen, with "‹" at the bar's left, and the system back gesture closes it. A main that must survive (an editor, the calendar grid, the board) stays mounted and is hidden with CSS, so an editor keeps its Y.Doc. Lists may keep unmounting, as they do today. Docs keeps its own phone hide rather than `PhoneDetail`, because its outline pane shares that hide.
 
-**Tools while a detail is open.** The detail takes the right slot; a right tool yields while it is open, as comments replace properties today. A left tool (the rail, the Docs outline) stays. Slides refits its slide as the column grows into a thread (816 → 736 at 1440); Vector's canvas narrows from the right.
+**Tools while a detail is open.** The detail takes the right slot; a right tool yields while it is open, as comments replace properties today. A left tool (the rail, the Docs outline) stays. Slides refits its slide as the column grows into a thread (864 → 784 at 1440); Vector's canvas narrows from the right.
 
 **Revealing an anchor.** A thread opened from the list or the activity reveals its anchor. In the prototype Vector panned about 800px to do it. The build pans only when the anchor would sit under the column, and then by the least distance that clears it.
 
@@ -215,7 +245,7 @@ All in `packages/ui`, exported from its barrels; nothing carries a permission ch
 <DetailColumn
     width="medium"               // 'flex' | 'medium' | 'large'
     title?="Comments"            // only over a list
-    onBack?={toList}             // in-column back (thread → list); the phone's arrow runs onBack ?? onClose
+    onBack?={toList}             // in-column back (thread → list), "‹ Comments"; on a phone a lone "‹" runs onClose without it
     actions={…}
     onClose={close}
     fill?                        // the body scrolls itself, such as a thread over its pinned composer
@@ -231,6 +261,12 @@ const { open, close } = useDetailHistory(value, setValue);  // the history rule 
 // setValue(next, { replace, state }): the host passes both to its own navigate
 const focusInDetail = useFocusInDetail();                   // folded into a keymap's enabled, beside useDialogOpen
 const px = useColumnWidthPx('large');                       // columnWidthPx(size, isTablet) outside React
+
+// The body's parts (section 3) and the one back.
+<DetailItemBlock title="Lunch" color={calendarColor}>{when}</DetailItemBlock>
+<DetailMeta>{calendarName}</DetailMeta>
+<DetailSection label="Guests">{guests}</DetailSection>
+<BackButton onClick={toList} label?="Comments" />
 ```
 
 `DetailColumn` has no footer slot. A thread's composer belongs to `CommentThread` and its chat hook, so the column gives the thread a `fill` body, and the thread scrolls over its own pinned composer. It wraps its `Column` in a `data-slot="detail-column"` element with `display: contents`, which `useFocusInDetail` and the tests find it by.
@@ -253,13 +289,13 @@ Comments:
 
 Order, each merge leaving the app whole:
 
-1. **First merge**: `column-widths.ts` with `Column`'s strict tokens, and with them every `Column` caller section 2 lists, so these widths change here: Contacts' and Admin users' and teams' list to `large` (400, 320 on a tablet), the waitlist and Drive's detail to 320 on a tablet, the Docs outline to 256, Docs' `'w-full'` to `flex`; `PropertiesPanel` and `SidebarContainer` take their width from `small` (no visible change). Then `DetailColumn`, `PhoneDetail`, `useDetailHistory`, `useFocusInDetail`, and the canvas' Esc handler calling `preventDefault` when it acts (section 4); the `CardDetail` split; Calendar (event detail in the column, URL, phone push, the open event's ring, `onSaved`; `EventDetailDialog` becomes an `EventDetail` body, `useEventDetailState` moves to the route, and `scripts/dialog-footer.ts` drops `apps/calendar/src/components/event-detail-dialog.tsx` from its list, or `bun scripts/check-standards.ts` fails); `CommentsColumn` in `CanvasDocumentShell` (Slides and Vector in one file) with `?panel=` and `?chat=`. The owner checks it at 1280 and 1440 before the rest follows.
+1. **First merge**: `column-widths.ts` with `Column`'s strict tokens, and with them every `Column` caller section 2 lists, so these widths change here: Contacts' and Admin users' and teams' list to `large` (400, 320 on a tablet), the waitlist and Drive's detail to 320 on a tablet, the Docs outline to 256, Docs' `'w-full'` to `flex`; `PropertiesPanel` and `SidebarContainer` take their width from `small` (no visible change). Then `DetailColumn`, `PhoneDetail`, `useDetailHistory`, `useFocusInDetail`, and the canvas' Esc handler calling `preventDefault` when it acts (section 4); `BackButton` with `Column`'s phone back and Drive's editor back on it, so "‹" lands in every app here; then the body anatomy, before anything draws a body: `DetailItemBlock`, `DetailMeta` and `DetailSection`, `.eigen-block` with every tile, event, draft and ghost on it (`CardTile` off shadcn's `Card`), and `colorSurface` with one tint, in one go since `DetailItemBlock` calls `colorSurface(color)` without a tone; the `CardDetail` split, on that anatomy, so the board's card dialog turns white with its tile-tinted block here; Slides' rail to `w-52 min-[120rem]:w-64` in `SlidePanel`; Calendar (event detail in the column, URL, phone push, the open event's ring, `onSaved`; `EventDetailDialog` becomes an `EventDetail` body, `useEventDetailState` moves to the route, and `scripts/dialog-footer.ts` drops `apps/calendar/src/components/event-detail-dialog.tsx` from its list, or `bun scripts/check-standards.ts` fails); `CommentsColumn` in `CanvasDocumentShell` (Slides and Vector in one file) with `?panel=` and `?chat=`. The owner checks it at 1280 and 1440 before the rest follows.
 2. Docs: `CommentsColumn` in the overlay slot, the intrusion and find-bar inset from the live width, the URL, `useFocusInDetail` in its typing.
 3. Sheets: the `Workbook` slot, `FloatingObjectPanel` into it, `CommentsColumn`, the URL.
 4. Stickies' activity in `CommentsColumn`, which then works on a phone; `PanelColumn` goes.
 5. The list apps onto `DetailColumn` and `useDetailHistory`: Mail, Contacts (through `ListDetailLayout`), Admin users and teams (the same), and the waitlist. This is the step that delivers their part of sections 1 and 8: Esc closes, the history rule (back after a close doesn't reopen the item), Mail's X, Mail's close keeping `?q=`. Their detail stays `flex` beside the `large` list. It also narrows `useKeyboardListNavigation`'s Esc to a selection of two or more rows (section 4), since Mail's and Contacts' lists are the first to sit beside a `DetailColumn`; Contacts' section headings in `ContactDetailCard` become `eigen-section-label` without the rule (Drive's vCard preview shares the card, so it changes too); the waitlist's Reject is no longer an X, and its "Select an entry" placeholder column goes, so nothing selected shows no detail.
-6. Drive onto `DetailColumn` and `useDetailHistory`: its share, watch and ⋮ into the bar, arrow keys replacing; and Slides' rail to `small`, its width from `small` as above.
-7. Docs in the same cycle as each step: LAYOUT.md (the detail rule, the widths, the placement rule), COMMENTS.md, MOBILE.md, the help-center articles on comments and calendar, CHANGELOG.
+6. Drive onto `DetailColumn` and `useDetailHistory`: its share, watch and ⋮ into the bar, arrow keys replacing.
+7. Docs in the same cycle as each step: LAYOUT.md (the detail rule, the widths, the placement rule, the body anatomy, `.eigen-block`, "‹" as the one back), COMMENTS.md, MOBILE.md, the help-center articles on comments and calendar, CHANGELOG, SHARED-PRIMITIVES.md through `bun run primitives` for `BackButton` and the anatomy. With the single tint in step 1: PROPOSAL_CALENDAR_VIEWS.md's answer 5 (0.25 for a tile, 0.5 for an open card) and its color-surface bullet, updated to one tint and pointing here; STICKIES.md's `colorSurface(color, tone)` bullet, which states the `'panel'` 0.5 tone as the owner's ruling; and any other doc a grep of `docs/` for the 0.5 tone finds.
 8. Later, optional cleanup: Mail's and the waitlist's inline list layouts into `ListDetailLayout`. Separate from step 5, which changes their behaviour, not their layout code.
 9. Later, its own product unit: the stickies list view, under `Board` so the Y.Doc provider stays above both views, a sticky in `CardDetail` in the column.
 
@@ -272,6 +308,7 @@ Counted from the files on `develop`; nothing reuses preview code. Rough, about �
 | Step | In | Out | Net | Prototype net |
 |---|---|---|---|---|
 | 1. Widths with every `Column` caller converted, `DetailColumn`, `PhoneDetail`, the two hooks, the canvas' Esc | ~250 | ~40 | +210 | +203 (it converted the callers too) |
+| 1. `BackButton`, the body anatomy, `.eigen-block`, one tint, Slides' rail (round 2: the comments' root back, Drive's editor back and the `AttendeeList` label on top) | ~310 | ~270 | +40 | +31 (69bec8c3d +6/−4, 0723f281e +79/−81, 340ccd016 +37/−18, a5cd12f8b +181/−169; tests and SHARED-PRIMITIVES.md included) |
 | 1. `CardDetail` split as a render prop | ~60 | ~15 | +45 | +45 |
 | 1. Calendar in the column (the dialog frame, `useEventDetailState` and three view mounts out; ring, `onSaved`, links in) | ~150 | ~130 | +20 | −1 |
 | 1. `CommentsColumn` and the URL in Slides and Vector (`PanelColumn` still serves the others) | ~280 | ~40 | +240 | +266 (with `cardInColumn`, the menu path left out) |
@@ -279,16 +316,16 @@ Counted from the files on `develop`; nothing reuses preview code. Rough, about �
 | 3. Sheets | ~30 | ~30 | 0 | not built |
 | 4. Stickies' activity; `PanelColumn` and the two `PropertiesPanel` shells out | ~15 | ~140 | −125 | not built |
 | 5. List apps onto `DetailColumn` and `useDetailHistory` (Mail, `ListDetailLayout`, the waitlist; the list Esc, Contacts' headings) | ~50 | ~50 | 0 | not built |
-| 6. Drive onto `DetailColumn` (`DriveDetailToolbar` and its back handlers out), Slides' rail | ~25 | ~50 | −25 | not built |
+| 6. Drive onto `DetailColumn` (`DriveDetailToolbar` and its back handlers out) | ~25 | ~50 | −25 | not built |
 | Mail's X | ~5 | 0 | +5 | not built |
-| **Total** | ~905 | ~525 | **about +380** | |
+| **Total** | ~1215 | ~795 | **about +420** | |
 | 8. Later: list layouts into `ListDetailLayout` | ~10 | ~100 | −90 | |
 
 The design grows the code by a few hundred lines. What it buys is behaviour: links, back, the phone push and one placement, not fewer lines.
 
 ## 6. Comments specifically
 
-**One column that holds the list and drills into a thread, with a back arrow to the list** (owner). The column is `medium` at the list and grows to `large` in a thread. The toolbar's comments icon opens the column at the list (`?panel=comments`). A click on a comment in the list, or on its anchor in the document (a highlight in Docs, a cell marker in Sheets, the corner marker on a canvas), opens the thread in the same column (`?chat=`); `‹ Comments` goes back to the list with its scroll kept. Entered from an anchor, the list is still behind the thread, as Mail's list is behind a message opened from a link. Activity is the same column at another list level; an activity row opens its thread with back to the activity. New comment stays `CardFormDialog`; Edit stays a dialog, the card's own edit form (`CardDetail`'s `editForm`), since `CardFormDialog` is create-only. The hover card on anchors stays. On the stickies board, an activity row opens the sticky in the board's dialog, as today.
+**One column that holds the list and drills into a thread, with `‹ Comments` back to the list** (owner). The column is `medium` at the list and grows to `large` in a thread. The toolbar's comments icon opens the column at the list (`?panel=comments`). A click on a comment in the list, or on its anchor in the document (a highlight in Docs, a cell marker in Sheets, the corner marker on a canvas), opens the thread in the same column (`?chat=`); `‹ Comments` goes back to the list with its scroll kept. Entered from an anchor, the list is still behind the thread, as Mail's list is behind a message opened from a link. Activity is the same column at another list level; an activity row opens its thread with back to the activity. New comment stays `CardFormDialog`; Edit stays a dialog, the card's own edit form (`CardDetail`'s `editForm`), since `CardFormDialog` is create-only. The hover card on anchors stays. On the stickies board, an activity row opens the sticky in the board's dialog, as today.
 
 Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slides leaves the slide a narrow strip on a laptop. Why not keep the dialog: it is the one item in Eigen that opens in a modal while every other item opens in a column, which is what the owner asked to change.
 
@@ -296,14 +333,23 @@ Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slid
 
 1. **Placement: under the bar that spans the screen.** The app bar in Mail, Contacts, Drive and Calendar; the editor bar in the editors, which stays full width while the detail takes the right slot under it. Not chosen: the detail running to the top, which would fold Docs' formatting row (B, I and U at 1280), hide Slides' and Vector's shape tools up to 1520, and break the shared top edge of Slides' rail and right column.
 2. **Docs keeps its overlay**, for properties and the detail alike, so the page stays centred. Not chosen: a sibling column, which would jump the page 160px on every open.
-3. **Four sizes: `small` 256, `medium` 320, `large` 400 (320 on a tablet), `flex`.** `medium` for a detail beside a surface (the comments list, the calendar's event), `large` for lists and Drive's detail. Slides' rail moves from 208 to `small`. Not chosen: details at `large` too, which at 1280 leaves the slide 576px and a day column 81px.
-4. **Comments: one column, the list drilling into a thread, back to the list.** The column grows from `medium` to `large` while a thread is open. On a phone the column is a screen of its own with a back arrow, as a mail is. New comment stays `CardFormDialog` and Edit a dialog (the record said Edit was `CardFormDialog` too; it never was, that dialog only creates). Not chosen: a thread beside the list (576px at the right), or keeping the dialog.
+3. **Four sizes: `small` 256, `medium` 320, `large` 400 (320 on a tablet), `flex`.** `medium` for a detail beside a surface (the comments list, the calendar's event), `large` for lists and Drive's detail. Slides' rail is no token; decision 11 reverses the earlier ruling that moved it to `small`. Not chosen: details at `large` too, which at 1280 leaves the slide 576px and a day column 81px.
+4. **Comments: one column, the list drilling into a thread, back to the list.** The column grows from `medium` to `large` while a thread is open. On a phone the column is a screen of its own with "‹", as a mail is. New comment stays `CardFormDialog` and Edit a dialog (the record said Edit was `CardFormDialog` too; it never was, that dialog only creates). Not chosen: a thread beside the list (576px at the right), or keeping the dialog.
 5. **The list level is in the URL**: `?panel=comments` or `?panel=activity`, beside `?chat=` for the thread, so a phone's back closes the column and a reload keeps it.
 6. **The stickies board keeps its dialog.** A sticky opens in the column only in the future list view.
 
+After the prototype's second round (owner, 25 November 2026):
+
+7. **One body anatomy.** `DetailItemBlock` (the item as it looks on its surface, square, in its tile tint, the `text-xl font-medium` title inside), `DetailMeta` (one muted `text-xs` line) and `DetailSection` (an `eigen-section-label` caption over `text-sm` rows), for the event, the comment thread, the board's card dialog, the .ics preview, and later a contact and the stickies list view (section 3). It replaces the old heading-and-meta rules. `AttendeeList`'s toggle drops its "N guests" label.
+8. **Back is "‹" everywhere.** One `BackButton`: a lone chevron with the tooltip "Back", or a chevron with the list's name. Every app's phone back becomes "‹" (was "←"), the comments thread shows `‹ Comments` on a desktop and a phone, and Drive's text editor's "Back to files" arrow becomes `‹ Files`. On a phone the comments column's own list shows a lone "‹" back to the document beside the title "Comments", never `‹ Comments`.
+9. **One `.eigen-block` class** for every tile and block, in `globals.css`: square, one flat shadow, the dark-mode stripe in its place. Calendar items and board cards look exactly the same. The owner chose it flat; drag ghosts and the board's drag overlay no longer look lifted, accepted.
+10. **One tint.** `colorSurface(color)` has no tone; the `'panel'` 0.5 tone goes. An opened sticky is a white dialog with the card's tile-tinted block on top, as a comment and an event are in their columns. This supersedes the "open card 0.5" ruling, answer 5 in PROPOSAL_CALENDAR_VIEWS.md.
+11. **Slides' rail is slides-only**, not a Column token: 208 (`w-52`) on normal screens, 256 from 1920 wide (`min-[120rem]:w-64`), where it matches the properties column across from it. This reverses the earlier ruling that moved it to `small`: a wider rail took room from the slide and its thumbnails read no better.
+12. **Docs' overlay, precisely.** The column may lie over the page's right margin, never its text, which `panelClearWidth` guarantees; "the page doesn't move" means that.
+
 ## 8. Risks
 
-**Size:** about 9 units (the first merge is four, then Docs, Sheets, Stickies' activity, the list apps, and Drive with Slides' rail) plus the docs pass; about +380 lines, tests on top (the prototype raised it from +165). The stickies list view is a unit of its own, later.
+**Size:** about 10 units (the first merge is five, round 2's anatomy, back, tile class, tint and rail among them, then Docs, Sheets, Stickies' activity, the list apps, and Drive) plus the docs pass; about +420 lines, tests on top (the first prototype raised it from +165 to +380, round 2 by about 40). The stickies list view is a unit of its own, later.
 
 **What could regress:**
 
@@ -318,6 +364,6 @@ Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slid
 - Comments: a `?chat=` that names a deleted comment must open it as deleted, which needs `useComments` to have loaded before the not-found rule runs; a test lands on one. A `?chat=` landing on the stickies board must still open its dialog, and a `?card=` landing too.
 - Widths: Contacts' and Admin's list grows to 400 on a desktop and drops to 320 on a tablet; the waitlist and Drive step to 320 on a tablet. Check the rows' second line still fits at 320.
 
-**Bugs this design removes:** Mail's missing X; the waitlist's X meaning Reject and its placeholder column; the calendar's `?eventId=` read once (`didAutoOpen`), never written, never cleared, back not closing, and the first occurrence of a series opening; `?chat=` never cleared in Docs, Sheets, Slides and Vector, so a reload reopens the comment; Drive pushing a history entry per arrow key; Stickies' missing activity on a phone (the ROADMAP "Mobile: next round" row); `PanelColumn` placed three ways; the panel inside a panel; Drive's 400 on a tablet and nine width literals; Mail's close dropping `?q=`; back after a close reopening the item; Drive's `handleBackToList` comment, which names only the narrow screen's back button though it backs the desktop X too.
+**Bugs this design removes:** Mail's missing X; the waitlist's X meaning Reject and its placeholder column; the calendar's `?eventId=` read once (`didAutoOpen`), never written, never cleared, back not closing, and the first occurrence of a series opening; `?chat=` never cleared in Docs, Sheets, Slides and Vector, so a reload reopens the comment; Drive pushing a history entry per arrow key; Stickies' missing activity on a phone (the ROADMAP "Mobile: next round" row); `PanelColumn` placed three ways; the panel inside a panel; Drive's 400 on a tablet and eight width literals; Mail's close dropping `?q=`; back after a close reopening the item; Drive's `handleBackToList` comment, which names only the narrow screen's back button though it backs the desktop X too; board cards (a medium shadow) and calendar events (rounded corners) drawn as two apps, and the open card's second tint; a phone back drawn as "←" beside a desktop "‹".
 
 **Outside this proposal:** `packages/ui` imports `@tanstack/react-router` in its source (`topbar.tsx`, `leave-guard.tsx` and more) without declaring it in its `package.json`, a pre-existing slip; declaring it is a `package.json` change and needs the owner's yes.
