@@ -4,7 +4,7 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -42,18 +42,6 @@ async function openPage() {
 }
 
 const DAYS = 'Days of inactivity before deletion';
-const control = (label: string) => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const element = tag && document.getElementById(tag.htmlFor);
-    if (!(element instanceof HTMLElement)) throw new Error(`no control labelled ${label}`);
-    return element;
-};
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeDays = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(control(DAYS), value);
-        control(DAYS).dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const saveButton = () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
 
 test('Guest access keeps the page contract', async () => {
@@ -63,16 +51,16 @@ test('Guest access keeps the page contract', async () => {
         submitLabel: 'Save',
         firstField: DAYS,
         onSubmit: saveSettings,
-        makeChanged: () => typeDays('30'),
-        makeInvalid: () => typeDays('999'),
+        makeChanged: () => type(DAYS, '30'),
+        makeInvalid: () => type(DAYS, '999'),
         invalidField: DAYS,
     });
 });
 
 test('Save sends only the guest settings that changed', async () => {
     await openPage();
-    await typeDays('30');
-    const days = control(DAYS);
+    await type(DAYS, '30');
+    const days = field(DAYS);
     if (!(days instanceof HTMLInputElement)) throw new Error('the days field is no input');
     await act(async () => pressEnter(days));
     expect(saveSettings.mock.calls).toEqual([[{ guests: { inactivityDays: 30 } }]]);
@@ -80,7 +68,7 @@ test('Save sends only the guest settings that changed', async () => {
 
 test('a switch turned back to what was saved leaves nothing to save', async () => {
     await openPage();
-    const toggle = () => act(async () => control('Allow open guest signup').click());
+    const toggle = () => act(async () => field('Allow open guest signup').click());
     await toggle();
     expect(saveButton()).toBeDefined();
     await toggle();
@@ -89,18 +77,18 @@ test('a switch turned back to what was saved leaves nothing to save', async () =
 
 test('the days field can be emptied and retyped, and days outside 1 to 365 are refused under it', async () => {
     await openPage();
-    const days = control(DAYS);
+    const days = field(DAYS);
     if (!(days instanceof HTMLInputElement)) throw new Error('the days field is no input');
-    await typeDays('');
+    await type(DAYS, '');
     expect(days.value).toBe('');
-    await typeDays('0');
+    await type(DAYS, '0');
     expect(days.value).toBe('0');
     await act(async () => pressEnter(days));
     expect(saveSettings).not.toHaveBeenCalled();
     const message = document.getElementById(days.getAttribute('aria-describedby') ?? '');
     expect(message?.textContent).toBe('A whole number of days, from 1 to 365');
 
-    await typeDays('365');
+    await type(DAYS, '365');
     await act(async () => pressEnter(days));
     expect(saveSettings.mock.calls).toEqual([[{ guests: { inactivityDays: 365 } }]]);
 });

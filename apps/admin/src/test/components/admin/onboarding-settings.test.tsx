@@ -3,7 +3,7 @@
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -47,19 +47,6 @@ async function openPage() {
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
 }
 
-const subjectField = () => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === 'Subject');
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error('no Subject field');
-    return input;
-};
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeSubject = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(subjectField(), value);
-        subjectField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 test('Onboarding keeps the page contract', async () => {
     await expectFormContract({
         kind: 'page',
@@ -67,14 +54,14 @@ test('Onboarding keeps the page contract', async () => {
         submitLabel: 'Save',
         firstField: 'Subject',
         onSubmit: saveSettings,
-        makeChanged: () => typeSubject('Hi'),
+        makeChanged: () => type('Subject', 'Hi'),
         modEnterFields: ['Body'],
     });
 });
 
 test('Ctrl+Enter in an email body saves the page, with no line break added', async () => {
     await openPage();
-    await typeSubject('You are in!');
+    await type('Subject', 'You are in!');
     const body = document.querySelector('.ProseMirror');
     if (!body) throw new Error('the page has no invite body');
     // Happy-dom is no Mac, so the editor's Mod is Ctrl.
