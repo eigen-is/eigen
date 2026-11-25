@@ -10,7 +10,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { CellRangeDialog } = await import('../../../components/CellRangeDialog');
 type Dialogs = Parameters<Parameters<typeof sheetDialogForm>[0]>[0];
 
@@ -41,8 +41,8 @@ test('the range picker keeps the dialog contract', async () => {
         makeChanged: () => typeInto(RANGE, 'Sheet1!A1:B2'),
         makeInvalid: () => typeInto(RANGE, 'A1:'),
         invalidField: RANGE,
+        savesAtOnce: true,
         except: {
-            ...SYNCHRONOUS_WRITE,
             enter: 'Select hands the slot to the opener at once, so a second Enter finds no picker; tested below',
             close: 'the picker has no X, and Esc and Cancel open its opener again',
             discard: 'a pick is not typed input, and Esc and Cancel open its opener again',

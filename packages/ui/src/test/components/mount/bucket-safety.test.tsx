@@ -50,9 +50,6 @@ for (const [title, changingRetention, submitLabel] of [
             makeChanged: () => typeDays('60'),
             makeInvalid: () => typeDays('0'),
             invalidField: 'Expire old versions after days',
-            except: {
-                focus: 'a number field has no selection range to read, so the test below checks the focus alone',
-            },
         });
     });
 }

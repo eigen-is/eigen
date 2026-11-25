@@ -60,10 +60,8 @@ test('Request access keeps the page form contract', async () => {
         firstField: 'Message',
         onSubmit: requestAccess,
         makeChanged: () => addMessage('I need this for the review'),
-        except: {
-            focus: 'the page opens on its button; the message box shows, focused, only after Add a message',
-            leaveGuard: 'an optional note to the owner, and nothing stored is lost by leaving, as on sign-in',
-        },
+        noDraft: true,
+        except: { focus: 'the page opens on its button; the message box shows, focused, only after Add a message' },
     });
 });
 

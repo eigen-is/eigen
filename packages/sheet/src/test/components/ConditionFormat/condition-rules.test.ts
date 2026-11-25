@@ -12,7 +12,7 @@ import { formatList } from '../../state/factories/validations';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { ConditionRules } = await import('../../../components/ConditionFormat/ConditionRules');
 
 type RuleType = import('../../../state').ConditionRuleType;
@@ -66,7 +66,7 @@ test('a rule dialog keeps the dialog contract', async () => {
         makeChanged: () => typeInto('Value', '3'),
         makeInvalid: () => typeInto('Value', 'abc'),
         invalidField: 'Value',
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

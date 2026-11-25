@@ -10,7 +10,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { CustomCurrencies } = await import('../../../components/FormatDialogs/CustomCurrencies');
 type Context = import('../../../state').Context;
 
@@ -48,7 +48,7 @@ test('Custom currencies keeps the dialog contract', async () => {
         makeChanged: () => typeInto(SYMBOL, 'kr'),
         makeInvalid: () => typeInto(SYMBOL, ''),
         invalidField: SYMBOL,
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 
