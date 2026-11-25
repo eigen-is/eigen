@@ -6,6 +6,7 @@
 import { afterEach, expect, jest, mock, test } from 'bun:test';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import type { ReactElement } from 'react';
@@ -137,10 +138,7 @@ test('a forward whose first save ran while its part uploaded reports the parts s
         );
         const subject = document.querySelector('#subject');
         if (!(subject instanceof HTMLInputElement)) throw new Error('no subject field');
-        await act(async () => {
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(subject, 'FW: Lunch!');
-            subject.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(subject, 'FW: Lunch!');
         await act(async () => void jest.advanceTimersByTime(3000));
         expect(saves).toEqual([undefined]);
         expect(partsSaved).toBe(0);
@@ -186,12 +184,6 @@ function input(id: string): HTMLInputElement {
     return element;
 }
 
-const type = (id: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input(id), value);
-        input(id).dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 // Off a Mac, which happy-dom says it is not, Mod is Ctrl.
 const pressModEnter = () =>
     act(async () => {
@@ -207,7 +199,7 @@ test('a send with no recipient says so under To and focuses it, with no alert', 
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(sendDraft).not.toHaveBeenCalled();
 
-    await type('to', 'bob@test.eigen.is');
+    await type(input('to'), 'bob@test.eigen.is');
     expect(input('to').getAttribute('aria-invalid')).toBeNull();
 });
 
@@ -222,7 +214,7 @@ test('a send with neither a subject nor a message says so under Subject and focu
 
 test('Cmd+Enter sends, and does nothing while a dialog or an alert dialog is open over the draft', async () => {
     const sendDraft = await openNewMail('bob@test.eigen.is');
-    await type('subject', 'Lunch');
+    await type(input('subject'), 'Lunch');
     for (const role of ['dialog', 'alertdialog']) {
         const dialog = document.createElement('div');
         dialog.setAttribute('role', role);
