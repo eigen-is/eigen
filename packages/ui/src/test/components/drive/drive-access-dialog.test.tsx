@@ -1,7 +1,7 @@
 // The Share dialog keeps the dialog contract. It lists who has access and saves only what changed, then closes; with
 // nothing changed Save closes like Cancel. Enter in the people field adds that person and saves nothing, and Save adds
 // a person still typed there first. A person already listed, or yourself, is refused under the field, and a person set
-// to Remove may be added back. A save that fails stays open with the edits kept. The lock and the read-only list's
+// to Remove, yourself included, may be added back. A save that fails stays open with the edits kept. The lock and the read-only list's
 // header are buttons the keyboard reaches. The owner gets the Share with team menu, and a viewer who may only look
 // gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
@@ -307,6 +307,18 @@ test('a person set to Remove is added back with the access they had', async () =
     await click(button('Save'));
     await settle();
     expect(updateACL.mock.calls).toEqual([[expect.objectContaining({ add: [], remove: [] })]]);
+});
+
+// An editor who set their own entry to Remove can take it back as anyone else's, not be told they have access.
+test('your own entry set to Remove is added back by your own address', async () => {
+    baseDirectList = [{ ...ADA, id: OWNER.id }, BOB];
+    isEffectiveOwner = false;
+    await open();
+    await chooseAccess(OWNER.id, 'Remove');
+    expect(people()).toContain('owner@example.com: Remove');
+    await addByEnter(OWNER.id);
+    expect(fieldError()).toBeUndefined();
+    expect(people()).toContain('owner@example.com: Editor');
 });
 
 test('Enter in the contact field adds the person and saves nothing', async () => {

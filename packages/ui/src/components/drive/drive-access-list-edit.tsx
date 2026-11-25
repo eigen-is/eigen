@@ -2,7 +2,7 @@
 // general access and, for the owner, whether editors may share. It is the dialog's form, and mounts with it, so each
 // opening starts from the item as it is. Save adds a person still typed in the field first, then sends only what
 // changed, so a dialog opened a while ago can't undo what another sharer added since; with nothing changed it closes.
-// Adding a person set to Remove takes the Remove back.
+// Adding a person set to Remove, yourself included, takes the Remove back.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -74,8 +74,9 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
         // A person set to Remove may be added again.
         listed: directList.filter((item) => item.read).map((item) => item.id),
         onAdd: (contact) => {
-            if (contact.email === user?.email?.toLowerCase()) return 'You already have access';
             const removed = directList.find((item) => item.id.toLowerCase() === contact.email);
+            // Your own entry set to Remove comes back as anyone's does.
+            if (!removed && contact.email === user?.email?.toLowerCase()) return 'You already have access';
             const restored = baseDirectList.find((item) => item.id === removed?.id && item.read);
             const next = removed
                 ? directList.map((item) =>
