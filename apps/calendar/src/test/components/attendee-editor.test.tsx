@@ -1,6 +1,7 @@
 // A guest's Remove button shows to a mouse user on the row's hover only, and Tab reaches it and shows it. A guest added
 // by address, in the field a screen reader names Guests, takes their name from the user's contacts, and an address
-// nobody knows is stored with no name at all. Inviting yourself is refused under the field, with no toast.
+// nobody knows is stored with no name at all. Inviting yourself, or a guest already on the list, is refused under the
+// field, with no toast.
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -57,11 +58,11 @@ test("a guest's Remove button shows on the row's hover only, and Tab reaches and
 });
 
 // Types an address into the field labelled Guests and presses its + button, and answers the guest list the editor hands back.
-async function addGuest(typed: string): Promise<Attendee[]> {
+async function addGuest(typed: string, attendees: Attendee[] = []): Promise<Attendee[]> {
     let added: Attendee[] = [];
     await renderInDocument(
         createElement(AttendeeEditor, {
-            attendees: [],
+            attendees,
             onChange: (attendees) => {
                 added = attendees;
             },
@@ -106,4 +107,11 @@ test('inviting yourself adds no guest, keeps the address and says why under the 
     expect(input?.getAttribute('aria-invalid')).toBe('true');
     expect(message?.textContent).toBe('You cannot invite yourself');
     expect(toastInfo).not.toHaveBeenCalled();
+});
+
+test('a guest already on the list is refused under the field, and the list stays as it was', async () => {
+    const ada: Attendee = { email: 'ada@example.org', status: 'pending', role: 'required' };
+    expect(await addGuest('Ada@example.org', [ada])).toEqual([]);
+    const message = document.querySelector('[data-slot="field-error"]');
+    expect(message?.textContent).toBe('ada@example.org is already in the list');
 });

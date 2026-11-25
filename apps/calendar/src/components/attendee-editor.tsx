@@ -1,7 +1,7 @@
 // The guest list of the event dialogs: a field that adds a guest by address or from the contacts it suggests, and the
 // guests below it with their reply and a button that removes one. A typed address takes the name of the user's contact
-// for it, if there is one. Inviting yourself is refused under the field. The dialog owns the list and saves it with the
-// event.
+// for it, if there is one. Inviting yourself or a guest already listed is refused under the field. The dialog owns the
+// list and saves it with the event.
 
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Badge } from '@workspace/ui/components/badge';
@@ -20,10 +20,12 @@ type AttendeeEditorProps = {
 };
 
 export function AttendeeEditor({ attendees, onChange, currentUserEmail }: AttendeeEditorProps) {
-    const contactInput = useContactInput(({ email, displayName }) => {
-        if (attendees.some((a) => a.email.toLowerCase() === email)) return;
-        if (email === currentUserEmail?.toLowerCase()) return 'You cannot invite yourself';
-        onChange([...attendees, { email, name: displayName, status: 'pending', role: 'required' }]);
+    const contactInput = useContactInput({
+        listed: attendees.map((a) => a.email),
+        onAdd: ({ email, displayName }) => {
+            if (email === currentUserEmail?.toLowerCase()) return 'You cannot invite yourself';
+            onChange([...attendees, { email, name: displayName, status: 'pending', role: 'required' }]);
+        },
     });
 
     return (

@@ -64,7 +64,10 @@ test('the + button is named Add, and adds the person and submits nothing', async
 
 // The row as every caller wires it, refusing the one address the caller names, as the guest list refuses the user's own.
 function Wired({ refuse }: { refuse: string }) {
-    const contactInput = useContactInput(({ email }) => (email === refuse ? 'You cannot invite yourself' : undefined));
+    const contactInput = useContactInput({
+        listed: [],
+        onAdd: ({ email }) => (email === refuse ? 'You cannot invite yourself' : undefined),
+    });
     return createElement(ContactAddRow, {
         value: contactInput.value,
         onChange: contactInput.handleChange,
