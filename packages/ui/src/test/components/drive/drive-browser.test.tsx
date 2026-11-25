@@ -8,6 +8,7 @@ import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { closingDialog, holdClosingDialogs } from '../../closing-dialog';
 import { drivePath } from '../../drive-path';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -260,10 +261,7 @@ test('New folder creates in the folder shown, and the browser moves into the new
     await click(buttonNamed('New folder'));
     const name = document.querySelector<HTMLInputElement>('input[placeholder="Enter folder name"]');
     if (!name) throw new Error('New folder asked for no name');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Drafts');
-        name.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(name, 'Drafts');
     await act(async () => buttonNamed('Create').click());
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(created).toEqual([{ ownerId: ME, mountId: 'default', parentId: 'docs', folderName: 'Drafts' }]);
@@ -447,10 +445,7 @@ test('a picker with a name keeps the focus in the name as its folders open, so E
     ));
     const name = document.querySelector<HTMLInputElement>('[role="dialog"] input');
     if (!name) throw new Error('New folder asked for no name');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Plans');
-        name.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(name, 'Plans');
     // A click focuses the button it presses, as Chrome's does.
     const change = buttonNamed('Change location');
     change.focus();

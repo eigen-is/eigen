@@ -1,3 +1,5 @@
+// Edit data is a small sheet of the chart's data: its grid, its keys as in Sheets, how it grows and reads numbers, and
+// paste. Apply writes only what the grid changed, so what a peer set meanwhile stays, and the dialog keeps its contract.
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
     applyChartSpecChange,
@@ -9,7 +11,7 @@ import {
     parseChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -18,8 +20,6 @@ installHappyDom();
 const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { ChartDataDialog } = await import('../../../components/charts');
-
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 type InlineSpec = ChartSpec & { data: InlineChartData };
 
@@ -160,13 +160,7 @@ async function open(spec: InlineSpec, raw: object = spec) {
         return event.defaultPrevented;
     };
     // What a keystroke the browser types into the focused editor looks like to React.
-    const type = async (value: string) => {
-        const input = editor();
-        await act(async () => {
-            setValue?.call(input, value);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    };
+    const typeInEditor = (value: string) => type(editor(), value);
     const mouseDown = async (target: HTMLElement | undefined, shiftKey = false) => {
         if (!target) throw new Error('no target');
         await act(async () =>
@@ -232,7 +226,7 @@ async function open(spec: InlineSpec, raw: object = spec) {
         scroll,
         highlighted,
         key,
-        type,
+        type: typeInEditor,
         mouseDown,
         doubleClick,
         select,
@@ -774,12 +768,12 @@ describe('ChartDataDialog: the form', () => {
         act(async () => {
             cellAt(row, column).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
         });
-    const typeAndCommit = (text: string) =>
-        act(async () => {
-            setValue?.call(cellEditor(), text);
-            cellEditor().dispatchEvent(new Event('input', { bubbles: true }));
+    const typeAndCommit = async (text: string) => {
+        await type(cellEditor(), text);
+        await act(async () => {
             cellEditor().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         });
+    };
 
     test('Edit data keeps the dialog contract', async () => {
         await expectFormContract({
@@ -807,9 +801,8 @@ describe('ChartDataDialog: the form', () => {
         apply.mockClear();
         const { unmount } = await renderInDocument(createElement(EditData));
         await select(1, 1);
+        await type(cellEditor(), '7');
         await act(async () => {
-            setValue?.call(cellEditor(), '7');
-            cellEditor().dispatchEvent(new Event('input', { bubbles: true }));
             cellEditor().dispatchEvent(
                 new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
             );

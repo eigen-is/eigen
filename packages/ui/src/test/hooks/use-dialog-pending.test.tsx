@@ -10,17 +10,17 @@ import { renderInDocument } from '../render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { AppError, onMutationError } = await import('@workspace/lib/api-error');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { useDialogPending } = await import('../../hooks/use-dialog-pending');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function mount(closeOnRefusal: boolean) {
+async function mount() {
     const onOpenChange = mock((_open: boolean) => {});
     let latest: ReturnType<typeof useDialogPending> | null = null;
     function Harness() {
-        latest = useDialogPending(onOpenChange, { closeOnRefusal });
+        latest = useDialogPending({ onOpenChange });
         return null;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));
@@ -34,10 +34,8 @@ async function mount(closeOnRefusal: boolean) {
     return { onOpenChange, run };
 }
 
-const refusal = () => new AppError({ error: { status: 403, value: 'No' }, status: 403 });
-
 test('an action that returns or resolves false keeps the dialog open, and one that resolves closes it', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     await run(() => false);
     await run(() => Promise.resolve<false>(false));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -46,7 +44,7 @@ test('an action that returns or resolves false keeps the dialog open, and one th
 });
 
 test('a synchronous throw reaches the caller, and the dialog stays open', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     const bug = new TypeError('editor is gone');
     expect(
         await run(() => {
@@ -57,26 +55,11 @@ test('a synchronous throw reaches the caller, and the dialog stays open', async 
 });
 
 test('a toasted failure ends in run, and the dialog stays open', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     const failure = new Error('offline');
     onMutationError(failure);
     expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
     expect(onOpenChange).not.toHaveBeenCalled();
-});
-
-test('with closeOnRefusal a toasted refusal closes the dialog and ends in run', async () => {
-    const { onOpenChange, run } = await mount(true);
-    const failure = refusal();
-    onMutationError(failure);
-    expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
-});
-
-test('with closeOnRefusal a refusal no toast showed closes the dialog and still reaches the caller', async () => {
-    const { onOpenChange, run } = await mount(true);
-    const failure = refusal();
-    expect(await run(() => Promise.reject<never>(failure))).toBe(failure);
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('with nothing to close, run still runs one action at a time and says when it is pending', async () => {

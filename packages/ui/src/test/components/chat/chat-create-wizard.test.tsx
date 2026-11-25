@@ -75,7 +75,7 @@ afterAll(() => {
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { act, createElement, useState } = await import('react');
-const { expectFormContract } = await import('../../form-contract');
+const { expectFormContract, type } = await import('../../form-contract');
 const { ChatCreateWizard } = await import('../../../components/chat/chat-create-wizard');
 const { clickRow } = await import('../../menu-rows');
 const { pressKey } = await import('../../press-key');
@@ -99,19 +99,9 @@ async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     );
 }
 
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function type(selector: string, value: string) {
-    const input = document.querySelector<HTMLInputElement>(selector);
-    if (!input) throw new Error(`the wizard drew no ${selector}`);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
-
 // Types a person into the people field and presses its + button, as a user picks someone.
 async function pick(email: string) {
-    await type('#chat-wizard-people', email);
+    await type('People', email);
     const add = document.querySelector<HTMLButtonElement>('button[aria-label="Add"]');
     if (!add) throw new Error('the wizard drew no + button');
     await act(async () => add.click());
@@ -191,7 +181,7 @@ test('the second step keeps the dialog contract', async () => {
         makeChanged: () => goToSecondStep(),
         makeInvalid: async () => {
             await goToSecondStep();
-            await type('#chat-wizard-name', ' ');
+            await type('Name', ' ');
         },
         invalidField: 'Name',
         except: { focus: 'the dialog opens on the people field of step 1; the test below pins both steps' },
@@ -210,7 +200,7 @@ test('the wizard opens on the people field, and its second step on the name, sel
 
 test('a person typed but not added counts as a change, and Next adds them before it goes on', async () => {
     await renderInDocument(createElement(HostedWizard));
-    await type('#chat-wizard-people', 'ada@example.com');
+    await type('People', 'ada@example.com');
     await act(async () => {
         document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
@@ -276,7 +266,7 @@ test("a typed contact's address names the chat by the contact, and an unknown on
 test('a name another chat has is said under the name, which keeps the focus and the dialog', async () => {
     const { AppError } = await import('@workspace/lib/api-error');
     await openSecondStep();
-    await type('#chat-wizard-name', 'Plans');
+    await type('Name', 'Plans');
     createRoom.mockImplementationOnce(async () => {
         throw new AppError({ error: { status: 409, value: 'Taken' }, status: 409 });
     });
@@ -285,6 +275,6 @@ test('a name another chat has is said under the name, which keeps the focus and 
     expect(name?.getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement?.id).toBe('chat-wizard-name');
     expect(document.body.textContent).toContain('A chat named "Plans" already exists here.');
-    await type('#chat-wizard-name', 'Plans 2');
+    await type('Name', 'Plans 2');
     expect(name?.getAttribute('aria-invalid')).toBeNull();
 });

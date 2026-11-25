@@ -9,7 +9,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CustomSort } = await import('../../../components/CustomSort');
 
 const consoleError = spyOn(console, 'error');
@@ -69,7 +69,7 @@ test('Custom sort keeps the dialog contract', async () => {
         firstField: 'Data has a header row',
         onSubmit: form.write,
         makeChanged: tickHeaderRow,
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

@@ -1,14 +1,16 @@
+// The font size row shows a deck's stored px in pt on the half-point grid and a drawing's in whole px, and showing a
+// size writes nothing. A typed pt writes its px at the deck width, a selection of alike sizes merges to one, and a step
+// moves each box from its own shown size.
 import { afterEach, expect, test } from 'bun:test';
 import { slidePtToPx } from '@workspace/lib/vector';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { FontSizeRow } = await import('../../../components/properties-panel/font-size-row');
-
-const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 // What a pptx's 44 pt title stores on a 10 in deck.
 const TITLE = 117.33333333333334;
@@ -50,10 +52,7 @@ async function visit(input: HTMLInputElement, typed?: string) {
         input.focus();
     });
     if (typed !== undefined) {
-        await act(async () => {
-            nativeValueSetter?.call(input, typed);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(input, typed);
     }
     await act(async () => {
         input.blur();

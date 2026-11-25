@@ -90,12 +90,6 @@ function Workbook({ harness }: { harness: Harness }) {
 
 type Params = Partial<Context> & { config?: SheetConfig };
 
-// What a sheet dialog's contract skips: its submit writes the workbook at once, so there is nothing to wait for.
-export const SYNCHRONOUS_WRITE = {
-    pending: 'the submit writes the workbook at once, so no save runs',
-    pendingClose: 'the submit writes the workbook at once, so no save runs',
-};
-
 // The dialog `open` opens, as an element expectFormContract renders afresh for each probe. Every write the dialog makes
 // reaches `write`, the submit the contract counts and holds. `context` reads the workbook of the last render.
 export function sheetDialogForm(open: (dialogs: Dialogs) => void, params: Params = {}) {

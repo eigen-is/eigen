@@ -9,7 +9,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { toast } from 'sonner';
-import { invalidateTeamRename } from '../../admin';
+import { invalidateTeamLists } from '../../admin';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidatePublicConfig } from '../../public/hooks/keys';
 import { invalidateServerS3Config, invalidateServerSettings } from './keys';
@@ -30,7 +30,7 @@ export function useSaveServerSettingsPage(organizationId: string) {
                 if (res.error) throw new AppError(res);
                 // The name rides out on the public config, which every app reads; the default team is renamed with it.
                 // The page shows the config's name once its draft clears, so the save waits for the refetch.
-                invalidateTeamRename(queryClient, organizationId);
+                invalidateTeamLists(queryClient, organizationId);
                 await invalidatePublicConfig(queryClient);
             }
             if (s3Config) {

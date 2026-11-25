@@ -4,6 +4,7 @@
 
 import { Check, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useFitHeight } from '../../hooks/use-fit-height';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
 export function InlineEdit({
@@ -23,9 +24,9 @@ export function InlineEdit({
         if (textarea) {
             textarea.focus();
             textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-            fitHeight(textarea);
         }
     }, []);
+    useFitHeight(textareaRef, content);
 
     const handleSave = () => {
         const trimmed = content.trim();
@@ -42,10 +43,7 @@ export function InlineEdit({
                 ref={textareaRef}
                 data-owns-escape
                 value={content}
-                onChange={(e) => {
-                    setContent(e.target.value);
-                    fitHeight(e.target);
-                }}
+                onChange={(e) => setContent(e.target.value)}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -66,10 +64,4 @@ export function InlineEdit({
             <TooltipButton icon={X} tooltipText="Cancel" className="h-8 w-8" preventFocusLoss onClick={onCancel} />
         </div>
     );
-}
-
-// Grows the textarea with its text up to its max-h, where it starts to scroll.
-function fitHeight(textarea: HTMLTextAreaElement) {
-    textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
 }

@@ -9,7 +9,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { LinkEditDialog } = await import('../../../components/LinkEditCard/LinkEditDialog');
 type CellLinkType = import('@workspace/lib/sheets').CellLinkType;
 
@@ -48,7 +48,7 @@ test('Insert link keeps the dialog contract', async () => {
         makeChanged: () => typeInto('Cell range', 'Sheet1!B2'),
         makeInvalid: () => typeInto('Cell range', 'A1:'),
         invalidField: 'Cell range',
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

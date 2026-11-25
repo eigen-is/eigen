@@ -11,7 +11,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { CustomDateTimeFormats } = await import('../../../components/FormatDialogs/CustomDateTimeFormats');
 type Context = import('../../../state').Context;
 
@@ -47,7 +47,7 @@ test('Custom date and time formats keeps the dialog contract', async () => {
         makeChanged: () => typeInto(SEPARATOR, '-'),
         makeInvalid: () => typeInto(SEPARATOR, '.,'),
         invalidField: SEPARATOR,
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

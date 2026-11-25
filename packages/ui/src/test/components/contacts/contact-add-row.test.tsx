@@ -3,6 +3,7 @@
 // Add, for a screen reader. An address the row can't read, or a person the caller refuses, keeps the text and says
 // why under the field, until the text changes.
 import { afterEach, expect, mock, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -82,12 +83,6 @@ async function renderWired() {
     if (!input) throw new Error('the row drew no field');
     return input;
 }
-
-const type = (input: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 
 // The message under the field, and the field marked as wrong and pointing at it, or null for a field with no problem.
 function problem(input: HTMLInputElement) {

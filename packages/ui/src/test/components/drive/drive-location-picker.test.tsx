@@ -5,8 +5,10 @@
 // keeps what was typed, and a pick alone closes on Esc at once. In folder mode, as Move to uses it, Cmd+Enter confirms.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
-import { expectFormContract } from '../../form-contract';
+import { closingDialog, holdClosingDialogs } from '../../closing-dialog';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
+import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -88,12 +90,6 @@ const nameField = () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('no name field');
     return input;
 };
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeName = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 // A pending button's spinner comes before its label.
 const click = (label: string) =>
     act(async () => {
@@ -113,15 +109,15 @@ test('New folder keeps the dialog contract', async () => {
         submitLabel: 'Create',
         firstField: 'Folder name',
         onSubmit: onConfirm,
-        makeChanged: () => typeName('Plans'),
-        makeInvalid: () => typeName('  '),
+        makeChanged: () => type('Folder name', 'Plans'),
+        makeInvalid: () => type('Folder name', '  '),
         invalidField: 'Folder name',
     });
 });
 
 test('Create hands on the folder and the trimmed name', async () => {
     await open('create');
-    await typeName(' Plans ');
+    await type('Folder name', ' Plans ');
     await click('Create');
     await settle();
     expect(onConfirm.mock.calls).toEqual([
@@ -136,7 +132,7 @@ test.each([403, 422])('a %i from the server keeps the picker open with the typed
     onMutationError(failure);
     await open('create');
     onConfirm.mockImplementation(() => Promise.reject(failure));
-    await typeName('Plans');
+    await type('Folder name', 'Plans');
     await click('Create');
     await settle();
     expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -150,14 +146,14 @@ test('a name the folder has already shows the reason under the field until the n
     onConfirm.mockImplementation(() =>
         Promise.reject(new AppError({ status: 409, error: { status: 409, value: taken } })),
     );
-    await typeName('Plans');
+    await type('Folder name', 'Plans');
     await click('Create');
     await settle();
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(fieldError()).toBe(taken);
     expect(nameField().getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(nameField());
-    await typeName('Plans 2');
+    await type('Folder name', 'Plans 2');
     expect(fieldError()).toBeUndefined();
 });
 
@@ -172,7 +168,7 @@ test('a name the folder has already loses its reason once another folder is pick
         onConfirm.mockImplementation(() =>
             Promise.reject(new AppError({ status: 409, error: { status: 409, value: taken } })),
         );
-        await typeName('Plans');
+        await type('Folder name', 'Plans');
         await click('Create');
         await settle();
         expect(fieldError()).toBe(taken);
@@ -185,7 +181,7 @@ test('a name the folder has already loses its reason once another folder is pick
 
 test('a host that moves the place keeps the typed name and shows the new place', async () => {
     await open('create');
-    await typeName('Plans');
+    await type('Folder name', 'Plans');
     await act(async () => moveTo('team-folder'));
     expect(nameField().value).toBe('Plans');
     expect(field.value?.folderId).toBe('team-folder');
@@ -222,6 +218,22 @@ test('Cmd+Enter in a folder picker confirms the folder shown', async () => {
     });
     await settle();
     expect(onConfirm.mock.calls).toEqual([[{ ownerId: 'owner-1', mountId: 'default', folderId: 'folder' }]]);
+});
+
+test('a second Enter while the picker fades out confirms nothing more, as a second Copy to would copy twice', async () => {
+    const letGo = holdClosingDialogs();
+    try {
+        await open('create');
+        await type('Folder name', 'Plans');
+        await act(async () => pressEnter(nameField()));
+        await settle();
+        expect(closingDialog()).not.toBeNull();
+        await act(async () => pressEnter(nameField()));
+        await settle();
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+    } finally {
+        letGo();
+    }
 });
 
 test('a picker with no name typed closes on Esc at once', async () => {

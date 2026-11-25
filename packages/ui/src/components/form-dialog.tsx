@@ -1,10 +1,10 @@
 // A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
-// description, and FormDialogForm the fields and the Cancel and submit footer, which the card form shares, on
-// FormShell's keys. It opens on the first text field, every close waits for a running submit, and a failure or a false
-// result keeps it open. Esc, the X and a click outside ask "Discard changes?" once the form changed; Cancel drops it.
-// The caller keeps the field state in a child that mounts with the dialog, so every opening starts clean. FormDialog
-// alone is also a titled shell with no form, as Word count uses it.
+// description, and FormDialogForm the fields and the Cancel and submit footer on FormShell's keys. It opens on the
+// first text field, every close waits for a running submit, and a failure or a false result keeps it open. Esc, the X
+// and a click outside ask "Discard changes?" once the form changed; Cancel drops it. The caller's fields mount with the
+// dialog, so every opening starts clean. FormDialog alone is a titled shell with no form, as Word count uses it.
 
+import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { DialogAction } from '../hooks/use-dialog-pending';
@@ -30,8 +30,7 @@ type FormDialogProps = {
 type FormDialogFormProps = {
     // Returns or resolves false to stay open, such as a check that marked a field invalid, which then gets the focus.
     onSubmit: DialogAction;
-    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
-    // click outside then ask before they drop it. One form per dialog at a time: the last one mounted wins.
+    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty.
     changed: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
@@ -44,7 +43,7 @@ type FormDialogFormProps = {
 
 type FormDialogContextValue = {
     pending: boolean;
-    submit: (onSubmit: DialogAction) => Promise<false | undefined> | undefined;
+    submit: (onSubmit: DialogAction) => Promise<false | undefined>;
     handleOpenChange: (open: boolean) => void;
     setChanged: (changed: boolean) => void;
 };
@@ -62,12 +61,9 @@ export function FormDialog({
     onCloseAutoFocus,
     children,
 }: FormDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange });
     const [changed, setChanged] = useState(false);
     const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
-
-    // A closing dialog stays mounted while it animates out, with the focus still in its field.
-    const submit = (onSubmit: DialogAction) => (open ? run(onSubmit) : undefined);
 
     return (
         <>
@@ -82,7 +78,7 @@ export function FormDialog({
                         <DialogTitle>{title}</DialogTitle>
                         {description && <DialogDescription>{description}</DialogDescription>}
                     </DialogHeader>
-                    <FormDialogContext.Provider value={{ pending, submit, handleOpenChange, setChanged }}>
+                    <FormDialogContext.Provider value={{ pending, submit: run, handleOpenChange, setChanged }}>
                         {children}
                     </FormDialogContext.Provider>
                 </DialogContent>
@@ -161,6 +157,21 @@ export function FormFooter({
                 {submitLabel}
             </Button>
         </DialogFooter>
+    );
+}
+
+// A footer tool with a text label, such as Share with team. A phone's footer keeps one row, so only its icon shows
+// there, and a screen reader still reads the label.
+export function FooterTool({
+    icon: Icon,
+    label,
+    ...props
+}: { icon: LucideIcon; label: string } & ComponentProps<'button'>) {
+    return (
+        <Button variant="outline" {...props}>
+            <Icon />
+            <span className="max-sm:sr-only">{label}</span>
+        </Button>
     );
 }
 

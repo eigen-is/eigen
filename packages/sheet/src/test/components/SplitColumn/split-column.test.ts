@@ -11,7 +11,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { SplitColumn } = await import('../../../components/SplitColumn');
 type Cell = import('../../../state').Cell;
 
@@ -56,7 +56,7 @@ test('Split text keeps the dialog contract', async () => {
         // A fresh dialog has no separator ticked.
         makeInvalid: async () => {},
         invalidField: 'Tab',
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

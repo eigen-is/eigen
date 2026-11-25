@@ -39,9 +39,9 @@ export function invalidateAdminTeams(queryClient: QueryClient, organizationId: s
     queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId) });
 }
 
-// A team's name shows in the org's team list, in each member's own teams and beside each user on the users page, so a
-// rename, or a removal, refreshes all three.
-export function invalidateTeamRename(queryClient: QueryClient, organizationId: string): void {
+// A team shows in the org's team list, in each member's own teams and beside each user on the users page, so a rename
+// or a removal refreshes all three.
+export function invalidateTeamLists(queryClient: QueryClient, organizationId: string): void {
     invalidateAdminTeams(queryClient, organizationId);
     invalidateMyTeams(queryClient);
     invalidateAdminUsers(queryClient);

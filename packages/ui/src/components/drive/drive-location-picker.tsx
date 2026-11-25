@@ -8,17 +8,17 @@ import { useAuth } from '@workspace/lib/auth';
 import { isNameTaken, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { Button } from '@workspace/ui/components/button';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell } from '@workspace/ui/components/form-shell';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { DriveNameField } from './drive-item-name-dialog';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
@@ -38,7 +38,7 @@ type DriveLocationPickerProps = {
 };
 
 export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
-    const { pending, run } = useDialogPending(onOpenChange);
+    const { pending, run } = useDialogPending({ open, onOpenChange });
     const [named, setNamed] = useState(false);
     const discard = useDiscardChanges({ open, changed: named, pending, onDiscard: () => onOpenChange(false) });
     return (
@@ -146,8 +146,8 @@ function DriveLocationPickerBody({
             {/* Edge to edge, so the folder browser's line spans the dialog. */}
             <div className="-mx-6 flex min-h-0 flex-1 flex-col">
                 {hasName && (
-                    <DriveNameField
-                        fieldRef={nameRef}
+                    <RequiredTextField
+                        ref={nameRef}
                         label={nameLabel}
                         autoFocus
                         className="px-6 pb-2"
@@ -156,7 +156,8 @@ function DriveLocationPickerBody({
                             setName(next);
                             setTaken(undefined);
                         }}
-                        taken={taken}
+                        message={FIELD_MESSAGES.nameMissing}
+                        error={taken}
                     />
                 )}
                 <DriveLocationField
@@ -175,11 +176,7 @@ function DriveLocationPickerBody({
             <FormFooter
                 start={
                     onDownloadInstead && (
-                        <Button variant="outline" onClick={onDownloadInstead}>
-                            <Download />
-                            {/* A phone's footer keeps one row, so only the icon shows there. */}
-                            <span className="max-sm:sr-only">Download instead</span>
-                        </Button>
+                        <FooterTool icon={Download} label="Download instead" onClick={onDownloadInstead} />
                     )
                 }
                 pending={pending}

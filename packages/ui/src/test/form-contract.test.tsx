@@ -1,6 +1,7 @@
 // expectFormContract passes a form that keeps every rule of its kind, and each probe fails a sample form that breaks
-// its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules, and
-// hand-built card and page samples prove the card's Esc and the page's leave guard both ways.
+// its rule, naming the probe. A form skips a probe only with a reason, or as one that saves at once or keeps no draft.
+// The dialog shell keeps the rules, and hand-built card and page samples prove the card's Esc and the page's leave guard
+// both ways.
 import { expect, mock, test } from 'bun:test';
 import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { FormContract } from './form-contract';
@@ -10,7 +11,7 @@ installHappyDom();
 
 const { createElement, useRef, useState } = await import('react');
 const { rethrowUntoasted } = await import('@workspace/lib/api-error');
-const { expectFormContract, expectFormProbe } = await import('./form-contract');
+const { expectFormContract, expectFormProbe, type } = await import('./form-contract');
 const { FormDialog, FormDialogForm } = await import('../components/form-dialog');
 const { FormShell } = await import('../components/form-shell');
 const { Button } = await import('../components/button');
@@ -22,17 +23,6 @@ const { Input } = await import('../components/input');
 const { LeaveGuard } = await import('../components/layout/app/leave-guard');
 
 type Save = (name: string) => Promise<void>;
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function type(label: string, value: string) {
-    const { act } = await import('react');
-    const input = document.querySelector(`[aria-label="${label}"]`);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no ${label} field`);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
 
 function contract(kind: FormContract['kind'], render: (onSubmit: Save) => ReactNode): FormContract {
     const onSubmit = mock<Save>(async () => {});
@@ -80,6 +70,8 @@ type ShellDialogProps = {
     onChoiceKeyDown?: (event: ReactKeyboardEvent) => void;
     // Tells the shell when the name changed, as every form must.
     reportsChange?: boolean;
+    // Writes at once instead of awaiting the save, as a Sheets dialog writes the workbook.
+    writesAtOnce?: boolean;
     showsError?: boolean;
     extra?: ReactNode;
 };
@@ -91,6 +83,7 @@ function ShellDialog({
     onNameKeyDown,
     onChoiceKeyDown,
     reportsChange = true,
+    writesAtOnce = false,
     showsError,
     extra,
 }: ShellDialogProps) {
@@ -110,7 +103,8 @@ function ShellDialog({
                     setError('Add a name');
                     return false;
                 }
-                await onSubmit(name);
+                if (writesAtOnce) onSubmit(name);
+                else await onSubmit(name);
             },
             children: [
                 ...NameField({ name, setName, error, onKeyDown: onNameKeyDown, showsError }),
@@ -284,15 +278,15 @@ function CardSample({ onSubmit, escToView }: { onSubmit: Save; escToView: boolea
     ];
 }
 
-// A settings page on FormShell, guarded while it holds a change when `guarded` holds. Unless `oneAtATime` is off it
-// ignores a submit while one runs, beyond the pending Save that ignores a click.
+// A settings page on FormShell, guarded while it holds a change, or only while no save runs, or not at all. Unless
+// `oneAtATime` is off it ignores a submit while one runs, beyond the pending Save that ignores a click.
 function PageSample({
     onSubmit,
-    guarded,
+    guard,
     oneAtATime = true,
 }: {
     onSubmit: Save;
-    guarded: boolean;
+    guard: 'always' | 'idle' | 'none';
     oneAtATime?: boolean;
 }) {
     const [name, setName] = useState('Notes');
@@ -311,10 +305,10 @@ function PageSample({
             }),
             error && createElement(FieldError, { key: 'error' }, error),
             createElement(Button, { key: 'save', type: 'submit', pending }, 'Save'),
-            guarded &&
+            guard !== 'none' &&
                 createElement(LeaveGuard, {
                     key: 'guard',
-                    active: name !== 'Notes' && !pending,
+                    active: name !== 'Notes' && (guard === 'always' || !pending),
                 }),
         ],
     });
@@ -325,8 +319,8 @@ const shell = (props: Omit<ShellDialogProps, 'onSubmit'> = {}) =>
 const loose = (props: Omit<LooseDialogProps, 'onSubmit'> = {}) =>
     contract('dialog', (onSubmit) => createElement(LooseDialog, { onSubmit, ...props }));
 const card = (escToView: boolean) => contract('card', (onSubmit) => createElement(CardSample, { onSubmit, escToView }));
-const page = (guarded: boolean, oneAtATime?: boolean) =>
-    contract('page', (onSubmit) => createElement(PageSample, { onSubmit, guarded, oneAtATime }));
+const page = (guard: 'always' | 'idle' | 'none', oneAtATime?: boolean) =>
+    contract('page', (onSubmit) => createElement(PageSample, { onSubmit, guard, oneAtATime }));
 
 test('a dialog on the shell keeps the contract', async () => {
     await expectFormContract(shell());
@@ -338,8 +332,8 @@ test('a card that goes back to its view on Esc keeps the card contract and its E
 });
 
 test('a page with a leave guard keeps the page contract, and one without fails it', async () => {
-    await expectFormContract(page(true));
-    await expect(expectFormContract(page(false))).rejects.toThrow('leaveGuard: a changed page asks');
+    await expectFormContract(page('always'));
+    await expect(expectFormContract(page('none'))).rejects.toThrow('leaveGuard: a changed page asks');
 });
 
 test('the focus probe fails a form that opens with nothing focused, or with a lone name not selected', async () => {
@@ -443,8 +437,22 @@ test('the card Esc probe fails a card whose Esc closes it where Cancel goes back
     await expectProbeToFail('cardEsc', card(false), 'Esc with nothing changed does what Cancel does');
 });
 
+test('a form whose submit writes at once skips the pending probes', async () => {
+    const subject = shell({ writesAtOnce: true });
+    await expectProbeToFail('pending', subject, 'Save says it is busy while the save runs');
+    await expectFormContract({ ...subject, savesAtOnce: true });
+});
+
+test('a page with no draft to lose skips the leave guard probe', async () => {
+    await expectFormContract({ ...page('none'), noDraft: true });
+});
+
 test('the leave guard probe fails a changed page that leaves without asking', async () => {
-    await expectProbeToFail('leaveGuard', page(false), 'a changed page asks "Discard changes?"');
+    await expectProbeToFail('leaveGuard', page('none'), 'a changed page asks "Discard changes?"');
+});
+
+test('the leave guard probe fails a page that stands down while its save runs', async () => {
+    await expectProbeToFail('leaveGuard', page('idle'), 'a changed page asks while its save runs');
 });
 
 test('the invalid probe fails a form that saves an invalid value, says nothing, or leaves its bad field unfocused', async () => {
@@ -469,7 +477,7 @@ test('the invalid probe fails a form that saves an invalid value, says nothing, 
 test('the pending probe fails a Save that hides that it is busy, or that saves again on a click or Cmd+Enter', async () => {
     await expectProbeToFail('pending', loose({ guarded: true }), 'Save says it is busy while the save runs');
     await expectProbeToFail('pending', loose({ busy: true }), 'a click while the save runs saves nothing more');
-    await expectProbeToFail('pending', page(false, false), 'Cmd+Enter while the save runs saves nothing more, ran 2');
+    await expectProbeToFail('pending', page('none', false), 'Cmd+Enter while the save runs saves nothing more, ran 2');
 });
 
 test('the pending close probe fails a dialog that closes while its save runs, or on a failed save', async () => {

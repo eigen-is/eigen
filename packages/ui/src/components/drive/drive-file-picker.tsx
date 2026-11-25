@@ -9,10 +9,10 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import type { DriveLocationValue, DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell } from '@workspace/ui/components/form-shell';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { Upload } from 'lucide-react';
 import { useState } from 'react';
 import { DriveBrowser } from './drive-browser';
@@ -36,7 +36,7 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
-                <DriveFilePickerBody {...body} open={open} onClose={() => onOpenChange(false)} />
+                <DriveFilePickerBody {...body} open={open} onOpenChange={onOpenChange} />
             </DialogContent>
         </Dialog>
     );
@@ -45,14 +45,15 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
 // Mounted with the dialog's content, so each opening starts at the root of the viewer's drive with nothing picked.
 function DriveFilePickerBody({
     open,
-    onClose,
+    onOpenChange,
     onSelect,
     onUploadFromDevice,
     canPick,
     submitLabel = 'Select',
     multiSelect = false,
-}: Omit<DriveFilePickerProps, 'onOpenChange' | 'title'> & { onClose: () => void }) {
+}: Omit<DriveFilePickerProps, 'title'>) {
     const { user } = useAuth();
+    const { pending, run } = useDialogPending({ open, onOpenChange });
     // Seeded from the view preference and kept here, so a sort picked in the dialog never writes it.
     const { sortKey, sortDir } = useDriveViewPreferences();
     const [sort, setSort] = useState<DriveSort>({ key: sortKey, dir: sortDir });
@@ -69,15 +70,11 @@ function DriveFilePickerBody({
     const picked = multiSelect ? pickedFiles : selected ? [selected] : [];
     const label = multiSelect && pickedFiles.length > 0 ? `${submitLabel} (${pickedFiles.length})` : submitLabel;
 
-    const confirm = (paths: DrivePath[]) => {
-        onSelect(paths);
-        onClose();
-    };
+    const confirm = (paths: DrivePath[]) => run(() => onSelect(paths));
 
     return (
         <FormShell
-            // A closing picker is still drawn as it fades out, and takes no second confirm, as FormDialog's form.
-            onSubmit={() => (open && picked.length > 0 ? confirm(picked) : undefined)}
+            onSubmit={() => (picked.length > 0 ? confirm(picked) : undefined)}
             className="flex min-h-0 flex-1 flex-col gap-4"
         >
             {/* Edge to edge from sm up. A phone keeps the padding, so the drive select above the folders stays inset. */}
@@ -99,15 +96,11 @@ function DriveFilePickerBody({
             <FormFooter
                 start={
                     onUploadFromDevice && (
-                        <Button variant="outline" onClick={onUploadFromDevice}>
-                            <Upload />
-                            {/* A phone's footer keeps one row, so only the icon shows there. */}
-                            <span className="max-sm:sr-only">Upload from device</span>
-                        </Button>
+                        <FooterTool icon={Upload} label="Upload from device" onClick={onUploadFromDevice} />
                     )
                 }
-                pending={false}
-                onCancel={onClose}
+                pending={pending}
+                onCancel={() => onOpenChange(false)}
                 canSubmit={picked.length > 0}
                 submitLabel={label}
             />

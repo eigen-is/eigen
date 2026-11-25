@@ -1,8 +1,8 @@
 // The probes every form's test runs, so each form proves it keeps the rules its shell owns: focus on open, Enter and
 // Cmd+Enter, closing with and without changes, the leave guard, an invalid submit, the pending button and a close while
 // the save runs. A test renders the real form through `render` and calls expectFormContract once; the probes of its
-// kind each render it afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch, and
-// a form that breaks one on purpose names it in `except` with its reason. Call `installHappyDom()` first.
+// kind each render it afresh in a memory router. A form that breaks one on purpose names it in `except` with its
+// reason. Call `installHappyDom()` first.
 import type { Mock } from 'bun:test';
 import type { ReactElement } from 'react';
 import { pressEnter } from './press-enter';
@@ -27,6 +27,11 @@ export type FormContract = {
     // More fields that Cmd+Enter must submit from untouched, such as a multi-line one, a rich-text one, or one that
     // commits its value on Enter.
     modEnterFields?: string[];
+    // The submit writes at once, such as into the open document, so no save runs to wait for.
+    savesAtOnce?: boolean;
+    // A page whose input is lost on leaving without harm, such as sign-in, which a password manager refills, has no
+    // leave guard.
+    noDraft?: boolean;
     // A probe this form breaks on purpose, with the reason, such as a subject where plain Enter must not send an email.
     except?: { [Name in ProbeName]?: string };
 };
@@ -46,31 +51,36 @@ const PROBE_NAMES = [
 ] as const;
 type ProbeName = (typeof PROBE_NAMES)[number];
 
-type Probe = { kinds: readonly FormKind[]; on: boolean; run: (form: FormContract) => Promise<void> };
+type Probe = { kinds: readonly FormKind[]; run: (form: FormContract) => Promise<void> };
 
 const PROBES: Record<ProbeName, Probe> = {
-    focus: { kinds: ['dialog', 'card', 'page'], on: true, run: probeFocus },
-    enter: { kinds: ['dialog', 'card', 'page'], on: true, run: probeEnter },
-    modEnter: { kinds: ['dialog', 'card', 'page'], on: true, run: probeModEnter },
-    close: { kinds: ['dialog'], on: true, run: probeClose },
-    discard: { kinds: ['dialog'], on: true, run: probeDiscard },
-    cardEsc: { kinds: ['card'], on: true, run: probeCardEsc },
-    leaveGuard: { kinds: ['page'], on: true, run: probeLeaveGuard },
-    invalid: { kinds: ['dialog', 'card', 'page'], on: true, run: probeInvalid },
-    pending: { kinds: ['dialog', 'card', 'page'], on: true, run: probePending },
-    pendingClose: { kinds: ['dialog', 'card'], on: true, run: probePendingClose },
+    focus: { kinds: ['dialog', 'card', 'page'], run: probeFocus },
+    enter: { kinds: ['dialog', 'card', 'page'], run: probeEnter },
+    modEnter: { kinds: ['dialog', 'card', 'page'], run: probeModEnter },
+    close: { kinds: ['dialog'], run: probeClose },
+    discard: { kinds: ['dialog'], run: probeDiscard },
+    cardEsc: { kinds: ['card'], run: probeCardEsc },
+    leaveGuard: { kinds: ['page'], run: probeLeaveGuard },
+    invalid: { kinds: ['dialog', 'card', 'page'], run: probeInvalid },
+    pending: { kinds: ['dialog', 'card', 'page'], run: probePending },
+    pendingClose: { kinds: ['dialog', 'card'], run: probePendingClose },
 };
 
 export async function expectFormContract(form: FormContract): Promise<void> {
     for (const name of PROBE_NAMES) {
-        const probe = PROBES[name];
         const reason = form.except?.[name];
         if (reason !== undefined && !reason.trim()) throw new Error(`${name}: an exception says why`);
-        if (probe.on && probe.kinds.includes(form.kind) && reason === undefined) await runProbe(name, probe, form);
+        if (reason === undefined && appliesTo(name, form)) await runProbe(name, PROBES[name], form);
     }
 }
 
-// One probe, switched on or not, for the probes' own tests.
+function appliesTo(name: ProbeName, form: FormContract): boolean {
+    if (form.savesAtOnce && (name === 'pending' || name === 'pendingClose')) return false;
+    if (form.noDraft && name === 'leaveGuard') return false;
+    return PROBES[name].kinds.includes(form.kind);
+}
+
+// One probe, whatever the form's kind, for the probes' own tests.
 export function expectFormProbe(name: ProbeName, form: FormContract): Promise<void> {
     return runProbe(name, PROBES[name], form);
 }
@@ -226,6 +236,16 @@ async function probeLeaveGuard(form: FormContract) {
         await click(button('Discard'));
         check(at() === ELSEWHERE, 'Discard leaves');
         check(calls(form) === 0, 'leaving saves nothing');
+    });
+    // The save may fail, and the draft would be gone with the page.
+    await withForm(form, async ({ leave, at }) => {
+        await form.makeChanged();
+        const release = hold(form.onSubmit);
+        await click(submitButton(form));
+        await leave();
+        check(at() === HERE && asking('Discard changes?'), 'a changed page asks while its save runs');
+        await click(button('Keep editing'));
+        await release();
     });
 }
 
@@ -424,7 +444,7 @@ const focused = () => {
 };
 
 // The field a label names: its aria-label, its aria-labelledby, or a <label> tied to it.
-function field(label: string): HTMLElement {
+export function field(label: string): HTMLElement {
     for (const element of document.querySelectorAll<HTMLElement>('[aria-label], [aria-labelledby]')) {
         const name =
             element.getAttribute('aria-label') ??
@@ -440,6 +460,23 @@ function field(label: string): HTMLElement {
         if (tag.textContent?.trim() === label && tied instanceof HTMLElement) return tied;
     }
     throw new Error(`no field labelled ${label}`);
+}
+
+// Types into a field, or the field a label names, as a keystroke does: React reads the value off its own tracker, so
+// the native setter is what reaches it.
+export async function type(target: string | HTMLElement, value: string): Promise<void> {
+    const input = typeof target === 'string' ? field(target) : target;
+    const setter =
+        input instanceof HTMLTextAreaElement
+            ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+            : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) || !setter) {
+        throw new Error(`${labelOf(input)} takes no typing`);
+    }
+    await act(() => {
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 }
 
 const contentOf = (element: HTMLElement) =>

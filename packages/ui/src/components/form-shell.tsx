@@ -1,8 +1,8 @@
-// The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys, their
-// first focus and their error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that
-// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed, and until
-// a submit goes through, its fields read useFormSubmitted(), so a missing value shows only then, and a refused submit
-// focuses the first field marked aria-invalid while the form still shows. Apps use the shells, not this.
+// The <form> under every form shell, such as FormDialogForm, CardForm and PageForm, and under a form no shell fits, such
+// as the sign-in page. Cmd or Ctrl+Enter submits from any field, with what the field committed on that key, and Enter
+// on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed, and until a submit goes
+// through, its fields read useFormSubmitted(), so a missing value shows only then, and a refused submit focuses the
+// first field marked aria-invalid.
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -44,7 +44,6 @@ export function FormShell({
         if (autoFocus && formRef.current) focusFirstField(formRef.current);
     }, [autoFocus]);
 
-    // A form that refused as it hid itself, such as Edit event opening a question over it, leaves the focus to that.
     useEffect(() => {
         const form = formRef.current;
         if (refusals === 0 || !form?.isConnected || form.closest(HIDDEN)) return;
@@ -54,7 +53,6 @@ export function FormShell({
     const submit = async () => {
         setSubmitted(true);
         const refused = (await onSubmit()) === false;
-        // A form that stays after its save, such as a page form, starts clean, so a later edit isn't red before Save.
         setSubmitted(refused);
         if (refused && !focusesOwnErrors) setRefusals((count) => count + 1);
     };
@@ -94,9 +92,8 @@ export function FormShell({
     );
 }
 
-// The first text field, else the first control, such as the calendar's recurring choice, never a color swatch before
-// the name. With `selectLone`, a lone text field with a value, such as a number to restart a list at, gets its text
-// selected. False when the form has nothing to focus.
+// The first text field, else the first control, never a color swatch before the name. With `selectLone`, a lone text
+// field with a value, such as a number to restart a list at, gets its text selected.
 export function focusFirstField(form: HTMLFormElement, { selectLone = false } = {}): boolean {
     const textFields = [...form.querySelectorAll<HTMLElement>(TEXT_FIELD)];
     const target = textFields[0] ?? form.querySelector<HTMLElement>(CONTROL);

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { AppError } from '@workspace/lib/api-error';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -57,11 +57,6 @@ const nameField = () => {
     if (!input) throw new Error('the dialog has no name field');
     return input;
 };
-const type = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -76,8 +71,8 @@ test('New folder keeps the dialog contract', async () => {
         submitLabel: 'Create',
         firstField: 'Folder name',
         onSubmit: onSave,
-        makeChanged: () => type('Invoices'),
-        makeInvalid: () => type('   '),
+        makeChanged: () => type(nameField(), 'Invoices'),
+        makeInvalid: () => type(nameField(), '   '),
         invalidField: 'Folder name',
     });
 });
@@ -94,7 +89,7 @@ test('New folder shows a labelled name field and the folder it goes in', async (
 
 test('Create hands the typed name on and closes once it is saved', async () => {
     await openNewFolder();
-    await type('Invoices');
+    await type(nameField(), 'Invoices');
     await click(button('Create'));
     await settle();
     expect(onSave.mock.calls).toEqual([['Invoices']]);
@@ -107,14 +102,14 @@ test('a name a sibling has already shows the reason under the field until the na
         throw new AppError({ status: 409, error: { status: 409, value: taken } });
     });
     await openNewFolder();
-    await type('Invoices');
+    await type(nameField(), 'Invoices');
     await click(button('Create'));
     await settle();
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(nameField().getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(nameField());
     expect(dialog()?.querySelector('[data-slot="field-error"]')?.textContent).toBe(taken);
-    await type('Invoices 2');
+    await type(nameField(), 'Invoices 2');
     expect(nameField().getAttribute('aria-invalid')).toBeNull();
     expect(dialog()?.querySelector('[data-slot="field-error"]')).toBeNull();
 });

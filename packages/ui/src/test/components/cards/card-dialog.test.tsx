@@ -4,7 +4,7 @@
 // bar sits above the form. Leaving the edit, by Cancel, Discard or Save, puts the focus on the card's Edit action.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -53,13 +53,6 @@ const titleField = () => {
     return input;
 };
 
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeTitle = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(titleField(), value);
-        titleField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 test("a card's edit keeps the card contract", async () => {
     await expectFormContract({
         kind: 'card',
@@ -67,8 +60,8 @@ test("a card's edit keeps the card contract", async () => {
         submitLabel: 'Save',
         firstField: 'Title',
         onSubmit: update,
-        makeChanged: () => typeTitle('Audit card, checked'),
-        makeInvalid: () => typeTitle(''),
+        makeChanged: () => type('Title', 'Audit card, checked'),
+        makeInvalid: () => type('Title', ''),
         invalidField: 'Title',
         modEnterFields: ['Description'],
     });
@@ -131,7 +124,7 @@ for (const [way, close] of CLOSES) {
     test(`${way} on a changed edit asks first, and Discard closes the card`, async () => {
         update.mockClear();
         await renderInDocument(createElement(EditCard));
-        await typeTitle('Audit card, checked');
+        await type('Title', 'Audit card, checked');
         await close();
         expect([asking(), cardOpen, editing()]).toEqual([true, true, true]);
         await click('Keep editing');
@@ -157,7 +150,7 @@ test("leaving the edit by Cancel, Discard or Save focuses the card's Edit action
         [
             'Discard',
             async () => {
-                await typeTitle('Audit card, checked');
+                await type('Title', 'Audit card, checked');
                 await pressEscape();
                 await click('Discard');
             },

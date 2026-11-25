@@ -3,15 +3,14 @@
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Trash2 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 
 type LabelDialogProps = {
     open: boolean;
@@ -94,44 +93,15 @@ function LabelForm({
             }}
             footerStart={selectedLabel && <TooltipButton icon={Trash2} tooltipText="Delete label" onClick={onDelete} />}
         >
-            <LabelNameField name={name} onNameChange={setName} color={color} onColorChange={setColor} />
+            <RequiredTextField
+                label="Label name"
+                placeholder="Enter label name"
+                maxLength={LABEL_NAME_MAX_LENGTH}
+                value={name}
+                onChange={setName}
+                message={FIELD_MESSAGES.nameMissing}
+                addon={<ColorPickerSwatch value={color} onChange={setColor} className="size-6 rounded-sm" />}
+            />
         </FormDialogForm>
-    );
-}
-
-// Its own component, so it reads whether its form's Save was pressed.
-function LabelNameField({
-    name,
-    onNameChange,
-    color,
-    onColorChange,
-}: {
-    name: string;
-    onNameChange: (name: string) => void;
-    color: string;
-    onColorChange: (color: string) => void;
-}) {
-    const id = useId();
-    const errorId = useId();
-    const missing = useFormSubmitted() && !name.trim();
-    return (
-        <Field>
-            <FieldLabel htmlFor={id}>Label name</FieldLabel>
-            <InputGroup>
-                <InputGroupAddon>
-                    <ColorPickerSwatch value={color} onChange={onColorChange} className="size-6 rounded-sm" />
-                </InputGroupAddon>
-                <InputGroupInput
-                    id={id}
-                    placeholder="Enter label name"
-                    maxLength={LABEL_NAME_MAX_LENGTH}
-                    value={name}
-                    onChange={(e) => onNameChange(e.target.value)}
-                    aria-invalid={missing || undefined}
-                    aria-describedby={missing ? errorId : undefined}
-                />
-            </InputGroup>
-            {missing && <FieldError id={errorId}>Add a name</FieldError>}
-        </Field>
     );
 }

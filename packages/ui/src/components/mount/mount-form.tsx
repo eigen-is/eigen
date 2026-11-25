@@ -8,11 +8,13 @@ import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid, mountStorageIdentity } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { useId, useState } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel } from '../field';
 import { FormDialogForm } from '../form-dialog';
 import { useFormSubmitted } from '../form-shell';
 import { Input } from '../input';
+import { RequiredTextField } from '../required-text-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
 import { S3ConfigCard } from './s3-config-card';
 
@@ -107,24 +109,17 @@ function MountFields({
     isEdit: boolean;
 }) {
     const id = useId();
-    const submitted = useFormSubmitted();
-    const nameMissing = submitted && !draft.name.trim();
-    const sizeRefused = submitted && !sizeFits(draft.size);
+    const sizeRefused = useFormSubmitted() && !sizeFits(draft.size);
 
     return (
         <>
-            <Field>
-                <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-                <Input
-                    id={`${id}-name`}
-                    value={draft.name}
-                    onChange={(e) => onChange({ name: e.target.value })}
-                    placeholder="e.g. shared files"
-                    aria-invalid={nameMissing || undefined}
-                    aria-describedby={nameMissing ? `${id}-name-error` : undefined}
-                />
-                {nameMissing && <FieldError id={`${id}-name-error`}>Add a name</FieldError>}
-            </Field>
+            <RequiredTextField
+                label="Name"
+                value={draft.name}
+                onChange={(name) => onChange({ name })}
+                placeholder="e.g. shared files"
+                message={FIELD_MESSAGES.nameMissing}
+            />
 
             <Field>
                 <FieldLabel htmlFor={`${id}-type`}>Storage type</FieldLabel>

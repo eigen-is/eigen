@@ -29,7 +29,7 @@ type CardFormDialogProps = {
 };
 
 export function CardFormDialog({ open, onOpenChange, onSave, ...rest }: CardFormDialogProps) {
-    const { pending, run } = useDialogPending(onOpenChange);
+    const { pending, run } = useDialogPending({ open, onOpenChange });
     const [changed, setChanged] = useState(false);
     const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
     return (

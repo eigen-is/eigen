@@ -13,7 +13,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { REFERENCE_ROW_COUNT } = await import('@workspace/lib/sheets');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { DataValidation } = await import('../../../components/DataValidation');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 type Selection = import('../../../state').Selection;
@@ -69,7 +69,7 @@ test('Data validation keeps the dialog contract', async () => {
         makeChanged: () => typeInto('Options', 'Yes,No'),
         makeInvalid: () => typeInto('Cell range', ''),
         invalidField: 'Cell range',
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

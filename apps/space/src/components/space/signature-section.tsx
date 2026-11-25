@@ -63,7 +63,7 @@ function SignatureForm({ existing }: { existing?: EmailSignature }) {
                     Save
                 </Button>
             </div>
-            <LeaveGuard active={isDirty} pending={pending} />
+            <LeaveGuard active={isDirty} />
         </FormShell>
     );
 }

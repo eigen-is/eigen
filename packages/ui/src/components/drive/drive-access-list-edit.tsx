@@ -20,7 +20,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import {
     Select,
     SelectContent,
@@ -168,11 +168,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                 myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                <Users />
-                                {/* A phone's footer keeps one row, so only the icon shows there. */}
-                                <span className="max-sm:sr-only">Share with team</span>
-                            </Button>
+                            <FooterTool icon={Users} label="Share with team" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
                             {myTeams.map((team) => (

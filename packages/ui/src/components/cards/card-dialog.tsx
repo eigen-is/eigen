@@ -87,7 +87,7 @@ export function CardDialog({
     // Whether the edit form holds a change, so the frame's Esc asks before it goes back to the view.
     const [editChanged, setEditChanged] = useState(false);
     // A save leaves the edit for the view once it lands.
-    const edit = useDialogPending(onEditingChange);
+    const edit = useDialogPending({ open, onOpenChange: onEditingChange });
 
     const handleOpenChange = (next: boolean) => {
         if (!next) onEditingChange(false);

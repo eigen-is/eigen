@@ -2,7 +2,7 @@
 // something was typed, Cancel drops it, and Save with no title says "Add a title" under the field.
 import { expect, mock, test } from 'bun:test';
 import type { CardFormPatch } from '@workspace/lib/types/comments';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -24,16 +24,6 @@ function AddCard() {
     });
 }
 
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-async function typeTitle(value: string) {
-    const input = document.querySelector('[role="dialog"] input');
-    if (!(input instanceof HTMLInputElement)) throw new Error('no Title field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-}
-
 test('Add card keeps the dialog contract', async () => {
     await expectFormContract({
         kind: 'dialog',
@@ -41,8 +31,8 @@ test('Add card keeps the dialog contract', async () => {
         submitLabel: 'Add card',
         firstField: 'Title',
         onSubmit: save,
-        makeChanged: () => typeTitle('Order fencing'),
-        makeInvalid: () => typeTitle('  '),
+        makeChanged: () => type('Title', 'Order fencing'),
+        makeInvalid: () => type('Title', '  '),
         invalidField: 'Title',
         modEnterFields: ['Description'],
     });
@@ -51,7 +41,7 @@ test('Add card keeps the dialog contract', async () => {
 test('a new card hands on its trimmed title and the first color', async () => {
     save.mockClear();
     await renderInDocument(createElement(AddCard));
-    await typeTitle('  Order fencing ');
+    await type('Title', '  Order fencing ');
     const add = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Add card');
     await act(async () => add?.click());
     expect(save).toHaveBeenCalledTimes(1);

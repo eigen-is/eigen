@@ -3,6 +3,7 @@
 // card's assignee, is no change and Save leaves it alone. Its Description is a named field that shows its placeholder,
 // and a missing title's message describes the Title field.
 import { expect, mock, test } from 'bun:test';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -16,13 +17,6 @@ const titleField = () => {
     if (!(input instanceof HTMLInputElement)) throw new Error('no Title field');
     return input;
 };
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeTitle = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(titleField(), value);
-        titleField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 
 test('the form reports a change, and none once the title is typed back', async () => {
     const onChangedChange = mock((_changed: boolean) => {});
@@ -39,9 +33,9 @@ test('the form reports a change, and none once the title is typed back', async (
     );
     // The editor rewrites the plain description as html as it loads, which is no change.
     expect(onChangedChange.mock.calls.at(-1)?.[0]).toBe(false);
-    await typeTitle('Audit card, checked');
+    await type('Title', 'Audit card, checked');
     expect(onChangedChange.mock.calls.at(-1)?.[0]).toBe(true);
-    await typeTitle('Audit card');
+    await type('Title', 'Audit card');
     expect(onChangedChange.mock.calls.at(-1)?.[0]).toBe(false);
 });
 
@@ -63,6 +57,7 @@ test('Description is named by its label and shows its placeholder', async () => 
             onSave: () => {},
             pending: false,
             onCancel: () => {},
+            onChangedChange: () => {},
             placeholderDescription: 'Add details',
         }),
     );
@@ -92,7 +87,7 @@ test('an assignee the host learns after the edit opened is no change, and Save l
     await renderInDocument(createElement(LateEntry));
     await act(async () => learn('ada@example.org'));
     expect(onChangedChange.mock.calls.at(-1)?.[0]).toBe(false);
-    await typeTitle('Audit card, checked');
+    await type('Title', 'Audit card, checked');
     const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
     await act(async () => save?.click());
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -100,7 +95,9 @@ test('an assignee the host learns after the edit opened is no change, and Save l
 });
 
 test('Save with no title says so under the field, and the message describes it', async () => {
-    await renderInDocument(createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {} }));
+    await renderInDocument(
+        createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {}, onChangedChange: () => {} }),
+    );
     const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
     await act(async () => save?.click());
     const message = document.querySelector('[data-slot="field-error"]');

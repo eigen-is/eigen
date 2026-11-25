@@ -11,7 +11,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { CustomNumberFormats } = await import('../../../components/FormatDialogs/CustomNumberFormats');
 type Context = import('../../../state').Context;
 
@@ -60,7 +60,7 @@ test('Custom number formats keeps the dialog contract', async () => {
         makeChanged: () => typeInto(PATTERN, '0.0'),
         makeInvalid: () => typeInto(PATTERN, '0[Red'),
         invalidField: PATTERN,
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

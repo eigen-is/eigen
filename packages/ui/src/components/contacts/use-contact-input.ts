@@ -1,14 +1,13 @@
 // The typed value of a people-picking field, such as a guest list, a share dialog or a new chat. It parses the
-// "Name <email>" text a picked suggestion arrives as, and names a typed address by the user's contact for it, so
-// every field reads a known address the same way. A person already in the list is refused the same way in every
-// field, and the caller's `onAdd` decides the rest. An address it can't read or a person refused keeps the text in the
-// field, with the reason ContactAddRow shows under it. Its form counts typed text as a change and commits it on Save,
-// which returns the person added, so the form saves them in the same submit.
+// "Name <email>" text a suggestion arrives as and names a typed address by the user's contact for it. A person already
+// in the list is refused in every field alike, and the caller's `onAdd` decides the rest; a refusal keeps the text,
+// with the reason ContactAddRow shows under it. Its form counts typed text as a change and commits it on Save, so the
+// person typed is saved in the same submit.
 
 import { useContacts } from '@workspace/lib/contacts';
 import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import type { ParsedContactInput } from '@workspace/lib/validation';
-import { parseContactInput } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, parseContactInput } from '@workspace/lib/validation';
 import { useCallback, useState } from 'react';
 
 type Contact = NonNullable<ParsedContactInput>;
@@ -48,7 +47,7 @@ export function useContactInput({
 
     const add = (input: string): Committed => {
         const parsed = parseContactInput(input);
-        if (!parsed) return refuse('Enter a valid email address');
+        if (!parsed) return refuse(FIELD_MESSAGES.invalidEmail);
         if (listed.some((email) => email.toLowerCase() === parsed.email)) {
             return refuse(`${parsed.email} is already in the list`);
         }

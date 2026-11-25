@@ -5,7 +5,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
@@ -82,11 +82,6 @@ const nameField = () => {
     if (!input) throw new Error('the dialog has no name field');
     return input;
 };
-const type = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -104,8 +99,8 @@ test('Add label keeps the dialog contract', async () => {
         submitLabel: 'Create',
         firstField: 'Label name',
         onSubmit,
-        makeChanged: () => type('Family'),
-        makeInvalid: () => type('   '),
+        makeChanged: () => type('Label name', 'Family'),
+        makeInvalid: () => type('Label name', '   '),
         invalidField: 'Label name',
     });
 });
@@ -117,8 +112,8 @@ test('Edit label keeps the dialog contract', async () => {
         submitLabel: 'Save',
         firstField: 'Label name',
         onSubmit,
-        makeChanged: () => type('Later'),
-        makeInvalid: () => type('  '),
+        makeChanged: () => type('Label name', 'Later'),
+        makeInvalid: () => type('Label name', '  '),
         invalidField: 'Label name',
     });
 });
@@ -128,7 +123,7 @@ test('Create hands the trimmed name and the next color on and closes', async () 
     const dialog = dialogTitled('Add label');
     expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(button(dialog, 'Delete label')).toBeUndefined();
-    await type(' Family ');
+    await type('Label name', ' Family ');
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(onSubmit.mock.calls).toEqual([[{ name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value }]]);
@@ -175,7 +170,7 @@ test('Delete waits while a save runs', async () => {
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes', async () => {
     await open(urgent);
     expect(nameField().value).toBe('Urgent');
-    await type('Later');
+    await type('Label name', 'Later');
     expect(button(dialogTitled('Edit label'), 'Delete label')?.dataset.variant).toBe('ghost');
     await click(button(dialogTitled('Edit label'), 'Delete label'));
     expect(button(dialogTitled('Delete label'), 'Delete')?.dataset.variant).toBe('destructive');
@@ -196,7 +191,7 @@ test("the label header's pencil saves its label, and a failed save stays open", 
     });
     ({ unmount } = await renderInDocument(createElement(LabelFilterHeader, { labels: [urgent], labelId: 'l1' })));
     await click(document.querySelector<HTMLButtonElement>('button') ?? undefined);
-    await type('Later');
+    await type('Label name', 'Later');
     await click(button(dialogTitled('Edit label'), 'Save'));
     await settle();
     expect(updateLabel.mock.calls).toEqual([[{ id: 'l1', name: 'Later', color: '#ef4444' }]]);

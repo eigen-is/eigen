@@ -12,7 +12,7 @@ import { pressEnter } from '@workspace/ui/test/press-enter';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, SYNCHRONOUS_WRITE, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
 const { InsertFunctionDialog } = await import('../../../components/InsertFunctionDialog');
 
 const SEARCH = 'Search function';
@@ -41,7 +41,7 @@ test('Insert function keeps the dialog contract', async () => {
         makeChanged: () => typeInto(SEARCH, 'sum'),
         makeInvalid: () => typeInto(SEARCH, 'NOSUCHFUNCTION'),
         invalidField: SEARCH,
-        except: SYNCHRONOUS_WRITE,
+        savesAtOnce: true,
     });
 });
 

@@ -7,7 +7,7 @@
 // deleting a new calendar is the hook's, pinned in packages/lib's use-transfer test.
 import { expect, mock, test } from 'bun:test';
 import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
-import { expectFormContract } from '../../form-contract';
+import { expectFormContract, field, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 
@@ -149,14 +149,6 @@ const chooseCalendar = async (label: string) => {
     });
 };
 const nameInput = () => dialog().querySelector('input') as HTMLInputElement;
-const typeName = async (value: string) => {
-    const input = nameInput();
-    // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-    await act(async () => {
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-};
 const enter = async () => {
     await act(async () => pressEnter(nameInput()));
 };
@@ -207,7 +199,6 @@ async function open() {
         openList,
         textsOf,
         trigger,
-        typeName,
     };
 }
 
@@ -223,11 +214,11 @@ test('Import to Calendar keeps the dialog contract', async () => {
         onSubmit: importToCalendar,
         makeChanged: async () => {
             await chooseCalendar('New calendar');
-            await typeName('Market season');
+            await type('Calendar name', 'Market season');
         },
         makeInvalid: async () => {
             await chooseCalendar('New calendar');
-            await typeName(' ');
+            await type('Calendar name', ' ');
         },
         invalidField: 'Calendar name',
     });
@@ -242,8 +233,7 @@ test('the dialog names the file and offers a calendar under Add to calendar, wit
     expect(dialog().querySelector('input')).toBeNull();
 
     await chooseCalendar('New calendar');
-    expect(dialog().querySelector('label[for="import-calendar-name"]')?.textContent).toBe('Calendar name');
-    expect(dialog().querySelector('input')?.id).toBe('import-calendar-name');
+    expect(dialog().contains(field('Calendar name'))).toBe(true);
     await cleanup();
 });
 
@@ -295,9 +285,9 @@ test('New calendar asks for one named after the file, in the viewer’s own home
 });
 
 test('Enter in the new calendar’s name imports into a calendar of that name, trimmed', async () => {
-    const { chooseCalendar, closed, cleanup, enter, typeName } = await open();
+    const { chooseCalendar, closed, cleanup, enter } = await open();
     await chooseCalendar('New calendar');
-    await typeName('  Market season ');
+    await type('Calendar name', '  Market season ');
 
     await enter();
     expect(handed).toEqual([{ kind: 'new', name: 'Market season', color: expect.any(String) }]);
@@ -306,9 +296,9 @@ test('Enter in the new calendar’s name imports into a calendar of that name, t
 });
 
 test('a new calendar with no name says "Add a name" under the field, and imports nothing', async () => {
-    const { chooseCalendar, click, closed, cleanup, enter, typeName } = await open();
+    const { chooseCalendar, click, closed, cleanup, enter } = await open();
     await chooseCalendar('New calendar');
-    await typeName('   ');
+    await type('Calendar name', '   ');
     await click('button', 'Import');
     expect(fieldError()).toBe('Add a name');
     await enter();
@@ -321,9 +311,9 @@ test('an import that fails keeps the dialog open with the calendar and name stil
     failure = new Error('offline');
     // The hook's mutation toasts its failure before the dialog sees it.
     onMutationError(failure);
-    const { button, chooseCalendar, click, closed, cleanup, nameInput, trigger, typeName } = await open();
+    const { button, chooseCalendar, click, closed, cleanup, nameInput, trigger } = await open();
     await chooseCalendar('New calendar');
-    await typeName('Market season');
+    await type('Calendar name', 'Market season');
 
     await click('button', 'Import');
     expect(handed).toEqual([{ kind: 'new', name: 'Market season', color: expect.any(String) }]);
@@ -381,9 +371,9 @@ test('while the calendars load there is only Close, and the default lands when t
 });
 
 test('a later fetch of the calendars overwrites neither the chosen target nor the typed name', async () => {
-    const { chooseCalendar, cleanup, draw, nameInput, trigger, typeName } = await open();
+    const { chooseCalendar, cleanup, draw, nameInput, trigger } = await open();
     await chooseCalendar('New calendar');
-    await typeName('Market season');
+    await type('Calendar name', 'Market season');
 
     served.calendars = [...calendars];
     await draw();
