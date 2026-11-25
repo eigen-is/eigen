@@ -1,7 +1,7 @@
 // The save story of Drive's inline editors: Mod+S, the dirty state and the discard dialog their Cancel
 // opens. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
-// changed since answers a conflict, which opens the conflict dialog. A navigation or a closed tab is
-// asked about by the editor's leave guard, which reads `unsaved`.
+// changed since answers a conflict, which opens the conflict dialog. `unsaved` tells a leave guard whether
+// there is unsaved work; a save in flight is not, unless the user typed after it was sent.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
@@ -18,7 +18,27 @@ type EditorSaveOptions = {
     getFrontmatter?: () => string | undefined;
 };
 
-export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getFrontmatter }: EditorSaveOptions) {
+type EditorSave = {
+    saveState: SaveState;
+    unsaved: boolean;
+    showConflict: boolean;
+    setShowConflict: (open: boolean) => void;
+    markDirty: () => void;
+    doSave: (force?: boolean) => Promise<boolean>;
+    confirmClose: (onClose: () => void) => void;
+    showDiscardConfirm: boolean;
+    handleDiscardConfirm: () => void;
+    handleDiscardCancel: () => void;
+};
+
+export function useEditorSave({
+    ownerId,
+    mountId,
+    pathId,
+    etag,
+    getContent,
+    getFrontmatter,
+}: EditorSaveOptions): EditorSave {
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [showConflict, setShowConflict] = useState(false);
     const etagRef = useRef(etag);

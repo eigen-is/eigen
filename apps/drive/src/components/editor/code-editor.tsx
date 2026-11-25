@@ -26,13 +26,13 @@ import {
     lineNumbers,
 } from '@codemirror/view';
 import { downloadBlob } from '@workspace/lib/download';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
+import { Column } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ConflictDialog } from './conflict-dialog';
+import { DiscardChangesDialogs } from './discard-changes-dialogs';
 import { EditToolbar } from './editor-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
@@ -165,7 +165,6 @@ export type CodeEditorViewHandle = {
     redo: () => void;
 };
 
-// Shared editable CodeMirror view
 export const CodeEditorView = forwardRef<
     CodeEditorViewHandle,
     {
@@ -208,7 +207,6 @@ export const CodeEditorView = forwardRef<
     return <div ref={containerRef} className="h-full overflow-hidden" />;
 });
 
-// Full standalone code editor
 type CodeEditorProps = {
     content: string;
     etag: string;
@@ -324,21 +322,11 @@ export function CodeEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <ConfirmDialog
+                <DiscardChangesDialogs
+                    unsaved={unsaved}
                     open={showDiscardConfirm}
-                    onOpenChange={(open) => {
-                        if (!open) handleDiscardCancel();
-                    }}
-                    title="Discard changes?"
-                    description="You have unsaved changes. Discard them?"
-                    confirmText="Discard"
-                    destructive
                     onConfirm={handleDiscardConfirm}
-                />
-                <LeaveGuard
-                    active={unsaved}
-                    title="Discard changes?"
-                    description="You have unsaved changes. Discard them?"
+                    onCancel={handleDiscardCancel}
                 />
             </Column>
         </DocSearchProvider>
