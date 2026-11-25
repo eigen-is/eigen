@@ -1,9 +1,8 @@
 // Which event the calendar view's detail column shows: the one its URL names, as the current list has it, so what the
-// column shows and the etag it writes with follow every refetch. The URL names an event by its series' id, or by the
-// uid or organizer's id a link carries, and an occurrence of a series by its date; a link with no date opens the
-// occurrence nearest the view's day. While the list lacks it, such as during a save or a refetch, the column keeps the
-// last copy it found, and after a save the URL takes the key the saved occurrence has now. The view route calls it
-// with the URL's pair and the events it loaded.
+// column shows and the etag it writes with follow every refetch. The URL names an event by its series' id, uid or
+// organizer's id, and an occurrence by its date; a link with no date opens the one nearest the view's day. While the
+// list lacks it, such as during a save, the column keeps the last copy it found until the URL closes it, and after a
+// save the URL takes the saved occurrence's key. The view route calls it with the URL's pair and the events it loaded.
 
 import { useAuth } from '@workspace/lib/auth';
 import { isFreeBusyEvent, isSeriesOccurrence } from '@workspace/lib/calendar';
@@ -60,6 +59,7 @@ export function useEventDetailState({
         if (!found || distance(e, focus) < distance(found, focus)) found = e;
     }
     if (found && found !== kept) setKept(found);
+    if (!open && kept) setKept(null);
     const event = found ?? (kept && open && isNamedBy(kept, open) ? kept : null);
 
     const calendar = event ? (calendars.find((c) => c.id === event.calendarId) ?? null) : null;

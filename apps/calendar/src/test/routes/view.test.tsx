@@ -191,6 +191,10 @@ async function open(url = OCTOBER) {
             await act(async () => router.history.back());
             await settle();
         },
+        forward: async () => {
+            await act(async () => router.history.forward());
+            await settle();
+        },
     };
 }
 
@@ -785,6 +789,20 @@ test('deleting the open event closes the column', async () => {
     expect(deleteEvent.mutateAsync).toHaveBeenCalledTimes(1);
     expect(detail()).toBeNull();
     expect(search()).toEqual({});
+});
+
+test('forward to a deleted event shows it is not in this view, not its last copy', async () => {
+    ownEvents.data = [event({ title: 'Review', startTime: at(13, 14) })];
+    const { container, search, forward } = await open('/view/day/2026-10-13');
+    await click(pill(container, 'Review'));
+    await click(barButton('Delete event'));
+    await click(button('Delete'));
+    await settle();
+    await refetchOwnEvents([]);
+    await forward();
+    expect(search()).toEqual({ eventId: 'Review' });
+    expect(detail()?.textContent).toContain("This event isn't in this view");
+    expect(barButton('Delete event')).toBeNull();
 });
 
 test('on a phone the event covers the grid, which stays mounted under it, and the lone back closes it', () =>
