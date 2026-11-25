@@ -114,7 +114,7 @@ export function ContactAutosuggest({
         [listOpen, suggestions, selectedIndex, handleSelect],
     );
 
-    const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDownSubmit = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter' || event.defaultPrevented) return;
         if (!inputValue.trim() && onEmptyEnter) {
             event.preventDefault();

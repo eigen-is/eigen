@@ -7,7 +7,7 @@ import { useContacts } from '@workspace/lib/contacts';
 import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import type { ParsedContactInput } from '@workspace/lib/validation';
 import { parseContactInput } from '@workspace/lib/validation';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 type ContactInput = {
     value: string;
@@ -21,39 +21,47 @@ type ContactInput = {
 export function useContactInput(onAdd: (contact: NonNullable<ParsedContactInput>) => string | undefined): ContactInput {
     const { data: contacts } = useContacts();
     const [value, setValue] = useState('');
-    // A reason holds only for the text it was given for, so an edit or the caller's reset clears it.
-    const [refusal, setRefusal] = useState<{ input: string; reason: string }>();
+    // A reason holds until the text changes, so an edit or the caller's reset clears it, and retyping the same text
+    // brings no old reason back before it is submitted again.
+    const [refusal, setRefusal] = useState<string>();
 
     const trySubmit = (input: string): boolean => {
         if (!input.trim()) return false;
         const parsed = parseContactInput(input);
         if (!parsed) {
-            setRefusal({ input, reason: 'Enter a valid email address' });
+            setRefusal('Enter a valid email address');
             return false;
         }
         const known = contacts && findContactByEmail(contacts, parsed.email);
         const displayName = parsed.displayName ?? ((known && contactFullName(known)) || undefined);
         const reason = onAdd({ email: parsed.email, displayName });
         if (reason) {
-            setRefusal({ input, reason });
+            setRefusal(reason);
             return false;
         }
         setValue('');
         return true;
     };
 
+    // Stable, since callers reset the field from an effect that lists it.
+    const reset = useCallback((next: string) => {
+        setRefusal(undefined);
+        setValue(next);
+    }, []);
+
     const handleChange = (input: string) => {
+        setRefusal(undefined);
         if (input.includes('<') && input.includes('>') && trySubmit(input)) return;
         setValue(input);
     };
 
     return {
         value,
-        setValue,
+        setValue: reset,
         handleChange,
         submit: () => {
             trySubmit(value);
         },
-        error: refusal?.input === value ? refusal.reason : undefined,
+        error: refusal,
     };
 }

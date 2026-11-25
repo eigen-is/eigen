@@ -118,6 +118,15 @@ test('the + on an address the caller refuses keeps the text and shows its reason
     expect(problem(input)).toBeNull();
 });
 
+test('retyping a refused address brings no old reason back before it is added again', async () => {
+    const input = await renderWired();
+    await type(input, 'ada@');
+    await act(async () => pressEnter(input));
+    await type(input, 'ada@e');
+    await type(input, 'ada@');
+    expect(problem(input)).toBeNull();
+});
+
 test('a person taken clears the field and shows no problem', async () => {
     const input = await renderWired();
     await type(input, 'ada@');
