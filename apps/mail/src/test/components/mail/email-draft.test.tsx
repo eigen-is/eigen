@@ -6,11 +6,13 @@ import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import type { ReactElement } from 'react';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
+const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { EmailDraft } = await import('../../../components/mail/email-draft');
 
 let unmount = async () => {};
@@ -60,24 +62,39 @@ const savedForward: EmailDraftType = {
     text: 'quoted',
 };
 
+// The composer lives under a route, as in the app.
+async function renderUnderRoute(composer: ReactElement) {
+    const router = createRouter({
+        routeTree: createRootRoute({ component: () => composer }),
+        history: createMemoryHistory(),
+    });
+    await router.load();
+    ({ unmount } = await renderInDocument(
+        createElement(AuthProvider, null, createElement(RouterProvider, { router })),
+    ));
+}
+
 async function openComposer(email: EmailDraftType | null) {
     fetched.length = 0;
+    const composer = createElement(EmailDraft, {
+        email,
+        prefillDraft: { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' },
+        forwardedParts: [part],
+        sendDraft: async () => {},
+        onAutoSave: async () => savedForward,
+        isSending: false,
+        onPreparingSendChange: () => {},
+        filePickerOpen: false,
+        onFilePickerOpenChange: () => {},
+    });
+    // The composer lives under a route, as in the app.
+    const router = createRouter({
+        routeTree: createRootRoute({ component: () => composer }),
+        history: createMemoryHistory(),
+    });
+    await router.load();
     ({ unmount } = await renderInDocument(
-        createElement(
-            AuthProvider,
-            null,
-            createElement(EmailDraft, {
-                email,
-                prefillDraft: { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' },
-                forwardedParts: [part],
-                sendDraft: async () => {},
-                onAutoSave: async () => savedForward,
-                isSending: false,
-                onPreparingSendChange: () => {},
-                filePickerOpen: false,
-                onFilePickerOpenChange: () => {},
-            }),
-        ),
+        createElement(AuthProvider, null, createElement(RouterProvider, { router })),
     ));
     await act(async () => {});
     return fetched.filter((url) => url.includes('/attachment/0/menu.pdf'));
@@ -104,30 +121,26 @@ test('a forward whose first save ran while its part uploaded reports the parts s
     let partsSaved = 0;
     jest.useFakeTimers();
     try {
-        ({ unmount } = await renderInDocument(
-            createElement(
-                AuthProvider,
-                null,
-                createElement(EmailDraft, {
-                    email: null,
-                    prefillDraft: { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' },
-                    forwardedParts: [part],
-                    sendDraft: async () => {},
-                    onAutoSave: async (_draft, options) => {
-                        saves.push(options?.tempAttachmentIds);
-                        return {
-                            ...savedForward,
-                            attachments: options?.tempAttachmentIds ? savedForward.attachments : [],
-                        };
-                    },
-                    onForwardedPartsSaved: () => partsSaved++,
-                    isSending: false,
-                    onPreparingSendChange: () => {},
-                    filePickerOpen: false,
-                    onFilePickerOpenChange: () => {},
-                }),
-            ),
-        ));
+        await renderUnderRoute(
+            createElement(EmailDraft, {
+                email: null,
+                prefillDraft: { subject: 'FW: Lunch', html: '<p>quoted</p>', text: 'quoted' },
+                forwardedParts: [part],
+                sendDraft: async () => {},
+                onAutoSave: async (_draft, options) => {
+                    saves.push(options?.tempAttachmentIds);
+                    return {
+                        ...savedForward,
+                        attachments: options?.tempAttachmentIds ? savedForward.attachments : [],
+                    };
+                },
+                onForwardedPartsSaved: () => partsSaved++,
+                isSending: false,
+                onPreparingSendChange: () => {},
+                filePickerOpen: false,
+                onFilePickerOpenChange: () => {},
+            }),
+        );
         const subject = document.querySelector('#subject');
         if (!(subject instanceof HTMLInputElement)) throw new Error('no subject field');
         await act(async () => {

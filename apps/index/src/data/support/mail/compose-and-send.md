@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, compose, send]
 related: [mail/read-and-reply, mail/get-started]
 order: 90
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 Composing a message in Mail takes a few seconds: add who it's going to, write a subject and a message, and click **Send**. This page walks through writing a brand-new email from start to finish.
@@ -51,7 +51,7 @@ A couple of checks happen before the email goes out:
 
 <div class="eigen-callout">
 
-You don't have to finish a message in one sitting. Mail saves your draft as you type and keeps it in the **Drafts** folder. Open it from there later to carry on, then send it the same way.
+You don't have to finish a message in one sitting. Mail saves your draft as you type and keeps it in the **Drafts** folder. Open it from there later to carry on, then send it the same way. If you close the tab before your last change is saved, your browser asks before it closes.
 
 </div>
 

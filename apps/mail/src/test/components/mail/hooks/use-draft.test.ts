@@ -9,6 +9,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { AuthProvider } = await import('@workspace/lib/auth');
+const { createBrowserHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { useDraft } = await import('../../../../components/mail/hooks/use-draft');
 
 function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
@@ -62,7 +63,15 @@ async function openDraft(options: Partial<Parameters<typeof useDraft>[0]>, answe
         });
         return null;
     }
-    ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe))));
+    // Under a route, as in the app: the router's browser history is what asks before the tab unloads.
+    const router = createRouter({
+        routeTree: createRootRoute({ component: () => createElement(Probe) }),
+        history: createBrowserHistory(),
+    });
+    await router.load();
+    ({ unmount } = await renderInDocument(
+        createElement(AuthProvider, null, createElement(RouterProvider, { router })),
+    ));
     const composer = () => {
         if (!seen.draft) throw new Error('the composer state never rendered');
         return seen.draft;
