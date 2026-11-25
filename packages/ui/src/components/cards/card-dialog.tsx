@@ -1,89 +1,22 @@
-// The dialog a comment card opens into, in every host: its link, edit and resolve actions in the top bar, then the
-// card's title, description, attachments and assignee with its thread below in one scroll, or the edit form in place.
-// A deleted comment opens the deleted state instead, with nothing that acts. The host's comment lifecycle decides
-// which state a card is in, and it does the writes this dialog asks for.
+// The dialog a comment card opens into, on a board or beside a document: CardDetail's actions in the top bar over its
+// body, and its edit form in place of the body while the card is edited. A save ends the edit once it lands, and the
+// frame asks "Discard changes?" before a close drops a changed form. A deleted comment opens a small dialog with the
+// deleted state instead, with nothing that acts.
 
-import { useResolveCardAttachments } from '@workspace/lib/comments';
-import { useAttachmentSubjects, useMediaResolver } from '@workspace/lib/drive';
-import type { ChatAttachment, CommentEntry } from '@workspace/lib/types/chat';
-import { isAttachmentReference } from '@workspace/lib/types/chat';
-import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive-access';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { Check, RotateCcw } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useDialogPending } from '../../hooks/use-dialog-pending';
-import { AttachmentChip } from '../attachment/attachment-chip';
-import { AttachmentStrip } from '../attachment/attachment-strip';
-import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
-import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
-import { AssigneeChip } from '../comments/assignee-chip';
-import { AssigneePicker } from '../comments/assignee-picker';
-import { CommentThread } from '../comments/comment-thread';
-import { CreatedByMeta } from '../comments/created-by-meta';
-import { DeletedComment } from '../comments/deleted-comment';
-import { ContextMenuAnchor } from '../context-menu';
 import { Dialog, DialogContent, DialogTitle } from '../dialog';
-import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
-import { useFileActionRunner } from '../file-actions/use-file-action-runner';
-import { CardBody } from './card-body';
-import { CardDialogActions } from './card-dialog-actions';
+import type { CardDetailProps } from './card-detail';
+import { CardDetail } from './card-detail';
 import { CardDialogFrame } from './card-dialog-frame';
-import { CardForm } from './card-form';
 
-type CardDialogProps = {
+type CardDialogProps = Omit<CardDetailProps, 'children'> & {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    card: CommentCard | null;
-    entry?: CommentEntry;
-    ownerId: string;
-    mountId: string;
-    // The container the card belongs to. The comment thread's notifications are tagged with it.
-    pathId: string;
-    canWrite?: boolean;
-    deleted: boolean;
-    // Edit mode is owned by the lifecycle bundle so the menus' Edit row can open straight into it.
-    isEditing: boolean;
-    onEditingChange: (editing: boolean) => void;
-    copyLinkUrl?: string;
-    members?: EffectiveMember[];
-    currentUserEmail?: string;
-    onUpdate?: (patch: CardFormPatch & { attachments?: ChatAttachment[] }) => void | Promise<void>;
-    onResolve?: (chatName: string, next: 'open' | 'resolved', title?: string) => void;
-    onAssign?: (chatName: string, assignee: string | null, title?: string) => void;
-    onDelete?: (cardId: string) => void;
 };
 
-export function CardDialog({
-    open,
-    onOpenChange,
-    card,
-    entry,
-    ownerId,
-    mountId,
-    pathId,
-    canWrite = true,
-    deleted,
-    isEditing,
-    onEditingChange,
-    copyLinkUrl,
-    members,
-    currentUserEmail,
-    onUpdate,
-    onResolve,
-    onAssign,
-    onDelete,
-}: CardDialogProps) {
-    const { mediaFolderId } = useMediaResolver();
-    const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
-    const { subjectOf, subjectsOf } = useAttachmentSubjects(ownerId, mountId, mediaFolderId);
-    // A chip's file actions open on right-click, and on touch through the long-press the chips share.
-    const { contextMenu: chipMenu, bind } = useAttachmentChipMenu<FileSubject>(subjectOf);
-    const attachmentSubjects = useMemo(() => subjectsOf(card?.attachments), [card?.attachments, subjectsOf]);
-    // The card's own attachments are the siblings, so a quick look from here keeps its Save all row.
-    const runner = useFileActionRunner(chipMenu.item, attachmentSubjects);
+export function CardDialog({ open, onOpenChange, ...detail }: CardDialogProps) {
+    const { onEditingChange } = detail;
     // Whether the edit form holds a change, so the frame's Esc asks before it goes back to the view.
     const [editChanged, setEditChanged] = useState(false);
     // A save leaves the edit for the view once it lands.
@@ -94,192 +27,43 @@ export function CardDialog({
         onOpenChange(next);
     };
 
-    // A comment whose card is gone has only its index row, which keeps the title.
-    if (deleted) {
-        return (
-            <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent size="sm" aria-describedby={undefined}>
-                    <DialogTitle className="sr-only">Deleted comment</DialogTitle>
-                    <DeletedComment title={(card ? card.title : entry?.title) || 'Comment'} className="pr-8" />
-                </DialogContent>
-            </Dialog>
-        );
-    }
-
-    if (!card) return null;
-
-    // A thread without an index row reads as open and unassigned, as the comment filter reads it. Its first message or
-    // assignment creates the row on the server.
-    const chatName = card.chatName;
-    const status = entry?.status ?? 'open';
-    const assignee = entry?.assignee ?? null;
-
-    // Resolve and reopen are writes, so they are gated like the menus' rows and the Edit pencil. A viewer would only
-    // get the 403 the route answers with.
-    const action =
-        canWrite && chatName && onResolve
-            ? {
-                  actionIcon: status === 'open' ? Check : RotateCcw,
-                  actionTooltip: status === 'open' ? 'Resolve' : 'Reopen',
-                  onAction: () => onResolve(chatName, status === 'open' ? 'resolved' : 'open', card.title),
-              }
-            : {};
-
-    const attachmentNames = card.attachments?.filter((name): name is string => typeof name === 'string') ?? [];
-
-    const handleEditSave = async (patch: CardFormPatch, drafts?: CardAttachmentDraft[], assignee?: string | null) => {
-        // The same Save may rename the card. The new title goes along, so the activity row and the title cache don't
-        // record the old name.
-        if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
-        if (!onUpdate) return;
-        if (drafts === undefined) {
-            await onUpdate(patch);
-            return;
-        }
-        const attachments = await resolveAttachments(drafts);
-        await onUpdate({ ...patch, attachments });
-    };
-
-    // The assignee sits in the meta row: a picker when the user may reassign, else a plain chip. A read-only card with
-    // no assignee shows nothing there.
-    let assigneeControl: ReactNode = null;
-    if (chatName) {
-        if (canWrite && onAssign && members && currentUserEmail) {
-            assigneeControl = (
-                <AssigneePicker
-                    value={assignee}
-                    onChange={(email) => onAssign(chatName, email, card.title)}
-                    members={members}
-                    currentUserEmail={currentUserEmail}
-                >
-                    <button
-                        type="button"
-                        // items-baseline lines the name up with the Created by text. The avatar centers itself.
-                        className="-mx-1 -my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
-                    >
-                        {assignee ? (
-                            <AssigneeChip email={assignee} />
-                        ) : (
-                            <span className="text-muted-foreground">Unassigned</span>
-                        )}
-                    </button>
-                </AssigneePicker>
-            );
-        } else if (assignee) {
-            assigneeControl = (
-                <span className="inline-flex items-baseline gap-1">
-                    <AssigneeChip email={assignee} />
-                </span>
-            );
-        }
-    }
-
-    // Who made the card on the left, who it is for on the right. On a narrow screen the creator's name gives way first.
-    const meta =
-        card.creator || assigneeControl ? (
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-                {card.creator && (
-                    <span className="min-w-0 truncate">
-                        <CreatedByMeta email={card.creator} createdAt={card.createdAt ?? 0} />
-                    </span>
-                )}
-                {assigneeControl && <span className="ml-auto shrink-0">{assigneeControl}</span>}
-            </span>
-        ) : undefined;
-
-    const canEdit = !!onUpdate && canWrite;
-    const editForm =
-        canEdit && isEditing ? (
-            <CardForm
-                key={card.id}
-                mode="edit"
-                initialTitle={card.title}
-                initialDescription={card.description}
-                initialColor={card.color}
-                allowAttachments={!!mediaFolderId}
-                initialAttachments={card.attachments}
-                members={members}
-                currentUserEmail={currentUserEmail}
-                initialAssignee={assignee}
-                onSave={(patch, drafts, assignee) => edit.run(() => handleEditSave(patch, drafts, assignee))}
-                pending={edit.pending}
-                onCancel={() => onEditingChange(false)}
-                onChangedChange={setEditChanged}
-                onDelete={onDelete && (() => onDelete(card.id))}
-            />
-        ) : undefined;
-
-    const content = (
-        <CardBody
-            title={card.title}
-            description={card.description}
-            meta={meta}
-            color={card.color}
-            canWrite={canWrite}
-            onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
-            attachments={
-                card.attachments && card.attachments.length > 0 ? (
-                    <>
-                        <AttachmentStrip {...bind()}>
-                            {card.attachments.map((attachment) =>
-                                isAttachmentReference(attachment) ? (
-                                    <ReferenceAttachmentChip key={`ref-${attachment.id}`} reference={attachment} />
-                                ) : mediaFolderId ? (
-                                    <AttachmentChip
-                                        key={`name-${attachment}`}
-                                        fileName={attachment}
-                                        ownerId={ownerId}
-                                        mountId={mountId}
-                                        mediaFolderId={mediaFolderId}
-                                        siblingFileNames={attachmentNames}
-                                    />
-                                ) : (
-                                    <SimpleAttachmentChip key={`name-${attachment}`} filename={attachment} />
-                                ),
-                            )}
-                        </AttachmentStrip>
-                        <ContextMenuAnchor contextMenu={chipMenu} className="min-w-48">
-                            <FileActionMenuItems runner={runner} />
-                        </ContextMenuAnchor>
-                        {runner.dialogs}
-                    </>
-                ) : undefined
-            }
-        />
-    );
-
-    let body: ReactNode;
-    if (editForm) {
-        // The form scrolls inside on short viewports, and the thread hides while it is open.
-        body = <div className="app-gutter-x flex min-h-0 flex-1 flex-col">{editForm}</div>;
-    } else if (chatName) {
-        body = <CommentThread ownerId={ownerId} mountId={mountId} pathId={pathId} chatName={chatName} lead={content} />;
-    } else {
-        body = (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-                {content}
-                <p className="app-gutter-x pb-4 text-sm text-muted-foreground">No chat available for this card.</p>
-            </div>
-        );
-    }
-
     return (
-        <CardDialogFrame
-            open={open}
-            onOpenChange={handleOpenChange}
-            title={card.title}
-            actions={
-                <CardDialogActions
-                    copyLinkUrl={copyLinkUrl}
-                    onEdit={canEdit ? () => onEditingChange(true) : undefined}
-                    {...action}
-                />
+        <CardDetail {...detail}>
+            {({ title, deleted, actions, body, editForm }) =>
+                deleted ? (
+                    <Dialog open={open} onOpenChange={handleOpenChange}>
+                        <DialogContent size="sm" aria-describedby={undefined}>
+                            <DialogTitle className="sr-only">Deleted comment</DialogTitle>
+                            <div className="pr-8">{body}</div>
+                        </DialogContent>
+                    </Dialog>
+                ) : (
+                    <CardDialogFrame
+                        open={open}
+                        onOpenChange={handleOpenChange}
+                        title={title}
+                        actions={actions}
+                        editing={
+                            editForm
+                                ? {
+                                      changed: editChanged,
+                                      pending: edit.pending,
+                                      onCancel: () => onEditingChange(false),
+                                  }
+                                : undefined
+                        }
+                    >
+                        {editForm ? (
+                            // The form scrolls inside on short viewports, and the thread hides while it is open.
+                            <div className="app-gutter-x flex min-h-0 flex-1 flex-col">
+                                {editForm({ pending: edit.pending, run: edit.run, onChangedChange: setEditChanged })}
+                            </div>
+                        ) : (
+                            body
+                        )}
+                    </CardDialogFrame>
+                )
             }
-            editing={
-                editForm && { changed: editChanged, pending: edit.pending, onCancel: () => onEditingChange(false) }
-            }
-        >
-            {body}
-        </CardDialogFrame>
+        </CardDetail>
     );
 }
