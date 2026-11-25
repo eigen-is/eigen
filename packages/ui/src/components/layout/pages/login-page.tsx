@@ -243,8 +243,8 @@ function GuestEmailForm({ initialEmail = '', onSent }: { initialEmail?: string; 
     });
 
     const onSubmit = async ({ email }: z.infer<typeof guestEmailSchema>) => {
-        const message = await postGuestAuth('request-otp', { email }, 'Failed to send code');
-        if (message) form.setError('email', { message }, { shouldFocus: true });
+        const failure = await postGuestAuth('request-otp', { email }, 'Failed to send code');
+        if (failure) showFailure(form, 'email', failure, ADDRESS_STATUSES);
         else onSent(email);
     };
 
@@ -274,8 +274,8 @@ function GuestCodeForm({ email }: { email: string }) {
     });
 
     const onSubmit = async ({ otp }: z.infer<typeof guestCodeSchema>) => {
-        const message = await postGuestAuth('verify-otp', { email, otp }, 'Verification failed', 'include');
-        if (message) form.setError('otp', { message }, { shouldFocus: true });
+        const failure = await postGuestAuth('verify-otp', { email, otp }, 'Verification failed', 'include');
+        if (failure) showFailure(form, 'otp', failure, CODE_STATUSES);
         else window.location.reload();
     };
 
@@ -308,9 +308,20 @@ function GuestCodeForm({ email }: { email: string }) {
     );
 }
 
-// Resolves the sentence to show under the field, or null once the route took it. `credentials` lets the answer set
-// the session cookie.
-async function postGuestAuth(route: string, body: object, offline: string, credentials?: RequestCredentials) {
+// An address that is no guest's or has nothing shared with it. A rate limit on asking is no reason to retype it.
+const ADDRESS_STATUSES = new Set([400]);
+
+// A wrong or expired code, and too many wrong tries (429), which only a new code gets past.
+const CODE_STATUSES = new Set([400, 429]);
+
+// Resolves the server's refusal, the offline sentence when no answer came, or null once the route took it.
+// `credentials` lets the answer set the session cookie.
+async function postGuestAuth(
+    route: string,
+    body: object,
+    offline: string,
+    credentials?: RequestCredentials,
+): Promise<AppError | string | null> {
     try {
         const res = await fetch(`${API_HOST}/guest-auth/${route}`, {
             method: 'POST',
@@ -318,7 +329,7 @@ async function postGuestAuth(route: string, body: object, offline: string, crede
             credentials,
             body: JSON.stringify(body),
         });
-        return res.ok ? null : (await appErrorFrom(res)).message;
+        return res.ok ? null : await appErrorFrom(res);
     } catch {
         return offline;
     }

@@ -50,8 +50,14 @@ afterEach(() => {
 });
 afterAll(() => fetchSpy.mockRestore());
 
-const refusal = (message: string) => () =>
-    new Response(JSON.stringify(message), { status: 400, headers: { 'Content-Type': 'application/json' } });
+const refusal =
+    (message: string, status = 400) =>
+    () =>
+        new Response(JSON.stringify(message), { status, headers: { 'Content-Type': 'application/json' } });
+
+const offline = () => {
+    throw new TypeError('Failed to fetch');
+};
 
 const { act, createElement } = await import('react');
 const router = await import('@tanstack/react-router');
@@ -171,6 +177,46 @@ test("a guest's code goes to the address it was sent to, and each refusal reads 
         ['request-otp', post({ email: 'joris@example.com' })],
         ['verify-otp', { ...post({ email: 'joris@example.com', otp: '123456' }), credentials: 'include' }],
     ]);
+});
+
+test("a guest's rate limit, a server error or no connection is a toast, with no field marked", async () => {
+    await renderPage(<LoginPage email="joris@example.com" />);
+    for (const [answer, toast] of [
+        [
+            refusal('Too many requests for this email — try again later', 429),
+            'Too many requests for this email — try again later',
+        ],
+        [refusal('Failed to send verification code', 500), 'Failed to send verification code'],
+        [offline, 'Failed to send code'],
+    ] as const) {
+        answers['request-otp'] = answer;
+        await act(async () => pressEnter(field('Email')));
+        expect(toasts.splice(0)).toEqual([toast]);
+        expect(field('Email').getAttribute('aria-invalid')).toBe('false');
+    }
+
+    delete answers['request-otp'];
+    await act(async () => pressEnter(field('Email')));
+    await type('One-time code', '123456');
+    for (const [answer, toast] of [
+        [refusal('Failed to create guest user', 500), 'Failed to create guest user'],
+        [offline, 'Verification failed'],
+    ] as const) {
+        answers['verify-otp'] = answer;
+        await act(async () => pressEnter(field('One-time code')));
+        expect(toasts.splice(0)).toEqual([toast]);
+        expect(field('One-time code').getAttribute('aria-invalid')).toBe('false');
+    }
+});
+
+test('too many wrong codes reads under the code, since only a new one helps', async () => {
+    answers['verify-otp'] = refusal('Too many wrong attempts — request a new code', 429);
+    await renderPage(<LoginPage email="joris@example.com" />);
+    await act(async () => pressEnter(field('Email')));
+    await type('One-time code', '123456');
+    await act(async () => pressEnter(field('One-time code')));
+    expect(messageUnder('One-time code')).toBe('Too many wrong attempts — request a new code');
+    expect(toasts).toEqual([]);
 });
 
 const post = (body: object) => ({
