@@ -7,18 +7,10 @@ import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
-import {
-    forwardRef,
-    useCallback,
-    useEffect,
-    useImperativeHandle,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { useFitHeight } from '../../hooks/use-fit-height';
 import { useSuggestions } from '../../hooks/use-suggestions';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -82,13 +74,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         return () => window.removeEventListener('focus', onFocus);
     }, [messageCount, focusTextarea]);
 
-    // Height follows the text however it changed: typed, completed from a list, or put back after a failed send.
-    useLayoutEffect(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-    }, [content]);
+    useFitHeight(textareaRef, content);
 
     const handleSend = () => {
         if (!canSend) return;
