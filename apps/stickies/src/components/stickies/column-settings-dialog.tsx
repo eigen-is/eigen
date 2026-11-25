@@ -3,14 +3,13 @@
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
+import { ColumnTitleField } from './column-title-field';
 
 type ColumnSettingsDialogProps = {
     open: boolean;
@@ -106,10 +105,11 @@ function ColumnSettingsForm({
     yjsDoc,
     onDelete,
 }: Pick<ColumnSettingsDialogProps, 'columnId' | 'columnTitle' | 'yjsDoc'> & { onDelete: () => void }) {
+    const [openedTitle] = useState(columnTitle);
     const [title, setTitle] = useState(columnTitle);
 
     const handleSubmit = () => {
-        if (!yjsDoc) return false;
+        if (!yjsDoc || !title.trim()) return false;
 
         yjsDoc.transact(() => {
             const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
@@ -119,15 +119,12 @@ function ColumnSettingsForm({
 
     return (
         <FormDialogForm
-            canSubmit={title.trim() !== ''}
-            submitLabel="Save changes"
+            changed={title !== openedTitle}
+            submitLabel="Save"
             onSubmit={handleSubmit}
             footerStart={<TooltipButton icon={Trash2} tooltipText="Delete column" onClick={onDelete} />}
         >
-            <Field>
-                <FieldLabel htmlFor="title">Title</FieldLabel>
-                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </Field>
+            <ColumnTitleField value={title} onChange={setTitle} />
         </FormDialogForm>
     );
 }
