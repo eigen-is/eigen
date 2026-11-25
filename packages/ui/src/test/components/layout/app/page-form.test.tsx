@@ -1,7 +1,8 @@
 // A draft page on PageForm keeps the page contract: it opens on its first field, Enter and Cmd+Enter save once, a bad
 // value is pointed at, Save shows that it is busy, and leaving with a change asks. Its Reset and Save show only once
 // something changed, Enter on a page with nothing changed saves nothing, Reset puts back what was saved, and a failed
-// save keeps the draft beside its hook's toast.
+// save keeps the draft beside its hook's toast. A page that edits one thing shows Cancel and its own label from the
+// start, and keeps the same contract.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { expectFormContract } from '../../../form-contract';
@@ -50,6 +51,33 @@ function NamePage(): ReactNode {
     });
 }
 
+// A page that makes one thing, such as a new contact, with Cancel beside its Create.
+function NewNotePage(): ReactNode {
+    const [name, setName] = useState('');
+    const blank = name.trim() === '';
+    return createElement(PageForm, {
+        changed: name !== '',
+        onCancel: cancel,
+        submitLabel: 'Create',
+        onSubmit: async () => {
+            if (blank) return false;
+            await save(name);
+        },
+        children: [
+            createElement(Input, {
+                key: 'name',
+                'aria-label': 'Name',
+                value: name,
+                onChange: (event: { target: { value: string } }) => setName(event.target.value),
+                'aria-invalid': blank || undefined,
+            }),
+            blank && createElement(FieldError, { key: 'error' }, 'Add a name'),
+        ],
+    });
+}
+
+const cancel = mock(() => {});
+
 // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
 async function type(value: string) {
     await act(async () => {
@@ -67,9 +95,9 @@ function nameField(): HTMLInputElement {
 const button = (label: string) =>
     [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
 
-async function openPage() {
+async function openPage(component: () => ReactNode = NamePage) {
     const root = router.createRootRoute({ component: router.Outlet });
-    const page = router.createRoute({ getParentRoute: () => root, path: '/', component: NamePage });
+    const page = router.createRoute({ getParentRoute: () => root, path: '/', component });
     const memory = router.createRouter({
         routeTree: root.addChildren([page]),
         history: router.createMemoryHistory({ initialEntries: ['/'] }),
@@ -124,4 +152,29 @@ test('a saved page hides its footer, and a failed save keeps the draft beside it
     await act(async () => pressEnter(nameField()));
     expect(nameField().value).toBe('Ideas');
     expect(button('Save')?.getAttribute('aria-busy')).toBeNull();
+});
+
+test('a page with Cancel keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(NewNotePage),
+        submitLabel: 'Create',
+        firstField: 'Name',
+        onSubmit: save,
+        makeChanged: () => type('Plans'),
+        makeInvalid: () => type(' '),
+        invalidField: 'Name',
+    });
+});
+
+test('a page with Cancel shows Cancel and its label from the start, and its submit runs with nothing changed', async () => {
+    cancel.mockClear();
+    await openPage(NewNotePage);
+    expect(button('Reset')).toBeUndefined();
+    await act(async () => button('Create')?.click());
+    expect(nameField().getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(nameField());
+    await act(async () => button('Cancel')?.click());
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
 });
