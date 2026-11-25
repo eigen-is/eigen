@@ -44,6 +44,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { DriveLocationField } from '../drive/drive-location-field';
+import { FooterTool } from '../form-dialog';
 import { FormShell } from '../form-shell';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -446,11 +447,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     myTeams.length > 0 && (
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
-                                                <Button variant="outline">
-                                                    <Users />
-                                                    {/* A phone's footer keeps one row, so only the icon shows there. */}
-                                                    <span className="max-sm:sr-only">Team chat</span>
-                                                </Button>
+                                                <FooterTool icon={Users} label="Team chat" />
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="start">
                                                 {selectedTeam && (

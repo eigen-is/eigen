@@ -5,6 +5,7 @@
 // The caller keeps the field state in a child that mounts with the dialog, so every opening starts clean. FormDialog
 // alone is also a titled shell with no form, as Word count uses it.
 
+import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { DialogAction } from '../hooks/use-dialog-pending';
@@ -157,6 +158,21 @@ export function FormFooter({
                 {submitLabel}
             </Button>
         </DialogFooter>
+    );
+}
+
+// A footer tool with a text label, such as Share with team. A phone's footer keeps one row, so only its icon shows
+// there, and a screen reader still reads the label.
+export function FooterTool({
+    icon: Icon,
+    label,
+    ...props
+}: { icon: LucideIcon; label: string } & ComponentProps<'button'>) {
+    return (
+        <Button variant="outline" {...props}>
+            <Icon />
+            <span className="max-sm:sr-only">{label}</span>
+        </Button>
     );
 }
 

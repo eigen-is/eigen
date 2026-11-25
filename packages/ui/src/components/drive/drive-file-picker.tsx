@@ -9,9 +9,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import type { DriveLocationValue, DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell } from '@workspace/ui/components/form-shell';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { Upload } from 'lucide-react';
@@ -97,11 +96,7 @@ function DriveFilePickerBody({
             <FormFooter
                 start={
                     onUploadFromDevice && (
-                        <Button variant="outline" onClick={onUploadFromDevice}>
-                            <Upload />
-                            {/* A phone's footer keeps one row, so only the icon shows there. */}
-                            <span className="max-sm:sr-only">Upload from device</span>
-                        </Button>
+                        <FooterTool icon={Upload} label="Upload from device" onClick={onUploadFromDevice} />
                     )
                 }
                 pending={pending}

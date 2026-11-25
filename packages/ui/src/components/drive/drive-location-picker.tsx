@@ -9,9 +9,8 @@ import { isNameTaken, useResolvedDriveLocation } from '@workspace/lib/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { FIELD_MESSAGES } from '@workspace/lib/validation';
-import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FooterTool, FormFooter } from '@workspace/ui/components/form-dialog';
 import { FormShell } from '@workspace/ui/components/form-shell';
 import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
@@ -177,11 +176,7 @@ function DriveLocationPickerBody({
             <FormFooter
                 start={
                     onDownloadInstead && (
-                        <Button variant="outline" onClick={onDownloadInstead}>
-                            <Download />
-                            {/* A phone's footer keeps one row, so only the icon shows there. */}
-                            <span className="max-sm:sr-only">Download instead</span>
-                        </Button>
+                        <FooterTool icon={Download} label="Download instead" onClick={onDownloadInstead} />
                     )
                 }
                 pending={pending}
