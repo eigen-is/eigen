@@ -67,6 +67,7 @@ export function FormDialog({
     const [changed, setChanged] = useState(false);
     // A running submit decides the close itself, so it asks nothing.
     const discard = useDiscardChanges({
+        open,
         changed: changed && !pending,
         onDiscard: () => handleOpenChange(false),
     });

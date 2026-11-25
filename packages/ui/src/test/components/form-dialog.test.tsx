@@ -568,3 +568,29 @@ test('while a submit runs on a changed form, Esc, the X and a click outside ask 
     const waited = { titles: ['Rename'], closes: 0, after: [[false]] };
     expect(seen).toEqual({ Esc: waited, X: waited, outside: waited });
 });
+
+test('a host that closes the dialog while it asks takes the question with it', async () => {
+    let setOpen = (_open: boolean) => {};
+    function Harness() {
+        const [open, setState] = useState(true);
+        setOpen = setState;
+        return createElement(FormDialog, {
+            open,
+            onOpenChange: setState,
+            title: 'Rename',
+            children: createElement(FormDialogForm, {
+                changed: true,
+                onSubmit: () => {},
+                submitLabel: 'Save',
+                children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+            }),
+        });
+    }
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    await pressEscape();
+    expect(titles()).toEqual(['Rename', 'Discard changes?']);
+    await act(async () => setOpen(false));
+    expect(titles()).not.toContain('Discard changes?');
+    await act(async () => setOpen(true));
+    expect(titles()).toEqual(['Rename']);
+});

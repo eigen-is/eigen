@@ -1,12 +1,12 @@
 // A close with nothing changed discards at once. A changed one asks "Discard changes?": Keep editing goes back with
-// nothing discarded, and the red Discard discards.
+// nothing discarded, and the red Discard discards. A dialog its host closes while it asks takes the question along.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../happy-dom';
 import { renderInDocument } from '../render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { useDiscardChanges } = await import('../../hooks/use-discard-changes');
 
 let unmount = async () => {};
@@ -15,13 +15,20 @@ afterEach(() => unmount());
 async function mount(changed: boolean) {
     const onDiscard = mock(() => {});
     let onOpenChange = (_open: boolean) => {};
+    let setOpen = (_open: boolean) => {};
     function Harness() {
-        const discard = useDiscardChanges({ changed, onDiscard });
+        const [open, setState] = useState(true);
+        setOpen = setState;
+        const discard = useDiscardChanges({ open, changed, onDiscard });
         onOpenChange = discard.onOpenChange;
         return discard.dialog;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));
-    return { onDiscard, requestClose: () => act(async () => onOpenChange(false)) };
+    return {
+        onDiscard,
+        requestClose: () => act(async () => onOpenChange(false)),
+        setOpen: (open: boolean) => act(async () => setOpen(open)),
+    };
 }
 
 const question = () => document.querySelector('[role="dialog"]');
@@ -58,4 +65,14 @@ test('with a change Discard discards and the question closes', async () => {
     await click('Discard');
     expect(onDiscard).toHaveBeenCalledTimes(1);
     expect(question()).toBeNull();
+});
+
+test('a host that closes the dialog while it asks takes the question along, and a reopening asks nothing', async () => {
+    const { onDiscard, requestClose, setOpen } = await mount(true);
+    await requestClose();
+    await setOpen(false);
+    expect(question()).toBeNull();
+    await setOpen(true);
+    expect(question()).toBeNull();
+    expect(onDiscard).not.toHaveBeenCalled();
 });

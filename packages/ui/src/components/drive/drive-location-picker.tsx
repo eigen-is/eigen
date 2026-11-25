@@ -44,6 +44,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [named, setNamed] = useState(false);
     const discard = useDiscardChanges({
+        open,
         changed: named && !pending,
         onDiscard: () => handleOpenChange(false),
     });

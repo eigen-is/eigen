@@ -7,11 +7,21 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { ConfirmDialog } from '../components/confirm-dialog';
 
-export function useDiscardChanges({ changed, onDiscard }: { changed: boolean; onDiscard: () => void }): {
+export function useDiscardChanges({
+    open,
+    changed,
+    onDiscard,
+}: {
+    open: boolean;
+    changed: boolean;
+    onDiscard: () => void;
+}): {
     onOpenChange: (open: boolean) => void;
     dialog: ReactNode;
 } {
     const [asking, setAsking] = useState(false);
+    // A host that closes the dialog itself leaves nothing to ask about, and its next opening asks nothing.
+    if (asking && !open) setAsking(false);
 
     // A dialog with no trigger inside it only ever asks Radix to close.
     const onOpenChange = (next: boolean) => {
