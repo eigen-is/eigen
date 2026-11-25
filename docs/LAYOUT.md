@@ -71,6 +71,10 @@ A dropdown menu that closes with no dialog over it focuses its trigger itself, w
 
 A target still on the page is never replaced, and an element inside an open dialog never becomes one, so a dialog opened over another can't steal its target. A caller's `onCloseAutoFocus` that calls `preventDefault`, such as the sheet's grid refocus, decides for itself. Something that took the focus as the dialog closed, such as a Rename dialog a palette row opened, keeps it.
 
+A target a save drew anew, such as an event chip that moved to another day, is found again by its `data-focus-key`: the calendar's event buttons carry their occurrence (`occurrenceKey`), so Edit event gives the focus to the chip on its new day. With no element of that key left, such as an event moved out of the shown week, the focus stays on `<body>`, where the calendar's keys still work.
+
+"Discard changes?" gives the focus back itself on Keep editing (`useDiscardChanges`). The press that asked focused the X, or nothing for a click outside, so Radix's return would land there; the form dialog's content reports every focus in its form through the hook's `onFocus`, and Keep editing goes back to the last of those fields, or to the first field once it is gone. While a dialog is open, `useKeyboardListNavigation` takes no focus from `<body>`: Chrome fires `focusout` when the question's focused button leaves the page, and Drive's list would otherwise grab the focus before the dialog returns it.
+
 The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened gives its trigger the focus with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
 
 ## A dialog opened by a value keeps it while it closes
