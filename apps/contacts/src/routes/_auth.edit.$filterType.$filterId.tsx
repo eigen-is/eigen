@@ -51,7 +51,13 @@ function EditContactRoute() {
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={backToContact} toolbar={<ContactEditToolbar isNew={false} />}>
-                <ContactEdit key={contactId} contact={contact} onSave={handleSave} onCancel={backToContact} />
+                <ContactEdit
+                    key={contactId}
+                    contact={contact}
+                    isNew={false}
+                    onSave={handleSave}
+                    onCancel={backToContact}
+                />
             </Column>
         </ColumnLayout>
     );
