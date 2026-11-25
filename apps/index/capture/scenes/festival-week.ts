@@ -25,7 +25,8 @@ export async function openFestivalMonth(page: Page, stack: Stack, title: string)
             () => null,
         );
         if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) return event;
-        await page.getByRole('button', { name: 'Next month' }).dispatchEvent('click');
+        // Exact, or the sidebar mini month's "Show next month" matches too.
+        await page.getByRole('button', { name: 'Next month', exact: true }).dispatchEvent('click');
         await Bun.sleep(800);
     }
     throw new Error(`${title} is not in the calendar's next three months`);
