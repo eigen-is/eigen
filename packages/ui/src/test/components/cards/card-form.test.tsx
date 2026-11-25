@@ -63,6 +63,7 @@ test('Description is named by its label and shows its placeholder', async () => 
             onSave: () => {},
             pending: false,
             onCancel: () => {},
+            onChangedChange: () => {},
             placeholderDescription: 'Add details',
         }),
     );
@@ -100,7 +101,9 @@ test('an assignee the host learns after the edit opened is no change, and Save l
 });
 
 test('Save with no title says so under the field, and the message describes it', async () => {
-    await renderInDocument(createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {} }));
+    await renderInDocument(
+        createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {}, onChangedChange: () => {} }),
+    );
     const save = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
     await act(async () => save?.click());
     const message = document.querySelector('[data-slot="field-error"]');

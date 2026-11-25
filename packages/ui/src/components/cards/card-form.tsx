@@ -49,7 +49,7 @@ type CardFormProps = {
     ) => ReturnType<DialogAction>;
     pending: boolean;
     onCancel: () => void;
-    onChangedChange?: (changed: boolean) => void;
+    onChangedChange: (changed: boolean) => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
     // A title above the form. A host that has its own, such as the card dialog, omits it.
@@ -109,8 +109,8 @@ export function CardForm({
         assignee !== initial.assignee ||
         draftsChanged;
     useEffect(() => {
-        onChangedChange?.(changed);
-        return () => onChangedChange?.(false);
+        onChangedChange(changed);
+        return () => onChangedChange(false);
     }, [changed, onChangedChange]);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
