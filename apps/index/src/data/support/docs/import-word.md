@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-11-01
+updated: 2026-11-25
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -21,7 +21,7 @@ Importing replaces the entire document: its text, headers and footers, and page 
 1. Open the document in Docs.
 2. Click **File** in the toolbar.
 3. Click **Import…**.
-4. In the **Import docx file** dialog, browse your Drive and select the `.docx` file you want to use, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file from the file chooser.
+4. In the **Import docx file** dialog, browse your Drive and select the `.docx` file you want to use, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file from the file chooser. On a phone, the button shows only its icon.
 5. A dialog reminds you that the file replaces the whole document. Click **Import**, or **Cancel** to leave the document as it is.
 
 An **Importing docx file** dialog shows while the file imports. When it closes, the document content is replaced. Images from the Word file are carried across and stored with the document. They count toward your drive's storage: if they don't fit in the space left, the import stops and the document stays as it was.

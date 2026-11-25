@@ -19,7 +19,7 @@ You can attach files to any chat message, either by picking something from Drive
 4. Click **Select** to confirm. The files appear as chips above the message box.
 5. Type an optional message, then press Enter to send.
 
-To upload a file from your computer instead, click **Upload from device** in the bottom-left corner of the dialog. Your browser's file chooser opens, and the file is added to the chat when you send.
+To upload a file from your computer instead, click **Upload from device** in the bottom-left corner of the dialog. Your browser's file chooser opens, and the file is added to the chat when you send. On a phone, the button shows only its icon.
 
 You can also paste an image directly into the message box. The image is added as an attachment without opening the dialog.
 

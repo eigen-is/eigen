@@ -17,7 +17,7 @@ You can insert images, charts, and tables anywhere in a document. Images can com
 1. Place your cursor where you want the image to appear.
 2. Click the **Insert image** button in the toolbar (the image icon with a plus symbol).
 3. The **Insert image** dialog opens. Choose where to get the image from:
-   - Click **Upload from device** to pick a file from your computer.
+   - Click **Upload from device** to pick a file from your computer. On a phone, the button shows only its icon.
    - Or browse your Drive and click a file, then click **Select**.
 4. The image appears in the document at the cursor position.
 
