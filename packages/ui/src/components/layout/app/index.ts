@@ -17,7 +17,6 @@ export { ListDetailLayout } from './list-detail-layout';
 export { LoadingState } from './loading-state';
 export { PageForm } from './page-form';
 export { RequestAccessView } from './request-access-view';
-export { SettingsFooter } from './settings-footer';
 export { SettingsPage } from './settings-page';
 export { SettingsSection } from './settings-section';
 export { ThemeProvider } from './theme-provider';
