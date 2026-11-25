@@ -32,7 +32,7 @@ import {
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -67,23 +67,24 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     }, [directList, inheritedList, user?.email]);
 
     const contactFieldId = useId();
-    // The list as a Save's commitTyped leaves it, which the save sends before React has rendered it.
-    const committedList = useRef(directList);
+
+    // The list with this person in it, or why they can't be added. A person set to Remove comes back with the access they
+    // had, your own entry included.
+    const withPerson = (list: readonly DirectAccessItem[], email: string): DirectAccessItem[] | string => {
+        const removed = list.find((item) => item.id.toLowerCase() === email);
+        if (!removed && email === user?.email?.toLowerCase()) return 'You already have access';
+        const restored = baseDirectList.find((item) => item.id === removed?.id && item.read);
+        return removed
+            ? list.map((item) => (item === removed ? (restored ?? { ...item, read: true, write: true }) : item))
+            : [...list, { id: email, read: true, write: true, owner: false }];
+    };
 
     const contactInput = useContactInput({
         // A person set to Remove may be added again.
         listed: directList.filter((item) => item.read).map((item) => item.id),
         onAdd: (contact) => {
-            const removed = directList.find((item) => item.id.toLowerCase() === contact.email);
-            // Your own entry set to Remove comes back as anyone's does.
-            if (!removed && contact.email === user?.email?.toLowerCase()) return 'You already have access';
-            const restored = baseDirectList.find((item) => item.id === removed?.id && item.read);
-            const next = removed
-                ? directList.map((item) =>
-                      item === removed ? (restored ?? { ...item, read: true, write: true }) : item,
-                  )
-                : [...directList, { id: contact.email, read: true, write: true, owner: false }];
-            committedList.current = next;
+            const next = withPerson(directList, contact.email);
+            if (typeof next === 'string') return next;
             setDirectListOverride(next);
             setHasChanges(true);
         },
@@ -120,14 +121,17 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     };
 
     const handleSave = async () => {
-        committedList.current = directList;
-        if (contactInput.commitTyped()) return false;
-        if (!hasChanges && committedList.current === directList) return;
+        // A person still typed in the field is saved with the rest, built here since the state update hasn't rendered yet.
+        const typed = contactInput.commitTyped();
+        if ('refused' in typed) return false;
+        const list = typed.added ? withPerson(directList, typed.added.email) : directList;
+        if (typeof list === 'string') return false;
+        if (!hasChanges && !typed.added) return;
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
         const add: DriveACL[] = [];
         const remove: string[] = [];
 
-        for (const item of committedList.current) {
+        for (const item of list) {
             if (item.owner) continue;
             const prev = base.get(item.id.toLowerCase());
             if (item.read || item.write) {
