@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2440 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2441 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1189,7 +1189,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1287)
+## Utilities & constants (1288)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2450,6 +2450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `updateMetaInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
+| `isDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `DISCARD_CHANGES_QUESTION` | `@workspace/ui/hooks/use-discard-changes` | packages/ui/src/hooks/use-discard-changes.tsx |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
