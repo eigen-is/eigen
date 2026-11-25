@@ -1,6 +1,7 @@
 export { ActivityPanel } from './activity-panel';
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
+export { CommentCardDialog } from './comment-card-dialog';
 export { CommentCardTile } from './comment-card-tile';
 export { CommentContextMenu } from './comment-context-menu';
 export { CommentFilterMenuItems } from './comment-filter-menu-items';
@@ -16,3 +17,4 @@ export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
 export { PanelColumn } from './panel-column';
+export { useCommentChatParam } from './use-comment-chat-param';

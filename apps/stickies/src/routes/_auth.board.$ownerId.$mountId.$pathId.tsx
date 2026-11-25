@@ -1,3 +1,6 @@
+// The Stickies board route: one board the URL names, opened through EigenDocEditorRoute. Its search names the open
+// card thread (?chat=), a copied card link (?card=), which it drops once used, and a find-bar landing (?q=).
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { EigenDocEditorRoute } from '@workspace/ui/components/layout/app';
@@ -15,15 +18,6 @@ function StickiesRoute() {
     const { chat, card, q } = Route.useSearch();
     const navigate = useNavigate();
     const initialSearchTerm = useLatchedDocSearchTerm(q);
-    const handleClearChat = useCallback(() => {
-        navigate({
-            to: Route.fullPath,
-            params: { ownerId, mountId, pathId },
-            search: (prev) => ({ ...prev, chat: undefined }),
-            replace: true,
-        });
-    }, [navigate, ownerId, mountId, pathId]);
-
     const handleClearCard = useCallback(() => {
         navigate({
             to: Route.fullPath,
@@ -39,8 +33,7 @@ function StickiesRoute() {
                 <StickiesBoard
                     ownerId={ownerId}
                     {...props}
-                    initialChatName={chat}
-                    onClearInitialChat={handleClearChat}
+                    chat={chat}
                     initialSearchTerm={initialSearchTerm}
                     initialCardId={card}
                     onClearInitialCard={handleClearCard}

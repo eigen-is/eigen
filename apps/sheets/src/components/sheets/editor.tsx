@@ -24,7 +24,13 @@ import type { ChartPanelState, Sheet, WorkbookInstance } from '@workspace/sheet'
 import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
+import {
+    CommentCardDialog,
+    CommentHoverCard,
+    CommentLifecycleDialogs,
+    PanelColumn,
+    useCommentChatParam,
+} from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
@@ -52,7 +58,7 @@ type SheetEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
+    chat: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -63,7 +69,7 @@ export function SheetEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
+    chat,
     initialSearchTerm,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
@@ -132,7 +138,7 @@ export function SheetEditor({
         mediaFolderId,
         doc: docRef.current,
         activeCardIds: activeComments.ids,
-        initialChatName,
+        ...useCommentChatParam(chat),
         // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then. A
         // failed load shows default cells that anchor nothing, so every comment would read as deleted.
         ready: sheets.length > 0 && !loadFailed,
@@ -517,9 +523,10 @@ export function SheetEditor({
                 onOpenCard={setOpenCardId}
             />
 
+            <CommentCardDialog lifecycle={lifecycle} path={path} canWrite={canWrite} />
+
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
-                path={path}
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={deleteCard}

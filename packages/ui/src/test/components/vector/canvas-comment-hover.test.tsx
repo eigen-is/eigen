@@ -19,6 +19,8 @@ const realCollab = await import('@workspace/lib/collab');
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realComments = { ...(await import('@workspace/lib/comments')) };
 const realDialogs = { ...(await import('../../../components/comments/comment-lifecycle-dialogs')) };
+const realCardDialog = { ...(await import('../../../components/comments/comment-card-dialog')) };
+const realChatParam = { ...(await import('../../../components/comments/use-comment-chat-param')) };
 const realGuard = { ...(await import('../../../components/layout/app/unsynced-edits-guard')) };
 const realBrowser = { ...(await import('../../../components/drive/drive-browser')) };
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
@@ -71,6 +73,16 @@ mock.module('@workspace/lib/comments', () => ({
 mock.module('../../../components/comments/comment-lifecycle-dialogs', () => ({
     CommentLifecycleDialogs: () => null,
 }));
+mock.module('../../../components/comments/comment-card-dialog', () => ({ CommentCardDialog: () => null }));
+// The open thread is the route's ?chat=, which a test of the hover has no need of.
+mock.module('../../../components/comments/use-comment-chat-param', () => ({
+    useCommentChatParam: (chat: string | undefined) => ({
+        chat,
+        onOpenChat: () => {},
+        onCloseChat: () => {},
+        onClearChat: () => {},
+    }),
+}));
 // The guard asks the router, which a test of the shell's comments has no need of.
 mock.module('../../../components/layout/app/unsynced-edits-guard', () => ({ UnsyncedEditsGuard: () => null }));
 // The picker's folder listing fetches Drive; only its title is under test.
@@ -80,6 +92,8 @@ afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/comments', () => realComments);
     mock.module('../../../components/comments/comment-lifecycle-dialogs', () => realDialogs);
+    mock.module('../../../components/comments/comment-card-dialog', () => realCardDialog);
+    mock.module('../../../components/comments/use-comment-chat-param', () => realChatParam);
     mock.module('../../../components/layout/app/unsynced-edits-guard', () => realGuard);
     mock.module('../../../components/drive/drive-browser', () => realBrowser);
     provider.destroy();
@@ -184,6 +198,7 @@ async function renderShell({
             canWrite: true,
             mediaFolderId: null,
             chatFolderId: null,
+            chat: undefined,
             doc: canvas,
             isMobile: false,
             onReveal: (el) => reveal(el.id),

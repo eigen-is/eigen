@@ -1,3 +1,6 @@
+// The Docs editor route: one doc the URL names, opened through EigenDocEditorRoute. Its search names the open comment
+// thread (?chat=) and a find-bar landing (?q=), and the editor takes both.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { EigenDocEditorRoute } from '@workspace/ui/components/layout/app';
@@ -17,7 +20,7 @@ function CollaborativeTextEditor() {
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
             {(props) => (
                 <div className="flex-1 overflow-hidden">
-                    <CollaborativeEditor {...props} initialChatName={chat} initialSearchTerm={initialSearchTerm} />
+                    <CollaborativeEditor {...props} chat={chat} initialSearchTerm={initialSearchTerm} />
                 </div>
             )}
         </EigenDocEditorRoute>

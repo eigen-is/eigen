@@ -1,4 +1,4 @@
-// A landing such as `?chat=` opens its comment only once the host is ready, so it never opens a comment in a state the
+// A landing such as `?card=` opens its comment only once the host is ready, so it never opens a comment in a state the
 // host is about to change. A name that finds no comment by then is reported once.
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';

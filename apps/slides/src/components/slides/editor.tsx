@@ -49,7 +49,7 @@ type SlideEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
+    chat: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -62,7 +62,7 @@ export function SlideEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
+    chat,
     initialSearchTerm,
 }: SlideEditorProps) {
     const { isMobile } = useLayout();
@@ -130,7 +130,7 @@ export function SlideEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        initialChatName,
+        chat,
         doc,
         isMobile,
         onReveal: revealElement,

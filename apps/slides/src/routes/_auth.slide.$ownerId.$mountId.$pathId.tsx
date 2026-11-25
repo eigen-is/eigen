@@ -1,3 +1,6 @@
+// The Slides editor route: one deck the URL names, opened through EigenDocEditorRoute. Its search names the open
+// comment thread (?chat=) and a find-bar landing (?q=), and the editor takes both.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { EigenDocEditorRoute } from '@workspace/ui/components/layout/app';
@@ -15,14 +18,7 @@ function SlideView() {
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     return (
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
-            {(props) => (
-                <SlideEditor
-                    ownerId={ownerId}
-                    {...props}
-                    initialChatName={chat}
-                    initialSearchTerm={initialSearchTerm}
-                />
-            )}
+            {(props) => <SlideEditor ownerId={ownerId} {...props} chat={chat} initialSearchTerm={initialSearchTerm} />}
         </EigenDocEditorRoute>
     );
 }

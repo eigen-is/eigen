@@ -1,11 +1,11 @@
 // The comment bundle every editor that shows comments shares, such as docs and stickies: the cards in the Y.Doc, the
-// server's index rows, create, update, resolve and assign, the open card, the card a delete is asked for, the ?chat=
-// and ?card= landings, and the rule that says a comment is deleted. Each editor keeps only what its anchor decides:
-// where a card anchors on create and delete, and which cards it uses (its active set). The editor wraps the side
-// effects of opening a card, such as Slides selecting the element's slide, around the `setOpenCardId` this returns.
+// server's index rows, create, update, resolve and assign, the open card, the card a delete is asked for, and the rule
+// that says a comment is deleted. The open thread is the host's ?chat=, which the host writes when this asks; only a
+// card with no chat, or a ?card= landing, opens here. Each editor keeps what its anchor decides, such as where a card
+// anchors and which cards it uses, and wraps side effects, such as revealing the anchor, around `setOpenCardId`.
 
 import { useAuth } from '@workspace/lib/auth';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import type { CommentEntry } from '../../../types/chat';
 import type { CommentCard, CommentMapName } from '../../../types/comments';
@@ -36,19 +36,24 @@ type CommentLifecycle = {
     openEntry: CommentEntry | undefined;
     openCardDeleted: boolean;
     isCardDeleted: (card: CommentCard) => boolean;
+    // Null closes the open comment.
     setOpenCardId: (cardId: string | null) => void;
     // Opens the comment a chat name names, and says whether one did. A host that reveals a card's anchor first passes
     // its own openCard, which then opens a card the chat name finds.
     openChat: (chatName: string, openCard?: (cardId: string) => void) => boolean;
     openCardForEdit: (cardId: string) => void;
+    // Closes the open comment once it was deleted, dropping its chat from the URL rather than going back to it.
+    closeDeletedCard: () => void;
     openCardEditing: boolean;
     setOpenCardEditing: (editing: boolean) => void;
     deleteCardId: string | null;
     requestDelete: (cardId: string | null) => void;
 };
 
-// A host passes `ready` once its cards have synced and its active set is computed. Until then a landing waits instead
-// of opening a card the host may not use, and no card reads deleted.
+// A host passes `ready` once its cards have synced and its active set is computed. Until then a chat or a landing waits
+// instead of opening a card the host may not use, and no card reads deleted. `onOpenChat` and `onCloseChat` write and
+// clear the host's ?chat= with its history rule; `onClearChat` drops it by replace, after a delete or for a chat that
+// names nothing.
 export function useCommentLifecycle({
     ownerId,
     mountId,
@@ -57,10 +62,12 @@ export function useCommentLifecycle({
     mediaFolderId,
     doc,
     activeCardIds,
-    initialChatName,
+    chat,
+    onOpenChat,
+    onCloseChat,
+    onClearChat,
     mapName = 'comments',
     ready,
-    onChatNotFound,
     initialCardId,
     onCardNotFound,
 }: {
@@ -71,10 +78,12 @@ export function useCommentLifecycle({
     mediaFolderId: string | null;
     doc: Y.Doc | null;
     activeCardIds: ReadonlySet<string>;
-    initialChatName?: string;
+    chat: string | undefined;
+    onOpenChat: (chatName: string) => void;
+    onCloseChat: () => void;
+    onClearChat: () => void;
     mapName?: CommentMapName;
     ready: boolean;
-    onChatNotFound?: () => void;
     initialCardId?: string;
     onCardNotFound?: () => void;
 }): CommentLifecycle {
@@ -93,34 +102,53 @@ export function useCommentLifecycle({
     const updateCard = useUpdateCommentCard(doc, mapName);
 
     const assignedCount = useAssignedCommentCount(cards, allComments, activeCardIds, user?.email ?? '');
-    const { card: openCard, entry: openEntry, gone } = useOpenCommentCard(cards, allComments, open);
+    // A chat waits for the index rows too, or a comment whose card is gone would read as not found.
+    const chatReady = ready && !commentsPending;
+    const chatOpen = useMemo(() => (chat && chatReady ? { chatName: chat } : null), [chat, chatReady]);
+    const { card: openCard, entry: openEntry, gone } = useOpenCommentCard(cards, allComments, chat ? chatOpen : open);
     const isCardDeleted = useIsCardDeleted(activeCardIds, ready);
-    // Stable, because hosts hand it to memoized components such as a board's columns.
-    const setOpenCardId = useCallback((cardId: string | null) => setOpen(cardId ? { cardId } : null), []);
-    // A chat name a card holds opens that card by its id, so it closes on delete however it was opened. A chat name
-    // no card holds opens while the index has its row, and then it opens as deleted.
+
+    // The opens are stable, because hosts hand them to memoized components such as a board's columns and to editor
+    // extensions that keep the closures they were built with. So they read this render's values here.
+    const latest = useRef({ cards, chat, onOpenChat, onCloseChat, onClearChat });
+    latest.current = { cards, chat, onOpenChat, onCloseChat, onClearChat };
+    const setOpenCardId = useCallback((cardId: string | null) => {
+        const { cards, chat, onOpenChat, onCloseChat } = latest.current;
+        const chatName = cardId ? cards[cardId]?.chatName : undefined;
+        setOpen(cardId && !chatName ? { cardId } : null);
+        if (chatName) onOpenChat(chatName);
+        else if (!cardId && chat) onCloseChat();
+    }, []);
+    // A chat name no card holds opens while the index has its row, and then it opens as deleted.
     const openChat = useCallback(
         (chatName: string, openCard?: (cardId: string) => void) => {
             const cardId = findCardIdByChatName(cards, chatName);
             if (cardId) {
-                if (openCard) openCard(cardId);
-                else setOpen({ cardId });
+                (openCard ?? setOpenCardId)(cardId);
                 return true;
             }
             const known = allComments.some((e) => e.chatName === chatName);
-            if (known) setOpen({ chatName });
+            if (known) {
+                setOpen(null);
+                latest.current.onOpenChat(chatName);
+            }
             return known;
         },
-        [cards, allComments],
+        [cards, allComments, setOpenCardId],
     );
+
+    // Runs once per chat that names nothing, as the host's clear takes it out of the URL.
+    const chatMissing = !!chat && chatReady && !openCard && !openEntry;
+    useEffect(() => {
+        if (chatMissing && chat) latest.current.onClearChat();
+    }, [chatMissing, chat]);
+
+    // A card id names only a card, so its landing needs only the cards.
     const openCardById = (cardId: string) => {
         const known = !!cards[cardId];
         if (known) setOpen({ cardId });
         return known;
     };
-    // A chat landing waits for the index rows too, or a comment whose card is gone would read as not found. A card id
-    // names only a card, so its landing needs only the cards.
-    useOpenOnLanding(initialChatName, openChat, { ready: ready && !commentsPending, onNotFound: onChatNotFound });
     useOpenOnLanding(initialCardId, openCardById, { ready, onNotFound: onCardNotFound });
 
     return {
@@ -141,6 +169,10 @@ export function useCommentLifecycle({
         openCardForEdit: (cardId: string) => {
             setOpenCardId(cardId);
             setEditCardId(cardId);
+        },
+        closeDeletedCard: () => {
+            setOpen(null);
+            if (chat) onClearChat();
         },
         openCardEditing: !!openCard && openCard.id === editCardId,
         setOpenCardEditing: (editing: boolean) => setEditCardId(editing ? (openCard?.id ?? null) : null),

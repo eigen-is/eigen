@@ -17,7 +17,13 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentCardTile, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
+import {
+    CommentCardDialog,
+    CommentCardTile,
+    CommentLifecycleDialogs,
+    PanelColumn,
+    useCommentChatParam,
+} from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     CollabDocumentGate,
@@ -48,8 +54,7 @@ type StickiesBoardProps = {
     chatFolderId: string | null;
     mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
-    onClearInitialChat?: () => void;
+    chat: string | undefined;
     initialSearchTerm?: string;
     initialCardId?: string;
     onClearInitialCard?: () => void;
@@ -62,8 +67,7 @@ export function StickiesBoard({
     chatFolderId,
     mediaFolderId,
     onAccessDialogOpen,
-    initialChatName,
-    onClearInitialChat,
+    chat,
     initialSearchTerm,
     initialCardId,
     onClearInitialCard,
@@ -98,10 +102,9 @@ export function StickiesBoard({
         mediaFolderId,
         doc: yjsDoc,
         activeCardIds,
-        initialChatName,
+        ...useCommentChatParam(chat),
         mapName: commentMapName(DRIVE_TYPE_STICKIES),
         ready: isSynced,
-        onChatNotFound: onClearInitialChat,
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
@@ -405,9 +408,15 @@ export function StickiesBoard({
                                         />
                                     )}
 
-                                    <CommentLifecycleDialogs
+                                    <CommentCardDialog
                                         lifecycle={lifecycle}
                                         path={path}
+                                        canWrite={canWrite}
+                                        onClose={initialCardId ? onClearInitialCard : undefined}
+                                    />
+
+                                    <CommentLifecycleDialogs
+                                        lifecycle={lifecycle}
                                         canWrite={canWrite}
                                         commentContextMenu={cardContextMenu}
                                         onDelete={(cardId) => {
@@ -419,7 +428,6 @@ export function StickiesBoard({
                                             });
                                         }}
                                         noun="card"
-                                        onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>
                                 {!isMobile && activityPanelOpen && (

@@ -9,7 +9,7 @@ import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
 import { CardFormDialog } from '../cards';
-import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '../comments';
+import { CommentCardDialog, CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '../comments';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { CollabDocumentGate } from '../layout/app/collab-document-gate';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
@@ -129,9 +129,10 @@ export function CanvasDocumentShell({
 
                 <CommentHoverCard side="right" {...comments.hoverCardProps} />
 
+                <CommentCardDialog lifecycle={comments.lifecycle} path={path} canWrite={canWrite} />
+
                 <CommentLifecycleDialogs
                     lifecycle={comments.lifecycle}
-                    path={path}
                     canWrite={canWrite}
                     commentContextMenu={comments.commentContextMenu}
                     onDelete={comments.deleteCard}

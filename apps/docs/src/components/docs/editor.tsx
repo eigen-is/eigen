@@ -38,11 +38,13 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
+    CommentCardDialog,
     CommentHoverCard,
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
     PanelColumn,
+    useCommentChatParam,
 } from '@workspace/ui/components/comments';
 import {
     ClipboardMenuItems,
@@ -138,7 +140,7 @@ export const CollaborativeEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
+    chat,
     initialSearchTerm,
 }: {
     path: DrivePath;
@@ -146,7 +148,7 @@ export const CollaborativeEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
+    chat: string | undefined;
     initialSearchTerm?: string;
 }) => {
     // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
@@ -180,7 +182,7 @@ export const CollaborativeEditor = ({
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        initialChatName={initialChatName}
+                        chat={chat}
                         initialSearchTerm={initialSearchTerm}
                     />
                 </>
@@ -200,7 +202,7 @@ const TiptapEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
+    chat,
     initialSearchTerm,
 }: {
     yDoc: Y.Doc;
@@ -213,7 +215,7 @@ const TiptapEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
+    chat: string | undefined;
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
@@ -511,7 +513,7 @@ const TiptapEditor = ({
         mediaFolderId,
         doc: yDoc,
         activeCardIds: activeComments.ids,
-        initialChatName,
+        ...useCommentChatParam(chat),
         ready: activeComments.ready,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
@@ -1094,9 +1096,10 @@ const TiptapEditor = ({
                 onOpenCard={handleCommentClick}
             />
 
+            <CommentCardDialog lifecycle={lifecycle} path={path} canWrite={canWrite} />
+
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
-                path={path}
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={removeCommentMarks}

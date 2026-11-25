@@ -1,43 +1,21 @@
-// The card dialog closes one way, however it closes. A peer who deletes the open card takes it away under the dialog,
-// and that runs the same close as the user's own: the host clears its landing, and an undo that brings the card back
-// doesn't open the dialog again. A delete from the edit form or the comment menu asks first, in every host, and only
-// then runs the host's delete and closes the dialog.
+// A delete from the card's edit form or the comment menu asks first, in every host, and only then runs the host's delete
+// and closes the open comment: a thread the URL names drops its ?chat= by replace.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import type { CommentContextMenuItem } from '../../../components/comments/comment-menu-items';
-import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
-// The props the card dialog was last rendered with.
-const seen: {
-    open?: boolean;
-    onOpenChange?: (open: boolean) => void;
-    onDelete?: (cardId: string) => void;
-    menuDelete?: (cardId: string) => void;
-} = {};
+// The delete the comment menu was last rendered with.
+const seen: { menuDelete?: (cardId: string) => void } = {};
 
 const realAuth = { ...(await import('@workspace/lib/auth')) };
-const realCardDialog = { ...(await import('../../../components/cards/card-dialog')) };
 const realContextMenu = { ...(await import('../../../components/comments/comment-context-menu')) };
 mock.module('@workspace/lib/auth', () => ({
     ...realAuth,
     useAuth: () => ({ user: { id: 'owner-1', email: 'ada@example.com' } }),
-}));
-mock.module('../../../components/cards/card-dialog', () => ({
-    CardDialog: (props: {
-        open: boolean;
-        onOpenChange: (open: boolean) => void;
-        onDelete?: (cardId: string) => void;
-    }) => {
-        seen.open = props.open;
-        seen.onOpenChange = props.onOpenChange;
-        seen.onDelete = props.onDelete;
-        return null;
-    },
 }));
 mock.module('../../../components/comments/comment-context-menu', () => ({
     CommentContextMenu: (props: { onDelete: (cardId: string) => void }) => {
@@ -47,7 +25,6 @@ mock.module('../../../components/comments/comment-context-menu', () => ({
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
-    mock.module('../../../components/cards/card-dialog', () => realCardDialog);
     mock.module('../../../components/comments/comment-context-menu', () => realContextMenu);
 });
 
@@ -66,14 +43,6 @@ const { useCommentLifecycle } = await import('@workspace/lib/comments');
 const { useContextMenu } = await import('../../../components/context-menu');
 const { CommentLifecycleDialogs } = await import('../../../components/comments/comment-lifecycle-dialogs');
 
-const path = drivePath({
-    id: 'board-1',
-    mountId: 'm1',
-    name: 'Board',
-    type: 'stickies',
-    mimeType: DRIVE_MIME_STICKIES,
-});
-
 function addCard(doc: Y.Doc): void {
     const card = new Y.Map<unknown>();
     card.set('title', 'Ship it');
@@ -85,15 +54,17 @@ function addCard(doc: Y.Doc): void {
 let unmount = async () => {};
 afterEach(() => unmount());
 
+// A board whose card's thread the URL names, as a click on it leaves it.
 async function mountBoard() {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(commentKeys.list('owner-1', 'm1', 'board-1'), []);
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'board-1'), []);
     const doc = new Y.Doc();
     addCard(doc);
-    const onCardDialogClose = mock(() => {});
     const onDelete = mock((_cardId: string) => {});
-    const handle: { setOpenCardId?: (cardId: string | null) => void; requestDelete?: (cardId: string) => void } = {};
+    const onCloseChat = mock(() => {});
+    const onClearChat = mock(() => {});
+    const handle: { requestDelete?: (cardId: string) => void; openCard?: boolean } = {};
     function Harness() {
         const lifecycle = useCommentLifecycle({
             ownerId: 'owner-1',
@@ -103,20 +74,22 @@ async function mountBoard() {
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1']),
+            chat: 'ship.eigenchat',
+            onOpenChat: () => {},
+            onCloseChat,
+            onClearChat,
             mapName: 'tasks',
             ready: true,
         });
-        handle.setOpenCardId = lifecycle.setOpenCardId;
         handle.requestDelete = lifecycle.requestDelete;
+        handle.openCard = !!lifecycle.openCard;
         const commentContextMenu = useContextMenu<CommentContextMenuItem>();
         return createElement(CommentLifecycleDialogs, {
             lifecycle,
-            path,
             canWrite: true,
             commentContextMenu,
             onDelete,
             noun: 'card',
-            onCardDialogClose,
         });
     }
     const root = createRoot(document.createElement('div'));
@@ -124,30 +97,8 @@ async function mountBoard() {
         root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness)));
     });
     unmount = async () => act(() => root.unmount());
-    await act(async () => handle.setOpenCardId?.('card-1'));
-    return { doc, onCardDialogClose, onDelete, handle };
+    return { onDelete, onCloseChat, onClearChat, handle };
 }
-
-test("a peer's delete closes the dialog as the user's close does, and an undo doesn't reopen it", async () => {
-    const { doc, onCardDialogClose } = await mountBoard();
-    expect(seen.open).toBe(true);
-
-    await act(async () => {
-        doc.getMap('tasks').delete('card-1');
-    });
-    expect(seen.open).toBe(false);
-    expect(onCardDialogClose).toHaveBeenCalledTimes(1);
-
-    await act(async () => addCard(doc));
-    expect(seen.open).toBe(false);
-});
-
-test("the user's close runs the host's close once", async () => {
-    const { onCardDialogClose } = await mountBoard();
-    await act(async () => seen.onOpenChange?.(false));
-    expect(seen.open).toBe(false);
-    expect(onCardDialogClose).toHaveBeenCalledTimes(1);
-});
 
 const confirmDialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
 const dialogButton = (name: string) => {
@@ -156,39 +107,30 @@ const dialogButton = (name: string) => {
     return button;
 };
 
-test('deleting from the edit form asks first, then runs the delete and closes the dialog', async () => {
-    const { onDelete, onCardDialogClose } = await mountBoard();
-    await act(async () => seen.onDelete?.('card-1'));
+test('a delete asks first, then runs the delete and drops the open thread from the URL', async () => {
+    const { onDelete, onCloseChat, onClearChat, handle } = await mountBoard();
+    expect(handle.openCard).toBe(true);
+    await act(async () => handle.requestDelete?.('card-1'));
     expect(onDelete).not.toHaveBeenCalled();
     expect(confirmDialog()?.querySelector('h2')?.textContent).toBe('Delete card');
     expect(confirmDialog()?.querySelector('p')?.textContent).toBe('This deletes the card and its replies.');
     expect(dialogButton('Delete').getAttribute('data-variant')).toBe('destructive');
-    expect(seen.open).toBe(true);
 
     await act(async () => dialogButton('Delete').click());
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledWith('card-1');
-    expect(seen.open).toBe(false);
-    expect(onCardDialogClose).toHaveBeenCalledTimes(1);
+    expect(onClearChat).toHaveBeenCalledTimes(1);
+    expect(onCloseChat).not.toHaveBeenCalled();
     expect(confirmDialog()).toBeNull();
 });
 
-test('cancelling keeps the card and leaves its dialog open, and the menu asks the same way', async () => {
-    const { onDelete } = await mountBoard();
+test('cancelling keeps the card and its thread, and the menu asks the same way', async () => {
+    const { onDelete, onClearChat } = await mountBoard();
     await act(async () => seen.menuDelete?.('card-1'));
     expect(confirmDialog()?.textContent).toContain('Delete card');
 
     await act(async () => dialogButton('Cancel').click());
     expect(onDelete).not.toHaveBeenCalled();
-    expect(seen.open).toBe(true);
+    expect(onClearChat).not.toHaveBeenCalled();
     expect(confirmDialog()).toBeNull();
-});
-
-test("a host's own menu asks in the same dialog, through the bundle's requestDelete", async () => {
-    const { onDelete, handle } = await mountBoard();
-    await act(async () => handle.requestDelete?.('card-1'));
-    expect(confirmDialog()?.textContent).toContain('Delete card');
-
-    await act(async () => dialogButton('Delete').click());
-    expect(onDelete).toHaveBeenCalledWith('card-1');
 });

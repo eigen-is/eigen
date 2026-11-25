@@ -1,6 +1,7 @@
 // The sheet editor's side of a comment: the grid's hover report drives the hover card, a card opened from the hover
 // opens where the pointer already is, and one opened from the pane first jumps to its cell and gives the grid the keys,
-// except on a phone, where the pane hides the grid. The grid, the pane and the card render as probes that keep their props, since they are tested
+// except on a phone, where the pane hides the grid. The open thread is the route's ?chat=, which the comments open and
+// close. The grid, the pane and the card render as probes that keep their props, since they are tested
 // where they live.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
@@ -23,6 +24,7 @@ type HoverCardProps = Props & { onOpenCard: (cardId: string) => void };
 type PanelProps = { onOpenCard: (cardId: string) => void; onOpenChat: (chatName: string) => boolean };
 
 const seen: {
+    lifecycleArgs?: { chat?: string; onOpenChat: (chatName: string) => void; onCloseChat: () => void };
     grid?: GridProps;
     hoverCard?: HoverCardProps;
     panel?: PanelProps;
@@ -84,7 +86,10 @@ const Nothing = () => null;
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 mock.module('@workspace/lib/comments', () => ({
     ...realComments,
-    useCommentLifecycle: () => lifecycle,
+    useCommentLifecycle: (args: NonNullable<typeof seen.lifecycleArgs>) => {
+        seen.lifecycleArgs = args;
+        return lifecycle;
+    },
     useCommentHover: () => hover,
 }));
 mock.module('@workspace/lib/drive', () => ({
@@ -123,6 +128,7 @@ mock.module('@workspace/ui/components/comments', () => ({
         return null;
     },
     CommentLifecycleDialogs: Nothing,
+    CommentCardDialog: Nothing,
     PanelColumn: (props: PanelProps) => {
         seen.panel = props;
         return null;
@@ -152,6 +158,7 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
+const router = await import('@tanstack/react-router');
 const { SheetEditor } = await import('../../../components/sheets/editor');
 
 const path = drivePath({ id: 'x1', mountId: 'm1', name: 'Book.eigensheet', mimeType: 'application/eigensheet' });
@@ -171,17 +178,34 @@ beforeEach(() => {
     hover.report.mockClear();
 });
 
-async function renderEditor() {
-    ({ unmount } = await renderInDocument(
-        createElement(SheetEditor, {
+let history = router.createMemoryHistory();
+
+// The editor under a route that reads ?chat=, as the sheet route does.
+async function renderEditor(entries = ['/']) {
+    function Page() {
+        const { chat } = router.useSearch({ strict: false });
+        return createElement(SheetEditor, {
             ownerId: 'owner-1',
             path,
             canWrite: true,
             mediaFolderId: null,
             chatFolderId: 'chat-1',
             onAccessDialogOpen: () => {},
-        }),
-    ));
+            chat,
+        });
+    }
+    const root = router.createRootRoute({ component: router.Outlet });
+    const page = router.createRoute({
+        getParentRoute: () => root,
+        path: '/',
+        validateSearch: (search: Record<string, unknown>): { chat?: string } =>
+            typeof search.chat === 'string' ? { chat: search.chat } : {},
+        component: Page,
+    });
+    history = router.createMemoryHistory({ initialEntries: entries });
+    const memory = router.createRouter({ routeTree: root.addChildren([page]), history });
+    await memory.load();
+    ({ unmount } = await renderInDocument(createElement(router.RouterProvider, { router: memory })));
     const { grid, hoverCard, toggleComments } = seen;
     if (!grid || !hoverCard || !toggleComments) throw new Error('the editor did not render');
     await act(async () => {
@@ -241,4 +265,21 @@ test('on a phone, where the pane hides the grid, a row and a chat name only open
         ['open', 'c1'],
         ['open', 'c1'],
     ]);
+});
+
+const chatParam = () => new URLSearchParams(history.location.search).get('chat');
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+
+test("the route's ?chat= is the open thread, which an open writes and a close takes out", async () => {
+    await renderEditor(['/?chat=chat-1']);
+    expect(seen.lifecycleArgs?.chat).toBe('chat-1');
+    await act(async () => seen.lifecycleArgs?.onCloseChat());
+    await settle();
+    expect(chatParam()).toBeNull();
+    expect(seen.lifecycleArgs?.chat).toBeUndefined();
+
+    await act(async () => seen.lifecycleArgs?.onOpenChat('chat-1'));
+    await settle();
+    expect(chatParam()).toBe('chat-1');
+    expect(seen.lifecycleArgs?.chat).toBe('chat-1');
 });

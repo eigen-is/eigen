@@ -25,7 +25,9 @@ const { WebsocketProvider } = await import('y-websocket');
 const { NodeSelection } = await import('@tiptap/pm/state');
 const { act, createElement, useState } = await import('react');
 const { formatForDisplay } = await import('@tanstack/react-hotkeys');
-const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useSearch } = await import(
+    '@tanstack/react-router'
+);
 const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
@@ -110,6 +112,9 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 let setCanWrite = (_canWrite: boolean) => {};
+let routerHistory = createMemoryHistory();
+// The page's ?chat=, the open comment thread.
+const chatParam = () => new URLSearchParams(routerHistory.location.search).get('chat');
 
 // What the command palette holds, such as the open doc's comment search, read beside the editor.
 let palette: ReturnType<typeof useCommandPalette> | null = null;
@@ -125,7 +130,7 @@ async function render({
     isMobile,
     mediaFolderId = null,
     chatFolderId = null,
-    initialChatName,
+    chat,
     width = 1920,
 }: {
     canWrite: boolean;
@@ -133,7 +138,7 @@ async function render({
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
     // A `?chat=` landing, such as a notification's link.
-    initialChatName?: string;
+    chat?: string;
     // The toolbar folds its menus by the window's width, the panes by the layout's isMobile.
     width?: number;
 }) {
@@ -143,6 +148,8 @@ async function render({
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
+        // The route reads ?chat=, as the doc route does.
+        const search: { chat?: string } = useSearch({ strict: false });
         // The editor route provides the document's media resolver.
         return createElement(MediaResolverProvider, {
             ownerId: path.ownerId,
@@ -155,7 +162,7 @@ async function render({
                 mediaFolderId,
                 chatFolderId,
                 onAccessDialogOpen: () => {},
-                initialChatName,
+                chat: search.chat,
             }),
         });
     }
@@ -172,7 +179,9 @@ async function render({
                     ),
                 ),
         }),
-        history: createMemoryHistory(),
+        history: (routerHistory = createMemoryHistory({
+            initialEntries: chat ? ['/', `/?chat=${chat}`] : ['/'],
+        })),
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
@@ -581,13 +590,39 @@ test('a link to a comment whose text was deleted opens it as deleted, its thread
     stored.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', stored);
     write('default', 'Hello');
-    await render({ ...WRITER, chatFolderId: 'chat', initialChatName: 'thread-1.eigenchat' });
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
     await waitUntil(
         () => document.body.textContent?.includes('This comment was deleted') === true,
         'the deleted state',
     );
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Check this');
     expect(document.querySelector('[role="dialog"] [contenteditable="true"]')).toBeNull();
+});
+
+// The open thread is the URL's ?chat=, so closing the card takes it out, and a reload no longer opens it again. A
+// ?chat= that names no comment is dropped the same way, without a history entry.
+test('a link opens its comment, and closing the card takes ?chat= out of the URL', async () => {
+    const stored = new Y.Map<unknown>();
+    stored.set('title', 'Check this');
+    stored.set('chatName', 'thread-1.eigenchat');
+    doc.getMap('comments').set('c1', stored);
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
+    const close = document.querySelector<HTMLElement>('button[aria-label="Close"]');
+    if (!close) throw new Error('no Close button');
+    await act(async () => close.click());
+    await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(routerHistory.location.state.__TSR_index).toBe(1);
+    await waitUntil(() => document.querySelector('[role="dialog"]') === null, 'the card to close');
+});
+
+test('a link to a comment that does not exist is dropped by replace', async () => {
+    write('default', 'Hello');
+    await render({ ...WRITER, chatFolderId: 'chats', chat: 'nothing' });
+    await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(routerHistory.location.state.__TSR_index).toBe(1);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
 test('word count from a band counts the body, and gives focus back to the band', async () => {
@@ -1488,7 +1523,9 @@ test.each([
     if (!mark) throw new Error('no comment mark');
     await act(async () => mark.click());
     expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
+    // The click writes ?chat=, and the card opens from the URL.
+    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
+    expect(chatParam()).toBe('thread-1');
 });
 
 // The image's menu asks before it deletes a comment, as a card's own menu does.
@@ -1876,7 +1913,7 @@ test.each([
     await waitUntil(() => palette?.docCommentSearch != null, 'the comment search');
     await act(async () => palette?.docCommentSearch?.reveal('thread-1'));
     expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
+    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
     // The caret goes to the anchor, at the start of the second paragraph, only where the body shows.
     expect(bodyEditor().state.selection.from).toBe(as.isMobile ? 1 : 8);
     expect(bodyView()?.closest('.hidden') != null).toBe(as.isMobile);

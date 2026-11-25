@@ -19,6 +19,7 @@ import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/
 import type { ComponentProps } from 'react';
 import { useCallback, useState } from 'react';
 import type { CommentContextMenuItem, CommentHoverCard, PanelColumn } from '../../comments';
+import { useCommentChatParam } from '../../comments';
 import { useContextMenu } from '../../context-menu';
 import { useCanvasComments } from './use-canvas-comments';
 import type { CanvasDoc } from './use-canvas-doc';
@@ -29,7 +30,8 @@ type CanvasCommentHostArgs = {
     canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
-    initialChatName?: string;
+    // The route's ?chat=, the open thread.
+    chat: string | undefined;
     doc: CanvasDoc;
     isMobile: boolean;
     // Bring an element into view before its card opens.
@@ -63,7 +65,7 @@ export function useCanvasCommentHost({
     canWrite,
     mediaFolderId,
     chatFolderId,
-    initialChatName,
+    chat,
     doc,
     isMobile,
     onReveal,
@@ -84,7 +86,7 @@ export function useCanvasCommentHost({
         mediaFolderId,
         doc: doc.yjsDoc,
         activeCardIds: activeComments.ids,
-        initialChatName,
+        ...useCommentChatParam(chat),
         ready: doc.synced,
     });
     const {

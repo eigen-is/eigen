@@ -31,7 +31,7 @@ type VectorEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
+    chat: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -42,7 +42,7 @@ export function VectorEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
+    chat,
     initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
@@ -87,7 +87,7 @@ export function VectorEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        initialChatName,
+        chat,
         doc,
         isMobile,
         onReveal: revealElement,

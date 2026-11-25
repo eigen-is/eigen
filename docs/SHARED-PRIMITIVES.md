@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2456 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2458 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (337)
+## Components (338)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -84,6 +84,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
 | `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
+| `CommentCardDialog` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-card-dialog.tsx |
 | `CommentCardTile` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-card-tile.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
@@ -390,7 +391,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (323)
+## Hooks (324)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -663,6 +664,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAwarenessIdentity` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-identity.ts |
 | `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
 | `useThrottledAwarenessField` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-throttled-awareness-field.ts |
+| `useCommentChatParam` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comment-chat-param.ts |
 | `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
 | `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
