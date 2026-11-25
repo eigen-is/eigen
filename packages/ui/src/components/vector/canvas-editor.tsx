@@ -574,10 +574,11 @@ export function CanvasEditor({
                 } else {
                     setPanning(false);
                 }
-                return;
-            }
-            if (s.hasSelection) setSelectedIds([]);
+            } else if (s.hasSelection) setSelectedIds([]);
             else if (s.tool !== 'select') setTool('select');
+            else return;
+            // Used, so a detail column beside the canvas closes only on an Escape with nothing left to cancel.
+            e.preventDefault();
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
