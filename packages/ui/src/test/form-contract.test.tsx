@@ -1,7 +1,8 @@
 // expectFormContract passes a form that keeps every rule of its kind, and each probe fails a sample form that breaks
-// its rule, naming the probe. The dialog shell keeps the rules today. Hand-built card and page samples keep the card's
-// Esc and the page's leave guard, whose probes stay off until their shells keep them, and the dialog sample that asks
-// before it drops a change keeps the discard probe, which the shell fails until then.
+// its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules today.
+// Hand-built card and page samples keep the card's Esc and the page's leave guard, whose probes stay off until their
+// shells keep them, and the dialog sample that asks before it drops a change keeps the discard probe, which the shell
+// fails until then.
 import { expect, mock, test } from 'bun:test';
 import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { FormContract } from './form-contract';
@@ -81,6 +82,7 @@ type ShellDialogProps = {
     // Asks before it drops a change, as the dialog shell will.
     asks?: boolean;
     showsError?: boolean;
+    extra?: ReactNode;
 };
 
 // A rename on the dialog shell, with a checkbox beside the name.
@@ -91,6 +93,7 @@ function ShellDialog({
     onChoiceKeyDown,
     asks,
     showsError,
+    extra,
 }: ShellDialogProps) {
     const [open, setOpen] = useState(true);
     const [asking, setAsking] = useState(false);
@@ -120,6 +123,7 @@ function ShellDialog({
                         { key: 'copy', onKeyDown: onChoiceKeyDown },
                         createElement(Checkbox, { 'aria-label': 'Keep a copy' }),
                     ),
+                    extra,
                 ],
             }),
         }),
@@ -145,10 +149,19 @@ type LooseDialogProps = {
     busy?: boolean;
     content?: Partial<ComponentProps<typeof DialogContent>>;
     cancelCloses?: boolean;
+    // Submits on Cmd+Enter and lets the key go on, as a form with its own shortcut may.
+    modEnter?: boolean;
 };
 
 // A rename built by hand on a plain <form>, as a dialog off the shell is.
-function LooseDialog({ onSubmit, guarded = false, busy = false, content, cancelCloses = true }: LooseDialogProps) {
+function LooseDialog({
+    onSubmit,
+    guarded = false,
+    busy = false,
+    content,
+    cancelCloses = true,
+    modEnter = false,
+}: LooseDialogProps) {
     const [open, setOpen] = useState(true);
     const [name, setName] = useState('Notes');
     const [error, setError] = useState('');
@@ -177,6 +190,9 @@ function LooseDialog({ onSubmit, guarded = false, busy = false, content, cancelC
                     onSubmit: (event: { preventDefault: () => void }) => {
                         event.preventDefault();
                         save();
+                    },
+                    onKeyDown: (event: ReactKeyboardEvent<HTMLFormElement>) => {
+                        if (modEnter && event.key === 'Enter' && event.metaKey) event.currentTarget.requestSubmit();
                     },
                 },
                 ...NameField({ name, setName, error }),
@@ -268,13 +284,22 @@ function CardSample({ onSubmit, escToView }: { onSubmit: Save; escToView: boolea
     ];
 }
 
-// A settings page on FormShell, guarded while it holds a change when `guarded` holds.
-function PageSample({ onSubmit, guarded }: { onSubmit: Save; guarded: boolean }) {
+// A settings page on FormShell, guarded while it holds a change when `guarded` holds. Unless `oneAtATime` is off it
+// ignores a submit while one runs, beyond the pending Save that ignores a click.
+function PageSample({
+    onSubmit,
+    guarded,
+    oneAtATime = true,
+}: {
+    onSubmit: Save;
+    guarded: boolean;
+    oneAtATime?: boolean;
+}) {
     const [name, setName] = useState('Notes');
     const [error, setError] = useState('');
     const { pending, save } = useSave(onSubmit, name, setError);
     return createElement(FormShell, {
-        onSubmit: () => (pending ? undefined : save()),
+        onSubmit: () => (pending && oneAtATime ? undefined : save()),
         children: [
             createElement(Input, {
                 key: 'name',
@@ -302,7 +327,8 @@ const shell = (props: Omit<ShellDialogProps, 'onSubmit'> = {}) =>
 const loose = (props: Omit<LooseDialogProps, 'onSubmit'> = {}) =>
     contract('dialog', (onSubmit) => createElement(LooseDialog, { onSubmit, ...props }));
 const card = (escToView: boolean) => contract('card', (onSubmit) => createElement(CardSample, { onSubmit, escToView }));
-const page = (guarded: boolean) => contract('page', (onSubmit) => createElement(PageSample, { onSubmit, guarded }));
+const page = (guarded: boolean, oneAtATime?: boolean) =>
+    contract('page', (onSubmit) => createElement(PageSample, { onSubmit, guarded, oneAtATime }));
 
 test('a dialog on the shell keeps the contract, and the switched-off discard probe is skipped', async () => {
     await expectFormContract(shell());
@@ -350,6 +376,59 @@ test('the Cmd+Enter probe fails a form without it, and one that loses Ctrl+Enter
     await expectProbeToFail('modEnter', shell({ onNameKeyDown: stopCtrl }), 'Ctrl+Enter in Name submits, ran 0 times');
 });
 
+// The fields Cmd+Enter is pressed in beyond the name: a multi-line one, a rich-text one, and a time that it commits on
+// Enter into the form's state.
+function ModEnterFields({ breaksLine = false }: { breaksLine?: boolean }) {
+    const [, setTime] = useState('09:00');
+    return [
+        createElement('textarea', {
+            key: 'notes',
+            'aria-label': 'Notes',
+            defaultValue: 'One',
+            onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+                if (breaksLine && event.key === 'Enter') event.currentTarget.value += '\n';
+            },
+        }),
+        createElement('div', { key: 'about', 'aria-label': 'About', contentEditable: true }, 'Two'),
+        createElement('input', {
+            key: 'start',
+            'aria-label': 'Start',
+            defaultValue: '09:00',
+            onKeyDown: (event: ReactKeyboardEvent<HTMLInputElement>) => {
+                if (event.key === 'Enter') setTime(event.currentTarget.value);
+            },
+        }),
+    ];
+}
+
+const withFields = (breaksLine: boolean): FormContract => ({
+    ...shell({ extra: createElement(ModEnterFields, { key: 'fields', breaksLine }) }),
+    modEnterFields: ['Notes', 'About', 'Start'],
+});
+
+test('the Cmd+Enter probe presses in every field it is given, and fails one that adds a line break', async () => {
+    await expectFormProbe('modEnter', withFields(false));
+    await expectProbeToFail('modEnter', withFields(true), 'Cmd+Enter in Notes leaves its content as it was');
+});
+
+test('the Cmd+Enter probe fails a form that lets the key reach a hotkey behind it', async () => {
+    await expectProbeToFail(
+        'modEnter',
+        loose({ guarded: true, modEnter: true }),
+        'Cmd+Enter in Name reaches no hotkey behind the form',
+    );
+});
+
+test('a form skips a probe it breaks on purpose, and only with a reason', async () => {
+    const swallow = (event: ReactKeyboardEvent) => event.key === 'Enter' && !event.metaKey && event.preventDefault();
+    const subject = shell({ onNameKeyDown: swallow });
+    await expectProbeToFail('enter', subject, 'Enter in Name submits, ran 0 times');
+    await expectFormContract({ ...subject, except: { enter: 'plain Enter in a subject must not send an email' } });
+    await expect(expectFormContract({ ...subject, except: { enter: ' ' } })).rejects.toThrow(
+        'enter: an exception says why',
+    );
+});
+
 test('the close probe fails a dialog that ignores Esc, has no X, ignores a click outside, or whose Cancel stays', async () => {
     const keep = (event: Event) => event.preventDefault();
     await expectProbeToFail('close', loose({ content: { onEscapeKeyDown: keep } }), 'Esc closes');
@@ -384,7 +463,8 @@ test('the invalid probe fails a form that saves an invalid value, says nothing, 
     await expectProbeToFail('invalid', loose(), 'Name has the focus');
 });
 
-test('the pending probe fails a Save that hides that it is busy, or that saves again on a second click', async () => {
+test('the pending probe fails a Save that hides that it is busy, or that saves again on a click or Cmd+Enter', async () => {
     await expectProbeToFail('pending', loose({ guarded: true }), 'Save says it is busy while the save runs');
     await expectProbeToFail('pending', loose({ busy: true }), 'a click while the save runs saves nothing more');
+    await expectProbeToFail('pending', page(false, false), 'Cmd+Enter while the save runs saves nothing more, ran 2');
 });

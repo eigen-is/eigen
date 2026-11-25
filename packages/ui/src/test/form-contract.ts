@@ -1,8 +1,8 @@
 // The probes every form's test runs, so each form proves it keeps the rules its shell owns: focus on open, Enter and
 // Cmd+Enter, closing with and without changes, the leave guard, an invalid submit and the pending button. A test
 // renders the real form through `render` and calls expectFormContract once; the probes of its kind each render it
-// afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch. Call
-// `installHappyDom()` first.
+// afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch, and a form that breaks
+// one on purpose names it in `except` with its reason. Call `installHappyDom()` first.
 import type { Mock } from 'bun:test';
 import type { ReactElement } from 'react';
 import { pressEnter } from './press-enter';
@@ -24,18 +24,26 @@ export type FormContract = {
     makeChanged: () => Promise<void>;
     makeInvalid?: () => Promise<void>;
     invalidField?: string;
+    // More fields that Cmd+Enter must submit from untouched, such as a multi-line one, a rich-text one, or one that
+    // commits its value on Enter.
+    modEnterFields?: string[];
+    // A probe this form breaks on purpose, with the reason, such as a subject where plain Enter must not send an email.
+    except?: { [Name in ProbeName]?: string };
 };
 
-type ProbeName =
-    | 'focus'
-    | 'enter'
-    | 'modEnter'
-    | 'close'
-    | 'discard'
-    | 'cardEsc'
-    | 'leaveGuard'
-    | 'invalid'
-    | 'pending';
+// In the order they run.
+const PROBE_NAMES = [
+    'focus',
+    'enter',
+    'modEnter',
+    'close',
+    'discard',
+    'cardEsc',
+    'leaveGuard',
+    'invalid',
+    'pending',
+] as const;
+type ProbeName = (typeof PROBE_NAMES)[number];
 
 type Probe = { kinds: readonly FormKind[]; on: boolean; run: (form: FormContract) => Promise<void> };
 
@@ -55,8 +63,11 @@ const PROBES: Record<ProbeName, Probe> = {
 };
 
 export async function expectFormContract(form: FormContract): Promise<void> {
-    for (const [name, probe] of Object.entries(PROBES)) {
-        if (probe.on && probe.kinds.includes(form.kind)) await runProbe(name, probe, form);
+    for (const name of PROBE_NAMES) {
+        const probe = PROBES[name];
+        const reason = form.except?.[name];
+        if (reason !== undefined && !reason.trim()) throw new Error(`${name}: an exception says why`);
+        if (probe.on && probe.kinds.includes(form.kind) && reason === undefined) await runProbe(name, probe, form);
     }
 }
 
@@ -106,18 +117,26 @@ async function probeEnter(form: FormContract) {
     });
 }
 
+// Each field submits on Cmd+Enter and on Ctrl+Enter, keeps its content, and lets no hotkey behind the form see the key.
 async function probeModEnter(form: FormContract) {
-    for (const [key, modifier] of [
-        ['Cmd', { metaKey: true }],
-        ['Ctrl', { ctrlKey: true }],
-    ] as const) {
-        await withForm(form, async () => {
-            await form.makeChanged();
-            const target = field(form.firstField);
-            await act(() => keydown(target, { key: 'Enter', ...modifier }));
-            await nextTask();
-            check(calls(form) === 1, `${key}+Enter in ${form.firstField} submits, ran ${calls(form)} times`);
-        });
+    for (const label of [form.firstField, ...(form.modEnterFields ?? [])]) {
+        for (const [key, modifier] of MODIFIERS) {
+            await withForm(form, async () => {
+                await form.makeChanged();
+                const target = field(label);
+                target.focus();
+                const before = contentOf(target);
+                const behind: KeyboardEvent[] = [];
+                const listen = (event: KeyboardEvent) => behind.push(event);
+                document.addEventListener('keydown', listen);
+                await act(() => keydown(target, { key: 'Enter', ...modifier }));
+                document.removeEventListener('keydown', listen);
+                check(contentOf(target) === before, `${key}+Enter in ${label} leaves its content as it was`);
+                await nextTask();
+                check(calls(form) === 1, `${key}+Enter in ${label} submits, ran ${calls(form)} times`);
+                check(behind.length === 0, `${key}+Enter in ${label} reaches no hotkey behind the form`);
+            });
+        }
     }
 }
 
@@ -227,6 +246,9 @@ async function probePending(form: FormContract) {
         check(document.activeElement === save, `${form.submitLabel} keeps the focus while the save runs`);
         await click(save);
         check(calls(form) === 1, `a click while the save runs saves nothing more, ran ${calls(form)} times`);
+        await act(() => keydown(field(form.firstField), { key: 'Enter', metaKey: true }));
+        await nextTask();
+        check(calls(form) === 1, `Cmd+Enter while the save runs saves nothing more, ran ${calls(form)} times`);
         await release();
     });
 }
@@ -289,6 +311,11 @@ const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 10)));
 
 // The shell submits a key's form on the next task, once React has rendered what the key changed.
 const nextTask = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+const MODIFIERS = [
+    ['Cmd', { metaKey: true }],
+    ['Ctrl', { ctrlKey: true }],
+] as const;
 
 const CHOICE = '[role="radio"], [role="checkbox"], input[type="radio"], input[type="checkbox"]';
 const MESSAGE = '[data-slot="field-error"], [data-slot="form-message"]';
@@ -371,6 +398,9 @@ function field(label: string): HTMLElement {
     }
     throw new Error(`no field labelled ${label}`);
 }
+
+const contentOf = (element: HTMLElement) =>
+    element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : element.innerHTML;
 
 function textFields(inside: Element): HTMLElement[] {
     const form = inside.closest('form');
