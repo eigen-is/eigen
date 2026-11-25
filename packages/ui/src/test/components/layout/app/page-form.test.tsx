@@ -4,7 +4,8 @@
 // save keeps the draft beside its hook's toast. A page form with no Reset, such as Change password, keeps the contract
 // too, and shows its button all along, so a Save with nothing typed still runs and says what is missing. An edit opened
 // from a view shows Cancel and Save throughout, Cancel goes back to the view, and its Save runs with nothing changed,
-// leaving the caller to go back.
+// leaving the caller to go back. A page that makes one thing shows Cancel and its own label, such as Create, from
+// the start, and keeps the same contract.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { expectFormContract } from '../../../form-contract';
@@ -52,6 +53,33 @@ function NamePage(): ReactNode {
         ],
     });
 }
+
+// A page that makes one thing, such as a new contact, with Cancel beside its Create.
+function NewNotePage(): ReactNode {
+    const [name, setName] = useState('');
+    const blank = name.trim() === '';
+    return createElement(PageForm, {
+        changed: name !== '',
+        onCancel: cancel,
+        submitLabel: 'Create',
+        onSubmit: async () => {
+            if (blank) return false;
+            await save(name);
+        },
+        children: [
+            createElement(Input, {
+                key: 'name',
+                'aria-label': 'Name',
+                value: name,
+                onChange: (event: { target: { value: string } }) => setName(event.target.value),
+                'aria-invalid': blank || undefined,
+            }),
+            blank && createElement(FieldError, { key: 'error' }, 'Add a name'),
+        ],
+    });
+}
+
+const cancel = mock(() => {});
 
 // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
 async function type(value: string) {
@@ -210,5 +238,30 @@ test('Save with nothing changed runs the submit, which here goes back and saves 
     await openPage(NameView);
     await act(async () => pressEnter(nameField()));
     expect(button('Edit')).toBeDefined();
+    expect(save).not.toHaveBeenCalled();
+});
+
+test('a page with Cancel keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(NewNotePage),
+        submitLabel: 'Create',
+        firstField: 'Name',
+        onSubmit: save,
+        makeChanged: () => type('Plans'),
+        makeInvalid: () => type(' '),
+        invalidField: 'Name',
+    });
+});
+
+test('a page with Cancel shows Cancel and its label from the start, and its submit runs with nothing changed', async () => {
+    cancel.mockClear();
+    await openPage(NewNotePage);
+    expect(button('Reset')).toBeUndefined();
+    await act(async () => button('Create')?.click());
+    expect(nameField().getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(nameField());
+    await act(async () => button('Cancel')?.click());
+    expect(cancel).toHaveBeenCalledTimes(1);
     expect(save).not.toHaveBeenCalled();
 });

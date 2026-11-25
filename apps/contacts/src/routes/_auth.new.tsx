@@ -31,7 +31,7 @@ function NewContactRoute() {
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew />}>
-                <ContactEdit contact={emptyContact} onSave={handleSave} onCancel={handleCancel} />
+                <ContactEdit contact={emptyContact} isNew onSave={handleSave} onCancel={handleCancel} />
             </Column>
         </ColumnLayout>
     );

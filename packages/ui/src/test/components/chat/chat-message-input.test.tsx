@@ -260,3 +260,11 @@ test('the attach button is a named, flat icon button in the text color', async (
     expect(attach?.className).not.toContain('text-muted-foreground');
     await unmount();
 });
+
+test('the send button is named for what it does', async () => {
+    const { unmount } = await renderInDocument(
+        createElement(ChatMessageInput, { ...inputProps, onSend: async () => true }),
+    );
+    expect(document.querySelector('button[aria-label="Send"]')).not.toBeNull();
+    await unmount();
+});

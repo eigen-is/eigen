@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, add, create, new]
 related: [contacts/get-started, contacts/edit-or-delete, contacts/contact-details]
 order: 20
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 Open Contacts and click **Create contact** in the sidebar. A blank form opens where you can fill in as much or as little as you know.
@@ -37,6 +37,6 @@ Click the camera icon at the bottom right of the avatar circle. Choose **Upload 
 
 ## Save the contact
 
-Click **Save** at the bottom of the form. Contacts takes you back to **My contacts**, where the new entry appears in the list.
+Click **Create** at the bottom of the form, or press Enter in any field. Contacts takes you back to **My contacts**, where the new entry appears in the list.
 
-To discard the form without saving, click **Cancel**.
+To leave without saving, click **Cancel**. If you typed anything, Contacts first asks **Discard changes?**, and leaving the page any other way asks the same.

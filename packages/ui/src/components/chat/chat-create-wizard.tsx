@@ -1,7 +1,8 @@
 // The New chat dialog: step 1 picks people or a team, step 2 names the chat and picks where it lives. Before it
 // creates anything it looks for an existing chat with exactly those members and offers to open that one instead.
-// Person-first surfaces open it, such as the chat sidebar's New chat button or a contact's Start chat. It creates
-// the chat already shared with the picked people, through useCreateChatRoom.
+// Person-first surfaces open it, such as the chat sidebar's New chat button or a contact's Start chat. Both steps are
+// one form on FormShell's keys, and a close with people picked or typed asks first. It creates the chat already shared
+// with the picked people, through useCreateChatRoom.
 
 import { openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
@@ -33,13 +34,17 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
+import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode, Ref } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { DriveLocationField } from '../drive/drive-location-field';
+import { FormShell, useFormSubmitted } from '../form-shell';
 import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserItem } from '../user/user-item';
@@ -83,6 +88,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const [locationExpanded, setLocationExpanded] = useState(false);
     const [createError, setCreateError] = useState<string | null>(null);
     const destination = useResolvedDriveLocation(location);
+    const nameRef = useRef<HTMLInputElement>(null);
+    const { pending, run } = useDialogPending();
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
@@ -119,42 +126,45 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     // Every match has exactly the picked people and me as its members.
     const memberCount = picked.length + 1;
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
-    const isBusy = createRoom.isPending || createTeamRoom.isPending;
-    // An empty name would create a file called just '.eigenchat'. A location the user opened has no folder
-    // until its drive's root has loaded.
-    const canCreate =
-        !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0 && (!locationTouched || !!destination.folderId));
+    // A location the user opened has no folder until its drive's root has loaded.
+    const locationLoading = !teamMode && locationTouched && !destination.folderId;
     // Step 1 waits for the lookup to settle, so a quick Enter can't skip past an existing chat. A team
     // without a drive stays on step 1, which says so.
     const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
-    const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
     // The chat's name falls back to an address's local part only for an address nobody knows.
     const contactInput = useContactInput({
         listed: pickedEmails,
         onAdd: ({ email, displayName = email.split('@')[0] }) => {
-            if (email === myEmail) return;
+            if (email === myEmail) return 'You are already in the chat';
             setPicked((prev) => [...prev, { email, displayName }]);
         },
     });
+    const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0 || contactInput.hasText) && !lookupPending;
 
     // A caller may pass a new array on every render. Its JSON stays the same, so the reset below doesn't run again
     // while the user edits.
     const initialPeopleKey = JSON.stringify(initialPeople ?? []);
+    // A chat is always with other people, so the prefill drops the user.
+    const seeded = useMemo(() => {
+        const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
+        return seed
+            .map((person) => ({ email: person.email.toLowerCase(), displayName: person.name?.trim() || person.email }))
+            .filter((person) => person.email !== myEmail);
+    }, [initialPeopleKey, myEmail]);
+
+    const changed =
+        pickedKey !== seeded.map((person) => person.email).join(',') ||
+        contactInput.hasText ||
+        nameDirty ||
+        locationTouched ||
+        teamMode;
+    const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
 
     // The form starts clean each time the dialog opens, and again when its prefill changes.
     useEffect(() => {
         if (!open) return;
-        const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
-        // A chat is always with other people, so the prefill drops the user.
-        setPicked(
-            seed
-                .map((person) => ({
-                    email: person.email.toLowerCase(),
-                    displayName: person.name?.trim() || person.email,
-                }))
-                .filter((person) => person.email !== myEmail),
-        );
+        setPicked(seeded);
         setStep(1);
         contactInput.setValue('');
         setName('');
@@ -164,7 +174,14 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setLocationTouched(false);
         setLocationExpanded(false);
         setCreateError(null);
-    }, [open, initialPeopleKey, myOwnerId, myEmail, contactInput.setValue]);
+    }, [open, seeded, myOwnerId, contactInput.setValue]);
+
+    // Step 2 opens on the name, selected, so typing replaces the one made from the people.
+    useEffect(() => {
+        if (step !== 2) return;
+        nameRef.current?.focus();
+        nameRef.current?.select();
+    }, [step]);
 
     // Until the user edits the name, it follows the picked people. A team chat starts with no name, because it needs a
     // typed topic.
@@ -189,24 +206,26 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         else openDocument(path);
     };
 
-    const goToCreateStep = () => {
-        setCreateError(null);
-        setStep(2);
-    };
-
-    // Step 1's main button opens the first existing match. Without one, it moves on to step 2.
-    const advanceOrOpen = () => {
-        if (hasMatches) {
+    // Step 1's main button opens the first existing match, and without one, or from Create new chat, moves on to step
+    // 2. A person still typed in the field is added first, and the next press goes on once their chats are looked up.
+    const advance = (openMatch: boolean) => {
+        if (!teamMode) {
+            const typed = contactInput.commitTyped();
+            if ('refused' in typed) return false;
+            if (typed.added) return;
+        }
+        if (openMatch && hasMatches) {
             goToRoom(teamMode ? teamChats[0] : matches[0].path);
             return;
         }
-        if (step1CanProceed) goToCreateStep();
+        if (!step1CanProceed) return;
+        setStep(2);
     };
 
+    // An empty name would create a file called just '.eigenchat', so the name field says so instead.
     const createChat = async () => {
-        if (!canCreate || isBusy) return;
-        setCreateError(null);
         const fileName = name.trim();
+        if (!fileName) return false;
         try {
             // A team chat takes no members, because the whole team is in it. The server renames a default
             // name that collides. A name the user typed gets a 409 instead, which shows under the name field.
@@ -221,262 +240,307 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                       }),
             );
         } catch (e) {
-            // The hook has already toasted any other failure. A 409 means the typed name is taken.
-            if (!(e instanceof AppError) || e.status !== 409) return;
+            // The hook toasted every other failure. A 409 means the typed name is taken, which the name field says.
+            if (!(e instanceof AppError) || e.status !== 409) throw e;
             setCreateError(`A chat named "${fileName}" already exists here. Rename it, or open the existing one.`);
+            return false;
         }
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="flex flex-col h-[620px] max-h-[85vh]">
-                <DialogHeader>
-                    <DialogTitle>New chat</DialogTitle>
-                    <DialogDescription className="sr-only">
-                        Choose who to chat with, then name the chat.
-                    </DialogDescription>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={discard.onOpenChange}>
+                <DialogContent className="flex flex-col h-[620px] max-h-[85vh]">
+                    <DialogHeader>
+                        <DialogTitle>New chat</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Choose who to chat with, then name the chat.
+                        </DialogDescription>
+                    </DialogHeader>
 
-                {step === 1 ? (
-                    <div className="-mx-6 flex flex-1 flex-col min-h-0">
-                        {teamMode ? (
-                            <div className="shrink-0 px-6 pb-2">
-                                <InfoBlock className="w-full text-sm">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                        <span className="truncate">
-                                            Everyone in <span className="font-medium">{selectedTeam.name}</span> is a
-                                            member
-                                        </span>
+                    <FormShell
+                        className="flex flex-1 flex-col min-h-0"
+                        onSubmit={() => (step === 1 ? advance(true) : run(createChat))}
+                    >
+                        {step === 1 ? (
+                            <div className="-mx-6 flex flex-1 flex-col min-h-0">
+                                {teamMode ? (
+                                    <div className="shrink-0 px-6 pb-2">
+                                        <InfoBlock className="w-full text-sm">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                <span className="truncate">
+                                                    Everyone in <span className="font-medium">{selectedTeam.name}</span>{' '}
+                                                    is a member
+                                                </span>
+                                            </div>
+                                            <TooltipButton
+                                                icon={X}
+                                                tooltipText={`Remove ${selectedTeam.name}`}
+                                                variant="ghost"
+                                                className="h-7 w-7 shrink-0"
+                                                onClick={() => setSelectedTeamId(null)}
+                                            />
+                                        </InfoBlock>
+                                        {!teamRootId && (
+                                            <p className="mt-1.5 text-sm text-muted-foreground">
+                                                This team has no drive yet.
+                                            </p>
+                                        )}
                                     </div>
-                                    <TooltipButton
-                                        icon={X}
-                                        tooltipText={`Remove ${selectedTeam.name}`}
-                                        variant="ghost"
-                                        className="h-7 w-7 shrink-0"
-                                        onClick={() => setSelectedTeamId(null)}
-                                    />
-                                </InfoBlock>
-                                {!teamRootId && (
-                                    <p className="mt-1.5 text-sm text-muted-foreground">This team has no drive yet.</p>
+                                ) : (
+                                    <>
+                                        <div className="shrink-0 px-6 pb-2">
+                                            <Label htmlFor="chat-wizard-people" className="sr-only">
+                                                People
+                                            </Label>
+                                            <ContactAddRow
+                                                id="chat-wizard-people"
+                                                value={contactInput.value}
+                                                onChange={contactInput.handleChange}
+                                                onSubmit={contactInput.submit}
+                                                error={contactInput.error}
+                                                onEmptyEnter={() => advance(true)}
+                                                excludeEmails={excludeEmails}
+                                                placeholder="Add people by name or email…"
+                                            />
+                                        </div>
+                                        {picked.length > 0 && (
+                                            <div className="shrink-0 px-6 pb-2 max-h-32 space-y-0.5 overflow-y-auto">
+                                                {picked.map((person) => (
+                                                    <div
+                                                        key={person.email}
+                                                        className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
+                                                    >
+                                                        <UserItem email={person.email} />
+                                                        <div className={HOVER_REVEAL_CLASS}>
+                                                            <TooltipButton
+                                                                icon={X}
+                                                                tooltipText={`Remove ${person.email}`}
+                                                                variant="ghost"
+                                                                className="h-7 w-7"
+                                                                onClick={() =>
+                                                                    setPicked((prev) =>
+                                                                        prev.filter(
+                                                                            (other) => other.email !== person.email,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
+
+                                {/* This spacer pushes the existing-chat panel down to just above the footer. */}
+                                <div className="flex-1" />
+
+                                {teamMode
+                                    ? teamChats.length > 0 && (
+                                          <MatchPanel title={`Chats in ${selectedTeam.name}`}>
+                                              {teamChats.map((chat) => (
+                                                  <MatchRow
+                                                      key={chat.id}
+                                                      name={stripEigenExtension(chat.name)}
+                                                      subtitle={null}
+                                                      onOpen={() => goToRoom(chat)}
+                                                  />
+                                              ))}
+                                          </MatchPanel>
+                                      )
+                                    : matches.length > 0 && (
+                                          <MatchPanel
+                                              title={
+                                                  matches.length === 1
+                                                      ? 'You already have a chat with these people'
+                                                      : 'Existing chats with these people'
+                                              }
+                                          >
+                                              {matches.map((m) => (
+                                                  <MatchRow
+                                                      key={m.path.id}
+                                                      name={stripEigenExtension(m.path.name)}
+                                                      subtitle={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}${m.canWrite ? '' : ' · view only'}`}
+                                                      onOpen={() => goToRoom(m.path)}
+                                                  />
+                                              ))}
+                                          </MatchPanel>
+                                      )}
                             </div>
                         ) : (
-                            <>
-                                <div className="shrink-0 px-6 pb-2">
-                                    <ContactAddRow
-                                        id="chat-wizard-people"
-                                        value={contactInput.value}
-                                        onChange={contactInput.handleChange}
-                                        onSubmit={contactInput.submit}
-                                        error={contactInput.error}
-                                        onEmptyEnter={advanceOrOpen}
-                                        excludeEmails={excludeEmails}
-                                        placeholder="Add people by name or email…"
+                            <div className="-mx-6 flex flex-1 flex-col min-h-0">
+                                <NameField
+                                    inputRef={nameRef}
+                                    value={name}
+                                    onChange={(value) => {
+                                        setNameDirty(true);
+                                        setName(value);
+                                        setCreateError(null);
+                                    }}
+                                    taken={createError}
+                                />
+
+                                {teamMode ? (
+                                    <Field className="shrink-0 px-6 pb-2">
+                                        <FieldLabel>Location</FieldLabel>
+                                        <InfoBlock className="w-full justify-start gap-2 text-sm">
+                                            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                            <span className="text-xs">
+                                                {selectedTeam.name} team drive › {CHATS_FOLDER_NAME}
+                                            </span>
+                                        </InfoBlock>
+                                    </Field>
+                                ) : locationTouched ? (
+                                    <DriveLocationField
+                                        value={location}
+                                        onChange={setLocation}
+                                        expanded={locationExpanded}
+                                        onExpandedChange={setLocationExpanded}
+                                        ownMountsOnly
                                     />
-                                </div>
-                                {picked.length > 0 && (
-                                    <div className="shrink-0 px-6 pb-2 max-h-32 space-y-0.5 overflow-y-auto">
-                                        {picked.map((person) => (
-                                            <div
-                                                key={person.email}
-                                                className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
+                                ) : (
+                                    <Field className="shrink-0 px-6 pb-2">
+                                        <FieldLabel>Location</FieldLabel>
+                                        <InfoBlock className="relative w-full gap-1.5 text-sm hover:bg-muted">
+                                            <span className="text-xs">My Drive › {CHATS_FOLDER_NAME}</span>
+                                            <button
+                                                type="button"
+                                                aria-label="Change location"
+                                                aria-expanded={false}
+                                                className={cn(
+                                                    STRETCHED_TRIGGER_CLASS,
+                                                    'ml-auto flex shrink-0 items-center gap-0.5',
+                                                )}
+                                                onClick={() => {
+                                                    setLocationTouched(true);
+                                                    setLocationExpanded(true);
+                                                }}
                                             >
-                                                <UserItem email={person.email} />
-                                                <div className={HOVER_REVEAL_CLASS}>
-                                                    <TooltipButton
-                                                        icon={X}
-                                                        tooltipText={`Remove ${person.email}`}
-                                                        variant="ghost"
-                                                        className="h-7 w-7"
-                                                        onClick={() =>
-                                                            setPicked((prev) =>
-                                                                prev.filter((other) => other.email !== person.email),
-                                                            )
-                                                        }
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                                <span className="mr-1 text-xs text-muted-foreground">Change</span>
+                                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                            </button>
+                                        </InfoBlock>
+                                    </Field>
                                 )}
-                            </>
+
+                                <p className="shrink-0 px-6 pb-2 text-xs text-muted-foreground">
+                                    {teamMode
+                                        ? 'Each chat is saved as a file on the team drive.'
+                                        : 'Each chat is saved as a file in your Drive.'}
+                                </p>
+                            </div>
                         )}
 
-                        {/* This spacer pushes the existing-chat panel down to just above the footer. */}
-                        <div className="flex-1" />
-
-                        {teamMode
-                            ? teamChats.length > 0 && (
-                                  <MatchPanel title={`Chats in ${selectedTeam.name}`}>
-                                      {teamChats.map((chat) => (
-                                          <MatchRow
-                                              key={chat.id}
-                                              name={stripEigenExtension(chat.name)}
-                                              subtitle={null}
-                                              onOpen={() => goToRoom(chat)}
-                                          />
-                                      ))}
-                                  </MatchPanel>
-                              )
-                            : matches.length > 0 && (
-                                  <MatchPanel
-                                      title={
-                                          matches.length === 1
-                                              ? 'You already have a chat with these people'
-                                              : 'Existing chats with these people'
-                                      }
-                                  >
-                                      {matches.map((m) => (
-                                          <MatchRow
-                                              key={m.path.id}
-                                              name={stripEigenExtension(m.path.name)}
-                                              subtitle={`${memberCount} ${memberCount === 1 ? 'member' : 'members'}${m.canWrite ? '' : ' · view only'}`}
-                                              onOpen={() => goToRoom(m.path)}
-                                          />
-                                      ))}
-                                  </MatchPanel>
-                              )}
-                    </div>
-                ) : (
-                    <div className="-mx-6 flex flex-1 flex-col min-h-0">
-                        <Field className="shrink-0 px-6 pb-2">
-                            <FieldLabel htmlFor="chat-wizard-name">Name</FieldLabel>
-                            <Input
-                                id="chat-wizard-name"
-                                value={name}
-                                onChange={(e) => {
-                                    setNameDirty(true);
-                                    setName(e.target.value);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        void createChat();
-                                    }
-                                }}
-                            />
-                            {createError && <FieldError>{createError}</FieldError>}
-                        </Field>
-
-                        {teamMode ? (
-                            <Field className="shrink-0 px-6 pb-2">
-                                <FieldLabel>Location</FieldLabel>
-                                <InfoBlock className="w-full justify-start gap-2 text-sm">
-                                    <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-                                    <span className="text-xs">
-                                        {selectedTeam.name} team drive › {CHATS_FOLDER_NAME}
-                                    </span>
-                                </InfoBlock>
-                            </Field>
-                        ) : locationTouched ? (
-                            <DriveLocationField
-                                value={location}
-                                onChange={setLocation}
-                                expanded={locationExpanded}
-                                onExpandedChange={setLocationExpanded}
-                                ownMountsOnly
-                            />
-                        ) : (
-                            <Field className="shrink-0 px-6 pb-2">
-                                <FieldLabel>Location</FieldLabel>
-                                <InfoBlock className="relative w-full gap-1.5 text-sm hover:bg-muted">
-                                    <span className="text-xs">My Drive › {CHATS_FOLDER_NAME}</span>
-                                    <button
-                                        type="button"
-                                        aria-label="Change location"
-                                        aria-expanded={false}
-                                        className={cn(
-                                            STRETCHED_TRIGGER_CLASS,
-                                            'ml-auto flex shrink-0 items-center gap-0.5',
-                                        )}
+                        <DialogFooter
+                            start={
+                                step === 1 ? (
+                                    myTeams &&
+                                    myTeams.length > 0 && (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline">
+                                                    <Users />
+                                                    {/* A phone's footer keeps one row, so only the icon shows there. */}
+                                                    <span className="max-sm:sr-only">Team chat</span>
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="start">
+                                                {selectedTeam && (
+                                                    <DropdownMenuItem onClick={() => setSelectedTeamId(null)}>
+                                                        <User className="h-4 w-4" />
+                                                        Personal chat
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {myTeams.map((team) => (
+                                                    <DropdownMenuItem
+                                                        key={team.id}
+                                                        onClick={() => setSelectedTeamId(team.id)}
+                                                        disabled={team.id === selectedTeamId}
+                                                    >
+                                                        <Users className="h-4 w-4" />
+                                                        {team.name}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        disabled={pending}
                                         onClick={() => {
-                                            setLocationTouched(true);
-                                            setLocationExpanded(true);
+                                            setCreateError(null);
+                                            setStep(1);
                                         }}
                                     >
-                                        <span className="mr-1 text-xs text-muted-foreground">Change</span>
-                                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                    </button>
-                                </InfoBlock>
-                            </Field>
-                        )}
-
-                        <p className="shrink-0 px-6 pb-2 text-xs text-muted-foreground">
-                            {teamMode
-                                ? 'Each chat is saved as a file on the team drive.'
-                                : 'Each chat is saved as a file in your Drive.'}
-                        </p>
-                    </div>
-                )}
-
-                <DialogFooter
-                    start={
-                        step === 1 ? (
-                            myTeams &&
-                            myTeams.length > 0 && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline">
-                                            <Users />
-                                            Team chat
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        {selectedTeam && (
-                                            <DropdownMenuItem onClick={() => setSelectedTeamId(null)}>
-                                                <User className="h-4 w-4" />
-                                                Personal chat
-                                            </DropdownMenuItem>
-                                        )}
-                                        {myTeams.map((team) => (
-                                            <DropdownMenuItem
-                                                key={team.id}
-                                                onClick={() => setSelectedTeamId(team.id)}
-                                                disabled={team.id === selectedTeamId}
-                                            >
-                                                <Users className="h-4 w-4" />
-                                                {team.name}
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )
-                        ) : (
-                            <Button
-                                variant="outline"
-                                onClick={() => {
-                                    setCreateError(null);
-                                    setStep(1);
-                                }}
-                            >
-                                Back
+                                        Back
+                                    </Button>
+                                )
+                            }
+                        >
+                            <Button variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+                                Cancel
                             </Button>
-                        )
-                    }
-                >
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
-                    </Button>
-                    {step === 1 ? (
-                        <>
-                            {hasMatches && (
-                                <Button variant="outline" disabled={!step1CanProceed} onClick={goToCreateStep}>
-                                    Create new chat
+                            {step === 1 ? (
+                                <>
+                                    {hasMatches && (
+                                        <Button
+                                            variant="outline"
+                                            disabled={!step1CanProceed}
+                                            onClick={() => advance(false)}
+                                        >
+                                            Create new chat
+                                        </Button>
+                                    )}
+                                    <Button type="submit" disabled={!step1CanProceed}>
+                                        {hasMatches ? 'Open' : 'Next'}
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button type="submit" disabled={locationLoading} pending={pending}>
+                                    Create
                                 </Button>
                             )}
-                            <Button onClick={advanceOrOpen} disabled={!step1CanProceed}>
-                                Let's chat
-                            </Button>
-                        </>
-                    ) : (
-                        <Button onClick={() => void createChat()} disabled={!canCreate || isBusy}>
-                            Let's chat
-                        </Button>
-                    )}
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                        </DialogFooter>
+                    </FormShell>
+                </DialogContent>
+            </Dialog>
+            {discard.dialog}
+        </>
+    );
+}
+
+// Once Create was pressed, an empty name says so, and a name another chat here has says that instead.
+function NameField({
+    inputRef,
+    value,
+    onChange,
+    taken,
+}: {
+    inputRef: Ref<HTMLInputElement>;
+    value: string;
+    onChange: (value: string) => void;
+    taken: string | null;
+}) {
+    const errorId = useId();
+    const submitted = useFormSubmitted();
+    const error = taken ?? (submitted && !value.trim() ? 'Add a name' : null);
+    return (
+        <Field className="shrink-0 px-6 pb-2">
+            <FieldLabel htmlFor="chat-wizard-name">Name</FieldLabel>
+            <Input
+                ref={inputRef}
+                id="chat-wizard-name"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                aria-invalid={!!error || undefined}
+                aria-describedby={error ? errorId : undefined}
+            />
+            {error && <FieldError id={errorId}>{error}</FieldError>}
+        </Field>
     );
 }
 
@@ -493,7 +557,7 @@ function MatchPanel({ title, children }: { title: string; children: ReactNode })
             <div className="rounded-md border">
                 <div className="flex items-center gap-2 border-b px-3 py-2 text-sm text-muted-foreground">
                     <MessageSquare className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{title}</span>
+                    <span className="min-w-0">{title}</span>
                 </div>
                 <div className="max-h-40 space-y-0.5 overflow-y-auto p-1">{children}</div>
             </div>

@@ -1,7 +1,8 @@
 // The mail composer: recipients, subject, body and attachments of one draft, and the send. Its state
 // and auto-save live in useDraft. Files come in from the disk, from Drive or from a forwarded message,
-// and each is staged on the server before a save embeds it. At send time it offers to share the Drive
-// documents the mail links with recipients who cannot open them yet.
+// and each is staged on the server before a save embeds it. A send that lacks a recipient or any content says so
+// under the field. At send time it offers to share the Drive documents the mail links with recipients who cannot
+// open them yet.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
@@ -21,19 +22,13 @@ import type { DraftUpdateOptions, EmailDraft as EmailDraftType, NewDraft } from 
 import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { ContactAutosuggest } from '@workspace/ui/components/contacts';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { LightEditor } from '@workspace/ui/components/editor';
+import { FieldError } from '@workspace/ui/components/field';
 import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
 import { Input } from '@workspace/ui/components/input';
 import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
@@ -73,6 +68,8 @@ const RECIPIENT_FIELDS = [
     { field: 'cc', label: 'Cc:' },
     { field: 'bcc', label: 'Bcc:' },
 ] as const;
+
+const MISSING = { to: 'Add at least one recipient', subject: 'Add a subject or a message' } as const;
 
 type EmailDraftProps = {
     email: EmailDraftType | null;
@@ -119,7 +116,10 @@ export function EmailDraft({
     filePickerOpen,
     onFilePickerOpenChange,
 }: EmailDraftProps) {
-    const [alertState, setAlertState] = useState<{ title: string; message: string } | null>(null);
+    const formRef = useRef<HTMLFormElement>(null);
+    // Once a send was refused, what it lacks shows under its field until the user adds it.
+    const [sendRefused, setSendRefused] = useState(false);
+    const [attachRefusal, setAttachRefusal] = useState<string>();
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     // Set once the time-of-send access check finds a grantable reference: holds the flushed draft to
     // send plus the aggregated dialog contents. Null closes the Share & send dialog.
@@ -186,12 +186,9 @@ export function EmailDraft({
         // every save and the draft is lost.
         const fresh = paths.filter((p) => isContainerType(p.type) && !state.driveReferences.some((r) => r.id === p.id));
         const room = Math.max(0, MAX_SEND_REFERENCES - state.driveReferences.length);
-        if (fresh.length > room) {
-            setAlertState({
-                title: 'Cannot attach',
-                message: `You can link at most ${MAX_SEND_REFERENCES} documents.`,
-            });
-        }
+        setAttachRefusal(
+            fresh.length > room ? `You can link at most ${MAX_SEND_REFERENCES} documents to one mail` : undefined,
+        );
         for (const path of fresh.slice(0, room)) {
             addDriveReference({
                 type: 'reference',
@@ -365,14 +362,18 @@ export function EmailDraft({
         }
     };
 
+    // Linked documents count as content, mirroring messageSend's ref-only allowance.
+    const missing = !isSendable
+        ? 'to'
+        : !state.subject.trim() && !state.bodyText.trim() && state.driveReferences.length === 0
+          ? 'subject'
+          : null;
+    const shownMissing = sendRefused ? missing : null;
+
     const handleSendEmail = async () => {
-        if (!isSendable) {
-            setAlertState({ title: 'Cannot send', message: 'Please specify at least one recipient.' });
-            return;
-        }
-        // Linked documents count as content, mirroring messageSend's ref-only allowance.
-        if (!state.subject.trim() && !state.bodyText.trim() && state.driveReferences.length === 0) {
-            setAlertState({ title: 'Cannot send', message: 'Please add a subject or message.' });
+        if (missing) {
+            setSendRefused(true);
+            formRef.current?.querySelector<HTMLElement>(`#${missing}`)?.focus();
             return;
         }
         if (!state.subject.trim()) {
@@ -385,8 +386,9 @@ export function EmailDraft({
     };
 
     // A modifier combo fires even while an input or editor is focused, and the body editor's submitOnModEnter keeps HardBreak
-    // from firing first. Being document-wide, it is the one send entry point the Share & send dialog doesn't block.
-    useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending && !shareState });
+    // from firing first. A dialog over the draft, such as Share & send or a form, owns its own Cmd+Enter.
+    const dialogOpen = useDialogOpen();
+    useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending && !dialogOpen });
 
     const { targetProps, isDragging } = useFileDropTarget(uploadFiles);
     const { onPaste } = useFilePasteTarget(uploadFiles);
@@ -396,6 +398,7 @@ export function EmailDraft({
     return (
         <div className="relative flex flex-col h-full w-full" {...targetProps} onPaste={onPaste}>
             <form
+                ref={formRef}
                 id="draft-form"
                 className="flex flex-col flex-1 min-h-0"
                 onSubmit={(e) => {
@@ -425,7 +428,10 @@ export function EmailDraft({
                                 disabled={isSending}
                                 autoComplete="off"
                                 id={field}
+                                aria-invalid={shownMissing === field || undefined}
+                                aria-describedby={shownMissing === field ? `${field}-error` : undefined}
                             />
+                            {shownMissing === field && <MissingError field={field} />}
                         </div>
                     ))}
                     <div className="grid grid-cols-[4rem_1fr] items-center border-b">
@@ -449,7 +455,10 @@ export function EmailDraft({
                             onChange={(e) => setField('subject', e.target.value)}
                             className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             disabled={isSending}
+                            aria-invalid={shownMissing === 'subject' || undefined}
+                            aria-describedby={shownMissing === 'subject' ? 'subject-error' : undefined}
                         />
+                        {shownMissing === 'subject' && <MissingError field="subject" />}
                     </div>
                 </div>
                 <DraftAttachments
@@ -458,6 +467,7 @@ export function EmailDraft({
                     onRemove={removeAttachment}
                     onRemoveReference={removeDriveReference}
                 />
+                {attachRefusal && <FieldError className="app-gutter-x pb-2">{attachRefusal}</FieldError>}
                 <div
                     className="flex-1 overflow-auto app-gutter cursor-text"
                     onClick={(e) => {
@@ -487,19 +497,6 @@ export function EmailDraft({
                 multiple
             />
             <FileDropOverlay visible={isDragging} label="Drop files to attach" icon={Paperclip} />
-            {alertState && (
-                <Dialog open onOpenChange={() => setAlertState(null)}>
-                    <DialogContent size="sm">
-                        <DialogHeader>
-                            <DialogTitle>{alertState.title}</DialogTitle>
-                            <DialogDescription>{alertState.message}</DialogDescription>
-                        </DialogHeader>
-                        <DialogFooter>
-                            <Button onClick={() => setAlertState(null)}>OK</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            )}
             <ConfirmDialog
                 open={confirmNoSubject}
                 onOpenChange={setConfirmNoSubject}
@@ -545,6 +542,14 @@ function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): 
         if (field === 'bcc') bcc.add(key);
     }
     return { all, bcc };
+}
+
+function MissingError({ field }: { field: keyof typeof MISSING }) {
+    return (
+        <FieldError id={`${field}-error`} className="col-start-2 pb-1.5">
+            {MISSING[field]}
+        </FieldError>
+    );
 }
 
 function focusBodyEditor(root: HTMLElement) {
