@@ -113,5 +113,5 @@ test('a username the rules refuse and a wrong sender say so as they are typed', 
     await type('Username', 'a');
     expect(messageUnder('Username')).toBe('Username must be 2-30 characters');
     await type('Sender address', 'nobody');
-    expect(messageUnder('Sender address')).toBe('This is not an email address');
+    expect(messageUnder('Sender address')).toBe('Enter a valid email address');
 });

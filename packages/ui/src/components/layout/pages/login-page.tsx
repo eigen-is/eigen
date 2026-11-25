@@ -17,7 +17,7 @@ import {
     useVerifyGuestCode,
 } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, validateEmailAddress } from '@workspace/lib/validation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { FieldValues, UseFormReturn } from 'react-hook-form';
@@ -41,7 +41,7 @@ const loginFormSchema = z.object({
 });
 
 const guestEmailSchema = z.object({
-    email: z.string().refine(validateEmailAddress, 'This is not an email address'),
+    email: z.string().refine(validateEmailAddress, FIELD_MESSAGES.invalidEmail),
 });
 
 const guestCodeSchema = z.object({

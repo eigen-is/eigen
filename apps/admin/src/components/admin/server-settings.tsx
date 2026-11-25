@@ -24,7 +24,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
 import type { LandingLink, ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, validateEmailAddress } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
@@ -214,7 +214,7 @@ function ServerSettingsForm({ settings, config }: { settings: ServerSettings; co
                             onChange={(e) => updateMail({ senderAddress: e.target.value.trim() })}
                             aria-invalid={senderAddressInvalid || undefined}
                         />
-                        {senderAddressInvalid && <FieldError>This is not an email address</FieldError>}
+                        {senderAddressInvalid && <FieldError>{FIELD_MESSAGES.invalidEmail}</FieldError>}
                     </div>
                 </div>
                 {relayHost && (

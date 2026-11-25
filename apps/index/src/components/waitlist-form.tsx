@@ -1,9 +1,10 @@
 // The landing page's Join the waitlist card: an email and a note, sent through useJoinWaitlist from a page form, so
 // an address that is none says so under its field and leaving with something typed asks first. The landing page shows
-// it once a visitor clicks Join waitlist, when the server's admin turned the waitlist on; a join or Cancel closes it.
+// it once a visitor clicks Join waitlist, when the server's admin turned the waitlist on; a join closes it, and Cancel
+// closes it without asking.
 
 import { useJoinWaitlist } from '@workspace/lib/public';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, validateEmailAddress } from '@workspace/lib/validation';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { FieldError } from '@workspace/ui/components/field';
 import { useFormSubmitted } from '@workspace/ui/components/form-shell';
@@ -59,7 +60,7 @@ function EmailField({ value, onChange }: { value: string; onChange: (value: stri
         : !value.trim()
           ? 'Enter your email address'
           : !validateEmailAddress(value)
-            ? 'Enter a valid email address'
+            ? FIELD_MESSAGES.invalidEmail
             : undefined;
 
     return (
