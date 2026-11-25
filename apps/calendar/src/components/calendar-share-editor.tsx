@@ -8,7 +8,6 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
 import { CALENDAR_SHARE_PERMISSIONS } from '@workspace/lib/types/calendar';
-import { Button } from '@workspace/ui/components/button';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
 import {
     DropdownMenu,
@@ -16,6 +15,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { FooterTool } from '@workspace/ui/components/form-dialog';
 import {
     Select,
     SelectContent,
@@ -130,11 +130,7 @@ export function ShareWithTeamButton({ shares, onChange }: CalendarShareEditorPro
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                    <Users />
-                    {/* A phone's footer keeps one row, so only the icon shows there. */}
-                    <span className="max-sm:sr-only">Share with team</span>
-                </Button>
+                <FooterTool icon={Users} label="Share with team" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
                 {myTeams.map((team) => (
