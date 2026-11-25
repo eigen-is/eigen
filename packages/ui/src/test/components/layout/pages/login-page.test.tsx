@@ -64,7 +64,7 @@ const offline = () => {
     throw new TypeError('Failed to fetch');
 };
 
-const { act, createElement } = await import('react');
+const { act, createElement, useEffect } = await import('react');
 const router = await import('@tanstack/react-router');
 const { expectFormContract } = await import('../../../form-contract');
 const { LoginPage } = await import('../../../../components/layout/pages/login-page');
@@ -104,6 +104,28 @@ test("the guest's email form keeps the page rules", async () => {
         except: { leaveGuard: NO_GUARD },
     });
 });
+
+test("the guest's code form keeps the page rules", async () => {
+    const verify = mock(() => new Response(null, { status: 200 }));
+    answers['verify-otp'] = verify;
+    await expectFormContract({
+        kind: 'page',
+        render: () => <AtCodeStep />,
+        submitLabel: 'Verify',
+        firstField: 'One-time code',
+        onSubmit: verify,
+        makeChanged: () => type('One-time code', '123456'),
+        makeInvalid: () => type('One-time code', '123'),
+        invalidField: 'One-time code',
+        except: { leaveGuard: NO_GUARD },
+    });
+});
+
+// The sign-in page with the guest's address already sent, as the code step opens.
+function AtCodeStep() {
+    useEffect(() => pressEnter(field('Email')), []);
+    return <LoginPage email="joris@example.com" />;
+}
 
 test('a click on a tab goes on into its first field', async () => {
     await renderPage(<LoginPage />);
