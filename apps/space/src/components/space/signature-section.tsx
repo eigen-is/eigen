@@ -1,8 +1,8 @@
 // The Signature section of Space's Mail settings: a rich-text editor for the user's email signature and its Save
 // button, on FormShell's keys, with a LeaveGuard while a change is unsaved. Mail adds the signature to new emails and
-// above the quote in replies and forwards. The editor opens on the saved signature once it has loaded, and takes no
-// focus then, since the page has other sections. A failed load shows an error, since an empty editor would save over
-// the signature.
+// above the quote in replies and forwards. The editor opens on the saved signature once it has loaded, with the focus
+// in it as the first field on the page. A failed load shows an error, since an empty editor would save over the
+// signature.
 
 import { useSaveSignature, useSpaceSettings } from '@workspace/lib/space';
 import type { EmailSignature } from '@workspace/lib/types/settings';
@@ -40,7 +40,7 @@ function SignatureForm({ id, existing }: { id: string; existing?: EmailSignature
     };
 
     return (
-        <FormShell className="space-y-4" onSubmit={() => (isDirty ? run(handleSave) : undefined)}>
+        <FormShell autoFocus className="space-y-4" onSubmit={() => (isDirty ? run(handleSave) : undefined)}>
             <div>
                 <h2 id={headingId} className="text-lg font-medium">
                     Signature

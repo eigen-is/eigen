@@ -1,5 +1,5 @@
 // The Mail signature keeps the page rules: Cmd+Enter in the editor saves once, its Save spins while the save runs, and
-// leaving with an unsaved change asks. It opens on the saved signature and takes no focus as the Mail page opens, a Save
+// leaving with an unsaved change asks. It opens on the saved signature with the focus in it, a Save
 // with nothing changed sends nothing, and a save sends the signature under the id it already had. A first signature
 // keeps what was typed while it saved. A failed load shows an error instead of an empty editor, whose Save would wipe
 // the saved signature.
@@ -56,14 +56,13 @@ test('the signature keeps the page rules', async () => {
         firstField: 'Signature',
         onSubmit: saveSignature.mutateAsync,
         makeChanged: () => typeSignature(' Lovelace'),
-        except: { focus: 'the signature shares the Mail page with other sections, so it takes no focus as it opens' },
     });
 });
 
 test('opens on the saved signature, a clean Save sends nothing, and it saves under its id', async () => {
     await renderPage();
     expect(editor().getHTML()).toBe('<p>Ada</p>');
-    expect(document.activeElement).toBe(document.body);
+    expect(document.activeElement).toBe(editor().view.dom);
     await act(async () => saveButton().click());
     expect(saveSignature.mutateAsync).not.toHaveBeenCalled();
 
