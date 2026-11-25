@@ -106,7 +106,7 @@ test('a second Enter while the change is on its way sends nothing', async () => 
 });
 
 // Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
-test('a refused change shows its toast, stays on the page and can be sent again', async () => {
+test('a refused change shows its toast, stays on the page and enables the button again', async () => {
     const page = await open();
     await type(field('Current password'), 'wrong-password');
     await type(field('New password'), 'new-password-456');
