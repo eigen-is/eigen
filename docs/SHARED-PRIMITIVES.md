@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2421 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2424 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (328)
+## Components (331)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -204,6 +204,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CollabDocumentGate` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/collab-document-gate.tsx |
 | `Column` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
+| `DetailItemBlock` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
+| `DetailMeta` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
+| `DetailSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
 | `EigenApp` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenDocEditorRoute` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-doc-editor-route.tsx |
 | `EigenDocRouteStatus` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-doc-route-status.tsx |

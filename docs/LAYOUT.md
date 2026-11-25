@@ -189,6 +189,14 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 Dark mode themes the app around a document, never the document. The page in Docs, the grid in Sheets, the slide in Slides and the canvas in Vector stay white in either theme, while the bars, panels and menus around them follow it. This is intended (the owner, 14 Nov 2026). `.eigen-paper` pins the light palette on such a surface ([CANVAS.md](CANVAS.md)).
 
+## An item is one square block, and an opened item reads block, meta, sections
+
+Cards in Stickies, comments in the document apps and events in Calendar are drawn alike, so the apps read as one. Every item drawn as a block of its own reads one class, `.eigen-block` (`packages/ui/src/styles/globals.css`): square like a list row, with one flat shadow set through Tailwind's shadow variable, so a ring on the block adds to it, and in dark mode `colorSurface`'s 2px stripe in its place. `CardTile` (a board card, a comment card in a list or the hover card, the drag overlay), the calendar's blocks, bars, drafts and lane ghosts, and `DetailItemBlock` read it, and none keeps a corner or shadow of its own. It comes after the search ring in the stylesheet, since the ring rounds what it rings. A floating surface around a tile, such as the hover card's popover, keeps its own `shadow-md`.
+
+The color is `colorSurface(color, tone)` in one of two tones, which the caller always names: `'tile'` for a small item you scan by color, such as a card on the board or an event on the grid, and the paler `'panel'` for the reading block of an opened item ([STICKIES.md](STICKIES.md)).
+
+An opened item's body is built from the parts in `packages/ui/src/components/layout/app/detail-item.tsx`, in this order: `DetailItemBlock`, the item's block with its title inside, in its color's panel tone or `bg-muted` without one; `DetailMeta`, one muted line, such as who created it; then `DetailSection`s, each an `eigen-section-label` caption over its rows. An opened card or comment takes all three. An opened event, in its dialog or an `.ics` quick look, skips the block and shows its title as a plain heading, as its color only names its calendar ([CALENDAR.md](CALENDAR.md#an-event-on-the-grid-is-drawn-as-a-card-is-and-opened-it-has-no-block)).
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way, so a user reads every Eigen menu alike, and a screen reader hears each row as checked or not.

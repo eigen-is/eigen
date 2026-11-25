@@ -12,6 +12,7 @@ import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
 import { ConfirmDialog } from '../confirm-dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
+import { DetailSection } from '../layout/app/detail-item';
 import { LoadingState } from '../layout/app/loading-state';
 
 type CommentThreadProps = {
@@ -75,7 +76,9 @@ function CommentThreadInner({
                     <>
                         {lead}
                         {chat.messages.some((message) => !message.deletedAt) && (
-                            <h3 className="eigen-section-label app-gutter-x mt-2 mb-2">Activity</h3>
+                            <div className="app-gutter-x">
+                                <DetailSection label="Activity" />
+                            </div>
                         )}
                     </>
                 }

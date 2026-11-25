@@ -31,9 +31,9 @@ type PlacedEventProps = EventSurfaceProps & {
 export const STRIPE_INSET = 'dark:pl-2';
 
 export const MORE_BUTTON =
-    'mx-0.5 truncate rounded px-1.5 text-left text-xs font-medium leading-5 text-muted-foreground hover:bg-accent';
+    'mx-0.5 truncate px-1.5 text-left text-xs font-medium leading-5 text-muted-foreground hover:bg-accent';
 
-const BAR = cn('truncate rounded px-1.5 py-0.5 font-medium', STRIPE_INSET);
+const BAR = cn('truncate px-1.5 py-0.5 font-medium', STRIPE_INSET);
 
 export function EventSurface({
     event,
@@ -52,7 +52,7 @@ export function EventSurface({
         <button
             type="button"
             className={cn(
-                'overflow-hidden text-left text-xs leading-4',
+                'eigen-block overflow-hidden text-left text-xs leading-4',
                 surface.className,
                 className,
                 eventSurfaceClasses('block', state),
@@ -76,12 +76,7 @@ export function EventBar({ bar, ...surfaceProps }: { bar: LaneBar } & EventSurfa
         <EventSurface
             event={bar.event}
             {...surfaceProps}
-            className={cn(
-                'mx-0.5',
-                BAR,
-                bar.continuesBefore && 'ml-0 rounded-l-none',
-                bar.continuesAfter && 'mr-0 rounded-r-none',
-            )}
+            className={cn('mx-0.5', BAR, bar.continuesBefore && 'ml-0', bar.continuesAfter && 'mr-0')}
             style={style}
         >
             {bar.event.title}
@@ -105,7 +100,7 @@ export function EventChip({ className, ...props }: PlacedEventProps) {
         <button
             type="button"
             className={cn(
-                '@container flex items-center gap-1 overflow-hidden whitespace-nowrap rounded px-0.5 py-0.5 text-left text-xs leading-4',
+                '@container flex items-center gap-1 overflow-hidden whitespace-nowrap px-0.5 py-0.5 text-left text-xs leading-4',
                 eventSurfaceClasses('dot', state),
                 className,
             )}
@@ -138,7 +133,7 @@ export function EventDot({ color, pending, className }: { color: string; pending
 export function LaneGhost({ bar, ...surfaceProps }: { bar: LaneBar } & EventSurfaceProps) {
     return (
         <div
-            className="pointer-events-none mx-0.5 rounded bg-background shadow-md"
+            className="eigen-block pointer-events-none mx-0.5 bg-background"
             style={{ gridRow: 1, gridColumn: `${bar.start + 1} / span ${bar.span}` }}
         >
             <EventChip event={bar.event} {...surfaceProps} className="w-full" />
