@@ -1,5 +1,5 @@
 // File › Page setup in Slides: Google Slides' slide size, Widescreen 16:9 or Standard 4:3, which every slide of the
-// deck shares. A writer picks one and OK writes it to the deck. A viewer sees the size with only a Close button.
+// deck shares. A writer picks one and Apply writes it to the deck. A viewer sees the size with only a Close button.
 
 import type { SlideSize } from '@workspace/lib/vector';
 import { oneOf, SLIDE_SIZE_KEYS } from '@workspace/lib/vector';
@@ -33,7 +33,7 @@ export function PageSetupDialog({ open, onOpenChange, slideSize, canWrite, onSli
 }
 
 // Mounted with the dialog, so each opening starts unpicked. Until the user picks, it shows the deck's size as it is
-// now, a peer's change included, and OK writes only a pick that differs from it.
+// now, a peer's change included, and Apply writes only a pick that differs from it.
 function PageSetupForm({
     slideSize,
     canWrite,
@@ -44,7 +44,8 @@ function PageSetupForm({
 
     return (
         <FormDialogForm
-            submitLabel="OK"
+            submitLabel="Apply"
+            changed={size !== slideSize}
             readOnly={!canWrite}
             onSubmit={() => {
                 if (size !== slideSize) onSlideSizeChange(size);

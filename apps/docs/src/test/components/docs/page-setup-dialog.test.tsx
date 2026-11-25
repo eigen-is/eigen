@@ -1,16 +1,17 @@
 // Page setup is Google Docs' Pages and Page-less tabs: on Pages, orientation, paper size and margins in centimeters; on
-// Page-less, the reader's own text width. A writer changes the doc's page and format with OK; a viewer reads them and
-// sets only their own text width. A band's Header format… and Footer format… open Google's Headers & footers
+// Page-less, the reader's own text width. A writer changes the doc's page and format with Apply; a viewer reads them
+// and sets only their own text width. A band's Header format… and Footer format… open Google's Headers & footers
 // dialog: the bands' distances from the paper's edge, in centimeters, and Different first page, applied with Apply.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const Y = await import('yjs');
 const { DEFAULT_PAGE_SETUP, PAGE_ROOT, PAPER_SIZES, pageRecord, readPageSetup } = await import(
     '@workspace/lib/docs/eigendoc'
@@ -93,6 +94,37 @@ const pickTab = (label: string) =>
         tab(label)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
     });
 
+// The page is written to the doc at once, so a submit has nothing to wait for.
+const WRITTEN_AT_ONCE = 'the page is written to the doc at once, with nothing to wait for';
+
+function PageSetupHost() {
+    const [open, setOpen] = useState(true);
+    return createElement(PageSetupDialog, {
+        open,
+        onOpenChange: setOpen,
+        onCloseAutoFocus: () => {},
+        setup: DEFAULT_PAGE_SETUP,
+        canWrite: true,
+        onSetupChange,
+        textWidth: 'narrow',
+        onTextWidthChange,
+    });
+}
+
+test('Page setup keeps the dialog contract, and opens on the first margin rather than its tabs', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(PageSetupHost),
+        submitLabel: 'Apply',
+        firstField: 'Top',
+        onSubmit: onSetupChange,
+        makeChanged: () => type('Top', '3'),
+        makeInvalid: () => type('Left', '-1'),
+        invalidField: 'Left',
+        except: { pending: WRITTEN_AT_ONCE, pendingClose: WRITTEN_AT_ONCE },
+    });
+});
+
 test("a writer sees the doc's page in Google's controls, all of them enabled", async () => {
     await render();
 
@@ -154,7 +186,7 @@ test('Landscape turns the paper, and a size picked then keeps the orientation', 
     await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.startsWith('Letter')));
     expect(control('Paper size')?.textContent).toBe('Letter (21.6 cm × 27.9 cm)');
     await type('Top', '2.54');
-    await click(button('OK'));
+    await click(button('Apply'));
 
     expect(onSetupChange.mock.calls).toEqual([
         [
@@ -178,7 +210,7 @@ test('an untouched margin keeps its exact size, though the field rounds it', asy
     await render(setup);
     expect(margins()).toEqual(['1.91', '2.00', '2.00', '16.82']);
     await click(control('Landscape'));
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSetupChange.mock.calls).toEqual([[setup, { ...setup, width: 297, height: 210 }]]);
 });
 
@@ -186,11 +218,11 @@ test('a typed margin is stored to the hundredth of a millimetre', async () => {
     await render();
     await type('Top', '1.91');
     await type('Left', '2.54');
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSetupChange.mock.calls[0]?.[1].margin).toEqual({ top: 19.1, right: 20, bottom: 20, left: 25.4 });
 });
 
-test('any page the doc reads opens with OK enabled, its margins shrunk or not', async () => {
+test('any page the doc reads opens with no error, its margins shrunk or not', async () => {
     for (const { width } of PAPER_SIZES) {
         for (const [marginLeft, marginRight] of [
             [40.9, 151.3],
@@ -201,13 +233,13 @@ test('any page the doc reads opens with OK enabled, its margins shrunk or not', 
         ]) {
             await render(readPageSetup({ width, marginLeft, marginRight }));
             expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
-            expect(button('OK')?.disabled).toBe(false);
+            expect(dialog()?.querySelector('[aria-invalid="true"]')).toBeNull();
             await unmount();
         }
     }
 });
 
-test("OK leaves a collaborator's change to a field the user didn't touch", async () => {
+test("Apply leaves a collaborator's change to a field the user didn't touch", async () => {
     const opened: PageSetup = {
         ...DEFAULT_PAGE_SETUP,
         width: 215.9,
@@ -223,9 +255,9 @@ test("OK leaves a collaborator's change to a field the user didn't touch", async
     peer.getMap(PAGE_ROOT).set('marginTop', 30);
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
     await click(control('Landscape'));
-    await click(button('OK'));
+    await click(button('Apply'));
     const [[from, to] = []] = onSetupChange.mock.calls;
-    if (!from || !to) throw new Error('OK wrote nothing');
+    if (!from || !to) throw new Error('Apply wrote nothing');
     writePageSetup(doc, createDocUndoManager(doc), from, to);
 
     expect(readPageSetup(doc.getMap(PAGE_ROOT).toJSON())).toEqual({
@@ -236,7 +268,7 @@ test("OK leaves a collaborator's change to a field the user didn't touch", async
     });
 });
 
-test('OK stores the margins the dialog showed for a page whose stored margins read back shrunk', async () => {
+test('Apply stores the margins the dialog showed for a page whose stored margins read back shrunk', async () => {
     const doc = new Y.Doc();
     const page = doc.getMap(PAGE_ROOT);
     page.set('marginLeft', 200);
@@ -246,9 +278,9 @@ test('OK stores the margins the dialog showed for a page whose stored margins re
 
     await click(control('Paper size'));
     await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.startsWith('A3')));
-    await click(button('OK'));
+    await click(button('Apply'));
     const [[from, to] = []] = onSetupChange.mock.calls;
-    if (!from || !to) throw new Error('OK wrote nothing');
+    if (!from || !to) throw new Error('Apply wrote nothing');
     writePageSetup(doc, createDocUndoManager(doc), from, to);
 
     expect(page.toJSON()).toEqual({ width: 297, height: 420, marginLeft: 92.5, marginRight: 92.5 });
@@ -258,15 +290,16 @@ test.each([
     ['a 20 cm top margin on A5', { ...DEFAULT_PAGE_SETUP, width: 148, height: 210 }, 'Top', '20'],
     ['a negative margin', DEFAULT_PAGE_SETUP, 'Left', '-1'],
     ['an empty margin', DEFAULT_PAGE_SETUP, 'Right', ''],
-])('%s shows an error and OK does nothing', async (_, setup, side, value) => {
+])('%s shows an error and Apply does nothing', async (_, setup, side, value) => {
     await render(setup);
     await type(side, value);
     expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
         'Margins must be 0 cm or more and leave at least 2.5 cm for the text.',
     );
-    expect(button('OK')?.disabled).toBe(true);
-    await click(button('OK'));
+    expect(control(side)?.getAttribute('aria-invalid')).toBe('true');
+    await click(button('Apply'));
     expect(onSetupChange).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('Cancel closes without a change', async () => {
@@ -288,13 +321,13 @@ test('a viewer sees the page read-only, with one Close button', async () => {
     expect(controls.length).toBe(7);
     for (const element of controls) expect(element.disabled).toBe(true);
 
-    expect(button('OK')).toBeUndefined();
+    expect(button('Apply')).toBeUndefined();
     expect(button('Cancel')).toBeUndefined();
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('a writer turns the doc page-less on its tab, which shows no paper or margins, and OK writes it', async () => {
+test('a writer turns the doc page-less on its tab, which shows no paper or margins, and Apply writes it', async () => {
     await render();
     expect(tab('Pages')?.getAttribute('aria-selected')).toBe('true');
     await pickTab('Page-less');
@@ -304,19 +337,19 @@ test('a writer turns the doc page-less on its tab, which shows no paper or margi
     expect(dialog()?.textContent).toContain('everyone who opens it sees the one chosen here');
     expect(dialog()?.textContent).toContain('Your own view');
     expect(widths()).toEqual(['true', 'false', 'false', 'false']);
-    await click(button('OK'));
+    await click(button('Apply'));
 
     expect(onSetupChange.mock.calls).toEqual([[DEFAULT_PAGE_SETUP, { ...DEFAULT_PAGE_SETUP, pageless: true }]]);
     expect(onTextWidthChange.mock.calls).toEqual([]);
 });
 
-test("a page-less doc opens on its tab, and OK saves a new text width as the reader's, apart from the doc", async () => {
+test("a page-less doc opens on its tab, and Apply saves a new text width as the reader's, apart from the doc", async () => {
     const setup = { ...DEFAULT_PAGE_SETUP, pageless: true };
     await render(setup, true, 'medium');
     expect(tab('Page-less')?.getAttribute('aria-selected')).toBe('true');
     expect(widths()).toEqual(['false', 'true', 'false', 'false']);
     await click(control('Full'));
-    await click(button('OK'));
+    await click(button('Apply'));
 
     expect(onTextWidthChange.mock.calls).toEqual([['full']]);
     // The doc's page is handed over unchanged, which writePageSetup writes as nothing.
@@ -328,7 +361,7 @@ test('Pages switches a page-less doc back, its paper and margins as they were', 
     await render(setup);
     await pickTab('Pages');
     expect(control('Landscape')?.getAttribute('aria-checked')).toBe('true');
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onSetupChange.mock.calls).toEqual([[setup, { ...setup, pageless: false }]]);
 });
 
@@ -336,7 +369,7 @@ test("a viewer of a page-less doc can't switch it to pages, but sets their own t
     await render({ ...DEFAULT_PAGE_SETUP, pageless: true }, false);
     expect(tab('Pages')?.disabled).toBe(true);
     await click(control('Wide'));
-    await click(button('OK'));
+    await click(button('Apply'));
     expect(onTextWidthChange.mock.calls).toEqual([['wide']]);
     expect(onSetupChange.mock.calls).toEqual([]);
 });
@@ -355,6 +388,31 @@ test('a phone gets no text width, as its column is the screen', async () => {
     ));
     expect(dialog()?.textContent).toContain('one continuous column');
     expect(control('Narrow')).toBeNull();
+});
+
+function HeadersAndFootersHost() {
+    const [open, setOpen] = useState(true);
+    return createElement(HeadersAndFootersDialog, {
+        open,
+        onOpenChange: setOpen,
+        onCloseAutoFocus: () => {},
+        setup: DEFAULT_PAGE_SETUP,
+        onSetupChange,
+    });
+}
+
+test('Headers and footers keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(HeadersAndFootersHost),
+        submitLabel: 'Apply',
+        firstField: 'Header (centimeters from top)',
+        onSubmit: onSetupChange,
+        makeChanged: () => type('Header (centimeters from top)', '1'),
+        makeInvalid: () => type('Footer (centimeters from bottom)', '2.5'),
+        invalidField: 'Footer (centimeters from bottom)',
+        except: { pending: WRITTEN_AT_ONCE, pendingClose: WRITTEN_AT_ONCE },
+    });
 });
 
 async function renderBandFormat(setup: PageSetup = DEFAULT_PAGE_SETUP) {
@@ -405,9 +463,10 @@ test.each([
     expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
         'The header must be 0 to 2 cm from the top and the footer 0 to 2 cm from the bottom, within their margins.',
     );
-    expect(button('Apply')?.disabled).toBe(true);
+    expect(control(label)?.getAttribute('aria-invalid')).toBe('true');
     await click(button('Apply'));
     expect(onSetupChange).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('Headers and footers writes through the page map, as one undo step', async () => {
@@ -417,7 +476,7 @@ test('Headers and footers writes through the page map, as one undo step', async 
     await type('Footer (centimeters from bottom)', '0.8');
     await click(button('Apply'));
     const [[from, to] = []] = onSetupChange.mock.calls;
-    if (!from || !to) throw new Error('OK wrote nothing');
+    if (!from || !to) throw new Error('Apply wrote nothing');
     writePageSetup(doc, undoManager, from, to);
     expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({ footerDistance: 8 });
 

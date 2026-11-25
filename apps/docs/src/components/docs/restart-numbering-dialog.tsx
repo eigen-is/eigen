@@ -1,11 +1,11 @@
 // Google Docs' List options › Restart numbering: the number a numbered list starts at, from the item the caret is in.
-// The toolbar opens it from the Format menu, and OK restarts the numbering there.
+// The toolbar opens it from the Format menu, and Apply restarts the numbering there.
 
 import type { Editor } from '@tiptap/react';
-import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { restartNumbering } from './list-numbering';
 
 type RestartNumberingDialogProps = {
@@ -33,9 +33,14 @@ function RestartNumberingForm({ editor }: { editor: Editor }) {
     const [startAt, setStartAt] = useState('1');
     const start = Number(startAt);
     const valid = Number.isInteger(start) && start >= 1;
+    const errorId = useId();
 
     return (
-        <FormDialogForm canSubmit={valid} submitLabel="OK" onSubmit={() => restartNumbering(editor, start)}>
+        <FormDialogForm
+            submitLabel="Apply"
+            changed={startAt !== '1'}
+            onSubmit={() => (valid ? restartNumbering(editor, start) : false)}
+        >
             <Field orientation="horizontal">
                 <FieldLabel htmlFor="restart-numbering-start">Start at</FieldLabel>
                 <Input
@@ -43,11 +48,13 @@ function RestartNumberingForm({ editor }: { editor: Editor }) {
                     type="number"
                     min={1}
                     className="w-24"
-                    autoFocus
+                    aria-invalid={!valid || undefined}
+                    aria-describedby={valid ? undefined : errorId}
                     value={startAt}
                     onChange={(e) => setStartAt(e.target.value)}
                 />
             </Field>
+            {!valid && <FieldError id={errorId}>Start at a whole number of 1 or more.</FieldError>}
         </FormDialogForm>
     );
 }

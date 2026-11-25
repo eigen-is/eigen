@@ -7,7 +7,7 @@ import { PARAGRAPH_FORMAT_LIMITS, selectionParagraphFormat } from '@workspace/li
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 type CustomSpacingDialogProps = {
     editor: Editor;
@@ -50,14 +50,16 @@ function CustomSpacingForm({ editor, normal }: { editor: Editor; normal: NormalS
         spaceAfter: fieldText(initial.spaceAfter),
     }));
     // An untouched field writes nothing, so an unset paragraph keeps the doc's Normal.
-    const changed = KEYS.filter((key) => text[key] !== fieldText(initial[key]));
-    const valid = changed.every((key) => {
+    const edited = KEYS.filter((key) => text[key] !== fieldText(initial[key]));
+    const invalid = (key: SpacingKey) => {
         const value = text[key].trim() ? Number(text[key]) : Number.NaN;
         const { min, max } = PARAGRAPH_FORMAT_LIMITS[key];
-        return value >= min && value <= max;
-    });
+        return edited.includes(key) && !(value >= min && value <= max);
+    };
+    const valid = !KEYS.some(invalid);
+    const errorId = useId();
 
-    const field = (key: SpacingKey, autoFocus?: boolean) => (
+    const field = (key: SpacingKey) => (
         <Field orientation="horizontal">
             <FieldLabel htmlFor={`custom-spacing-${key}`}>{LABELS[key]}</FieldLabel>
             <Input
@@ -65,7 +67,8 @@ function CustomSpacingForm({ editor, normal }: { editor: Editor; normal: NormalS
                 type="number"
                 step="any"
                 className="w-24"
-                autoFocus={autoFocus}
+                aria-invalid={invalid(key) || undefined}
+                aria-describedby={invalid(key) ? errorId : undefined}
                 disabled={key !== 'lineSpacing' && !spacing}
                 value={text[key]}
                 onChange={(e) => setText({ ...text, [key]: e.target.value })}
@@ -75,22 +78,23 @@ function CustomSpacingForm({ editor, normal }: { editor: Editor; normal: NormalS
 
     return (
         <FormDialogForm
-            canSubmit={valid}
             submitLabel="Apply"
+            changed={edited.length > 0}
             onSubmit={() => {
+                if (!valid) return false;
                 const format: { [key in SpacingKey]?: number } = {};
-                for (const key of changed) format[key] = Number(text[key]);
-                if (changed.length > 0) editor.chain().focus().setParagraphFormat(format).run();
+                for (const key of edited) format[key] = Number(text[key]);
+                if (edited.length > 0) editor.chain().focus().setParagraphFormat(format).run();
             }}
         >
-            {field('lineSpacing', true)}
+            {field('lineSpacing')}
             <FieldSet className="gap-3">
                 <FieldLegend variant="label">Paragraph spacing (points)</FieldLegend>
                 {field('spaceBefore')}
                 {field('spaceAfter')}
             </FieldSet>
             {!valid && (
-                <FieldError>
+                <FieldError id={errorId}>
                     Line spacing must be between {PARAGRAPH_FORMAT_LIMITS.lineSpacing.min} and{' '}
                     {PARAGRAPH_FORMAT_LIMITS.lineSpacing.max}, and spacing between{' '}
                     {PARAGRAPH_FORMAT_LIMITS.spaceBefore.min} and {PARAGRAPH_FORMAT_LIMITS.spaceBefore.max} points.

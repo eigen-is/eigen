@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, page-setup, page-less, pageless, text-width, layout, tables]
 related: [docs/page-setup, docs/images-and-tables, docs/print]
 order: 115
-updated: 2026-10-27
+updated: 2026-11-25
 ---
 
 Page-less mode shows a document as one long column of text, without pages, page breaks, headers, or footers. Wide tables and images get room beside the text, so you can read and edit them without squeezing them into the page.
@@ -15,7 +15,7 @@ Page-less mode shows a document as one long column of text, without pages, page 
 
 1. Click **File** in the toolbar and choose **Page setup…**.
 2. Click the **Page-less** tab.
-3. Click **OK**.
+3. Click **Apply**.
 
 You can also choose **Format → Switch to page-less format**. To go back, choose **Format → Switch to pages format**, or the **Pages** tab in **Page setup…**. **Edit → Undo** takes the switch back too.
 
@@ -25,7 +25,7 @@ Page-less is a setting of the document, so everyone who opens it sees it page-le
 
 1. In a page-less document, click **File** and choose **Page setup…**.
 2. On the **Page-less** tab, under **Text width**, pick **Narrow**, **Medium**, **Wide**, or **Full**.
-3. Click **OK**.
+3. Click **Apply**.
 
 A new account starts at **Narrow**. **Full** fills the window, less a margin on each side. The text width is yours alone: it applies to every page-less document you open, on every device you sign in on, and the people you share with keep their own. Viewers can set it too. On a phone the text fills the screen, so there's no text width to pick.
 
