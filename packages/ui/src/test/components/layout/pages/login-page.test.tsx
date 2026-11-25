@@ -274,17 +274,26 @@ async function renderPage(element: ReactElement) {
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
 }
 
-// As a browser clicks: Radix switches the tab on the press, then the press focuses the tab, then the click lands.
+// As a browser clicks: Radix switches the tab on the press, then the press focuses the tab. The new panel has another
+// height, so the centred card moves and the click lands on the page behind the tab, never on the tab.
 async function clickTab(label: string) {
-    const tab = [...document.querySelectorAll('[role="tab"]')].find((element) => element.textContent === label);
-    if (!(tab instanceof HTMLElement)) throw new Error(`no ${label} tab`);
-    await act(async () => {
+    const tab = theTab(label);
+    // React renders the press's change at once, as a browser's discrete event does, and the tab's focus follows in the
+    // same task.
+    act(() => {
         tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
     });
+    act(() => tab.focus());
     await act(async () => {
-        tab.focus();
-        tab.click();
+        document.body.click();
+        await new Promise((resolve) => setTimeout(resolve));
     });
+}
+
+function theTab(label: string): HTMLElement {
+    const tab = [...document.querySelectorAll('[role="tab"]')].find((element) => element.textContent === label);
+    if (!(tab instanceof HTMLElement)) throw new Error(`no ${label} tab`);
+    return tab;
 }
 
 function field(label: string): HTMLInputElement {

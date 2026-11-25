@@ -61,10 +61,20 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
             formContent = (
                 <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
                     <TabsList className="w-full mb-6">
-                        <TabsTrigger value="signin" className="flex-1" onClick={focusPanelField}>
+                        <TabsTrigger
+                            value="signin"
+                            className="flex-1"
+                            onMouseDown={focusPanelField}
+                            onClick={focusPanelField}
+                        >
                             Sign in
                         </TabsTrigger>
-                        <TabsTrigger value="guest" className="flex-1" onClick={focusPanelField}>
+                        <TabsTrigger
+                            value="guest"
+                            className="flex-1"
+                            onMouseDown={focusPanelField}
+                            onClick={focusPanelField}
+                        >
                             Guest
                         </TabsTrigger>
                     </TabsList>
@@ -104,10 +114,12 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
     );
 }
 
-// The press on a tab focuses the tab after its panel mounted, so the panel's autoFocus field loses it again.
+// A press on a tab mounts its panel, whose autoFocus field then loses the focus to the tab the browser focuses for the
+// press. The click that follows may never reach the tab, since the card centres on the new panel's height and moves
+// away from the pointer, so the press itself hands the focus on, a task later. The click does it for Enter and Space.
 function focusPanelField(event: MouseEvent<HTMLButtonElement>) {
-    const panel = document.getElementById(event.currentTarget.getAttribute('aria-controls') ?? '');
-    panel?.querySelector('input')?.focus();
+    const panelId = event.currentTarget.getAttribute('aria-controls') ?? '';
+    setTimeout(() => document.getElementById(panelId)?.querySelector('input')?.focus());
 }
 
 function PasswordLoginForm() {
