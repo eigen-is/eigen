@@ -1,8 +1,9 @@
 // Two clients on one event, through the real hooks and dialogs against a server stub that judges etags as the API does.
-// A write on a stale etag is refused, says so, and the next try goes through on what was reloaded, with the dialog still
-// open. A save keeps the detail column open on the saved event, and a delete closes it. Edit event keeps what was typed and follows the rest: a refetch moves only the fields nobody touched, and typed
-// edits can't overwrite a change unseen. So a guest's reply costs a form nothing, and a second Save doesn't revert it. A
-// save of two writes sends the second with the etag the first answered, and a cross-home redo copies all of the form.
+// A write on a stale etag is refused, says so, and the next try goes through on what was reloaded, with the dialog
+// still open. A save keeps the detail column open on the saved event, and a delete closes it. Edit event keeps what was
+// typed and follows the rest: a refetch moves only the fields nobody touched, and typed edits can't overwrite a change
+// unseen. So a guest's reply costs a form nothing, and a second Save doesn't revert it. A save of two writes sends the
+// second with the etag the first answered, and a cross-home redo copies all of the form.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type {
     Attendee,
