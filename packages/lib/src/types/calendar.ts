@@ -16,6 +16,9 @@ export type Attendee = {
     role: 'required' | 'optional';
 };
 
+// A guest's reply to an invitation: every status but the pending one before it.
+export type RsvpStatus = Exclude<Attendee['status'], 'pending'>;
+
 // `userId` is the organizer's Home, known only from the invitation link a guest's copy carries.
 export type Organizer = { userId?: string; email: string; name?: string };
 

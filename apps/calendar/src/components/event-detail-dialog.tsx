@@ -21,6 +21,7 @@ import type {
     CalendarEventOccurrence,
     CalendarItem,
     RecurrenceScope,
+    RsvpStatus,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
@@ -44,8 +45,6 @@ import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } fro
 import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
-
-type RsvpStatus = 'accepted' | 'declined' | 'tentative';
 
 // The replies to an invitation, in the order the panel shows them.
 const RSVP_CHOICES = [
