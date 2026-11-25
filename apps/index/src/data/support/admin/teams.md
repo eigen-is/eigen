@@ -63,7 +63,7 @@ An account marked **no organization** has no **Teams** section.
 4. Under **Calendar**, turn the team calendar on or off, and set how much access members have: **Can edit**, **Can view**, or **Free/busy**.
 5. **Notify members** is on for a new team. While it is on, every member gets a notification, and an email if your server sends them, when someone asks for access to a file on the team's Drive. Turn it off and nobody is told. Every new user joins the team named after your organization, so a request on its Drive reaches everyone.
 6. Under **Quota overrides**, you can raise the storage limits of this team's members: **Mail, Contacts & Calendar (MB)** (**Contacts & Calendar (MB)** on a server without mailboxes), and **Default mount (MB)** for each member's own Drive. The team's own Drive keeps its own limit. Leave the fields empty to use the server defaults.
-7. Click **Save settings**. A message says the team settings are saved. If the server refuses a change, the form stays open with your changes, so you can click **Save settings** again.
+7. Click **Save**, or press Enter. A message says the team settings are saved. If the server refuses a change, the form stays open with your changes, so you can click **Save** again. **Cancel** closes the form without saving, and if you leave the page with unsaved changes, Eigen asks first.
 
 ## Delete a team
 
