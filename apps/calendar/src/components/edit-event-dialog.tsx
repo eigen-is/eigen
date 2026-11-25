@@ -1,8 +1,8 @@
 // The Edit event dialog: every field of an existing event and its guests. A change to a repeating event first asks
 // which occurrences it applies to, a move to another owner's calendar that loses something warns first, and an
 // invitation from someone else only lets you pick its calendar. The event's detail column mounts it anew for each
-// opening, and it shows a series once its master has loaded. A field shows what the user changed, else the event as
-// it is now, so a refetch or a refused Save moves only what nobody touched.
+// opening, shows a series once its master has loaded, and hands it the event a save stored. A field shows what
+// the user changed, else the event as it is now, so a refetch or a refused Save moves only what nobody touched.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -21,7 +21,7 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import type { Attendee, CalendarEventOccurrence, RecurrenceScope } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, CalendarEventOccurrence, RecurrenceScope } from '@workspace/lib/types/calendar';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { AttendeeList } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -33,6 +33,7 @@ import { AttendeeEditor, useGuestInput } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
 import type { EventFieldTimes } from './event-form-fields';
 import { EventFormFields, timesDiffer } from './event-form-fields';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { RecurringActionDialog } from './recurring-action-dialog';
 import { toTimeString } from './time-select';
 
@@ -42,6 +43,7 @@ type EditEventDialogProps = {
     event: CalendarEventOccurrence;
     // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
     ownerId: string;
+    onSaved: (save: EventSave) => void;
 };
 
 // What the user changed, and nothing else.
@@ -54,7 +56,7 @@ type TypedFields = {
     calendarKey?: string;
 };
 
-export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEventDialogProps) {
+export function EditEventDialog({ open, onOpenChange, event, ownerId, onSaved }: EditEventDialogProps) {
     const { user } = useAuth();
     const viewerId = user?.id ?? '';
 
@@ -173,13 +175,14 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
 
         const targetId = event.parentEventId || event.id;
 
+        let saved: CalendarEvent;
         if (!calendarChanged || !selectedCal) {
-            await saveOccurrence({ ...occurrenceSave, scope });
+            saved = await saveOccurrence({ ...occurrenceSave, scope });
         } else if (selectedCal.ownerId === ownerId) {
             // The server-owned move carries the exception children and the organizer link, and fires no decline.
             const updated = await saveOccurrence({ ...occurrenceSave, scope: 'all' });
             holdEtag(updated.etag);
-            await moveEvent.mutateAsync({
+            saved = await moveEvent.mutateAsync({
                 calendarId: event.calendarId,
                 id: targetId,
                 targetCalendarId: selectedCal.id,
@@ -188,7 +191,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
         } else {
             // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
             // overrides stay behind. An override is copied as one event, without a rule.
-            await createEvent.mutateAsync({
+            saved = await createEvent.mutateAsync({
                 calendarId: selectedCal.id,
                 ...edited,
                 rrule: event.parentEventId ? undefined : rruleString,
@@ -199,6 +202,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
                 etag: heldEtag,
             });
         }
+        onSaved({ occurrence: event, saved, startTime: start });
     };
 
     // A cross-home copy made by a form already behind the event would only stand beside the original.

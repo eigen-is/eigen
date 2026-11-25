@@ -214,7 +214,12 @@ function CalendarPage() {
         }),
         open &&
             detail.event &&
-            createElement(EventDetail, { ...detail, event: detail.event, onClose: () => setOpen(undefined) }),
+            createElement(EventDetail, {
+                ...detail,
+                event: detail.event,
+                onClose: () => setOpen(undefined),
+                onSaved: () => {},
+            }),
     );
 }
 

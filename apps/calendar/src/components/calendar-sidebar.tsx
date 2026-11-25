@@ -1,5 +1,5 @@
-// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer picks
-// the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
+// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day and the open event
+// (a computer picks the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
 // checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
 // so the month stays in view however many calendars there are.
 
@@ -229,6 +229,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                     label={CALENDAR_VIEW_LABELS[mode]}
                                     to="/view/$mode/$date"
                                     params={{ mode, date: focusKey }}
+                                    keepSearch
                                     condensed={condensed}
                                 />
                             );

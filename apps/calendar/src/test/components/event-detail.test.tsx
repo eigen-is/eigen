@@ -126,6 +126,7 @@ async function open(event: CalendarEventOccurrence = dentist, sharedCalendar: Sh
             sharedCalendar,
             ownerId: sharedCalendar ? sharedCalendar.ownerUserId : 'u1',
             onClose,
+            onSaved: () => {},
         }),
     ));
 }

@@ -3,7 +3,7 @@
 // a press that never travels opens the detail, Escape snaps back, and a finger or an event the viewer may not change
 // never drags. A drop of one event saves at once with the list's etag, a series asks which events first, by the
 // owner's rule for another day, and an event with guests asks before it mails them. A refused drop reloads and toasts,
-// and inside the recurring choice the next OK sends the reloaded etag.
+// and inside the recurring choice the next OK sends the reloaded etag. A saved drop hands back where the event is now.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type {
     CalendarEvent,
@@ -13,6 +13,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import type { EventSave } from '../../components/hooks/use-event-detail-state';
 import { dialogTitles } from '../dialog-titles';
 
 // happy-dom lays nothing out, so open() fires the month row's observer itself.
@@ -160,12 +161,21 @@ const WEEK = viewDays('week', at(14, 0));
 // What a click hands the route, which opens the event's detail.
 const opened = mock((_event: CalendarEventOccurrence) => {});
 const openedTitles = () => opened.mock.calls.map(([event]) => event.title);
+// What a saved drop hands the route, which moves the open event's key with it.
+const saved = mock((_save: EventSave) => {});
 const OCTOBER = at(1, 0);
 // The list as a view gets it, with a free/busy block a shared calendar adds.
 function Page({ month }: { month: boolean }) {
     const { data = [] } = useEvents(USER, 1, 2);
     const events = [...data, freeBusy];
-    const props = { events, calendars: [work], sharedCalendars: [busyShare], onEventClick: opened, openKey: undefined };
+    const props = {
+        events,
+        calendars: [work],
+        sharedCalendars: [busyShare],
+        onEventClick: opened,
+        openKey: undefined,
+        onSaved: saved,
+    };
     return month
         ? createElement(MonthView, { focus: OCTOBER, ...props, onDayClick: () => {} })
         : createElement(TimeGrid, { days: WEEK, ...props, onCreateEvent: () => {} });
@@ -187,6 +197,7 @@ beforeEach(() => {
     server.held = Promise.resolve();
     toasts.length = 0;
     opened.mockClear();
+    saved.mockClear();
 });
 
 const settle = () =>
@@ -258,10 +269,19 @@ test('moving an event an hour later saves its new times with the etag the list h
     await drag(block('Review'), tuesday(10.2), tuesday(11.2), 'mouse', () => {
         ghost = shown('Review').map((shownBlock) => shownBlock.textContent ?? '');
     });
+
     expect(ghost).toContain('Review11:00 – 12:00');
     expect(server.writes).toEqual([{ write: 'update', etag: 'v1', startTime: at(13, 11), endTime: at(13, 12) }]);
     expect(topOf('Review')).toBe(`${11 * HOUR}px`);
     expect(dialogTitles()).toEqual([]);
+});
+
+test('a saved drop hands back the event as dropped, what the server stored and where it starts now', async () => {
+    await open([review]);
+    await drag(block('Review'), tuesday(10.2), tuesday(11.2));
+    expect(saved.mock.calls.map(([save]) => [save.occurrence.title, save.saved.etag, save.startTime])).toEqual([
+        ['Review', 'v2', at(13, 11)],
+    ]);
 });
 
 test('a move across columns changes the day and keeps the time', async () => {

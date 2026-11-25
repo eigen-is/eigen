@@ -24,6 +24,7 @@ import { cellAt, isDragPointer } from './calendar-utils';
 import type { EventSurfaceProps } from './event-chip';
 import { EventBar, LaneGhost } from './event-chip';
 import { EventDropHost } from './event-drop-host';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
 import { useViewDrag } from './hooks/use-view-drag';
 import { MonthDayPopover } from './month-day-popover';
@@ -36,6 +37,7 @@ type MonthViewProps = {
     onDayClick: (date: Date) => void;
     onEventClick: EventSurfaceProps['onClick'];
     openKey: string | undefined;
+    onSaved: (save: EventSave) => void;
 };
 
 // In pixels: the lanes start under the date row (top-7), each lane is a text-xs line with py-0.5, gap-y-0.5 apart.
@@ -51,8 +53,9 @@ export function MonthView({
     onDayClick,
     onEventClick,
     openKey,
+    onSaved,
 }: MonthViewProps) {
-    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
+    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars, onSaved });
     // The rows share the height equally, so the first one measures them all.
     const [rowRef, rowSize] = useElementSize<HTMLDivElement>();
     const lanes = Math.max(1, Math.floor((rowSize.height - DATE_ROW) / (LANE + GAP)));
@@ -127,6 +130,7 @@ export function MonthView({
                                             <Link
                                                 to="/view/$mode/$date"
                                                 params={{ mode: 'day', date: key }}
+                                                search
                                                 className={cn(
                                                     'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full',
                                                     today

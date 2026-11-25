@@ -8,13 +8,16 @@
 // multi-day all-day events as one bar, and the current time only while today is in view. Google's keys switch the
 // view on the same day, go to today and open New event, and do nothing while a dialog is open. The sidebar's mini
 // month sits under the calendar lists at full width, marks the view's days, browses months on its own, and opens a
-// clicked day in the current view.
+// clicked day in the current view. With an event open, a click on empty grid only closes it and a drag still creates,
+// a save that re-keys it moves the URL with it or closes it when nothing is left, every view navigation keeps it, and
+// the view keys stand down while the focus is in its column.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
     CalendarItem,
     CreateEventInput,
     SharedCalendar,
+    UpdateEventInput,
 } from '@workspace/lib/types/calendar';
 import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -94,7 +97,16 @@ const refetchOwnEvents = (data: CalendarEventOccurrence[]) =>
         for (const listener of listeners) listener();
     });
 const sharedEvents = { data: [event({ title: 'Team sync', calendarId: 'team-cal', startTime: at(14, 9) })] };
-const createEvent = { mutateAsync: mock(async (_input: CreateEventInput) => {}), isPending: false };
+// A save answers with the event the server stored, and may change the list first, as the refetch it awaits does.
+const createEvent = {
+    mutateAsync: mock(async (_input: CreateEventInput): Promise<CalendarEventOccurrence | undefined> => undefined),
+    isPending: false,
+};
+const updateEvent = {
+    mutateAsync: mock(async (_input: UpdateEventInput): Promise<CalendarEventOccurrence | undefined> => undefined),
+    isPending: false,
+};
+let master: { data: CalendarEventOccurrence | undefined } = { data: undefined };
 const createOwners: string[] = [];
 const deleteEvent = { mutateAsync: mock(async (_input: { id: string; calendarId: string }) => {}), isPending: false };
 
@@ -120,6 +132,8 @@ mock.module('@workspace/lib/calendar', () => ({
         return createEvent;
     },
     useDeleteEvent: () => deleteEvent,
+    useUpdateEvent: () => updateEvent,
+    useEvent: () => master,
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
@@ -143,6 +157,8 @@ afterEach(() => unmount());
 beforeEach(() => {
     ownEvents = { data: [], isLoading: false };
     createEvent.mutateAsync.mockClear();
+    updateEvent.mutateAsync.mockClear();
+    master = { data: undefined };
     deleteEvent.mutateAsync.mockClear();
     createOwners.length = 0;
 });
@@ -1018,4 +1034,175 @@ test('while a menu or the view select is open the keys do nothing', async () => 
         expect(path()).toBe('/view/week/2026-10-14');
         await unmount();
     }
+});
+
+// The week of 12 October with Review open in the column, from a deep link, so a close replaces at once.
+const REVIEW_OPEN = '/view/week/2026-10-14?eventId=Review';
+const review = () => event({ title: 'Review', startTime: at(13, 14) });
+
+test('with an event open, a click on an empty slot only closes it and creates nothing', async () => {
+    ownEvents.data = [review()];
+    const { container, search } = await open(REVIEW_OPEN);
+    const column = dayColumn(container, 2);
+    await press(column, 10 * HOUR + 10, 10 * HOUR + 10);
+    expect(detail()).toBeNull();
+    expect(search()).toEqual({});
+    expect(dialogTitle()).toBeUndefined();
+    expect(column.textContent).not.toContain('(No title)');
+});
+
+test('with an event open, a drag over empty time closes it and opens New event over the range', async () => {
+    ownEvents.data = [review()];
+    const { container } = await open(REVIEW_OPEN);
+    await press(dayColumn(container, 2), 10 * HOUR, 11.5 * HOUR);
+    expect(detail()).toBeNull();
+    expect(await savedTimes()).toEqual({
+        startTime: at(14, 10),
+        endTime: new Date(2026, 9, 14, 11, 30),
+        allDay: false,
+    });
+});
+
+test('with an event open, a click in the all-day lane only closes it', async () => {
+    ownEvents.data = [review()];
+    const { container } = await open(REVIEW_OPEN);
+    const lane = container.querySelectorAll('.border-b > .grid')[1];
+    if (!lane) throw new Error('the grid has no all-day lane');
+    lane.getBoundingClientRect = () => new DOMRect(0, 0, 700, 24);
+    await act(async () => {
+        lane.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 250 }));
+    });
+    expect(detail()).toBeNull();
+    expect(dialogTitle()).toBeUndefined();
+});
+
+test('with an event open, a click on a day of the month only closes it', async () => {
+    ownEvents.data = [review()];
+    const { container } = await open(`${OCTOBER}?eventId=Review`);
+    const day = [...container.querySelectorAll('.grid-cols-7 > div.cursor-pointer')].find(
+        (cell) => cell.firstElementChild?.textContent === '9',
+    );
+    await click(day);
+    expect(detail()).toBeNull();
+    expect(dialogTitle()).toBeUndefined();
+});
+
+// Edit event's Save on the open event, at a scope when it is a series.
+async function saveOpenEvent(scope?: string) {
+    await click(barButton('Edit event'));
+    await click(button('Save'));
+    if (scope) {
+        await act(async () => document.querySelector<HTMLButtonElement>(`#recurring-${scope}`)?.click());
+        await click(button('OK'));
+    }
+    await settle();
+}
+
+test('a save that splits the series at the open occurrence follows it to the new series', async () => {
+    const split = { ...weekly(16), id: 'Split', title: 'Weekly from Friday' };
+    ownEvents.data = [weekly(13), weekly(16)];
+    master = { data: weekly(13) };
+    updateEvent.mutateAsync.mockImplementationOnce(async () => ({ ...weekly(13), etag: 'e2' }));
+    createEvent.mutateAsync.mockImplementationOnce(async () => {
+        ownEvents = { ...ownEvents, data: [weekly(13), split] };
+        return split;
+    });
+    const { container, search, index } = await open('/view/week/2026-10-14');
+    await click(weeklyBlocks(container)[1]);
+    await saveOpenEvent('this-and-following');
+    expect([search(), index()]).toEqual([{ eventId: 'Split', occurrence: '2026-10-16' }, 1]);
+    expect(detailTitle()).toBe('Weekly from Friday');
+    expect(dialogTitle()).toBeUndefined();
+});
+
+test('a save that keeps the open key leaves the URL and the column as they are', async () => {
+    ownEvents.data = [review()];
+    updateEvent.mutateAsync.mockImplementationOnce(async () => review());
+    const { container, search, index } = await open('/view/week/2026-10-14');
+    await click(pill(container, 'Review'));
+    await saveOpenEvent();
+    expect(updateEvent.mutateAsync).toHaveBeenCalledTimes(1);
+    expect([search(), index(), detailTitle()]).toEqual([{ eventId: 'Review' }, 1, 'Review']);
+});
+
+test('a save after which the view holds nothing of the event closes the column', async () => {
+    ownEvents.data = [review()];
+    updateEvent.mutateAsync.mockImplementationOnce(async () => {
+        ownEvents = { ...ownEvents, data: [] };
+        return review();
+    });
+    const { container, search } = await open('/view/week/2026-10-14');
+    await click(pill(container, 'Review'));
+    await saveOpenEvent();
+    expect(detail()).toBeNull();
+    expect(search()).toEqual({});
+});
+
+// Weekly's Friday occurrence open in the week of 12 October.
+const WEEKLY_OPEN = { eventId: 'Weekly', occurrence: '2026-10-16' };
+const WEEKLY_URL = '/view/week/2026-10-14?eventId=Weekly&occurrence=2026-10-16';
+const toolbarButton = (container: HTMLElement, name: string) =>
+    [...container.querySelectorAll('button')].find(
+        (b) => b.getAttribute('aria-label') === name || b.textContent === name,
+    );
+
+test.each([
+    ['the next arrow', '/view/week/2026-10-21', (c: HTMLElement) => click(toolbarButton(c, 'Next week'))],
+    ['the previous arrow', '/view/week/2026-10-07', (c: HTMLElement) => click(toolbarButton(c, 'Previous week'))],
+    ['Today', '/view/week/2026-11-24', (c: HTMLElement) => click(toolbarButton(c, 'Today'))],
+    ['a view key', '/view/month/2026-10-14', () => typeKey('m')],
+    [
+        "a day's header",
+        '/view/day/2026-10-13',
+        (c: HTMLElement) => click(c.querySelector('a[href^="/view/day/2026-10-13"]')),
+    ],
+    ['the mini month', '/view/week/2026-10-28', () => click(miniDay('2026-10-28'))],
+    [
+        'the view select',
+        '/view/month/2026-10-14',
+        async () => {
+            await click(document.querySelector('[data-slot="select-trigger"]'));
+            await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === 'Month'));
+        },
+    ],
+])('%s keeps the open event', async (_, to, go) => {
+    setSystemTime(new Date(2026, 10, 24, 9));
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { container, path, search } = await open(WEEKLY_URL);
+    await go(container);
+    expect([path(), search(), detailTitle()]).toEqual([to, WEEKLY_OPEN, 'Weekly']);
+});
+
+test("a month date's link keeps the open event", async () => {
+    ownEvents.data = [weekly(13), weekly(16)];
+    const { container, path, search } = await open('/view/month/2026-10-15?eventId=Weekly&occurrence=2026-10-16');
+    await click(container.querySelector('a[href^="/view/day/2026-10-09"]'));
+    expect([path(), search(), detailTitle()]).toEqual(['/view/day/2026-10-09', WEEKLY_OPEN, 'Weekly']);
+});
+
+test("on a phone the sidebar's views keep the open event", () =>
+    onPhone(async () => {
+        ownEvents.data = [weekly(13), weekly(16)];
+        await open(WEEKLY_URL);
+        expect(viewLink('Month')?.getAttribute('href')).toBe(
+            '/view/month/2026-10-14?eventId=Weekly&occurrence=2026-10-16',
+        );
+    }));
+
+test('with the focus in the open event the view keys do nothing, and with it on the grid they work', async () => {
+    ownEvents.data = [review()];
+    const { container, path } = await open(REVIEW_OPEN);
+    const edit = barButton('Edit event');
+    if (!(edit instanceof HTMLElement)) throw new Error('the column has no Edit event button');
+    await act(async () => edit.focus());
+    await act(async () => {
+        edit.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true }));
+    });
+    expect(path()).toBe('/view/week/2026-10-14');
+
+    const block = pill(container, 'Review');
+    if (!(block instanceof HTMLElement)) throw new Error('the grid has no Review block');
+    await act(async () => block.focus());
+    await typeKey('m');
+    expect(path()).toBe('/view/month/2026-10-14');
 });

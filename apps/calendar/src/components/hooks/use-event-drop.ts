@@ -10,11 +10,13 @@ import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@wor
 import { useState } from 'react';
 import { eventOwnerId, isSameOccurrence } from '../calendar-utils';
 import type { EventDropHostProps } from '../event-drop-host';
+import type { EventSave } from './use-event-detail-state';
 
 type UseEventDropOptions = {
     events: readonly CalendarEventOccurrence[];
     calendars: readonly CalendarItem[];
     sharedCalendars: readonly SharedCalendar[];
+    onSaved: (save: EventSave) => void;
 };
 
 type UseEventDropReturn = {
@@ -26,7 +28,7 @@ type UseEventDropReturn = {
 
 type Dropped = { event: CalendarEventOccurrence; moved: EventTimes };
 
-export function useEventDrop({ events, calendars, sharedCalendars }: UseEventDropOptions): UseEventDropReturn {
+export function useEventDrop({ events, calendars, sharedCalendars, onSaved }: UseEventDropOptions): UseEventDropReturn {
     const { user } = useAuth();
     const canReschedule = useCanReschedule(calendars, sharedCalendars);
     const [dropped, setDropped] = useState<Dropped | null>(null);
@@ -48,6 +50,7 @@ export function useEventDrop({ events, calendars, sharedCalendars }: UseEventDro
                       event: current,
                       moved: dropped.moved,
                       ownerId: eventOwnerId(current, calendars, sharedCalendars, user?.id),
+                      onSaved,
                       onDone: () => setDropped(null),
                   }
                 : null,

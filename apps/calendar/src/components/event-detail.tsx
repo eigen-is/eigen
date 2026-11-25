@@ -37,6 +37,7 @@ import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { RecurringActionDialog } from './recurring-action-dialog';
 
 // The replies to an invitation, in the order the column shows them.
@@ -53,9 +54,10 @@ type EventDetailProps = {
     // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
     ownerId: string;
     onClose: () => void;
+    onSaved: (save: EventSave) => void;
 };
 
-export function EventDetail({ event, calendar, sharedCalendar, ownerId, onClose }: EventDetailProps) {
+export function EventDetail({ event, calendar, sharedCalendar, ownerId, onClose, onSaved }: EventDetailProps) {
     const { user } = useAuth();
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
@@ -304,6 +306,7 @@ export function EventDetail({ event, calendar, sharedCalendar, ownerId, onClose 
                 onOpenChange={setEditOpen}
                 event={event}
                 ownerId={ownerId}
+                onSaved={onSaved}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

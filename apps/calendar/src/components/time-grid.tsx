@@ -1,7 +1,7 @@
 // The Calendar app's day, 3-day and week views: a column per day under its date, an all-day lane of bars across their
 // days, and a scrolling day of hours with each timed event as a block at its minutes, side by side where they overlap.
 // A click on an event asks the route to open its detail, and a click or a mouse or pen drag on empty time asks it to
-// open New event there. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a
+// open New event there, saying which, since a click while an event is open only closes it. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a
 // bar to other days, and the drop saves it; the route picks the days, the events and the one it has open.
 
 import { Link } from '@tanstack/react-router';
@@ -32,6 +32,7 @@ import type { NewEventTimes } from './create-event-dialog';
 import type { EventSurfaceProps } from './event-chip';
 import { EventBar, LaneGhost, MORE_BUTTON } from './event-chip';
 import { EventDropHost } from './event-drop-host';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
 import { useViewDrag } from './hooks/use-view-drag';
 import { atMinutes, DraftBlock, HOUR_HEIGHT, minutesToPx, TimedEventBlock } from './time-grid-block';
@@ -43,7 +44,9 @@ type TimeGridProps = {
     sharedCalendars: readonly SharedCalendar[];
     onEventClick: EventSurfaceProps['onClick'];
     openKey: string | undefined;
-    onCreateEvent: (times: NewEventTimes) => void;
+    onSaved: (save: EventSave) => void;
+    // `drawn` says a drag drew the range, where a click only picked a slot.
+    onCreateEvent: (times: NewEventTimes, drawn: boolean) => void;
 };
 
 // A range drawn over one day column, in minutes from its midnight.
@@ -66,9 +69,10 @@ export function TimeGrid({
     sharedCalendars,
     onEventClick,
     openKey,
+    onSaved,
     onCreateEvent,
 }: TimeGridProps) {
-    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
+    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars, onSaved });
     const [allDayExpanded, setAllDayExpanded] = useState(false);
     const [now, setNow] = useState(() => new Date());
     const scrollerRef = useRef<HTMLDivElement>(null);
@@ -115,8 +119,11 @@ export function TimeGrid({
     const surfaceProps = { calendars, sharedCalendars, onClick: onEventClick, openKey };
     const draftColor = defaultCalendar(calendars)?.color ?? DEFAULT_CALENDAR_COLOR;
 
-    const createTimed = (dayIdx: number, top: number, bottom: number) =>
-        onCreateEvent({ start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false });
+    const createTimed = (dayIdx: number, top: number, bottom: number, drawn: boolean) =>
+        onCreateEvent(
+            { start: atMinutes(days[dayIdx], top), end: atMinutes(days[dayIdx], bottom), allDay: false },
+            drawn,
+        );
 
     // One gesture at a time: `follow` draws it for the pointer's last spot, as it moves and as an edge scrolls the
     // hours under it, and `land` runs on a release after a move.
@@ -167,7 +174,7 @@ export function TimeGrid({
                 range = { dayIdx, ...slotRange(pressed, minutesAt(column, y)) };
                 setDraft(range);
             },
-            land: () => createTimed(range.dayIdx, range.top, range.bottom),
+            land: () => createTimed(range.dayIdx, range.top, range.bottom, true),
             scrolls: true,
         });
     };
@@ -219,6 +226,7 @@ export function TimeGrid({
                                     key={key}
                                     to="/view/$mode/$date"
                                     params={{ mode: 'day', date: key }}
+                                    search
                                     className="group flex flex-col items-center py-1.5"
                                 >
                                     <span
@@ -263,7 +271,7 @@ export function TimeGrid({
                         onClick={(e) => {
                             if (isOnEvent(e.target)) return;
                             const day = days[dayAt(e.currentTarget, e.clientX, days.length)];
-                            onCreateEvent({ start: day, end: day, allDay: true });
+                            onCreateEvent({ start: day, end: day, allDay: true }, false);
                         }}
                     >
                         {bars.map((bar) => (
@@ -336,7 +344,7 @@ export function TimeGrid({
                                         onClick={(e) => {
                                             if (isOnEvent(e.target)) return;
                                             const top = slotAt(minutesAt(e.currentTarget, e.clientY));
-                                            createTimed(dayIdx, top, top + NEW_EVENT_MINUTES);
+                                            createTimed(dayIdx, top, top + NEW_EVENT_MINUTES, false);
                                         }}
                                     >
                                         <div className="absolute inset-y-0 left-0 right-1 md:right-2">

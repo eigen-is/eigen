@@ -1,7 +1,7 @@
 // The toolbar above Calendar's views: Today, previous and next, the title with the view's days, and the view choice.
 // On a phone, Today folds into a kebab menu and the sidebar picks the view. The URL holds the view and its focused
 // day, so each control navigates to a new one, and switching the view keeps the day. It also binds Google's keys for
-// the same moves, and c for New event, while no dialog or menu is open.
+// the same moves, and c for New event, while no dialog or menu is open and the focus is not in the event's column.
 
 import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
@@ -18,6 +18,7 @@ import { useLayout } from '@workspace/ui/components/layout/app';
 import { KebabTrigger, Toolbar, ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useDialogOpen, useMenuOpen } from '@workspace/ui/hooks/use-dialog-open';
+import { useFocusInDetail } from '@workspace/ui/hooks/use-focus-in-detail';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useShowView } from './hooks/use-show-view';
 
@@ -37,13 +38,14 @@ export function CalendarToolbar({ mode, focus, onCreateEvent }: CalendarToolbarP
     const step = CALENDAR_VIEW_LABELS[mode].toLowerCase();
     const dialogOpen = useDialogOpen();
     const menuOpen = useMenuOpen();
+    const focusInDetail = useFocusInDetail();
     useCalendarShortcuts({
         mode,
         focus,
         show,
         showToday,
         create: onCreateEvent,
-        enabled: !dialogOpen && !menuOpen,
+        enabled: !dialogOpen && !menuOpen && !focusInDetail,
     });
 
     return (

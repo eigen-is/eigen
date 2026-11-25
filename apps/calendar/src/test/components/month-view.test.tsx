@@ -123,6 +123,7 @@ async function renderMonth(events: CalendarEventOccurrence[]) {
             calendars: [work],
             sharedCalendars: [],
             onDayClick,
+            onSaved: () => {},
             onEventClick,
             openKey: undefined,
         });
