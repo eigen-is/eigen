@@ -76,6 +76,7 @@ export function FormDialog({
                     size={size}
                     onOpenAutoFocus={onOpenAutoFocus ?? focusOnOpen}
                     onCloseAutoFocus={onCloseAutoFocus}
+                    onFocus={discard.onFocus}
                 >
                     <DialogHeader>
                         <DialogTitle>{title}</DialogTitle>

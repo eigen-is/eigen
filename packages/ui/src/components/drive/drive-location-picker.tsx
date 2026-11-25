@@ -44,7 +44,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
     return (
         <>
             <Dialog open={open} onOpenChange={discard.onOpenChange}>
-                <DialogContent className="flex flex-col">
+                <DialogContent className="flex flex-col" onFocus={discard.onFocus}>
                     <DriveLocationPickerBody
                         {...body}
                         pending={pending}

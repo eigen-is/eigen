@@ -35,7 +35,7 @@ export function CardFormDialog({ open, onOpenChange, onSave, ...rest }: CardForm
     return (
         <>
             <Dialog open={open} onOpenChange={discard.onOpenChange}>
-                <DialogContent>
+                <DialogContent onFocus={discard.onFocus}>
                     {open && (
                         <CardForm
                             {...rest}

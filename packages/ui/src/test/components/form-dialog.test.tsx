@@ -287,6 +287,10 @@ test('a dialog opened from inside another form submits only itself', async () =>
 });
 
 const byLabel = (name: string) => document.querySelector(`[aria-label="${name}"]`);
+const focusLabel = (name: string) => {
+    const target = byLabel(name);
+    if (target instanceof HTMLElement) target.focus();
+};
 const selected = (name: string) => {
     const input = byLabel(name);
     return input instanceof HTMLInputElement
@@ -448,6 +452,46 @@ test('a changed dialog over another asks for itself only, Esc on the question ke
     expect(titles()).toEqual(['Move']);
     expect(document.activeElement).toBe(anyButton('New folder') ?? null);
     expect(onMove).not.toHaveBeenCalled();
+});
+
+test('Keep editing after the X goes back to the field last in use, not to the X', async () => {
+    await render({
+        changed: true,
+        fields: [
+            createElement(Input, { key: 'title', 'aria-label': 'Title', defaultValue: 'Standup' }),
+            createElement(Input, { key: 'place', 'aria-label': 'Location', defaultValue: 'Utrecht' }),
+        ],
+    });
+    focusLabel('Location');
+    await press('Close');
+    await press('Keep editing');
+    await focusReturned();
+    expect(document.activeElement).toBe(byLabel('Location'));
+});
+
+test('Keep editing goes back to the first field once the one last in use is gone', async () => {
+    function Fields() {
+        const [place, setPlace] = useState(true);
+        return [
+            createElement(Input, { key: 'title', 'aria-label': 'Title', defaultValue: 'Standup' }),
+            place &&
+                createElement(Input, {
+                    key: 'place',
+                    'aria-label': 'Location',
+                    defaultValue: 'Utrecht',
+                    onBlur: () => setPlace(false),
+                }),
+        ];
+    }
+    await render({ changed: true, fields: createElement(Fields) });
+    focusLabel('Location');
+    // The X, which a press focuses, takes the focus from the field, and the field goes, as a step that changed does.
+    await press('Close');
+    expect(titles()).toEqual(['Rename', 'Discard changes?']);
+    await press('Keep editing');
+    await focusReturned();
+    expect(titles()).toEqual(['Rename']);
+    expect(document.activeElement).toBe(byLabel('Title'));
 });
 
 test('a form that says nothing changed closes at once, and a read-only one never asks', async () => {

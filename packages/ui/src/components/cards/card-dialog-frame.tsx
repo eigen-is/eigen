@@ -55,6 +55,10 @@ export function CardDialogFrame({ open, onOpenChange, title, actions, editing, c
                 <DialogContent
                     showCloseButton={isEditing}
                     className="flex flex-col gap-0 p-0 [--app-gutter-x:1.5rem]"
+                    onFocus={(event) => {
+                        backToView.onFocus(event);
+                        close.onFocus(event);
+                    }}
                     onEscapeKeyDown={(event) => {
                         // A field that keeps its own Esc, such as an open list, has taken it already.
                         if (!editing || event.defaultPrevented) return;
