@@ -162,7 +162,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 
 ### Dependency direction
 
-**Dependencies run one way: `sheet → lib` and `ui → lib`, never back.** `lib` serves the backend too, while `sheet` and `ui` need React and the DOM, so a lib import of either would load React into the backend. A biome rule enforces it. So the sheet types both sides need (`Cell`, `Sheet`, `Op`, `Range`, …) live in `packages/lib/src/sheets/`, re-exported by the sheet package.
+**Dependencies run one way: `sheet → lib` and `ui → lib`, never back.** `lib` serves the backend too, while `sheet` and `ui` need React and the DOM, so a lib import of either would load React into the backend. A biome rule enforces it. `sheet` also builds on `ui`, such as its dialogs, inputs and list hooks, and `ui` never imports `sheet`. So the sheet types both sides need (`Cell`, `Sheet`, `Op`, `Range`, …) live in `packages/lib/src/sheets/`, re-exported by the sheet package.
 
 `packages/math` is a leaf below all three: anything may import it, and it imports no package and no React, DOM, Bun or Node API, so the browser, the API, a Worker and Node run it unchanged. Its biome rule and tsconfig (`lib: ["ESNext"]`, no `types`) enforce it.
 
