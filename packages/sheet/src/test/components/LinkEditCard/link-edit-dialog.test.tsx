@@ -1,6 +1,6 @@
-// The Insert link dialog keeps the dialog contract: Apply stays live, and an address Sheets can't open, or none at all,
-// says why under its field and takes the focus. The link card's own tests cover how the dialog opens and comes back
-// from the range picker.
+// The Insert link dialog keeps the dialog contract: Apply stays live, and a cell range Sheets can't read, or none at
+// all, says why under its field and takes the focus. The shared address field's own tests cover a web address, and the
+// link card's tests how the dialog opens and comes back from the range picker.
 
 import { expect, test } from 'bun:test';
 import { expectFormContract } from '@workspace/ui/test/form-contract';
@@ -38,26 +38,24 @@ const openLink =
 const problem = () => document.querySelector('[role="dialog"] [data-slot="field-error"]')?.textContent;
 
 test('Insert link keeps the dialog contract', async () => {
-    const form = sheetDialogForm(openLink(), { sheets: SHEETS });
+    const form = sheetDialogForm(openLink('cellrange'), { sheets: SHEETS });
     await expectFormContract({
         kind: 'dialog',
         render: form.render,
         submitLabel: 'Apply',
         firstField: 'Display text',
         onSubmit: form.write,
-        makeChanged: () => typeInto('Link address', 'https://eigen.is'),
-        makeInvalid: () => typeInto('Link address', 'javascript:alert(1)'),
-        invalidField: 'Link address',
+        makeChanged: () => typeInto('Cell range', 'Sheet1!B2'),
+        makeInvalid: () => typeInto('Cell range', 'A1:'),
+        invalidField: 'Cell range',
         except: SYNCHRONOUS_WRITE,
     });
 });
 
-test('an empty address says so once Apply is pressed', async () => {
+test('Apply keeps the dialog while the web address is empty', async () => {
     const dialog = await renderSheetDialog(openLink(), { sheets: SHEETS });
-    expect(problem()).toBeUndefined();
     await dialog.click('Apply');
-    expect(problem()).toBe('Enter a link address');
-    expect(document.activeElement).toBe(dialog.field('Link address'));
+    expect(dialog.context().sheets[0].data?.[0]?.[0]).toBeNull();
     expect(dialog.dialogs()).toHaveLength(1);
 });
 
