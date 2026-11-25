@@ -1,7 +1,7 @@
 // Page setup is Google Slides' slide size, 16:9 or 4:3. A writer changes the deck's size with Apply; a viewer reads it.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { SlideSize } from '@workspace/lib/vector';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -22,8 +22,6 @@ const radios = () =>
         checked: radio.getAttribute('aria-checked') === 'true',
         disabled: radio.disabled,
     }));
-const radio = (label: string) =>
-    [...document.querySelectorAll('label')].find((l) => l.textContent === label)?.htmlFor ?? '';
 
 const click = (element: Element | null | undefined) =>
     act(async () => {
@@ -73,11 +71,8 @@ test('Page setup keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: 'Widescreen 16:9',
         onSubmit: onSlideSizeChange,
-        makeChanged: () => click(document.getElementById(radio('Standard 4:3'))),
-        except: {
-            pending: 'the size is written to the deck at once, with nothing to wait for',
-            pendingClose: 'the size is written to the deck at once, with nothing to wait for',
-        },
+        makeChanged: () => click(field('Standard 4:3')),
+        savesAtOnce: true,
     });
 });
 
@@ -93,7 +88,7 @@ test("a writer sees the deck's size among Google's two, both enabled", async () 
 
 test('Apply writes the picked size once and closes', async () => {
     await render();
-    await click(document.getElementById(radio('Standard 4:3')));
+    await click(field('Standard 4:3'));
     await click(button('Apply'));
     expect(onSlideSizeChange.mock.calls).toEqual([['4:3']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
@@ -108,7 +103,7 @@ test('Apply on the size the deck already has writes nothing', async () => {
 
 test('Cancel closes without a change', async () => {
     await render();
-    await click(document.getElementById(radio('Standard 4:3')));
+    await click(field('Standard 4:3'));
     await click(button('Cancel'));
     expect(onSlideSizeChange).not.toHaveBeenCalled();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
@@ -124,7 +119,7 @@ test("a peer's change shows in the open dialog, and Apply then keeps it", async 
 
 test("a pick outlives a peer's change, and Apply writes it", async () => {
     await render();
-    await click(document.getElementById(radio('Standard 4:3')));
+    await click(field('Standard 4:3'));
     await peerSets('16:9');
     expect(radios().map(({ checked }) => checked)).toEqual([false, true]);
     await click(button('Apply'));
