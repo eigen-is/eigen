@@ -464,6 +464,7 @@ describe('a sheet added under a name it cannot take', () => {
         ['with a colon', 'a:b', 'a_b'],
         ['with a quote at its end', "x'", 'x'],
         ['empty', '', 'Sheet1'],
+        ['blank', ' ', 'Sheet1'],
     ])('a name %s is repaired, as an import repairs it', (_, name, repaired) => {
         const added: Op = { op: 'addSheet', id: 's2', path: [], value: baseSheet('s2', name) };
         expect(replaySheetsOps([baseSheet('s1', 'One')], [[added]]).map((sheet) => sheet.name)).toEqual([

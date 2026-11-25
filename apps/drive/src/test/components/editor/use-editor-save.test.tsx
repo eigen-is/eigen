@@ -1,7 +1,7 @@
 // A text file saves only what changed, against the version it was opened at: a save sends that version's
 // etag, and the next save the one the server answered. A file someone else changed meanwhile opens the conflict
 // dialog instead of being overwritten, unless the user forces it. A failed save stays unsaved, and an
-// unsaved file asks before it closes or the tab unloads.
+// unsaved file asks before its Cancel closes it.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { EditorSaveResult } from '@workspace/lib/types/file-kinds';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -147,20 +147,4 @@ test('closing a clean file closes at once, and an unsaved one asks first', async
     await act(async () => save().confirmClose(close));
     await act(async () => save().handleDiscardConfirm());
     expect(close).toHaveBeenCalledTimes(2);
-});
-
-test('the tab asks before it unloads while the file is unsaved, and not after a save', async () => {
-    const save = await renderSave();
-    const unload = () => {
-        const event = new Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(event);
-        return event.defaultPrevented;
-    };
-    expect(unload()).toBe(false);
-    await act(async () => save().markDirty());
-    expect(unload()).toBe(true);
-    await act(async () => {
-        await save().doSave();
-    });
-    expect(unload()).toBe(false);
 });

@@ -110,7 +110,6 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     };
 
     const atQuery = getAtSuggestQuery(content);
-    const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
         setContent((prev) => {
@@ -121,42 +120,31 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         });
     }, []);
 
-    const closeSuggest = useCallback(() => {
-        setContent((prev) => {
-            const atIdx = prev.lastIndexOf('@');
-            return atIdx === -1 ? prev : prev.slice(0, atIdx);
-        });
-    }, []);
-
     // Shift+Enter commits an @-mention but is a newline in the slash lists below. With no matches, Enter sends
     // `@foo` as typed, where a commit on the empty list would strip it.
     const atSuggest = useSuggestions({
-        visible: suggestOpen,
+        visible: atQuery !== null,
         onSelect: handlePlayerSelect,
-        onEscape: closeSuggest,
         acceptShiftEnter: true,
         passthroughWhenEmpty: true,
     });
 
     const trimmedContent = content.trim();
     const slashQuery = trimmedContent.startsWith('/') && !trimmedContent.includes(' ') ? trimmedContent : null;
-    const slashSuggestOpen = slashQuery !== null && !SLASH_COMMANDS.includes(slashQuery);
+    const slashListVisible = slashQuery !== null && !SLASH_COMMANDS.includes(slashQuery);
 
     const handleSlashSelect = useCallback((command: string) => {
         setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
     }, []);
 
-    const clearContent = useCallback(() => setContent(''), []);
-
     const slashSuggest = useSuggestions({
-        visible: slashSuggestOpen,
+        visible: slashListVisible,
         onSelect: handleSlashSelect,
-        onEscape: clearContent,
         passthroughWhenEmpty: true,
     });
 
     const slashTarget = getSlashTargetQuery(content);
-    const slashTargetOpen = slashTarget !== null && !slashSuggestOpen;
+    const targetListVisible = slashTarget !== null && !slashListVisible;
 
     const slashTargetMembers = useMemo(() => {
         if (!slashTarget || slashTarget.mode === 'contacts') return [];
@@ -176,20 +164,9 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         [slashTarget?.appendSpace],
     );
 
-    // Escape drops the target back to just the command (keep everything before the space).
-    const clearSlashTarget = useCallback(
-        () =>
-            setContent((prev) => {
-                const spaceIdx = prev.indexOf(' ');
-                return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
-            }),
-        [],
-    );
-
     const targetSuggest = useSuggestions({
-        visible: slashTargetOpen,
+        visible: targetListVisible,
         onSelect: handleSlashTargetSelect,
-        onEscape: clearSlashTarget,
         passthroughWhenEmpty: true,
     });
 
@@ -242,12 +219,12 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     query={atQuery || ''}
                     roomMembers={roomMembers}
                     onSelect={handlePlayerSelect}
-                    visible={suggestOpen}
+                    visible={atSuggest.open}
                     selectedIndex={atSuggest.selectedIndex}
                     onItemsChange={atSuggest.onItemsChange}
                     includeContacts={false}
                 />
-                {slashTargetOpen && slashTarget && (
+                {targetSuggest.open && slashTarget && (
                     <ChatPlayerSuggest
                         query={slashTarget.query}
                         roomMembers={slashTarget.mode === 'contacts' ? [] : slashTargetMembers}
@@ -262,7 +239,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     query={slashQuery ?? ''}
                     commandsHelp={COMMANDS_HELP}
                     onSelect={handleSlashSelect}
-                    visible={slashSuggestOpen}
+                    visible={slashSuggest.open}
                     selectedIndex={slashSuggest.selectedIndex}
                     onItemsChange={slashSuggest.onItemsChange}
                 />

@@ -28,9 +28,20 @@ describe('engine/sheet-name — copySheetName', () => {
 describe('engine/sheet-name — legalSheetNames', () => {
     test('every name it gives follows the rule, a cut through a surrogate pair too', () => {
         const emoji = String.fromCodePoint(0x1f600);
-        const names = legalSheetNames(['a:b', "'x'", '', "''", 'x'.repeat(40), `${'y'.repeat(30)}${emoji}`, 'a[b]/c']);
+        const names = legalSheetNames([
+            'a:b',
+            "'x'",
+            '',
+            ' ',
+            "''",
+            'x'.repeat(40),
+            `${'y'.repeat(30)}${emoji}`,
+            'a[b]/c',
+        ]);
         expect(names.every(isSheetName)).toBe(true);
-        expect(names[5]).toBe('y'.repeat(30));
+        expect(names[2]).toBe('Sheet3');
+        expect(names[3]).toBe('Sheet4');
+        expect(names[6]).toBe('y'.repeat(30));
     });
 
     test('a reserved name is numbered, and the first holding any other keeps it', () => {

@@ -1,6 +1,6 @@
 // A Radix dialog dismisses on Escape from a document capture listener, which runs before the textarea
-// hears the key. Pinned here: Escape with the @-mention list open closes only the list, inside a dialog
-// as well, and Escape with nothing open still closes the dialog. Also pinned: a send clears the box at
+// hears the key. Pinned here: Escape with the @-mention list open closes only the list and keeps the text, inside a
+// dialog as well, and Escape with nothing open still closes the dialog. Also pinned: a send clears the box at
 // once, and a failed one puts its text and files back unless the user has started the next message, and one no toast
 // told the user about still surfaces. A send that takes no files, a slash command that runs here, puts its files back too.
 import { expect, mock, test } from 'bun:test';
@@ -68,18 +68,37 @@ async function mount() {
     return { closed, textarea, type, pressEscape, cleanup: unmount };
 }
 
-test('Escape with the @-mention list open closes the list, not the dialog', async () => {
+test('Escape with the @-mention list open closes the list and keeps the text, not the dialog', async () => {
     const { closed, textarea, type, pressEscape, cleanup } = await mount();
-    await type('hi @');
+    await type('hi @a');
     expect(document.querySelectorAll('li')).toHaveLength(1);
 
     await pressEscape();
     expect(closed.count).toBe(0);
-    expect(textarea.value).toBe('hi ');
+    expect(textarea.value).toBe('hi @a');
     expect(document.querySelectorAll('li')).toHaveLength(0);
+
+    // The list stays closed while that mention is typed on, and the next one opens it again.
+    await type('hi @ad');
+    expect(document.querySelectorAll('li')).toHaveLength(0);
+    await type('hi @ad ');
+    await type('hi @ad @');
+    expect(document.querySelectorAll('li')).toHaveLength(1);
+    await pressEscape();
 
     await pressEscape();
     expect(closed.count).toBe(1);
+    await cleanup();
+});
+
+test('Escape with the slash command list open closes the list and keeps the text', async () => {
+    const { closed, textarea, type, pressEscape, cleanup } = await mount();
+    await type('/wh');
+    expect(document.querySelectorAll('li').length).toBeGreaterThan(0);
+    await pressEscape();
+    expect(closed.count).toBe(0);
+    expect(textarea.value).toBe('/wh');
+    expect(document.querySelectorAll('li')).toHaveLength(0);
     await cleanup();
 });
 

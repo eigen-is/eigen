@@ -1,10 +1,11 @@
-// The save story of Drive's inline editors: Mod+S, the dirty state, the guard on a closing tab and the
-// discard dialog. Each save sends the etag the editor loaded, or the one its last save answered, so
-// a file that changed since answers a conflict, which opens the conflict dialog.
+// The save story of Drive's inline editors: Mod+S, the dirty state and the discard dialog their Cancel
+// opens. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
+// changed since answers a conflict, which opens the conflict dialog. A navigation or a closed tab is
+// asked about by the editor's leave guard, which reads `saveState`.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'conflict';
 
@@ -61,17 +62,6 @@ export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getF
         e.preventDefault();
         doSave();
     });
-
-    useEffect(() => {
-        const handler = (e: BeforeUnloadEvent) => {
-            if (isDirtyRef.current) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        };
-        window.addEventListener('beforeunload', handler);
-        return () => window.removeEventListener('beforeunload', handler);
-    }, []);
 
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
     const pendingCloseRef = useRef<(() => void) | null>(null);
