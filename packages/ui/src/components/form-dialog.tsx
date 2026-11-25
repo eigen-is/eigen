@@ -10,7 +10,7 @@ import type { DialogAction } from '../hooks/use-dialog-pending';
 import { useDialogPending } from '../hooks/use-dialog-pending';
 import { Button } from './button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
-import { FormShell } from './form-shell';
+import { FormShell, focusFirstField } from './form-shell';
 
 type FormDialogProps = {
     open: boolean;
@@ -66,7 +66,7 @@ export function FormDialog({
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
                 size={size}
-                onOpenAutoFocus={onOpenAutoFocus ?? focusFirstField}
+                onOpenAutoFocus={onOpenAutoFocus ?? focusOnOpen}
                 onCloseAutoFocus={onCloseAutoFocus}
             >
                 <DialogHeader>
@@ -123,29 +123,8 @@ export function FormDialogForm({
     );
 }
 
-// The first text field, else the first control, such as the calendar's recurring choice, never a colour swatch before
-// the name. A lone text field with a value, such as a number to restart a list at, gets its text selected.
-function focusFirstField(event: Event) {
+// Radix focuses the dialog itself unless the form took the focus.
+function focusOnOpen(event: Event) {
     const form = event.target instanceof Element ? event.target.querySelector('form') : null;
-    if (!form) return;
-    const textFields = [...form.querySelectorAll<HTMLElement>(TEXT_FIELD)];
-    const target = textFields[0] ?? form.querySelector<HTMLElement>(CONTROL);
-    if (!target) return;
-    event.preventDefault();
-    target.focus();
-    if (textFields.length === 1 && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
-        target.select();
-    }
+    if (form && focusFirstField(form, { selectLone: true })) event.preventDefault();
 }
-
-const TEXT_FIELD = [
-    'input:not([type])',
-    ...['text', 'search', 'url', 'tel', 'email', 'password', 'number'].map((type) => `input[type="${type}"]`),
-    'textarea',
-    '[contenteditable="true"]',
-]
-    .map((field) => `${field}:not(:disabled):not([readonly])`)
-    .join(', ');
-
-// Tabbable only: Radix's hidden radio inputs are not, and its radio group hands the focus to the checked item.
-const CONTROL = ':is(input, select, textarea, button, [tabindex]):not(:disabled):not([tabindex="-1"])';

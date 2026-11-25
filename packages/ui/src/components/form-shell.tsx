@@ -1,8 +1,8 @@
-// The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys and their
-// error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that key, and Enter on a
-// radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed its fields read
-// useFormSubmitted(), so a missing value shows only then, and a submit whose check refused focuses the first field
-// marked aria-invalid while the form still shows. Apps use the shells, not this.
+// The <form> under every form shell, such as FormDialogForm, so a dialog, a card and a page share their keys, their
+// first focus and their error focus. Cmd or Ctrl+Enter submits from any field, with what the field committed on that
+// key, and Enter on a radio or a checkbox submits too, since Radix swallows it there. Once Save was pressed its fields
+// read useFormSubmitted(), so a missing value shows only then, and a refused submit focuses the first field marked
+// aria-invalid while the form still shows. Apps use the shells, not this.
 
 import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -13,6 +13,8 @@ type FormShellProps = {
     onSubmit: DialogAction;
     // A react-hook-form form focuses its first error itself.
     focusesOwnErrors?: boolean;
+    // Focuses the first field as the form mounts, as a page form does. A dialog focuses its form as it opens instead.
+    autoFocus?: boolean;
     className?: string;
     children: ReactNode;
 };
@@ -26,11 +28,21 @@ export function useFormSubmitted(): boolean {
     return useContext(FormSubmittedContext);
 }
 
-export function FormShell({ onSubmit, focusesOwnErrors = false, className, children }: FormShellProps) {
+export function FormShell({
+    onSubmit,
+    focusesOwnErrors = false,
+    autoFocus = false,
+    className,
+    children,
+}: FormShellProps) {
     const formRef = useRef<HTMLFormElement>(null);
     const [submitted, setSubmitted] = useState(false);
     // Counts refused submits, so the focus moves once the form has rendered the messages it set.
     const [refusals, setRefusals] = useState(0);
+
+    useEffect(() => {
+        if (autoFocus && formRef.current) focusFirstField(formRef.current);
+    }, [autoFocus]);
 
     // A form that refused as it hid itself, such as Edit event opening a question over it, leaves the focus to that.
     useEffect(() => {
@@ -78,3 +90,33 @@ export function FormShell({ onSubmit, focusesOwnErrors = false, className, child
         </form>
     );
 }
+
+// The first text field, else the first control, such as the calendar's recurring choice, never a color swatch before
+// the name. With `selectLone`, a lone text field with a value, such as a number to restart a list at, gets its text
+// selected. False when the form has nothing to focus.
+export function focusFirstField(form: HTMLFormElement, { selectLone = false } = {}): boolean {
+    const textFields = [...form.querySelectorAll<HTMLElement>(TEXT_FIELD)];
+    const target = textFields[0] ?? form.querySelector<HTMLElement>(CONTROL);
+    if (!target) return false;
+    target.focus();
+    if (
+        selectLone &&
+        textFields.length === 1 &&
+        (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+    ) {
+        target.select();
+    }
+    return true;
+}
+
+const TEXT_FIELD = [
+    'input:not([type])',
+    ...['text', 'search', 'url', 'tel', 'email', 'password', 'number'].map((type) => `input[type="${type}"]`),
+    'textarea',
+    '[contenteditable="true"]',
+]
+    .map((field) => `${field}:not(:disabled):not([readonly])`)
+    .join(', ');
+
+// Tabbable only: Radix's hidden radio inputs are not, and its radio group hands the focus to the checked item.
+const CONTROL = ':is(input, select, textarea, button, [tabindex]):not(:disabled):not([tabindex="-1"])';
