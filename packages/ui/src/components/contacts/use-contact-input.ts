@@ -2,13 +2,19 @@
 // "Name <email>" text a picked suggestion arrives as, and names a typed address by the user's contact for it, so
 // every field reads a known address the same way. A person already in the list is refused the same way in every
 // field, and the caller's `onAdd` decides the rest. An address it can't read or a person refused keeps the text in the
-// field, with the reason ContactAddRow shows under it. Its form counts typed text as a change and commits it on Save.
+// field, with the reason ContactAddRow shows under it. Its form counts typed text as a change and commits it on Save,
+// which returns the person added, so the form saves them in the same submit.
 
 import { useContacts } from '@workspace/lib/contacts';
 import { contactFullName, findContactByEmail } from '@workspace/lib/types/contact';
 import type { ParsedContactInput } from '@workspace/lib/validation';
 import { parseContactInput } from '@workspace/lib/validation';
 import { useCallback, useState } from 'react';
+
+type Contact = NonNullable<ParsedContactInput>;
+
+// The person a commit added, nobody when the field was empty, or the reason it refused, which the field shows too.
+type Committed = { added?: Contact } | { refused: string };
 
 type ContactInput = {
     value: string;
@@ -17,8 +23,7 @@ type ContactInput = {
     submit: () => void;
     error: string | undefined;
     hasText: boolean;
-    // Adds the typed person, or returns the reason it refuses them, which the field shows too.
-    commitTyped: () => string | undefined;
+    commitTyped: () => Committed;
 };
 
 export function useContactInput({
@@ -28,7 +33,7 @@ export function useContactInput({
     // The addresses the field's list holds already.
     listed: readonly string[];
     // Returns the reason it refuses the person, or nothing to take them.
-    onAdd: (contact: NonNullable<ParsedContactInput>) => string | undefined;
+    onAdd: (contact: Contact) => string | undefined;
 }): ContactInput {
     const { data: contacts } = useContacts();
     const [value, setValue] = useState('');
@@ -38,24 +43,27 @@ export function useContactInput({
 
     const refuse = (reason: string) => {
         setRefusal(reason);
-        return reason;
+        return { refused: reason };
     };
 
-    // The reason the person in `input` is refused, or nothing once they are added.
-    const add = (input: string): string | undefined => {
+    const add = (input: string): Committed => {
         const parsed = parseContactInput(input);
         if (!parsed) return refuse('Enter a valid email address');
         if (listed.some((email) => email.toLowerCase() === parsed.email)) {
             return refuse(`${parsed.email} is already in the list`);
         }
         const known = contacts && findContactByEmail(contacts, parsed.email);
-        const displayName = parsed.displayName ?? ((known && contactFullName(known)) || undefined);
-        const reason = onAdd({ email: parsed.email, displayName });
+        const added = {
+            email: parsed.email,
+            displayName: parsed.displayName ?? ((known && contactFullName(known)) || undefined),
+        };
+        const reason = onAdd(added);
         if (reason) return refuse(reason);
         setValue('');
+        return { added };
     };
 
-    const commitTyped = () => (value.trim() ? add(value) : undefined);
+    const commitTyped = (): Committed => (value.trim() ? add(value) : {});
 
     // Stable, since callers reset the field from an effect that lists it.
     const reset = useCallback((next: string) => {
@@ -65,7 +73,7 @@ export function useContactInput({
 
     const handleChange = (input: string) => {
         setRefusal(undefined);
-        if (input.includes('<') && input.includes('>') && !add(input)) return;
+        if (input.includes('<') && input.includes('>') && 'added' in add(input)) return;
         setValue(input);
     };
 
