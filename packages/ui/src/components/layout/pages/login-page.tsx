@@ -123,7 +123,7 @@ export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
 }
 
 // A press on a tab mounts its panel, whose autoFocus field then loses the focus to the tab the browser focuses for the
-// press. The click that follows may never reach the tab, since the card centres on the new panel's height and moves
+// press. The click that follows may never reach the tab, since the card centers on the new panel's height and moves
 // away from the pointer, so the press itself hands the focus on, a task later. The click does it for Enter and Space.
 function focusPanelField(event: MouseEvent<HTMLButtonElement>) {
     const panelId = event.currentTarget.getAttribute('aria-controls') ?? '';
