@@ -66,7 +66,7 @@ test('each problem reads under its own field, and nothing is sent', async () => 
     expect(messageUnder('Name')).toBeUndefined();
     expect(messageUnder('Username')).toBe('Username must be 2-30 characters');
     expect(messageUnder('Password')).toBe('Password must be at least 8 characters');
-    expect(messageUnder('Confirm password')).toBe('Passwords do not match');
+    expect(messageUnder('Confirm password')).toBe("Passwords don't match");
     expect(document.activeElement).toBe(field('Username'));
     expect(register.mutateAsync).not.toHaveBeenCalled();
 });

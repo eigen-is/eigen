@@ -4,7 +4,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { loadIntoSession, useInviteRegister } from '@workspace/lib/auth';
-import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormShell } from '@workspace/ui/components/form-shell';
@@ -21,11 +21,11 @@ const signupSchema = z
             const problem = validateUsername(username.toLowerCase());
             if (problem) context.addIssue({ code: 'custom', message: problem });
         }),
-        password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+        password: z.string().min(MIN_PASSWORD_LENGTH, FIELD_MESSAGES.passwordTooShort),
         confirmPassword: z.string(),
     })
     .refine((values) => values.password === values.confirmPassword, {
-        message: 'Passwords do not match',
+        message: FIELD_MESSAGES.passwordsDiffer,
         path: ['confirmPassword'],
     });
 
