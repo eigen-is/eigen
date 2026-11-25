@@ -75,6 +75,8 @@ export function ChangePassword({
         });
     }
 
+    const { isSubmitting } = form.formState;
+
     return (
         <div className="space-y-8 pb-20 m-4">
             <Form {...form}>
@@ -178,7 +180,9 @@ export function ChangePassword({
                     </div>
 
                     <div className="flex justify-end gap-3">
-                        <Button type="submit">Change password</Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? 'Changing password...' : 'Change password'}
+                        </Button>
                     </div>
                 </form>
             </Form>
