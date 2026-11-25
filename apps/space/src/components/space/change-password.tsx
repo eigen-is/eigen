@@ -2,6 +2,7 @@
 // to sign out other sessions. Space's password page shows it.
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { MIN_PASSWORD_LENGTH, validatePasswordStrength } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -61,24 +62,20 @@ export function ChangePassword({
         },
     });
 
-    const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const password = e.target.value;
-        setPasswordStrength(validatePasswordStrength(password));
-        form.setValue('newPassword', password);
-    };
-
-    async function onSubmit(values: z.infer<typeof formSchema>) {
-        await onPasswordChange({
+    const onSubmit = form.handleSubmit((values) =>
+        onPasswordChange({
             currentPassword: values.currentPassword,
             newPassword: values.newPassword,
             revokeOtherSessions: values.revokeOtherSessions,
-        });
-    }
+        }).catch(rethrowUntoasted),
+    );
+
+    const { isSubmitting } = form.formState;
 
     return (
         <div className="space-y-8 pb-20 m-4">
             <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <form onSubmit={onSubmit} className="space-y-6">
                     <FormField
                         control={form.control}
                         name="currentPassword"
@@ -110,7 +107,10 @@ export function ChangePassword({
                                         placeholder="Enter new password"
                                         autoComplete="new-password"
                                         {...field}
-                                        onChange={handlePasswordChange}
+                                        onChange={(e) => {
+                                            field.onChange(e);
+                                            setPasswordStrength(validatePasswordStrength(e.target.value));
+                                        }}
                                     />
                                 </FormControl>
                                 {field.value.length > 0 && (
@@ -173,12 +173,14 @@ export function ChangePassword({
                     />
 
                     <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <InfoIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        <InfoIcon className="h-4 w-4 mt-0.5 shrink-0" />
                         <p>Choose a strong password and don't reuse it for other accounts.</p>
                     </div>
 
                     <div className="flex justify-end gap-3">
-                        <Button type="submit">Change password</Button>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? 'Changing password...' : 'Change password'}
+                        </Button>
                     </div>
                 </form>
             </Form>

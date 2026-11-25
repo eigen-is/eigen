@@ -30,7 +30,7 @@ To see all sheets at once, click the grid icon (next to the **+** button) to ope
 
 Double-click a tab to edit its name inline. Type the new name, then press **Enter** or click anywhere else to save.
 
-A name has 1 to 31 characters. It can't contain `\ / ? * [ ] :`, and it can't start or end with an apostrophe (`'`). The fullwidth `：` and `？` are fine. If a name breaks these rules, Sheets keeps the old name and tells you why.
+A name has 1 to 31 characters, and spaces alone don't count as a name. It can't contain `\ / ? * [ ] :`, and it can't start or end with an apostrophe (`'`). The fullwidth `：` and `？` are fine. If a name breaks these rules, Sheets keeps the old name and tells you why.
 
 Two tabs can't share a name, and letter case doesn't count, as in Excel. If you type a name another tab already has, such as `data` next to `Data`, the tab keeps its old name and a message says "Another sheet already has this name". A formula finds the sheet even when its name's case differs, so `=data!A1` reads the tab named `Data`.
 

@@ -13,7 +13,6 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { downloadBlob } from '@workspace/lib/download';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Column } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
@@ -24,6 +23,7 @@ import type { MarkdownStorage } from 'tiptap-markdown';
 import { Markdown } from 'tiptap-markdown';
 import { CodeEditorView } from './code-editor';
 import { ConflictDialog } from './conflict-dialog';
+import { DiscardChangesDialogs } from './discard-changes-dialogs';
 import { EditToolbar } from './editor-toolbar';
 import { MarkdownToolbarButtons } from './markdown-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
@@ -142,6 +142,7 @@ export function MarkdownEditor({
 
     const {
         saveState,
+        atRisk,
         showConflict,
         setShowConflict,
         markDirty,
@@ -183,7 +184,7 @@ export function MarkdownEditor({
 
     const toolbar = (
         <EditToolbar
-            onBack={() => confirmClose(onBack)}
+            onBack={onBack}
             onCancel={() => confirmClose(onCancel)}
             onSave={handleSave}
             isSaving={saveState === 'saving'}
@@ -230,16 +231,11 @@ export function MarkdownEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <ConfirmDialog
+                <DiscardChangesDialogs
+                    atRisk={atRisk}
                     open={showDiscardConfirm}
-                    onOpenChange={(open) => {
-                        if (!open) handleDiscardCancel();
-                    }}
-                    title="Discard changes?"
-                    description="You have unsaved changes. Discard them?"
-                    confirmText="Discard"
-                    destructive
                     onConfirm={handleDiscardConfirm}
+                    onCancel={handleDiscardCancel}
                 />
             </Column>
         </DocSearchProvider>

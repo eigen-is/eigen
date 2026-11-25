@@ -9,6 +9,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { AuthProvider } = await import('@workspace/lib/auth');
+const { createBrowserHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { useDraft } = await import('../../../../components/mail/hooks/use-draft');
 
 function att(filename: string | undefined, contentType: string, index: number, size = 10): Attachment {
@@ -62,7 +63,15 @@ async function openDraft(options: Partial<Parameters<typeof useDraft>[0]>, answe
         });
         return null;
     }
-    ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Probe))));
+    // Under a route, as in the app: the router's browser history is what asks before the tab unloads.
+    const router = createRouter({
+        routeTree: createRootRoute({ component: () => createElement(Probe) }),
+        history: createBrowserHistory(),
+    });
+    await router.load();
+    ({ unmount } = await renderInDocument(
+        createElement(AuthProvider, null, createElement(RouterProvider, { router })),
+    ));
     const composer = () => {
         if (!seen.draft) throw new Error('the composer state never rendered');
         return seen.draft;
@@ -287,6 +296,46 @@ describe('closing the composer while a save is in flight', () => {
 
         await answer(1);
         expect(saves.length).toBe(2);
+    });
+});
+
+describe('closing the tab', () => {
+    const unload = () => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+    };
+
+    test('asks while an edit has not reached the server, and not once it has', async () => {
+        const { run, flush } = await openDraft({});
+        expect(unload()).toBe(false);
+        await run((d) => d.setField('body', '<p>The last words</p>'));
+        await run((d) => d.setField('bodyText', 'The last words'));
+        expect(unload()).toBe(true);
+        await flush();
+        expect(unload()).toBe(false);
+    });
+
+    test('lets a draft emptied of everything go, since no save would keep it', async () => {
+        const { run } = await openDraft({ email: savedDraft([]) });
+        await run((d) => d.setField('subject', ''));
+        await run((d) => d.setField('bodyText', ''));
+        expect(unload()).toBe(false);
+    });
+
+    test('asks while a save is on its way', async () => {
+        const answered = Promise.withResolvers<void>();
+        const { run } = await openDraft({
+            onSave: async () => {
+                await answered.promise;
+                return savedDraft([]);
+            },
+        });
+        await run((d) => d.setField('subject', 'Lunch'));
+        await run((d) => void d.flushAndGetDraft());
+        expect(unload()).toBe(true);
+        await act(async () => answered.resolve());
+        expect(unload()).toBe(false);
     });
 });
 

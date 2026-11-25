@@ -906,7 +906,7 @@ describe('9. a sheet name', () => {
         const rename = (name: unknown) => ({ kind: 'record', sheet: 's1', type: 'sheet', id: 's1', set: { name } });
         expect(accepts(rename('Q1 sales'))).toBe(true);
         expect(accepts(rename('x'.repeat(31)))).toBe(true);
-        for (const name of ['', 'x'.repeat(32), 'a:b', 'a[1]', "'a", "a'", 'a/b', 'a?', 'a*', 'a\\b', 3]) {
+        for (const name of ['', ' ', '\n', 'x'.repeat(32), 'a:b', 'a[1]', "'a", "a'", 'a/b', 'a?', 'a*', 'a\\b', 3]) {
             expect(accepts(rename(name))).toBe(false);
             expect(accepts(added({ fields: { name, order: 'a0' } }))).toBe(false);
         }

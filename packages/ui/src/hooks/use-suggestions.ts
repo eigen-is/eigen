@@ -1,26 +1,27 @@
+// The keys of a suggestion list under a text box, such as the chat composer's @-mention and slash command lists or
+// the sheet's formula names: the arrows move the pick, Enter or Tab commits it, and Escape closes the list. The box
+// decides when its list is visible from what it holds; a list closed with Escape keeps the text and stays closed
+// until the box stops asking for it.
+
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 type UseSuggestionsOptions = {
     visible: boolean;
     onSelect: (item: string) => void;
-    onEscape: () => void;
-    // Fires on commit (Enter/Tab) when the list is empty. Use when a "commit nothing" should
-    // still dismiss the suggest — @-mention uses this to strip the trailing `@query` text.
-    onCommitEmpty?: () => void;
-    // Pass keys through to the caller when the list is empty. True for suggests that should
-    // stay invisible to the send handler when they have nothing to offer; false for suggests
-    // that want to consume keys even with an empty list (default).
+    onEscape?: () => void;
+    // An empty list leaves every key to the box, so Enter sends what is typed.
     passthroughWhenEmpty?: boolean;
-    // Accept Shift+Enter as commit too. Default false (shift+Enter inserts a newline). Set
-    // true on the @-mention suggest to preserve its historic commit-on-any-Enter behavior.
+    // Shift+Enter commits too, where it would otherwise be a newline.
     acceptShiftEnter?: boolean;
 };
 
 type UseSuggestionsResult = {
+    // Whether the list shows: visible, and not closed with Escape since it last opened.
+    open: boolean;
     selectedIndex: number;
     onItemsChange: (count: number, items: string[]) => void;
-    // Returns true when the key was consumed; callers should early-return in that case.
+    // True when the list took the key, so the box ignores it.
     handleKeyDown: (e: React.KeyboardEvent) => boolean;
     // Whether handleKeyDown takes keys right now: the input's aria-expanded.
     isActive: boolean;
@@ -30,13 +31,13 @@ export function useSuggestions({
     visible,
     onSelect,
     onEscape,
-    onCommitEmpty,
     passthroughWhenEmpty = false,
     acceptShiftEnter = false,
 }: UseSuggestionsOptions): UseSuggestionsResult {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const selectedIndexRef = useRef(0);
     const [count, setCount] = useState(0);
+    const [dismissed, setDismissed] = useState(false);
     const itemsRef = useRef<string[]>([]);
 
     selectedIndexRef.current = selectedIndex;
@@ -48,10 +49,13 @@ export function useSuggestions({
     }, []);
 
     useEffect(() => {
-        if (!visible) setSelectedIndex(0);
+        if (visible) return;
+        setSelectedIndex(0);
+        setDismissed(false);
     }, [visible]);
 
-    const isActive = visible && !(passthroughWhenEmpty && count === 0);
+    const open = visible && !dismissed;
+    const isActive = open && !(passthroughWhenEmpty && count === 0);
 
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent): boolean => {
@@ -74,21 +78,20 @@ export function useSuggestions({
                 if (item !== undefined) {
                     onSelect(item);
                     setSelectedIndex(0);
-                } else {
-                    onCommitEmpty?.();
                 }
                 return true;
             }
             if (e.key === 'Escape') {
                 e.preventDefault();
-                onEscape();
+                setDismissed(true);
+                onEscape?.();
                 setSelectedIndex(0);
                 return true;
             }
             return false;
         },
-        [isActive, count, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
+        [isActive, count, acceptShiftEnter, onSelect, onEscape],
     );
 
-    return { selectedIndex, onItemsChange, handleKeyDown, isActive };
+    return { open, selectedIndex, onItemsChange, handleKeyDown, isActive };
 }

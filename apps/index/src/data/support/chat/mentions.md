@@ -17,7 +17,7 @@ An @-mention lets you address a specific person in a message. When you type `@`,
 3. Use the arrow keys to move through the list, then press Enter or Tab to pick someone. You can also click a name in the list.
 4. The person's email address is added to your message, ready for you to continue typing.
 
-Press Escape to close the list without adding a mention.
+Press Escape to close the list without adding a mention. What you typed stays in the message box.
 
 ## How it appears in the conversation
 
