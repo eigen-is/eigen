@@ -24,6 +24,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Cards in Stickies** — the items on a board are called cards in every button, menu, notification, activity row and help article, such as **Add card** and **Delete card**
 - **New events in Calendar** — start an hour long, as in Google Calendar, from **Create event** and the **c** key too
 - **Event colors in Calendar** — in light mode, events are lighter, the same shade as a Stickies card of that color
+- **Cards and events** — cards in Stickies, comments in Docs, Sheets, Slides and Vector, and events in Calendar are square with a lighter shadow, so they look alike. Opened, each shows its colored block with the title on top, then its details under small headings
 
 ### Fixed
 
