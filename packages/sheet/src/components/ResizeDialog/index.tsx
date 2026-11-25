@@ -37,22 +37,18 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
         return uniformSize != null ? String(uniformSize) : '';
     });
     const [value, setValue] = useState(opened);
-    // Why the last Apply was refused, until the next edit.
-    const [refusal, setRefusal] = useState<string>();
+    // An empty size says why only once Apply was pressed, until the next edit.
+    const [refused, setRefused] = useState(false);
     const reasonId = useId();
 
     const size = Number(value);
     const rangeMessage = `Enter a value between 1 and ${MAX_SIZE[mode]}.`;
     const outOfRange = value !== '' && !(Number.isInteger(size) && size >= 1 && size <= MAX_SIZE[mode]);
-    const reason = outOfRange ? rangeMessage : refusal;
+    const reason = outOfRange || refused ? rangeMessage : undefined;
 
     const apply = () => {
         if (value === '' || outOfRange) {
-            setRefusal(rangeMessage);
-            return false;
-        }
-        if (selectedIndices.length === 0) {
-            setRefusal(isRow ? 'Select the rows to resize first.' : 'Select the columns to resize first.');
+            setRefused(true);
             return false;
         }
         setContext((draftCtx) => {
@@ -79,7 +75,7 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
                             aria-describedby={reason ? reasonId : undefined}
                             onChange={(e) => {
                                 setValue(e.target.value);
-                                setRefusal(undefined);
+                                setRefused(false);
                             }}
                         />
                         <span className="text-sm text-muted-foreground">px</span>
