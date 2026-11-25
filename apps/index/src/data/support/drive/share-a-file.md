@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/get-started]
 order: 20
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with everyone on your Eigen server who has the link, and decide whether they can view it or also make changes.
@@ -17,16 +17,16 @@ Everything in Drive is private to you until you share it. You can share a file o
 2. Right-click it (or open the **⋮** menu), hover over **Share**, then click **Share** in the sub-menu that appears.
 3. In the **Share** dialog, type a name or email address in the box at the top, then pick the person. They appear under **People with access**.
 4. Choose what they can do from the dropdown next to their name: **Editor** (view and make changes) or **Viewer** (view only). New people are added as **Editors**.
-5. Click **Save**.
+5. Click **Save**. An address still in the box is added first, so you don't lose it.
 
-To remove someone later, open the same dialog, set their dropdown to **Remove**, and click **Save**.
+To remove someone later, open the same dialog, set their dropdown to **Remove**, and click **Save**. Changed your mind before saving? Type their address again to add them back.
 
 ::: video src="/data/about/media/drive-share" caption="A person added as a viewer in the Share dialog, then cancelled instead of saved."
 :::
 
 ## Share with a team
 
-If you belong to a team, click **Share with team** at the bottom of the dialog and pick the team. Everyone in that team gets access.
+If you belong to a team, click **Share with team** at the bottom of the dialog and pick the team. Everyone in that team gets access. On a phone the button shows only its people icon.
 
 ## Share with a link
 

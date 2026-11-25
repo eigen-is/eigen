@@ -1,14 +1,16 @@
-// The Share dialog lists who has access and saves only what changed, then closes. Save waits for a change, Enter in
-// the contact field adds that person and saves nothing, a person already listed is refused under the field, and a
-// save that fails stays open with the edits kept. Cancel
-// waits while a save runs. The lock and the read-only list's header are buttons the keyboard reaches. The owner gets
-// the Share with team menu, and a viewer who may only look gets Close alone.
+// The Share dialog keeps the dialog contract. It lists who has access and saves only what changed, then closes; with
+// nothing changed Save closes like Cancel. Enter in the people field adds that person and saves nothing, and Save adds
+// a person still typed there first. A person already listed, or yourself, is refused under the field, and a person set
+// to Remove may be added back. A save that fails stays open with the edits kept. The lock and the read-only list's
+// header are buttons the keyboard reaches. The owner gets the Share with team menu, and a viewer who may only look
+// gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { pressKey } from '../../press-key';
@@ -185,6 +187,7 @@ const typeContact = (value: string) =>
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(contactField(), value);
         contactField().dispatchEvent(new Event('input', { bubbles: true }));
     });
+const fieldError = () => dialog()?.querySelector('[data-slot="field-error"]')?.textContent;
 const addByEnter = async (email: string) => {
     await typeContact(email);
     await act(async () => pressEnter(contactField()));
@@ -221,7 +224,21 @@ async function chooseAccess(email: string, label: string) {
     );
 }
 
-test('Share lists who has access, and Save waits for a change', async () => {
+test('Share keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness),
+        submitLabel: 'Save',
+        firstField: 'Add people',
+        onSubmit: updateACL,
+        makeChanged: () => click(lock(OPEN_LINK)),
+        makeInvalid: () => typeContact('not-an-email'),
+        invalidField: 'Add people',
+        except: { enter: 'Enter in the people field adds the person typed, and never saves' },
+    });
+});
+
+test('Share lists who has access, and Save with nothing changed closes and sends nothing', async () => {
     await open();
     expect(dialog()?.querySelector('h2')?.textContent).toBe("Share 'Notes'");
     expect(people()).toEqual([
@@ -231,7 +248,65 @@ test('Share lists who has access, and Save waits for a change', async () => {
         'carol@example.com: Viewer',
     ]);
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'Save']);
-    expect(button('Save')?.disabled).toBe(true);
+    await click(button('Save'));
+    await settle();
+    expect(updateACL).not.toHaveBeenCalled();
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('Save adds a person still typed in the field, and saves them with the rest', async () => {
+    await open();
+    await chooseAccess('bob@example.com', 'Editor');
+    await typeContact('dan@example.com');
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([
+        [
+            expect.objectContaining({
+                add: [
+                    { id: 'bob@example.com', read: true, write: true },
+                    { id: 'dan@example.com', read: true, write: true },
+                ],
+                remove: [],
+            }),
+        ],
+    ]);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a typed person alone counts as a change, so Esc asks before it drops them', async () => {
+    await open();
+    await typeContact('dan@example.com');
+    await act(async () => {
+        contactField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    const titles = [...document.querySelectorAll('[role="dialog"] h2')].map((h) => h.textContent);
+    expect(titles).toContain('Discard changes?');
+    expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('your own address is refused under the field', async () => {
+    await open();
+    await addByEnter('owner@example.com');
+    expect(fieldError()).toBe('owner@example.com is already in the list');
+    baseDirectList = [ADA];
+    await unmount();
+    await open();
+    await addByEnter('owner@example.com');
+    expect(fieldError()).toBe('You already have access');
+    expect(people()).not.toContain('owner@example.com: Editor');
+});
+
+test('a person set to Remove is added back with the access they had', async () => {
+    await open();
+    await chooseAccess('bob@example.com', 'Remove');
+    expect(people()).toContain('bob@example.com: Remove');
+    await addByEnter('bob@example.com');
+    expect(fieldError()).toBeUndefined();
+    expect(people()).toContain('bob@example.com: Viewer');
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([[expect.objectContaining({ add: [], remove: [] })]]);
 });
 
 test('Enter in the contact field adds the person and saves nothing', async () => {
@@ -239,7 +314,6 @@ test('Enter in the contact field adds the person and saves nothing', async () =>
     await addByEnter('dan@example.com');
     expect(people()).toContain('dan@example.com: Editor');
     expect(contactField().value).toBe('');
-    expect(button('Save')?.disabled).toBe(false);
 
     // An empty field takes Enter too, so a pending change is still not saved.
     await act(async () => pressEnter(contactField()));
@@ -253,10 +327,7 @@ test('a person already in the list stays in the field, refused under it', async 
     await addByEnter('ada@example.com');
     expect(contactField().value).toBe('ada@example.com');
     expect(contactField().getAttribute('aria-invalid')).toBe('true');
-    expect(dialog()?.querySelector('[data-slot="field-error"]')?.textContent).toBe(
-        'ada@example.com is already in the list',
-    );
-    expect(button('Save')?.disabled).toBe(true);
+    expect(fieldError()).toBe('ada@example.com is already in the list');
 });
 
 test('Save sends exactly what changed and closes once it is saved', async () => {
@@ -354,12 +425,10 @@ test('another item opens with its own list, and a refetch of the same item keeps
     await addByEnter('dan@example.com');
     await act(async () => showPath({ ...notes, updatedAt: new Date('2026-09-21T09:00:00Z') }));
     expect(people()).toContain('dan@example.com: Editor');
-    expect(button('Save')?.disabled).toBe(false);
 
     await act(async () => showPath(plans));
     expect(dialog()?.querySelector('h2')?.textContent).toBe("Share 'Plans'");
     expect(people()).toEqual(['owner@example.com: Owner', 'erin@example.com: Viewer', 'carol@example.com: Viewer']);
-    expect(button('Save')?.disabled).toBe(true);
 });
 
 test('Email collaborators for one item closes when the host moves to another', async () => {
