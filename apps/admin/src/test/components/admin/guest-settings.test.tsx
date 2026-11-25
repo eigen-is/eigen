@@ -1,5 +1,6 @@
 // Guest access keeps the page contract, saves only the guest settings it changed, and shows no Save for a switch
-// turned back to what was saved.
+// turned back to what was saved. The days field takes what is typed, an emptied field included, and a number of days
+// outside what the server takes says so under the field and saves nothing.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -63,6 +64,8 @@ test('Guest access keeps the page contract', async () => {
         firstField: DAYS,
         onSubmit: saveSettings,
         makeChanged: () => typeDays('30'),
+        makeInvalid: () => typeDays('999'),
+        invalidField: DAYS,
     });
 });
 
@@ -82,4 +85,22 @@ test('a switch turned back to what was saved leaves nothing to save', async () =
     expect(saveButton()).toBeDefined();
     await toggle();
     expect(saveButton()).toBeUndefined();
+});
+
+test('the days field can be emptied and retyped, and days outside 1 to 365 are refused under it', async () => {
+    await openPage();
+    const days = control(DAYS);
+    if (!(days instanceof HTMLInputElement)) throw new Error('the days field is no input');
+    await typeDays('');
+    expect(days.value).toBe('');
+    await typeDays('0');
+    expect(days.value).toBe('0');
+    await act(async () => pressEnter(days));
+    expect(saveSettings).not.toHaveBeenCalled();
+    const message = document.getElementById(days.getAttribute('aria-describedby') ?? '');
+    expect(message?.textContent).toBe('A whole number of days, from 1 to 365');
+
+    await typeDays('365');
+    await act(async () => pressEnter(days));
+    expect(saveSettings.mock.calls).toEqual([[{ guests: { inactivityDays: 365 } }]]);
 });

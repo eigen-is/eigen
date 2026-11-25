@@ -86,10 +86,11 @@ function OnboardingSettingsForm({ onboarding }: { onboarding: ServerSettings['on
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Body</Label>
+                        <Label id={`${fieldId}-invite-body`}>Body</Label>
                         <div className="border rounded-md p-3 min-h-[160px] bg-background">
                             <LightEditor
                                 key={`invite-${editorKey}`}
+                                labelledBy={`${fieldId}-invite-body`}
                                 content={current.inviteEmail.body}
                                 onChange={(body) => update({ inviteEmail: { body } })}
                                 submitOnModEnter
@@ -149,10 +150,11 @@ function OnboardingSettingsForm({ onboarding }: { onboarding: ServerSettings['on
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Body</Label>
+                                    <Label id={`${fieldId}-welcome-body`}>Body</Label>
                                     <div className="border rounded-md p-3 min-h-[160px] bg-background">
                                         <LightEditor
                                             key={`welcome-${editorKey}`}
+                                            labelledBy={`${fieldId}-welcome-body`}
                                             content={current.welcomeMail.body}
                                             onChange={(body) => update({ welcomeMail: { body } })}
                                             submitOnModEnter

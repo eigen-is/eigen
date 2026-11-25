@@ -1,6 +1,7 @@
 // The first-run wizard that names the organization, picks where files are stored, and creates the admin account.
 // The admin app shows it in place of everything else while the server reports that setup is still required, and
-// the setup link's token proves the visitor ran the setup command.
+// the setup link's token proves the visitor ran the setup command. Complete setup with a field missing or wrong says
+// so under that field and sends nothing.
 
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
@@ -12,11 +13,15 @@ import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@wo
 import { EigenLoader } from '@workspace/ui/components/braket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { FieldError } from '@workspace/ui/components/field';
+import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Label } from '@workspace/ui/components/label';
 import { EmptyState } from '@workspace/ui/components/layout/app';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { CheckCircle2, KeyRound } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
@@ -37,66 +42,59 @@ export function SetupWizard({ status, setupToken }: { status: SetupStatus; setup
     return <SetupForm status={status} setupToken={setupToken} />;
 }
 
+type SetupFields = {
+    orgName: string;
+    // Empty means the org name; the server stores only a sender that differs from the defaults.
+    senderName: string;
+    senderAddress: string;
+    adminName: string;
+    adminUsername: string;
+    adminPassword: string;
+};
+
 function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: string }) {
     const completeSetup = useCompleteSetup(setupToken);
     const s3Check = useCheckSetupS3(setupToken);
     const s3Harden = useHardenSetupS3(setupToken);
-    const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
-    const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
-        s3Harden.mutateAsync({ ...config, noncurrentDays });
+    const { pending, run } = useDialogPending();
 
     const [completed, setCompleted] = useState(false);
-
-    const [orgName, setOrgName] = useState('');
-    // Empty means the org name; the server stores only a sender that differs from the defaults.
-    const [senderName, setSenderName] = useState('');
-    const [senderAddress, setSenderAddress] = useState(defaultSenderAddress(status.mailDomain));
+    const [fields, setFields] = useState<SetupFields>({
+        orgName: '',
+        senderName: '',
+        senderAddress: defaultSenderAddress(status.mailDomain),
+        adminName: '',
+        adminUsername: '',
+        adminPassword: '',
+    });
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
-    const [adminUsername, setAdminUsername] = useState('');
-    const [adminPassword, setAdminPassword] = useState('');
-    const [adminName, setAdminName] = useState('');
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
-    const username = adminUsername.trim().toLowerCase();
-    const usernameError = username ? validateUsername(username) : null;
-    const senderAddressValid = validateEmailAddress(senderAddress);
-    const formReady = !!(
-        orgName &&
-        senderAddressValid &&
-        username &&
-        !usernameError &&
-        adminName &&
-        adminPassword.length >= MIN_PASSWORD_LENGTH &&
-        s3Verified
-    );
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!formReady) return;
-        completeSetup.mutate(
-            {
-                orgName: orgName.trim(),
-                senderName,
-                senderAddress,
-                storageType,
-                adminUsername: username,
-                adminPassword,
-                adminName,
-                ...(storageType === 's3'
-                    ? {
-                          s3Endpoint: s3Config.endpoint,
-                          s3Bucket: s3Config.bucket,
-                          s3Prefix: s3Config.prefix,
-                          s3Region: s3Config.region ?? '',
-                          s3AccessKeyId: s3Config.accessKeyId,
-                          s3SecretAccessKey: s3Config.secretAccessKey,
-                      }
-                    : {}),
-            },
-            { onSuccess: () => setCompleted(true) },
-        );
+    const handleSubmit = async () => {
+        const problems = problemsOf(fields);
+        if (Object.values(problems).some(Boolean) || !s3Verified) return false;
+        await completeSetup.mutateAsync({
+            orgName: fields.orgName.trim(),
+            senderName: fields.senderName,
+            senderAddress: fields.senderAddress,
+            storageType,
+            adminUsername: usernameOf(fields),
+            adminPassword: fields.adminPassword,
+            adminName: fields.adminName,
+            ...(storageType === 's3'
+                ? {
+                      s3Endpoint: s3Config.endpoint,
+                      s3Bucket: s3Config.bucket,
+                      s3Prefix: s3Config.prefix,
+                      s3Region: s3Config.region ?? '',
+                      s3AccessKeyId: s3Config.accessKeyId,
+                      s3SecretAccessKey: s3Config.secretAccessKey,
+                  }
+                : {}),
+        });
+        setCompleted(true);
     };
 
     if (completed) {
@@ -131,125 +129,29 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                     <CardDescription>Let's configure your instance</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-4">
-                            <h3 className="font-medium text-lg">Server configuration</h3>
-
-                            <div>
-                                <Label htmlFor="orgName">Organization name</Label>
-                                <Input
-                                    id="orgName"
-                                    value={orgName}
-                                    onChange={(e) => setOrgName(e.target.value.trimStart())}
-                                    placeholder={ORG_NAME_PLACEHOLDER}
-                                    required
-                                    className="mt-1.5"
+                    <FormShell className="space-y-6" onSubmit={() => run(handleSubmit)} autoFocus>
+                        <SetupFieldset
+                            fields={fields}
+                            onChange={(patch) => setFields((prev) => ({ ...prev, ...patch }))}
+                            mailDomain={status.mailDomain}
+                            storagePicker={
+                                <StorageTypePicker
+                                    storageType={storageType}
+                                    onStorageTypeChange={setStorageType}
+                                    s3Config={s3Config}
+                                    onS3ConfigChange={setS3Config}
+                                    checkS3={(config) => s3Check.mutateAsync(config)}
+                                    hardenS3={(config, noncurrentDays) =>
+                                        s3Harden.mutateAsync({ ...config, noncurrentDays })
+                                    }
+                                    onS3Verified={onS3Verified}
                                 />
-                            </div>
-
-                            <div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <Label htmlFor="senderName">Sender name</Label>
-                                        <Input
-                                            id="senderName"
-                                            value={senderName}
-                                            onChange={(e) => setSenderName(e.target.value)}
-                                            placeholder={orgName.trim() || ORG_NAME_PLACEHOLDER}
-                                            maxLength={100}
-                                            className="mt-1.5"
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="senderAddress">Sender address</Label>
-                                        <Input
-                                            id="senderAddress"
-                                            type="email"
-                                            value={senderAddress}
-                                            onChange={(e) => setSenderAddress(e.target.value.trim())}
-                                            required
-                                            className="mt-1.5"
-                                        />
-                                    </div>
-                                </div>
-                                {senderAddressValid ? (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Notifications, codes and invitations are sent from this address. Your mail relay
-                                        must be allowed to send from it.
-                                    </p>
-                                ) : (
-                                    <p className="text-xs text-destructive mt-1">This is not an email address</p>
-                                )}
-                            </div>
-
-                            <StorageTypePicker
-                                storageType={storageType}
-                                onStorageTypeChange={setStorageType}
-                                s3Config={s3Config}
-                                onS3ConfigChange={setS3Config}
-                                checkS3={handleS3Check}
-                                hardenS3={handleS3Harden}
-                                onS3Verified={onS3Verified}
-                            />
-                        </div>
-
-                        <div className="space-y-4 pt-6 border-t">
-                            <h3 className="font-medium text-lg">Admin account</h3>
-
-                            <div>
-                                <Label htmlFor="adminName">Full name</Label>
-                                <Input
-                                    id="adminName"
-                                    value={adminName}
-                                    onChange={(e) => setAdminName(e.target.value)}
-                                    required
-                                    className="mt-1.5"
-                                />
-                            </div>
-
-                            <div>
-                                <Label htmlFor="adminUsername">Username</Label>
-                                <InputGroup className="mt-1.5">
-                                    <InputGroupInput
-                                        id="adminUsername"
-                                        value={adminUsername}
-                                        onChange={(e) => setAdminUsername(e.target.value)}
-                                        placeholder="jane"
-                                        autoComplete="off"
-                                        required
-                                    />
-                                    <InputGroupAddon align="inline-end">
-                                        <InputGroupText>@{status.mailDomain}</InputGroupText>
-                                    </InputGroupAddon>
-                                </InputGroup>
-                                {usernameError ? (
-                                    <p className="text-xs text-destructive mt-1">{usernameError}</p>
-                                ) : (
-                                    <p className="text-xs text-muted-foreground mt-1">You sign in with this address</p>
-                                )}
-                            </div>
-
-                            <div>
-                                <Label htmlFor="adminPassword">Password</Label>
-                                <Input
-                                    id="adminPassword"
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={adminPassword}
-                                    onChange={(e) => setAdminPassword(e.target.value)}
-                                    minLength={MIN_PASSWORD_LENGTH}
-                                    required
-                                    className="mt-1.5"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    At least {MIN_PASSWORD_LENGTH} characters
-                                </p>
-                            </div>
-                        </div>
+                            }
+                        />
 
                         <div className="space-y-1.5">
-                            <Button type="submit" disabled={completeSetup.isPending} className="w-full">
-                                {completeSetup.isPending ? 'Setting up...' : 'Complete setup'}
+                            <Button type="submit" pending={pending} className="w-full">
+                                Complete setup
                             </Button>
                             {!s3Verified && (
                                 <p className="text-xs text-muted-foreground text-center">
@@ -257,9 +159,177 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                 </p>
                             )}
                         </div>
-                    </form>
+                    </FormShell>
                 </CardContent>
             </Card>
         </div>
     );
+}
+
+// Its own component, so it reads whether Complete setup was pressed.
+function SetupFieldset({
+    fields,
+    onChange,
+    mailDomain,
+    storagePicker,
+}: {
+    fields: SetupFields;
+    onChange: (patch: Partial<SetupFields>) => void;
+    mailDomain: string;
+    storagePicker: ReactNode;
+}) {
+    const submitted = useFormSubmitted();
+    const problems = problemsOf(fields);
+    // A wrong sender or username shows as it is typed, a missing value only once Complete setup was pressed.
+    const shown = (field: keyof SetupFields) =>
+        submitted || (LIVE.has(field) && fields[field] !== '') ? problems[field] : undefined;
+    const note = (field: keyof SetupFields) => {
+        const problem = shown(field);
+        const id = `${field}-note`;
+        const text = problem ?? HINTS[field];
+        return {
+            input: { 'aria-invalid': !!problem || undefined, 'aria-describedby': text ? id : undefined },
+            line: problem ? (
+                <FieldError id={id} className="mt-1">
+                    {problem}
+                </FieldError>
+            ) : (
+                text && (
+                    <p id={id} className="text-xs text-muted-foreground mt-1">
+                        {text}
+                    </p>
+                )
+            ),
+        };
+    };
+    const orgName = note('orgName');
+    const senderAddress = note('senderAddress');
+    const adminName = note('adminName');
+    const adminUsername = note('adminUsername');
+    const adminPassword = note('adminPassword');
+
+    return (
+        <>
+            <div className="space-y-4">
+                <h3 className="font-medium text-lg">Server configuration</h3>
+
+                <div>
+                    <Label htmlFor="orgName">Organization name</Label>
+                    <Input
+                        id="orgName"
+                        value={fields.orgName}
+                        onChange={(e) => onChange({ orgName: e.target.value.trimStart() })}
+                        placeholder={ORG_NAME_PLACEHOLDER}
+                        className="mt-1.5"
+                        {...orgName.input}
+                    />
+                    {orgName.line}
+                </div>
+
+                <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="senderName">Sender name</Label>
+                            <Input
+                                id="senderName"
+                                value={fields.senderName}
+                                onChange={(e) => onChange({ senderName: e.target.value })}
+                                placeholder={fields.orgName.trim() || ORG_NAME_PLACEHOLDER}
+                                maxLength={100}
+                                className="mt-1.5"
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="senderAddress">Sender address</Label>
+                            <Input
+                                id="senderAddress"
+                                type="email"
+                                value={fields.senderAddress}
+                                onChange={(e) => onChange({ senderAddress: e.target.value.trim() })}
+                                className="mt-1.5"
+                                {...senderAddress.input}
+                            />
+                        </div>
+                    </div>
+                    {senderAddress.line}
+                </div>
+
+                {storagePicker}
+            </div>
+
+            <div className="space-y-4 pt-6 border-t">
+                <h3 className="font-medium text-lg">Admin account</h3>
+
+                <div>
+                    <Label htmlFor="adminName">Full name</Label>
+                    <Input
+                        id="adminName"
+                        value={fields.adminName}
+                        onChange={(e) => onChange({ adminName: e.target.value })}
+                        className="mt-1.5"
+                        {...adminName.input}
+                    />
+                    {adminName.line}
+                </div>
+
+                <div>
+                    <Label htmlFor="adminUsername">Username</Label>
+                    <InputGroup className="mt-1.5">
+                        <InputGroupInput
+                            id="adminUsername"
+                            value={fields.adminUsername}
+                            onChange={(e) => onChange({ adminUsername: e.target.value })}
+                            placeholder="jane"
+                            autoComplete="off"
+                            {...adminUsername.input}
+                        />
+                        <InputGroupAddon align="inline-end">
+                            <InputGroupText>@{mailDomain}</InputGroupText>
+                        </InputGroupAddon>
+                    </InputGroup>
+                    {adminUsername.line}
+                </div>
+
+                <div>
+                    <Label htmlFor="adminPassword">Password</Label>
+                    <Input
+                        id="adminPassword"
+                        type="password"
+                        autoComplete="new-password"
+                        value={fields.adminPassword}
+                        onChange={(e) => onChange({ adminPassword: e.target.value })}
+                        className="mt-1.5"
+                        {...adminPassword.input}
+                    />
+                    {adminPassword.line}
+                </div>
+            </div>
+        </>
+    );
+}
+
+const LIVE: ReadonlySet<keyof SetupFields> = new Set(['senderAddress', 'adminUsername']);
+
+// The line under a field while nothing is wrong with it.
+const HINTS: Partial<Record<keyof SetupFields, string>> = {
+    senderAddress:
+        'Notifications, codes and invitations are sent from this address. Your mail relay must be allowed to send from it.',
+    adminUsername: 'You sign in with this address',
+    adminPassword: `At least ${MIN_PASSWORD_LENGTH} characters`,
+};
+
+const usernameOf = (fields: SetupFields) => fields.adminUsername.trim().toLowerCase();
+
+function problemsOf(fields: SetupFields): Partial<Record<keyof SetupFields, string>> {
+    const username = usernameOf(fields);
+    return {
+        orgName: fields.orgName ? undefined : 'Add a name',
+        senderAddress: validateEmailAddress(fields.senderAddress) ? undefined : 'This is not an email address',
+        adminName: fields.adminName.trim() ? undefined : 'Add your name',
+        adminUsername: username ? (validateUsername(username) ?? undefined) : 'Add a username',
+        adminPassword:
+            fields.adminPassword.length < MIN_PASSWORD_LENGTH
+                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+                : undefined,
+    };
 }

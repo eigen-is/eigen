@@ -2,7 +2,8 @@
 // name alone sends the name and nothing else. Send test mail is a button of its own, so Enter in a field saves rather than
 // sending, and a click sends without saving. Each landing link's remove button is named after the link: its title,
 // its URL when the title is empty, or "empty link" for a row with neither, so a screen reader hears which one goes. A
-// save refused for an incomplete bucket says which field under it and focuses that field.
+// save refused for an incomplete bucket says which field under it and focuses that field. Each switch is named by its
+// label and described by its sentence.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { expectFormContract } from '@workspace/ui/test/form-contract';
@@ -192,4 +193,15 @@ test('a save refused for an incomplete bucket says so under the field and focuse
     expect(document.getElementById(field('Endpoint').getAttribute('aria-describedby') ?? '')?.textContent).toBe(
         'Add an endpoint',
     );
+});
+
+test('each notification switch is named by its label and described by its sentence', async () => {
+    await openPage();
+    const tag = [...document.querySelectorAll('label')].find(
+        (l) => l.textContent === 'Email users for calendar invites',
+    );
+    const toggle = tag && document.getElementById(tag.htmlFor);
+    expect(toggle?.getAttribute('role')).toBe('switch');
+    const description = document.getElementById(toggle?.getAttribute('aria-describedby') ?? '');
+    expect(description?.textContent).toBe("An invitation can't wait, and Google Calendar and Outlook email it too.");
 });

@@ -1,9 +1,11 @@
 // The owner's Guest access settings: whether anyone may ask for a guest sign-in code, even with nothing shared to
 // them yet, and after how many idle days a guest account is deleted. Changes collect in a draft on a PageForm and save
-// together through the server-settings hooks. The Guest access route shows it.
+// together through the server-settings hooks, once the days are a whole number in the range the server takes. The
+// Guest access route shows it.
 
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
+import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { LoadingState, PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
@@ -11,6 +13,10 @@ import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { useId } from 'react';
 import { usePageDraft } from './hooks/use-page-draft';
+
+// What the server takes.
+const MIN_DAYS = 1;
+const MAX_DAYS = 365;
 
 export function GuestSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
@@ -31,8 +37,12 @@ function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
     const fieldId = useId();
 
     const update = (patch: Partial<ServerSettings['guests']>) => setDraft((prev) => ({ ...prev, ...patch }));
+    const days = current.inactivityDays;
+    // An emptied field reads as NaN, which is no whole number either.
+    const daysOutOfRange = !Number.isInteger(days) || days < MIN_DAYS || days > MAX_DAYS;
 
     const handleSave = async () => {
+        if (daysOutOfRange) return false;
         await updateSettings.mutateAsync({ guests: draft });
         reset();
     };
@@ -41,7 +51,7 @@ function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
         <PageForm changed={changed} onSubmit={handleSave} onReset={reset}>
             <SettingsSection
                 title="Open signup"
-                description="When enabled, anyone can request a guest OTP — even if no resource has been shared with their email yet. Disable to require a pending share before issuing OTPs."
+                description="On, anyone can ask for a sign-in code with their email address, even before anything is shared with them. Off, only someone who has something shared with them gets a code."
             >
                 <div className="flex items-center gap-3">
                     <Switch
@@ -57,22 +67,25 @@ function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
 
             <SettingsSection
                 title="Inactivity cleanup"
-                description="Guest accounts with no session activity for this many days are deleted automatically by a daily sweep. Their share registry entries persist, so re-signing in restores their shared resources."
+                description="Once a day, guest accounts that have not been active for this many days are deleted. What was shared with them stays, so a guest who signs in again gets it back."
             >
                 <div className="space-y-1.5">
                     <Label htmlFor={`${fieldId}-days`}>Days of inactivity before deletion</Label>
                     <Input
                         id={`${fieldId}-days`}
                         type="number"
-                        min={1}
-                        max={365}
-                        value={current.inactivityDays}
-                        onChange={(e) => {
-                            const value = e.target.valueAsNumber;
-                            if (Number.isNaN(value) || value < 1) return;
-                            update({ inactivityDays: value });
-                        }}
+                        min={MIN_DAYS}
+                        max={MAX_DAYS}
+                        value={Number.isNaN(days) ? '' : days}
+                        onChange={(e) => update({ inactivityDays: e.target.valueAsNumber })}
+                        aria-invalid={daysOutOfRange || undefined}
+                        aria-describedby={daysOutOfRange ? `${fieldId}-days-error` : undefined}
                     />
+                    {daysOutOfRange && (
+                        <FieldError id={`${fieldId}-days-error`}>
+                            A whole number of days, from {MIN_DAYS} to {MAX_DAYS}
+                        </FieldError>
+                    )}
                 </div>
             </SettingsSection>
         </PageForm>

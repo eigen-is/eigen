@@ -48,7 +48,7 @@ You can raise the **Mail, Contacts & Calendar (MB)** and **Default mount (MB)** 
 1. Open [Admin](/admin), click **Teams** in the sidebar, and click the team in the list.
 2. Click **Edit** at the top of the detail panel.
 3. Scroll to **Quota overrides**.
-4. Enter a value in **Mail, Contacts & Calendar (MB)** or **Default mount (MB)** (or both). Leave a field empty to keep the server default for that quota type.
-5. Click **Save settings**.
+4. Enter a value in **Mail, Contacts & Calendar (MB)** or **Default mount (MB)** (or both), of at least 10 MB. Leave a field empty to keep the server default for that quota type.
+5. Click **Save**.
 
 The override applies to all current and future members of that team. If you later remove the override by clearing the field and saving, those members return to the server-wide defaults.

@@ -14,10 +14,10 @@ import { invalidateMyTeams } from '../../home';
 import { invalidateTeamMembers } from '../../team';
 import { adminKeys, invalidateAdminTeams, invalidateAdminUsers, invalidateTeamRename } from './keys';
 
-export function useTeams(organizationId?: string) {
+export function useTeams(organizationId: string) {
     const isGuest = useIsGuest();
     return useQuery({
-        queryKey: adminKeys.teams(organizationId ?? ''),
+        queryKey: adminKeys.teams(organizationId),
         queryFn: async (): Promise<OrgTeam[]> => {
             const { data } = await authClient.organization.listTeams({
                 query: { organizationId },
@@ -30,12 +30,12 @@ export function useTeams(organizationId?: string) {
                 updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
             }));
         },
-        enabled: !!organizationId && !isGuest,
+        enabled: !isGuest,
         staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 
-export function useCreateTeam(organizationId?: string) {
+export function useCreateTeam(organizationId: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (name: string) => {
@@ -47,14 +47,14 @@ export function useCreateTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            invalidateAdminTeams(queryClient, organizationId ?? '');
+            invalidateAdminTeams(queryClient, organizationId);
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
 }
 
-export function useRemoveTeam(organizationId?: string) {
+export function useRemoveTeam(organizationId: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (teamId: string) => {
@@ -69,7 +69,7 @@ export function useRemoveTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            invalidateTeamRename(queryClient, organizationId ?? '');
+            invalidateTeamRename(queryClient, organizationId);
         },
         onError: onMutationError,
     });

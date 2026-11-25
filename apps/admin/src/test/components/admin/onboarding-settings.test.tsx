@@ -1,5 +1,5 @@
 // Onboarding keeps the page contract, and Cmd or Ctrl+Enter in an email body saves the page with no line break added,
-// since the body is a rich-text field inside the form.
+// since the body is a rich-text field inside the form. Each body is named by its Body label.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -68,6 +68,7 @@ test('Onboarding keeps the page contract', async () => {
         firstField: 'Subject',
         onSubmit: saveSettings,
         makeChanged: () => typeSubject('Hi'),
+        modEnterFields: ['Body'],
     });
 });
 
