@@ -17,7 +17,6 @@ type FontSizeStepperProps = {
 // Google Docs' and Sheets' "− [11] +", as narrow as theirs: a 32px box between 24px buttons.
 export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProps) {
     const shown = value === undefined ? '' : String(value);
-    // Editable buffer so typing doesn't apply on every keystroke; commit on blur/Enter.
     const [draft, setDraft] = useState(shown);
     // Escape blurs too, and that blur's handler still holds the typed draft.
     const escaped = useRef(false);
@@ -28,7 +27,7 @@ export function FontSizeStepper({ value, onChange, onStep }: FontSizeStepperProp
     }, [shown]);
 
     const commit = () => {
-        const size = escaped.current ? undefined : readFontSize(Number.parseFloat(draft));
+        const size = escaped.current || draft.trim() === '' ? undefined : readFontSize(Number(draft));
         escaped.current = false;
         if (size !== undefined && size !== value) onChange(size);
         else setDraft(shown);
