@@ -1,25 +1,26 @@
-// Change password sends the change once: while the server answers, the button reads "Changing password..." and takes
-// no second Enter or click. A done change returns to Space's start page; a refused one shows its toast and the form
-// can try again. A too-short new password says so, and stops saying so once the password is long enough.
+// Change password keeps the page contract and sends the change once: while the server answers, the button spins and
+// takes no second Enter or click. A done change returns to Space's start page; a refused one shows its toast and the
+// form can try again. A too-short new password says so, and stops saying so once the password is long enough.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
 
-// The change, stubbed and held until the test lets the server answer: one object, so the effects that depend on it settle.
+// The change, stubbed: one object, so the effects that depend on it settle. A test holds it until the server answers.
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 let answered = Promise.withResolvers<void>();
 const toasts: string[] = [];
-const changePassword = {
-    mutateAsync: mock(async (_data: { currentPassword: string; newPassword: string; revokeOtherSessions: boolean }) => {
-        // What the hook's mutateAsync does on a refusal: its onError toasts, and the promise still rejects.
-        await answered.promise.catch((error: unknown) => {
-            onMutationError(error);
-            throw error;
-        });
-    }),
+type PasswordChange = Parameters<ReturnType<typeof realAuth.useChangePassword>['mutateAsync']>[0];
+const changePassword = { mutateAsync: mock(async (_data: PasswordChange) => {}) };
+// What the hook's mutateAsync does on a refusal: its onError toasts, and the promise still rejects.
+const waitForAnswer = async () => {
+    await answered.promise.catch((error: unknown) => {
+        onMutationError(error);
+        throw error;
+    });
 };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -42,7 +43,8 @@ const { act, createElement } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
-const { routeTree } = await import('../../routeTree.gen');
+const { ChangePassword } = await import('../../../components/space/change-password');
+const { routeTree } = await import('../../../routeTree.gen');
 
 const auth = {
     isAuthenticated: true,
@@ -56,7 +58,8 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     answered = Promise.withResolvers<void>();
-    changePassword.mutateAsync.mockClear();
+    changePassword.mutateAsync.mockReset();
+    changePassword.mutateAsync.mockImplementation(waitForAnswer);
     toasts.length = 0;
 });
 
@@ -89,15 +92,43 @@ const type = (input: HTMLInputElement, value: string) =>
 
 const submitButton = () => document.querySelector<HTMLButtonElement>('button[type="submit"]');
 
-test('a second Enter while the change is on its way sends nothing', async () => {
-    const page = await open();
+const fillIn = async () => {
     await type(field('Current password'), 'old-password-123');
     await type(field('New password'), 'new-password-456');
     await type(field('Confirm new password'), 'new-password-456');
+};
+
+test('Change password keeps the page contract', async () => {
+    changePassword.mutateAsync.mockImplementation(async () => {});
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(UploadProvider, null, createElement(ChangePassword)),
+        submitLabel: 'Change password',
+        firstField: 'Current password',
+        onSubmit: changePassword.mutateAsync,
+        makeChanged: fillIn,
+        makeInvalid: () => type(field('Current password'), ''),
+        invalidField: 'Current password',
+        modEnterFields: ['Confirm new password'],
+    });
+});
+
+test('sends the passwords and the choice to log out other devices', async () => {
+    changePassword.mutateAsync.mockImplementation(async () => {});
+    await open();
+    await fillIn();
+    await act(async () => pressEnter(field('Confirm new password')));
+    expect(changePassword.mutateAsync.mock.calls).toEqual([
+        [{ currentPassword: 'old-password-123', newPassword: 'new-password-456', revokeOtherSessions: true }],
+    ]);
+});
+
+test('a second Enter while the change is on its way sends nothing', async () => {
+    const page = await open();
+    await fillIn();
 
     await act(async () => pressEnter(field('Confirm new password')));
-    expect(submitButton()?.disabled).toBe(true);
-    expect(submitButton()?.textContent).toBe('Changing password...');
+    expect(submitButton()?.getAttribute('aria-busy')).toBe('true');
     await act(async () => pressEnter(field('Confirm new password')));
     expect(changePassword.mutateAsync).toHaveBeenCalledTimes(1);
 
@@ -106,7 +137,7 @@ test('a second Enter while the change is on its way sends nothing', async () => 
 });
 
 // Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
-test('a refused change shows its toast, stays on the page and enables the button again', async () => {
+test('a refused change shows its toast, stays on the page and its button takes another try', async () => {
     const page = await open();
     await type(field('Current password'), 'wrong-password');
     await type(field('New password'), 'new-password-456');
@@ -117,8 +148,8 @@ test('a refused change shows its toast, stays on the page and enables the button
     await act(async () => void (await Bun.sleep(0)));
     expect(toasts).toEqual(['Invalid password']);
     expect(page.pathname()).toBe('/security/password');
-    expect(submitButton()?.disabled).toBe(false);
-    expect(submitButton()?.textContent).toBe('Change password');
+    expect(submitButton()?.getAttribute('aria-busy')).toBeNull();
+    expect(field('Current password').value).toBe('wrong-password');
 });
 
 test('a too-short new password says so until it is long enough', async () => {
