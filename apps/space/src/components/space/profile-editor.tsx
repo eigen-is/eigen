@@ -59,7 +59,7 @@ export function ProfileEditor() {
                 avatar: data.avatar || '',
                 etag: heldEtag,
             });
-            await navigate({ to: '/' });
+            await navigate({ to: '/', ignoreBlocker: true });
         });
     });
 

@@ -49,7 +49,7 @@ export function ChangePassword() {
 
     const onSubmit = form.handleSubmit(async ({ currentPassword, newPassword, revokeOtherSessions }) => {
         await changePassword.mutateAsync({ currentPassword, newPassword, revokeOtherSessions });
-        await navigate({ to: '/' });
+        await navigate({ to: '/', ignoreBlocker: true });
     });
 
     return (
