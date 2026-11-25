@@ -3,18 +3,18 @@
 // join. The organization's default team, which every user joins, has no remove buttons. A user's detail
 // has the same section the other way round, the teams that user is in.
 
-import { useMembers, useRemoveTeamMember } from '@workspace/lib/admin';
+import { useMembers } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMembers } from '@workspace/lib/team';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { Button } from '@workspace/ui/components/button';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserItem } from '@workspace/ui/components/user';
 import { UserRoundPlus, X } from 'lucide-react';
 import { useState } from 'react';
 import { AddMemberDialog } from './add-member-dialog';
+import { RemoveFromTeamDialog } from './remove-from-team-dialog';
 
 type TeamMembersSectionProps = {
     team: OrgTeam;
@@ -29,7 +29,6 @@ export function TeamMembersSection({ team, organizationId }: TeamMembersSectionP
 
     const { data: teamMembers = [] } = useTeamMembers(team.id);
     const { data: allMembers = [] } = useMembers(organizationId);
-    const removeMember = useRemoveTeamMember();
     const { data: config } = usePublicConfig();
     const isDefaultTeam = team.id === config?.defaultTeamId;
 
@@ -83,22 +82,7 @@ export function TeamMembersSection({ team, organizationId }: TeamMembersSectionP
                 </div>
             )}
 
-            <ConfirmDialog
-                open={confirmOpen}
-                onOpenChange={setConfirmOpen}
-                title="Remove from team"
-                description={
-                    <>
-                        Remove <strong>{removing.name}</strong> from <strong>{team.name}</strong>? They lose access to
-                        what is shared with the team.
-                    </>
-                }
-                onConfirm={async () => {
-                    await removeMember.mutateAsync({ teamId: team.id, userId: removing.userId });
-                }}
-                confirmText="Remove"
-                destructive
-            />
+            <RemoveFromTeamDialog open={confirmOpen} onOpenChange={setConfirmOpen} team={team} member={removing} />
         </div>
     );
 }
