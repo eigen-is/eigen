@@ -3,7 +3,7 @@
 // invite and reloads into the new session on Space's start page.
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useInviteRegister } from '@workspace/lib/auth';
+import { loadIntoSession, useInviteRegister } from '@workspace/lib/auth';
 import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
@@ -39,10 +39,7 @@ export function SignupForm({ token, mailDomain }: { token: string; mailDomain?: 
 
     const onSubmit = form.handleSubmit(async ({ name, username, password }) => {
         await register.mutateAsync({ name, username: username.toLowerCase(), password });
-        // A full load picks up the new session cookie. The page goes only after this returns, so the button stays
-        // pending and a second Enter sends nothing.
-        window.location.href = '/';
-        await new Promise<never>(() => {});
+        await loadIntoSession('/');
     });
 
     return (

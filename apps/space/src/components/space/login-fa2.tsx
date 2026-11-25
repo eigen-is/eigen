@@ -6,7 +6,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
 import { getErrorMessage } from '@workspace/lib/api-error';
-import { isExpiredSignIn, isWrongCode, useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
+import { isExpiredSignIn, isWrongCode, loadIntoSession, useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
 import { Bar, Ket } from '@workspace/ui/components/braket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -110,9 +110,7 @@ function CodeForm({ mode, redirect, onSwitch }: { mode: Mode; redirect?: string;
             form.setError('code', { message: getErrorMessage(error) }, { shouldFocus: true });
             return;
         }
-        window.location.href = redirect || '/';
-        // The page goes only after this returns, so the button stays pending and a second Enter sends nothing.
-        await new Promise<never>(() => {});
+        await loadIntoSession(redirect || '/');
     });
 
     return (

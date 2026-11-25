@@ -1,7 +1,7 @@
 // Sign-in on the sign-in page: a member with a password through useAuth's login, or a guest who asks for a one-time
 // code by email and sends it back, which sets the guest's session cookie through the public guest sign-in routes. A
 // refusal of what was typed is the form's to show under its field, so these hooks raise no toast for one; any other
-// failure, such as a rate limit or no connection, is a toast.
+// failure, such as a rate limit or no connection, is a toast. After a sign-in, loadIntoSession loads the next page.
 
 import { useMutation } from '@tanstack/react-query';
 import { api } from '../../api';
@@ -22,6 +22,14 @@ export function isRefusedAddress(error: unknown): boolean {
 // A wrong or expired code, and too many wrong tries (429), which only a new code gets past.
 export function isRefusedCode(error: unknown): boolean {
     return error instanceof AppError && (error.status === 400 || error.status === 429);
+}
+
+// A full load picks up the session cookie a sign-in set; with no `href` the page reloads. It never resolves, so the
+// form's button stays pending until the page goes and a second Enter sends nothing.
+export function loadIntoSession(href?: string): Promise<never> {
+    if (href === undefined) window.location.reload();
+    else window.location.href = href;
+    return new Promise(() => {});
 }
 
 export function usePasswordSignIn() {

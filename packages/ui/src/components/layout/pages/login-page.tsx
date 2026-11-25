@@ -11,6 +11,7 @@ import {
     isRefusedAddress,
     isRefusedCode,
     isRefusedCredentials,
+    loadIntoSession,
     useAuth,
     usePasswordSignIn,
     useRequestGuestCode,
@@ -284,9 +285,7 @@ function GuestCodeForm({ email }: { email: string }) {
             form.setError('otp', { message: getErrorMessage(error) }, { shouldFocus: true });
             return;
         }
-        window.location.reload();
-        // The page goes only after this returns, so the button stays pending and a second Enter sends nothing.
-        await new Promise<never>(() => {});
+        await loadIntoSession();
     };
 
     return (
