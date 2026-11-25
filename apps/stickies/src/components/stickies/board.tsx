@@ -78,7 +78,6 @@ export function StickiesBoard({
         setIsAddColumnDialogOpen,
         handleAddColumn,
         deleteCardFromBoard,
-        isSynced,
         offline,
         loaded,
         storageUnavailable,
@@ -104,7 +103,7 @@ export function StickiesBoard({
         activeCardIds,
         ...useCommentChatParam(chat),
         mapName: commentMapName(DRIVE_TYPE_STICKIES),
-        ready: isSynced,
+        ready: loaded,
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
@@ -271,8 +270,7 @@ export function StickiesBoard({
         return null;
     };
 
-    // `loaded` stays true once set, so a dropped connection keeps the board mounted. `isSynced` still gates the
-    // presence and the seeding of a new board.
+    // `loaded` stays true once set, so a dropped connection keeps the board mounted.
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <UnsyncedEditsGuard active={unsyncedEdits} />

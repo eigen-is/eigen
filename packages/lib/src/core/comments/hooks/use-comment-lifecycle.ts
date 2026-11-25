@@ -50,8 +50,9 @@ type CommentLifecycle = {
     requestDelete: (cardId: string | null) => void;
 };
 
-// A host passes `ready` once its cards have synced and its active set is computed. Until then a chat or a landing waits
-// instead of opening a card the host may not use, and no card reads deleted. `onOpenChat` and `onCloseChat` write and
+// A host passes `ready` once its cards first synced and its active set is computed, and keeps it through a disconnect, or
+// the open card would close. Until then a chat or a landing waits instead of opening a card the host may not use, and no
+// card reads deleted. `onOpenChat` and `onCloseChat` write and
 // clear the host's ?chat= with its history rule; `onClearChat` drops it by replace, after a delete or for a chat that
 // names nothing.
 export function useCommentLifecycle({
@@ -142,6 +143,11 @@ export function useCommentLifecycle({
     useEffect(() => {
         if (chatMissing && chat) latest.current.onClearChat();
     }, [chatMissing, chat]);
+    // A peer's delete takes away a card open here, and an undo that brings it back leaves it closed.
+    const openGone = !chat && !!open && !openCard;
+    useEffect(() => {
+        if (openGone) setOpen(null);
+    }, [openGone]);
 
     // A card id names only a card, so its landing needs only the cards.
     const openCardById = (cardId: string) => {

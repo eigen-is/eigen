@@ -281,7 +281,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         // For awareness: the cursors and the remote selections.
         provider,
         // The live Y.Doc, for the comments, which live in its `comments` map. It is null until the effect runs, and the
-        // editor reads comments only once `synced` is true, like the rest of the panel.
+        // editor reads comments only once `loaded` is true, like the rest of the panel.
         yjsDoc,
         synced,
         offline,

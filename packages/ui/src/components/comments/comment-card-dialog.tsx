@@ -23,16 +23,13 @@ export function CommentCardDialog({ lifecycle, path, canWrite, onClose }: Commen
     const { user } = useAuth();
     const shown = !!openCard || !!openEntry;
 
-    // A peer's delete can take the open comment away, which hides the dialog without a close. So every close runs
-    // here, once the dialog is gone, and the open state clears too: an undo that brings the card back stays closed.
+    // A peer's delete can take the open comment away, which hides the dialog without a close, so the host hears of
+    // every close here, once the dialog is gone.
     const wasShown = useRef(false);
     useEffect(() => {
-        if (wasShown.current && !shown) {
-            setOpenCardId(null);
-            onClose?.();
-        }
+        if (wasShown.current && !shown) onClose?.();
         wasShown.current = shown;
-    }, [shown, setOpenCardId, onClose]);
+    }, [shown, onClose]);
 
     return (
         <CardDialog

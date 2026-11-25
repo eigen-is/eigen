@@ -82,7 +82,7 @@ export function useCanvasCommentHost({
         mediaFolderId,
         doc: doc.yjsDoc,
         activeCardIds: activeComments.ids,
-        ready: doc.synced,
+        ready: doc.loaded,
         panel,
         chat,
         reveal: (cardId, growPx) => {

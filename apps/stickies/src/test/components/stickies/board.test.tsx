@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:
 import { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import type { ReactNode } from 'react';
@@ -21,7 +22,19 @@ const seen: {
 } = {};
 let doc = new Y.Doc();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useSyncExternalStore } = await import('react');
+// The socket's state, which drops on a disconnect and comes back on the next sync. The first sync happened.
+let isSynced = true;
+const syncListeners = new Set<() => void>();
+const setSynced = (next: boolean) =>
+    act(async () => {
+        isSynced = next;
+        for (const listener of syncListeners) listener();
+    });
+const subscribeSync = (listener: () => void) => {
+    syncListeners.add(listener);
+    return () => syncListeners.delete(listener);
+};
 const router = await import('@tanstack/react-router');
 const { QueryClientProvider } = await import('@tanstack/react-query');
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -47,12 +60,12 @@ mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
 }));
 mock.module('../../../components/stickies/hooks/use-board', () => ({
     useBoard: () => ({
+        isSynced: useSyncExternalStore(subscribeSync, () => isSynced),
         board: { columns: { col: { id: 'col', title: 'To do', taskIds: ['card-1'] } }, columnOrder: ['col'] },
         isAddColumnDialogOpen: false,
         setIsAddColumnDialogOpen: () => {},
         handleAddColumn: () => {},
         deleteCardFromBoard: () => {},
-        isSynced: true,
         offline: false,
         loaded: true,
         storageUnavailable: false,
@@ -94,6 +107,7 @@ const { PreviewProvider } = await import('@workspace/ui/components/preview-provi
 const path = drivePath({ id: 'b1', mountId: 'm1', name: 'Board', type: 'stickies', mimeType: DRIVE_MIME_STICKIES });
 
 beforeEach(() => {
+    isSynced = true;
     doc = new Y.Doc();
     const card = new Y.Map<unknown>();
     card.set('title', 'Ship it');
@@ -205,4 +219,17 @@ test('a ?chat= that names no card is dropped by replace', async () => {
     await settle();
     expect(param('chat')).toBeNull();
     expect(history.location.state.__TSR_index).toBe(1);
+});
+
+test('a dropped connection keeps the open thread, its URL and an edit in progress', async () => {
+    await openBoard(['/', '/?chat=ship.eigenchat']);
+    await act(async () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Edit"]')?.click());
+    await type('Title', 'Ship it today');
+    await setSynced(false);
+    await settle();
+    await setSynced(true);
+    await settle();
+    expect(param('chat')).toBe('ship.eigenchat');
+    expect(history.location.state.__TSR_index).toBe(1);
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('Ship it today');
 });

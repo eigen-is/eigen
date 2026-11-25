@@ -96,6 +96,7 @@ async function openBoard(entries: string[]) {
     const doc = new Y.Doc();
     addCard(doc, 'card-1', 'ship.eigenchat');
     addCard(doc, 'card-2');
+    addCard(doc, 'card-3', 'fresh.eigenchat');
     const onClose = mock(() => {});
     const onDelete = mock((_cardId: string) => {});
     const handle: { lifecycle?: ReturnType<typeof useCommentLifecycle> } = {};
@@ -108,7 +109,7 @@ async function openBoard(entries: string[]) {
             chatFolderId: 'chat-1',
             mediaFolderId: null,
             doc,
-            activeCardIds: new Set(['card-1', 'card-2']),
+            activeCardIds: new Set(['card-1', 'card-2', 'card-3']),
             ...useCommentChatParam(chat),
             mapName: 'tasks',
             ready: true,
@@ -236,5 +237,15 @@ test("a card without a thread opens without the URL, and a peer's delete closes 
     expect(board.onClose).toHaveBeenCalledTimes(1);
 
     await run(() => addCard(board.doc, 'card-2'));
+    expect(seen.open).toBe(false);
+});
+
+test("a peer's delete of a thread with no row yet drops ?chat= by replace, and nothing goes back", async () => {
+    const board = await openBoard(['/']);
+    await run(() => board.lifecycle().setOpenCardId('card-3'));
+    expect(board.index()).toBe(1);
+    await run(() => board.doc.getMap('tasks').delete('card-3'));
+    expect(board.chat()).toBeNull();
+    expect(board.index()).toBe(1);
     expect(seen.open).toBe(false);
 });

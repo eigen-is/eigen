@@ -8,6 +8,7 @@ import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
 import { drivePath } from '../../drive-path';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -15,7 +16,7 @@ installHappyDom();
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
-const { act, createElement, useEffect, useRef } = await import('react');
+const { act, createElement, useEffect, useRef, useSyncExternalStore } = await import('react');
 const router = await import('@tanstack/react-router');
 const { QueryClientProvider } = await import('@tanstack/react-query');
 const realCollab = await import('@workspace/lib/collab');
@@ -28,7 +29,21 @@ const thread: { chatName?: string; autoFocus?: boolean } = {};
 
 let doc = new Y.Doc();
 let provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
-// A synced canvas, with no server behind it.
+// The socket's state, which drops on a disconnect and comes back on the next sync. The first sync happened.
+let synced = true;
+const syncListeners = new Set<() => void>();
+const setSynced = async (next: boolean) => {
+    await act(async () => {
+        synced = next;
+        for (const listener of syncListeners) listener();
+    });
+    await settle();
+};
+const subscribeSync = (listener: () => void) => {
+    syncListeners.add(listener);
+    return () => syncListeners.delete(listener);
+};
+// A canvas that loaded, with no server behind it.
 mock.module('@workspace/lib/collab', () => ({
     ...realCollab,
     useCollabDoc: () => {
@@ -38,7 +53,7 @@ mock.module('@workspace/lib/collab', () => ({
             docRef,
             provider,
             undoManager: null,
-            synced: true,
+            synced: useSyncExternalStore(subscribeSync, () => synced),
             offline: false,
             loaded: true,
             storageUnavailable: false,
@@ -101,6 +116,7 @@ beforeEach(() => {
     thread.chatName = undefined;
     thread.autoFocus = undefined;
     mounts = 0;
+    synced = true;
 });
 
 let unmount = async () => {};
@@ -404,4 +420,16 @@ test("a thread's Edit opens the card's form in a dialog over the column, and Can
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(search().get('chat')).toBe('thread-1.eigenchat');
     expect(columnWidth()).toBe('400px');
+});
+
+test('a dropped connection keeps the open thread, its URL and an edit in progress', async () => {
+    await openCanvas(['/', '/?panel=comments&chat=thread-1.eigenchat']);
+    await click(button('Edit'));
+    await type('Title', 'A new title');
+    await setSynced(false);
+    await setSynced(true);
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(historyIndex()).toBe(1);
+    expect(columnWidth()).toBe('400px');
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('A new title');
 });
