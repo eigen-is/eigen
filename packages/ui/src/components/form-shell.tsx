@@ -53,7 +53,6 @@ export function FormShell({
     const submit = async () => {
         setSubmitted(true);
         const refused = (await onSubmit()) === false;
-        // A form that stays after its save, such as a page form, starts clean, so a later edit isn't red before Save.
         setSubmitted(refused);
         if (refused && !focusesOwnErrors) setRefusals((count) => count + 1);
     };

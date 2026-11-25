@@ -1,9 +1,8 @@
-// Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with
-// Eigen Sheets' look and keys. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer,
-// empty rows and columns to grow into as far as the inline limits go. The grid edits a draft, so Apply is one
-// change of the spec, what the grid changed since it opened, and Cancel leaves it as it was; Enter belongs to the
-// cells, and Cmd+Enter applies. A chart past the grid's limits (an imported one), or whose data holds what this
-// build can't edit, shows its data read-only.
+// Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with Eigen
+// Sheets' look and keys, the grid PowerPoint and Keynote offer, with empty rows and columns to grow into up to the
+// inline limits. The grid edits a draft, so Apply is one change of the spec and Cancel leaves it as it was; Enter
+// belongs to the cells, and Cmd+Enter applies. A chart past the grid's limits, or whose data holds what this build
+// can't edit, shows its data read-only.
 
 import {
     chartSpecChange,

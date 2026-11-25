@@ -1,9 +1,8 @@
 // A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
-// description, and FormDialogForm the fields and the Cancel and submit footer, which the card form shares, on
-// FormShell's keys. It opens on the first text field, every close waits for a running submit, and a failure or a false
-// result keeps it open. Esc, the X and a click outside ask "Discard changes?" once the form changed; Cancel drops it.
-// The caller keeps the field state in a child that mounts with the dialog, so every opening starts clean. FormDialog
-// alone is also a titled shell with no form, as Word count uses it.
+// description, and FormDialogForm the fields and the Cancel and submit footer on FormShell's keys. It opens on the
+// first text field, every close waits for a running submit, and a failure or a false result keeps it open. Esc, the X
+// and a click outside ask "Discard changes?" once the form changed; Cancel drops it. The caller's fields mount with the
+// dialog, so every opening starts clean. FormDialog alone is a titled shell with no form, as Word count uses it.
 
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
@@ -31,8 +30,7 @@ type FormDialogProps = {
 type FormDialogFormProps = {
     // Returns or resolves false to stay open, such as a check that marked a field invalid, which then gets the focus.
     onSubmit: DialogAction;
-    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
-    // click outside then ask before they drop it. One form per dialog at a time: the last one mounted wins.
+    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty.
     changed: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw

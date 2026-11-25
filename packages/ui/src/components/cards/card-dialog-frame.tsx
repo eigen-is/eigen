@@ -1,9 +1,8 @@
-// The dialog a card opens into, on a board or beside a document: a top bar with the card's actions and the close
-// button, over the card's body, which fills the rest and scrolls on its own, such as its thread or its edit form.
-// While the body is the edit form the bar gives way to the dialog's own X, and Esc goes back to the card's view as the
-// form's Cancel does. Once the form changed, Esc asks "Discard changes?" first, and so do the X and a click outside,
-// which close the card. While the form saves, every close waits. Leaving the edit puts the focus back on the bar's Edit
-// action, or on the dialog when the bar has none. Callers such as CardDialog fill in both.
+// The dialog a card opens into, on a board or beside a document, such as CardDialog's: a top bar with the card's
+// actions and the close button, over the card's body, which fills the rest and scrolls on its own. While the body is
+// the edit form the bar gives way to the dialog's own X, and Esc goes back to the card's view as Cancel does. Once the
+// form changed, Esc, the X and a click outside ask "Discard changes?" first; while it saves, every close waits.
+// Leaving the edit puts the focus back on the bar's Edit action.
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
