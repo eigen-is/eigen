@@ -1,5 +1,6 @@
 // The Sharing part of Edit calendar: add a person by email, set each one's access or remove them, and the footer's
-// Share with team. Each change only edits the dialog's list of shares, which Save sends with the name and color.
+// Share with team. Each change only edits the dialog's list of shares, which Save sends with the name and color. The
+// dialog owns the field's text through useShareInput, so its Save counts typed text as a change and adds it first.
 
 import { useAuth } from '@workspace/lib/auth';
 import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
@@ -25,25 +26,47 @@ import {
 } from '@workspace/ui/components/select';
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
+import { useRef } from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
     onChange: (shares: CalendarShare[] | null) => void;
 };
 
-export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorProps) {
+type ShareInput = ReturnType<typeof useContactInput> & {
+    // The shares with the typed person added, or false when the field refuses them and says why.
+    commitShares: () => CalendarShare[] | null | false;
+};
+
+export function useShareInput({ shares, onChange }: CalendarShareEditorProps): ShareInput {
+    const { user } = useAuth();
+    // commitTyped adds through onAdd before a render shows the share, so a save takes the list onAdd built.
+    const built = useRef<CalendarShare[]>(null);
+    const currentShares = shares ?? [];
+    const input = useContactInput({
+        listed: currentShares.map((s) => s.targetId),
+        onAdd: ({ email }) => {
+            if (email === user?.email?.toLowerCase()) return 'You cannot share a calendar with yourself';
+            built.current = [...currentShares, { targetId: email, permission: 'read' }];
+            onChange(built.current);
+        },
+    });
+    return {
+        ...input,
+        commitShares: () => {
+            built.current = null;
+            if (input.commitTyped()) return false;
+            return built.current ?? shares;
+        },
+    };
+}
+
+export function CalendarShareEditor({ shares, onChange, input }: CalendarShareEditorProps & { input: ShareInput }) {
     const currentShares = shares ?? [];
     const { user } = useAuth();
 
     const excludeEmails = currentShares.map((s) => s.targetId);
     if (user?.email) excludeEmails.push(user.email);
-
-    const contactInput = useContactInput({
-        listed: currentShares.map((s) => s.targetId),
-        onAdd: ({ email }) => {
-            onChange([...currentShares, { targetId: email, permission: 'read' }]);
-        },
-    });
 
     const handlePermissionChange = (targetId: string, permission: string) => {
         const next = CALENDAR_SHARE_PERMISSIONS.find((p) => p === permission);
@@ -60,10 +83,10 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
 
             <ContactAddRow
                 id="share-contact"
-                value={contactInput.value}
-                onChange={contactInput.handleChange}
-                onSubmit={contactInput.submit}
-                error={contactInput.error}
+                value={input.value}
+                onChange={input.handleChange}
+                onSubmit={input.submit}
+                error={input.error}
                 excludeEmails={excludeEmails}
             />
 

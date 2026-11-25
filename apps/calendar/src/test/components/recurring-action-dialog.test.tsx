@@ -1,9 +1,11 @@
-// The recurring action dialog asks which events of a series an edit or delete applies to. It starts at the first
-// option on every opening, and a screen reader names its choices by the dialog's title. OK hands the chosen one on
-// and closes, and a confirm that fails keeps it open.
+// The recurring action dialog asks which events of a series an edit or delete applies to. It keeps the dialog contract
+// and its OK, and Enter on its first option, where it opens, answers. It starts at the first option on every opening,
+// and a screen reader names its choices by the dialog's title. OK hands the chosen one on and closes, and a confirm
+// that fails keeps it open.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { RecurrenceScope } from '@workspace/lib/types/calendar';
 import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -56,6 +58,31 @@ const checked = () => radios().find((radio) => radio.getAttribute('aria-checked'
 const labels = () => [...document.querySelectorAll('[role="dialog"] label')].map((label) => label.textContent);
 const button = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
+
+test('the recurring choice keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { options: RECURRENCE_SCOPES }),
+        submitLabel: 'OK',
+        firstField: 'This event',
+        onSubmit: onConfirm,
+        makeChanged: () => act(async () => radios()[2]?.click()),
+        except: {
+            discard: 'a scope is a pick, not typed input, and a close goes back to the form or drop that asked',
+        },
+    });
+});
+
+test('Enter on the option it opens on answers with that option', async () => {
+    await open();
+    expect(document.activeElement).toBe(radios()[0]);
+    await act(async () => {
+        radios()[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(onConfirm.mock.calls).toEqual([['this']]);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
 
 test('it offers the options it is given, the first one chosen', async () => {
     await open(['this', 'all']);

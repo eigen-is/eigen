@@ -279,14 +279,13 @@ test('deleting one occurrence of a series cancels that day and keeps the series'
     });
 });
 
-// Clicks a day of the grid and saves the New event dialog it opens as "Dentist".
+// Clicks a day of the grid and creates the event the New event dialog it opens names "Dentist".
 async function createOnDay(container: HTMLElement, date: string, beforeSave = async () => {}) {
     const day = [...container.querySelectorAll('.grid-cols-7 > div.cursor-pointer')].find(
         (cell) => cell.firstElementChild?.textContent === date,
     );
     await click(day);
     expect(dialogTitle()).toBe('New event');
-    expect(button('Save')?.hasAttribute('disabled')).toBe(true);
 
     const title = document.querySelector<HTMLInputElement>('input[placeholder="Add title"]');
     if (!title) throw new Error('the dialog has no title field');
@@ -296,14 +295,14 @@ async function createOnDay(container: HTMLElement, date: string, beforeSave = as
         title.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await beforeSave();
-    await click(button('Save'));
+    await click(button('Create'));
     return createEvent.mutateAsync.mock.calls[0]?.[0];
 }
 
 // The default start is the next quarter hour of the wall clock, so each test pins the clock.
 afterEach(() => setSystemTime());
 
-test('a click on a day opens New event there, and Save creates it in the default calendar', async () => {
+test('a click on a day opens New event there, and Create makes it in the default calendar', async () => {
     setSystemTime(new Date(2026, 9, 27, 10, 7));
     const { container } = await open();
     const input = await createOnDay(container, '9');
@@ -715,7 +714,7 @@ async function savedTimes() {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(title, 'Focus');
         title.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await click(button('Save'));
+    await click(button('Create'));
     const input = createEvent.mutateAsync.mock.calls[0]?.[0];
     return { startTime: input?.startTime, endTime: input?.endTime, allDay: input?.allDay };
 }

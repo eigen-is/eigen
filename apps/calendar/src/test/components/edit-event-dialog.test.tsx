@@ -1,4 +1,6 @@
-// Edit event is a form: Save or Enter in the title saves a one-off event and closes it once. While the save runs,
+// Edit event keeps the dialog contract, and an emptied title says "Add a title" under the field. A guest typed but not
+// added is saved with the event, and a series shows no form until its master has loaded. Save or Enter in the title
+// saves a one-off event and closes it once. While the save runs,
 // Cancel and Escape wait, and a save the server refuses keeps the dialog open beside the hook's toast, with no
 // unhandled rejection. A series occurrence asks which events the change applies to, and a move to another owner asks
 // first, and each closes Edit event once its save is done. A move retried after a failed delete copies again.
@@ -6,6 +8,7 @@
 // list with only the guests added or removed there. Copying an invitation's guests saves nothing.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem, UpdateEventInput } from '@workspace/lib/types/calendar';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -119,7 +122,7 @@ afterAll(() => {
     process.off('unhandledRejection', onUnhandled);
 });
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { EditEventDialog } = await import('../../components/edit-event-dialog');
 
@@ -139,6 +142,12 @@ beforeEach(() => {
     isFromOthers = notFromOthers;
     unhandled.length = 0;
 });
+
+// The dialog under a parent that owns `open`, as the event's detail does.
+function Harness() {
+    const [open, setOpen] = useState(true);
+    return createElement(EditEventDialog, { open, onOpenChange: setOpen, event: dentist, ownerId: session.user.id });
+}
 
 async function open(event = dentist, ownerId = session.user.id) {
     ({ unmount } = await renderInDocument(
@@ -181,10 +190,60 @@ const pick = async (from: string, to: string) => {
     if (!option) throw new Error(`the picker has no ${to}`);
     await pointAt(option);
 };
+// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
+const typeInto = (field: HTMLInputElement, value: string) =>
+    act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+const guestField = () => {
+    const field = document.querySelector<HTMLInputElement>('[role="dialog"] #attendee-input');
+    if (!field) throw new Error('the dialog has no guest field');
+    return field;
+};
 const pressEscape = () =>
     act(async () => {
         document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
+
+test('Edit event keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness),
+        submitLabel: 'Save',
+        firstField: 'Title',
+        onSubmit: updateEvent.mutateAsync,
+        makeChanged: () => typeInto(titleField(), 'Dentist at nine'),
+        makeInvalid: () => typeInto(titleField(), ' '),
+        invalidField: 'Title',
+        modEnterFields: ['Guests', 'Description'],
+    });
+});
+
+test('an emptied title says "Add a title" under the field and saves nothing', async () => {
+    await open();
+    await typeInto(titleField(), '');
+    await save();
+    expect(document.querySelector('[role="dialog"] [data-slot="field-error"]')?.textContent).toBe('Add a title');
+    expect(updateEvent.mutateAsync).not.toHaveBeenCalled();
+});
+
+test('a guest typed but not added is saved with the event', async () => {
+    await open();
+    await typeInto(guestField(), 'ada@example.org');
+    await save();
+    await settle();
+    expect(updateEvent.mutateAsync.mock.calls.at(-1)?.[0].data?.attendees).toEqual([
+        { email: 'ada@example.org', name: undefined, status: 'pending', role: 'required' },
+    ]);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a series shows no form until its master has loaded', async () => {
+    await open(standup);
+    expect(document.querySelector('[role="dialog"] input')).toBeNull();
+    expect(() => button('Save')).toThrow();
+});
 
 test('Save updates the event and closes the dialog', async () => {
     await open();
@@ -279,15 +338,9 @@ test('This event keeps the list a date already holds, and saves the one the user
     expect(savedForOneDate()).toMatchObject({ data: { attendees: [bea] } });
 });
 
-// React reads a typed value through the input's own setter, so the field is set the way a keystroke sets it.
 const addGuest = async (email: string) => {
-    const field = document.querySelector<HTMLInputElement>('[role="dialog"] #attendee-input');
-    if (!field) throw new Error('the dialog has no guest field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, email);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await act(async () => pressEnter(field));
+    await typeInto(guestField(), email);
+    await act(async () => pressEnter(guestField()));
 };
 // What the last "All events" save posted.
 const savedForSeries = () => updateEvent.mutateAsync.mock.calls.map(([input]) => input).at(-1);

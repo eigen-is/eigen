@@ -1,12 +1,13 @@
-// The one thing an .ics import needs that the other two do not: a target. What is pinned here is which calendars are
-// offered: the home's own, plus a team calendar the viewer may write in. A calendar shared from another user's home is
-// refused by the import route, so it is not on the list. Also pinned: the file and target the dialog hands
-// `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits, that a failure keeps the dialog
-// open, that a calendar that went away can't be imported into, and that a list that would not load offers a retry
-// rather than loading for ever. Making, filling and deleting a new calendar is the hook's, pinned in packages/lib's
-// use-transfer test.
+// The one thing an .ics import needs that the other two do not: a target. The dialog keeps the dialog contract. What is
+// pinned here is which calendars are offered: the home's own, plus a team calendar the viewer may write in. A calendar
+// shared from another user's home is refused by the import route, so it is not on the list. Also pinned: the file and
+// target the dialog hands `useImportToCalendar`, that a later fetch overwrites no choice, that a failure keeps the
+// dialog open, that a new calendar with no name or a calendar that went away says so under its field, and that a list
+// still loading or that would not load shows only Close, with a retry for the one that failed. Making, filling and
+// deleting a new calendar is the hook's, pinned in packages/lib's use-transfer test.
 import { expect, mock, test } from 'bun:test';
 import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 
@@ -82,18 +83,17 @@ const served: { calendars: Calendar[] | undefined; sharedCalendars: Shared[]; is
     isError: false,
 };
 
+const importToCalendar = mock(async (source: unknown, target: Target) => {
+    sources.push(source);
+    handed.push(target);
+    if (failure) throw failure;
+});
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch }),
     useSharedCalendars: () => ({ data: served.sharedCalendars }),
-    useImportToCalendar: () => ({
-        importToCalendar: async (source: unknown, target: Target) => {
-            sources.push(source);
-            handed.push(target);
-            if (failure) throw failure;
-        },
-    }),
+    useImportToCalendar: () => ({ importToCalendar }),
 }));
 
 const session = { user: { id: 'owner-1' } };
@@ -107,7 +107,7 @@ mock.module('@workspace/lib/public', () => ({
 }));
 
 const { onMutationError } = await import('@workspace/lib/api-error');
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { ImportToCalendarPicker } = await import('../../../components/calendar/import-to-calendar-picker');
 
@@ -116,6 +116,56 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     filename: 'Autumn market.ics',
     size: 2048,
 });
+
+// Radix portals each dialog to the body, so a test that opened one before scopes to the newest.
+const dialog = () => [...document.querySelectorAll('[role="dialog"]')].at(-1) as HTMLElement;
+const button = (label: string) =>
+    [...dialog().querySelectorAll('button')].find((el) => el.textContent?.trim() === label);
+const click = async (selector: string, label: string) => {
+    const target = [...dialog().querySelectorAll(selector)].find((el) => el.textContent?.trim() === label);
+    if (!target) throw new Error(`no "${label}" ${selector}; saw ${dialog().textContent}`);
+    await act(async () => {
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
+const trigger = () => dialog().querySelector('[data-slot="select-trigger"]') as HTMLButtonElement;
+// Radix portals the open list to the body too, so everything read out of it scopes to the newest one.
+const list = () => [...document.querySelectorAll('[data-slot="select-content"]')].at(-1) as HTMLElement;
+const openList = async () => {
+    await act(async () => {
+        trigger().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        trigger().dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        trigger().dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
+const textsOf = (selector: string) => [...list().querySelectorAll(selector)].map((el) => el.textContent?.trim());
+const chooseCalendar = async (label: string) => {
+    await openList();
+    const option = [...list().querySelectorAll('[role="option"]')].find((el) => el.textContent?.trim() === label);
+    if (!option) throw new Error(`no "${label}" option`);
+    await act(async () => {
+        option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        option.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
+const nameInput = () => dialog().querySelector('input') as HTMLInputElement;
+const typeName = async (value: string) => {
+    const input = nameInput();
+    // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+    await act(async () => {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+};
+const enter = async () => {
+    await act(async () => pressEnter(nameInput()));
+};
+
+// The picker under a host that owns `open`, as a file action does.
+function Picker() {
+    const [open, setOpen] = useState(true);
+    return createElement(ImportToCalendarPicker, { subject, open, onClose: () => setOpen(false) });
+}
 
 async function open() {
     handed = [];
@@ -140,49 +190,6 @@ async function open() {
     };
     await draw();
 
-    // Radix portals each dialog to the body, so a test that opened one before scopes to the newest.
-    const dialog = () => [...document.querySelectorAll('[role="dialog"]')].at(-1) as HTMLElement;
-    const button = (label: string) =>
-        [...dialog().querySelectorAll('button')].find((el) => el.textContent?.trim() === label);
-    const click = async (selector: string, label: string) => {
-        const target = [...dialog().querySelectorAll(selector)].find((el) => el.textContent?.trim() === label);
-        if (!target) throw new Error(`no "${label}" ${selector}; saw ${dialog().textContent}`);
-        await act(async () => {
-            target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-    };
-    const trigger = () => dialog().querySelector('[data-slot="select-trigger"]') as HTMLButtonElement;
-    // Radix portals the open list to the body too, so everything read out of it scopes to the newest one.
-    const list = () => [...document.querySelectorAll('[data-slot="select-content"]')].at(-1) as HTMLElement;
-    const openList = async () => {
-        await act(async () => {
-            trigger().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
-            trigger().dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
-            trigger().dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-    };
-    const textsOf = (selector: string) => [...list().querySelectorAll(selector)].map((el) => el.textContent?.trim());
-    const chooseCalendar = async (label: string) => {
-        await openList();
-        const option = [...list().querySelectorAll('[role="option"]')].find((el) => el.textContent?.trim() === label);
-        if (!option) throw new Error(`no "${label}" option`);
-        await act(async () => {
-            option.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
-            option.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-        });
-    };
-    const nameInput = () => dialog().querySelector('input') as HTMLInputElement;
-    const typeName = async (value: string) => {
-        const input = nameInput();
-        // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        await act(async () => {
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-    };
-    const enter = async () => {
-        await act(async () => pressEnter(nameInput()));
-    };
     const cleanup = async () => {
         await act(async () => root.unmount());
         container.remove();
@@ -203,6 +210,32 @@ async function open() {
         typeName,
     };
 }
+
+const fieldError = () => dialog().querySelector('[data-slot="field-error"]')?.textContent;
+
+test('Import to Calendar keeps the dialog contract', async () => {
+    handed = [];
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Picker),
+        submitLabel: 'Import',
+        firstField: 'Add to calendar',
+        onSubmit: importToCalendar,
+        makeChanged: async () => {
+            await chooseCalendar('New calendar');
+            await typeName('Market season');
+        },
+        makeInvalid: async () => {
+            await chooseCalendar('New calendar');
+            await typeName(' ');
+        },
+        invalidField: 'Calendar name',
+        except: {
+            // Reported against the shared Select.
+            modEnter: "the Select's trigger opens its list on Cmd+Enter as well as submitting",
+        },
+    });
+});
 
 test('the dialog names the file and offers a calendar under Add to calendar, with a name field only for a new one', async () => {
     const { chooseCalendar, cleanup, dialog, trigger } = await open();
@@ -276,14 +309,12 @@ test('Enter in the new calendar’s name imports into a calendar of that name, t
     await cleanup();
 });
 
-test('a new calendar with no name cannot be imported, by the button or by Enter', async () => {
-    const { button, chooseCalendar, closed, cleanup, enter, typeName } = await open();
+test('a new calendar with no name says "Add a name" under the field, and imports nothing', async () => {
+    const { chooseCalendar, click, closed, cleanup, enter, typeName } = await open();
     await chooseCalendar('New calendar');
-    await typeName('');
-    expect(button('Import')?.disabled).toBe(true);
     await typeName('   ');
-    expect(button('Import')?.disabled).toBe(true);
-
+    await click('button', 'Import');
+    expect(fieldError()).toBe('Add a name');
     await enter();
     expect(handed).toEqual([]);
     expect(closed.count).toBe(0);
@@ -303,26 +334,29 @@ test('an import that fails keeps the dialog open with the calendar and name stil
     expect(closed.count).toBe(0);
     expect(trigger().textContent).toContain('New calendar');
     expect(nameInput().value).toBe('Market season');
-    expect(button('Import')?.disabled).toBe(false);
+    expect(button('Import')?.getAttribute('aria-busy')).toBeNull();
 
     failure = null;
     await cleanup();
 });
 
-test('a calendar that went away after it was chosen greys Import out until another is picked', async () => {
-    const { button, chooseCalendar, click, closed, cleanup, draw, trigger } = await open();
+test('a calendar that went away after it was chosen says "Pick a calendar" until another is picked', async () => {
+    const { chooseCalendar, click, closed, cleanup, draw, trigger } = await open();
     await chooseCalendar('Marketing');
 
     served.sharedCalendars = [];
     await draw();
     expect(trigger().textContent).toBe('Select calendar');
-    expect(button('Import')?.disabled).toBe(true);
     await click('button', 'Import');
+    expect(fieldError()).toBe('Pick a calendar');
+    expect(trigger().getAttribute('aria-invalid')).toBe('true');
     expect(handed).toEqual([]);
     expect(closed.count).toBe(0);
 
     await chooseCalendar('Work');
-    expect(button('Import')?.disabled).toBe(false);
+    expect(fieldError()).toBeUndefined();
+    await click('button', 'Import');
+    expect(handed).toEqual([{ kind: 'existing', ownerId: 'owner-1', calendarId: 'cal-work' }]);
     served.sharedCalendars = sharedCalendars;
     await cleanup();
 });
@@ -335,17 +369,18 @@ test('cancel imports nothing', async () => {
     await cleanup();
 });
 
-test('while the calendars load there is no target to import into, and the default lands when they arrive', async () => {
+test('while the calendars load there is only Close, and the default lands when they arrive', async () => {
     served.calendars = undefined;
     const { button, cleanup, dialog, draw, trigger } = await open();
     expect(dialog().textContent).toContain('Loading calendars');
     expect(trigger().disabled).toBe(true);
-    expect(button('Import')?.disabled).toBe(true);
+    expect(button('Import')).toBeUndefined();
+    expect(button('Close')).toBeDefined();
 
     served.calendars = calendars;
     await draw();
     expect(trigger().textContent).toContain('Home');
-    expect(button('Import')?.disabled).toBe(false);
+    expect(button('Import')).toBeDefined();
     await cleanup();
 });
 
@@ -367,7 +402,7 @@ test('a calendar list that would not load offers a retry instead of loading for 
     const { button, click, closed, cleanup, dialog } = await open();
     expect(dialog().textContent).toContain('Could not load your calendars');
     expect(dialog().textContent).not.toContain('Loading calendars');
-    expect(button('Import')?.disabled).toBe(true);
+    expect(button('Import')).toBeUndefined();
 
     await click('button', 'Try again');
     expect(refetch).toHaveBeenCalledTimes(1);
