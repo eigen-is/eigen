@@ -34,6 +34,7 @@ afterAll(() => {
 
 const { act } = await import('react');
 const { adminKeys } = await import('../../../../core/admin/hooks/keys');
+const { homeKeys } = await import('../../../../core/home/hooks/keys');
 const { wasToasted } = await import('../../../../core/api-error');
 const { publicKeys } = await import('../../../../core/public/hooks/keys');
 const { s3ConfigKeys, settingsKeys } = await import('../../../../core/settings/hooks/keys');
@@ -97,4 +98,32 @@ test('a refused write stops the rest, toasts only its error, and what landed bef
     expect(wasToasted(failure)).toBe(true);
     expect(hasKey(invalidated, publicKeys.config)).toBe(true);
     expect(hasKey(invalidated, settingsKeys.server())).toBe(false);
+});
+
+test('a rename refreshes the teams and users, and the next write waits for the public config refetch', async () => {
+    const { queryClient, invalidated } = trackingClient();
+    const refetch = Promise.withResolvers<void>();
+    const track = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = ((filters?: { queryKey?: readonly unknown[] }) => {
+        const result = track(filters as never);
+        return hasKey([[...(filters?.queryKey ?? [])]], publicKeys.config) ? refetch.promise : result;
+    }) as typeof queryClient.invalidateQueries;
+    const { latest, unmount } = await renderHook(() => useSaveServerSettingsPage('org-1'), queryClient);
+    let save: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+        save = latest.mutateAsync({ orgName: 'Acme Labs', s3Config: S3 });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(hasKey(invalidated, publicKeys.config)).toBe(true);
+    expect(writes).toEqual(['name Acme Labs']);
+
+    await act(async () => {
+        refetch.resolve();
+        await save;
+    });
+    await unmount();
+
+    expect(writes).toEqual(['name Acme Labs', 's3']);
+    expect(hasKey(invalidated, homeKeys.all)).toBe(true);
+    expect(hasKey(invalidated, adminKeys.users())).toBe(true);
 });
