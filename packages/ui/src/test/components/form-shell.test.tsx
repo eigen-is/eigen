@@ -1,8 +1,8 @@
 // The form under every shell submits on Cmd or Ctrl+Enter from any field, a multi-line one and one that took the key
 // for itself included, and on Enter from a radio or a checkbox. It saves what a field commits on that Enter. It acts
 // only on keys from its own fields, keeps Cmd+Enter from a hotkey behind it, and never shows the browser's bubbles. Its
-// fields learn that Save was pressed until a submit goes through, and a refused submit focuses the first field marked invalid unless the form
-// focuses its own errors or hid itself.
+// fields learn that Save was pressed until a submit goes through, and a refused submit focuses the first field marked
+// invalid unless the form hid itself.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
@@ -21,12 +21,9 @@ const { Checkbox } = await import('../../components/checkbox');
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function render(
-    children: ReactNode,
-    { onSubmit = (): ReturnType<DialogAction> => undefined, focusesOwnErrors = false } = {},
-) {
+async function render(children: ReactNode, { onSubmit = (): ReturnType<DialogAction> => undefined } = {}) {
     const submit = mock<DialogAction>(onSubmit);
-    ({ unmount } = await renderInDocument(createElement(FormShell, { onSubmit: submit, focusesOwnErrors, children })));
+    ({ unmount } = await renderInDocument(createElement(FormShell, { onSubmit: submit, children })));
     return submit;
 }
 
@@ -152,10 +149,9 @@ test('a submit that went through starts the form clean again, so a page that sta
 });
 
 // Marks its second field invalid as its check refuses, as a form whose submit names a field does.
-function CheckedForm({ focusesOwnErrors }: { focusesOwnErrors: boolean }) {
+function CheckedForm() {
     const [error, setError] = useState(false);
     return createElement(FormShell, {
-        focusesOwnErrors,
         onSubmit: async () => {
             setError(true);
             return false as const;
@@ -168,7 +164,7 @@ function CheckedForm({ focusesOwnErrors }: { focusesOwnErrors: boolean }) {
 }
 
 test('a refused submit focuses the field it marked invalid', async () => {
-    ({ unmount } = await renderInDocument(createElement(CheckedForm, { focusesOwnErrors: false })));
+    ({ unmount } = await renderInDocument(createElement(CheckedForm)));
     await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
     expect(document.activeElement).toBe(byLabel('End'));
 });
@@ -204,12 +200,6 @@ test('a refused submit from a form that hid itself moves no focus into it', asyn
         expect(document.activeElement === byLabel('End')).toBe(false);
         await unmount();
     }
-});
-
-test('a form that focuses its own errors keeps the focus where it put it', async () => {
-    ({ unmount } = await renderInDocument(createElement(CheckedForm, { focusesOwnErrors: true })));
-    await keydown(byLabel('Title'), { key: 'Enter', metaKey: true });
-    expect(document.activeElement).not.toBe(byLabel('End'));
 });
 
 test('a field already marked invalid as the form opens takes no focus', async () => {

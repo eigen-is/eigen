@@ -210,7 +210,7 @@ function SignInForm<Values extends FieldValues>({
     const { pending, run } = useDialogPending();
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors className="space-y-6" onSubmit={() => run(form.handleSubmit(onSubmit))}>
+            <FormShell className="space-y-6" onSubmit={() => run(form.handleSubmit(onSubmit))}>
                 {children}
                 <Button type="submit" className="w-full" pending={pending}>
                     {submitLabel}

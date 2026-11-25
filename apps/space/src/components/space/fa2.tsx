@@ -57,7 +57,7 @@ export function TwoFactorPasswordStep({ onEnabled }: { onEnabled: (secret: TwoFa
 
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
+            <FormShell autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
                 <Notice title="Important">
                     Two-factor authentication adds an extra layer of security to your account. Once enabled, you'll need
                     both your password and a verification code from your authentication app to sign in.
@@ -164,7 +164,7 @@ export function TwoFactorVerifyStep({ onBack, onVerified }: { onBack: () => void
 
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
+            <FormShell autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
                 <Notice title="Verify your setup">
                     Enter the 6-digit verification code from your authenticator app to complete the setup.
                 </Notice>
@@ -297,7 +297,7 @@ export function TwoFactorDisable({ onDisabled }: { onDisabled: () => void }) {
 
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors autoFocus className="space-y-4 max-w-sm" onSubmit={() => run(onSubmit)}>
+            <FormShell autoFocus className="space-y-4 max-w-sm" onSubmit={() => run(onSubmit)}>
                 <FormField
                     control={form.control}
                     name="password"

@@ -47,7 +47,7 @@ export function SignupForm({ token, mailDomain }: { token: string; mailDomain?: 
 
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
+            <FormShell autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
                 <FormField
                     control={form.control}
                     name="name"
