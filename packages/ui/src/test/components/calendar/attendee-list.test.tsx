@@ -1,5 +1,5 @@
-// The guest list's header: the organizer is a guest, in the breakdown alike, so the parts add up to the whole, and the
-// header shows only the breakdown, under the Guests caption its host draws. Their reply is their own attendee row's,
+// The guest list's header: the organizer counts in the breakdown like any guest, so the parts add up to the whole, and
+// the header shows only the breakdown, as its host names the list. The organizer's reply is their own attendee row's,
 // or accepted when the file lists them only as organizer.
 import { expect, mock, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
