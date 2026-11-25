@@ -2,10 +2,10 @@
 // selected so a typed number replaces it, and Apply restarts the list there. A number below 1 or with a fraction is
 // marked on the field, and Apply refuses it.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import { button, click, control, message, type } from '../../fixtures/paragraph-dialog';
+import { button, click, message } from '../../fixtures/paragraph-dialog';
 
 installHappyDom();
 
@@ -52,7 +52,6 @@ const written = mock(() => {});
 editor.on('update', written);
 
 test('Restart numbering keeps the dialog contract', async () => {
-    const atOnce = 'the list is restarted in the doc at once, with nothing to wait for';
     await expectFormContract({
         kind: 'dialog',
         render: host,
@@ -62,11 +61,8 @@ test('Restart numbering keeps the dialog contract', async () => {
         makeChanged: () => type('Start at', '3'),
         makeInvalid: () => type('Start at', '0'),
         invalidField: 'Start at',
-        except: {
-            focus: 'a number field reads no selection in the DOM, so the next test checks the select itself',
-            pending: atOnce,
-            pendingClose: atOnce,
-        },
+        savesAtOnce: true,
+        except: { focus: 'a number field reads no selection in the DOM, so the next test checks the select itself' },
     });
 });
 
@@ -74,8 +70,8 @@ test('Start at has the focus as it opens, its 1 selected so a typed number repla
     const select = spyOn(HTMLInputElement.prototype, 'select');
     try {
         ({ unmount } = await renderInDocument(host()));
-        expect(document.activeElement).toBe(control('Start at'));
-        expect(select.mock.contexts.at(-1)).toBe(control('Start at'));
+        expect(document.activeElement).toBe(field('Start at'));
+        expect(select.mock.contexts.at(-1)).toBe(field('Start at'));
     } finally {
         select.mockRestore();
     }
@@ -94,6 +90,6 @@ test.each(['0', '1.5', ''])('%p shows a message and Apply does nothing', async (
     await type('Start at', typed);
     await click(button('Apply'));
     expect(message()).toBe('Start at a whole number of 1 or more.');
-    expect(control('Start at')?.getAttribute('aria-invalid')).toBe('true');
+    expect(field('Start at').getAttribute('aria-invalid')).toBe('true');
     expect(start()).toBe(1);
 });

@@ -3,10 +3,10 @@
 // out of range is marked on its field, and Apply refuses it.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import { button, click, control, formats, message, paragraphs, type, value } from '../../fixtures/paragraph-dialog';
+import { button, click, formats, message, paragraphs, value } from '../../fixtures/paragraph-dialog';
 
 installHappyDom();
 
@@ -50,7 +50,6 @@ const written = mock(() => {});
 editor.on('update', written);
 
 test('Custom spacing keeps the dialog contract', async () => {
-    const atOnce = 'the spacing is written to the doc at once, with nothing to wait for';
     await expectFormContract({
         kind: 'dialog',
         render: () => host(paragraphs({})),
@@ -60,7 +59,7 @@ test('Custom spacing keeps the dialog contract', async () => {
         makeChanged: () => type('Before', '6'),
         makeInvalid: () => type('After', '-1'),
         invalidField: 'After',
-        except: { pending: atOnce, pendingClose: atOnce },
+        savesAtOnce: true,
     });
 });
 
@@ -93,7 +92,7 @@ test("in a list item Custom spacing sets the line spacing, and Before and After 
         { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [paragraph] }] }] },
         3,
     );
-    expect(['Before', 'After'].map((label) => control(label)?.hasAttribute('disabled'))).toEqual([true, true]);
+    expect(['Before', 'After'].map((label) => field(label).hasAttribute('disabled'))).toEqual([true, true]);
     expect(['Before', 'After'].map(value)).toEqual(['0', '0']);
     await type('Line spacing', '2');
     await click(button('Apply'));
@@ -108,13 +107,10 @@ test('Custom spacing refuses a line spacing or a spacing out of range, on the fi
     await open(paragraphs({}));
     await type('Line spacing', '9');
     expect(message()).toBe('Line spacing must be between 0.5 and 5, and spacing between 0 and 400 points.');
-    expect(control('Line spacing')?.getAttribute('aria-invalid')).toBe('true');
+    expect(field('Line spacing').getAttribute('aria-invalid')).toBe('true');
     await type('Line spacing', '1.5');
     await type('After', '-1');
-    expect(['Line spacing', 'After'].map((label) => control(label)?.getAttribute('aria-invalid'))).toEqual([
-        null,
-        'true',
-    ]);
+    expect(['Line spacing', 'After'].map((label) => field(label).getAttribute('aria-invalid'))).toEqual([null, 'true']);
     await type('After', '');
     await click(button('Apply'));
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
