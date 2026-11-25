@@ -1,10 +1,12 @@
 // A form dialog submits on Enter as on its submit button, and only when the caller says the fields are valid. While a
 // submit runs, its buttons and every way to close it wait. It closes once the submit succeeds and stays open when it
 // fails or returns false, for another try. A dialog that is closing takes no second submit, and a dialog opened from
-// inside another form never submits that form.
+// inside another form never submits that form. A changed form asks before Esc drops it, a dialog stacked on another
+// asks for itself only, and the focus goes back to what opened the dialog it discarded.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
+import { holdClosingDialogs } from '../closing-dialog';
 import { installHappyDom } from '../happy-dom';
 import { pressEnter } from '../press-enter';
 import { renderInDocument } from '../render-in-document';
@@ -13,6 +15,7 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
+const { Button } = await import('../../components/button');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
 const { RadioGroup, RadioGroupItem } = await import('../../components/radio-group');
@@ -388,4 +391,143 @@ test('a refused submit keeps the dialog open and focuses the field it marked', a
     await click('Save');
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(byLabel('Name'));
+});
+
+// A Move dialog with a New folder dialog it opens over itself, both holding a change, as a location picker does.
+function Stacked({ onMove }: { onMove: () => void }) {
+    const [moving, setMoving] = useState(true);
+    const [naming, setNaming] = useState(false);
+    return createElement(FormDialog, {
+        open: moving,
+        onOpenChange: setMoving,
+        title: 'Move',
+        children: createElement(FormDialogForm, {
+            changed: true,
+            submitLabel: 'Move',
+            onSubmit: onMove,
+            children: [
+                createElement(Input, { key: 'to', 'aria-label': 'Destination', defaultValue: 'Plans' }),
+                createElement(Button, { key: 'new', onClick: () => setNaming(true) }, 'New folder'),
+                createElement(FormDialog, {
+                    key: 'naming',
+                    open: naming,
+                    onOpenChange: setNaming,
+                    title: 'New folder',
+                    children: createElement(FormDialogForm, {
+                        changed: true,
+                        submitLabel: 'Create',
+                        onSubmit: () => {},
+                        children: createElement(Input, { 'aria-label': 'Folder name', defaultValue: 'Q3' }),
+                    }),
+                }),
+            ],
+        }),
+    });
+}
+
+// Radix hands the focus back on the task after a dialog closes.
+const focusReturned = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+const titles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+const anyButton = (name: string) => [...document.querySelectorAll('button')].find((b) => label(b) === name);
+const press = (name: string) =>
+    act(async () => {
+        const target = anyButton(name);
+        if (!target) throw new Error(`no ${name} button`);
+        target.focus();
+        target.click();
+    });
+
+test('a changed dialog over another asks for itself only, Esc on the question keeps editing, and Discard closes it alone', async () => {
+    const onMove = mock(() => {});
+    ({ unmount } = await renderInDocument(createElement(Stacked, { onMove })));
+    await press('New folder');
+    expect(titles()).toEqual(['Move', 'New folder']);
+    await pressEscape();
+    expect(titles()).toEqual(['Move', 'New folder', 'Discard changes?']);
+    await pressEscape();
+    await focusReturned();
+    expect(titles()).toEqual(['Move', 'New folder']);
+    expect(document.activeElement).toBe(byLabel('Folder name'));
+    await pressEscape();
+    await press('Discard');
+    await focusReturned();
+    expect(titles()).toEqual(['Move']);
+    expect(document.activeElement).toBe(anyButton('New folder') ?? null);
+    expect(onMove).not.toHaveBeenCalled();
+});
+
+test('a form that says nothing changed closes at once, and a read-only one never asks', async () => {
+    await render();
+    await pressEscape();
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+    await unmount();
+    onOpenChange.mockClear();
+    ({ unmount } = await renderInDocument(
+        createElement(FormDialog, {
+            open: true,
+            onOpenChange,
+            title: 'Rename',
+            children: createElement(FormDialogForm, {
+                changed: true,
+                readOnly: true,
+                onSubmit: () => {},
+                submitLabel: 'Save',
+                children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+            }),
+        }),
+    ));
+    await pressEscape();
+    expect(titles()).not.toContain('Discard changes?');
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('after Discard the focus goes back to what opened the discarded dialog, whichever ends its fade-out first', async () => {
+    for (const first of ['Discard changes?', 'New folder']) {
+        const release = holdClosingDialogs();
+        ({ unmount } = await renderInDocument(createElement(Stacked, { onMove: () => {} })));
+        await press('New folder');
+        await pressEscape();
+        await press('Discard');
+        for (const title of [first, ...['Discard changes?', 'New folder'].filter((other) => other !== first)]) {
+            const content = [...document.querySelectorAll('[role="dialog"]')].find(
+                (dialog) => dialog.querySelector('h2')?.textContent === title,
+            );
+            if (content?.getAttribute('data-state') !== 'closed') throw new Error(`${title} is not fading out`);
+            await act(async () => {
+                content.dispatchEvent(new AnimationEvent('animationend', { animationName: 'fade-out' }));
+            });
+            await focusReturned();
+        }
+        expect(titles()).toEqual(['Move']);
+        expect(document.activeElement).toBe(anyButton('New folder') ?? null);
+        release();
+        await unmount();
+    }
+});
+
+test('a changed form that another view replaces leaves the dialog closing at once', async () => {
+    let replace = () => {};
+    function Harness() {
+        const [loading, setLoading] = useState(false);
+        replace = () => setLoading(true);
+        return createElement(FormDialog, {
+            open: true,
+            onOpenChange,
+            title: 'Rename',
+            children: loading
+                ? 'Loading'
+                : createElement(FormDialogForm, {
+                      changed: true,
+                      onSubmit: () => {},
+                      submitLabel: 'Save',
+                      children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+                  }),
+        });
+    }
+    onOpenChange.mockClear();
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    await act(async () => replace());
+    await pressEscape();
+    expect(titles()).toEqual(['Rename']);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });

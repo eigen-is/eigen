@@ -1,8 +1,7 @@
 // expectFormContract passes a form that keeps every rule of its kind, and each probe fails a sample form that breaks
 // its rule, naming the probe. A form skips a probe only with a reason. The dialog shell keeps the rules today.
 // Hand-built card and page samples keep the card's Esc and the page's leave guard, whose probes stay off until their
-// shells keep them, and the dialog sample that asks before it drops a change keeps the discard probe, which the shell
-// fails until then.
+// shells keep them.
 import { expect, mock, test } from 'bun:test';
 import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { FormContract } from './form-contract';
@@ -79,8 +78,8 @@ type ShellDialogProps = {
     onOpenAutoFocus?: (event: Event) => void;
     onNameKeyDown?: (event: ReactKeyboardEvent) => void;
     onChoiceKeyDown?: (event: ReactKeyboardEvent) => void;
-    // Asks before it drops a change, as the dialog shell will.
-    asks?: boolean;
+    // Tells the shell when the name changed, as every form must.
+    reportsChange?: boolean;
     showsError?: boolean;
     extra?: ReactNode;
 };
@@ -91,54 +90,39 @@ function ShellDialog({
     onOpenAutoFocus,
     onNameKeyDown,
     onChoiceKeyDown,
-    asks,
+    reportsChange = true,
     showsError,
     extra,
 }: ShellDialogProps) {
     const [open, setOpen] = useState(true);
-    const [asking, setAsking] = useState(false);
     const [name, setName] = useState('Notes');
     const [error, setError] = useState('');
-    const changed = name !== 'Notes';
-    return [
-        createElement(FormDialog, {
-            key: 'form',
-            open,
-            onOpenChange: (next: boolean) => (!next && asks && changed ? setAsking(true) : setOpen(next)),
-            title: 'Rename',
-            onOpenAutoFocus,
-            children: createElement(FormDialogForm, {
-                submitLabel: 'Save',
-                onSubmit: async () => {
-                    if (!name.trim()) {
-                        setError('Add a name');
-                        return false;
-                    }
-                    await onSubmit(name);
-                },
-                children: [
-                    ...NameField({ name, setName, error, onKeyDown: onNameKeyDown, showsError }),
-                    createElement(
-                        'span',
-                        { key: 'copy', onKeyDown: onChoiceKeyDown },
-                        createElement(Checkbox, { 'aria-label': 'Keep a copy' }),
-                    ),
-                    extra,
-                ],
-            }),
+    return createElement(FormDialog, {
+        open,
+        onOpenChange: setOpen,
+        title: 'Rename',
+        onOpenAutoFocus,
+        children: createElement(FormDialogForm, {
+            changed: reportsChange && name !== 'Notes',
+            submitLabel: 'Save',
+            onSubmit: async () => {
+                if (!name.trim()) {
+                    setError('Add a name');
+                    return false;
+                }
+                await onSubmit(name);
+            },
+            children: [
+                ...NameField({ name, setName, error, onKeyDown: onNameKeyDown, showsError }),
+                createElement(
+                    'span',
+                    { key: 'copy', onKeyDown: onChoiceKeyDown },
+                    createElement(Checkbox, { 'aria-label': 'Keep a copy' }),
+                ),
+                extra,
+            ],
         }),
-        createElement(ConfirmDialog, {
-            key: 'ask',
-            open: asking,
-            onOpenChange: setAsking,
-            title: 'Discard changes?',
-            description: 'What you changed is not saved.',
-            cancelText: 'Keep editing',
-            confirmText: 'Discard',
-            destructive: true,
-            onConfirm: () => setOpen(false),
-        }),
-    ];
+    });
 }
 
 type LooseDialogProps = {
@@ -330,13 +314,8 @@ const card = (escToView: boolean) => contract('card', (onSubmit) => createElemen
 const page = (guarded: boolean, oneAtATime?: boolean) =>
     contract('page', (onSubmit) => createElement(PageSample, { onSubmit, guarded, oneAtATime }));
 
-test('a dialog on the shell keeps the contract, and the switched-off discard probe is skipped', async () => {
+test('a dialog on the shell keeps the contract', async () => {
     await expectFormContract(shell());
-    await expectProbeToFail('discard', shell(), 'Esc on a changed form asks "Discard changes?"');
-});
-
-test('a dialog that asks before it drops a change keeps the discard probe', async () => {
-    await expectFormProbe('discard', shell({ asks: true }));
 });
 
 test('a card that goes back to its view on Esc keeps the card contract and its Esc probe', async () => {
@@ -435,6 +414,15 @@ test('the close probe fails a dialog that ignores Esc, has no X, ignores a click
     await expectProbeToFail('close', loose({ content: { showCloseButton: false } }), 'nothing to click');
     await expectProbeToFail('close', loose({ content: { onPointerDownOutside: keep } }), 'a click outside closes');
     await expectProbeToFail('close', loose({ cancelCloses: false }), 'Cancel closes the form');
+});
+
+test('the discard probe fails a form that never tells its shell it changed, and one that closes on a changed Esc', async () => {
+    await expectProbeToFail(
+        'discard',
+        shell({ reportsChange: false }),
+        'Esc on a changed form asks "Discard changes?"',
+    );
+    await expectProbeToFail('discard', loose(), 'Esc on a changed form asks "Discard changes?"');
 });
 
 test('the card Esc probe fails a card whose Esc closes it where Cancel goes back to its view', async () => {

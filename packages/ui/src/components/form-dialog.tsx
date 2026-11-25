@@ -1,13 +1,15 @@
 // A dialog around a form, such as Docs' Page setup or Add link. FormDialog draws the shell with its title and
 // description, and FormDialogForm the fields and the Cancel and submit footer on FormShell's keys. It opens on the
-// first text field, every way to close waits for a running submit, and a failure or a false result keeps it open. The
-// caller keeps the field state in a child that mounts with the dialog, so every opening starts clean. FormDialog alone
-// is also a titled shell with no form, as Word count uses it.
+// first text field, every way to close waits for a running submit, and a failure or a false result keeps it open. Esc,
+// the X and a click outside ask "Discard changes?" once the form says it changed; Cancel drops it. The caller keeps the
+// field state in a child that mounts with the dialog, so every opening starts clean. FormDialog alone is also a titled
+// shell with no form, as Word count uses it.
 
 import type { ComponentProps, ReactNode } from 'react';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import type { DialogAction } from '../hooks/use-dialog-pending';
 import { useDialogPending } from '../hooks/use-dialog-pending';
+import { useDiscardChanges } from '../hooks/use-discard-changes';
 import { Button } from './button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 import { FormShell } from './form-shell';
@@ -28,6 +30,9 @@ type FormDialogProps = {
 type FormDialogFormProps = {
     // Returns or resolves false to stay open, such as a check that marked a field invalid, which then gets the focus.
     onSubmit: DialogAction;
+    // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
+    // click outside then ask before they drop it.
+    changed?: boolean;
     canSubmit?: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
@@ -42,9 +47,10 @@ type FormDialogContextValue = {
     pending: boolean;
     submit: (onSubmit: DialogAction) => Promise<false | undefined> | undefined;
     handleOpenChange: (open: boolean) => void;
+    setChanged: (changed: boolean) => void;
 };
 
-// The shell owns the dialog's close and the form starts the submit, so both share one pending state.
+// The shell owns the dialog's close and the form starts the submit and knows what changed, so both share this.
 const FormDialogContext = createContext<FormDialogContextValue | null>(null);
 
 export function FormDialog({
@@ -58,31 +64,37 @@ export function FormDialog({
     children,
 }: FormDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    const [changed, setChanged] = useState(false);
+    const { requestClose, dialog } = useDiscardChanges({ changed, onDiscard: () => handleOpenChange(false) });
 
     // A closing dialog stays mounted while it animates out, with the focus still in its field.
     const submit = (onSubmit: DialogAction) => (open ? run(onSubmit) : undefined);
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent
-                size={size}
-                onOpenAutoFocus={onOpenAutoFocus ?? focusFirstField}
-                onCloseAutoFocus={onCloseAutoFocus}
-            >
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                    {description && <DialogDescription>{description}</DialogDescription>}
-                </DialogHeader>
-                <FormDialogContext.Provider value={{ pending, submit, handleOpenChange }}>
-                    {children}
-                </FormDialogContext.Provider>
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={open} onOpenChange={(next) => (next || pending ? handleOpenChange(next) : requestClose())}>
+                <DialogContent
+                    size={size}
+                    onOpenAutoFocus={onOpenAutoFocus ?? focusFirstField}
+                    onCloseAutoFocus={onCloseAutoFocus}
+                >
+                    <DialogHeader>
+                        <DialogTitle>{title}</DialogTitle>
+                        {description && <DialogDescription>{description}</DialogDescription>}
+                    </DialogHeader>
+                    <FormDialogContext.Provider value={{ pending, submit, handleOpenChange, setChanged }}>
+                        {children}
+                    </FormDialogContext.Provider>
+                </DialogContent>
+            </Dialog>
+            {dialog}
+        </>
     );
 }
 
 export function FormDialogForm({
     onSubmit,
+    changed = false,
     canSubmit = true,
     submitLabel,
     footerStart,
@@ -91,7 +103,14 @@ export function FormDialogForm({
 }: FormDialogFormProps) {
     const context = useContext(FormDialogContext);
     if (!context) throw new Error('FormDialogForm renders inside a FormDialog');
-    const { pending, submit, handleOpenChange } = context;
+    const { pending, submit, handleOpenChange, setChanged } = context;
+
+    // A form that goes, such as one a loading state replaces, leaves nothing to ask about.
+    const asks = changed && !readOnly;
+    useEffect(() => {
+        setChanged(asks);
+        return () => setChanged(false);
+    }, [asks, setChanged]);
 
     return (
         <FormShell

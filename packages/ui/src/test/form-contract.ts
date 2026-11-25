@@ -52,8 +52,7 @@ const PROBES: Record<ProbeName, Probe> = {
     enter: { kinds: ['dialog', 'card', 'page'], on: true, run: probeEnter },
     modEnter: { kinds: ['dialog', 'card', 'page'], on: true, run: probeModEnter },
     close: { kinds: ['dialog'], on: true, run: probeClose },
-    // Off until the dialog shell asks before it drops a change.
-    discard: { kinds: ['dialog'], on: false, run: probeDiscard },
+    discard: { kinds: ['dialog'], on: true, run: probeDiscard },
     // Off until the card shell goes back to its view on Esc.
     cardEsc: { kinds: ['card'], on: false, run: probeCardEsc },
     // Off until the page shell guards its changes.
