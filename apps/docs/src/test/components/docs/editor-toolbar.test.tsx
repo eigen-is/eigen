@@ -1324,11 +1324,9 @@ async function restartAtCaret(startAt: string) {
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Restart numbering');
 
     const input = document.querySelector<HTMLInputElement>('[role="dialog"] input');
-    expect(input?.value).toBe('1');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, startAt);
-        input?.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    if (!input) throw new Error('no Start at field');
+    expect(input.value).toBe('1');
+    await type(input, startAt);
     const apply = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].find(
         (button) => button.textContent === 'Apply',
     );
