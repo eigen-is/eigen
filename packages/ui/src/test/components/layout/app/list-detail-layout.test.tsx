@@ -67,7 +67,7 @@ test('a selection opens the detail beside a list of fixed width', async () => {
     expect(text).toContain('The list');
     expect(text).toContain('Detail toolbar');
     expect(text).toContain('The detail');
-    expect(listWidth).toBe('350px');
+    expect(listWidth).toBe('400px');
     expect(listGrow).toBe('');
 });
 

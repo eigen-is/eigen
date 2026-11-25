@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2451 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2452 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (334)
+## Components (335)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -233,6 +233,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SidebarPrimaryButton` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-primary-button.tsx |
 | `SidebarSection` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `AppBarMenu` | `@workspace/ui/components/layout/toolbar` | packages/ui/src/components/layout/toolbar/app-bar-menu.tsx |
+| `BackButton` | `@workspace/ui/components/layout/toolbar` | packages/ui/src/components/layout/toolbar/back-button.tsx |
 | `CenteredToolbar` | `@workspace/ui/components/layout/toolbar` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
 | `DocumentModeButton` | `@workspace/ui/components/layout/toolbar` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DocumentShareCluster` | `@workspace/ui/components/layout/toolbar` | packages/ui/src/components/layout/toolbar/document-share-cluster.tsx |
@@ -2426,6 +2427,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `focusFirstField` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `STRETCHED_TRIGGER_CLASS` | `@workspace/ui/components/info-block` | packages/ui/src/components/info-block.tsx |
+| `columnWidthPx` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-widths.ts |
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `FILTER_LABELS` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -2442,7 +2444,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MIXED` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `numberAtStep` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `numToStr` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
-| `PROPERTIES_PANEL_WIDTH_PX` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `sealed` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `FIND_HOTKEY` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `FIND_REPLACE_HOTKEY` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |

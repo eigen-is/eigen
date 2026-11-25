@@ -155,12 +155,7 @@ export function DriveLayout({
                     <DriveList {...listProps} />
                 </Column>
                 {showDetail && (
-                    <Column
-                        id="detail"
-                        width={isMobile ? 'flex' : '400px'}
-                        onBack={onBackToList}
-                        toolbar={detailToolbar}
-                    >
+                    <Column id="detail" width="large" onBack={onBackToList} toolbar={detailToolbar}>
                         <DriveDetail path={detailPath} siblings={sortedContents} actions={actions} />
                     </Column>
                 )}

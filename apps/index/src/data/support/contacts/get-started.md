@@ -29,7 +29,7 @@ One of the cards is you. Contacts keeps a card linked to your own Eigen account,
 
 ## View a contact
 
-The list fills the page until you pick someone. Click any row to open the contact's details on the right, beside a narrower list. On a phone, the details take the place of the list, and the back arrow returns to it. To go back to the full list on a computer, click **Close** (the **X**) in the toolbar above the details.
+The list fills the page until you pick someone. Click any row to open the contact's details on the right, beside a narrower list. On a phone, the details take the place of the list, and the back button (**‹**) returns to it. To go back to the full list on a computer, click **Close** (the **X**) in the toolbar above the details.
 
 The detail panel shows their **Contact information** (email addresses and phone numbers), company and job title, birthday, **Addresses**, and **Notes**, depending on what has been filled in.
 

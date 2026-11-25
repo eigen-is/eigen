@@ -131,7 +131,7 @@ test('unsaved edits ask before a sidebar link leaves, and Keep editing keeps the
 test('Back with unsaved edits asks once, then leaves', async () => {
     const editor = await openEditor();
     await editor.type();
-    await editor.click('Back to files');
+    await editor.click('Files');
     expect(editor.at()).toBe('/edit');
     await editor.click('Discard');
     expect(editor.at()).toBe('/recent');

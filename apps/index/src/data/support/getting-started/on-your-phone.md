@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-11-02
+updated: 2026-11-25
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
@@ -15,7 +15,7 @@ Eigen runs in the browser on your phone, with the same account and the same file
 
 On a computer most apps show two or three columns side by side: the sidebar, a list, and the item you picked. A phone shows one of them at a time.
 
-Tap a message in Mail or a person in Contacts and the list is replaced by what you tapped. A back arrow appears at the left of the toolbar to take you back to the list. From the list, the same arrow opens the sidebar, which is where you switch folder, label, calendar, or chat room. Every app with a sidebar gives you that arrow, so there is always a way back to navigation.
+Tap a message in Mail or a person in Contacts and the list is replaced by what you tapped. A back button (**‹**) appears at the left of the toolbar to take you back to the list. From the list, the same button opens the sidebar, which is where you switch folder, label, calendar, or chat room. Every app with a sidebar gives you that button, so there is always a way back to navigation.
 
 ## The top bar
 
@@ -53,4 +53,4 @@ In Calendar, **Today** and the month or week choice move into a **View options**
 
 ## Comments and activity
 
-In documents, spreadsheets, and presentations, opening **Comments** or **Activity** takes over the screen instead of opening a panel beside your work. The pane has its own back arrow. Your document is waiting exactly as you left it, with the same scroll position and selection.
+In documents, spreadsheets, and presentations, opening **Comments** or **Activity** takes over the screen instead of opening a panel beside your work. The pane has its own back button. Your document is waiting exactly as you left it, with the same scroll position and selection.

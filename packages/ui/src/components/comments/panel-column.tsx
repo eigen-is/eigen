@@ -1,5 +1,5 @@
 // A document's comments or activity pane, one component for every viewport: a Column whose toolbar carries the
-// title, the filter and the close button, so the panels below stay plain bodies. Column gives the back arrow on
+// title, the filter and the close button, so the panels below stay plain bodies. Column gives the back on
 // mobile and the fixed-width sibling on desktop. Mount it outside any <ColumnLayout mobileColumn="…">: a Column
 // whose id doesn't match hides itself, so a host that wraps this one silently gets no pane at all.
 
@@ -15,7 +15,6 @@ import { Column } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
 import { ToolbarTitle } from '../layout/toolbar/toolbar-title';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import { PROPERTIES_PANEL_WIDTH_PX } from '../properties-panel';
 import { ActivityPanel } from './activity-panel';
 import { CommentFilterButton } from './comment-filter-button';
 import type { CommentContextMenuItem } from './comment-menu-items';
@@ -67,7 +66,7 @@ export function PanelColumn({
     return (
         <Column
             id="panel"
-            width={`${PROPERTIES_PANEL_WIDTH_PX}px`}
+            width="small"
             className={cn('bg-background', !isMobile && 'border-l')}
             onBack={onClose}
             toolbarBorder="always"
@@ -85,7 +84,7 @@ export function PanelColumn({
                                 currentUserEmail={currentUserEmail}
                             />
                         )}
-                        {/* Mobile closes with Column's own back arrow. */}
+                        {/* A phone closes it with Column's own back. */}
                         {!isMobile && <TooltipButton icon={X} tooltipText="Close" onClick={onClose} />}
                     </div>
                 </>

@@ -323,13 +323,13 @@ test('the outline over the left of a page-less doc narrows its column, at Wide a
 
     localStorage.setItem('eigen-docs-outline', 'shown');
     await render(WRITER);
-    // The outline's 240 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
-    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1152 });
+    // The outline's 256 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 256, width: 1136 });
     await unmount();
 
     localStorage.setItem('eigen-docs-text-width:u1', 'wide');
     await render(WRITER);
-    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1008 });
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 256, width: 992 });
     // Room enough beside it, a Wide column stays centred.
     expect(await pagelessColumnAt(1920)).toEqual({ left: 432, width: 1056 });
 });

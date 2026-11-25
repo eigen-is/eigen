@@ -1,12 +1,14 @@
 // The page shell every app screen is built from: ColumnLayout lays its Columns side by side, and on a phone shows
 // only the one named mobileColumn. Each Column has a toolbar bar whose bottom border fades in once its content
-// scrolls, and on a phone a back arrow that runs onBack or opens the sidebar.
+// scrolls, and on a phone a back chevron that runs onBack or opens the sidebar. A Column is the flex main or one of the
+// named fixed widths.
 
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { TooltipButton } from '../toolbar/tooltip-button';
+import { BackButton } from '../toolbar/back-button';
+import type { ColumnWidth } from './column-widths';
+import { columnWidthPx } from './column-widths';
 import { useLayout } from './layout-context';
 
 type ColumnContextType = {
@@ -17,18 +19,18 @@ const ColumnContext = createContext<ColumnContextType>({ mobileColumn: null });
 
 type ColumnProps = {
     id: string;
-    width: string;
+    width: ColumnWidth;
     toolbar?: ReactNode;
     // 'always' keeps the toolbar border for a column with a canvas below, such as a doc's.
     toolbarBorder?: 'auto' | 'always';
-    // 'sidebar' opens the phone's sidebar, and shows no arrow where the app has no collapsible sidebar.
+    // 'sidebar' opens the phone's sidebar, and shows no back where the app has no collapsible sidebar.
     onBack?: (() => void) | 'sidebar';
     children: ReactNode;
     className?: string;
 };
 
 function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, className }: ColumnProps) {
-    const { isMobile, sidebarMode, setSidebarOpen } = useLayout();
+    const { isMobile, isTablet, sidebarMode, setSidebarOpen } = useLayout();
     const { mobileColumn } = useContext(ColumnContext);
     const [scrolled, setScrolled] = useState(false);
     const cleanupRef = useRef<(() => void) | null>(null);
@@ -57,12 +59,9 @@ function Column({ id, width, toolbar, toolbarBorder = 'auto', onBack, children, 
         ? { width: '100%', flex: '1 1 auto' }
         : width === 'flex'
           ? { flex: '1 1 auto', minWidth: 0 }
-          : { width, flexShrink: 0 };
+          : { width: columnWidthPx(width, isTablet), flexShrink: 0 };
 
-    const backButton =
-        isMobile && backHandler ? (
-            <TooltipButton icon={ArrowLeft} tooltipText="Back" className="mr-1" onClick={backHandler} />
-        ) : null;
+    const backButton = isMobile && backHandler ? <BackButton onClick={backHandler} /> : null;
 
     return (
         <div className={cn('group/column h-full flex flex-col overflow-hidden', className)} style={style}>

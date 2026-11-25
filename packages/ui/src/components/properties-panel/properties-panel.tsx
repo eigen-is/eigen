@@ -1,24 +1,11 @@
+// The frame every properties panel shares, such as Slides' or Docs' selection panel: a small fixed-width column at
+// the right with an optional title bar and one scroller, and the section and row grammar the panels are written in.
+
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar/toolbar-title';
 import { ScrollArea } from '@workspace/ui/components/scroll-area';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
-
-// The w-64 below, for hosts that have to lay out around this panel.
-export const PROPERTIES_PANEL_WIDTH_PX = 256;
-
-// Section order is a cross-app convention, not a runtime sort — every host (vector, slides, docs,
-// sheets) authors its sections in this sequence so the panel reads the same everywhere:
-//
-//   1. geometry     Transform / Layout
-//   2. content      Text · Spacing · Image
-//   3. paint        Fill / Color / Background · Stroke / Border · Shape · Arrowheads · Sketch
-//   4. appearance   Appearance
-//   5. actions      Arrange · Align
-//   6. destructive  Delete
-//
-// Titles are literals and the host guards only filter, so authored order IS rendered order — which
-// keeps DOM order (and with it tab order) matched to what the eye sees. A new section slots into its
-// group; a group a panel doesn't have is simply absent.
+import { columnWidthPx } from '../layout/app/column-widths';
 
 type PropertiesPanelProps = {
     children: ReactNode;
@@ -29,7 +16,14 @@ type PropertiesPanelProps = {
 
 export function PropertiesPanel({ title, children, className }: PropertiesPanelProps) {
     return (
-        <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
+        <div
+            // A class reads the width, so a host's own, such as the comments pane's w-full, still wins.
+            className={cn(
+                'w-(--column-small) border-l bg-background shrink-0 h-full flex flex-col overflow-hidden',
+                className,
+            )}
+            style={{ '--column-small': `${columnWidthPx('small', false)}px` }}
+        >
             {title && (
                 <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
                     <ToolbarTitle>{title}</ToolbarTitle>

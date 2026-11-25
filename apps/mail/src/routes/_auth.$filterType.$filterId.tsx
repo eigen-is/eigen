@@ -12,7 +12,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column, ColumnLayout, EmptyState, useLayout } from '@workspace/ui/components/layout/app';
+import { Column, ColumnLayout, EmptyState } from '@workspace/ui/components/layout/app';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -50,7 +50,6 @@ function MailRoute() {
     const { filterType, filterId } = Route.useParams();
     const { mailId, mode, to, attach, q } = Route.useSearch();
     const navigate = useNavigate();
-    const { isTablet } = useLayout();
     // Reply, Forward and Compose hand the composer its prefill through history state. A new composeSessionKey
     // starts a new compose session, which remounts the composer.
     const { prefillDraft, forwardedParts, composeSessionKey } = useLocation().state;
@@ -230,7 +229,6 @@ function MailRoute() {
     // so EmailDraft reports that earlier window here and both it and the toolbar read one flag.
     const [preparingSend, setPreparingSend] = useState(false);
     const isSending = actions.isSendPending || preparingSend;
-    const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!mailId || mode === 'compose';
 
     const listToolbar = (
@@ -295,7 +293,7 @@ function MailRoute() {
             {/* display:contents, so the ref hangs on a real node without changing the layout. */}
             <div ref={mailSurfaceRef} className="contents">
                 <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-                    <Column id="list" width={showDetail ? listWidth : 'flex'} onBack="sidebar" toolbar={listToolbar}>
+                    <Column id="list" width={showDetail ? 'large' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
                         <div className={cn('flex flex-col h-full overflow-hidden', showDetail && 'border-r')}>
                             <EmailList
                                 // A new mailbox or search text scrolls the list to the top. A refined search

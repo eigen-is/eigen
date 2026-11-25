@@ -14,16 +14,26 @@ The marketing routes in `apps/index` use `AppShell` without `EigenApp`, so `Pale
 
 ## Every page is a `ColumnLayout` of `Column`s with the toolbar as a prop
 
-The toolbar is the `toolbar` prop of a `Column`, never part of the page content. `Column` draws it in a fixed `h-12` bar, so every page has the same toolbar height and the mobile back arrow has one home.
+The toolbar is the `toolbar` prop of a `Column`, never part of the page content. `Column` draws it in a fixed `h-12` bar, so every page has the same toolbar height and the phone's back has one home.
 
 ```tsx
 <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-    <Column id="list" width="350px" onBack="sidebar" toolbar={<ListToolbar />}>…</Column>
+    <Column id="list" width="large" onBack="sidebar" toolbar={<ListToolbar />}>…</Column>
     <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<DetailToolbar />}>…</Column>
 </ColumnLayout>
 ```
 
 A list whose items open a detail is `ListDetailLayout`, as on the contacts and admin users and teams pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page.
+
+## A side column is small, medium or large
+
+**A `Column`'s `width` is a name, never a pixel value: `flex` for the main, or `small` (256), `medium` (320) or `large` (400).** `small` is for navigation and tools, such as the sidebar, the properties panels and the Docs outline; `medium` for a detail beside a work surface; `large` for a list or a detail beside one, such as Mail's list or Drive's detail. On a tablet `large` steps down to 320, so there every column that isn't `small` is 320 and a 1024 tablet keeps a 640 main beside the sidebar's rail. The numbers and that step live once, in `column-widths.ts` beside `Column`, which reads `isTablet` itself, so no page writes its own tablet branch. A host that lays out around a column or draws one as a plain element, such as the Docs overlay's maths, `PropertiesPanel` or `SidebarContainer`, reads the number from `columnWidthPx`. The sidebar's 64px tablet rail is a mode of the sidebar, not a width a column picks.
+
+Slides' slide rail is the one side column with its own width: 208 (`w-52`), and 256 from 1920 wide, where it matches the properties panel across from it. Its thumbnails read no better wider, so the slide keeps the room.
+
+## A properties panel's sections come in one order
+
+Every properties panel, in Vector, Slides, Docs and Sheets, writes its sections in one order: geometry (Transform, Layout), content (Text, Spacing, Image), paint (Fill, Color, Background, Stroke, Border, Shape, Arrowheads, Sketch), appearance, actions (Arrange, Align), then Delete. It is a convention, not a sort: a panel's titles are literals and its guards only filter, so the written order is the drawn order, and the tab order follows what the eye sees. A new section slots into its group, and a group a panel lacks is absent.
 
 ## Every horizontal inset is the one gutter
 
@@ -35,7 +45,9 @@ The wide gutter is 20px because that clears a macOS overlay scrollbar, which tak
 
 On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` renders only the `Column` whose `id` matches, at full width. Without a `mobileColumn`, or outside a `ColumnLayout`, every `Column` renders, which is how an editor mounts a full-width pane as a sibling. So `PanelColumn`, the comments and activity pane, must mount outside any `ColumnLayout` that sets one: a wrapped pane silently never shows ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)).
 
-`onBack` gives a column the mobile back arrow. **The first column of a page passes `onBack="sidebar"`,** or a phone user has no way back to navigation. The sentinel opens the sidebar as a column and checks `sidebarMode` itself, so a surface without a sidebar never shows a dead arrow.
+`onBack` gives a column the phone's back, a lone "‹" from `BackButton`. **The first column of a page passes `onBack="sidebar"`,** or a phone user has no way back to navigation. The sentinel opens the sidebar as a column and checks `sidebarMode` itself, so a surface without a sidebar never shows a dead back.
+
+**`BackButton` is the one back in a bar: a lone "‹" with the tooltip Back, or "‹" beside the name of where it goes, such as Drive's text editor's "‹ Files".** One glyph for every back, on a phone and a desktop, so the same move never looks two ways.
 
 ## The sidebar is a rail on a tablet and a column on a phone
 
