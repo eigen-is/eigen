@@ -3,6 +3,7 @@
 // asks first. The prefill of a reply or forward counts as saved, so a draft only reaches Drafts once
 // the user changes something.
 
+import { useBlocker } from '@tanstack/react-router';
 import { AppError, rethrowUntoasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
@@ -65,6 +66,21 @@ type UseDraftOptions = {
     onDraftIdAssigned?: (id: string) => void;
 };
 
+type Draft = {
+    state: DraftFields;
+    setField: (field: DraftEditableField, value: string) => void;
+    addAttachment: (meta: AttachmentMeta) => void;
+    addPrefillAttachment: (meta: AttachmentMeta) => void;
+    removeAttachment: (index: number) => void;
+    addDriveReference: (ref: AttachmentReference) => void;
+    removeDriveReference: (id: string) => void;
+    markEditorReady: (html: string, text: string) => void;
+    isSendable: boolean;
+    disableSaves: () => void;
+    enableSaves: () => void;
+    flushAndGetDraft: () => Promise<NewDraft>;
+};
+
 export function useDraft({
     email,
     prefillTo,
@@ -72,7 +88,7 @@ export function useDraft({
     signatureHtml,
     onSave,
     onDraftIdAssigned,
-}: UseDraftOptions) {
+}: UseDraftOptions): Draft {
     const { user } = useAuth();
     const [state, dispatch] = useReducer(draftReducer, undefined, () =>
         savedState(initFields(email, prefillTo, prefillDraft, signatureHtml)),
@@ -123,17 +139,11 @@ export function useDraft({
         };
     }, []);
 
-    // A closed tab runs no closing save, so the browser asks while an edit has not reached the server.
-    useEffect(() => {
-        const ask = (event: BeforeUnloadEvent) => {
-            if (hasUnsavedEdit(latestRef.current.state)) event.preventDefault();
-        };
-        window.addEventListener('beforeunload', ask);
-        return () => window.removeEventListener('beforeunload', ask);
-    }, []);
+    // A closed tab runs no closing save, so the browser asks while an edit has not reached the server. An in-app
+    // navigation goes at once, since unmounting runs the closing save.
+    useBlocker({ shouldBlockFn: () => false, enableBeforeUnload: () => hasUnsavedEdit(latestRef.current.state) });
 
-    // Once the editor has parsed the seeded body and emitted its canonical HTML/text, snap
-    // them into state and reset the saved fingerprint. Fires once via LightEditor's onReady.
+    // The editor's first output is its own normalization of the seeded body, not an edit, so it becomes the saved state.
     const editorReadyRef = useRef(false);
     const markEditorReady = (html: string, text: string) => {
         if (editorReadyRef.current) return;
@@ -214,7 +224,7 @@ function initFields(
     signatureHtml?: string,
 ): DraftFields {
     if (email) {
-        // Saved-draft branch: never re-inject. The body is whatever the user last saved.
+        // The saved body already holds the signature and quote, so neither is added again.
         return {
             id: email.id,
             to: addressObjectToString(email.to),
