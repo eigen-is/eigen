@@ -31,7 +31,7 @@ type FormDialogFormProps = {
     // Returns or resolves false to stay open, such as a check that marked a field invalid, which then gets the focus.
     onSubmit: DialogAction;
     // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
-    // click outside then ask before they drop it.
+    // click outside then ask before they drop it. One form per dialog at a time: the last one mounted wins.
     changed?: boolean;
     canSubmit?: boolean;
     submitLabel: string;
@@ -65,14 +65,18 @@ export function FormDialog({
 }: FormDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [changed, setChanged] = useState(false);
-    const { requestClose, dialog } = useDiscardChanges({ changed, onDiscard: () => handleOpenChange(false) });
+    // A running submit decides the close itself, so it asks nothing.
+    const discard = useDiscardChanges({
+        changed: changed && !pending,
+        onDiscard: () => handleOpenChange(false),
+    });
 
     // A closing dialog stays mounted while it animates out, with the focus still in its field.
     const submit = (onSubmit: DialogAction) => (open ? run(onSubmit) : undefined);
 
     return (
         <>
-            <Dialog open={open} onOpenChange={(next) => (next || pending ? handleOpenChange(next) : requestClose())}>
+            <Dialog open={open} onOpenChange={discard.onOpenChange}>
                 <DialogContent
                     size={size}
                     onOpenAutoFocus={onOpenAutoFocus ?? focusFirstField}
@@ -87,7 +91,7 @@ export function FormDialog({
                     </FormDialogContext.Provider>
                 </DialogContent>
             </Dialog>
-            {dialog}
+            {discard.dialog}
         </>
     );
 }

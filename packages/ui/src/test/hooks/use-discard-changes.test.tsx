@@ -14,14 +14,14 @@ afterEach(() => unmount());
 
 async function mount(changed: boolean) {
     const onDiscard = mock(() => {});
-    let requestClose = () => {};
+    let onOpenChange = (_open: boolean) => {};
     function Harness() {
         const discard = useDiscardChanges({ changed, onDiscard });
-        requestClose = discard.requestClose;
+        onOpenChange = discard.onOpenChange;
         return discard.dialog;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));
-    return { onDiscard, requestClose: () => act(async () => requestClose()) };
+    return { onDiscard, requestClose: () => act(async () => onOpenChange(false)) };
 }
 
 const question = () => document.querySelector('[role="dialog"]');

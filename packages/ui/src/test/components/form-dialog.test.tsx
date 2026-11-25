@@ -31,6 +31,7 @@ const onOpenChange = mock((_open: boolean) => {});
 
 async function render({
     onSubmit = () => {},
+    changed,
     canSubmit,
     footerStart,
     readOnly,
@@ -41,6 +42,7 @@ async function render({
     onOpenAutoFocus?: (event: Event) => void;
     fields?: ReactNode;
     onSubmit?: DialogAction;
+    changed?: boolean;
     canSubmit?: boolean;
     footerStart?: ReactNode;
     readOnly?: boolean;
@@ -56,6 +58,7 @@ async function render({
             onOpenAutoFocus,
             children: createElement(FormDialogForm, {
                 onSubmit,
+                changed,
                 canSubmit,
                 submitLabel: 'Save',
                 footerStart,
@@ -530,4 +533,38 @@ test('a changed form that another view replaces leaves the dialog closing at onc
     await pressEscape();
     expect(titles()).toEqual(['Rename']);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+// Radix starts listening for outside clicks a tick after the dialog opens, and waits for the click before it closes.
+async function clickOutside() {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!overlay) throw new Error('no dialog is open');
+    await act(async () => {
+        overlay.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+        overlay.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        overlay.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    });
+}
+
+test('while a submit runs on a changed form, Esc, the X and a click outside ask nothing and wait', async () => {
+    const closes = {
+        Esc: pressEscape,
+        X: () =>
+            act(async () => dialog()?.querySelector<HTMLButtonElement>(':scope > [data-slot="dialog-close"]')?.click()),
+        outside: clickOutside,
+    };
+    const seen: Record<string, unknown> = {};
+    for (const [name, close] of Object.entries(closes)) {
+        let finish = () => {};
+        await render({ changed: true, onSubmit: () => new Promise<void>((resolve) => (finish = resolve)) });
+        await click('Save');
+        await close();
+        const waiting = { titles: titles(), closes: onOpenChange.mock.calls.length };
+        await act(async () => finish());
+        seen[name] = { ...waiting, after: onOpenChange.mock.calls };
+        await unmount();
+    }
+    const waited = { titles: ['Rename'], closes: 0, after: [[false]] };
+    expect(seen).toEqual({ Esc: waited, X: waited, outside: waited });
 });

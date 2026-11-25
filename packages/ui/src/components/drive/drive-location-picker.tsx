@@ -20,10 +20,10 @@ import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import type { DialogAction } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
+import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useDiscardChanges } from '../../hooks/use-discard-changes';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
@@ -43,12 +43,15 @@ type DriveLocationPickerProps = {
 export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocationPickerProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [named, setNamed] = useState(false);
-    const { requestClose, dialog } = useDiscardChanges({ changed: named, onDiscard: () => handleOpenChange(false) });
+    const discard = useDiscardChanges({
+        changed: named && !pending,
+        onDiscard: () => handleOpenChange(false),
+    });
     // A host that names another place while the picker is open, such as once the viewer's teams have loaded, moves it.
     const place = `${body.defaultOwnerId}/${body.defaultMountId}/${body.defaultFolderId}`;
     return (
         <>
-            <Dialog open={open} onOpenChange={(next) => (next || pending ? handleOpenChange(next) : requestClose())}>
+            <Dialog open={open} onOpenChange={discard.onOpenChange}>
                 <DialogContent className="flex flex-col">
                     <DriveLocationPickerBody
                         key={place}
@@ -60,7 +63,7 @@ export function DriveLocationPicker({ open, onOpenChange, ...body }: DriveLocati
                     />
                 </DialogContent>
             </Dialog>
-            {dialog}
+            {discard.dialog}
         </>
     );
 }
