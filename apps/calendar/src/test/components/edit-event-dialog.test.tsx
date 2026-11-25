@@ -149,7 +149,8 @@ async function open(event = dentist, ownerId = session.user.id) {
 const dialogText = () => [...document.querySelectorAll('[role="dialog"]')].map((dialog) => dialog.textContent);
 const button = (label: string) => {
     const found = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-        (b) => b.textContent === label || b.getAttribute('aria-label') === label,
+        // A pending button's spinner comes before its label.
+        (b) => b.lastChild?.textContent === label || b.getAttribute('aria-label') === label,
     );
     if (!found) throw new Error(`the dialog has no ${label}`);
     return found;
@@ -217,12 +218,12 @@ test('Enter in the title saves the event and closes the dialog', async () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('while a save runs, its buttons are disabled and Cancel and Escape wait for it', async () => {
+test('while a save runs, Save shows it is busy and Cancel and Escape wait for it', async () => {
     let finish = () => {};
     updateEvent.mutateAsync.mockImplementation(() => new Promise((resolve) => (finish = () => resolve({ etag: '2' }))));
     await open();
     await save();
-    expect([button('Cancel').disabled, button('Save').disabled]).toEqual([true, true]);
+    expect([button('Cancel').disabled, button('Save').getAttribute('aria-busy')]).toEqual([true, 'true']);
     await click('Cancel');
     await pressEscape();
     expect(onOpenChange).not.toHaveBeenCalled();
