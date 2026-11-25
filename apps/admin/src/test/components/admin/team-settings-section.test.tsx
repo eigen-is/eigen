@@ -1,11 +1,11 @@
 // Team settings, opened with Edit, keeps the page contract and saves its name, calendar access and settings through
 // one save, then goes back to the view. An empty name and a quota below the minimum are refused under their fields and
-// nothing is written, a name put back to the saved one is left out of the save, and Cancel, or Save with nothing
+// nothing is written, the empty name only once Save was pressed, a name put back to the saved one is left out of the save, and Cancel, or Save with nothing
 // changed, goes back unsaved.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import type { OrgTeam } from '@workspace/lib/types/admin';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -66,18 +66,6 @@ async function openForm() {
     await renderInDocument(createElement(router.RouterProvider, { router: memory }));
 }
 
-const field = (label: string) => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-};
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (label: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field(label), value);
-        field(label).dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (label: string) => act(async () => button(label)?.click());
 
 const SETTINGS = {
@@ -134,6 +122,17 @@ test('a quota below the minimum is refused under its field, and nothing is writt
     const message = document.getElementById(mount.getAttribute('aria-describedby') ?? '');
     expect(message?.textContent).toBe(`At least ${QUOTA_MIN_MB} MB`);
     expect(document.activeElement).toBe(mount);
+});
+
+test('an emptied name says so only once Save was pressed, and nothing is written', async () => {
+    await openForm();
+    await type('Team name', '');
+    expect(document.body.textContent).not.toContain('Add a name');
+    await click('Save');
+    expect(save).not.toHaveBeenCalled();
+    const name = field('Team name');
+    expect(document.getElementById(name.getAttribute('aria-describedby') ?? '')?.textContent).toBe('Add a name');
+    expect(document.activeElement).toBe(name);
 });
 
 test('Cancel goes back to the view and writes nothing', async () => {

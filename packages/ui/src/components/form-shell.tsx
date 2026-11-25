@@ -11,8 +11,6 @@ import type { DialogAction } from '../hooks/use-dialog-pending';
 type FormShellProps = {
     // Returns or resolves false when its check refused, so the shell focuses the field that says why.
     onSubmit: DialogAction;
-    // A react-hook-form form focuses its first error itself.
-    focusesOwnErrors?: boolean;
     // Focuses the first field as the form mounts, as a page form does. A dialog focuses its form as it opens instead.
     autoFocus?: boolean;
     className?: string;
@@ -28,13 +26,7 @@ export function useFormSubmitted(): boolean {
     return useContext(FormSubmittedContext);
 }
 
-export function FormShell({
-    onSubmit,
-    focusesOwnErrors = false,
-    autoFocus = false,
-    className,
-    children,
-}: FormShellProps) {
+export function FormShell({ onSubmit, autoFocus = false, className, children }: FormShellProps) {
     const formRef = useRef<HTMLFormElement>(null);
     const [submitted, setSubmitted] = useState(false);
     // Counts refused submits, so the focus moves once the form has rendered the messages it set.
@@ -54,7 +46,7 @@ export function FormShell({
         setSubmitted(true);
         const refused = (await onSubmit()) === false;
         setSubmitted(refused);
-        if (refused && !focusesOwnErrors) setRefusals((count) => count + 1);
+        if (refused) setRefusals((count) => count + 1);
     };
 
     return (

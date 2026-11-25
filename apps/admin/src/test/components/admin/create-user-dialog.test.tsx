@@ -3,7 +3,7 @@
 // under each field and creates nothing, and the dialog shows no form until the server's config has loaded.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -43,18 +43,6 @@ function Toolbar() {
     return createElement(CreateUserDialog, { open, onOpenChange: setOpen });
 }
 
-const field = (label: string) => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-};
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (label: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field(label), value);
-        field(label).dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const fill = async (fields: { Name: string; Username: string; Password: string }) => {
     for (const [label, value] of Object.entries(fields)) await type(label, value);
 };

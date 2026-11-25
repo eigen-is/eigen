@@ -1,7 +1,8 @@
 // The Mail signature keeps the page rules: Cmd+Enter in the editor saves once, its Save spins while the save runs, and
-// leaving with an unsaved change asks. It opens on the saved signature and takes no focus as the Mail page opens, its
-// Save waits greyed until something changed, and a save sends the signature under the id it already had. A failed
-// load shows an error instead of an empty editor, whose Save would wipe the saved signature.
+// leaving with an unsaved change asks. It opens on the saved signature and takes no focus as the Mail page opens, a Save
+// with nothing changed sends nothing, and a save sends the signature under the id it already had. A first signature
+// keeps what was typed while it saved. A failed load shows an error instead of an empty editor, whose Save would wipe
+// the saved signature.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { EmailSignature } from '@workspace/lib/types/settings';
 import type { LightEditor } from '@workspace/ui/components/editor';
@@ -59,14 +60,14 @@ test('the signature keeps the page rules', async () => {
     });
 });
 
-test('opens on the saved signature, Save waits greyed until something changed, and it saves under its id', async () => {
+test('opens on the saved signature, a clean Save sends nothing, and it saves under its id', async () => {
     await renderPage();
     expect(editor().getHTML()).toBe('<p>Ada</p>');
-    expect(saveButton().disabled).toBe(true);
     expect(document.activeElement).toBe(document.body);
+    await act(async () => saveButton().click());
+    expect(saveSignature.mutateAsync).not.toHaveBeenCalled();
 
     await typeSignature(' Lovelace');
-    expect(saveButton().disabled).toBe(false);
     await act(async () => saveButton().click());
     expect(saveSignature.mutateAsync.mock.calls).toEqual([
         [{ id: 'sig-1', name: 'Default', html: '<p>Ada Lovelace</p>' }],
@@ -84,7 +85,24 @@ test('a failed load shows an error, and the refetch opens the saved signature un
         for (const listener of listeners) listener();
     });
     expect(editor().getHTML()).toBe('<p>Ada</p>');
-    expect(saveButton().disabled).toBe(true);
+});
+
+test('a first signature keeps what was typed while it saved', async () => {
+    settings = { data: { email: { signatures: [] } }, isLoading: false, isError: false };
+    const { promise: saved, resolve } = Promise.withResolvers<object>();
+    saveSignature.mutateAsync.mockImplementationOnce(() => saved);
+    await renderPage();
+    await typeSignature('Ada');
+    await act(async () => saveButton().click());
+    await typeSignature(' Lovelace');
+
+    const [[first]] = saveSignature.mutateAsync.mock.calls;
+    await act(async () => {
+        resolve({});
+        settings = { data: { email: { signatures: [first] } }, isLoading: false, isError: false };
+        for (const listener of listeners) listener();
+    });
+    expect(editor().getHTML()).toBe('<p>Ada Lovelace</p>');
 });
 
 async function renderPage() {

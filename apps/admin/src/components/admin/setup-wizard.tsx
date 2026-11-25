@@ -9,7 +9,7 @@ import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { ServerStorageType, SetupStatus } from '@workspace/lib/types/settings';
-import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { EigenLoader } from '@workspace/ui/components/braket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -323,13 +323,10 @@ const usernameOf = (fields: SetupFields) => fields.adminUsername.trim().toLowerC
 function problemsOf(fields: SetupFields): Partial<Record<keyof SetupFields, string>> {
     const username = usernameOf(fields);
     return {
-        orgName: fields.orgName ? undefined : 'Add a name',
-        senderAddress: validateEmailAddress(fields.senderAddress) ? undefined : 'This is not an email address',
+        orgName: fields.orgName ? undefined : FIELD_MESSAGES.nameMissing,
+        senderAddress: validateEmailAddress(fields.senderAddress) ? undefined : FIELD_MESSAGES.invalidEmail,
         adminName: fields.adminName.trim() ? undefined : 'Add your name',
         adminUsername: username ? (validateUsername(username) ?? undefined) : 'Add a username',
-        adminPassword:
-            fields.adminPassword.length < MIN_PASSWORD_LENGTH
-                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
-                : undefined,
+        adminPassword: fields.adminPassword.length < MIN_PASSWORD_LENGTH ? FIELD_MESSAGES.passwordTooShort : undefined,
     };
 }

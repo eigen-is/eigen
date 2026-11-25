@@ -3,11 +3,10 @@
 // name of only spaces is refused under the field, and the name is saved trimmed.
 
 import { useCreateTeam } from '@workspace/lib/admin';
-import { Field, FieldContent, FieldError, FieldLabel } from '@workspace/ui/components/field';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { Input } from '@workspace/ui/components/input';
-import { useId, useState } from 'react';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
+import { useState } from 'react';
 
 type CreateTeamDialogProps = {
     open: boolean;
@@ -37,29 +36,7 @@ function CreateTeamForm({ organizationId }: { organizationId: string }) {
                 await createTeam.mutateAsync(name.trim());
             }}
         >
-            <TeamNameField name={name} onNameChange={setName} />
+            <RequiredTextField label="Team name" value={name} onChange={setName} message={FIELD_MESSAGES.nameMissing} />
         </FormDialogForm>
-    );
-}
-
-// Its own component, so it reads whether its form's Create was pressed.
-function TeamNameField({ name, onNameChange }: { name: string; onNameChange: (name: string) => void }) {
-    const id = useId();
-    const errorId = useId();
-    const missing = useFormSubmitted() && !name.trim();
-    return (
-        <Field>
-            <FieldLabel htmlFor={id}>Team name</FieldLabel>
-            <FieldContent>
-                <Input
-                    id={id}
-                    value={name}
-                    onChange={(e) => onNameChange(e.target.value)}
-                    aria-invalid={missing || undefined}
-                    aria-describedby={missing ? errorId : undefined}
-                />
-                {missing && <FieldError id={errorId}>Add a name</FieldError>}
-            </FieldContent>
-        </Field>
     );
 }

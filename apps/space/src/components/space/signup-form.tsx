@@ -3,8 +3,8 @@
 // invite and reloads into the new session on Space's start page.
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useInviteRegister } from '@workspace/lib/auth';
-import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
+import { loadIntoSession, useInviteRegister } from '@workspace/lib/auth';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { FormShell } from '@workspace/ui/components/form-shell';
@@ -21,11 +21,11 @@ const signupSchema = z
             const problem = validateUsername(username.toLowerCase());
             if (problem) context.addIssue({ code: 'custom', message: problem });
         }),
-        password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+        password: z.string().min(MIN_PASSWORD_LENGTH, FIELD_MESSAGES.passwordTooShort),
         confirmPassword: z.string(),
     })
     .refine((values) => values.password === values.confirmPassword, {
-        message: 'Passwords do not match',
+        message: FIELD_MESSAGES.passwordsDiffer,
         path: ['confirmPassword'],
     });
 
@@ -39,15 +39,12 @@ export function SignupForm({ token, mailDomain }: { token: string; mailDomain?: 
 
     const onSubmit = form.handleSubmit(async ({ name, username, password }) => {
         await register.mutateAsync({ name, username: username.toLowerCase(), password });
-        // A full load picks up the new session cookie. The page goes only after this returns, so the button stays
-        // pending and a second Enter sends nothing.
-        window.location.href = '/';
-        await new Promise<never>(() => {});
+        await loadIntoSession('/');
     });
 
     return (
         <Form {...form}>
-            <FormShell focusesOwnErrors autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
+            <FormShell autoFocus className="space-y-6" onSubmit={() => run(onSubmit)}>
                 <FormField
                     control={form.control}
                     name="name"

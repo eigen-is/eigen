@@ -3,7 +3,7 @@
 // follows a completed setup.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -34,18 +34,6 @@ const wizard = () =>
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const field = (label: string) => {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-};
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (label: string, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field(label), value);
-        field(label).dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const fill = async (name = 'Acme') => {
     await type('Organization name', name);
     await type('Full name', 'Jane Doe');
@@ -69,10 +57,7 @@ test('First-run setup keeps the page contract', async () => {
         makeChanged: () => fill(),
         makeInvalid: () => type('Organization name', ''),
         invalidField: 'Organization name',
-        except: {
-            leaveGuard:
-                'the wizard replaces the whole app, so there is no page to leave to, and a reload starts it again',
-        },
+        noDraft: true,
     });
 });
 
@@ -113,5 +98,5 @@ test('a username the rules refuse and a wrong sender say so as they are typed', 
     await type('Username', 'a');
     expect(messageUnder('Username')).toBe('Username must be 2-30 characters');
     await type('Sender address', 'nobody');
-    expect(messageUnder('Sender address')).toBe('This is not an email address');
+    expect(messageUnder('Sender address')).toBe('Enter a valid email address');
 });

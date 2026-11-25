@@ -15,22 +15,23 @@ import { useId, useState } from 'react';
 
 export function SignatureSection() {
     const { data, isError } = useSpaceSettings();
+    // A new signature's id is claimed once, so every save writes the same one and its first save remounts nothing.
+    const [newId] = useState(() => crypto.randomUUID());
     if (data) {
         const existing = data.email?.signatures?.[0];
-        return <SignatureForm key={existing?.id} existing={existing} />;
+        const id = existing?.id ?? newId;
+        return <SignatureForm key={id} id={id} existing={existing} />;
     }
     return isError ? <ErrorState message="Failed to load your signature." /> : <LoadingState />;
 }
 
 // The editor reads its content only as it mounts, so it mounts once the saved signature is known, and again when
 // another one arrives.
-function SignatureForm({ existing }: { existing?: EmailSignature }) {
+function SignatureForm({ id, existing }: { id: string; existing?: EmailSignature }) {
     const save = useSaveSignature();
     const { pending, run } = useDialogPending();
     const headingId = useId();
     const [html, setHtml] = useState(existing?.html ?? '');
-    // A new signature's id is claimed once, so every save writes the same one.
-    const [id] = useState(() => existing?.id ?? crypto.randomUUID());
 
     const isDirty = html !== (existing?.html ?? '');
 
@@ -59,7 +60,7 @@ function SignatureForm({ existing }: { existing?: EmailSignature }) {
                 />
             </div>
             <div className="flex justify-end">
-                <Button type="submit" pending={pending} disabled={!isDirty}>
+                <Button type="submit" pending={pending}>
                     Save
                 </Button>
             </div>

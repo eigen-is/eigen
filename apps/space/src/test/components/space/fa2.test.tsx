@@ -1,8 +1,8 @@
 // The two-factor page's forms keep the page rules: the password that turns it on, the code that checks the app, and
 // the password that turns it off. Pinned beside the contract: each sends its hook what it sent before, a wrong code
-// reads under its field with no toast, and leaving the recovery codes asks first, while "I've saved my recovery codes"
-// leaves without asking.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+// reads under its field with no toast, a copy of the recovery codes the browser refuses is a toast, and leaving the
+// recovery codes asks first, while "I've saved my recovery codes" leaves without asking.
+import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
@@ -50,8 +50,6 @@ const { TwoFactorCodesStep, TwoFactorDisable, TwoFactorPasswordStep, TwoFactorVe
     '../../../components/space/fa2'
 );
 
-const NO_GUARD = 'a typed password or code loses nothing stored, so only the recovery codes step guards leaving';
-
 test('the password that turns two-factor on keeps the page rules', async () => {
     await expectFormContract({
         kind: 'page',
@@ -62,7 +60,7 @@ test('the password that turns two-factor on keeps the page rules', async () => {
         makeChanged: () => type('Current password', 'secret-password'),
         makeInvalid: () => type('Current password', ''),
         invalidField: 'Current password',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -76,7 +74,7 @@ test('the code that checks the app keeps the page rules', async () => {
         makeChanged: () => type('Verification code', '123456'),
         makeInvalid: () => type('Verification code', '123'),
         invalidField: 'Verification code',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -90,7 +88,7 @@ test('the password that turns two-factor off keeps the page rules', async () => 
         makeChanged: () => type('Confirm your password', 'secret-password'),
         makeInvalid: () => type('Confirm your password', ''),
         invalidField: 'Confirm your password',
-        except: { leaveGuard: NO_GUARD },
+        noDraft: true,
     });
 });
 
@@ -148,6 +146,18 @@ test('leaving the recovery codes asks first, and the saved button leaves without
 
     await act(async () => button("I've saved my recovery codes").click());
     expect(page.at()).toBe('/');
+});
+
+// Bun fails a test on an unhandled rejection, as the browser raises a page error on one.
+test('a copy of the recovery codes the browser refuses is a toast', async () => {
+    const writeText = spyOn(navigator.clipboard, 'writeText').mockImplementation(async () => {
+        throw new DOMException('Write permission denied', 'NotAllowedError');
+    });
+    await renderAt(createElement(TwoFactorCodesStep, { backupCodes: SECRET.backupCodes }));
+    await act(async () => button('Copy all codes').click());
+    expect(writeText.mock.calls).toEqual([['aaaaa-11111\nbbbbb-22222']]);
+    expect(toasts).toEqual(['Write permission denied']);
+    writeText.mockRestore();
 });
 
 const SETUP = '/security/2fa';

@@ -12,12 +12,14 @@ import type { OrgTeam } from '@workspace/lib/types/admin';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import { CALENDAR_SHARE_PERMISSIONS } from '@workspace/lib/types/calendar';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Button } from '@workspace/ui/components/button';
 import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { PageForm, SettingsSection } from '@workspace/ui/components/layout/app';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
@@ -153,7 +155,6 @@ function TeamSettingsForm({
 
     const update = (patch: Partial<TeamSettingsDraft>) => setDraft((prev) => ({ ...prev, ...patch }));
     const name = draft.name.trim();
-    const nameBlank = name === '';
     const homeDataTooSmall = draft.homeDataMaxMB !== '' && Number(draft.homeDataMaxMB) < QUOTA_MIN_MB;
     const mountTooSmall = draft.mountMaxMB !== '' && Number(draft.mountMaxMB) < QUOTA_MIN_MB;
 
@@ -164,7 +165,7 @@ function TeamSettingsForm({
             onDone();
             return;
         }
-        if (nameBlank || homeDataTooSmall || mountTooSmall) return false;
+        if (!name || homeDataTooSmall || mountTooSmall) return false;
         const existingShares = (defaultCalendar?.shares ?? []).filter((s) => s.targetId !== ownerId);
         // Members read their team's calendar without a share row, so Can view drops the team's row.
         const shares =
@@ -202,17 +203,12 @@ function TeamSettingsForm({
                     />
                 </div>
 
-                <div className="space-y-1.5">
-                    <Label htmlFor={`${id}-name`}>Team name</Label>
-                    <Input
-                        id={`${id}-name`}
-                        value={draft.name}
-                        onChange={(e) => update({ name: e.target.value })}
-                        aria-invalid={nameBlank || undefined}
-                        aria-describedby={nameBlank ? `${id}-name-error` : undefined}
-                    />
-                    {nameBlank && <FieldError id={`${id}-name-error`}>Add a name</FieldError>}
-                </div>
+                <RequiredTextField
+                    label="Team name"
+                    value={draft.name}
+                    onChange={(name) => update({ name })}
+                    message={FIELD_MESSAGES.nameMissing}
+                />
 
                 <Separator />
 

@@ -4,20 +4,20 @@
 
 import { useAppPasswords, useCreateAppPassword, useDeleteAppPassword } from '@workspace/lib/auth';
 import { formatDate } from '@workspace/lib/date';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { CopyInput } from '@workspace/ui/components/copy-input';
-import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
-import { FormShell, useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { Input } from '@workspace/ui/components/input';
+import { FormShell } from '@workspace/ui/components/form-shell';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 
 export function AppPasswords() {
     const { data: passwords, isLoading } = useAppPasswords();
@@ -62,8 +62,15 @@ export function AppPasswords() {
                 )}
 
                 <FormShell className="flex items-start gap-2" onSubmit={() => run(handleCreate)}>
-                    <NameField value={name} onChange={setName} />
-                    <Button type="submit" className="mt-5" pending={pending}>
+                    <RequiredTextField
+                        label="Name"
+                        placeholder="e.g. Thunderbird"
+                        value={name}
+                        onChange={setName}
+                        message={FIELD_MESSAGES.nameMissing}
+                        className="flex-1 gap-1"
+                    />
+                    <Button type="submit" className="mt-6" pending={pending}>
                         <Plus className="h-4 w-4 mr-1" />
                         Generate
                     </Button>
@@ -127,28 +134,5 @@ export function AppPasswords() {
                 />
             )}
         </Card>
-    );
-}
-
-// Once Generate was pressed, an empty name says so under the field.
-function NameField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
-    const id = useId();
-    const errorId = useId();
-    const missing = useFormSubmitted() && !value.trim();
-    return (
-        <Field data-invalid={missing || undefined} className="flex-1 gap-1">
-            <FieldLabel htmlFor={id} className="text-muted-foreground text-xs">
-                Name
-            </FieldLabel>
-            <Input
-                id={id}
-                placeholder="e.g. Thunderbird"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                aria-invalid={missing || undefined}
-                aria-describedby={missing ? errorId : undefined}
-            />
-            {missing && <FieldError id={errorId}>Add a name</FieldError>}
-        </Field>
     );
 }

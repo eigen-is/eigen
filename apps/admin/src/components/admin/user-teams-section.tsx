@@ -4,25 +4,23 @@
 // through the same team-member mutations. The organization's default team, which every user joins,
 // is left out, so the count and the empty state are about the teams an admin chose.
 
-import { useRemoveTeamMember } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Button } from '@workspace/ui/components/button';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Plus, UsersRound, X } from 'lucide-react';
 import { useState } from 'react';
 import { AddToTeamDialog } from './add-to-team-dialog';
+import { RemoveFromTeamDialog } from './remove-from-team-dialog';
 
 export function UserTeamsSection({ user }: { user: AdminUserRow }) {
     const [showAddDialog, setShowAddDialog] = useState(false);
     // Kept after the question closes, so it still names the team while it fades out.
     const [removing, setRemoving] = useState({ id: '', name: '' });
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const removeMember = useRemoveTeamMember();
     const { data: config } = usePublicConfig();
     const teams = user.teams
         .filter((team) => team.id !== config?.defaultTeamId)
@@ -62,21 +60,11 @@ export function UserTeamsSection({ user }: { user: AdminUserRow }) {
                 </div>
             )}
 
-            <ConfirmDialog
+            <RemoveFromTeamDialog
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}
-                title="Remove from team"
-                description={
-                    <>
-                        Remove <strong>{user.name}</strong> from <strong>{removing.name}</strong>? They lose access to
-                        what is shared with the team.
-                    </>
-                }
-                onConfirm={async () => {
-                    await removeMember.mutateAsync({ teamId: removing.id, userId: user.id });
-                }}
-                confirmText="Remove"
-                destructive
+                team={removing}
+                member={{ userId: user.id, name: user.name }}
             />
         </div>
     );

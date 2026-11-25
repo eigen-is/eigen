@@ -18,7 +18,8 @@ const verify = async (input: { code: string; trustDevice?: boolean }) => {
     return answer;
 };
 
-const realClientModule = await import('../../../../core/auth/hooks/use-auth-client');
+// A copy, because mock.module rewrites a loaded module's exports in place, and afterAll puts the original back.
+const realClientModule = { ...(await import('../../../../core/auth/hooks/use-auth-client')) };
 mock.module('../../../../core/auth/hooks/use-auth-client', () => ({
     authClient: { twoFactor: { verifyTotp: verify, verifyBackupCode: verify } },
 }));

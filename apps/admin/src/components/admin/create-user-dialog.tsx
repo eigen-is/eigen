@@ -5,13 +5,14 @@
 import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import type { OrgRole } from '@workspace/lib/types/admin';
-import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Field, FieldContent, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { LoadingState } from '@workspace/ui/components/layout/app';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useId, useState } from 'react';
 
@@ -48,7 +49,7 @@ function CreateUserForm({ organizationId, mailDomain }: { organizationId: string
             submitLabel="Create"
             onSubmit={async () => {
                 const problems = problemsOf(user);
-                if (problems.name || problems.username || problems.password) return false;
+                if (!user.name.trim() || problems.username || problems.password) return false;
                 await createUser.mutateAsync({
                     name: user.name.trim(),
                     email: `${localPart(user.username)}@${mailDomain}`,
@@ -100,19 +101,12 @@ function CreateUserFields({
 
     return (
         <>
-            <Field>
-                <FieldLabel htmlFor={`${id}-name`}>Name</FieldLabel>
-                <FieldContent>
-                    <Input
-                        id={`${id}-name`}
-                        value={user.name}
-                        onChange={(e) => onChange({ name: e.target.value })}
-                        aria-invalid={!!problems.name || undefined}
-                        aria-describedby={problems.name ? `${id}-name-error` : undefined}
-                    />
-                    {problems.name && <FieldError id={`${id}-name-error`}>{problems.name}</FieldError>}
-                </FieldContent>
-            </Field>
+            <RequiredTextField
+                label="Name"
+                value={user.name}
+                onChange={(name) => onChange({ name })}
+                message={FIELD_MESSAGES.nameMissing}
+            />
 
             <Field>
                 <FieldLabel htmlFor={`${id}-username`}>Username</FieldLabel>
@@ -154,13 +148,9 @@ function CreateUserFields({
 // What an admin pastes after an @ is dropped, since the address is always on this server's mail domain.
 const localPart = (username: string) => username.toLowerCase().split('@')[0];
 
-function problemsOf(user: NewUser): Partial<Record<keyof NewUser, string>> {
+function problemsOf(user: NewUser): { username?: string; password?: string } {
     return {
-        name: user.name.trim() ? undefined : 'Add a name',
         username: user.username ? (validateUsername(localPart(user.username)) ?? undefined) : 'Add a username',
-        password:
-            user.password.length < MIN_PASSWORD_LENGTH
-                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
-                : undefined,
+        password: user.password.length < MIN_PASSWORD_LENGTH ? FIELD_MESSAGES.passwordTooShort : undefined,
     };
 }

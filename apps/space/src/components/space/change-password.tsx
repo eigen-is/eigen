@@ -5,7 +5,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
 import { useChangePassword } from '@workspace/lib/auth';
-import { MIN_PASSWORD_LENGTH, validatePasswordStrength } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH, validatePasswordStrength } from '@workspace/lib/validation';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
@@ -19,14 +19,12 @@ import { z } from 'zod';
 const formSchema = z
     .object({
         currentPassword: z.string().min(1, 'Current password is required'),
-        newPassword: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
-        confirmPassword: z
-            .string()
-            .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+        newPassword: z.string().min(MIN_PASSWORD_LENGTH, FIELD_MESSAGES.passwordTooShort),
+        confirmPassword: z.string().min(MIN_PASSWORD_LENGTH, FIELD_MESSAGES.passwordTooShort),
         revokeOtherSessions: z.boolean(),
     })
     .refine((data) => data.newPassword === data.confirmPassword, {
-        message: "Passwords don't match",
+        message: FIELD_MESSAGES.passwordsDiffer,
         path: ['confirmPassword'],
     });
 
@@ -49,7 +47,7 @@ export function ChangePassword() {
 
     const onSubmit = form.handleSubmit(async ({ currentPassword, newPassword, revokeOtherSessions }) => {
         await changePassword.mutateAsync({ currentPassword, newPassword, revokeOtherSessions });
-        await navigate({ to: '/' });
+        await navigate({ to: '/', ignoreBlocker: true });
     });
 
     return (
