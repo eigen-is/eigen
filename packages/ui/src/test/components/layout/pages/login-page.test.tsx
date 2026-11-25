@@ -1,6 +1,7 @@
 // The sign-in page keeps the page rules on its three forms: username and password, a guest's email, and the code the
 // guest was sent. Pinned beside the contract: a click on a tab goes on into its first field, a refusal reads under the
-// field it is about rather than in a banner, and each form still sends the auth routes exactly what it sent before.
+// field it is about rather than in a banner while a rate limit, a server error or no connection is a toast, and each
+// form still sends the auth routes exactly what it sent before.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { ReactElement } from 'react';
 import { installHappyDom } from '../../../happy-dom';
@@ -13,8 +14,14 @@ type LoginResult = { success: boolean; error?: unknown };
 
 const login = mock(async (_email: string, _password: string): Promise<LoginResult> => ({ success: true }));
 
+const toasts: string[] = [];
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realPublic = { ...(await import('@workspace/lib/public')) };
+const realSonner = { ...(await import('sonner')) };
+mock.module('sonner', () => ({
+    ...realSonner,
+    toast: { ...realSonner.toast, error: (message: string) => toasts.push(message) },
+}));
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ login, isAuthenticated: false }) }));
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
@@ -23,6 +30,7 @@ mock.module('@workspace/lib/public', () => ({
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/public', () => realPublic);
+    mock.module('sonner', () => realSonner);
 });
 
 // What each guest route answers; a test sets a refusal.
@@ -36,6 +44,7 @@ const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
 );
 afterEach(() => {
     answers = {};
+    toasts.length = 0;
     fetchSpy.mockClear();
     login.mockClear();
 });
@@ -101,11 +110,39 @@ test('sends the username at the mail domain, and a wrong password reads under th
     await act(async () => pressEnter(field('Password')));
 
     expect(login.mock.calls).toEqual([['anouk@tuimel.example', 'wrong']]);
-    expect(messageUnder('Password')).toBe('Login failed');
+    expect(messageUnder('Password')).toBe('Invalid');
     expect(field('Password').getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(field('Password'));
     expect(messageUnder('Username')).toBeUndefined();
 });
+
+// better-auth answers with a plain object, and better-fetch throws when there is no connection at all.
+for (const [what, error, toast] of [
+    [
+        'a rate limit',
+        { status: 429, statusText: 'Too Many Requests', message: 'Too many requests' },
+        'Too many requests',
+    ],
+    [
+        'a server error',
+        { status: 500, statusText: 'Internal Server Error', message: 'Database locked' },
+        'Database locked',
+    ],
+    ['no connection', new TypeError('Failed to fetch'), 'Login failed'],
+] as const) {
+    test(`${what} on sign-in is a toast, with no field marked`, async () => {
+        login.mockImplementationOnce(async () => ({ success: false, error }));
+        await renderPage(<LoginPage />);
+        await type('Username', 'anouk');
+        await type('Password', 'secret');
+        await act(async () => pressEnter(field('Password')));
+
+        expect(toasts).toEqual([toast]);
+        expect(messageUnder('Password')).toBeUndefined();
+        expect(field('Password').getAttribute('aria-invalid')).toBe('false');
+        expect(field('Username').getAttribute('aria-invalid')).toBe('false');
+    });
+}
 
 test("a guest's code goes to the address it was sent to, and each refusal reads under its field", async () => {
     answers['request-otp'] = refusal('No shared resources found for this email');

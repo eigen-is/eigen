@@ -1,19 +1,21 @@
 // The sign-in page every app shows a visitor with no session: a member signs in with username and password, a guest
 // asks for a one-time code by email and types it in. The password form goes through useAuth; the guest forms post to
-// the public guest sign-in routes themselves. A refusal shows under the field it is about, in the server's own words
-// where it gave some.
+// the public guest sign-in routes themselves. A refusal of what was typed shows under the field it is about, in the
+// server's own words where it gave some; a rate limit, a server error or no connection is a toast.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
 import { API_HOST, getDemoEnterUrl } from '@workspace/lib/api';
-import { appErrorFrom } from '@workspace/lib/api-error';
+import { AppError, appErrorFrom, getErrorMessage } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
+import { isRecord } from '@workspace/lib/guards';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { MouseEvent, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import type { FieldValues, SubmitHandler, UseFormReturn } from 'react-hook-form';
+import type { FieldValues, Path, SubmitHandler, UseFormReturn } from 'react-hook-form';
 import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { Bar } from '../../braket/bar';
 import { Ket } from '../../braket/ket';
@@ -121,9 +123,7 @@ function PasswordLoginForm() {
 
     const onSubmit = async ({ email, password }: z.infer<typeof loginFormSchema>) => {
         const { success, error } = await login(`${email.toLowerCase().split('@')[0]}@${loginDomain}`, password);
-        if (success) return;
-        const message = error instanceof Error ? error.message : 'Login failed';
-        form.setError('password', { message }, { shouldFocus: true });
+        if (!success) showFailure(form, 'password', loginFailure(error), CREDENTIAL_STATUSES);
     };
 
     useEffect(() => {
@@ -168,6 +168,30 @@ function PasswordLoginForm() {
             />
         </SignInForm>
     );
+}
+
+// Wrong credentials and an unverified email. A rate limit, a server error or no connection is no reason to retype them.
+const CREDENTIAL_STATUSES = new Set([400, 401]);
+
+// better-auth answers a refusal with a plain object, never an Error; better-fetch throws when there is no connection.
+function loginFailure(error: unknown): AppError | string {
+    if (!isRecord(error) || typeof error.status !== 'number') return 'Login failed';
+    return new AppError({ status: error.status, error: { status: error.status, value: error } });
+}
+
+// A no to what was typed reads under its field. Any other failure is a toast that marks no field, since typing it again
+// gets the same answer.
+function showFailure<Values extends FieldValues>(
+    form: UseFormReturn<Values>,
+    name: Path<Values>,
+    failure: AppError | string,
+    fieldStatuses: ReadonlySet<number>,
+) {
+    if (failure instanceof AppError && fieldStatuses.has(failure.status)) {
+        form.setError(name, { message: failure.message }, { shouldFocus: true });
+    } else {
+        toast.error(getErrorMessage(failure));
+    }
 }
 
 // The form and its full-width submit button, which spins while the sign-in runs. A second Enter or Cmd+Enter in that
