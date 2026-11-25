@@ -1,5 +1,5 @@
-// How a failed request reaches the user: AppError reads the server's message and the status from what Eden or a fetch
-// hands back, naming the status only when the server sent no message of its own. getErrorMessage turns it into the
+// How a failed request reaches the user: AppError reads the server's message and the status from what Eden, a fetch
+// or better-auth hands back, naming the status only when the server sent no message of its own. getErrorMessage turns it into the
 // toast's text, and onMutationError is the onError every mutation hook passes to show it. onEtagWriteError is that
 // onError for a write that sends an etag. wasToasted tells a caller that also sees the rejection that a toast already
 // showed it, and isRefusal tells a dialog whether another try could help.
@@ -65,6 +65,11 @@ export function appErrorFromBody(status: number, contentType: string | null, bod
 
 export async function appErrorFrom(response: Response): Promise<AppError> {
     return appErrorFromBody(response.status, response.headers.get('content-type'), await response.text());
+}
+
+// better-auth's client answers a refusal with a plain object, never an Error. `fallback` is the words when it gave none.
+export function authFailure({ status, message }: { status: number; message?: string }, fallback: string): AppError {
+    return new AppError({ status, error: { status, value: message ?? fallback } });
 }
 
 // The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"

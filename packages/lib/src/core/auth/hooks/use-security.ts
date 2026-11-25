@@ -5,16 +5,12 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AppError, onMutationError } from '../../api-error';
+import { AppError, authFailure, onMutationError } from '../../api-error';
 import { authClient } from './use-auth-client';
 
 // better-auth refuses a code that isn't the current one, or a backup code already used, with a 401.
 export function isWrongCode(error: unknown): boolean {
     return error instanceof AppError && error.status === 401;
-}
-
-function failure({ status, message }: { status: number; message?: string }, fallback: string): AppError {
-    return new AppError({ status, error: { status, value: message ?? fallback } });
 }
 
 function onCodeError(error: unknown): void {
@@ -25,7 +21,7 @@ export function useChangePassword() {
     return useMutation({
         mutationFn: async (data: { currentPassword: string; newPassword: string; revokeOtherSessions: boolean }) => {
             const result = await authClient.changePassword(data);
-            if (result.error) throw failure(result.error, 'Failed to change password');
+            if (result.error) throw authFailure(result.error, 'Failed to change password');
             return result.data;
         },
         onSuccess: () => {
@@ -39,7 +35,7 @@ export function useInitialize2FA() {
     return useMutation({
         mutationFn: async (password: string) => {
             const result = await authClient.twoFactor.enable({ password, method: 'totp' });
-            if (result.error) throw failure(result.error, 'Failed to initialize two-factor authentication');
+            if (result.error) throw authFailure(result.error, 'Failed to initialize two-factor authentication');
             if (result.data.method !== 'totp') throw new Error('Unexpected two-factor method');
             return result.data;
         },
@@ -51,7 +47,7 @@ export function useVerifyTotp() {
     return useMutation({
         mutationFn: async (input: { code: string; trustDevice?: boolean }) => {
             const result = await authClient.twoFactor.verifyTotp(input);
-            if (result.error) throw failure(result.error, 'Failed to verify verification code');
+            if (result.error) throw authFailure(result.error, 'Failed to verify verification code');
             return result.data;
         },
         onError: onCodeError,
@@ -62,7 +58,7 @@ export function useVerifyBackupCode() {
     return useMutation({
         mutationFn: async (input: { code: string; trustDevice?: boolean }) => {
             const result = await authClient.twoFactor.verifyBackupCode(input);
-            if (result.error) throw failure(result.error, 'Invalid backup code');
+            if (result.error) throw authFailure(result.error, 'Invalid backup code');
             return result.data;
         },
         onError: onCodeError,
@@ -73,7 +69,7 @@ export function useDisable2FA() {
     return useMutation({
         mutationFn: async (password: string) => {
             const result = await authClient.twoFactor.disable({ password });
-            if (result.error) throw failure(result.error, 'Failed to disable two-factor authentication');
+            if (result.error) throw authFailure(result.error, 'Failed to disable two-factor authentication');
             return result.data;
         },
         onSuccess: () => {
