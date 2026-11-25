@@ -7,13 +7,12 @@ import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@worksp
 import { CALENDAR_NAME_MAX_LENGTH } from '@workspace/lib/constants/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { useFormSubmitted } from '@workspace/ui/components/form-shell';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { ColorPickerSwatch } from '@workspace/ui/components/media';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Separator } from '@workspace/ui/components/separator';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -117,7 +116,15 @@ function CalendarConfigForm({
                 )
             }
         >
-            <NameField name={name} onChange={setName} color={color} onColorChange={setColor} />
+            <RequiredTextField
+                label="Calendar name"
+                placeholder="Enter calendar name"
+                maxLength={CALENDAR_NAME_MAX_LENGTH}
+                value={name}
+                onChange={setName}
+                message={FIELD_MESSAGES.nameMissing}
+                addon={<ColorPickerSwatch value={color} onChange={setColor} className="size-6 rounded-sm" />}
+            />
 
             {calendar && (
                 <>
@@ -126,40 +133,5 @@ function CalendarConfigForm({
                 </>
             )}
         </FormDialogForm>
-    );
-}
-
-// The name with the color swatch inside it. Once Create or Save was pressed, a name of only spaces says so under it.
-function NameField({
-    name,
-    onChange,
-    color,
-    onColorChange,
-}: {
-    name: string;
-    onChange: (name: string) => void;
-    color: string;
-    onColorChange: (color: string) => void;
-}) {
-    const missing = useFormSubmitted() && !name.trim();
-    return (
-        <Field>
-            <FieldLabel htmlFor="calendar-name">Calendar name</FieldLabel>
-            <InputGroup>
-                <InputGroupAddon>
-                    <ColorPickerSwatch value={color} onChange={onColorChange} className="size-6 rounded-sm" />
-                </InputGroupAddon>
-                <InputGroupInput
-                    id="calendar-name"
-                    placeholder="Enter calendar name"
-                    maxLength={CALENDAR_NAME_MAX_LENGTH}
-                    value={name}
-                    onChange={(e) => onChange(e.target.value)}
-                    aria-invalid={missing || undefined}
-                    aria-describedby={missing ? 'calendar-name-error' : undefined}
-                />
-            </InputGroup>
-            {missing && <FieldError id="calendar-name-error">Add a name</FieldError>}
-        </Field>
     );
 }
