@@ -59,8 +59,10 @@ export function SlidePanel({
     const dragged = frames.find((frame) => frame.id === dragActiveId);
     const elementsByFrame = useElementsByFrame(frames, elements);
 
+    // Thumbnails read no better wider, so the rail leaves the slide the room until 1920 wide, where it matches the
+    // properties panel across from it.
     return (
-        <div className="w-52 flex-shrink-0 border-r bg-muted/30 flex flex-col h-full">
+        <div className="w-52 min-[120rem]:w-64 shrink-0 border-r bg-muted/30 flex flex-col h-full">
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
                 <DndContext
                     sensors={sensors}
@@ -117,13 +119,13 @@ export function SlideStrip({ frames, elements, activeFrameId, onSelectFrame, mat
     const elementsByFrame = useElementsByFrame(frames, elements);
 
     return (
-        <div className="flex-shrink-0 overflow-x-auto border-t bg-muted/30">
+        <div className="shrink-0 overflow-x-auto border-t bg-muted/30">
             <div className="flex gap-1 p-2">
                 {frames.map((frame, index) => (
                     <div
                         key={frame.id}
                         ref={frame.id === activeFrameId ? scrollIntoStrip : undefined}
-                        className="w-32 flex-shrink-0"
+                        className="w-32 shrink-0"
                     >
                         <FrameThumbnail
                             frame={frame}
