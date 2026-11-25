@@ -108,6 +108,10 @@ describe('a tab rename', () => {
 
     test('refuses an empty name, and a name another tab has in any case, and says so', () => {
         expect(rename('')).toEqual({ name: 'One', tab: 'One', error: 'Sheet name cannot be empty' });
+        // A tab whose text was all deleted can still hold a line break, and spaces show as an empty tab.
+        for (const blank of ['\n', '   ']) {
+            expect(rename(blank)).toEqual({ name: 'One', tab: 'One', error: 'Sheet name cannot be empty' });
+        }
         const taken = { name: 'One', tab: 'One', error: 'Another sheet already has this name' };
         expect(rename('Two')).toEqual(taken);
         expect(rename('two')).toEqual(taken);

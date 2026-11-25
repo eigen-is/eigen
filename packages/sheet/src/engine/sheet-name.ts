@@ -21,7 +21,7 @@ export type RenameSheetOp = { id: string; name: string };
 
 // Why sheet `id` can't take a name, if it can't. A name is taken in any case, as Excel compares names.
 export function sheetNameRefusal(sheets: readonly Sheet[], id: string, name: string): string | undefined {
-    if (name.length === 0) return 'Sheet name cannot be empty';
+    if (name.trim().length === 0) return 'Sheet name cannot be empty';
     if (!isSheetName(name)) return SHEET_NAME_RULE;
     const key = sheetNameKey(name);
     const taken = sheets.some((sheet) => sheet.id !== id && sheetNameKey(sheet.name) === key);
@@ -152,7 +152,8 @@ export function legalSheetNames(names: readonly string[], reserved: readonly str
 
 function legalSheetName(name: string): string {
     const replaced = stripNonXmlChars(name).replace(SHEET_NAME_FORBIDDEN, '_');
-    return fit(replaced, MAX_SHEET_NAME_LENGTH).replace(SHEET_NAME_END_QUOTES, '');
+    const legal = fit(replaced, MAX_SHEET_NAME_LENGTH).replace(SHEET_NAME_END_QUOTES, '');
+    return legal.trim() ? legal : '';
 }
 
 // A cut between a surrogate pair's halves leaves a character XML can't hold, which the strip takes off.
