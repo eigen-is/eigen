@@ -31,7 +31,7 @@ const onOpenChange = mock((_open: boolean) => {});
 
 async function render({
     onSubmit = () => {},
-    changed,
+    changed = false,
     footerStart,
     readOnly,
     description,
@@ -195,6 +195,7 @@ test('a second Enter while the dialog animates out submits nothing', async () =>
             onOpenChange: setOpen,
             title: 'Rename',
             children: createElement(FormDialogForm, {
+                changed: false,
                 onSubmit,
                 submitLabel: 'Save',
                 children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
@@ -272,6 +273,7 @@ test('a dialog opened from inside another form submits only itself', async () =>
                 onOpenChange,
                 title: 'Rename',
                 children: createElement(FormDialogForm, {
+                    changed: false,
                     onSubmit,
                     submitLabel: 'Save',
                     children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
@@ -361,6 +363,7 @@ test('Cmd+Enter submits from a multi-line field', async () => {
 function CheckedName() {
     const [error, setError] = useState('');
     return createElement(FormDialogForm, {
+        changed: false,
         submitLabel: 'Save',
         onSubmit: () => {
             setError('Add a name');

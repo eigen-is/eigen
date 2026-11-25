@@ -32,7 +32,7 @@ type FormDialogFormProps = {
     onSubmit: DialogAction;
     // Whether the fields differ from what the dialog opened with, such as react-hook-form's isDirty. Esc, the X and a
     // click outside then ask before they drop it. One form per dialog at a time: the last one mounted wins.
-    changed?: boolean;
+    changed: boolean;
     submitLabel: string;
     // Tools on the left of the footer, such as a trash icon or Share with team, which wait while a submit runs. A raw
     // <button> there needs type="button": it comes before the submit button, so Enter in a field would click it.
@@ -93,7 +93,7 @@ export function FormDialog({
 
 export function FormDialogForm({
     onSubmit,
-    changed = false,
+    changed,
     submitLabel,
     footerStart,
     readOnly = false,
