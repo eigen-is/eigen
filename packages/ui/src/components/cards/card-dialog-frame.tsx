@@ -2,7 +2,7 @@
 // button, over the card's body, which fills the rest and scrolls on its own, such as its thread or its edit form.
 // While the body is the edit form the bar gives way to the dialog's own X, and Esc goes back to the card's view as the
 // form's Cancel does. Once the form changed, Esc asks "Discard changes?" first, and so do the X and a click outside,
-// which close the card. Callers such as CardDialog fill in both.
+// which close the card. While the form saves, every close waits. Callers such as CardDialog fill in both.
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -17,16 +17,22 @@ type CardDialogFrameProps = {
     // Names the dialog for a screen reader. The body shows the title itself.
     title: string;
     actions?: ReactNode;
-    // Set while the body is the edit form: whether it changed, and its way back to the view.
-    editing?: { changed: boolean; onCancel: () => void };
+    // Set while the body is the edit form: whether it changed or saves, and its way back to the view.
+    editing?: { changed: boolean; pending: boolean; onCancel: () => void };
     children: ReactNode;
 };
 
 export function CardDialogFrame({ open, onOpenChange, title, actions, editing, children }: CardDialogFrameProps) {
     const changed = !!editing?.changed;
+    const pending = !!editing?.pending;
     // Esc leaves the edit for the view, and every other close leaves the card.
-    const backToView = useDiscardChanges({ open: open && !!editing, changed, onDiscard: () => editing?.onCancel() });
-    const close = useDiscardChanges({ open, changed, onDiscard: () => onOpenChange(false) });
+    const backToView = useDiscardChanges({
+        open: open && !!editing,
+        changed,
+        pending,
+        onDiscard: () => editing?.onCancel(),
+    });
+    const close = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
 
     return (
         <>

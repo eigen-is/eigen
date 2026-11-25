@@ -1,6 +1,7 @@
 // A card's edit keeps the card contract: Esc goes back to the card's view as Cancel does, asking "Discard changes?"
 // first once something changed, and only that edit ends, not the card. The corner X and a click outside close the card,
-// asking the same question first once something changed. While editing, no empty bar sits above the form.
+// asking the same question first once something changed. Every close waits while a save runs. While editing, no empty
+// bar sits above the form.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import { expectFormContract } from '../../form-contract';
@@ -19,7 +20,7 @@ const { PreviewProvider } = await import('../../../components/preview-provider')
 
 // No thread, so the view is the card and its line.
 const card: CommentCard = { id: 'card-1', title: 'Audit card', description: '', color: '#fde68a' };
-const update = mock((_patch: CardFormPatch) => {});
+const update = mock(async (_patch: CardFormPatch) => {});
 
 // The card's open state, as its host last set it.
 let cardOpen = true;
@@ -70,9 +71,6 @@ test("a card's edit keeps the card contract", async () => {
         makeInvalid: () => typeTitle(''),
         invalidField: 'Title',
         modEnterFields: ['Description'],
-        except: {
-            pending: 'a card writes to its Y.Doc at once; only an upload leaves Save pending, as Add card shows',
-        },
     });
 });
 

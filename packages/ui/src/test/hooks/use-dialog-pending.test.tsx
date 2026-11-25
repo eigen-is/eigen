@@ -1,6 +1,7 @@
 // A dialog's action that returns or resolves false keeps it open, and any other result closes it. An action that throws
 // an error no toast has shown, such as a bug in a synchronous submit, reaches whoever called run, and the dialog stays
-// open. An error the mutation hook toasted ends there.
+// open. An error the mutation hook toasted ends there. A form with nothing to close, such as a page form, runs its
+// submit the same way, one at a time.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { installHappyDom } from '../happy-dom';
@@ -76,4 +77,27 @@ test('with closeOnRefusal a refusal no toast showed closes the dialog and still 
     const failure = refusal();
     expect(await run(() => Promise.reject<never>(failure))).toBe(failure);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('with nothing to close, run still runs one action at a time and says when it is pending', async () => {
+    const hook: { current?: ReturnType<typeof useDialogPending> } = {};
+    function Harness() {
+        hook.current = useDialogPending();
+        return null;
+    }
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const action = mock(() => promise);
+    let first: Promise<unknown> | undefined;
+    await act(async () => {
+        first = hook.current?.run(action);
+    });
+    expect(hook.current?.pending).toBe(true);
+    await act(async () => hook.current?.run(action));
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => {
+        resolve();
+        await first;
+    });
+    expect(hook.current?.pending).toBe(false);
 });

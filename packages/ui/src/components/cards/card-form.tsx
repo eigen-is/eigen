@@ -4,7 +4,6 @@
 // field. It tells its host whether anything changed, so the host's Esc can ask before it drops the edit. Editing can
 // offer Delete, which the host confirms.
 
-import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
@@ -19,6 +18,7 @@ import { Label } from '@workspace/ui/components/label';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Paperclip, Trash2 } from 'lucide-react';
 import { useEffect, useId, useState } from 'react';
+import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
@@ -41,14 +41,16 @@ type CardFormProps = {
     members?: EffectiveMember[];
     currentUserEmail?: string;
     initialAssignee?: string | null;
+    // The host runs it through its pending lifecycle, which says `pending` while it runs.
     onSave: (
         patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
         // Undefined when untouched, so the host skips the assignment.
         assignee?: string | null,
-    ) => void | Promise<void>;
+    ) => ReturnType<DialogAction>;
+    pending: boolean;
     onCancel: () => void;
-    // Whether the fields differ from what the form opened with. Off while a save runs, which decides the close itself.
+    // Whether the fields differ from what the form opened with.
     onChangedChange?: (changed: boolean) => void;
     // Editing only. The host confirms and deletes, and what was typed stays until it does.
     onDelete?: () => void;
@@ -70,6 +72,7 @@ export function CardForm({
     currentUserEmail,
     initialAssignee = null,
     onSave,
+    pending,
     onCancel,
     onChangedChange,
     onDelete,
@@ -84,7 +87,6 @@ export function CardForm({
     const [assignee, setAssignee] = useState<string | null>(initialAssignee);
     const [drafts, setDrafts] = useState<CardAttachmentDraft[]>(initialAttachments);
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [pending, setPending] = useState(false);
     // The editor rewrites a plain-text description as HTML as it loads. A save with no edits compares against that
     // form, or it would write the rewrite back.
     const [loadedDescription, setLoadedDescription] = useState(initialDescription);
@@ -99,18 +101,16 @@ export function CardForm({
         color !== initialColor ||
         assignee !== initialAssignee ||
         draftsChanged;
-    const reportsChanged = changed && !pending;
     useEffect(() => {
-        onChangedChange?.(reportsChanged);
+        onChangedChange?.(changed);
         return () => onChangedChange?.(false);
-    }, [reportsChanged, onChangedChange]);
+    }, [changed, onChangedChange]);
 
     const stageFiles = (files: File[]) => setDrafts((prev) => [...prev, ...files]);
     const { targetProps } = useFileDropTarget(stageFiles, allowAttachments);
     const { onPaste } = useFilePasteTarget(stageFiles, allowAttachments);
 
-    const handleSubmit = async () => {
-        if (pending) return;
+    const handleSubmit = () => {
         if (!title.trim()) return false;
         const patch: CardFormPatch = {};
         let attachments: CardAttachmentDraft[] | undefined;
@@ -128,16 +128,7 @@ export function CardForm({
             if (draftsChanged) attachments = drafts;
             assigneeArg = assignee !== initialAssignee ? assignee : undefined;
         }
-        setPending(true);
-        try {
-            await onSave(patch, attachments, assigneeArg);
-        } catch (error) {
-            // A mutation's failure is toasted already, so the form stays open for a retry. Anything else, such as a
-            // Yjs write, has no toast and must surface.
-            rethrowUntoasted(error);
-        } finally {
-            setPending(false);
-        }
+        return onSave(patch, attachments, assigneeArg);
     };
 
     return (

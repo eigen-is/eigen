@@ -1,7 +1,7 @@
 // Asks before unsaved work is dropped, such as a page form's draft or a Drive text file's edits, while `active` says
-// something is at risk. An in-app navigation waits on the question a form asks before a close, "Discard changes?",
-// through the router's blocker, and a reload or a closed tab gets the browser's own prompt through its beforeunload. A
-// host renders it beside the work it guards.
+// something is at risk and no save runs, so a save's own navigation goes through. An in-app navigation waits on the
+// question a form asks before a close, "Discard changes?", through the router's blocker, and a reload or a closed tab
+// gets the browser's own prompt through its beforeunload. A host renders it beside the work it guards.
 
 import { useBlocker } from '@tanstack/react-router';
 import type { ComponentProps } from 'react';
@@ -11,14 +11,16 @@ import { ConfirmDialog } from '../../confirm-dialog';
 
 type LeaveGuardProps = {
     active: boolean;
+    pending?: boolean;
     // For work that is not a form's draft, such as edits made offline.
     question?: Pick<ComponentProps<typeof ConfirmDialog>, 'title' | 'description' | 'cancelText' | 'confirmText'>;
 };
 
-export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION }: LeaveGuardProps) {
+export function LeaveGuard({ active, pending = false, question = DISCARD_CHANGES_QUESTION }: LeaveGuardProps) {
+    const asks = active && !pending;
     const blocker = useBlocker({
-        shouldBlockFn: () => active,
-        enableBeforeUnload: () => active,
+        shouldBlockFn: () => asks,
+        enableBeforeUnload: () => asks,
         withResolver: true,
     });
 
@@ -26,9 +28,9 @@ export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION }: Leav
     // asked goes on instead of being dropped.
     useEffect(() => {
         if (blocker.status !== 'blocked') return;
-        if (!active) blocker.proceed();
+        if (!asks) blocker.proceed();
         return () => blocker.proceed();
-    }, [blocker, active]);
+    }, [blocker, asks]);
 
     return (
         <ConfirmDialog

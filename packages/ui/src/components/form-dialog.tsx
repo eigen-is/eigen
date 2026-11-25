@@ -65,12 +65,7 @@ export function FormDialog({
 }: FormDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [changed, setChanged] = useState(false);
-    // A running submit decides the close itself, so it asks nothing.
-    const discard = useDiscardChanges({
-        open,
-        changed: changed && !pending,
-        onDiscard: () => handleOpenChange(false),
-    });
+    const discard = useDiscardChanges({ open, changed, pending, onDiscard: () => onOpenChange(false) });
 
     // A closing dialog stays mounted while it animates out, with the focus still in its field.
     const submit = (onSubmit: DialogAction) => (open ? run(onSubmit) : undefined);

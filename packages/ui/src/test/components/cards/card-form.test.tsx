@@ -30,6 +30,7 @@ test('the form reports a change, and none once the title is typed back', async (
             initialTitle: 'Audit card',
             initialDescription: 'Plain text',
             onSave: () => {},
+            pending: false,
             onCancel: () => {},
             onChangedChange,
         }),
@@ -44,7 +45,9 @@ test('the form reports a change, and none once the title is typed back', async (
 
 test('a color picked counts as a change', async () => {
     const onChangedChange = mock((_changed: boolean) => {});
-    await renderInDocument(createElement(CardForm, { onSave: () => {}, onCancel: () => {}, onChangedChange }));
+    await renderInDocument(
+        createElement(CardForm, { onSave: () => {}, pending: false, onCancel: () => {}, onChangedChange }),
+    );
     const swatches = document.querySelectorAll<HTMLElement>('button[style*="background-color"]');
     const other = [...swatches].at(-1);
     if (!other) throw new Error('no color swatch');
@@ -54,7 +57,12 @@ test('a color picked counts as a change', async () => {
 
 test('Description is named by its label and shows its placeholder', async () => {
     await renderInDocument(
-        createElement(CardForm, { onSave: () => {}, onCancel: () => {}, placeholderDescription: 'Add details' }),
+        createElement(CardForm, {
+            onSave: () => {},
+            pending: false,
+            onCancel: () => {},
+            placeholderDescription: 'Add details',
+        }),
     );
     const editor = document.querySelector('[contenteditable="true"]');
     const label = document.getElementById(editor?.getAttribute('aria-labelledby') ?? '');

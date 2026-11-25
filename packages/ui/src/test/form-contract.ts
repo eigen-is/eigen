@@ -1,5 +1,6 @@
 // The probes every form's test runs, so each form proves it keeps the rules its shell owns: focus on open, Enter and
-// Cmd+Enter, closing with and without changes, the leave guard, an invalid submit and the pending button. A test
+// Cmd+Enter, closing with and without changes, the leave guard, an invalid submit, the pending button and a close while
+// the save runs. A test
 // renders the real form through `render` and calls expectFormContract once; the probes of its kind each render it
 // afresh in a memory router. A probe whose rule no shell keeps yet stays off behind its switch, and a form that breaks
 // one on purpose names it in `except` with its reason. Call `installHappyDom()` first.
@@ -42,6 +43,7 @@ const PROBE_NAMES = [
     'leaveGuard',
     'invalid',
     'pending',
+    'pendingClose',
 ] as const;
 type ProbeName = (typeof PROBE_NAMES)[number];
 
@@ -57,6 +59,7 @@ const PROBES: Record<ProbeName, Probe> = {
     leaveGuard: { kinds: ['page'], on: true, run: probeLeaveGuard },
     invalid: { kinds: ['dialog', 'card', 'page'], on: true, run: probeInvalid },
     pending: { kinds: ['dialog', 'card', 'page'], on: true, run: probePending },
+    pendingClose: { kinds: ['dialog', 'card'], on: true, run: probePendingClose },
 };
 
 export async function expectFormContract(form: FormContract): Promise<void> {
@@ -250,6 +253,30 @@ async function probePending(form: FormContract) {
     });
 }
 
+// Every close waits for a running save, which then decides, and a failed save keeps the form with what was typed.
+async function probePendingClose(form: FormContract) {
+    for (const [way, close] of CLOSES) {
+        await withForm(form, async () => {
+            await form.makeChanged();
+            const release = hold(form.onSubmit);
+            await click(submitButton(form));
+            await close();
+            check(openForm(form), `${way} while the save runs leaves the form open`);
+            check(!asking('Discard changes?'), `${way} while the save runs asks nothing`);
+            await release();
+        });
+    }
+    await withForm(form, async () => {
+        await form.makeChanged();
+        const typed = contentOf(field(form.firstField));
+        const release = hold(form.onSubmit, { fails: true });
+        await click(submitButton(form));
+        await release();
+        check(openForm(form), 'a failed save keeps the form open');
+        check(contentOf(field(form.firstField)) === typed, `a failed save keeps what was typed in ${form.firstField}`);
+    });
+}
+
 const HERE = '/';
 const ELSEWHERE = '/elsewhere';
 
@@ -316,11 +343,20 @@ const CHOICE = '[role="radio"], [role="checkbox"], input[type="radio"], input[ty
 const MESSAGE = '[data-slot="field-error"], [data-slot="form-message"]';
 const ONE_LINE_TYPES = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number']);
 
-// Holds every submit until the returned release, then lets each run as it would have.
-function hold(onSubmit: FormContract['onSubmit']): () => Promise<void> {
+// Holds every submit until the returned release, then lets each run as it would have, or fail as a mutation whose
+// hook toasted the error does.
+function hold(onSubmit: FormContract['onSubmit'], { fails = false } = {}): () => Promise<void> {
     const original = onSubmit.getMockImplementation();
     const { promise, resolve } = Promise.withResolvers<void>();
-    onSubmit.mockImplementation((...args) => promise.then(() => original?.(...args)));
+    onSubmit.mockImplementation((...args) =>
+        promise.then(async () => {
+            if (!fails) return original?.(...args);
+            const { onMutationError } = await import('@workspace/lib/api-error');
+            const failure = new Error('offline');
+            onMutationError(failure);
+            throw failure;
+        }),
+    );
     return async () => {
         await act(async () => resolve());
         onSubmit.mockImplementation(original ?? (() => undefined));
