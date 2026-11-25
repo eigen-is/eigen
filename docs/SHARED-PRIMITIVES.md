@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2428 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2429 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1185,7 +1185,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1279)
+## Utilities & constants (1280)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2006,6 +2006,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `missingS3Fields` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MOUNT_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
