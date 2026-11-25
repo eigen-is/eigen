@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2429 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2430 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1185,7 +1185,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1280)
+## Utilities & constants (1281)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1782,6 +1782,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
+| `isNameTaken` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `labelFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
