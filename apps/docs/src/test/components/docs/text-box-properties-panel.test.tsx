@@ -128,14 +128,36 @@ test('the outline style and weight write one outline value; vertical alignment a
     stillSelected(editor);
 });
 
+const weightField = () => {
+    const found = document.querySelector<HTMLInputElement>('input[type="number"][step="0.5"]');
+    if (!found) throw new Error('no weight field');
+    return found;
+};
+
 // The weight field keeps a typed weight to what a line draws, as a table cell's border keeps it.
-test('a weight past the thickest writes the thickest line', async () => {
+test('a weight past the thickest writes the thickest line, and the field shows it', async () => {
     const editor = await mount();
-    const weight = document.querySelector<HTMLInputElement>('input[type="number"][step="0.5"]');
-    if (!weight) throw new Error('no weight field');
-    await typeInField(weight, '20');
+    await typeInField(weightField(), '20');
     expect(box(editor)?.['outline']).toBe('8px solid #000000');
+    expect(weightField().value).toBe('8.0');
     stillSelected(editor);
+});
+
+test('the weight applies on Enter: Escape or a cleared field writes nothing and shows the weight again', async () => {
+    const editor = await mount();
+    const weight = weightField();
+    await act(async () => {
+        nativeValueSetter?.call(weight, '3');
+        weight.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(box(editor)?.['outline']).toBe('1px solid #000000');
+    await act(async () => {
+        weight.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(weight.value).toBe('1.0');
+    await typeInField(weight, '');
+    expect(box(editor)?.['outline']).toBe('1px solid #000000');
+    expect(weight.value).toBe('1.0');
 });
 
 test('the padding fields write the insets in cm', async () => {

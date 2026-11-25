@@ -58,13 +58,22 @@ test("a typed size lands in Google's range, in half points", async () => {
     expect(onChange.mock.calls).toEqual([[13], [10.5], [400]]);
 });
 
-test('Escape, a word or no change applies nothing and shows the size again', async () => {
+test('Escape, a word, a cleared box or no change applies nothing and shows the size again', async () => {
     const input = await render(11);
     await type(input, '14', 'Escape');
     expect(input.value).toBe('11');
     await type(input, 'big', 'Enter');
     expect(input.value).toBe('11');
+    await type(input, '', 'Enter');
+    expect(input.value).toBe('11');
     await type(input, '11');
+    expect(onChange).not.toHaveBeenCalled();
+});
+
+test('a size with a stray letter in it is refused, not read up to the letter', async () => {
+    const input = await render(11);
+    await type(input, '1x1', 'Enter');
+    expect(input.value).toBe('11');
     expect(onChange).not.toHaveBeenCalled();
 });
 

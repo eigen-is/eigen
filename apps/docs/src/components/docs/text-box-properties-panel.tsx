@@ -10,8 +10,7 @@ import {
     BORDER_STYLES,
     borderValue,
     figurePlacement,
-    MAX_BORDER_PX,
-    MIN_BORDER_PX,
+    fitBorderPx,
     readTextBoxAttrs,
     TEXT_BOX_DEFAULT_OUTLINE,
     textBoxPadding,
@@ -20,7 +19,6 @@ import {
     ColorRow,
     PropertiesPanel,
     PropertyCheckbox,
-    PropertyNumberInput,
     PropertyRow,
     PropertySection,
     PropertyToggle,
@@ -30,7 +28,7 @@ import { AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJusti
 import { figureMaxWidth } from './extensions/figure-frame';
 import { selectionDrawsInLine } from './extensions/positioned-figure';
 import { fitTextBoxHeight, fitTextBoxWidth, setTextBoxLayout } from './extensions/text-box';
-import { CmField, FigureLayoutSection, FigureSizeSection } from './figure-properties-panel';
+import { CmField, FigureField, FigureLayoutSection, FigureSizeSection } from './figure-properties-panel';
 import { useBorderBoxHeight } from './hooks/use-border-box-height';
 
 const VERTICAL_ALIGN_LOOK: { align: TextBoxVerticalAlign; label: string; icon: LucideIcon }[] = [
@@ -134,12 +132,14 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                 {look.pen && (
                     <>
                         <PropertyRow label="Weight">
-                            <PropertyNumberInput
-                                value={look.pen.width}
-                                min={MIN_BORDER_PX}
-                                max={MAX_BORDER_PX}
+                            <FigureField
+                                type="number"
                                 step={0.5}
-                                onChange={(width) => outline({ width })}
+                                value={String(look.pen.width)}
+                                onCommit={(value) => {
+                                    if (value.trim() !== '' && Number.isFinite(Number(value)))
+                                        outline({ width: fitBorderPx(Number(value)) });
+                                }}
                             />
                         </PropertyRow>
                         <PropertyRow label="Style">

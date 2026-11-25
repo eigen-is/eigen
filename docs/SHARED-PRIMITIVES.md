@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2421 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2424 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (328)
+## Components (329)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -179,6 +179,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormMessage` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormDialog` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialogForm` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
+| `FormShell` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `HintPill` | `@workspace/ui/components/hint-pill` | packages/ui/src/components/hint-pill.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `StorageUsageBars` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
@@ -381,7 +382,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (315)
+## Hooks (316)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -659,6 +660,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
+| `useFormSubmitted` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `useApp` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
@@ -701,7 +703,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (474)
+## Types (475)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1178,6 +1180,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
+| `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
 ## Utilities & constants (1277)
@@ -1692,12 +1695,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `listTypeOfStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/ordered-list.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
-| `MAX_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MAX_HEADING_LEVEL` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MAX_PAPER_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_PAPER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_TEXT_BOX_PADDING` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
-| `MIN_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -2448,6 +2449,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
+| `expectFormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `expectFormProbe` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 | `expectKeyboardReveal` | `@workspace/ui/test/hover-reveal` | packages/ui/src/test/hover-reveal.ts |
 | `checkRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
