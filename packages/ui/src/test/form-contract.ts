@@ -88,7 +88,8 @@ async function probeFocus(form: FormContract) {
         const target = field(form.firstField);
         check(document.activeElement === target, `${form.firstField} has the focus as it opens, not ${focused()}`);
         const lone = form.kind !== 'page' && textFields(target).length === 1;
-        if (lone && target instanceof HTMLInputElement && target.value) {
+        // A number field selects its text but tells no selection (selectionStart is null), so its select goes unseen.
+        if (lone && target instanceof HTMLInputElement && target.value && target.selectionStart !== null) {
             check(target.selectionStart !== target.selectionEnd, `the text of ${form.firstField} is selected`);
         }
     });

@@ -503,8 +503,12 @@ export const SheetOverlay: React.FC = () => {
                                     <Input
                                         ref={bottomAddRowInputRef}
                                         type="text"
+                                        aria-label="Rows to add"
                                         className="h-8 w-16"
                                         placeholder={DEFAULT_ADD_ROWS.toString()}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleBottomAddRow();
+                                        }}
                                     />
                                     <span className="text-sm text-muted-foreground">(more rows at bottom)</span>
                                     <Button

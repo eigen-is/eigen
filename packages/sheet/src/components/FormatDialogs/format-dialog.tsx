@@ -1,7 +1,11 @@
 // The parts the custom format dialogs share, such as Custom number formats: the dialog whose Apply sets one number
-// format on the selection, the line that previews the format, and the list of presets with the one in use marked.
+// format on the selection, the line under its field that previews the format or says why it can't be applied, and the
+// list of presets with the one in use marked. A format typed wrong says so as it is typed, and an empty one once Apply
+// was pressed.
 
+import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
 import { useContext } from 'react';
@@ -10,16 +14,22 @@ import { useDialogProps } from '../../hooks/useDialog';
 import { handleNumberFormat } from '../../state';
 import type { FormatPreview } from './format-pattern';
 
+// `error` says what is wrong with the format as typed, and `missing` what an empty one lacks. The fields get the
+// problem to show now.
 export function FormatDialog({
     title,
     pattern,
-    canSubmit,
+    changed,
+    error,
+    missing,
     children,
 }: {
     title: string;
     pattern: string;
-    canSubmit: boolean;
-    children: ReactNode;
+    changed: boolean;
+    error?: string;
+    missing?: string;
+    children: (problem: string | undefined) => ReactNode;
 }) {
     const { setContext, refs } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
@@ -28,29 +38,47 @@ export function FormatDialog({
         <FormDialog {...dialogProps} title={title}>
             <FormDialogForm
                 submitLabel="Apply"
-                canSubmit={canSubmit}
-                onSubmit={() =>
+                changed={changed}
+                onSubmit={() => {
+                    if (error ?? missing) return false;
                     setContext((ctx) => {
                         const cellInput = refs.cellInput.current;
                         if (!cellInput) return;
                         handleNumberFormat(ctx, cellInput, pattern);
-                    })
-                }
+                    });
+                }}
             >
-                {children}
+                <FormatFields error={error} missing={missing}>
+                    {children}
+                </FormatFields>
             </FormDialogForm>
         </FormDialog>
     );
 }
 
-// The format shown on the dialog's sample value, or why the format can't be read.
-export function PatternPreview({ preview }: { preview: FormatPreview }) {
-    return preview.ok ? (
-        <div className="text-sm text-muted-foreground">
-            Preview: <span className="text-foreground">{preview.text}</span>
-        </div>
-    ) : (
-        <div className="text-sm text-destructive">{preview.error}</div>
+// Inside the form, where it knows whether Apply was pressed.
+function FormatFields({
+    error,
+    missing,
+    children,
+}: {
+    error?: string;
+    missing?: string;
+    children: (problem: string | undefined) => ReactNode;
+}) {
+    const submitted = useFormSubmitted();
+    return children(error ?? (submitted ? missing : undefined));
+}
+
+// The format shown on the dialog's sample value, or the problem its field points at by `id`.
+export function PatternPreview({ id, preview, problem }: { id: string; preview: FormatPreview; problem?: string }) {
+    if (problem) return <FieldError id={id}>{problem}</FieldError>;
+    return (
+        preview.ok && (
+            <div className="text-sm text-muted-foreground">
+                Preview: <span className="text-foreground">{preview.text}</span>
+            </div>
+        )
     );
 }
 

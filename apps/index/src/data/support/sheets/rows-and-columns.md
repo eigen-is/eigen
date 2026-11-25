@@ -76,7 +76,7 @@ To set a column to fit its contents, double-click the right edge of the column l
 
 1. Click a row number or column letter to select it.
 2. Right-click the selection.
-3. Choose **Resize the row** or **Resize the column**. Type a number in the dialog that opens, then click **OK**. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
+3. Choose **Resize the row** or **Resize the column**. Type a number in the dialog that opens, then click **Apply**. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
 
 ## Hide and show rows or columns
 

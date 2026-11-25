@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, links, hyperlinks, cells]
 related: [sheets/enter-and-edit-data, sheets/multiple-tabs]
 order: 140
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 A cell can carry a link to a web page, to a range of cells, or to another sheet tab in the same spreadsheet. The cell shows the text you choose for it, in blue with an underline. The link stays with the cell when you move, sort, or fill it.
@@ -17,11 +17,11 @@ A cell can carry a link to a web page, to a range of cells, or to another sheet 
 3. In the **Insert link** dialog, type what the cell should show in **Display text**.
 4. Pick where the link goes from **Link type**:
    - **Webpages**: type the address in **Link address**. An address without `https://` in front of it gets one added.
-   - **Cell range**: type a range such as `Sheet1!A1:C8` in **Cell range**, or click the grid icon inside the field and select the range with the mouse.
+   - **Cell range**: type a range such as `Sheet1!A1:C8` in **Cell range**, or click the grid icon inside the field, select the range with the mouse and click **Select**.
    - **Sheet**: choose a tab from the **Worksheet** list.
-5. Click **OK**, or press Enter in a field.
+5. Click **Apply**, or press Enter in a field.
 
-If you leave **Display text** empty, the cell shows the address instead. If the cell held a formula, new display text replaces it. If the address is not one Sheets can open, a short message appears under the field and **OK** stays grayed out until you correct it.
+If you leave **Display text** empty, the cell shows the address instead. If the cell held a formula, new display text replaces it. If the address is empty or not one Sheets can open, a short message appears under the field and the dialog stays open until you correct it.
 
 ## Open a link
 
@@ -35,7 +35,7 @@ Hover over a cell that has a link. A small card appears under it, or above it ne
 The same card carries three icon buttons on its right, as long as you can edit the spreadsheet:
 
 - The copy icon copies the web address to your clipboard. It appears for web links only.
-- The pencil icon reopens the dialog, now headed **Edit link**, where you can change the display text, the type, or the address. Click **OK** to save.
+- The pencil icon reopens the dialog, now headed **Edit link**, where you can change the display text, the type, or the address. Click **Apply** to save.
 - The broken-link icon removes the link. The cell keeps its text and loses the blue underline.
 
 People who can only view the spreadsheet see the card with the open button, but none of these three.
