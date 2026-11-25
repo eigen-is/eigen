@@ -1,6 +1,6 @@
 // The admin's Server settings page, in sections such as the organization's name, the sender of the server's mail,
 // the storage quotas and defaults, and the landing page's links. Its changes collect in drafts on a PageForm, and Save
-// writes the ones that changed through the server-settings hooks once every field is valid.
+// writes the ones that changed in one save, which says once that the page saved, once every field is valid.
 
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
@@ -14,13 +14,11 @@ import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/li
 import {
     useCheckS3Connection,
     useHardenS3Bucket,
+    useSaveServerSettingsPage,
     useSendTestMail,
     useServerS3Config,
     useServerSettings,
     useServerStatus,
-    useUpdateOrgName,
-    useUpdateServerS3Config,
-    useUpdateServerSettings,
 } from '@workspace/lib/settings';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
@@ -43,15 +41,13 @@ import { SwitchRow } from './switch-row';
 
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
-    const updateSettings = useUpdateServerSettings();
     const { data: s3Config } = useServerS3Config();
-    const updateS3Config = useUpdateServerS3Config();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
     const homeDataLabel = useHomeDataLabel();
     const { data: config } = usePublicConfig();
     const mailEnabled = useMailEnabled();
-    const updateOrgName = useUpdateOrgName(config?.orgId);
+    const save = useSaveServerSettingsPage(config?.orgId);
     const sendTestMail = useSendTestMail();
     const { data: status } = useServerStatus();
 
@@ -138,18 +134,16 @@ export function ServerSettingsPage() {
 
     const handleSave = async () => {
         if (invalid) return false;
-        if (orgNameChanged) await updateOrgName.mutateAsync(orgName.trim());
-        if (s3Changed) await updateS3Config.mutateAsync(currentS3);
-        if (settingsChanged) {
-            const saved = await updateSettings.mutateAsync(
-                draft.landing?.links
-                    ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(draft.landing.links) } }
-                    : draft,
-            );
-            // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
-            // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
-            if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
-        }
+        const links = draft.landing?.links;
+        const settingsDraft = links ? { ...draft, landing: { ...draft.landing, links: normalizeLinks(links) } } : draft;
+        const saved = await save.mutateAsync({
+            orgName: orgNameChanged ? orgName.trim() : undefined,
+            s3Config: s3Changed ? currentS3 : undefined,
+            settings: settingsChanged ? settingsDraft : undefined,
+        });
+        // A new backup bucket brings a one-time notice to keep its keys off this server. A bucket that lacks
+        // something, such as versioning, warns on every save of the upload settings, even when it stayed the same.
+        if (saved?.notice || saved?.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         handleReset();
     };
 
