@@ -128,6 +128,8 @@ async function probeEnter(form: FormContract) {
 }
 
 // Each field submits on Cmd+Enter and on Ctrl+Enter, keeps its content, and lets no hotkey behind the form see the key.
+// The save is held until the checks are done: on a slow machine the shell's deferred submit can run before the press's
+// act returns, and a save that went through resets the draft, so the content check would read the reset.
 async function probeModEnter(form: FormContract) {
     for (const label of [form.firstField, ...(form.modEnterFields ?? [])]) {
         for (const [key, modifier] of MODIFIERS) {
@@ -139,12 +141,14 @@ async function probeModEnter(form: FormContract) {
                 const behind: KeyboardEvent[] = [];
                 const listen = (event: KeyboardEvent) => behind.push(event);
                 document.addEventListener('keydown', listen);
+                const release = hold(form.onSubmit);
                 await act(() => keydown(target, { key: 'Enter', ...modifier }));
                 document.removeEventListener('keydown', listen);
                 check(contentOf(target) === before, `${key}+Enter in ${label} leaves its content as it was`);
                 await nextTask();
                 check(calls(form) === 1, `${key}+Enter in ${label} submits, ran ${calls(form)} times`);
                 check(behind.length === 0, `${key}+Enter in ${label} reaches no hotkey behind the form`);
+                await release();
             });
         }
     }

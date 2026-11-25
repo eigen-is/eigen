@@ -70,6 +70,7 @@ Globals and the DOM:
 - A module that keeps the first DOM object it made keeps the first stub too: stub the vector text measurer through `stubCanvasMeasure` (`packages/ui/src/test/canvas-measure.ts`).
 - Enter in a form field is `pressEnter(field)`, which clicks the form's first submit button, so nothing submits while it is disabled.
 - A form's test renders the real form and calls `expectFormContract` (`@workspace/ui/test/form-contract`) once, then tests only what is special about that form ([FORMS.md § Each rule is tested at its shell](FORMS.md#each-rule-is-tested-at-its-shell-and-every-form-proves-it-uses-it)).
+- An `await act(async …)` ends on a `setImmediate`, and on a slow runner a `setTimeout(0)` set inside it, such as `FormShell`'s deferred Mod+Enter submit, runs first. A check that must read the form before that submit's save lands holds the save with `hold` (`form-contract.ts`) and releases it after.
 - A failed `toBeNull()` on an element prints its whole tree, which takes seconds: assert on labels or titles.
 
 ## Resource bounds measure the child, and scale rather than time
