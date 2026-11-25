@@ -1,7 +1,8 @@
 // The hooks that change Drive, such as create, upload, copy, move, rename and delete. Each one sends its
 // request per item, but an upload sends its files in one, and then calls the invalidators for the listings
 // the change makes stale, once for the whole batch. A batch goes through settleEach: when only part of it goes
-// through, the hook says which items did, so a dialog can retry the rest and an editor can keep what landed.
+// through, the hook says which items did, so a dialog can retry the rest and an editor can keep what landed. A
+// name a sibling has already gets no toast from a create or a rename: the form that typed it shows why.
 
 import type { QueryClient, UseMutationResult } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +18,16 @@ import type { UploadOptions } from '../upload';
 import { uploadFiles } from '../upload';
 import { invalidateItemCreated, invalidateItemsDeleted, invalidatePathRenamed, invalidatePathsMoved } from './keys';
 import { folderContentQueryConfig } from './reads';
+
+// The server's answer to a create or rename whose name a sibling has already.
+export function isNameTaken(error: unknown): boolean {
+    return error instanceof AppError && error.status === 409;
+}
+
+// A form that names an item shows a taken name under its field, so a toast would say it twice.
+function toastUnlessNameTaken(error: unknown) {
+    if (!isNameTaken(error)) onMutationError(error);
+}
 
 // Owner and mount come with each call, so one instance can create a folder in any drive.
 export function useCreateFolder() {
@@ -39,7 +50,7 @@ export function useCreateFolder() {
         },
         onSuccess: (_, variables) =>
             invalidateItemCreated(queryClient, variables.ownerId, variables.mountId, variables.parentId),
-        onError: onMutationError,
+        onError: toastUnlessNameTaken,
     });
 }
 
@@ -228,7 +239,7 @@ export function useRenamePath(): UseMutationResult<void, unknown, { path: DriveP
             if (response.error) throw new AppError(response);
         },
         onSuccess: (_data, { path }) => invalidatePathRenamed(queryClient, path, user?.id ?? ''),
-        onError: onMutationError,
+        onError: toastUnlessNameTaken,
     });
 }
 
@@ -268,7 +279,7 @@ export function useCreateDriveItem(type: EigenDocType) {
                 variables.parentId,
                 EIGEN_DOC_TYPE_INFO[type].mime,
             ),
-        onError: onMutationError,
+        onError: toastUnlessNameTaken,
     });
 }
 
