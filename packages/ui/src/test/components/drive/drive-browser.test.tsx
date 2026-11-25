@@ -6,8 +6,10 @@ import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
+import { closingDialog, holdClosingDialogs } from '../../closing-dialog';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
+import { pressEnter } from '../../press-enter';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -256,7 +258,7 @@ test('a closed folder picker reads no root', async () => {
 test('New folder creates in the folder shown, and the browser moves into the new folder', async () => {
     await openFolderPicker({ defaultFolderId: 'docs' });
     await click(buttonNamed('New folder'));
-    const name = document.querySelector<HTMLInputElement>('#itemName');
+    const name = document.querySelector<HTMLInputElement>('input[placeholder="Enter folder name"]');
     if (!name) throw new Error('New folder asked for no name');
     await act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Drafts');
@@ -265,7 +267,7 @@ test('New folder creates in the folder shown, and the browser moves into the new
     await act(async () => buttonNamed('Create').click());
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(created).toEqual([{ ownerId: ME, mountId: 'default', parentId: 'docs', folderName: 'Drafts' }]);
-    expect(document.querySelector('#itemName')).toBeNull();
+    expect(document.querySelector('input[placeholder="Enter folder name"]')).toBeNull();
     expect(crumbs()).toEqual(['Drive', 'Docs', 'Drafts']);
     expect(rowNames()).toEqual([]);
     expect(await confirmed()).toEqual([{ ownerId: ME, mountId: 'default', folderId: 'made' }]);
@@ -371,6 +373,40 @@ test('the file picker walks folders, crumbs and mounts, and Select hands back th
     expect(onSelect.mock.calls).toEqual([[[notes]]]);
 });
 
+// The row and the form around it both took Cmd+Enter, and the closing form, still drawn as it faded out, confirmed
+// again: a second import or insert.
+const pressOnList = (key: string, init: KeyboardEventInit = {}) =>
+    act(async () => {
+        const list = document.querySelector('[role="grid"]');
+        if (!(list instanceof HTMLElement)) throw new Error('no list');
+        list.focus();
+        list.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+        // The form submits a task after the key.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+test('Cmd+Enter on the picked file hands it back once, also pressed again as the picker closes', async () => {
+    const release = holdClosingDialogs();
+    try {
+        await openFilePicker();
+        await clickRow('Notes.txt');
+        await pressOnList('Enter', { metaKey: true });
+        expect(closingDialog()).not.toBeNull();
+        await pressOnList('Enter', { metaKey: true });
+        expect(onSelect.mock.calls).toEqual([[[notes]]]);
+    } finally {
+        release();
+    }
+});
+
+test('Cmd+Enter on a folder with nothing picked confirms nothing and opens no folder', async () => {
+    await openFilePicker();
+    await pressOnList('ArrowDown');
+    await pressOnList('Enter', { metaKey: true });
+    expect(onSelect.mock.calls).toEqual([]);
+    expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
+});
+
 test('the file picker opens at the root again after it was closed in another folder', async () => {
     await openFilePicker();
     await click(buttonNamed('Design drive'));
@@ -392,4 +428,36 @@ test('the file picker opens at the root again after Upload from device closed it
     await act(async () => reopen());
     expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
     expect(activeMount()).toBe('Drive');
+});
+
+// The folder list takes the focus as it opens, so a name typed before Change location lost it, and Enter then created
+// nothing until the name was clicked again.
+test('a picker with a name keeps the focus in the name as its folders open, so Enter still creates', async () => {
+    onConfirm.mockClear();
+    ({ unmount } = await renderInDocument(
+        createElement(DriveLocationPicker, {
+            open: true,
+            onOpenChange: () => {},
+            mode: 'create',
+            title: 'New folder',
+            nameLabel: 'Folder name',
+            confirmLabel: 'Create',
+            onConfirm,
+        }),
+    ));
+    const name = document.querySelector<HTMLInputElement>('[role="dialog"] input');
+    if (!name) throw new Error('New folder asked for no name');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(name, 'Plans');
+        name.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // A click focuses the button it presses, as Chrome's does.
+    const change = buttonNamed('Change location');
+    change.focus();
+    await click(change);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(rowNames()).toEqual(['Docs', 'Notes.txt']);
+    expect(document.activeElement).toBe(name);
+    await act(async () => pressEnter(name));
+    expect(onConfirm.mock.calls).toEqual([[{ ownerId: ME, mountId: 'default', folderId: 'root', name: 'Plans' }]]);
 });

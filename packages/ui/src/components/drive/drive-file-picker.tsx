@@ -1,6 +1,7 @@
-// A dialog for picking files from the viewer's Drive: a DriveBrowser, a Select button and, where the caller
-// can take one, Upload from device. It hands the picked files back, such as to the file menu's Open. A single
-// pick also confirms on a second click of its row; a multi pick takes every file highlighted.
+// A dialog for picking files from the viewer's Drive: a DriveBrowser, a Select button, or the caller's own verb such
+// as Import, and, where the caller can take one, Upload from device. It hands the picked files back, such as to the
+// file menu's Open. The button waits for a pick, and then Cmd+Enter confirms too. A single pick also confirms on a
+// second click of its row; a multi pick takes every file highlighted.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
@@ -9,14 +10,9 @@ import { isFolderType } from '@workspace/lib/types/drive';
 import type { DriveLocationValue, DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormFooter } from '@workspace/ui/components/form-dialog';
+import { FormShell } from '@workspace/ui/components/form-shell';
 import { Upload } from 'lucide-react';
 import { useState } from 'react';
 import { DriveBrowser } from './drive-browser';
@@ -28,6 +24,7 @@ type DriveFilePickerProps = {
     onUploadFromDevice?: () => void;
     canPick?: (item: DrivePath) => boolean;
     title?: string;
+    submitLabel?: string;
     multiSelect?: boolean;
 };
 
@@ -39,7 +36,7 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription className="sr-only">Browse your Drive and pick a file.</DialogDescription>
                 </DialogHeader>
-                <DriveFilePickerBody {...body} onClose={() => onOpenChange(false)} />
+                <DriveFilePickerBody {...body} open={open} onClose={() => onOpenChange(false)} />
             </DialogContent>
         </Dialog>
     );
@@ -47,12 +44,14 @@ export function DriveFilePicker({ open, onOpenChange, title = 'Attach file', ...
 
 // Mounted with the dialog's content, so each opening starts at the root of the viewer's drive with nothing picked.
 function DriveFilePickerBody({
+    open,
     onClose,
     onSelect,
     onUploadFromDevice,
     canPick,
+    submitLabel = 'Select',
     multiSelect = false,
-}: Omit<DriveFilePickerProps, 'open' | 'onOpenChange' | 'title'> & { onClose: () => void }) {
+}: Omit<DriveFilePickerProps, 'onOpenChange' | 'title'> & { onClose: () => void }) {
     const { user } = useAuth();
     // Seeded from the view preference and kept here, so a sort picked in the dialog never writes it.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -68,7 +67,7 @@ function DriveFilePickerBody({
 
     const pickedFiles = multiSelected.filter((p) => !isFolderType(p.type));
     const picked = multiSelect ? pickedFiles : selected ? [selected] : [];
-    const submitLabel = multiSelect && pickedFiles.length > 0 ? `Select (${pickedFiles.length})` : 'Select';
+    const label = multiSelect && pickedFiles.length > 0 ? `${submitLabel} (${pickedFiles.length})` : submitLabel;
 
     const confirm = (paths: DrivePath[]) => {
         onSelect(paths);
@@ -76,7 +75,11 @@ function DriveFilePickerBody({
     };
 
     return (
-        <>
+        <FormShell
+            // A closing picker is still drawn as it fades out, and takes no second confirm, as FormDialog's form.
+            onSubmit={() => (open && picked.length > 0 ? confirm(picked) : undefined)}
+            className="flex min-h-0 flex-1 flex-col gap-4"
+        >
             {/* Edge to edge from sm up. A phone keeps the padding, so the drive select above the folders stays inset. */}
             <div className="min-h-0 flex-1 overflow-hidden sm:-mx-6">
                 <DriveBrowser
@@ -93,7 +96,7 @@ function DriveFilePickerBody({
                 />
             </div>
 
-            <DialogFooter
+            <FormFooter
                 start={
                     onUploadFromDevice && (
                         <Button variant="outline" onClick={onUploadFromDevice}>
@@ -102,14 +105,11 @@ function DriveFilePickerBody({
                         </Button>
                     )
                 }
-            >
-                <Button variant="outline" onClick={onClose}>
-                    Cancel
-                </Button>
-                <Button onClick={() => confirm(picked)} disabled={picked.length === 0}>
-                    {submitLabel}
-                </Button>
-            </DialogFooter>
-        </>
+                pending={false}
+                onCancel={onClose}
+                canSubmit={picked.length > 0}
+                submitLabel={label}
+            />
+        </FormShell>
     );
 }

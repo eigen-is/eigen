@@ -1,12 +1,14 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
 // arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
-// ⌘A selects every row. The list spreads the returned handleKeyDown on its focusable container.
+// ⌘A selects every row. Cmd or Ctrl+Enter is left to a form around the list. The list spreads the returned
+// handleKeyDown on its focusable container.
 // The hook keeps the focus on that container while nothing else holds it, and takes it back from a row's own button
 // when a key moves the cursor.
 
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { isKeyboardContextMenu } from '../components/context-menu/use-context-menu';
+import { isTypingTarget } from './is-typing-target';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
@@ -97,8 +99,9 @@ export function useKeyboardListNavigation<T>({
         if (!reclaimFocus) return;
         const focusList = () => containerRef.current?.focus({ preventScroll: true });
 
+        // A field the user types in keeps it, such as a picker's name while its folder list opens.
         const timer = setTimeout(() => {
-            if (!containerRef.current?.contains(document.activeElement)) focusList();
+            if (!containerRef.current?.contains(document.activeElement) && !isTypingTarget()) focusList();
         }, 100);
 
         const reclaim = () => {
@@ -257,6 +260,8 @@ export function useKeyboardListNavigation<T>({
             }
 
             case 'Enter': {
+                // Cmd or Ctrl+Enter is the form's submit, such as a file picker's, which confirms the picked row once.
+                if (e.metaKey || e.ctrlKey) break;
                 e.preventDefault();
                 const index = targetIndex();
                 if (index >= 0) {

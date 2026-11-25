@@ -98,9 +98,9 @@ async function click(label: string) {
 }
 
 // Runs the action, cancels the dialog it opens, and returns that dialog as it fades out.
-async function cancelDialogOf(id: DriveActionId, items: DrivePath[]) {
+async function cancelDialogOf(id: DriveActionId, items: DrivePath[], cancel = 'Cancel') {
     await openDialogOf(id, items);
-    await click('Cancel');
+    await click(cancel);
     return closingDialog();
 }
 
@@ -126,6 +126,7 @@ test('after a partial failure the delete dialog asks about the failed item, agai
 });
 
 test('Email collaborators stays mounted while it closes', async () => {
-    const dialog = await cancelDialogOf('email-collaborators', [sharedDoc]);
+    // The settings with the signature are still loading here, so the dialog offers Close alone.
+    const dialog = await cancelDialogOf('email-collaborators', [sharedDoc], 'Close');
     expect(dialog?.querySelector('h2')?.textContent).toBe('Email collaborators');
 });

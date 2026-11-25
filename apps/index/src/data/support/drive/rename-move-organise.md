@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, organize, rename, move]
 related: [drive/get-started, drive/create-folders-and-documents]
 order: 70
-updated: 2026-11-12
+updated: 2026-11-25
 ---
 
 You can rename any file or folder in Drive and move items between folders without leaving the browser.
@@ -16,7 +16,7 @@ You can rename any file or folder in Drive and move items between folders withou
 1. Right-click the file or folder (or click the **⋮** button at the end of its row).
 2. Choose **Rename** from the menu.
 3. In the dialog, edit the name in the text field. A file shows its whole name with the part before the extension selected, so typing replaces only that part. You can change or remove the extension too. A document you made in Eigen shows its name without an extension.
-4. Click **Rename** to save, or **Cancel** to leave the name as it is.
+4. Click **Rename** to save, or **Cancel** to leave the name as it is. If something in the same folder already has that name, the dialog says so under the field and stays open, so you can pick another.
 
 You can also rename from the detail panel: select the item to open its panel, click the **⋮** button at the top of the panel, and choose **Rename**.
 

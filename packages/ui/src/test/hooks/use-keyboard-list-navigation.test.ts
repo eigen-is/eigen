@@ -181,6 +181,15 @@ describe('useKeyboardListNavigation Space and Enter', () => {
         await unmount();
     });
 
+    // A picker's form submits on Cmd+Enter, so a row that opened on it too would confirm twice.
+    test('Cmd or Ctrl+Enter opens nothing and is left to the form around the list', async () => {
+        const { calls, list, keydown, unmount } = await mountList(1);
+        expect((await keydown(list, 'Enter', { metaKey: true })).defaultPrevented).toBe(false);
+        expect((await keydown(list, 'Enter', { ctrlKey: true })).defaultPrevented).toBe(false);
+        expect(calls).toEqual([]);
+        await unmount();
+    });
+
     test('on a button inside a row, Enter and Space press the button and leave the row alone', async () => {
         const { calls, menuButton, keydown, unmount } = await mountList(1);
         for (const key of ['Enter', ' ']) {
@@ -202,6 +211,27 @@ describe('useKeyboardListNavigation Space and Enter', () => {
             expect(calls).toEqual([key === 'End' ? 'open:c' : 'open:b']);
             await unmount();
         }
+    });
+});
+
+// The list takes the focus a moment after it mounts, so its keys work without a click, but never from a field the user
+// types in, such as a picker's name while the picker's folder list opens.
+describe('useKeyboardListNavigation focus on mount', () => {
+    const afterTheTimer = () => act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+
+    test('the list takes the focus when nothing holds it', async () => {
+        const { list, unmount } = await mountList(-1);
+        await afterTheTimer();
+        expect(document.activeElement).toBe(list);
+        await unmount();
+    });
+
+    test('a field the user types in keeps the focus', async () => {
+        const { field, unmount } = await mountList(-1);
+        if (field instanceof HTMLElement) field.focus();
+        await afterTheTimer();
+        expect(document.activeElement).toBe(field);
+        await unmount();
     });
 });
 

@@ -2,7 +2,8 @@
 // closed by then. What is pinned here is that the blocking progress dialog covers that wait, for an
 // upload from the device and a pick from Drive alike, which Drive rows the picker offers, and that a pick
 // runs no import until the dialog after it says how the file comes in. That dialog waits for the import, and a failed
-// one leaves it open for another try. A canceled one keeps naming the file while it fades out.
+// one leaves it open for another try. A canceled one keeps naming the file while it fades out. The choice keeps the
+// dialog contract, and the picker before it says Select, since the choice is the import.
 import { expect, mock, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -10,7 +11,9 @@ import { DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive
 import type { ConvertTarget } from '@workspace/lib/types/drive-convert';
 import { holdClosingDialogs } from '../../closing-dialog';
 import { drivePath } from '../../drive-path';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
@@ -19,32 +22,38 @@ const fromDrive: unknown[] = [];
 // How the next import from Drive ends, once it has been recorded.
 let importEnds: () => Promise<void> = async () => {};
 
+const importFromDrive = mock(async (variables: unknown) => {
+    fromDrive.push(variables);
+    await importEnds();
+});
 const realDrive = await import('@workspace/lib/drive');
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useDriveViewPreferences: () => ({ sortKey: 'name', sortDir: 'asc' }),
     useImportDocument: () => ({ mutateAsync: async () => {}, isPending: pending.device }),
-    useImportFromDrive: () => ({
-        mutateAsync: async (variables: unknown) => {
-            fromDrive.push(variables);
-            await importEnds();
-        },
-        isPending: pending.drive,
-    }),
+    useImportFromDrive: () => ({ mutateAsync: importFromDrive, isPending: pending.drive }),
 }));
 const session = { user: { id: 'owner-1' } };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 const browsed: { canPick?: (item: DrivePath) => boolean; onConfirm?: (item: DrivePath) => void } = {};
+// A row the browser confirms as it mounts, as a person's double click would, so the choice opens with the test's render.
+let confirmOnMount: DrivePath | null = null;
 mock.module('../../../components/drive/drive-browser', () => ({
     DriveBrowser: ({ canPick, onConfirm }: typeof browsed) => {
         browsed.canPick = canPick;
         browsed.onConfirm = onConfirm;
+        useConfirmOnMount(onConfirm);
         return null;
     },
 }));
 
-const { act, createElement, useState } = await import('react');
+const { act, createElement, useEffect, useState } = await import('react');
+function useConfirmOnMount(onConfirm: ((item: DrivePath) => void) | undefined) {
+    useEffect(() => {
+        if (confirmOnMount) onConfirm?.(confirmOnMount);
+    }, [onConfirm]);
+}
 const { createRoot } = await import('react-dom/client');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { DocumentImportPicker } = await import('../../../components/drive/document-import-picker');
@@ -121,6 +130,33 @@ function Host({ target, file }: { target: ConvertTarget; file: string }) {
         afterFrameId: 'fr-current',
     });
 }
+
+test('the choice keeps the dialog contract', async () => {
+    importEnds = async () => {};
+    confirmOnMount = drivePath({ id: 'picked', name: 'Review.pptx', mimeType: PPTX_MIME });
+    try {
+        await expectFormContract({
+            kind: 'dialog',
+            render: () => createElement(Host, { target: 'eigenslides', file: 'Open document' }),
+            submitLabel: 'Import',
+            firstField: 'Insert slides',
+            onSubmit: importFromDrive,
+            makeChanged: () => act(async () => document.querySelectorAll<HTMLElement>('[role="radio"]')[1]?.click()),
+            except: { discard: 'A choice of how the file comes in loses nothing typed, so a close never asks' },
+        });
+    } finally {
+        confirmOnMount = null;
+    }
+});
+
+test('the picker before the choice says Select', async () => {
+    const { unmount } = await renderInDocument(
+        createElement(DocumentImportPicker, { path, open: true, onOpenChange: () => {}, target: 'eigenslides' }),
+    );
+    const footer = [...document.querySelectorAll('[role="dialog"] [data-slot="dialog-footer"] button')];
+    expect(footer.map((b) => b.textContent)).toEqual(['Upload from device', 'Cancel', 'Select']);
+    await unmount();
+});
 
 async function pickFromDrive(target: ConvertTarget, name: string): Promise<() => Promise<void>> {
     fromDrive.length = 0;
