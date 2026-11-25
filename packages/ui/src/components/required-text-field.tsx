@@ -1,7 +1,7 @@
 // A labelled text field a form can't do without, such as a name or a title. Once its form's Save was pressed, a blank
-// value shows the field's message under it and marks the field invalid, so the shell focuses it; a reason from
-// elsewhere, such as a name the server says is taken, shows the same way. An addon, such as a color swatch, sits
-// inside the field before the text.
+// value shows the field's message under it and marks the field invalid, so the shell focuses it, unless the user may
+// not change it; a reason from elsewhere, such as a name the server says is taken, shows the same way. An addon, such
+// as a color swatch, sits inside the field before the text.
 
 import type { ComponentProps, ReactNode } from 'react';
 import { useId } from 'react';
@@ -19,7 +19,9 @@ type RequiredTextFieldProps = {
     error?: string;
     addon?: ReactNode;
     className?: string;
-} & Pick<ComponentProps<'input'>, 'ref' | 'id' | 'placeholder' | 'maxLength' | 'autoFocus'>;
+    labelClassName?: string;
+    inputClassName?: string;
+} & Pick<ComponentProps<'input'>, 'ref' | 'id' | 'placeholder' | 'maxLength' | 'autoFocus' | 'disabled'>;
 
 export function RequiredTextField({
     label,
@@ -29,6 +31,8 @@ export function RequiredTextField({
     error,
     addon,
     className,
+    labelClassName,
+    inputClassName,
     id,
     ...inputProps
 }: RequiredTextFieldProps) {
@@ -36,10 +40,11 @@ export function RequiredTextField({
     const errorId = useId();
     const submitted = useFormSubmitted();
     const fieldId = id ?? ownId;
-    const shown = error || (submitted && !value.trim() ? message : undefined);
+    const shown = error || (submitted && !inputProps.disabled && !value.trim() ? message : undefined);
     const props = {
         ...inputProps,
         id: fieldId,
+        className: inputClassName,
         value,
         onChange: (event: { target: { value: string } }) => onChange(event.target.value),
         'aria-invalid': !!shown || undefined,
@@ -47,7 +52,9 @@ export function RequiredTextField({
     };
     return (
         <Field className={className}>
-            <FieldLabel htmlFor={fieldId}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId} className={labelClassName}>
+                {label}
+            </FieldLabel>
             {addon ? (
                 <InputGroup>
                     <InputGroupAddon>{addon}</InputGroupAddon>

@@ -14,11 +14,18 @@ const { field, type } = await import('../form-contract');
 let unmount = async () => {};
 afterEach(() => unmount());
 
-function Form({ error }: { error?: string }) {
+function Form({ error, disabled }: { error?: string; disabled?: boolean }) {
     const [name, setName] = useState('');
     return (
         <FormShell onSubmit={() => (name.trim() ? undefined : false)}>
-            <RequiredTextField label="Name" value={name} onChange={setName} message="Add a name" error={error} />
+            <RequiredTextField
+                label="Name"
+                value={name}
+                onChange={setName}
+                message="Add a name"
+                error={error}
+                disabled={disabled}
+            />
             <button type="submit">Save</button>
         </FormShell>
     );
@@ -48,4 +55,11 @@ test('a reason from elsewhere shows under the field before Save', async () => {
     ({ unmount } = await renderInDocument(<Form error="A chat with this name exists" />));
     expect(field('Name').getAttribute('aria-invalid')).toBe('true');
     expect(messageUnder('Name')).toBe('A chat with this name exists');
+});
+
+test('a field the user may not change asks for nothing', async () => {
+    ({ unmount } = await renderInDocument(<Form disabled />));
+    await save();
+    expect(field('Name').getAttribute('aria-invalid')).toBeNull();
+    expect(messageUnder('Name')).toBeUndefined();
 });
