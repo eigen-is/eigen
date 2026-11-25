@@ -1,7 +1,8 @@
 // The dialog a card opens into, on a board or beside a document: a top bar with the card's actions and the close
 // button, over the card's body, which fills the rest and scrolls on its own, such as its thread or its edit form.
 // While the body is the edit form the bar gives way to the dialog's own X, and Esc goes back to the card's view as the
-// form's Cancel does, asking "Discard changes?" first once the form changed. Callers such as CardDialog fill in both.
+// form's Cancel does. Once the form changed, Esc asks "Discard changes?" first, and so do the X and a click outside,
+// which close the card. Callers such as CardDialog fill in both.
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -22,15 +23,14 @@ type CardDialogFrameProps = {
 };
 
 export function CardDialogFrame({ open, onOpenChange, title, actions, editing, children }: CardDialogFrameProps) {
-    const discard = useDiscardChanges({
-        open: open && !!editing,
-        changed: !!editing?.changed,
-        onDiscard: () => editing?.onCancel(),
-    });
+    const changed = !!editing?.changed;
+    // Esc leaves the edit for the view, and every other close leaves the card.
+    const backToView = useDiscardChanges({ open: open && !!editing, changed, onDiscard: () => editing?.onCancel() });
+    const close = useDiscardChanges({ open, changed, onDiscard: () => onOpenChange(false) });
 
     return (
         <>
-            <Dialog open={open} onOpenChange={onOpenChange}>
+            <Dialog open={open} onOpenChange={close.onOpenChange}>
                 {/* The gutter takes the 24px every dialog pads with, so the edit form's footer runs exactly edge to
                     edge. */}
                 <DialogContent
@@ -40,7 +40,7 @@ export function CardDialogFrame({ open, onOpenChange, title, actions, editing, c
                         // A field that keeps its own Esc, such as an open list, has taken it already.
                         if (!editing || event.defaultPrevented) return;
                         event.preventDefault();
-                        discard.onOpenChange(false);
+                        backToView.onOpenChange(false);
                     }}
                 >
                     <DialogTitle className="sr-only">{title}</DialogTitle>
@@ -60,7 +60,8 @@ export function CardDialogFrame({ open, onOpenChange, title, actions, editing, c
                     <div className="flex min-h-0 flex-1 flex-col">{children}</div>
                 </DialogContent>
             </Dialog>
-            {discard.dialog}
+            {backToView.dialog}
+            {close.dialog}
         </>
     );
 }
