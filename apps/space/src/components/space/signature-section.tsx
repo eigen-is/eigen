@@ -1,41 +1,28 @@
 // The Signature section of Space's Mail settings: a rich-text editor for the user's email signature and its Save
-// button. Mail adds the signature to new emails and above the quote in replies and forwards. The editor loads the
-// saved signature once and keeps what the user types through later refetches.
+// button. Mail adds the signature to new emails and above the quote in replies and forwards. The editor opens on the
+// saved signature once it has loaded and keeps what the user types through later refetches.
 
 import { useSaveSignature, useSpaceSettings } from '@workspace/lib/space';
+import type { EmailSignature } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { LoadingState } from '@workspace/ui/components/layout/app';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 export function SignatureSection() {
     const { data, isLoading } = useSpaceSettings();
-    const save = useSaveSignature();
-    const existing = data?.email?.signatures?.[0];
-
-    const [html, setHtml] = useState('');
-    const seededRef = useRef<string | null>(null);
-
-    // Seed the editor once per signature, so a refetch after a save keeps what the user is typing.
-    useEffect(() => {
-        const id = existing?.id ?? null;
-        if (id !== seededRef.current) {
-            seededRef.current = id;
-            setHtml(existing?.html ?? '');
-        }
-    }, [existing?.id, existing?.html]);
-
     if (isLoading) return <LoadingState />;
+    return <SignatureForm existing={data?.email?.signatures?.[0]} />;
+}
+
+// The editor reads its content only as it mounts, so it mounts once the saved signature is known.
+function SignatureForm({ existing }: { existing?: EmailSignature }) {
+    const save = useSaveSignature();
+    const [html, setHtml] = useState(existing?.html ?? '');
+    // A new signature's id is claimed once, so every save writes the same one.
+    const [id] = useState(() => existing?.id ?? crypto.randomUUID());
 
     const isDirty = html !== (existing?.html ?? '');
-
-    const handleSave = () => {
-        // Claim the id before the save, so the refetch that gives a new signature its id doesn't seed the editor
-        // again and drop what is typed meanwhile.
-        const id = existing?.id ?? crypto.randomUUID();
-        seededRef.current = id;
-        save.mutate({ id, name: existing?.name ?? 'Default', html });
-    };
 
     return (
         <div className="space-y-4">
@@ -54,7 +41,11 @@ export function SignatureSection() {
                 />
             </div>
             <div className="flex justify-end">
-                <Button onClick={handleSave} pending={save.isPending} disabled={!isDirty}>
+                <Button
+                    onClick={() => save.mutate({ id, name: existing?.name ?? 'Default', html })}
+                    pending={save.isPending}
+                    disabled={!isDirty}
+                >
                     Save
                 </Button>
             </div>
