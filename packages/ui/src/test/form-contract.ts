@@ -412,7 +412,7 @@ const focused = () => {
 };
 
 // The field a label names: its aria-label, its aria-labelledby, or a <label> tied to it.
-function field(label: string): HTMLElement {
+export function field(label: string): HTMLElement {
     for (const element of document.querySelectorAll<HTMLElement>('[aria-label], [aria-labelledby]')) {
         const name =
             element.getAttribute('aria-label') ??
@@ -428,6 +428,23 @@ function field(label: string): HTMLElement {
         if (tag.textContent?.trim() === label && tied instanceof HTMLElement) return tied;
     }
     throw new Error(`no field labelled ${label}`);
+}
+
+// Types into a field, or the field a label names, as a keystroke does: React reads the value off its own tracker, so
+// the native setter is what reaches it.
+export async function type(target: string | HTMLElement, value: string): Promise<void> {
+    const input = typeof target === 'string' ? field(target) : target;
+    const setter =
+        input instanceof HTMLTextAreaElement
+            ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+            : Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) || !setter) {
+        throw new Error(`${labelOf(input)} takes no typing`);
+    }
+    await act(() => {
+        setter.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 }
 
 const contentOf = (element: HTMLElement) =>
