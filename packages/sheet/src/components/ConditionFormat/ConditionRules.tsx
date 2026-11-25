@@ -1,5 +1,5 @@
 // The dialog for one conditional-format rule, such as "Greater than" or "Top 10", opened from the Format menu. It
-// holds the rule's value and colors, and on OK it checks them with conditionRuleError: a refused value keeps the
+// holds the rule's value and colors, and on Apply it checks them with conditionRuleError: a refused value keeps the
 // dialog open with the reason under the field, and a good one goes to addConditionRule. RULE_COPY names each rule
 // once, so this dialog and the places that list rules, such as the Format menu, show the same words.
 
@@ -13,6 +13,7 @@ import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { isEqual } from 'es-toolkit';
 import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
@@ -42,7 +43,7 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const dialogProps = useDialogProps();
     const errorId = useId();
     const { label, description } = RULE_COPY[type];
-    const [rule, setRule] = useState<ConditionRulesProps>({
+    const [opened] = useState<ConditionRulesProps>({
         rulesType: type,
         rulesValue: '',
         textColor: { check: false, color: eigenColor('emerald', 600) },
@@ -52,7 +53,8 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
         repeatValue: '0',
         projectValue: '10',
     });
-    // The reason the last OK was refused, until the next edit.
+    const [rule, setRule] = useState(opened);
+    // The reason the last Apply was refused, until the next edit.
     const [error, setError] = useState<string>();
     const edit = (change: Partial<ConditionRulesProps>) => {
         setRule((prev) => ({ ...prev, ...change }));
@@ -66,7 +68,8 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
     return (
         <FormDialog {...dialogProps} title={label} description={description}>
             <FormDialogForm
-                submitLabel="OK"
+                submitLabel="Apply"
+                changed={!isEqual(rule, opened)}
                 onSubmit={() => {
                     const refusal = conditionRuleError(context, rule);
                     if (refusal) {

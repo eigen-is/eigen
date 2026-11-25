@@ -1,14 +1,15 @@
 // The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules in their order,
-// each with its range, a plain-English description and a swatch of its style. Its delete button per rule removes that
-// rule by its id at once, so the dialog is a list with only Close in its footer.
+// each with its range, a plain-English description and a swatch of its style. Its delete button per rule asks first,
+// then removes that rule by its id, so the dialog is a list with only Close in its footer.
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { orderedRules } from '@workspace/lib/sheets';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { DialogFooter } from '@workspace/ui/components/dialog';
 import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Trash2 } from 'lucide-react';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { rangeToA1 } from '../../engine/a1-notation';
 import { useDialogProps } from '../../hooks/useDialog';
@@ -30,6 +31,8 @@ export function ManageRules() {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const rules = orderedRules(findSheet(context, context.currentSheetId)?.conditionalFormats);
+    // The rule whose delete is being asked about.
+    const [deleting, setDeleting] = useState<[string, ConditionalFormatRule]>();
 
     return (
         <FormDialog
@@ -58,7 +61,7 @@ export function ManageRules() {
                                 icon={Trash2}
                                 tooltipText="Delete rule"
                                 className="h-7 w-7 shrink-0"
-                                onClick={() => setContext((ctx) => deleteSheetRule(ctx, id))}
+                                onClick={() => setDeleting([id, rule])}
                             />
                         </div>
                     ))}
@@ -66,6 +69,25 @@ export function ManageRules() {
             )}
 
             <DialogFooter showCloseButton />
+            <ConfirmDialog
+                open={deleting !== undefined}
+                onOpenChange={(open) => !open && setDeleting(undefined)}
+                title="Delete rule?"
+                description={
+                    deleting && (
+                        <>
+                            Delete <strong>{describeRule(deleting[1])}</strong> on{' '}
+                            {deleting[1].ranges.map((range) => rangeToA1(range)).join(', ')}? Its cells lose this
+                            formatting.
+                        </>
+                    )
+                }
+                confirmText="Delete"
+                destructive
+                onConfirm={() => {
+                    if (deleting) setContext((ctx) => deleteSheetRule(ctx, deleting[0]));
+                }}
+            />
         </FormDialog>
     );
 }

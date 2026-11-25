@@ -1,5 +1,5 @@
 // The Manage rules dialog lists the sheet's conditional formats, each with its description and range, and a named
-// delete button that removes that rule at once. It is a list with no submit, so its footer has only Close.
+// delete button that asks first, then removes that rule. It is a list with no submit, so its footer has only Close.
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -56,14 +56,28 @@ test('a sheet with no rules says so', async () => {
     expect(dialog.dialogs()[0]?.textContent).toContain('No rules on this sheet.');
 });
 
-test('each rule has a named delete button that removes it at once', async () => {
+test('each rule has a named delete button that asks, and Delete removes that rule', async () => {
     const dialog = await openManageRules([GREATER_THAN, COLOR_SCALE]);
     expect(dialog.dialogs()[0]?.textContent).toContain('Greater than 3');
     expect(dialog.dialogs()[0]?.textContent).toContain('A1:A4');
     expect(dialog.dialogs()[0]?.textContent).toContain('B2');
     expect(deleteButtons()).toHaveLength(2);
     await act(async () => deleteButtons()[0]?.click());
+    const question = dialog.dialogs().at(-1);
+    expect(question?.querySelector('h2')?.textContent).toBe('Delete rule?');
+    expect(question?.textContent).toContain('Delete Greater than 3 on A1:A4?');
+    expect(formatList(dialog.context().sheets[0]?.conditionalFormats)).toEqual([GREATER_THAN, COLOR_SCALE]);
+    await dialog.click('Delete');
     expect(formatList(dialog.context().sheets[0]?.conditionalFormats)).toEqual([COLOR_SCALE]);
+    expect(dialog.dialogs()).toHaveLength(1);
+    expect(dialog.title()).toBe('Manage rules');
+});
+
+test('Cancel on the question keeps the rule', async () => {
+    const dialog = await openManageRules([GREATER_THAN]);
+    await act(async () => deleteButtons()[0]?.click());
+    await dialog.click('Cancel');
+    expect(formatList(dialog.context().sheets[0]?.conditionalFormats)).toEqual([GREATER_THAN]);
     expect(dialog.dialogs()).toHaveLength(1);
 });
 
