@@ -9,7 +9,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
-import { invalidateTeamRename } from '../../admin/hooks/keys';
+import { invalidateTeamLists } from '../../admin/hooks/keys';
 import { AppError, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { invalidateCalendarList } from '../../calendar/hooks/keys';
@@ -46,7 +46,7 @@ export function useSaveTeamSettings(teamId: string, organizationId: string) {
             if (name !== undefined) {
                 const { error } = await authClient.organization.updateTeam({ teamId, data: { name } });
                 if (error) throw new Error(error.message ?? 'Failed to rename the team');
-                invalidateTeamRename(queryClient, organizationId);
+                invalidateTeamLists(queryClient, organizationId);
             }
             if (calendar) {
                 const res = await calendarApi({ ownerId })

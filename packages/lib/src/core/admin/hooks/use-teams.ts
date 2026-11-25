@@ -12,7 +12,7 @@ import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
 import { invalidateTeamMembers } from '../../team';
-import { adminKeys, invalidateAdminTeams, invalidateAdminUsers, invalidateTeamRename } from './keys';
+import { adminKeys, invalidateAdminTeams, invalidateAdminUsers, invalidateTeamLists } from './keys';
 
 export function useTeams(organizationId: string) {
     const isGuest = useIsGuest();
@@ -69,7 +69,7 @@ export function useRemoveTeam(organizationId: string) {
             return data;
         },
         onSuccess: () => {
-            invalidateTeamRename(queryClient, organizationId);
+            invalidateTeamLists(queryClient, organizationId);
         },
         onError: onMutationError,
     });
