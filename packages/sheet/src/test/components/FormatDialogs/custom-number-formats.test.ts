@@ -4,14 +4,14 @@
 // the mouse or the keyboard.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CustomNumberFormats } = await import('../../../components/FormatDialogs/CustomNumberFormats');
 type Context = import('../../../state').Context;
 
@@ -57,8 +57,8 @@ test('Custom number formats keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: PATTERN,
         onSubmit: form.write,
-        makeChanged: () => typeInto(PATTERN, '0.0'),
-        makeInvalid: () => typeInto(PATTERN, '0[Red'),
+        makeChanged: () => type(PATTERN, '0.0'),
+        makeInvalid: () => type(PATTERN, '0[Red'),
         invalidField: PATTERN,
         savesAtOnce: true,
     });

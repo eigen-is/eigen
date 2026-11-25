@@ -1,8 +1,9 @@
 // What the paragraph format dialogs' tests share, such as Custom spacing's and Indentation options': a doc of formatted
-// paragraphs, each paragraph's stored format read back, and the dialog's fields found by their label and typed into as
-// a person does. Call after happy-dom is installed: React and the editor load only then.
+// paragraphs, each paragraph's stored format read back, and what a field shows. Call after happy-dom is installed:
+// React and the editor load only then.
 
 import type { Editor, JSONContent } from '@tiptap/core';
+import { field } from '@workspace/ui/test/form-contract';
 
 export const paragraphs = (...attrs: Record<string, unknown>[]): JSONContent => ({
     type: 'doc',
@@ -19,24 +20,10 @@ export async function formats(editor: Editor) {
     );
 }
 
-export function control(label: string): HTMLElement | null {
-    const element = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    return element ? document.getElementById(element.htmlFor) : null;
-}
-
 export const value = (label: string) => {
-    const input = control(label);
-    return input instanceof HTMLInputElement ? input.value : input?.textContent;
+    const input = field(label);
+    return input instanceof HTMLInputElement ? input.value : input.textContent;
 };
-
-export async function type(label: string, text: string) {
-    const { act } = await import('react');
-    const input = control(label);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no ${label} field`);
-    // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, text);
-    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
-}
 
 export async function click(element: Element | null | undefined) {
     const { act } = await import('react');

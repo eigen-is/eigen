@@ -7,7 +7,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -129,11 +129,6 @@ const nameField = () => {
     if (!input) throw new Error('the dialog has no name field');
     return input;
 };
-const type = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(nameField(), value);
-        nameField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const click = (target: HTMLButtonElement | undefined) =>
     act(async () => {
         if (!target) throw new Error('nothing to click');
@@ -148,8 +143,8 @@ test('Edit calendar keeps the dialog contract', async () => {
         submitLabel: 'Save',
         firstField: 'Calendar name',
         onSubmit: updateCalendar.mutateAsync,
-        makeChanged: () => type('Office'),
-        makeInvalid: () => type('  '),
+        makeChanged: () => type(nameField(), 'Office'),
+        makeInvalid: () => type(nameField(), '  '),
         invalidField: 'Calendar name',
     });
 });
@@ -161,14 +156,14 @@ test('New calendar says Create, refuses a name of only spaces under the field, t
     expect(button(dialog, 'Delete calendar')).toBeUndefined();
     expect(document.activeElement).toBe(nameField());
 
-    await type('   ');
+    await type(nameField(), '   ');
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(dialog?.querySelector('[data-slot="field-error"]')?.textContent).toBe('Add a name');
     expect(createCalendar.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await type(' Gym ');
+    await type(nameField(), ' Gym ');
     await click(button(dialog, 'Create'));
     await settle();
     expect(createCalendar.mutateAsync.mock.calls).toEqual([
@@ -182,15 +177,10 @@ const shareField = () => {
     if (!input) throw new Error('the dialog has no share field');
     return input;
 };
-const typeShare = (value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(shareField(), value);
-        shareField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
 
 test('a person typed but not added is shared with on Save', async () => {
     await open(calendar({}));
-    await typeShare('bea@example.org');
+    await type(shareField(), 'bea@example.org');
     await click(button(dialogTitled('Edit calendar'), 'Save'));
     await settle();
     expect(updateCalendar.mutateAsync.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -204,7 +194,7 @@ test('a person typed but not added is shared with on Save', async () => {
 
 test('your own address is refused under the share field, and Save stays open with it', async () => {
     await open(calendar({}));
-    await typeShare('Me@test.eigen.is');
+    await type(shareField(), 'Me@test.eigen.is');
     await act(async () => pressEnter(shareField()));
     const message = () => dialogTitled('Edit calendar')?.querySelector('[data-slot="field-error"]')?.textContent;
     expect(message()).toBe('You cannot share a calendar with yourself');
@@ -220,7 +210,7 @@ test('Edit calendar starts from the calendar and saves its name, color and share
     const dialog = dialogTitled('Edit calendar');
     expect(dialog?.querySelector('[data-slot="dialog-description"]')).toBeNull();
     expect(nameField().value).toBe('Work');
-    await type('Office');
+    await type(nameField(), 'Office');
     await click(button(dialog, 'Save'));
     await settle();
     expect(updateCalendar.mutateAsync.mock.calls).toEqual([
@@ -251,7 +241,7 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
 
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes and closes', async () => {
     await open(calendar({}));
-    await type('Office');
+    await type(nameField(), 'Office');
     expect(button(dialogTitled('Edit calendar'), 'Delete calendar')?.dataset.variant).toBe('ghost');
     await click(button(dialogTitled('Edit calendar'), 'Delete calendar'));
     expect(dialogTitled('Delete calendar')?.querySelector('p')?.innerHTML).toBe(

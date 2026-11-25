@@ -2,14 +2,15 @@
 // Yjs document itself. A delete takes the column's cards with it, as one undo step.
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import * as Y from 'yjs';
-import { ColumnTitleField } from './column-title-field';
 
 type ColumnSettingsDialogProps = {
     open: boolean;
@@ -124,7 +125,7 @@ function ColumnSettingsForm({
             onSubmit={handleSubmit}
             footerStart={<TooltipButton icon={Trash2} tooltipText="Delete column" onClick={onDelete} />}
         >
-            <ColumnTitleField value={title} onChange={setTitle} />
+            <RequiredTextField label="Title" value={title} onChange={setTitle} message={FIELD_MESSAGES.titleMissing} />
         </FormDialogForm>
     );
 }

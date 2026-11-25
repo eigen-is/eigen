@@ -4,7 +4,7 @@
 // click in a color swatch's popover picks the color and leaves the dialog open, as a click outside it does not.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { formatList } from '../../state/factories/validations';
@@ -12,7 +12,7 @@ import { formatList } from '../../state/factories/validations';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { ConditionRules } = await import('../../../components/ConditionFormat/ConditionRules');
 
 type RuleType = import('../../../state').ConditionRuleType;
@@ -63,8 +63,8 @@ test('a rule dialog keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: 'Value',
         onSubmit: form.write,
-        makeChanged: () => typeInto('Value', '3'),
-        makeInvalid: () => typeInto('Value', 'abc'),
+        makeChanged: () => type('Value', '3'),
+        makeInvalid: () => type('Value', 'abc'),
         invalidField: 'Value',
         savesAtOnce: true,
     });

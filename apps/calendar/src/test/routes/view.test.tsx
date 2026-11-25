@@ -16,6 +16,7 @@ import type {
     CreateEventInput,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -289,11 +290,7 @@ async function createOnDay(container: HTMLElement, date: string, beforeSave = as
 
     const title = document.querySelector<HTMLInputElement>('input[placeholder="Add title"]');
     if (!title) throw new Error('the dialog has no title field');
-    await act(async () => {
-        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-        setValue?.call(title, '  Dentist  ');
-        title.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(title, '  Dentist  ');
     await beforeSave();
     await click(button('Create'));
     return createEvent.mutateAsync.mock.calls[0]?.[0];
@@ -710,10 +707,7 @@ async function savedTimes() {
     expect(dialogTitle()).toBe('New event');
     const title = document.querySelector<HTMLInputElement>('input[placeholder="Add title"]');
     if (!title) throw new Error('the dialog has no title field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(title, 'Focus');
-        title.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(title, 'Focus');
     await click(button('Create'));
     const input = createEvent.mutateAsync.mock.calls[0]?.[0];
     return { startTime: input?.startTime, endTime: input?.endTime, allDay: input?.allDay };

@@ -26,13 +26,12 @@ import {
     lineNumbers,
 } from '@codemirror/view';
 import { downloadBlob } from '@workspace/lib/download';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ConflictDialog } from './conflict-dialog';
-import { DiscardChangesDialogs } from './discard-changes-dialogs';
 import { EditToolbar } from './editor-toolbar';
 import { useCodeMirrorSearchController } from './use-codemirror-search-controller';
 import { useEditorSave } from './use-editor-save';
@@ -250,24 +249,15 @@ export function CodeEditor({
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const {
-        saveState,
-        atRisk,
-        showConflict,
-        setShowConflict,
-        markDirty,
-        doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
-    } = useEditorSave({
-        ownerId,
-        mountId,
-        pathId,
-        etag,
-        getContent,
-    });
+    const { saveState, atRisk, showConflict, setShowConflict, markDirty, doSave, cancel, discardDialog } =
+        useEditorSave({
+            ownerId,
+            mountId,
+            pathId,
+            etag,
+            getContent,
+            onCancel,
+        });
 
     const handleChange = useCallback(
         (value: string) => {
@@ -289,12 +279,7 @@ export function CodeEditor({
     };
 
     const toolbar = (
-        <EditToolbar
-            onBack={onBack}
-            onCancel={() => confirmClose(onCancel)}
-            onSave={handleSave}
-            isSaving={saveState === 'saving'}
-        >
+        <EditToolbar onBack={onBack} onCancel={cancel} onSave={handleSave} isSaving={saveState === 'saving'}>
             <TooltipButton icon={Undo} tooltipText="Undo" onClick={() => editorViewRef.current?.undo()} />
             <TooltipButton icon={Redo} tooltipText="Redo" onClick={() => editorViewRef.current?.redo()} />
         </EditToolbar>
@@ -330,12 +315,8 @@ export function CodeEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <DiscardChangesDialogs
-                    atRisk={atRisk}
-                    open={showDiscardConfirm}
-                    onConfirm={handleDiscardConfirm}
-                    onCancel={handleDiscardCancel}
-                />
+                {discardDialog}
+                <LeaveGuard active={atRisk} />
             </Column>
         </DocSearchProvider>
     );

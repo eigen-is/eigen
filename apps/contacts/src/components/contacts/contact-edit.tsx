@@ -9,6 +9,7 @@ import { useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -24,7 +25,7 @@ import { useContactAvatarUpload } from '@workspace/ui/components/use-contact-ava
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';
-import type React from 'react';
+import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import type { Control } from 'react-hook-form';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -36,7 +37,7 @@ const formSchema = z
         lastName: z.string(),
         company: z.string(),
         jobTitle: z.string(),
-        email: z.array(z.object({ value: z.email('Enter a valid email address').or(z.literal('')) })),
+        email: z.array(z.object({ value: z.email(FIELD_MESSAGES.invalidEmail).or(z.literal('')) })),
         phone: z.array(z.object({ value: z.string() })),
         address: z.array(
             z.object({
@@ -362,14 +363,14 @@ function formValues(contact: Contact): FormValues {
     return {
         firstName: contact.firstName,
         lastName: contact.lastName,
-        company: contact.company || '',
-        jobTitle: contact.jobTitle || '',
+        company: contact.company ?? '',
+        jobTitle: contact.jobTitle ?? '',
         email: contact.email.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
         phone: contact.phone.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
         address: contact.address?.length ? contact.address : [{}],
-        birthday: contact.birthday || '',
-        notes: contact.notes || '',
-        labels: contact.labels || [],
+        birthday: contact.birthday ?? '',
+        notes: contact.notes ?? '',
+        labels: contact.labels ?? [],
         avatar: contact.avatar ?? null,
     };
 }
@@ -408,7 +409,7 @@ type RepeatableFieldProps = {
     label: string;
     onAdd: () => void;
     className?: string;
-    children: React.ReactNode;
+    children: ReactNode;
 };
 
 function RepeatableField({ label, onAdd, className, children }: RepeatableFieldProps) {

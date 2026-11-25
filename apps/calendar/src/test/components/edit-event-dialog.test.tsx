@@ -8,7 +8,7 @@
 // list with only the guests added or removed there. Copying an invitation's guests saves nothing.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem, UpdateEventInput } from '@workspace/lib/types/calendar';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -190,12 +190,6 @@ const pick = async (from: string, to: string) => {
     if (!option) throw new Error(`the picker has no ${to}`);
     await pointAt(option);
 };
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeInto = (field: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const guestField = () => {
     const field = document.querySelector<HTMLInputElement>('[role="dialog"] #attendee-input');
     if (!field) throw new Error('the dialog has no guest field');
@@ -213,8 +207,8 @@ test('Edit event keeps the dialog contract', async () => {
         submitLabel: 'Save',
         firstField: 'Title',
         onSubmit: updateEvent.mutateAsync,
-        makeChanged: () => typeInto(titleField(), 'Dentist at nine'),
-        makeInvalid: () => typeInto(titleField(), ' '),
+        makeChanged: () => type(titleField(), 'Dentist at nine'),
+        makeInvalid: () => type(titleField(), ' '),
         invalidField: 'Title',
         modEnterFields: ['Guests', 'Description'],
     });
@@ -222,7 +216,7 @@ test('Edit event keeps the dialog contract', async () => {
 
 test('an emptied title says "Add a title" under the field and saves nothing', async () => {
     await open();
-    await typeInto(titleField(), '');
+    await type(titleField(), '');
     await save();
     expect(document.querySelector('[role="dialog"] [data-slot="field-error"]')?.textContent).toBe('Add a title');
     expect(updateEvent.mutateAsync).not.toHaveBeenCalled();
@@ -230,7 +224,7 @@ test('an emptied title says "Add a title" under the field and saves nothing', as
 
 test('a guest typed but not added is saved with the event', async () => {
     await open();
-    await typeInto(guestField(), 'ada@example.org');
+    await type(guestField(), 'ada@example.org');
     await save();
     await settle();
     expect(updateEvent.mutateAsync.mock.calls.at(-1)?.[0].data?.attendees).toEqual([
@@ -339,7 +333,7 @@ test('This event keeps the list a date already holds, and saves the one the user
 });
 
 const addGuest = async (email: string) => {
-    await typeInto(guestField(), email);
+    await type(guestField(), email);
     await act(async () => pressEnter(guestField()));
 };
 // What the last "All events" save posted.

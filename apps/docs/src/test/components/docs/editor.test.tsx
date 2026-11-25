@@ -8,6 +8,7 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -519,13 +520,7 @@ test('Options › Footer format… sets the footer’s distance from the bottom,
     await openMenu('Options');
     expect(menuItems()).not.toContain('Header format…');
     await pick('Footer format…');
-    const field = [...document.querySelectorAll('label')].find(
-        (l) => l.textContent === 'Footer (centimeters from bottom)',
-    );
-    const input = field && document.getElementById(field.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error('no footer distance field');
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '0.8');
-    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
+    await type('Footer (centimeters from bottom)', '0.8');
     await inBrowserFrames(() => button('Apply')?.click());
 
     expect(doc.getMap(PAGE_ROOT).get('footerDistance')).toBe(8);

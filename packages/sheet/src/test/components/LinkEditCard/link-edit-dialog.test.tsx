@@ -3,13 +3,13 @@
 // link card's tests how the dialog opens and comes back from the range picker.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
 const { createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { LinkEditDialog } = await import('../../../components/LinkEditCard/LinkEditDialog');
 type CellLinkType = import('@workspace/lib/sheets').CellLinkType;
 
@@ -45,8 +45,8 @@ test('Insert link keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: 'Display text',
         onSubmit: form.write,
-        makeChanged: () => typeInto('Cell range', 'Sheet1!B2'),
-        makeInvalid: () => typeInto('Cell range', 'A1:'),
+        makeChanged: () => type('Cell range', 'Sheet1!B2'),
+        makeInvalid: () => type('Cell range', 'A1:'),
         invalidField: 'Cell range',
         savesAtOnce: true,
     });
@@ -62,7 +62,7 @@ test('Apply keeps the dialog while the web address is empty', async () => {
 test('an empty cell range says so once Apply is pressed', async () => {
     const dialog = await renderSheetDialog(openLink('cellrange'), { sheets: SHEETS });
     await dialog.click('Apply');
-    expect(problem()).toBe('Enter a cell range');
+    expect(problem()).toBe('Enter a cell range, such as A1:B10');
     expect(document.activeElement).toBe(dialog.field('Cell range'));
     await dialog.type('Cell range', 'A1:');
     expect(problem()).toBe('Please enter a valid cell range, such as Sheet1!A1:C8');

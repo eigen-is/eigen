@@ -5,6 +5,7 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import type { Contact } from '@workspace/lib/types/contact';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -13,6 +14,7 @@ import { toast } from 'sonner';
 installHappyDom();
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realContacts = { ...(await import('@workspace/lib/contacts')) };
 const realPublic = { ...(await import('@workspace/lib/public')) };
 const grace: Contact = {
@@ -23,6 +25,7 @@ const grace: Contact = {
     email: ['Grace@example.com'],
     phone: [],
 };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: { email: 'Me@example.com' } }) }));
 mock.module('@workspace/lib/contacts', () => ({
     ...realContacts,
     useContacts: () => ({ data: [grace] }),
@@ -39,6 +42,7 @@ mock.module('@workspace/lib/public', () => ({
     }),
 }));
 afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/contacts', () => realContacts);
     mock.module('@workspace/lib/public', () => realPublic);
 });
@@ -51,7 +55,7 @@ const { AttendeeEditor, useGuestInput } = await import('../../components/attende
 
 // The editor with the field its dialog owns, as New event and Edit event hold it.
 function Editor({ attendees, onChange }: { attendees: Attendee[]; onChange: (attendees: Attendee[]) => void }) {
-    const input = useGuestInput({ attendees, onChange, currentUserEmail: 'Me@example.com' });
+    const input = useGuestInput({ attendees, onChange });
     return createElement(AttendeeEditor, { attendees, onChange, input });
 }
 
@@ -78,10 +82,7 @@ async function addGuest(typed: string, attendees: Attendee[] = []): Promise<Atte
     const input = document.querySelector<HTMLInputElement>(`input#${label?.htmlFor}`);
     const add = document.querySelector<HTMLButtonElement>('button[aria-label="Add"]');
     if (!input || !add) throw new Error('the editor drew no guest field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, typed);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await type(input, typed);
     await act(async () => add.click());
     return added;
 }

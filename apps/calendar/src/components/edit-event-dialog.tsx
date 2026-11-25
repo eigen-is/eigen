@@ -116,11 +116,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
                 serverAttendees.find((stored) => stored.email.toLowerCase() === guest.email.toLowerCase()) ?? guest,
         ) ?? serverAttendees;
     const attendees = withReplies(typed.attendees);
-    const guestInput = useGuestInput({
-        attendees,
-        onChange: (value) => edit({ attendees: value }),
-        currentUserEmail: user?.email,
-    });
+    const guestInput = useGuestInput({ attendees, onChange: (value) => edit({ attendees: value }) });
     const isRecurring = !!event.rrule;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isFromOthers(event);
@@ -238,7 +234,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
                         onSubmit={async () => {
                             const guests = guestInput.commitGuests();
                             // An invitation's title is the organizer's, so its copy moves whatever the title holds.
-                            if ((!isLinkedEvent && !title.trim()) || !guests) return false;
+                            if ((!isLinkedEvent && !title.trim()) || guests === false) return false;
                             if (crossHomeMove && moveLossReasons.length > 0) {
                                 setShowMoveConfirm(true);
                                 return false;
@@ -247,7 +243,7 @@ export function EditEventDialog({ open, onOpenChange, event, ownerId }: EditEven
                                 setShowRecurringDialog(true);
                                 return false;
                             }
-                            return save('all', guestInput.hasText ? guests : typed.attendees);
+                            return save('all', guests);
                         }}
                     >
                         {isLinkedEvent && (

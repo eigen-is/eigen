@@ -4,7 +4,7 @@
 import { afterAll, mock, test } from 'bun:test';
 import { emptyContact } from '@workspace/lib/constants/contact';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -21,7 +21,7 @@ afterAll(() => {
     mock.module('@workspace/lib/contacts', () => realContacts);
 });
 
-const { act, createElement } = await import('react');
+const { createElement } = await import('react');
 const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
 const { ContactEdit } = await import('../../../components/contacts/contact-edit');
 
@@ -35,21 +35,6 @@ const page = (contact: Contact, isNew: boolean) => () =>
         null,
         createElement(ContactEdit, { contact, isNew, onSave: save, onCancel: () => {} }),
     );
-
-function nameField(label: string): HTMLInputElement {
-    const tag = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = tag && document.getElementById(tag.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-}
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const type = (label: string, value: string) =>
-    act(async () => {
-        const input = nameField(label);
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 
 test('Create contact keeps the page contract', async () => {
     await expectFormContract({

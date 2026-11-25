@@ -4,14 +4,14 @@
 // whole pattern.
 
 import { expect, test } from 'bun:test';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog, sheetDialogForm, typeInto } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CustomDateTimeFormats } = await import('../../../components/FormatDialogs/CustomDateTimeFormats');
 type Context = import('../../../state').Context;
 
@@ -44,8 +44,8 @@ test('Custom date and time formats keeps the dialog contract', async () => {
         submitLabel: 'Apply',
         firstField: SEPARATOR,
         onSubmit: form.write,
-        makeChanged: () => typeInto(SEPARATOR, '-'),
-        makeInvalid: () => typeInto(SEPARATOR, '.,'),
+        makeChanged: () => type(SEPARATOR, '-'),
+        makeInvalid: () => type(SEPARATOR, '.,'),
         invalidField: SEPARATOR,
         savesAtOnce: true,
     });

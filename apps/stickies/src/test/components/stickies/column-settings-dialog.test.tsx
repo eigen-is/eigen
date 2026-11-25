@@ -4,7 +4,7 @@
 // column while it fades out after the delete. The save is one write to the document, so nothing is pending.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import * as Y from 'yjs';
@@ -61,19 +61,6 @@ function Board({ doc }: { doc: Y.Doc }) {
     });
 }
 
-const titleField = () => {
-    const field = document.querySelector('[role="dialog"] input');
-    if (!(field instanceof HTMLInputElement)) throw new Error('no Title field');
-    return field;
-};
-
-// React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-const typeTitle = (text: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(titleField(), text);
-        titleField().dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 // Every open dialog's footer buttons: Column settings' and, above it, its confirmation's.
 const footerButtons = () => [
     ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] [data-slot="dialog-footer"] button'),
@@ -97,21 +84,18 @@ test('Column settings keeps the dialog contract', async () => {
         submitLabel: 'Save',
         firstField: 'Title',
         onSubmit: saved,
-        makeChanged: () => typeTitle('Doing'),
-        makeInvalid: () => typeTitle('  '),
+        makeChanged: () => type('Title', 'Doing'),
+        makeInvalid: () => type('Title', '  '),
         invalidField: 'Title',
-        except: {
-            pending: 'the save is one write to the board document, so there is nothing to wait for',
-            pendingClose: 'the save is one write to the board document, so there is nothing to wait for',
-        },
+        savesAtOnce: true,
     });
 });
 
 test('Column settings saves the trimmed title into the column and closes', async () => {
     const doc = boardDoc();
     ({ unmount } = await renderInDocument(createElement(Board, { doc })));
-    expect(titleField().value).toBe('To do');
-    await typeTitle(' Done  ');
+    expect(field('Title')).toHaveProperty('value', 'To do');
+    await type('Title', ' Done  ');
     await act(async () => button('Save')?.click());
     expect(columnTitle(doc)).toBe('Done');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -140,11 +124,11 @@ test('Column settings: Delete column asks first, then removes the column and its
 
 test("Column settings starts from the column's title again after a Cancel", async () => {
     ({ unmount } = await renderInDocument(createElement(Board, { doc: boardDoc() })));
-    await typeTitle('Doing');
+    await type('Title', 'Doing');
     await act(async () => button('Cancel')?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await act(async () => setOpen(true));
-    expect(titleField().value).toBe('To do');
+    expect(field('Title')).toHaveProperty('value', 'To do');
 });
 
 test('the delete confirmation still names the column and its card while it fades out', async () => {

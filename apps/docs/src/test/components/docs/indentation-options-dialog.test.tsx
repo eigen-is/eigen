@@ -3,10 +3,10 @@
 // on its field, and Apply refuses it.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { expectFormContract } from '@workspace/ui/test/form-contract';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import { button, click, control, formats, message, paragraphs, type, value } from '../../fixtures/paragraph-dialog';
+import { button, click, formats, message, paragraphs, value } from '../../fixtures/paragraph-dialog';
 
 installHappyDom();
 
@@ -46,7 +46,7 @@ async function open(content: JSONContent) {
 }
 
 const pick = async (label: string, option: string) => {
-    await click(control(label));
+    await click(field(label));
     await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === option));
 };
 
@@ -55,7 +55,6 @@ const written = mock(() => {});
 editor.on('update', written);
 
 test('Indentation options keeps the dialog contract', async () => {
-    const atOnce = 'the indent is written to the doc at once, with nothing to wait for';
     await expectFormContract({
         kind: 'dialog',
         render: () => host(paragraphs({})),
@@ -65,7 +64,7 @@ test('Indentation options keeps the dialog contract', async () => {
         makeChanged: () => type('Right', '1'),
         makeInvalid: () => type('Right', '-1'),
         invalidField: 'Right',
-        except: { pending: atOnce, pendingClose: atOnce },
+        savesAtOnce: true,
     });
 });
 
@@ -74,7 +73,7 @@ test('Indentation options opens on no indent in centimeters, and Left with a han
     await open(paragraphs({}));
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Indentation options');
     expect(['Left', 'Right', 'Special indent'].map(value)).toEqual(['0', '0', 'None']);
-    const by = control('By');
+    const by = field('By');
     expect(by instanceof HTMLInputElement && by.disabled).toBe(true);
     await type('Left', '2');
     await pick('Special indent', 'Hanging');
@@ -105,8 +104,8 @@ test('Indentation options refuses a negative indent, on the field that holds it'
     await open(paragraphs({}));
     await type('Left', '-1');
     expect(message()).toBe('Indents must be 0 cm or more.');
-    expect(['Left', 'Right'].map((label) => control(label)?.getAttribute('aria-invalid'))).toEqual(['true', null]);
+    expect(['Left', 'Right'].map((label) => field(label).getAttribute('aria-invalid'))).toEqual(['true', null]);
     await click(button('Apply'));
-    expect(document.activeElement).toBe(control('Left'));
+    expect(document.activeElement).toBe(field('Left'));
     expect(await formats(editor)).toEqual([{}]);
 });
