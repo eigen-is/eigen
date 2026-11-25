@@ -142,7 +142,7 @@ export function MarkdownEditor({
 
     const {
         saveState,
-        unsaved,
+        atRisk,
         showConflict,
         setShowConflict,
         markDirty,
@@ -232,7 +232,7 @@ export function MarkdownEditor({
                     onDownload={handleDownload}
                 />
                 <DiscardChangesDialogs
-                    unsaved={unsaved}
+                    atRisk={atRisk}
                     open={showDiscardConfirm}
                     onConfirm={handleDiscardConfirm}
                     onCancel={handleDiscardCancel}

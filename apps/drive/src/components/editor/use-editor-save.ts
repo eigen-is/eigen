@@ -1,7 +1,7 @@
 // The save story of Drive's inline editors: Mod+S, the dirty state and the discard dialog their Cancel
 // opens. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
-// changed since answers a conflict, which opens the conflict dialog. `unsaved` tells a leave guard whether
-// there is unsaved work; a save in flight is not, unless the user typed after it was sent.
+// changed since answers a conflict, which opens the conflict dialog. `unsaved` says whether there is
+// work to save; `atRisk` adds a save in flight, which a leave guard must not drop since that save may fail.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
@@ -21,6 +21,7 @@ type EditorSaveOptions = {
 type EditorSave = {
     saveState: SaveState;
     unsaved: boolean;
+    atRisk: boolean;
     showConflict: boolean;
     setShowConflict: (open: boolean) => void;
     markDirty: () => void;
@@ -46,6 +47,7 @@ export function useEditorSave({
     const editsRef = useRef(0);
     const fileSave = useFileSave(ownerId, mountId, pathId);
     const unsaved = saveState === 'unsaved' || saveState === 'conflict';
+    const atRisk = unsaved || saveState === 'saving';
 
     const markDirty = useCallback(() => {
         editsRef.current++;
@@ -115,6 +117,7 @@ export function useEditorSave({
     return {
         saveState,
         unsaved,
+        atRisk,
         showConflict,
         setShowConflict,
         markDirty,

@@ -244,7 +244,7 @@ export function CodeEditor({
 
     const {
         saveState,
-        unsaved,
+        atRisk,
         showConflict,
         setShowConflict,
         markDirty,
@@ -323,7 +323,7 @@ export function CodeEditor({
                     onDownload={handleDownload}
                 />
                 <DiscardChangesDialogs
-                    unsaved={unsaved}
+                    atRisk={atRisk}
                     open={showDiscardConfirm}
                     onConfirm={handleDiscardConfirm}
                     onCancel={handleDiscardCancel}

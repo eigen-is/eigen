@@ -158,13 +158,13 @@ test('typing during a save keeps the file unsaved, so leaving still asks', async
     expect(asking()).toBe(true);
 });
 
-test('leaving while a save is in flight goes at once', async () => {
+test('leaving while a save is in flight asks, since that save may still fail', async () => {
     const editor = await openEditor();
     const release = holdSaves();
     await editor.type();
     await editor.click('Save');
     await editor.leaveForRecent();
-    expect(editor.at()).toBe('/recent');
-    expect(asking()).toBe(false);
+    expect(editor.at()).not.toBe('/recent');
+    expect(asking()).toBe(true);
     await release();
 });
