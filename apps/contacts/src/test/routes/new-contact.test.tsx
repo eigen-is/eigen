@@ -131,3 +131,12 @@ test('a second Enter while the saved contact opens creates no second contact', a
     expect(page.location()).toEqual(['/book/all', { contactId: 'c-new' }]);
     held.mockRestore();
 });
+
+test('Cancel leaves for the book at once, without asking about what was typed', async () => {
+    const page = await open();
+    await type(field('First name'), 'Fenna');
+    const cancel = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel');
+    await act(async () => cancel?.click());
+    expect(page.text()).not.toContain('Discard changes?');
+    expect(page.location()).toEqual(['/book/all', {}]);
+});

@@ -201,6 +201,17 @@ test('a second Enter while the saved contact opens sends no second write', async
     held.mockRestore();
 });
 
+test('Cancel goes back to the contact at once, without asking about what was typed', async () => {
+    const page = await open();
+    await type(field('Company'), 'Analytical Engines');
+    const cancel = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel');
+    await act(async () => cancel?.click());
+    await settle();
+    expect(page.text()).not.toContain('Discard changes?');
+    expect(page.pathname()).toBe('/book/all');
+    expect(server.writes).toEqual([]);
+});
+
 test('a sync moves only the fields nobody touched, offers no way to lose the edits, and a Save over it is refused', async () => {
     const page = await open();
     await type(field('Notes'), 'Met at the conference');

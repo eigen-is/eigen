@@ -39,4 +39,4 @@ Click the camera icon at the bottom right of the avatar circle. Choose **Upload 
 
 Click **Create** at the bottom of the form, or press Enter in any field. Contacts takes you back to **My contacts**, where the new entry appears in the list.
 
-To leave without saving, click **Cancel**. If you typed anything, Contacts first asks **Discard changes?**, and leaving the page any other way asks the same.
+To leave without saving, click **Cancel**: what you typed is dropped. If you typed anything and leave the page any other way, such as with the back arrow, Contacts first asks **Discard changes?**.
