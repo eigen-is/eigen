@@ -1,21 +1,20 @@
 // One event as it reads when nobody is editing it, such as a stored occurrence in the calendar's detail dialog or an
-// event an .ics file holds in its quick look: its block with its title and time, a meta line the surface may give,
-// such as its calendar, then its place, guests and description, each under its caption. It is data alone: the surface
-// around it owns answering, editing and deleting, and may add sections of its own, such as the reply to an invitation.
+// event an .ics file holds in its quick look: its title and time as plain rows, with no block, a meta line the surface
+// may give, such as its calendar, then its place, guests and description, each under its caption. It is data alone:
+// the surface around it owns answering, editing and deleting, and may add sections of its own, such as the reply to
+// an invitation.
 
 import { formatEventWhen, rruleToText, viewerTimeZone } from '@workspace/lib/calendar';
 import { remainingLine } from '@workspace/lib/transfer';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
 import type { ReactNode } from 'react';
 import { Badge } from '../badge';
-import { DetailItemBlock, DetailMeta, DetailSection } from '../layout/app/detail-item';
+import { DetailMeta, DetailSection } from '../layout/app/detail-item';
 import { AttendeeList } from './attendee-list';
 
 // `remainingAttendees` counts the guests a payload capped away.
 export type EventDetailCardProps = {
     title: string;
-    // Its calendar's color. A file's event has none, and its block is muted.
-    color?: string;
     status?: CalendarEvent['status'] | null;
     start: Date;
     end: Date;
@@ -34,7 +33,6 @@ export type EventDetailCardProps = {
 
 export function EventDetailCard({
     title,
-    color,
     status,
     start,
     end,
@@ -54,7 +52,8 @@ export function EventDetailCard({
 
     return (
         <div className={className}>
-            <DetailItemBlock title={title || '(No title)'} color={color}>
+            <h2 className="text-xl leading-snug font-medium break-words">{title || '(No title)'}</h2>
+            <div className="mt-1 text-sm">
                 {status === 'cancelled' && (
                     <Badge variant="destructive" className="mb-1">
                         Canceled
@@ -65,7 +64,7 @@ export function EventDetailCard({
                     <p className="text-xs opacity-70">{timezone.split('/').pop()?.replace(/_/g, ' ')} time zone</p>
                 )}
                 {recurrenceText && <p className="text-xs opacity-70 break-words">{recurrenceText}</p>}
-            </DetailItemBlock>
+            </div>
 
             {meta && <DetailMeta>{meta}</DetailMeta>}
 

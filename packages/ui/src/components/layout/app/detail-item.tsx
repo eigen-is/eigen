@@ -1,7 +1,7 @@
-// The parts an opened item's body is built from, so a calendar event and a comment card read as one design in any
+// The parts an opened item's body is built from, so a card, a comment and a calendar event read as one design in any
 // dialog: on top the item's own block, square as its tile is on its surface, in the paler panel tone of its color;
 // under it a muted meta line, such as who created it; then sections under a caption, such as an event's guests or a
-// thread's activity.
+// thread's activity. An opened event takes the meta line and sections without the block.
 
 import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';

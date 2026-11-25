@@ -1,6 +1,6 @@
 // The event detail panel's icon buttons carry their names, so a screen reader can find Edit event and Delete event,
-// and each opens its dialog. Its body is the event's block in its calendar's color, the calendar under it, then the
-// event's sections.
+// and each opens its dialog. Its body is the event's title and time with no
+// block, the calendar under them, then the event's sections.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -109,8 +109,6 @@ async function open(event: CalendarEventOccurrence = dentist) {
     ));
 }
 
-const { colorSurface } = await import('@workspace/ui/lib/color-surface');
-
 const click = (name: string) =>
     act(async () => {
         const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${name}"]`);
@@ -173,11 +171,11 @@ test('deleting a changed occurrence offers no this and following, as it has no r
     expect(options).toEqual(['recurring-this', 'recurring-all']);
 });
 
-test("the event's block is in its calendar's color, with the calendar in the line under it", async () => {
+test("the event has no block, in its calendar's color or not, and the calendar is in the line under it", async () => {
     await open({ ...dentist, location: 'Grote Markt' });
-    const block = document.querySelector<HTMLElement>('[role="dialog"] .eigen-block');
-    expect(block?.querySelector('h2')?.textContent).toBe('Dentist');
-    expect(block?.style.getPropertyValue('--surface-bg')).toBe(colorSurface(work.color, 'panel').style['--surface-bg']);
-    expect(block?.nextElementSibling?.textContent).toBe('Work');
-    expect(block?.parentElement?.querySelector('section h3')?.textContent).toBe('Location');
+    expect(document.querySelector('[role="dialog"] .eigen-block')).toBeNull();
+    const title = document.querySelector<HTMLElement>('[role="dialog"] h2:not(.sr-only)');
+    expect(title?.textContent).toBe('Dentist');
+    expect(title?.nextElementSibling?.nextElementSibling?.textContent).toBe('Work');
+    expect(title?.parentElement?.querySelector('section h3')?.textContent).toBe('Location');
 });

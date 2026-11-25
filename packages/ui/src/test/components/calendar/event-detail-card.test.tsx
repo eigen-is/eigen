@@ -1,8 +1,8 @@
 // The read-only body of an event, drawn from data alone. What is pinned here is the all-day reading —
 // the calendar domain stores midnight UTC with an EXCLUSIVE end, so a one-day event spans two stored
 // dates and must still show one day — plus the two things a file's event carries that a stored one does
-// not always: a cancellation, and guests the payload did not list. It reads as every opened item does: its block,
-// its meta line, then its sections.
+// not always: a cancellation, and guests the payload did not list. It reads as every opened item does, without the
+// block: its title and time, its meta line, then its sections.
 import { expect, mock, test } from 'bun:test';
 import type { EventDetailCardProps } from '../../../components/calendar/event-detail-card';
 import { installHappyDom } from '../../happy-dom';
@@ -60,13 +60,12 @@ test('a canceled event says so', async () => {
     expect(text).toContain('Canceled');
 });
 
-test("an event is its block with title, time, zone and repeat, its meta, then its sections and the surface's own", async () => {
+test("an event is its title, time, zone and repeat with no block, its meta, then its sections and the surface's own", async () => {
     const { container, unmount } = await renderInDocument(
         createElement(
             EventDetailCard,
             {
                 title: 'Autumn market',
-                color: '#3b82f6',
                 start: new Date('2026-09-20T09:00:00Z'),
                 end: new Date('2026-09-20T10:00:00Z'),
                 allDay: false,
@@ -80,11 +79,12 @@ test("an event is its block with title, time, zone and repeat, its meta, then it
             createElement('section', null, 'RSVP'),
         ),
     );
-    const [block, meta, ...sections] = [...(container.firstElementChild?.children ?? [])];
-    expect(block?.className).toContain('eigen-block');
-    expect(block?.querySelector('h2')?.textContent).toBe('Autumn market');
-    expect(block?.textContent).toContain('Amsterdam time zone');
-    expect(block?.textContent).toContain('Every week on Sunday');
+    const [title, when, meta, ...sections] = [...(container.firstElementChild?.children ?? [])];
+    expect(container.querySelector('.eigen-block')).toBeNull();
+    expect(title?.tagName).toBe('H2');
+    expect(title?.textContent).toBe('Autumn market');
+    expect(when?.textContent).toContain('Amsterdam time zone');
+    expect(when?.textContent).toContain('Every week on Sunday');
     expect(meta?.textContent).toBe('Work');
     expect(sections.map((section) => section.querySelector('h3')?.textContent ?? section.textContent)).toEqual([
         'Location',

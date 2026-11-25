@@ -4,7 +4,6 @@
 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
-    getCalendarColor,
     isSeriesOccurrence,
     isTransferableCalendarHome,
     occurrenceScopes,
@@ -196,7 +195,6 @@ export function EventDetailDialog({
 
                     <EventDetailCard
                         title={event.title}
-                        color={getCalendarColor(event, calendar ? [calendar] : [], sharedCalendars)}
                         status={event.status}
                         start={event.startTime}
                         end={event.endTime}
