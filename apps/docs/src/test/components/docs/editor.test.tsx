@@ -1499,7 +1499,7 @@ test('a right-click on a text box offers a writer Cut, Copy and Delete, and Dele
 function writeCard() {
     const card = new Y.Map<unknown>();
     card.set('title', 'Check this');
-    card.set('chatName', 'thread-1');
+    card.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', card);
 }
 
@@ -1518,14 +1518,15 @@ test.each([
     if (!(node instanceof Y.XmlElement)) throw new Error('no node');
     node.setAttribute('commentCardId', 'c1');
     writeCard();
-    await render({ ...WRITER, chatFolderId: 'chats' });
+    await render({ ...WRITER, chatFolderId: 'chat' });
     const mark = bodyView()?.querySelector<HTMLElement>('button[aria-label="Open comment"]');
     if (!mark) throw new Error('no comment mark');
     await act(async () => mark.click());
     expect(commentsPanelShown()).toBe(true);
     // The click writes ?chat=, and the card opens from the URL.
     await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
-    expect(chatParam()).toBe('thread-1');
+    expect(chatParam()).toBe('thread-1.eigenchat');
+    expect(cardDialogText()).not.toContain('This comment was deleted');
 });
 
 // The image's menu asks before it deletes a comment, as a card's own menu does.
@@ -1625,7 +1626,7 @@ test('a press within the pause shows no card, as for a drag-select that starts o
 test('a click on the hover card opens the card beside the comments panel', async () => {
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
-    await render({ ...WRITER, chatFolderId: 'chats' });
+    await render({ ...WRITER, chatFolderId: 'chat' });
     const span = bodyView()?.querySelector('.comment-highlight');
     if (!span) throw new Error('no highlight');
     await moveOver(span);
@@ -1634,6 +1635,7 @@ test('a click on the hover card opens the card beside the comments panel', async
     await act(async () => card?.click());
     expect(commentsPanelShown()).toBe(true);
     expect(cardDialogText()).toContain('Check this');
+    expect(cardDialogText()).not.toContain('This comment was deleted');
     expect(hoverCardShown()).toBeFalsy();
 });
 
@@ -1645,7 +1647,7 @@ test('a resolved comment shows no card from its text, while a corner mark still 
     if (!(equation instanceof Y.XmlElement)) throw new Error('no equation');
     equation.setAttribute('commentCardId', 'c1');
     writeCard();
-    commentRows = [{ chatName: 'thread-1', status: 'resolved', messageCount: 0 }];
+    commentRows = [{ chatName: 'thread-1.eigenchat', status: 'resolved', messageCount: 0 }];
     await render(WRITER);
     await waitUntil(() => bodyEditor().storage.comment.resolvedIds.has('c1'), 'the resolved card');
 
@@ -1909,11 +1911,12 @@ test.each([
     write('default', 'Intro');
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
-    await render({ ...as, chatFolderId: 'chats' });
+    await render({ ...as, chatFolderId: 'chat' });
     await waitUntil(() => palette?.docCommentSearch != null, 'the comment search');
-    await act(async () => palette?.docCommentSearch?.reveal('thread-1'));
+    await act(async () => palette?.docCommentSearch?.reveal('thread-1.eigenchat'));
     expect(commentsPanelShown()).toBe(true);
     await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
+    expect(cardDialogText()).not.toContain('This comment was deleted');
     // The caret goes to the anchor, at the start of the second paragraph, only where the body shows.
     expect(bodyEditor().state.selection.from).toBe(as.isMobile ? 1 : 8);
     expect(bodyView()?.closest('.hidden') != null).toBe(as.isMobile);
