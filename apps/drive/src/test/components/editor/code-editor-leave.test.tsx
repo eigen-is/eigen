@@ -8,8 +8,24 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-// One object, so the editor's save callback keeps its identity across renders.
-const fileSave = { mutateAsync: async (): Promise<EditorSaveResult> => ({ conflict: false, etag: '"saved"' }) };
+// One object, so the editor's save callback keeps its identity across renders. A test that holds `held` keeps
+// every save in flight until it calls release.
+let held: Promise<void> | undefined;
+const fileSave = {
+    mutateAsync: async (): Promise<EditorSaveResult> => {
+        await held;
+        return { conflict: false, etag: '"saved"' };
+    },
+};
+function holdSaves() {
+    let release = () => {};
+    held = new Promise((resolve) => {
+        release = resolve;
+    });
+    return async () => {
+        await act(async () => release());
+    };
+}
 // A copy, because mock.module rewrites a loaded module's exports in place, and afterAll puts the original back.
 const realEditor = { ...(await import('@workspace/lib/editor')) };
 mock.module('@workspace/lib/editor', () => ({ ...realEditor, useFileSave: () => fileSave }));
@@ -25,7 +41,10 @@ const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet
 const { CodeEditor } = await import('../../../components/editor/code-editor');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+afterEach(async () => {
+    held = undefined;
+    await unmount();
+});
 
 async function openEditor() {
     const rootRoute = createRootRoute({ component: Outlet });
@@ -124,4 +143,28 @@ test('the tab asks before it unloads while the file is unsaved, and not after a 
     expect(editor.unload()).toBe(true);
     await editor.click('Save');
     expect(editor.unload()).toBe(false);
+});
+
+test('typing during a save keeps the file unsaved, so leaving still asks', async () => {
+    const editor = await openEditor();
+    const release = holdSaves();
+    await editor.type();
+    await editor.click('Save');
+    await editor.type();
+    await release();
+    expect(editor.unload()).toBe(true);
+    await editor.leaveForRecent();
+    expect(editor.at()).toBe('/edit');
+    expect(asking()).toBe(true);
+});
+
+test('leaving while a save is in flight goes at once', async () => {
+    const editor = await openEditor();
+    const release = holdSaves();
+    await editor.type();
+    await editor.click('Save');
+    await editor.leaveForRecent();
+    expect(editor.at()).toBe('/recent');
+    expect(asking()).toBe(false);
+    await release();
 });

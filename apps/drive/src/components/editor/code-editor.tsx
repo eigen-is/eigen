@@ -246,6 +246,7 @@ export function CodeEditor({
 
     const {
         saveState,
+        unsaved,
         showConflict,
         setShowConflict,
         markDirty,
@@ -335,7 +336,7 @@ export function CodeEditor({
                     onConfirm={handleDiscardConfirm}
                 />
                 <LeaveGuard
-                    active={saveState !== 'saved'}
+                    active={unsaved}
                     title="Discard changes?"
                     description="You have unsaved changes. Discard them?"
                 />

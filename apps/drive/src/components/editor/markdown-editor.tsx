@@ -142,6 +142,7 @@ export function MarkdownEditor({
 
     const {
         saveState,
+        unsaved,
         showConflict,
         setShowConflict,
         markDirty,
@@ -242,7 +243,7 @@ export function MarkdownEditor({
                     onConfirm={handleDiscardConfirm}
                 />
                 <LeaveGuard
-                    active={saveState !== 'saved'}
+                    active={unsaved}
                     title="Discard changes?"
                     description="You have unsaved changes. Discard them?"
                 />
