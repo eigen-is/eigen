@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, kanban, editing]
 related: [stickies/get-started, stickies/move-cards, stickies/delete-cards]
 order: 30
-updated: 2026-11-24
+updated: 2026-11-25
 ---
 
 Cards are the individual items on a Stickies board. Each card has a title, an optional description, and a color. This article covers how to add a new card and how to change a card's content after you've created it.
@@ -28,7 +28,7 @@ To copy a card you already have, hold **Alt** (**Option** on a Mac) while you dr
 ## Edit a card
 
 1. Click the card to open it.
-2. In the card dialog, click the pencil icon (**Edit**) in the strip below the description.
+2. Click the pencil icon (**Edit**) in the bar at the top of the card dialog.
 3. The card's title, description, and color open for editing inside the card.
 4. Change whatever you like, then click **Save**. Click **Cancel** to discard your changes.
 
