@@ -2,6 +2,7 @@
 // and it closes once the action succeeds. With nothing to edit, a server refusal closes it too, since another try gets
 // the same no; a failure another try could get past keeps it open beside the error toast.
 
+import { isRefusal } from '@workspace/lib/api-error';
 import type { ReactNode } from 'react';
 import { useDialogPending } from '../hooks/use-dialog-pending';
 import { Button } from './button';
@@ -31,7 +32,7 @@ export function ConfirmDialog({
     destructive = false,
     onCloseAutoFocus,
 }: ConfirmDialogProps) {
-    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange, closeOnRefusal: true });
+    const { pending, run, handleOpenChange } = useDialogPending({ open, onOpenChange });
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -47,10 +48,14 @@ export function ConfirmDialog({
                     <Button
                         variant={destructive ? 'destructive' : 'default'}
                         // A handler typed as returning nothing may still resolve its mutation's false, which must
-                        // not keep a yes/no open.
+                        // not keep a yes/no open. Its hook toasted a refusal, and another try gets the same no.
                         onClick={() =>
                             run(async () => {
-                                await onConfirm();
+                                try {
+                                    await onConfirm();
+                                } catch (error) {
+                                    if (!isRefusal(error)) throw error;
+                                }
                             })
                         }
                         pending={pending}
