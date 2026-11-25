@@ -12,8 +12,13 @@ export function UnsyncedEditsGuard({ active }: UnsyncedEditsGuardProps) {
     return (
         <LeaveGuard
             active={active}
-            title="Leave without syncing?"
-            description="Edits made while offline have not reached the server yet. If you leave now they are lost."
+            question={{
+                title: 'Leave without syncing?',
+                description:
+                    'Edits made while offline have not reached the server yet. If you leave now they are lost.',
+                cancelText: 'Stay',
+                confirmText: 'Leave',
+            }}
         />
     );
 }

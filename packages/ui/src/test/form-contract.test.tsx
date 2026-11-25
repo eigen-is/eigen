@@ -298,8 +298,6 @@ function PageSample({
                 createElement(LeaveGuard, {
                     key: 'guard',
                     active: name !== 'Notes' && !pending,
-                    title: 'Leave without saving?',
-                    description: 'What you changed is not saved.',
                 }),
         ],
     });
@@ -429,7 +427,7 @@ test('the card Esc probe fails a card whose Esc closes it where Cancel goes back
 });
 
 test('the leave guard probe fails a changed page that leaves without asking', async () => {
-    await expectProbeToFail('leaveGuard', page(false), 'a changed page asks "Leave without saving?"');
+    await expectProbeToFail('leaveGuard', page(false), 'a changed page asks "Discard changes?"');
 });
 
 test('the invalid probe fails a form that saves an invalid value, says nothing, or leaves its bad field unfocused', async () => {

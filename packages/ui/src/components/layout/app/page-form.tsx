@@ -52,11 +52,7 @@ export function PageForm({ onSubmit, changed, onReset, children }: PageFormProps
                     </div>
                 </>
             )}
-            <LeaveGuard
-                active={changed && !pending}
-                title="Leave without saving?"
-                description="Your changes have not been saved. If you leave now they are lost."
-            />
+            <LeaveGuard active={changed && !pending} />
         </FormShell>
     );
 }

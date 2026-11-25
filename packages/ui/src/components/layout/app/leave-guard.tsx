@@ -1,19 +1,21 @@
 // Asks before unsaved work is dropped, such as a page form's draft or a Drive text file's edits, while `active` says
-// something is at risk. An in-app navigation waits on a Stay or Leave question through the router's blocker, and a
-// reload or a closed tab gets the browser's own prompt through its beforeunload. A host renders it beside the work it
-// guards.
+// something is at risk. An in-app navigation waits on the question a form asks before a close, "Discard changes?",
+// through the router's blocker, and a reload or a closed tab gets the browser's own prompt through its beforeunload. A
+// host renders it beside the work it guards.
 
 import { useBlocker } from '@tanstack/react-router';
+import type { ComponentProps } from 'react';
 import { useEffect } from 'react';
+import { DISCARD_CHANGES_QUESTION } from '../../../hooks/use-discard-changes';
 import { ConfirmDialog } from '../../confirm-dialog';
 
 type LeaveGuardProps = {
     active: boolean;
-    title: string;
-    description: string;
+    // For work that is not a form's draft, such as edits made offline.
+    question?: Pick<ComponentProps<typeof ConfirmDialog>, 'title' | 'description' | 'cancelText' | 'confirmText'>;
 };
 
-export function LeaveGuard({ active, title, description }: LeaveGuardProps) {
+export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION }: LeaveGuardProps) {
     const blocker = useBlocker({
         shouldBlockFn: () => active,
         enableBeforeUnload: () => active,
@@ -34,11 +36,8 @@ export function LeaveGuard({ active, title, description }: LeaveGuardProps) {
             onOpenChange={(open) => {
                 if (!open) blocker.reset?.();
             }}
-            title={title}
-            description={description}
+            {...question}
             onConfirm={() => blocker.proceed?.()}
-            cancelText="Stay"
-            confirmText="Leave"
             destructive
         />
     );

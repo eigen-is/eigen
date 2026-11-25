@@ -2,10 +2,18 @@
 // corner X or a click outside a form dialog. The shell hands Radix its onOpenChange: a close discards at once when
 // nothing changed, and otherwise opens the question, whose red Discard discards and whose Keep editing goes back to the
 // form. The shell renders `dialog` beside its own; a button that says it discards, such as Cancel, skips the question.
+// The question's words are shared, so a page's leave guard and an editor's Cancel ask the same.
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { ConfirmDialog } from '../components/confirm-dialog';
+
+export const DISCARD_CHANGES_QUESTION = {
+    title: 'Discard changes?',
+    description: 'What you changed is not saved.',
+    cancelText: 'Keep editing',
+    confirmText: 'Discard',
+} as const;
 
 export function useDiscardChanges({
     open,
@@ -32,12 +40,9 @@ export function useDiscardChanges({
 
     const dialog = (
         <ConfirmDialog
+            {...DISCARD_CHANGES_QUESTION}
             open={asking}
             onOpenChange={setAsking}
-            title="Discard changes?"
-            description="What you changed is not saved."
-            cancelText="Keep editing"
-            confirmText="Discard"
             destructive
             onConfirm={onDiscard}
         />

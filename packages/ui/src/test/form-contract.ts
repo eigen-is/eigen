@@ -206,12 +206,12 @@ async function probeLeaveGuard(form: FormContract) {
     await withForm(form, async ({ leave, at }) => {
         await form.makeChanged();
         await leave();
-        check(at() === HERE && asking('Leave without saving?'), 'a changed page asks "Leave without saving?"');
-        await click(button('Stay'));
-        check(at() === HERE && openForm(form), 'Stay keeps the page and its form');
+        check(at() === HERE && asking('Discard changes?'), 'a changed page asks "Discard changes?"');
+        await click(button('Keep editing'));
+        check(at() === HERE && openForm(form), 'Keep editing keeps the page and its form');
         await leave();
-        await click(button('Leave'));
-        check(at() === ELSEWHERE, 'Leave goes');
+        await click(button('Discard'));
+        check(at() === ELSEWHERE, 'Discard leaves');
         check(calls(form) === 0, 'leaving saves nothing');
     });
 }
