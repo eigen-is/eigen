@@ -2,7 +2,7 @@
 // button. Mail adds the signature to new emails and above the quote in replies and forwards. The editor loads the
 // saved signature once and keeps what the user types through later refetches.
 
-import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { useSaveSignature, useSpaceSettings } from '@workspace/lib/space';
 import { Button } from '@workspace/ui/components/button';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { LoadingState } from '@workspace/ui/components/layout/app';
@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export function SignatureSection() {
     const { data, isLoading } = useSpaceSettings();
-    const update = useUpdateSpaceSettings();
+    const save = useSaveSignature();
     const existing = data?.email?.signatures?.[0];
 
     const [html, setHtml] = useState('');
@@ -34,11 +34,7 @@ export function SignatureSection() {
         // again and drop what is typed meanwhile.
         const id = existing?.id ?? crypto.randomUUID();
         seededRef.current = id;
-        update.mutate({
-            email: {
-                signatures: [{ id, name: existing?.name ?? 'Default', html }],
-            },
-        });
+        save.mutate({ id, name: existing?.name ?? 'Default', html });
     };
 
     return (
@@ -58,8 +54,8 @@ export function SignatureSection() {
                 />
             </div>
             <div className="flex justify-end">
-                <Button onClick={handleSave} disabled={!isDirty || update.isPending}>
-                    {update.isPending ? 'Saving...' : 'Save'}
+                <Button onClick={handleSave} pending={save.isPending} disabled={!isDirty}>
+                    Save
                 </Button>
             </div>
         </div>

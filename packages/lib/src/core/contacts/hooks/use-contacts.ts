@@ -8,6 +8,7 @@ import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
+import { toast } from 'sonner';
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
@@ -58,14 +59,32 @@ export function useUpdateContact() {
     const ownerId = user?.id ?? '';
 
     return useMutation({
-        mutationFn: async ({ id, ...data }: UpdateContactInput & { id: string }) => {
-            const response = await contactsApi({ ownerId }).contacts({ id }).put(data);
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        mutationFn: (contact: UpdateContactInput & { id: string }) => putContact(ownerId, contact),
         onSuccess: () => invalidateContactList(queryClient, ownerId),
         onError: onContactWriteError(queryClient, ownerId, STALE_UPDATE_TOAST),
     });
+}
+
+// The user's own card, saved from Personal info, which then leaves the page: the result shows nowhere, so it toasts.
+export function useUpdateProfile() {
+    const queryClient = useQueryClient();
+    const { user } = useAuth();
+    const ownerId = user?.id ?? '';
+
+    return useMutation({
+        mutationFn: (contact: UpdateContactInput & { id: string }) => putContact(ownerId, contact),
+        onSuccess: () => {
+            invalidateContactList(queryClient, ownerId);
+            toast.success('Profile saved');
+        },
+        onError: onContactWriteError(queryClient, ownerId, STALE_UPDATE_TOAST),
+    });
+}
+
+async function putContact(ownerId: string, { id, ...data }: UpdateContactInput & { id: string }) {
+    const response = await contactsApi({ ownerId }).contacts({ id }).put(data);
+    if (response.error) throw new AppError(response);
+    return response.data;
 }
 
 export function useDeleteContact() {

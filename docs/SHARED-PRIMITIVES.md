@@ -421,7 +421,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useStartServerBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useTeams` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUpdateMemberRole` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
-| `useUpdateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUploadBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useUploadServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useVerifyBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
@@ -515,6 +514,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMeContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
+| `useUpdateProfile` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useDocsTextWidth` | `@workspace/lib/docs` | packages/lib/src/core/docs/hooks/use-docs-text-width.ts |
 | `useFileDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
@@ -620,13 +620,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSearchQuery` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useHardenS3Bucket` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
+| `useSaveServerSettingsPage` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-save-server-settings-page.ts |
 | `useSendTestMail` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-test-mail.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
 | `useServerStatus` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-status.ts |
-| `useUpdateOrgName` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-organization.ts |
-| `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useUpdateServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
+| `useSaveSignature` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useSettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useTheme` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-theme.ts |
@@ -635,11 +635,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
 | `useAddTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useRemoveTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
+| `useSaveTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useTeamMembers` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-members.ts |
 | `useTeamMounts` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUpdateTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
-| `useUpdateTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUploadTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
 | `useDebouncedValue` | `@workspace/lib/use-debounced-value` | packages/lib/src/core/use-debounced-value.ts |
 | `useHeldEtag` | `@workspace/lib/use-held-etag` | packages/lib/src/core/use-held-etag.ts |
@@ -704,7 +704,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (474)
+## Types (475)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -877,6 +877,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailAddress` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EmailSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `EmailSignature` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ExportFormat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

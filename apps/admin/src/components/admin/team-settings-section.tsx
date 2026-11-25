@@ -1,19 +1,19 @@
 // The settings section of a team's admin page: its name and avatar, whether it has a calendar, and the quota
-// overrides that raise its members' storage limits above the server's defaults. Each part saves through its own
-// hook, such as the team settings or the calendar, and a refused save is toasted there.
+// overrides that raise its members' storage limits above the server's defaults. The avatar saves as it changes; the
+// rest saves through one Save, which toasts once, and a refused save is toasted there and keeps the form open.
 
-import { useUpdateTeam } from '@workspace/lib/admin';
-import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
+import { useCalendars } from '@workspace/lib/calendar';
 import { CALENDAR_PERMISSION_LABELS } from '@workspace/lib/constants/calendar';
 import { QUOTA_MIN_MB } from '@workspace/lib/constants/settings';
 import { useHomeDataLabel } from '@workspace/lib/public';
-import { useRemoveTeamAvatar, useTeamSettings, useUpdateTeamSettings, useUploadTeamAvatar } from '@workspace/lib/team';
+import { useRemoveTeamAvatar, useSaveTeamSettings, useTeamSettings, useUploadTeamAvatar } from '@workspace/lib/team';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
 import { CALENDAR_SHARE_PERMISSIONS } from '@workspace/lib/types/calendar';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Button } from '@workspace/ui/components/button';
+import { FieldError } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { SettingsSection } from '@workspace/ui/components/layout/app';
@@ -22,7 +22,7 @@ import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Pencil } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 type TeamSettingsSectionProps = {
     team: OrgTeam;
@@ -42,15 +42,13 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const [draftNotifyMembers, setDraftNotifyMembers] = useState(true);
     const [draftHomeDataMax, setDraftHomeDataMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
-
-    const updateTeam = useUpdateTeam(organizationId);
+    const nameId = useId();
 
     const { data: settings } = useTeamSettings(team.id);
     const calendarEnabled = settings?.calendar?.enabled !== false;
     // A team with its calendar off has no calendar list to fetch: the route answers 404.
     const { data: calendars = [] } = useCalendars(ownerId, !!settings && calendarEnabled);
-    const updateCalendar = useUpdateCalendar(ownerId);
-    const updateSettings = useUpdateTeamSettings(team.id);
+    const save = useSaveTeamSettings(team.id, organizationId);
     const homeDataLabel = useHomeDataLabel();
     const uploadAvatar = useUploadTeamAvatar(team.id);
     const removeAvatar = useRemoveTeamAvatar(team.id);
@@ -68,6 +66,8 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const calendarPermission = defaultCal?.shares?.find((s) => s.targetId === ownerId)?.permission ?? 'read';
     const homeDataTooSmall = draftHomeDataMax !== '' && Number(draftHomeDataMax) < QUOTA_MIN_MB;
     const mountTooSmall = draftMountMax !== '' && Number(draftMountMax) < QUOTA_MIN_MB;
+    const name = draftName.trim();
+    const nameBlank = name === '';
 
     const openSettingsForm = () => {
         setDraftName(team.name);
@@ -80,26 +80,26 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     };
 
     const handleSaveSettings = () => {
-        const name = draftName.trim();
-        if (name && name !== team.name) updateTeam.mutate({ teamId: team.id, name });
-        if (defaultCal && draftCalEnabled) {
-            const existingShares = (defaultCal.shares ?? []).filter((s) => s.targetId !== ownerId);
-            // Members read their team's calendar without a share row, so Can view drops the team's row.
-            const shares =
-                draftCalPermission === 'read'
-                    ? existingShares.length > 0
-                        ? existingShares
-                        : null
-                    : [...existingShares, { targetId: ownerId, permission: draftCalPermission }];
-            updateCalendar.mutate({ id: defaultCal.id, shares });
-        }
-        updateSettings.mutate(
+        if (nameBlank) return;
+        const existingShares = (defaultCal?.shares ?? []).filter((s) => s.targetId !== ownerId);
+        // Members read their team's calendar without a share row, so Can view drops the team's row.
+        const shares =
+            draftCalPermission === 'read'
+                ? existingShares.length > 0
+                    ? existingShares
+                    : null
+                : [...existingShares, { targetId: ownerId, permission: draftCalPermission }];
+        save.mutate(
             {
-                calendar: { enabled: draftCalEnabled },
-                notifyMembers: draftNotifyMembers,
-                memberOverrides: {
-                    homeDataMaxMB: draftHomeDataMax ? Number(draftHomeDataMax) : undefined,
-                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
+                name: name !== team.name ? name : undefined,
+                calendar: defaultCal && draftCalEnabled ? { id: defaultCal.id, shares } : undefined,
+                settings: {
+                    calendar: { enabled: draftCalEnabled },
+                    notifyMembers: draftNotifyMembers,
+                    memberOverrides: {
+                        homeDataMaxMB: draftHomeDataMax ? Number(draftHomeDataMax) : undefined,
+                        defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
+                    },
                 },
             },
             { onSuccess: () => setShowSettingsForm(false) },
@@ -137,8 +137,14 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label>Team name</Label>
-                        <Input value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+                        <Label htmlFor={nameId}>Team name</Label>
+                        <Input
+                            id={nameId}
+                            value={draftName}
+                            onChange={(e) => setDraftName(e.target.value)}
+                            aria-invalid={nameBlank || undefined}
+                        />
+                        {nameBlank && <FieldError>Add a name</FieldError>}
                     </div>
 
                     <Separator />
@@ -222,7 +228,11 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
                         <Button variant="outline" onClick={() => setShowSettingsForm(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSaveSettings} disabled={homeDataTooSmall || mountTooSmall}>
+                        <Button
+                            onClick={handleSaveSettings}
+                            pending={save.isPending}
+                            disabled={homeDataTooSmall || mountTooSmall}
+                        >
                             Save settings
                         </Button>
                     </div>

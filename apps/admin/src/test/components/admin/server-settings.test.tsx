@@ -1,5 +1,5 @@
-// Server settings keeps the page contract, and saves only the drafts that changed: a new organization name alone
-// writes the name and nothing else. Send test mail is a button of its own, so Enter in a field saves rather than
+// Server settings keeps the page contract, and its one save carries only the drafts that changed: a new organization
+// name alone sends the name and nothing else. Send test mail is a button of its own, so Enter in a field saves rather than
 // sending, and a click sends without saving. Each landing link's remove button is named after the link: its title,
 // its URL when the title is empty, or "empty link" for a row with neither, so a screen reader hears which one goes.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
@@ -49,11 +49,11 @@ const SETTINGS: ServerSettings = {
     },
 };
 const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
-const saveOrgName = mock(async (_name: string) => {});
-const saveSettings = mock(async () => ({}));
+const save = mock(async (_parts: object) => null);
 const sendTestMail = mock(() => {});
 afterEach(() => {
-    for (const save of [saveOrgName, saveSettings, sendTestMail]) save.mockClear();
+    save.mockClear();
+    sendTestMail.mockClear();
 });
 
 // The settings hooks and the public config are stubbed so the page needs no server, and the sections this test
@@ -65,11 +65,9 @@ mock.module('@workspace/lib/settings', () => ({
     useServerSettings: () => ({ data: SETTINGS, isLoading: false }),
     useServerS3Config: () => ({ data: undefined }),
     useServerStatus: () => ({ data: undefined }),
-    useUpdateServerSettings: () => ({ ...mutation, mutateAsync: saveSettings }),
-    useUpdateServerS3Config: () => mutation,
+    useSaveServerSettingsPage: () => ({ ...mutation, mutateAsync: save }),
     useCheckS3Connection: () => mutation,
     useHardenS3Bucket: () => mutation,
-    useUpdateOrgName: () => ({ ...mutation, mutateAsync: saveOrgName }),
     useSendTestMail: () => ({ ...mutation, mutate: sendTestMail }),
 }));
 const realPublic = { ...(await import('@workspace/lib/public')) };
@@ -131,7 +129,7 @@ test('Server settings keeps the page contract', async () => {
         render: () => createElement(ServerSettingsPage),
         submitLabel: 'Save',
         firstField: 'Organization name',
-        onSubmit: saveOrgName,
+        onSubmit: save,
         makeChanged: () => type('Organization name', 'Acme Labs'),
         makeInvalid: () => type('Organization name', ' '),
         invalidField: 'Organization name',
@@ -142,8 +140,7 @@ test('a new organization name alone saves the trimmed name and nothing else', as
     await openPage();
     await type('Organization name', ' Acme Labs ');
     await act(async () => pressEnter(field('Organization name')));
-    expect(saveOrgName.mock.calls).toEqual([['Acme Labs']]);
-    expect(saveSettings).not.toHaveBeenCalled();
+    expect(save.mock.calls).toEqual([[{ orgName: 'Acme Labs', s3Config: undefined, settings: undefined }]]);
 });
 
 test('a change put back by hand leaves nothing to save', async () => {
@@ -160,12 +157,14 @@ test('Send test mail sends without saving, and Enter in a field saves rather tha
     expect(send?.type).toBe('button');
     await act(async () => send?.click());
     expect(sendTestMail).toHaveBeenCalledTimes(1);
-    expect(saveSettings).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
 
     await type('Max upload (MB)', '50');
     await act(async () => pressEnter(field('Max upload (MB)')));
     expect(sendTestMail).toHaveBeenCalledTimes(1);
-    expect(saveSettings).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls).toEqual([
+        [{ orgName: undefined, s3Config: undefined, settings: { quotas: { maxUploadSizeMB: 50 } } }],
+    ]);
 });
 
 test("each landing link's remove button is named after the link's title, else its URL", async () => {

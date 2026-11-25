@@ -15,7 +15,7 @@ export type MountSettings = {
     s3Config?: S3Config;
 };
 
-type EmailSignature = {
+export type EmailSignature = {
     id: string;
     name: string;
     html: string;
