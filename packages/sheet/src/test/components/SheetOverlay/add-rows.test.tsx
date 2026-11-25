@@ -1,5 +1,5 @@
-// The add-rows footer under the grid: Add puts the typed number of rows at the bottom, 50 when the field is empty, and a
-// count it can't add says why instead of doing nothing.
+// The add-rows footer under the grid: Add, or Enter in the field, puts the typed number of rows at the bottom, 50 when
+// the field is empty, and a count it can't add says why instead of doing nothing.
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
@@ -39,8 +39,14 @@ async function mount() {
             add.click();
         });
     };
+    const enterRows = async (count: string) => {
+        await act(async () => {
+            field.value = count;
+            field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        });
+    };
     const rows = () => ref.current?.getAllSheets()[0]?.data?.length;
-    return { addRows, rows };
+    return { addRows, enterRows, rows };
 }
 
 test('Add puts the typed number of rows at the bottom, 50 when the field is empty', async () => {
@@ -50,6 +56,12 @@ test('Add puts the typed number of rows at the bottom, 50 when the field is empt
     await addRows('');
     expect(rows()).toBe(63);
     expect(toastError).not.toHaveBeenCalled();
+});
+
+test('Enter in the field adds the rows too', async () => {
+    const { enterRows, rows } = await mount();
+    await enterRows('4');
+    expect(rows()).toBe(14);
 });
 
 test('a count that is no number of rows it can add says so and adds nothing', async () => {
