@@ -1,6 +1,7 @@
 // The Chart panel edits the selected chart's spec and frame through the doc's own undo manager: each change one undo
 // step, a typed title too, and Edit data's Apply one write.
 import { afterEach, describe, expect, test } from 'bun:test';
+import { type as typeInto } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -26,8 +27,6 @@ afterEach(async () => {
     for (const unmount of unmounts) await unmount();
     unmounts = [];
 });
-
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 // A collab editor over `doc` holding one chart, selected, its panel and its Edit data dialog mounted as the editor
 // mounts them: the inserted one, or the one a peer's doc already holds. Every write past the insert would be its own
@@ -125,13 +124,11 @@ const typeInB2 = async (value: string) => {
     });
     await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]'), value);
 };
-const type = (input: HTMLInputElement | null | undefined, value: string) =>
-    act(async () => {
-        if (!input) throw new Error('no field to type in');
-        input.focus();
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+const type = async (input: HTMLInputElement | null | undefined, value: string) => {
+    if (!input) throw new Error('no field to type in');
+    await act(async () => input.focus());
+    await typeInto(input, value);
+};
 // A keydown on the field, returned so the test can see whether the browser's own handling of it was prevented.
 const press = async (input: HTMLInputElement | null, init: KeyboardEventInit) => {
     const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });

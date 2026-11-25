@@ -2,6 +2,7 @@
 // entries, all six at once or one. Each write keeps the node selected, so the panel stays, and the editor redraws.
 import { afterEach, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -154,12 +155,8 @@ const sizeBox = () => document.querySelector<HTMLInputElement>('input[aria-label
 const typeSize = async (size: string) => {
     const box = sizeBox();
     if (!box) throw new Error('no size box');
-    // React reads a typed value through the input's own setter.
-    await act(async () => {
-        box.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(box, size);
-        box.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => box.focus());
+    await type(box, size);
     await act(async () => box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
 };
 const levelLooks = (editor: InstanceType<typeof Editor>) =>

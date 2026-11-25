@@ -3,6 +3,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -335,13 +336,8 @@ test("the size box shows the selection's size, and a typed size replaces Small",
     await act(async () => editor.commands.setTextSelection({ from: 1, to: 10 }));
     expect(box()?.value).toBe('');
 
-    await act(async () => {
-        const input = box();
-        if (!input) return;
-        input.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '14');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await act(async () => box()?.focus());
+    await type('Font size', '14');
     await act(async () => box()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(editor.getJSON().content?.[0]?.content).toEqual([
         {
