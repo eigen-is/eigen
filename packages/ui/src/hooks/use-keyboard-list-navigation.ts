@@ -95,8 +95,8 @@ export function useKeyboardListNavigation<T>({
     // A click on something that can't take focus, such as the detail panel or a toolbar, leaves nothing focused, and
     // so does a page restored from the back/forward cache. Every key here would then do nothing until the user
     // clicked a row again. Turning reclaimFocus back on starts the timer again. That also covers a closed composer
-    // that held the focus, because a focused element that unmounts fires no focusout. An open dialog owns the focus,
-    // such as a Rename whose question just went and whose field gets the focus back a moment later.
+    // that held the focus: its focusout fires as it unmounts, before this effect listens again. An open dialog owns the
+    // focus, such as a Rename whose question just went and whose field gets the focus back a moment later.
     useEffect(() => {
         if (!reclaimFocus) return;
         const focusList = () => {
