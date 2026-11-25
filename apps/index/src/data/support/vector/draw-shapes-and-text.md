@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-11-11
+updated: 2026-11-25
 ---
 
 You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
@@ -79,7 +79,7 @@ Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets
 1. Double-click the chart, or click **Edit data** in the properties panel.
 2. The **Edit data** dialog shows the data as a small spreadsheet: categories down column A, series across row 1, and the category axis title in A1. Click a cell and type to replace it, or double-click it (or press **F2**) to change part of it. Press **Enter** to move down or **Tab** to move right. **Escape** cancels what you typed in a cell. A cell left empty leaves a gap in the chart.
 3. Type in an empty row or column after the data to add a category or a series. To remove one, click its row number or column letter and press **Delete**. **Delete** on selected cells empties them.
-4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
+4. Click **Apply** to update the chart, or **Cancel** to leave it as it was.
 
 You can paste cells copied from a spreadsheet into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values. When a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them. A chart with more data than that, for example from an imported file, opens its data read-only.
 

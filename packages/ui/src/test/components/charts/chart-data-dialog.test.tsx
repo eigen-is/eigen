@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
     applyChartSpecChange,
     DEFAULT_CHART_SERIES_STYLE,
@@ -9,11 +9,13 @@ import {
     parseChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
+import { expectFormContract } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { ChartDataDialog } = await import('../../../components/charts');
 
@@ -72,7 +74,7 @@ afterEach(async () => {
     cleanups = [];
 });
 
-// The dialog over a host that stores `raw`, the spec itself unless a test stores what the type forbids. Save applies
+// The dialog over a host that stores `raw`, the spec itself unless a test stores what the type forbids. Apply applies
 // its change onto what the host stores then, as every host does, and keeps the spec that reads back.
 async function open(spec: InlineSpec, raw: object = spec) {
     const saved: ChartSpec[] = [];
@@ -209,10 +211,10 @@ async function open(spec: InlineSpec, raw: object = spec) {
         await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     };
     const save = async () => {
-        await click(button('Save'));
+        await click(button('Apply'));
         const last = saved.at(-1);
-        if (!last) throw new Error('Save wrote nothing');
-        if (last.data.source !== 'inline') throw new Error('Save wrote range data');
+        if (!last) throw new Error('Apply wrote nothing');
+        if (last.data.source !== 'inline') throw new Error('Apply wrote range data');
         return { ...last, data: last.data };
     };
     return {
@@ -305,7 +307,7 @@ describe('ChartDataDialog: the grid', () => {
         expect((await dialog.save()).axes.x.title.text).toBe('Squads');
     });
 
-    test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
+    test("Apply leaves a peer's category axis title alone when A1 did not change", async () => {
         const dialog = await open(titled('Teams'));
         await dialog.rerender(titled('Squads'));
         await dialog.select(1, 1);
@@ -313,7 +315,7 @@ describe('ChartDataDialog: the grid', () => {
         expect((await dialog.save()).axes.x.title.text).toBe('Squads');
     });
 
-    test('Save writes the grid once, Cancel nothing', async () => {
+    test('Apply writes the grid once, Cancel nothing', async () => {
         const dialog = await open(scores());
         await dialog.click(dialog.button('Cancel'));
         expect(dialog.saved).toEqual([]);
@@ -332,19 +334,19 @@ describe('ChartDataDialog: the grid', () => {
         expect(dialog.dialog().textContent).toContain('read-only');
         expect(dialog.dialog().textContent).toContain('S12');
         expect([...dialog.dialog().querySelectorAll('button')].map((el) => el.textContent?.trim())).not.toContain(
-            'Save',
+            'Apply',
         );
     });
 });
 
-describe('ChartDataDialog: Save is a change', () => {
-    test('Save writes only what the grid changed, so what the chart stores beside it stays', async () => {
+describe('ChartDataDialog: Apply is a change', () => {
+    test('Apply writes only what the grid changed, so what the chart stores beside it stays', async () => {
         const spec = scores();
         const dialog = await open(spec, { ...spec, future: 1, legend: { position: 'inside' } });
         await dialog.select(1, 1);
         await dialog.type('7');
         await dialog.key('Enter');
-        await dialog.click(dialog.button('Save'));
+        await dialog.click(dialog.button('Apply'));
         expect(dialog.changes).toEqual([
             [
                 {
@@ -388,7 +390,7 @@ describe('ChartDataDialog: Save is a change', () => {
         expect(plain.dialog().querySelectorAll('input')).toHaveLength(1);
     });
 
-    test("a peer's series colour, slice colour and title while the dialog is open survive Save", async () => {
+    test("a peer's series colour, slice colour and title while the dialog is open survive Apply", async () => {
         const dialog = await open(scores());
         const peer: InlineSpec = {
             ...scores(),
@@ -609,25 +611,28 @@ describe('ChartDataDialog: growing the grid', () => {
         expect((await full.save()).data.series).toHaveLength(11);
     });
 
-    test('a value that is not a number is flagged and keeps Save off', async () => {
+    test('a value that is not a number is flagged, and Apply refuses it and selects the first such cell', async () => {
         const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.type('lots');
         await dialog.key('Enter');
-        expect(dialog.cell(1, 1).getAttribute('aria-invalid')).toBe('true');
-        expect(dialog.button('Save').disabled).toBe(true);
+        expect(dialog.cell(1, 1).dataset.invalid).toBe('true');
         expect(dialog.dialog().textContent).toContain('Values must be numbers.');
-        await dialog.select(1, 1);
+        await dialog.click(dialog.button('Apply'));
+        expect(dialog.saved).toEqual([]);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B2: lots');
+        expect(dialog.editor().getAttribute('aria-invalid')).toBe('true');
         await dialog.type('7');
         await dialog.key('Enter');
-        expect(dialog.button('Save').disabled).toBe(false);
+        expect(dialog.dialog().textContent).not.toContain('Values must be numbers.');
 
-        // Save with such a value still open flags it rather than writing it.
+        // Apply with such a value still open flags it rather than writing it.
         await dialog.select(2, 2);
         await dialog.type('many');
-        await dialog.click(dialog.button('Save'));
+        await dialog.click(dialog.button('Apply'));
         expect(dialog.saved).toEqual([]);
-        expect(dialog.cell(2, 2).getAttribute('aria-invalid')).toBe('true');
+        expect(dialog.cell(2, 2).dataset.invalid).toBe('true');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('C3: many');
     });
 });
 
@@ -635,7 +640,7 @@ describe('ChartDataDialog: numbers as Sheets shows them', () => {
     test('grouping, a leading currency symbol and a trailing percent read as numbers', async () => {
         const dialog = await open(scores());
         await dialog.paste(1, 1, { 'text/plain': '$1,234.00\n1,234\n12%\n-€5.5' });
-        expect(dialog.button('Save').disabled).toBe(false);
+        expect(dialog.dialog().querySelector('[data-invalid]')).toBeNull();
         expect((await dialog.save()).data.series[0].values).toEqual([1234, 1234, 0.12, -5.5]);
     });
 
@@ -650,7 +655,7 @@ describe('ChartDataDialog: numbers as Sheets shows them', () => {
         for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5', '0x10', '0b11', '$0x10', '0x10%']) {
             const dialog = await open(scores());
             await dialog.paste(1, 1, { 'text/plain': text });
-            expect(dialog.button('Save').disabled).toBe(true);
+            expect(dialog.cell(1, 1).dataset.invalid).toBe('true');
         }
     });
 });
@@ -741,5 +746,80 @@ describe('ChartDataDialog: paste fits the grid', () => {
         const dialog = await open(scores());
         await dialog.paste(0, 1, { 'text/plain': `${'x'.repeat(MAX_CHART_LABEL_LENGTH + 50)}\tB` });
         expect((await dialog.save()).data.series[0].name).toHaveLength(MAX_CHART_LABEL_LENGTH);
+    });
+});
+
+describe('ChartDataDialog: the form', () => {
+    const apply = mock((_change: ChartSpecChange) => {});
+
+    function EditData() {
+        const [open, setOpen] = useState(true);
+        const spec = scores();
+        return createElement(ChartDataDialog, { spec, stored: spec, open, onOpenChange: setOpen, onSave: apply });
+    }
+
+    const cellAt = (row: number, column: number) => {
+        const found = document.querySelector(
+            `[role="row"][aria-rowindex="${row + 2}"] > [aria-colindex="${column + 2}"]`,
+        );
+        if (!found) throw new Error(`no cell ${row}, ${column}`);
+        return found;
+    };
+    const cellEditor = () => {
+        const found = document.querySelector('[role="dialog"] input[data-cell-editor]');
+        if (!(found instanceof HTMLInputElement)) throw new Error('no cell editor');
+        return found;
+    };
+    const select = (row: number, column: number) =>
+        act(async () => {
+            cellAt(row, column).dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        });
+    const typeAndCommit = (text: string) =>
+        act(async () => {
+            setValue?.call(cellEditor(), text);
+            cellEditor().dispatchEvent(new Event('input', { bubbles: true }));
+            cellEditor().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        });
+
+    test('Edit data keeps the dialog contract', async () => {
+        await expectFormContract({
+            kind: 'dialog',
+            render: () => createElement(EditData),
+            submitLabel: 'Apply',
+            firstField: 'A1',
+            onSubmit: apply,
+            // B2 changes, and A1 is selected again, as the dialog opened.
+            makeChanged: async () => {
+                await select(1, 1);
+                await typeAndCommit('7');
+                await select(0, 0);
+            },
+            makeInvalid: async () => {
+                await select(1, 1);
+                await typeAndCommit('lots');
+            },
+            invalidField: 'B2: lots',
+            except: { enter: 'Enter in a cell opens or commits the cell, as in Sheets' },
+        });
+    });
+
+    test('Cmd+Enter in an open cell applies the grid with what it holds', async () => {
+        apply.mockClear();
+        const { unmount } = await renderInDocument(createElement(EditData));
+        await select(1, 1);
+        await act(async () => {
+            setValue?.call(cellEditor(), '7');
+            cellEditor().dispatchEvent(new Event('input', { bubbles: true }));
+            cellEditor().dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+            );
+        });
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(apply).toHaveBeenCalledTimes(1);
+        const [[change]] = apply.mock.calls;
+        expect(parseChartSpec(JSON.stringify(applyChartSpecChange(scores(), change)))?.data).toMatchObject({
+            series: [{ values: [7, 65, 38, 80] }, { values: [58, 47, 71, 63] }],
+        });
+        await unmount();
     });
 });

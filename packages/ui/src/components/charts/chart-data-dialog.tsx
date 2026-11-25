@@ -1,8 +1,9 @@
 // Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with
 // Eigen Sheets' look and keys. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer,
-// empty rows and columns to grow into as far as the inline limits go. The grid edits a draft, so Save is one
-// change of the spec, what the grid changed since it opened, and Cancel leaves it as it was. A chart past the
-// grid's limits (an imported one), or whose data holds what this build can't edit, shows its data read-only.
+// empty rows and columns to grow into as far as the inline limits go. The grid edits a draft, so Apply is one
+// change of the spec, what the grid changed since it opened, and Cancel leaves it as it was; Enter belongs to the
+// cells, and Cmd+Enter applies. A chart past the grid's limits (an imported one), or whose data holds what this
+// build can't edit, shows its data read-only.
 
 import {
     chartSpecChange,
@@ -23,18 +24,12 @@ import {
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
 import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
-import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { FieldError } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { CellRef, Grid, GridSelection, InlineChartSpec } from './chart-data-grid';
 import {
     cellText,
@@ -71,32 +66,20 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
     const unknown = holdsUnknownChartData(stored, spec);
     const readOnly = unknown || exceedsInlineGridLimits(spec.data);
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Edit data</DialogTitle>
-                    <DialogDescription>
-                        {unknown
-                            ? NEWER_CHART_DATA_NOTICE
-                            : readOnly
-                              ? 'This chart has more data than the editor holds, so it opens read-only.'
-                              : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
-                    </DialogDescription>
-                </DialogHeader>
-                {readOnly ? (
-                    <ReadOnlyGrid data={spec.data} />
-                ) : (
-                    <EditableGrid
-                        spec={spec}
-                        onCancel={() => onOpenChange(false)}
-                        onSave={(next) => {
-                            onSave(next);
-                            onOpenChange(false);
-                        }}
-                    />
-                )}
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Edit data"
+            description={
+                unknown
+                    ? NEWER_CHART_DATA_NOTICE
+                    : readOnly
+                      ? 'This chart has more data than the editor holds, so it opens read-only.'
+                      : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'
+            }
+        >
+            {readOnly ? <ReadOnlyGrid data={spec.data} /> : <EditableGrid spec={spec} onSave={onSave} />}
+        </FormDialog>
     );
 }
 
@@ -107,7 +90,7 @@ type InlineChartDataDialogProps = {
     onClose: () => void;
 };
 
-// Edit data opened by a double-click: open at once, closed on Cancel or Save. A chart that can't be drawn, or
+// Edit data opened by a double-click: open at once, closed on Cancel or Apply. A chart that can't be drawn, or
 // that a collaborator deleted or broke meanwhile, has no grid to show, so it closes itself.
 export function InlineChartDataDialog({ spec, stored, onSave, onClose }: InlineChartDataDialogProps) {
     const data = spec?.data.source === 'inline' ? spec.data : null;
@@ -151,16 +134,8 @@ const HIGHLIGHT = 'bg-linear-to-r from-(--sheet-header-highlight) to-(--sheet-he
 // Mounted with the dialog, so every opening starts from the chart as stored. One input sits on the active
 // cell and keeps the focus, invisible until a cell is edited, as Sheets' cell input does: a key lands in
 // it, and a canvas host's clipboard and keys stand down for a focused input.
-function EditableGrid({
-    spec,
-    onCancel,
-    onSave,
-}: {
-    spec: InlineChartSpec;
-    onCancel: () => void;
-    onSave: (change: ChartSpecChange) => void;
-}) {
-    // As the chart was when the dialog opened, so Save writes only what the grid changed since.
+function EditableGrid({ spec, onSave }: { spec: InlineChartSpec; onSave: (change: ChartSpecChange) => void }) {
+    // As the chart was when the dialog opened, so Apply writes only what the grid changed since.
     const [opened] = useState(() => gridOf(spec));
     const [grid, setGrid] = useState(opened);
     const [selection, setSelection] = useState<GridSelection>({
@@ -184,6 +159,7 @@ function EditableGrid({
     const active = selection.anchor;
     const range = rangeOf(selection);
     const invalid = rows.some((row) => !row.cells.every(isNumberText));
+    const messageId = useId();
 
     // The moved end scrolls into view below the header strip and right of the row numbers.
     useLayoutEffect(() => {
@@ -213,7 +189,7 @@ function EditableGrid({
     };
     useLayoutEffect(growReach, []);
 
-    // The open edit lands in the grid; Save and every move go from the committed grid.
+    // The open edit lands in the grid; Apply and every move go from the committed grid.
     const committed = () => {
         if (!editing) return grid;
         const written = writeCell(grid, active, editing.text);
@@ -271,7 +247,7 @@ function EditableGrid({
                 extend({ row: selection.focus.row + arrow[0], column: selection.focus.column + arrow[1] });
             } else commitAndMove(...arrow);
         } else if (e.key === 'Tab') {
-            // Past the grid's edge Tab leaves it, so the keyboard reaches Save.
+            // Past the grid's edge Tab leaves it, so the keyboard reaches Apply.
             const column = active.column + (e.shiftKey ? -1 : 1);
             if (column < 0 || column >= shown.columns) return;
             commitAndMove(0, e.shiftKey ? -1 : 1);
@@ -354,18 +330,24 @@ function EditableGrid({
     const lastRow = shown.rows - 1;
     const lastColumn = shown.columns - 1;
 
+    // A value that isn't a number, an open cell's included, refuses Apply and selects the first such cell.
     const save = () => {
         const final = committed();
-        // An open cell that isn't a number is flagged, as Enter would have left it.
-        if (final.rows.some((row) => !row.cells.every(isNumberText))) {
-            setGrid(final);
-            setEditing(null);
-            return;
+        const row = final.rows.findIndex((r) => !r.cells.every(isNumberText));
+        if (row >= 0) {
+            const column = final.rows[row].cells.findIndex((text) => !isNumberText(text)) + 1;
+            reveal.current = { row: true, column: true };
+            selectCell(final, { row: row + 1, column });
+            return false;
         }
-        onSave(chartSpecChange(specOf(opened, spec), specOf(final, spec)));
+        return onSave(chartSpecChange(specOf(opened, spec), specOf(final, spec)));
     };
+    const changed =
+        chartSpecChange(specOf(opened, spec), specOf(editing ? writeCell(grid, active, editing.text).grid : grid, spec))
+            .length > 0;
 
     const activeText = cellText(grid, active);
+    const activeRefused = active.row > 0 && active.column > 0 && !isNumberText(activeText);
     const label = `${columnIndexToLabel(active.column)}${active.row + 1}${activeText ? `: ${activeText}` : ''}`;
     const box = (top: number, left: number, bottom: number, right: number) => ({
         top: rowTop(top),
@@ -375,7 +357,7 @@ function EditableGrid({
     });
 
     return (
-        <>
+        <FormDialogForm onSubmit={save} changed={changed} submitLabel="Apply">
             {/* eigen-paper: the grid keeps Sheets' light look in dark mode, as the workbook does. isolate
                 keeps the sticky headers' stacking inside the grid. */}
             <div
@@ -459,7 +441,7 @@ function EditableGrid({
                                             role="gridcell"
                                             aria-colindex={column + 2}
                                             aria-selected={rowSelected && column >= range.left && column <= range.right}
-                                            aria-invalid={bad || undefined}
+                                            data-invalid={bad || undefined}
                                             className={cn(
                                                 GRID_LINES,
                                                 'truncate px-1',
@@ -500,6 +482,8 @@ function EditableGrid({
                     // Escape while a cell is open cancels the edit, not the dialog.
                     data-owns-escape={editing ? '' : undefined}
                     aria-label={label}
+                    aria-invalid={activeRefused || undefined}
+                    aria-describedby={invalid ? messageId : undefined}
                     autoComplete="off"
                     spellCheck={false}
                     className={cn(
@@ -526,16 +510,8 @@ function EditableGrid({
                     {clipped === 'typed' ? 'that value was' : 'the rest was'} left out.
                 </p>
             )}
-            {invalid && <p className="text-xs text-destructive">Values must be numbers.</p>}
-            <DialogFooter>
-                <Button variant="outline" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button disabled={invalid} onClick={save}>
-                    Save
-                </Button>
-            </DialogFooter>
-        </>
+            {invalid && <FieldError id={messageId}>Values must be numbers.</FieldError>}
+        </FormDialogForm>
     );
 }
 
