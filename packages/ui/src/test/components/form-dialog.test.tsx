@@ -457,6 +457,25 @@ test('Keep editing after the X goes back to the field last in use, not to the X'
     expect(document.activeElement).toBe(field('Location'));
 });
 
+// The dialog opens on the group, which hands the focus to its checked radio. A click that takes no focus checks the
+// other one, and the group would hand the focus to that.
+test('Keep editing goes back to the radio last in use, not to the one its group picks', async () => {
+    await render({
+        changed: true,
+        fields: createElement(
+            RadioGroup,
+            { defaultValue: 'all' },
+            createElement(RadioGroupItem, { value: 'this', 'aria-label': 'This event' }),
+            createElement(RadioGroupItem, { value: 'all', 'aria-label': 'All events' }),
+        ),
+    });
+    await act(async () => field('This event').click());
+    await pressEscape();
+    await press('Keep editing');
+    await focusReturned();
+    expect(document.activeElement).toBe(field('All events'));
+});
+
 test('Keep editing goes back to the first field once the one last in use is gone', async () => {
     function Fields() {
         const [place, setPlace] = useState(true);

@@ -47,10 +47,14 @@ export function useDiscardChanges({
         else onDiscard();
     };
 
-    // React passes up a focus from a portal too, such as a date picker's popover, which is no field of this form.
-    const onFocus = ({ target, currentTarget }: FocusEvent<HTMLElement>) => {
+    // Where the focus is once the focus is handled, not what took it: a radio group hands it on to a radio. React passes
+    // up a focus from a portal too, such as a date picker's popover, which is no field of this form.
+    const onFocus = ({ currentTarget }: FocusEvent<HTMLElement>) => {
         content.current = currentTarget;
-        if (currentTarget.contains(target) && target.closest('form')) lastField.current = target;
+        const focused = currentTarget.ownerDocument.activeElement;
+        if (focused instanceof HTMLElement && currentTarget.contains(focused) && focused.closest('form')) {
+            lastField.current = focused;
+        }
     };
 
     // The press that asked focused the X, or nothing for a click outside, and Radix would give the focus back to that.
