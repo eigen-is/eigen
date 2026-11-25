@@ -200,8 +200,8 @@ test("a guest's code goes to the address it was sent to, and each refusal reads 
 
     const sent = fetchSpy.mock.calls.map(([url, init]) => [String(url).split('/guest-auth/')[1], init]);
     expect(sent).toEqual([
-        ['request-otp', post({ email: 'joris@example.com' })],
-        ['request-otp', post({ email: 'joris@example.com' })],
+        ['request-otp', { ...post({ email: 'joris@example.com' }), credentials: 'same-origin' }],
+        ['request-otp', { ...post({ email: 'joris@example.com' }), credentials: 'same-origin' }],
         ['verify-otp', { ...post({ email: 'joris@example.com', otp: '123456' }), credentials: 'include' }],
     ]);
 });
@@ -259,7 +259,7 @@ test('a second Enter after the code went through sends nothing while the page re
 
 const post = (body: object) => ({
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
 });
 

@@ -4,8 +4,8 @@
 // connection included, is a toast.
 
 import { useMutation } from '@tanstack/react-query';
-import { API_HOST } from '../../api';
-import { AppError, appErrorFrom, onMutationError } from '../../api-error';
+import { api } from '../../api';
+import { AppError, onMutationError } from '../../api-error';
 
 // An address that is no guest's or has nothing shared with it. A rate limit on asking is no reason to retype it.
 export function isRefusedAddress(error: unknown): boolean {
@@ -19,7 +19,14 @@ export function isRefusedCode(error: unknown): boolean {
 
 export function useRequestGuestCode() {
     return useMutation({
-        mutationFn: (email: string) => postGuestAuth('request-otp', { email }, 'Failed to send code'),
+        mutationFn: async (email: string) => {
+            // No session yet, so the ask goes without the cookies the answer to a code sets.
+            const res = await api['guest-auth']['request-otp'].post(
+                { email },
+                { fetch: { credentials: 'same-origin' } },
+            );
+            throwFailure(res, 'Failed to send code');
+        },
         onError: (error) => {
             if (!isRefusedAddress(error)) onMutationError(error);
         },
@@ -28,28 +35,20 @@ export function useRequestGuestCode() {
 
 export function useVerifyGuestCode() {
     return useMutation({
-        mutationFn: ({ email, otp }: { email: string; otp: string }) =>
-            postGuestAuth('verify-otp', { email, otp }, 'Verification failed', 'include'),
+        mutationFn: async ({ email, otp }: { email: string; otp: string }) => {
+            throwFailure(await api['guest-auth']['verify-otp'].post({ email, otp }), 'Verification failed');
+        },
         onError: (error) => {
             if (!isRefusedCode(error)) onMutationError(error);
         },
     });
 }
 
-// Throws the server's refusal, or `offline` when no answer came. `credentials` lets the answer set the session cookie.
-async function postGuestAuth(
-    route: string,
-    body: object,
+// Eden answers a lost connection with no response at all, which `offline` names.
+function throwFailure(
+    res: { error: { status: unknown; value: unknown } | null; status: number; response?: Response },
     offline: string,
-    credentials?: RequestCredentials,
-): Promise<void> {
-    const res = await fetch(`${API_HOST}/guest-auth/${route}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials,
-        body: JSON.stringify(body),
-    }).catch(() => {
-        throw new Error(offline);
-    });
-    if (!res.ok) throw await appErrorFrom(res);
+) {
+    if (!res.error) return;
+    throw res.response ? new AppError(res) : new Error(offline);
 }
