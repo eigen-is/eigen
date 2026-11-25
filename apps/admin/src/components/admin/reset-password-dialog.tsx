@@ -3,7 +3,7 @@
 // password that is too short is refused under the field.
 
 import { useResetUserPassword } from '@workspace/lib/admin';
-import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
+import { FIELD_MESSAGES, MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Field, FieldContent, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { useFormSubmitted } from '@workspace/ui/components/form-shell';
@@ -72,9 +72,7 @@ function NewPasswordField({
                     aria-invalid={tooShort || undefined}
                     aria-describedby={tooShort ? errorId : undefined}
                 />
-                {tooShort && (
-                    <FieldError id={errorId}>Password must be at least {MIN_PASSWORD_LENGTH} characters</FieldError>
-                )}
+                {tooShort && <FieldError id={errorId}>{FIELD_MESSAGES.passwordTooShort}</FieldError>}
             </FieldContent>
         </Field>
     );

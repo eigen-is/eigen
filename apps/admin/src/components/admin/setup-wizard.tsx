@@ -323,13 +323,10 @@ const usernameOf = (fields: SetupFields) => fields.adminUsername.trim().toLowerC
 function problemsOf(fields: SetupFields): Partial<Record<keyof SetupFields, string>> {
     const username = usernameOf(fields);
     return {
-        orgName: fields.orgName ? undefined : 'Add a name',
+        orgName: fields.orgName ? undefined : FIELD_MESSAGES.nameMissing,
         senderAddress: validateEmailAddress(fields.senderAddress) ? undefined : FIELD_MESSAGES.invalidEmail,
         adminName: fields.adminName.trim() ? undefined : 'Add your name',
         adminUsername: username ? (validateUsername(username) ?? undefined) : 'Add a username',
-        adminPassword:
-            fields.adminPassword.length < MIN_PASSWORD_LENGTH
-                ? `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
-                : undefined,
+        adminPassword: fields.adminPassword.length < MIN_PASSWORD_LENGTH ? FIELD_MESSAGES.passwordTooShort : undefined,
     };
 }
