@@ -4,6 +4,7 @@
 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
+    getCalendarColor,
     isSeriesOccurrence,
     isTransferableCalendarHome,
     occurrenceScopes,
@@ -35,6 +36,7 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { ProgressDialog } from '@workspace/ui/components/drive';
+import { DetailSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserName } from '@workspace/ui/components/user';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
@@ -186,30 +188,44 @@ export function EventDetailDialog({
             >
                 <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
-                        <DialogTitle className="text-xl">{event.title}</DialogTitle>
+                        <DialogTitle className="sr-only">{event.title}</DialogTitle>
                         <DialogDescription className="sr-only">
                             Event time, location, guests and details.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-3">
-                        {/* The title is the dialog's own header, so the card draws everything but it. */}
-                        <EventDetailCard
-                            status={event.status}
-                            start={event.startTime}
-                            end={event.endTime}
-                            allDay={event.allDay}
-                            timezone={event.timezone}
-                            rrule={event.rrule}
-                            location={event.location}
-                            description={event.description}
-                            organizer={event.data?.organizer}
-                            attendees={attendees}
-                        />
-
+                    <EventDetailCard
+                        title={event.title}
+                        color={getCalendarColor(event, calendar ? [calendar] : [], sharedCalendars)}
+                        status={event.status}
+                        start={event.startTime}
+                        end={event.endTime}
+                        allDay={event.allDay}
+                        timezone={event.timezone}
+                        rrule={event.rrule}
+                        location={event.location}
+                        description={event.description}
+                        organizer={event.data?.organizer}
+                        attendees={attendees}
+                        meta={
+                            calendarName && (
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                    <Calendar className="h-3 w-3 shrink-0" />
+                                    <span className="min-w-0 truncate">
+                                        {calendarName}
+                                        {sharedCalendar && !isLinkedEvent && (
+                                            <>
+                                                {' '}
+                                                · Created by <UserName userId={event.createByUserId || undefined} />
+                                            </>
+                                        )}
+                                    </span>
+                                </span>
+                            )
+                        }
+                    >
                         {isLinkedEvent && myAttendeeStatus && (
-                            <div className="pt-3 mt-3 border-t">
-                                <div className="text-sm font-medium mb-2">RSVP</div>
+                            <DetailSection label="RSVP">
                                 <div className="flex gap-2">
                                     {RSVP_CHOICES.map(({ status, icon: Icon, label }) => (
                                         <Button
@@ -235,23 +251,9 @@ export function EventDetailDialog({
                                         </Button>
                                     ))}
                                 </div>
-                            </div>
+                            </DetailSection>
                         )}
-
-                        {calendarName && (
-                            <div className="pt-3 mt-3 border-t flex items-start gap-3">
-                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <div className="text-sm text-muted-foreground min-w-0 break-words">
-                                    {calendarName}
-                                    {sharedCalendar && !isLinkedEvent && (
-                                        <div className="text-xs">
-                                            Created by: <UserName userId={event.createByUserId || undefined} />
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </EventDetailCard>
 
                     <DialogFooter
                         start={

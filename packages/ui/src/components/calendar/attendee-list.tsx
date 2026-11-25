@@ -1,5 +1,5 @@
-// An event's guests, read-only: the organizer first, then everyone else with their reply, under a count and a tally of
-// the replies, with a button that copies the addresses. It also owns how a reply reads, its icon and its label, for
+// An event's guests, read-only: the organizer first, then everyone else with their reply, under a tally of the replies,
+// or their count when the tally is unknown, with a button that copies the addresses. It also owns how a reply reads, its icon and its label, for
 // other views of the guests such as the editor that collects them. It shows wherever someone reads an event's guests,
 // such as its detail card.
 
@@ -39,11 +39,11 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
     const organizerReply = attendees.find((a) => a.email.toLowerCase() === organizerEmail)?.status ?? 'accepted';
 
     const count = filteredAttendees.length + (organizer ? 1 : 0) + remaining;
-    const title = count === 1 ? '1 guest' : `${count} guests`;
-    // The replies of the listed guests are the whole event's only when the payload carried them all.
+    // The host captions the list Guests, so the header is the tally, whose parts add up to the count. The replies of
+    // the listed guests are the whole event's only when the payload carried them all.
     const statuses = filteredAttendees.map((a) => a.status);
     if (organizer) statuses.push(organizerReply);
-    const summary = remaining === 0 ? buildAttendeeSummary(statuses) : '';
+    const title = remaining === 0 ? buildAttendeeSummary(statuses) : `${count} guests`;
 
     const handleCopyEmails = () => {
         const emails = filteredAttendees.map((a) => a.email);
@@ -54,7 +54,6 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
     return (
         <CollapsibleUserList
             title={title}
-            summaryLines={summary ? [summary] : undefined}
             count={count}
             actions={
                 <TooltipButton

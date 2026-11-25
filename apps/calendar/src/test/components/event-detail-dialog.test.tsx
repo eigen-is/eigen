@@ -1,5 +1,6 @@
 // The event detail panel's icon buttons carry their names, so a screen reader can find Edit event and Delete event,
-// and each opens its dialog.
+// and each opens its dialog. Its body is the event's block in its calendar's color, the calendar under it, then the
+// event's sections.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -107,6 +108,8 @@ async function open(event: CalendarEventOccurrence = dentist) {
     ));
 }
 
+const { colorSurface } = await import('@workspace/ui/lib/color-surface');
+
 const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
 const click = (name: string) =>
     act(async () => {
@@ -163,4 +166,13 @@ test('deleting a changed occurrence offers no this and following, as it has no r
     expect(dialogTitles()).toEqual(['Delete recurring event']);
     const options = [...document.querySelectorAll('[role="dialog"] [role="radio"]')].map((radio) => radio.id);
     expect(options).toEqual(['recurring-this', 'recurring-all']);
+});
+
+test("the event's block is in its calendar's color, with the calendar in the line under it", async () => {
+    await open({ ...dentist, location: 'Grote Markt' });
+    const block = document.querySelector<HTMLElement>('[role="dialog"] .eigen-block');
+    expect(block?.querySelector('h2')?.textContent).toBe('Dentist');
+    expect(block?.style.getPropertyValue('--surface-bg')).toBe(colorSurface(work.color, 'panel').style['--surface-bg']);
+    expect(block?.nextElementSibling?.textContent).toBe('Work');
+    expect(block?.parentElement?.querySelector('section h3')?.textContent).toBe('Location');
 });

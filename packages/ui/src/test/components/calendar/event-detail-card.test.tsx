@@ -1,7 +1,8 @@
 // The read-only body of an event, drawn from data alone. What is pinned here is the all-day reading —
 // the calendar domain stores midnight UTC with an EXCLUSIVE end, so a one-day event spans two stored
 // dates and must still show one day — plus the two things a file's event carries that a stored one does
-// not always: a cancellation, and guests the payload did not list.
+// not always: a cancellation, and guests the payload did not list. It reads as every opened item does: its block,
+// its meta line, then its sections.
 import { expect, mock, test } from 'bun:test';
 import type { EventDetailCardProps } from '../../../components/calendar/event-detail-card';
 import { installHappyDom } from '../../happy-dom';
@@ -48,28 +49,66 @@ test('a multi-day all-day event names its last day, not the exclusive bound', as
     expect(text).toContain('Tuesday, 22 Sep 2026');
 });
 
-test('a canceled event says so, whether or not the surface draws the title', async () => {
-    const withTitle = await render({
+test('a canceled event says so', async () => {
+    const text = await render({
         title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
         status: 'cancelled',
     });
-    expect(withTitle).toContain('Canceled');
+    expect(text).toContain('Canceled');
+});
 
-    const titleless = await render({
+test("an event is its block with title, time, zone and repeat, its meta, then its sections and the surface's own", async () => {
+    const { container, unmount } = await renderInDocument(
+        createElement(
+            EventDetailCard,
+            {
+                title: 'Autumn market',
+                color: '#3b82f6',
+                start: new Date('2026-09-20T09:00:00Z'),
+                end: new Date('2026-09-20T10:00:00Z'),
+                allDay: false,
+                timezone: 'Europe/Amsterdam',
+                rrule: 'FREQ=WEEKLY;BYDAY=SU',
+                location: 'Grote Markt',
+                description: 'Bring a bag.',
+                attendees: [{ email: 'ada@example.com', name: 'Ada', status: 'accepted', role: 'required' }],
+                meta: 'Work',
+            },
+            createElement('section', null, 'RSVP'),
+        ),
+    );
+    const [block, meta, ...sections] = [...(container.firstElementChild?.children ?? [])];
+    expect(block?.className).toContain('eigen-block');
+    expect(block?.querySelector('h2')?.textContent).toBe('Autumn market');
+    expect(block?.textContent).toContain('Amsterdam time zone');
+    expect(block?.textContent).toContain('Every week on Sunday');
+    expect(meta?.textContent).toBe('Work');
+    expect(sections.map((section) => section.querySelector('h3')?.textContent ?? section.textContent)).toEqual([
+        'Location',
+        'Guests',
+        'Description',
+        'RSVP',
+    ]);
+    await unmount();
+});
+
+test('an event without a title reads (No title)', async () => {
+    const text = await render({
+        title: '',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
-        status: 'cancelled',
     });
-    expect(titleless).toContain('Canceled');
+    expect(text).toContain('(No title)');
 });
 
 // A payload lists only the first ICS_PREVIEW_MAX_ATTENDEES guests, so the card says how many it is not showing.
 test('the guests an event holds beyond the ones listed are counted', async () => {
     const text = await render({
+        title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
@@ -77,13 +116,14 @@ test('the guests an event holds beyond the ones listed are counted', async () =>
         remainingAttendees: 150,
     });
 
-    // The header counts every guest the event has, not the ones the payload happened to carry.
+    // With no breakdown to show, the header counts every guest the event has, not the ones the payload carried.
     expect(text).toContain('151 guests');
     expect(text).toContain('and 150 more guests');
 });
 
 test('a truncated guest list says nothing about how the event replied', async () => {
     const text = await render({
+        title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
@@ -102,6 +142,7 @@ test('a truncated guest list says nothing about how the event replied', async ()
 
 test('a guest list the payload carried whole keeps its breakdown', async () => {
     const text = await render({
+        title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
@@ -112,10 +153,12 @@ test('a guest list the payload carried whole keeps its breakdown', async () => {
     });
 
     expect(text).toContain('1 accepted, 1 declined');
+    expect(text).not.toContain('2 guests');
 });
 
 test('what the event does not carry draws nothing', async () => {
     const text = await render({
+        title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,

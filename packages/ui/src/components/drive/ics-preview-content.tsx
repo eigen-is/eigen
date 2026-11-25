@@ -1,3 +1,7 @@
+// The quick look of an .ics file, from Drive or from a mail's attachment: what the file asks, such as a cancellation,
+// said once, then each event it holds as the calendar's detail reads one, and a count of the events it does not draw.
+// The server reads the file; this draws its answer.
+
 import { ICS_METHOD_LABEL } from '@workspace/lib/calendar';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { useIcsPreview } from '@workspace/lib/drive';
