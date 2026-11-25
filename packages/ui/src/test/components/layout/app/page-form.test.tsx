@@ -1,7 +1,8 @@
 // A draft page on PageForm keeps the page contract: it opens on its first field, Enter and Cmd+Enter save once, a bad
 // value is pointed at, Save shows that it is busy, and leaving with a change asks. Its Reset and Save show only once
 // something changed, Enter on a page with nothing changed saves nothing, Reset puts back what was saved, and a failed
-// save keeps the draft beside its hook's toast.
+// save keeps the draft beside its hook's toast. An edit opened from a view shows Cancel and Save throughout, and
+// Cancel, or Save with nothing changed, goes back to the view.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { expectFormContract } from '../../../form-contract';
@@ -67,9 +68,9 @@ function nameField(): HTMLInputElement {
 const button = (label: string) =>
     [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
 
-async function openPage() {
+async function openPage(component: () => ReactNode = NamePage) {
     const root = router.createRootRoute({ component: router.Outlet });
-    const page = router.createRoute({ getParentRoute: () => root, path: '/', component: NamePage });
+    const page = router.createRoute({ getParentRoute: () => root, path: '/', component });
     const memory = router.createRouter({
         routeTree: root.addChildren([page]),
         history: router.createMemoryHistory({ initialEntries: ['/'] }),
@@ -124,4 +125,52 @@ test('a saved page hides its footer, and a failed save keeps the draft beside it
     await act(async () => pressEnter(nameField()));
     expect(nameField().value).toBe('Ideas');
     expect(button('Save')?.getAttribute('aria-busy')).toBeNull();
+});
+
+// The same name, edited from a view of it, as a team's settings are.
+function NameView(): ReactNode {
+    const [editing, setEditing] = useState(true);
+    const [name, setName] = useState('Notes');
+    if (!editing) return createElement('button', { type: 'button', onClick: () => setEditing(true) }, 'Edit');
+    return createElement(PageForm, {
+        changed: name !== 'Notes',
+        onCancel: () => setEditing(false),
+        onSubmit: async () => {
+            await save(name);
+            setEditing(false);
+        },
+        children: createElement(Input, {
+            'aria-label': 'Name',
+            value: name,
+            onChange: (event: { target: { value: string } }) => setName(event.target.value),
+        }),
+    });
+}
+
+test('an edit opened from a view keeps the page contract', async () => {
+    await expectFormContract({
+        kind: 'page',
+        render: () => createElement(NameView),
+        submitLabel: 'Save',
+        firstField: 'Name',
+        onSubmit: save,
+        makeChanged: () => type('Plans'),
+    });
+});
+
+test('an edit opened from a view shows Cancel and Save throughout, and Cancel goes back to the view', async () => {
+    await openPage(NameView);
+    expect(button('Reset')).toBeUndefined();
+    expect(button('Save')).toBeDefined();
+    await type('Plans');
+    await act(async () => button('Cancel')?.click());
+    expect(button('Edit')).toBeDefined();
+    expect(save).not.toHaveBeenCalled();
+});
+
+test('Save with nothing changed goes back to the view and saves nothing', async () => {
+    await openPage(NameView);
+    await act(async () => pressEnter(nameField()));
+    expect(button('Edit')).toBeDefined();
+    expect(save).not.toHaveBeenCalled();
 });
