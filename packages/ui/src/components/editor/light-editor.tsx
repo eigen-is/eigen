@@ -20,6 +20,8 @@ type LightEditorProps = {
     // The trimmed html and text of the first parse, so a caller that compares against them sees no change until an edit.
     onReady?: (arg: { editor: Editor; html: string; text: string }) => void;
     placeholder?: string;
+    // The id of the label that names the field, such as a form's "Description".
+    labelledBy?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
     editable?: boolean;
@@ -38,6 +40,7 @@ export function LightEditor({
     onChangeText,
     onReady,
     placeholder,
+    labelledBy,
     toolbar = 'floating',
     className,
     editable = true,
@@ -67,6 +70,7 @@ export function LightEditor({
             attributes: {
                 class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
+                ...(labelledBy ? { 'aria-labelledby': labelledBy } : {}),
             },
             // No equation node either: a pasted equation reads as its linear text.
             transformPastedHTML: mathAsText,
