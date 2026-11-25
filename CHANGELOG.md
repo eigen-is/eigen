@@ -16,6 +16,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 - **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row
 - **Forms** — every form in every app behaves the same. Save waits for what you typed, and a switch saves at once. Esc, the X or a click outside asks "Discard changes?" when something changed, and so does leaving a page with unsaved changes. A problem shows under its field and Save stays clickable. Save shows a spinner while it works, and Cmd+Enter (Ctrl+Enter on Windows) submits from any field. Buttons say Save, Create, Apply or the verb of the job. Delete asks unless you can undo it, and rich-text fields show their placeholder
+- **Slide backgrounds** — two buttons, Apply to following slides and Apply to all slides, copy the current slide's background in one step, in place of the Apply to list and its Apply button
+- **A user's teams in Admin** — the team everyone joins is listed too, so nobody reads "Not in any team yet" while they are in it
 - **Delete in settings dialogs** — a trash icon at the bottom left deletes a label in Contacts, a calendar in Calendar and a column in Stickies, and removes data validation in Sheets
 - **Calendar's sidebar** — the small month sits at the bottom under a line, as wide as the sidebar, and stays in view while a long list of calendars scrolls
 - **Share with team in Calendar** — Edit calendar has **Share with team** at the bottom, as the Share dialog does
