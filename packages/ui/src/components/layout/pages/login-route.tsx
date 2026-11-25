@@ -36,9 +36,10 @@ export function createLoginRouteOptions(fallback = '/') {
             context: { auth: { isAuthenticated: boolean } };
             search: { redirect?: string; email?: string };
         }) => {
-            if (context.auth.isAuthenticated) {
-                throw redirect({ to: search.redirect || fallback });
-            }
+            if (!context.auth.isAuthenticated) return;
+            const target = search.redirect || fallback;
+            // A full URL leaves by a page load; `to` would put this app's basepath in front of it.
+            throw URL.canParse(target) ? redirect({ href: target }) : redirect({ to: target });
         },
     };
 }
