@@ -1,6 +1,7 @@
 // A person list with a menu gives each row a ⋮ button that opens it. A mouse user sees the button on hover only. Tab
 // skips it, since the list's menu key, Shift+F10 or the ContextMenu key, opens the menu of the row under the cursor.
-// The open row has the stripe and the wash, and the cursor on another row the stripe only, as in Mail.
+// The open row has the stripe and the wash, and the cursor on another row the stripe only, as in Mail. An open menu
+// shows its row as it is now, such as a contact a label toggle just changed.
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { expectKeyboardReveal } from '../../hover-reveal';
@@ -9,7 +10,7 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const { DropdownMenuItem } = await import('../../../components/dropdown-menu');
 const { PersonList } = await import('../../../components/user/person-list');
 
@@ -111,4 +112,31 @@ test('the cursor walks the rows in the order they are drawn, a name under # incl
     }
     const drawn = [...container.querySelectorAll('.eigen-list-item')].map((row) => row.textContent);
     expect(opened).toEqual(drawn);
+});
+
+test('an open menu follows its row as the list changes under it', async () => {
+    let rename = (_name: string) => {};
+    function RenamingList() {
+        const [people, setPeople] = useState(PEOPLE);
+        rename = (name) => setPeople([PEOPLE[0], { id: 'grace', name }]);
+        return createElement(PersonList<Person>, {
+            items: people,
+            searchQuery: '',
+            getId: (person) => person.id,
+            getName: (person) => person.name,
+            getSearchFields: (person) => [person.name],
+            onRowClick: () => {},
+            renderPerson: (person) => createElement('span', null, person.name),
+            emptyState: null,
+            renderMenuItems: (items) =>
+                createElement(DropdownMenuItem, null, `Menu of ${items.map((p) => p.name).join(', ')}`),
+        });
+    }
+    await renderInDocument(createElement(RenamingList));
+    const grace = document.querySelectorAll('button[aria-label="More actions"]')[1];
+    await act(async () => {
+        if (grace instanceof HTMLElement) grace.click();
+    });
+    await act(async () => rename('Grace Hopper'));
+    expect(menuRows()).toEqual(['Menu of Grace Hopper']);
 });

@@ -101,11 +101,10 @@ export function PersonList<T>({
             : undefined,
     });
 
-    const menuItems = contextMenu.item
-        ? selection.selectedCount > 1
-            ? selection.selectedItems
-            : [contextMenu.item]
-        : [];
+    // The pressed row as the list holds it now, so a change the menu made, such as a label it toggled, shows in it.
+    const pressed = contextMenu.item;
+    const pressedNow = pressed && (items.find((item) => getId(item) === getId(pressed)) ?? pressed);
+    const menuItems = pressedNow ? (selection.selectedCount > 1 ? selection.selectedItems : [pressedNow]) : [];
 
     return (
         <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>

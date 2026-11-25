@@ -37,7 +37,7 @@ You can assign or remove labels without opening the edit form.
 
 1. Right-click a contact in the list. A menu appears.
 2. Choose **Assign label** to open the label submenu.
-3. Click a label name to toggle it on or off. A tick shows which labels are already assigned.
+3. Click a label name to toggle it on or off. A tick shows which labels are already assigned. The menu stays open, so you can toggle several labels in one go.
 
 You can select several contacts first (hold Ctrl or Cmd while clicking) and assign a label to all of them at once.
 
