@@ -1,8 +1,8 @@
 // Email collaborators: a subject seeded with the file's name, a message seeded with the user's signature, and a copy to
 // self. While the settings load, a loader shows above Cancel and a disabled Send, and the signature is there once they
 // arrive. Send waits until the message says more than the signature, and while the subject or the message is too long.
-// Only a click on Send sends: Enter in the subject does nothing, and Enter in the message starts a new paragraph. A send
-// closes the dialog, and a failed one stays open with what was typed.
+// Send or Cmd+Enter sends, the message as typed: Enter in the subject does nothing, and Enter in the message starts a
+// new paragraph. A send closes the dialog, and a failed one stays open with what was typed.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
@@ -187,6 +187,19 @@ test('Enter in the message starts a new paragraph and sends nothing', async () =
     expect(messageEditor().getHTML()).toBe('<p>Hi.</p><p>Reinder</p>');
     expect(sendEmail).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('Cmd+Enter in the message sends once, with no line break added', async () => {
+    await open();
+    await typeMessage('Hi.');
+    await act(async () => {
+        messageEditor().view.dom.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+        );
+    });
+    await settle();
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(sendEmail.mock.calls[0]?.[0].message).toBe('<p>Hi.Reinder</p>');
 });
 
 test('Send waits for more than the signature, and while the subject or the message is too long', async () => {

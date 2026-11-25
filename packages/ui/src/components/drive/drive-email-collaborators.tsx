@@ -1,7 +1,8 @@
 // The Email collaborators dialog: a message about one Drive file to everyone it is shared with. The server adds a link
 // to the file. Drive's Share dialog and an editor's File menu open it, for example. The subject starts as the file's
 // name, and the message starts as the user's first signature. Send stays disabled until the message says more than the
-// signature. It is also disabled while the subject or the message is too long. Only a click on Send sends the email.
+// signature. It is also disabled while the subject or the message is too long. Send or Cmd+Enter sends the email, and
+// plain Enter never does.
 
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import { useSpaceSettings } from '@workspace/lib/space';
@@ -82,7 +83,7 @@ function EmailCollaboratorsForm({ path, signature }: { path: DrivePath; signatur
                     id="email-subject"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    // An email can't be taken back, so Enter in the subject doesn't send it.
+                    // An email can't be taken back, so plain Enter in the subject doesn't send it. Cmd+Enter does.
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') e.preventDefault();
                     }}
@@ -97,6 +98,7 @@ function EmailCollaboratorsForm({ path, signature }: { path: DrivePath; signatur
                         onChange={setMessage}
                         onChangeText={setMessageText}
                         onReady={({ text }) => setSeedText(text)}
+                        submitOnModEnter
                         placeholder="Write a message..."
                         className="px-3 py-2"
                         containerClassName="min-h-[180px] flex flex-col"
