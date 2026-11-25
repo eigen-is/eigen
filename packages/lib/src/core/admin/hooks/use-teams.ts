@@ -1,7 +1,8 @@
-// The Admin app's hooks for an organization's teams: list, create, rename and remove them, and add or
-// remove members. They call better-auth's organization plugin, which requires an admin. For the teams
-// the current user belongs to, use useMyTeams() from '@workspace/lib/home'; for the members of any team
-// the user can see, use useTeamMembers() from '@workspace/lib/team'.
+// The Admin app's hooks for an organization's teams: list, create and remove them, and add or remove
+// members. They call better-auth's organization plugin, which requires an admin. A rename saves with the
+// team's settings, through useSaveTeamSettings(). For the teams the current user belongs to, use
+// useMyTeams() from '@workspace/lib/home'; for the members of any team the user can see, use
+// useTeamMembers() from '@workspace/lib/team'.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -116,26 +117,6 @@ export function useRemoveTeamMember() {
         },
         onSuccess: (_data, variables) => {
             invalidateTeamMembers(queryClient, variables.teamId);
-            invalidateMyTeams(queryClient);
-            invalidateAdminUsers(queryClient);
-        },
-        onError: onMutationError,
-    });
-}
-
-export function useUpdateTeam(organizationId?: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ teamId, name }: { teamId: string; name: string }) => {
-            const { data, error } = await authClient.organization.updateTeam({
-                teamId,
-                data: { name },
-            });
-            if (error) throw new Error(error.message ?? 'Failed to update team');
-            return data;
-        },
-        onSuccess: () => {
-            invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
             invalidateAdminUsers(queryClient);
         },
