@@ -1,12 +1,14 @@
 // The range picker: a small dialog that names the range selected on the grid, for a link or a validation rule to
 // use. It opens in the slot's non-modal shell, so the grid stays usable to pick on, and its field follows the
-// selection. Its opener decides what OK and Cancel do, such as opening its own dialog again with the pick.
+// selection. Its opener decides what Select and Cancel do, such as opening its own dialog again with the pick. Its
+// form takes Enter and Cmd+Enter as a dialog form does, and Select waits until there is a range.
 
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FieldError } from '@workspace/ui/components/field';
+import { FormShell } from '@workspace/ui/components/form-shell';
 import { Input } from '@workspace/ui/components/input';
-import { cn } from '@workspace/ui/lib/utils';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { getRangetxt, isLinkValid } from '../../state';
 
@@ -23,6 +25,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
     const { context } = useContext(WorkbookContext);
     const [rangeTxt, setRangeTxt] = useState(value);
     const isLink = variant === 'link';
+    const refusalId = useId();
 
     // Only a typed range can be malformed, never one picked on the grid.
     const validity = isLinkValid('cellrange', rangeTxt);
@@ -49,37 +52,46 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
             <DialogHeader>
                 <DialogTitle>Select cell range</DialogTitle>
             </DialogHeader>
-            {isLink ? (
-                <div className="space-y-1.5">
+            <FormShell
+                className="flex flex-col gap-4"
+                onSubmit={() => {
+                    if (invalid) return false;
+                    onConfirm(rangeTxt);
+                }}
+            >
+                {isLink ? (
+                    <div className="space-y-1.5">
+                        <Input
+                            aria-label="Cell range"
+                            aria-invalid={invalid && !!rangeTxt}
+                            aria-describedby={invalid && rangeTxt ? refusalId : undefined}
+                            spellCheck={false}
+                            placeholder="Select cells using the cursor or enter directly"
+                            value={rangeTxt}
+                            onChange={(e) => setRangeTxt(e.target.value)}
+                        />
+                        {invalid && rangeTxt && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
+                    </div>
+                ) : (
+                    // A value display, not a text box. Out of the tab order, Radix doesn't give it the opening focus,
+                    // which would draw it with a ring and its value selected.
                     <Input
                         aria-label="Cell range"
-                        className={cn(invalid && rangeTxt && 'border-destructive')}
-                        spellCheck={false}
-                        placeholder="Select cells using the cursor or enter directly"
+                        readOnly
+                        tabIndex={-1}
+                        placeholder="Select a range of cells"
                         value={rangeTxt}
-                        onChange={(e) => setRangeTxt(e.target.value)}
                     />
-                    {invalid && rangeTxt && <p className="text-xs text-destructive">{validity.tooltip}</p>}
-                </div>
-            ) : (
-                // A value display, not a text box. Out of the tab order, Radix doesn't give it the opening focus, which
-                // would draw it with a ring and its value selected.
-                <Input
-                    aria-label="Cell range"
-                    readOnly
-                    tabIndex={-1}
-                    placeholder="Select a range of cells"
-                    value={rangeTxt}
-                />
-            )}
-            <DialogFooter>
-                <Button variant="outline" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button disabled={invalid} onClick={() => onConfirm(rangeTxt)}>
-                    OK
-                </Button>
-            </DialogFooter>
+                )}
+                <DialogFooter>
+                    <Button variant="outline" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                    <Button type="submit" disabled={!rangeTxt}>
+                        Select
+                    </Button>
+                </DialogFooter>
+            </FormShell>
         </>
     );
 }

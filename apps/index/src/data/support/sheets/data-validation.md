@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-11-20
+updated: 2026-11-25
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -15,9 +15,9 @@ Data validation lets you control what goes into a cell. You can add a dropdown l
 1. Select the cell or cells you want to validate.
 2. Open the **Data** menu and click **Data validation**.
 
-The dialog shows the current selection in the **Cell range** field. You can type a different range there, or click the grid icon next to it to select a range with the mouse. When you confirm the range, the dialog comes back with everything you had filled in.
+The dialog shows the current selection in the **Cell range** field. You can type a different range there, or click the grid icon next to it to select a range with the mouse. When you click **Select**, the dialog comes back with everything you had filled in.
 
-When you click **OK**, Sheets checks the rule first. If something can't be used, such as a range that names no cells or a list with no options, the dialog stays open and a message under the field says what is wrong.
+When you click **Apply**, Sheets checks the rule first. If something can't be used, such as a range that names no cells or a list with no options, the dialog stays open and a message under the field says what is wrong.
 
 If you selected a whole column by clicking its header letter, the field shows it as `B:B`, and the rule covers every row of that column, including the rows below your data. A whole row shows as `2:2`.
 
@@ -26,7 +26,7 @@ If you selected a whole column by clicking its header letter, the field shows it
 1. Under **Validation condition**, choose **Drop-down list** from the menu.
 2. In the field below, type the options separated by commas, for example `Yes,No,Maybe`. To use values from existing cells instead, click the grid icon next to the field and select the range.
 3. Tick **Allow multiple selection** if you want people to be able to pick more than one option from the list.
-4. Click **OK**.
+4. Click **Apply**.
 
 A cell with a dropdown shows a small arrow at its right edge. Click it to open the list of options, or select the cell and press **Alt+Down**.
 
@@ -34,7 +34,7 @@ A cell with a dropdown shows a small arrow at its right edge. Click it to open t
 
 1. Under **Validation condition**, choose **Checkbox**.
 2. Optionally, enter the values that represent the **Selected** (checked) and **Not selected** (unchecked) states.
-3. Click **OK**.
+3. Click **Apply**.
 
 The cell displays a checkbox that toggles between the two values when clicked.
 
@@ -43,7 +43,7 @@ The cell displays a checkbox that toggles between the two values when clicked.
 1. Under **Validation condition**, choose **Number**, **Whole number**, or **Decimal number**, depending on what you need.
 2. Choose a condition from the second menu: **Between**, **Not between**, **Equal to**, **Not equal to**, **Greater than**, **Less than**, **Greater than or equal to**, or **Less than or equal to**.
 3. Enter the value or values the rule compares against.
-4. Click **OK**.
+4. Click **Apply**.
 
 **Text length** follows the same steps and conditions, but checks the number of characters in the cell rather than a numeric value.
 
@@ -52,14 +52,14 @@ The cell displays a checkbox that toggles between the two values when clicked.
 1. Under **Validation condition**, choose **Text**.
 2. Choose a condition: **Includes**, **Does not include**, or **Equal to**.
 3. Type the text the rule checks against.
-4. Click **OK**.
+4. Click **Apply**.
 
 ## Add a date rule
 
 1. Under **Validation condition**, choose **Date**.
 2. Choose a condition: **Between**, **Not between**, **Equal to**, **Not equal to**, **Earlier than**, **Not earlier than**, **Later than**, or **Not later than**.
 3. Enter the date or dates the rule compares against.
-4. Click **OK**.
+4. Click **Apply**.
 
 ## Options that apply to all rules
 
