@@ -53,7 +53,7 @@ export function ConfirmDialog({
                                 await onConfirm();
                             })
                         }
-                        disabled={pending}
+                        pending={pending}
                     >
                         {confirmText}
                     </Button>

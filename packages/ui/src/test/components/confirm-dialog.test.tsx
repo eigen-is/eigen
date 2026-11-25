@@ -57,3 +57,31 @@ test('a refused action closes the dialog', async () => {
 test('an action that may go through on another try keeps the dialog open', async () => {
     expect(await confirmFailingWith(500)).toEqual([]);
 });
+
+test('while its action runs the confirm button shows a spinner, ignores a click and keeps the focus', async () => {
+    let finish = () => {};
+    const onConfirm = mock(() => new Promise<void>((resolve) => (finish = resolve)));
+    const onOpenChange = mock((_open: boolean) => {});
+    ({ unmount } = await renderInDocument(
+        createElement(ConfirmDialog, {
+            open: true,
+            onOpenChange,
+            title: 'Delete team',
+            description: 'Delete it?',
+            confirmText: 'Delete',
+            onConfirm,
+        }),
+    ));
+    const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button')];
+    const [cancel, confirm] = buttons();
+    confirm?.focus();
+    await act(async () => confirm?.click());
+    expect(confirm?.getAttribute('aria-busy')).toBe('true');
+    expect(confirm?.disabled).toBe(false);
+    expect(cancel?.disabled).toBe(true);
+    expect(document.activeElement).toBe(confirm ?? null);
+    await act(async () => confirm?.click());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});

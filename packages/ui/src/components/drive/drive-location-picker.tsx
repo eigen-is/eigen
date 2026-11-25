@@ -22,7 +22,6 @@ import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
-import { EigenLoader } from '../braket/eigen-loader';
 import { DriveLocationField } from './drive-location-field';
 
 type DriveLocationPickerProps = {
@@ -149,8 +148,7 @@ function DriveLocationPickerBody({
                 <Button variant="outline" onClick={onCancel} disabled={pending}>
                     Cancel
                 </Button>
-                <Button onClick={handleSubmit} disabled={pending || !canConfirm}>
-                    {pending && <EigenLoader className="text-current" />}
+                <Button onClick={handleSubmit} disabled={!canConfirm} pending={pending}>
                     {confirmLabel}
                 </Button>
             </DialogFooter>

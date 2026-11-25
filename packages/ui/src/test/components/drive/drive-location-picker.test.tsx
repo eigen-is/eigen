@@ -23,12 +23,9 @@ const { DriveLocationPicker } = await import('../../../components/drive/drive-lo
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function createFailingWith(status: number) {
+// Opens the New folder picker and types a name, as a keystroke does.
+async function openWithName(onConfirm: () => Promise<void>) {
     const onOpenChange = mock((_open: boolean) => {});
-    const failure = new AppError({ error: { status, value: 'No' }, status });
-    // A real mutation hook toasts the error before it rejects, which is what lets the picker keep it to itself.
-    onMutationError(failure);
-    const onConfirm = mock(() => Promise.reject(failure));
     ({ unmount } = await renderInDocument(
         createElement(DriveLocationPicker, {
             open: true,
@@ -47,11 +44,25 @@ async function createFailingWith(status: number) {
     await act(async () => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    const create = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Create');
+    // A pending button's spinner comes before its label.
+    const create = [...document.querySelectorAll('[role="dialog"] button')].find(
+        (b) => b.lastChild?.textContent === 'Create',
+    );
     if (!create) throw new Error('no create button');
-    await act(async () => {
-        create.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    const clickCreate = () =>
+        act(async () => {
+            create.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+    return { input, create, clickCreate, onOpenChange };
+}
+
+async function createFailingWith(status: number) {
+    const failure = new AppError({ error: { status, value: 'No' }, status });
+    // A real mutation hook toasts the error before it rejects, which is what lets the picker keep it to itself.
+    onMutationError(failure);
+    const onConfirm = mock(() => Promise.reject(failure));
+    const { input, clickCreate, onOpenChange } = await openWithName(onConfirm);
+    await clickCreate();
     return { tries: onConfirm.mock.calls.length, closes: onOpenChange.mock.calls, name: input.value };
 }
 
@@ -61,4 +72,16 @@ test('a folder the server refuses keeps the picker open with the typed name', as
 
 test('a name the server refuses keeps the picker open with the typed name', async () => {
     expect(await createFailingWith(422)).toEqual({ tries: 1, closes: [], name: 'Plans' });
+});
+
+test('while the create runs its button shows a spinner and ignores another click', async () => {
+    let finish = () => {};
+    const onConfirm = mock(() => new Promise<void>((resolve) => (finish = resolve)));
+    const { create, clickCreate, onOpenChange } = await openWithName(onConfirm);
+    await clickCreate();
+    expect(create.getAttribute('aria-busy')).toBe('true');
+    await clickCreate();
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
