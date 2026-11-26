@@ -61,11 +61,8 @@ const TOO_LARGE_TO_SHOW = 'Document too large to show';
 // The largest side of an image's screen preview.
 const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
-function textCacheName(drivePath: DrivePath, format: string): string {
-    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
-}
-
-function screenCacheName(drivePath: DrivePath, format: string, ext: 'webp' | 'svg'): string {
+// A cache file is named by the path's version, so an edit misses the old file.
+function versionedName(drivePath: DrivePath, format: string, ext: 'json' | 'webp' | 'svg'): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.${ext}`;
 }
 
@@ -199,9 +196,9 @@ async function getOrCacheImage(
 // A stale value is an earlier version's, served while the current one regenerates.
 type Served<T> = { value: T; stale: boolean };
 
-// A member's first miss is foreground work the request waits on. A visitor's, and a stale regeneration, are background
-// work, which waits behind every foreground job and which the runner may drop under load. A plain file's generator
-// ignores it.
+// A first miss for a reader by name is foreground work the request waits on. Anyone else's, and a stale regeneration,
+// are background work, which waits behind every foreground job and which the runner may drop under load. A plain
+// file's generator ignores it.
 type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
 // The first miss's priority is asked for only on a miss, since deciding it reads the file's ancestors.
@@ -246,7 +243,7 @@ async function getOrCacheText<T>(
     firstMiss: MissPriority,
 ): Promise<Served<T> | null> {
     const pathId = drivePath.id;
-    const cacheName = textCacheName(drivePath, format);
+    const cacheName = versionedName(drivePath, format, 'json');
     const cacheFile = path.join(previewsDir, cacheName);
     const current = await readCachedText(cacheFile, parse);
     if (current !== null) return fresh(current);
@@ -328,7 +325,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
+            versionedName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
             'image/svg+xml',
             async () => {
                 const bytes = await mount.readBytes(drivePath.id);
@@ -343,7 +340,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
+            versionedName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
             'image/webp',
             async () => {
                 const file = await mount.readFile(drivePath.id);
@@ -360,8 +357,8 @@ export async function getScreenPreview(
     return null;
 }
 
-// A collab document's whole state for a reader who gets no socket, garbage-collected as a member's first sync is, so it
-// holds nothing an author deleted. `version` names the stored rows, and the state is cached under it. A build that
+// A collab document's whole state for a reader who is not live, garbage-collected as a live reader's first sync is, so
+// it holds nothing an author deleted. `version` names the stored rows, and the state is cached under it. A build that
 // ran out of time or memory is a document too large, as for an export, and the version is not built again for a while.
 export async function getCollabState(
     mount: Mount,

@@ -20,7 +20,7 @@ import {
     servedFileHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
-import { getReadDrive, getSharedDrive, readImportSourceBytes, transformPriorityFor } from '../lib/drive';
+import { getReadDrive, getReaderAccess, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -79,7 +79,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            const priority = await transformPriorityFor(drive, user, path);
+            const { priority } = await drive.readerAccess(params.mountId, params.pathId, user);
             // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or stop
             // its Worker.
             const result = await drive.withHomeHeld(() =>
@@ -210,8 +210,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return answerPreview(request, set, path, TEXT_FORMAT, async () =>
-                getTextPreview(mount, path, () => transformPriorityFor(drive, user, path)),
+            return answerPreview(request, set, path, TEXT_FORMAT, () =>
+                getTextPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
             );
         },
         // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
@@ -225,8 +229,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, VCARD_FORMAT, async () =>
-                getVCardPreview(mount, path, () => transformPriorityFor(drive, user, path)),
+            return answerPreview(request, set, path, VCARD_FORMAT, () =>
+                getVCardPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -238,8 +246,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, EML_FORMAT, async () =>
-                getEmlPreview(mount, path, () => transformPriorityFor(drive, user, path)),
+            return answerPreview(request, set, path, EML_FORMAT, () =>
+                getEmlPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -251,8 +263,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, ICS_FORMAT, async () =>
-                getIcsPreview(mount, path, () => transformPriorityFor(drive, user, path)),
+            return answerPreview(request, set, path, ICS_FORMAT, () =>
+                getIcsPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },

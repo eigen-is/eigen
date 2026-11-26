@@ -1,7 +1,7 @@
 // The Drive HTTP routes about who may use a path and what happens to it: its ACL, its members, the
 // caller's permissions, mail to its collaborators, access requests, its history and its watchers. Each
 // gets its drive from getSharedDrive, which checks the access, except an access request, which comes
-// from someone who has none yet, and the caller's permissions, which readPermissions answers for a
+// from someone who has none yet, and the caller's permissions, which getReaderAccess answers for a
 // visitor without a login too. Guests can't share, so the sharing routes refuse them.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
@@ -17,7 +17,7 @@ import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import type { Static } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest } from '../lib/auth/access';
-import { getSharedDrive, readPermissions } from '../lib/drive';
+import { getReaderAccess, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
@@ -162,7 +162,8 @@ export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
     .get(
         '/drive/:ownerId/:mountId/path/:pathId/permissions',
         async ({ params, user }): Promise<DrivePathPermissions> => {
-            return readPermissions(params.ownerId, params.mountId, params.pathId, user);
+            const { canRead, canWrite } = await getReaderAccess(params.ownerId, params.mountId, params.pathId, user);
+            return { canRead, canWrite };
         },
         { linkAuth: true },
     )

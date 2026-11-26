@@ -24,7 +24,7 @@ type RequestAccessViewProps = {
 };
 
 export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessViewProps) {
-    const auth = useAuth();
+    const { user } = useAuth();
     const isGuest = useIsGuest();
     const { setSidebarHidden } = useLayout();
     const { data: owner } = usePublicUser(ownerId);
@@ -33,7 +33,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
     const [showMessage, setShowMessage] = useState(false);
     const { pending, run } = useDialogPending();
     const router = useRouter();
-    const signedOut = !auth.user;
+    const signedOut = !user;
 
     useEffect(() => {
         setSidebarHidden(true);
@@ -45,7 +45,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
         if (signedOut) router.navigate({ ...loginLocation(router.state.location), replace: true });
     }, [signedOut, router]);
 
-    if (!auth.user) return null;
+    if (signedOut) return null;
 
     return (
         <div className="flex flex-col items-center justify-center h-full w-full gap-6 p-8 text-center">
@@ -99,7 +99,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
                 </FormShell>
             )}
 
-            <p className="text-xs text-muted-foreground">Signed in as {auth.user.email}</p>
+            <p className="text-xs text-muted-foreground">Signed in as {user.email}</p>
         </div>
     );
 }

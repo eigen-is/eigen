@@ -1,15 +1,11 @@
 // The way a route gets at a drive. The owner gets their own Drive. Anyone else who is signed in gets a
 // SharedDrive, which checks their access before every call. A visitor without a login gets a LinkDrive,
 // which reads only what a public link opens. What a caller may do with a path, signed in or not, is answered here too,
-// whether they sync it over the collab socket, and at which priority a transform for them runs.
+// such as whether they sync it over the collab socket.
 
-import type { DrivePath } from '@workspace/lib/types/drive';
-import type { DrivePathPermissions } from '@workspace/lib/types/drive-access';
-import type { TransformPriority } from '../document/transform/runner';
 import { getHome } from '../home';
 import type { User } from '../user';
-import { getMemberships } from '../user';
-import { canReadByNameFromAncestors } from './acl';
+import type { ReaderAccess } from './acl';
 import type { Drive } from './drive';
 import { LinkDrive } from './link-drive';
 import { SharedDrive } from './shared-drive';
@@ -32,7 +28,7 @@ export async function getSharedDrive(ownerId: string, user: User): Promise<Drive
 }
 
 // A visitor has no home of their own, so the request opens only the home its URL names.
-export async function getLinkDrive(ownerId: string): Promise<LinkDrive> {
+async function getLinkDrive(ownerId: string): Promise<LinkDrive> {
     const home = await getHome(ownerId); // ownerId-routed: the request is for this owner's home
     return new LinkDrive(home);
 }
@@ -41,43 +37,14 @@ export async function getReadDrive(ownerId: string, user: User | null): Promise<
     return user ? getSharedDrive(ownerId, user) : getLinkDrive(ownerId);
 }
 
-// A visitor never writes, and a member's read and write take the user.
-export async function readPermissions(
+// A visitor never writes, syncs nothing over the collab socket and waits behind every reader by name.
+export async function getReaderAccess(
     ownerId: string,
     mountId: string,
     pathId: string,
     user: User | null,
-): Promise<DrivePathPermissions> {
-    if (!user) return { canRead: await (await getLinkDrive(ownerId)).canRead(mountId, pathId), canWrite: false };
-    const drive = await getSharedDrive(ownerId, user);
-    const [canRead, canWrite] = await Promise.all([
-        drive.canRead(mountId, pathId, user),
-        drive.canWrite(mountId, pathId, user),
-    ]);
-    return { canRead, canWrite };
-}
-
-// A visitor is never live: only someone signed in opens the collab socket.
-export async function isLiveReader(
-    ownerId: string,
-    mountId: string,
-    pathId: string,
-    user: User | null,
-): Promise<boolean> {
-    if (!user) return false;
-    return (await getSharedDrive(ownerId, user)).isLiveReader(mountId, pathId, user);
-}
-
-// An export, or a preview that isn't cached yet, runs at foreground priority only for someone who reads the file by
-// name, such as its owner or a person its ACL names. Whoever reads it only through a link or "Anyone signed in", signed
-// in or not, waits behind them, so a burst of link views can't take the one transform queue from the people the files
-// are shared with.
-export async function transformPriorityFor(
-    drive: DriveLike | LinkDrive,
-    user: User | null,
-    path: DrivePath,
-): Promise<TransformPriority> {
-    if (!user) return 'background';
-    const chain = await drive.breadCrumb(path.mountId, path.id);
-    return canReadByNameFromAncestors(chain, user, await getMemberships(user.id)) ? 'foreground' : 'background';
+): Promise<ReaderAccess> {
+    if (user) return (await getSharedDrive(ownerId, user)).readerAccess(mountId, pathId, user);
+    const canRead = await (await getLinkDrive(ownerId)).canRead(mountId, pathId);
+    return { canRead, canWrite: false, live: false, priority: 'background' };
 }

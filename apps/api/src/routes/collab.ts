@@ -27,7 +27,7 @@ import { EMPTY_AWARENESS_MESSAGE, startLoadingHeartbeat } from '../lib/collab/lo
 import { ApiError } from '../lib/core/errors';
 import { answerRevalidated } from '../lib/core/http';
 import { readCollabStateVersion } from '../lib/document/transform/collab-source';
-import { getReadDrive, getSharedDrive, isLiveReader, readPermissions, transformPriorityFor } from '../lib/drive';
+import { getReadDrive, getReaderAccess, getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
@@ -61,13 +61,17 @@ export const collabRouter = new Elysia({
     .get(
         '/collab/:ownerId/:mountId/:pathId/info',
         async ({ params, user }): Promise<CollabDocumentInfo> => {
-            const permissions = await readPermissions(params.ownerId, params.mountId, params.pathId, user);
-            if (!permissions.canRead) return { ...permissions, live: false, path: null, folderContents: null };
+            const { canRead, canWrite, live } = await getReaderAccess(
+                params.ownerId,
+                params.mountId,
+                params.pathId,
+                user,
+            );
+            if (!canRead) return { canRead, canWrite, live, path: null, folderContents: null };
             const drive = await getReadDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-            const live = await isLiveReader(params.ownerId, params.mountId, params.pathId, user);
-            return { ...permissions, live, path, folderContents };
+            return { canRead, canWrite, live, path, folderContents };
         },
         { linkAuth: true },
     )
@@ -90,7 +94,14 @@ export const collabRouter = new Elysia({
                 `"${version}"`,
                 async () =>
                     new Response(
-                        await getCollabState(mount, path, type, version, () => transformPriorityFor(drive, user, path)),
+                        await getCollabState(
+                            mount,
+                            path,
+                            type,
+                            version,
+                            async () =>
+                                (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                        ),
                     ),
             );
             set.headers['Content-Type'] = 'application/octet-stream';
@@ -185,16 +196,16 @@ export const collabRouter = new Elysia({
                     return;
                 }
                 // Answers whether the socket keeps its access, and closes it when it doesn't.
-                const checkAccess = async (): Promise<boolean> => {
-                    // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the
-                    // email.
-                    const current = await getSessionUser(sessionId);
-                    if (current !== null && (await drive.isLiveReader(mountId, pathId, current))) return true;
+                const checkAccess = async (current: User | null): Promise<boolean> => {
+                    if (current !== null && (await drive.readerAccess(mountId, pathId, current)).live) return true;
                     rawWs.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     cleanupSession(session, rawWs);
                     return false;
                 };
-                if (!(await checkAccess())) return;
+                // Later checks read the session's row, not the user the socket opened with: an ACL entry outlives its
+                // user, and matches on the email.
+                const checkSession = async (): Promise<boolean> => checkAccess(await getSessionUser(sessionId));
+                if (!(await checkAccess(user))) return;
                 // Only a live reader holds the Home, until cleanupSession lets go. A Home that closes anyway,
                 // such as for a restore, closes the socket with the retry close.
                 session.releaseHome = drive.holdHome(() =>
@@ -221,7 +232,7 @@ export const collabRouter = new Elysia({
                     }
                     try {
                         rawWs.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
-                        await checkAccess();
+                        await checkSession();
                     } catch (err) {
                         console.error('Error in collab keepalive:', err);
                     }
@@ -229,7 +240,7 @@ export const collabRouter = new Elysia({
 
                 // A change during the load is found now, not at the first tick. A frame that waits for `opened` finds
                 // no document once the session is cleaned up. Only an open that keeps its access counts on Recent.
-                if (!(await checkAccess())) return;
+                if (!(await checkSession())) return;
                 recordOpened(user, document.path);
             } catch (err) {
                 const status = err instanceof ApiError ? err.status : 500;

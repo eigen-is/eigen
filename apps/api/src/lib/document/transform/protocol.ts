@@ -93,8 +93,8 @@ export type ExtractTextJob = {
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
-// The stored document as one garbage-collected update, what a member's first sync carries, for a reader who gets no
-// socket: the rows still hold what an author deleted.
+// The stored document as one garbage-collected update, what a live reader's first sync carries, for a reader who is not
+// live: the rows still hold what an author deleted.
 export type CollabStateJob = { kind: 'collab-state'; documentType: DriveCollabType };
 
 // A conversion of uploaded bytes, which learns of its destination only what an insert fits into. There is one arm per

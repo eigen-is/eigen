@@ -8,6 +8,7 @@ import { shareTag } from '@workspace/lib/notification/tags';
 import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { DriveACL } from '@workspace/lib/types/drive-access';
+import { aclGrants } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, asc, eq } from 'drizzle-orm';
@@ -15,7 +16,6 @@ import type { Home } from '../home';
 import { getFromHomes } from '../home/home-relay';
 import type { Memberships, User } from '../user';
 import { actorDisplayName, getMemberships } from '../user';
-import { matchesACL } from './acl';
 import type { SharedDb } from './shared';
 import { sharedPaths } from './shared-schema';
 import { buildDriveEvent } from './sse-events';
@@ -34,7 +34,7 @@ export async function receiveSharedPathChange(
     // An owner, and a member of the team that owns the path, see it in their own drive already.
     const owner = parseOwnerId(path.ownerId);
     const owns = path.ownerId === home.user.id || (owner.type === 'team' && memberships.teamIds.includes(owner.id));
-    if (owns || newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
+    if (owns || !aclGrants(newACL, home.user, memberships.teamIds, 'read')) {
         const removed = sharedDb
             .delete(sharedPaths)
             .where(

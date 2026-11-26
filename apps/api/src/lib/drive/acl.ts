@@ -10,18 +10,22 @@ import {
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
     isCollabType,
+    isDocumentMediaFolder,
     isDocumentType,
 } from '@workspace/lib/types/drive';
-import type { DriveACL, DriveACLDelta, DriveVisibility } from '@workspace/lib/types/drive-access';
+import type { DriveACL, DriveACLDelta, DrivePathPermissions, DriveVisibility } from '@workspace/lib/types/drive-access';
+import { holdsByName } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { arePublicLinksEnabled } from '../config/server-settings';
 import { ApiError } from '../core';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Memberships, User } from '../user';
 
+export type ReaderAccess = DrivePathPermissions & { live: boolean; priority: TransformPriority };
+
 // While public links are off a link is private to everyone. Its value stays, so turning them on opens it again.
-export function grantsPublicRead(visibility: DriveVisibility): boolean {
-    if (visibility === 'link') return arePublicLinksEnabled();
+export function grantsPublicRead(visibility: DriveVisibility, publicLinks: boolean): boolean {
+    if (visibility === 'link') return publicLinks;
     return visibility === 'public-read' || visibility === 'public-write';
 }
 
@@ -60,37 +64,6 @@ export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: Drive
     if (!intoOpenFolder) throw new ApiError(423, DOCUMENT_WRITE_ERROR);
 }
 
-// Ownership, team membership, public visibility (unless countVisibility is off) or an ACL entry on the path or any
-// ancestor. Only the first two count in the trash.
-function canFromAncestors(
-    ancestors: readonly DrivePath[],
-    user: User,
-    memberships: Memberships,
-    permission: 'read' | 'write',
-    countVisibility = true,
-): boolean {
-    const trashed = isTrashedChain(ancestors);
-    for (const path of ancestors) {
-        if (path.ownerId === user.id) return true;
-
-        const parsed = parseOwnerId(path.ownerId);
-        if (parsed.type === 'team' && memberships.teamIds.includes(parsed.id)) return true;
-
-        if (trashed) continue;
-
-        if (
-            countVisibility &&
-            (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write')
-        ) {
-            return true;
-        }
-
-        if (path.acl && matchesACL(path.acl, user, memberships, permission)) return true;
-    }
-
-    return false;
-}
-
 // What a visitor without a login may read: the index of the highest path with a link, or null. The chain is folders,
 // then at most a file, or a collab document and at most its media/ and a file in it. The link is at or above that end.
 export function canReadByLink(chain: readonly DrivePath[]): number | null {
@@ -101,60 +74,49 @@ export function canReadByLink(chain: readonly DrivePath[]): number | null {
     if (head > end) return null;
     const [item, media, file, ...deeper] = chain.slice(end);
     const endsInFile = item?.type === DRIVE_TYPE_FILE && media === undefined;
-    const endsInDocument =
-        item !== undefined &&
-        isCollabType(item.type) &&
-        (media === undefined || (media.type === DRIVE_TYPE_FOLDER && media.name === CONTAINER_MEDIA_FOLDER)) &&
+    const endsInDocument = item !== undefined && isCollabType(item.type) && media === undefined;
+    const endsInMedia =
+        isDocumentMediaFolder(item, media) &&
         (file === undefined || file.type === DRIVE_TYPE_FILE) &&
         deeper.length === 0;
-    return endsInFile || endsInDocument ? head : null;
+    return endsInFile || endsInDocument || endsInMedia ? head : null;
 }
 
-export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
-    return canFromAncestors(ancestors, user, memberships, 'read');
-}
-
-export function canWriteFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
-    return canFromAncestors(ancestors, user, memberships, 'write');
-}
-
-// Read the person holds themselves, as an owner or through an ACL entry, not through a link or "Anyone signed in".
-export function canReadByNameFromAncestors(
-    ancestors: readonly DrivePath[],
+// Held by name, or outside the trash a signed-in link or, while public links are on, a public link.
+export function canReadFromAncestors(
+    chain: readonly DrivePath[],
     user: User,
     memberships: Memberships,
+    publicLinks: boolean,
 ): boolean {
-    return canFromAncestors(ancestors, user, memberships, 'read', false);
+    if (holdsByName(chain, user, memberships.teamIds, 'read')) return true;
+    return !isTrashedChain(chain) && chain.some((path) => grantsPublicRead(path.visibility, publicLinks));
 }
 
-// Write the person holds themselves, as an owner or through an ACL entry, not through "Anyone signed in can edit".
-export function canWriteByNameFromAncestors(
-    ancestors: readonly DrivePath[],
-    user: User,
-    memberships: Memberships,
-): boolean {
-    return canFromAncestors(ancestors, user, memberships, 'write', false);
+export function canWriteFromAncestors(chain: readonly DrivePath[], user: User, memberships: Memberships): boolean {
+    if (holdsByName(chain, user, memberships.teamIds, 'write')) return true;
+    return !isTrashedChain(chain) && chain.some((path) => path.visibility === 'public-write');
 }
 
-export function matchesACL(
-    acl: readonly DriveACL[],
+// What a signed-in reader may do with a path. A live reader syncs it over the collab socket: they read it by name, or
+// may both write and read it, as an ACL entry can grant write alone. Only a reader by name runs its transforms at
+// foreground priority, so a burst of views through a public or signed-in link can't take the one transform queue from
+// the people it is shared with.
+export function readerAccess(
+    chain: readonly DrivePath[],
     user: User,
     memberships: Memberships,
-    permission: 'read' | 'write',
-): boolean {
-    for (const entry of acl) {
-        const hasPermission = permission === 'read' ? entry.read : entry.write;
-        if (!hasPermission) continue;
-
-        const parsed = parseOwnerId(entry.id);
-
-        if (parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
-            return true;
-        }
-
-        if (parsed.type === 'team' && memberships.teamIds.includes(parsed.id)) return true;
-    }
-    return false;
+    publicLinks: boolean,
+): ReaderAccess {
+    const readsByName = holdsByName(chain, user, memberships.teamIds, 'read');
+    const canRead = canReadFromAncestors(chain, user, memberships, publicLinks);
+    const canWrite = canWriteFromAncestors(chain, user, memberships);
+    return {
+        canRead,
+        canWrite,
+        live: readsByName || (canWrite && canRead),
+        priority: readsByName ? 'foreground' : 'background',
+    };
 }
 
 // The merge runs on the server, so two people who share at once keep each other's entries. An added entry

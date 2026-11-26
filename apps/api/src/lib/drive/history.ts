@@ -10,6 +10,7 @@ import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@wor
 import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { arePublicLinksEnabled } from '../config/server-settings';
 import { pushToHomes } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
@@ -209,6 +210,7 @@ export class FileHistory {
         );
         const cardId = details && 'cardId' in details ? details.cardId : undefined;
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
+        const publicLinks = arePublicLinksEnabled();
         // One failed lookup skips only that watcher, because the change has landed already.
         const recipients = await Promise.all(
             watcherIds.map(async (watcherId) => {
@@ -217,7 +219,9 @@ export class FileHistory {
                     if (!watcher) return null;
                     if (opts.excludeEmails?.has(watcher.email.toLowerCase())) return null;
                     const memberships = await getMemberships(watcherId);
-                    return canReadFromAncestors(opts.verifyAncestors, watcher, memberships) ? watcherId : null;
+                    return canReadFromAncestors(opts.verifyAncestors, watcher, memberships, publicLinks)
+                        ? watcherId
+                        : null;
                 } catch {
                     return null;
                 }

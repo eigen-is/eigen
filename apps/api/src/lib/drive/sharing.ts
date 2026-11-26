@@ -50,6 +50,7 @@ export async function checkAccessForEmails(
     mount: Mount,
     pathId: string,
     emails: readonly string[],
+    publicLinks: boolean,
 ): Promise<DriveAccessCheckResult> {
     // An empty breadcrumb means the path is gone.
     const crumbs = await mount.getBreadcrumb(pathId);
@@ -57,7 +58,8 @@ export async function checkAccessForEmails(
 
     const members = await membersFromCrumbs(owner, crumbs);
     const memberByEmail = new Map(members.map((m) => [m.email, m]));
-    const ancestorPublic = !isTrashedChain(crumbs) && crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
+    const ancestorPublic =
+        !isTrashedChain(crumbs) && crumbs.some((crumb) => grantsPublicRead(crumb.visibility, publicLinks));
     const openSignup = getServerSettings().guests.openSignup;
 
     const recipients: DriveAccessRecipient[] = [];
