@@ -4,8 +4,11 @@
 // stamped with the version and the format lets a new version or renderer write a new file, so a response can be
 // cached long.
 
+import { once } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { Readable } from 'node:stream';
+import { buffer } from 'node:stream/consumers';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -14,8 +17,8 @@ import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
-import type { BunFile } from 'bun';
 import { ApiError } from '../core/errors';
+import { isEnoent } from '../core/local-filesystem';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { EmlPreviewJob, IcsPreviewJob, PreviewResult, VCardPreviewJob } from '../document/transform/protocol';
@@ -53,6 +56,8 @@ export const ICS_FORMAT = 'ics-f2';
 // A collab document's whole state as one Yjs update.
 export const COLLAB_STATE_FORMAT = 'state-f1';
 
+const TOO_LARGE_TO_SHOW = 'Document too large to show';
+
 // The largest side of an image's screen preview.
 const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
@@ -77,21 +82,41 @@ function failedRecently(cacheFile: string): boolean {
     return marker !== undefined && Date.now() - marker.mtimeMs < FAILED_MARKER_MS;
 }
 
-async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<void> {
-    if (!(err instanceof TransformFailedError && err.repeats)) return;
+// A remembered failure answers as nothing to show; any other failure is the caller's.
+async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<null> {
+    if (!(err instanceof TransformFailedError && err.repeats)) throw err;
+    console.error(`[preview] Remembering the failed build of ${path.basename(cacheFile)}:`, err);
     await writeCacheFile(failedMarker(cacheFile), '').catch(() => {});
+    return null;
 }
 
 // A path keeps one file of each kind, which is its extension, so a text preview and a collab state live side by side
 // while a format bump prunes the earlier format of its kind. A failed marker counts as the kind of its file.
-async function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
-    const prefix = `${pathId}-`;
+function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
     const kind = path.extname(keep);
+    return removeCachedFiles(
+        previewsDir,
+        pathId,
+        (name) => name !== keep && path.extname(name.replace(/\.failed$/, '')) === kind,
+    );
+}
+
+// Every cached file of a path, for a data.db replaced under it: the copy's row ids restart and can name a cached state
+// again, and a preview of the old content is stale anyway.
+export function dropPreviews(previewsDir: string, pathId: string): Promise<void> {
+    return removeCachedFiles(previewsDir, pathId, () => true);
+}
+
+async function removeCachedFiles(
+    previewsDir: string,
+    pathId: string,
+    remove: (name: string) => boolean,
+): Promise<void> {
+    const prefix = `${pathId}-`;
     const files = await fs.promises.readdir(previewsDir);
     await Promise.all(
         files
-            .filter((name) => name !== keep && name.startsWith(prefix))
-            .filter((name) => path.extname(name.replace(/\.failed$/, '')) === kind)
+            .filter((name) => name.startsWith(prefix) && remove(name))
             .map((name) => fs.promises.unlink(path.join(previewsDir, name)).catch(() => {})),
     );
 }
@@ -124,10 +149,11 @@ function generateOnce<T>(
 ): Promise<T | null> {
     const existing = inFlight.get(cacheName);
     if (existing) return existing;
+    const cacheFile = path.join(previewsDir, cacheName);
     const task = (async () => {
-        const result = await generate();
+        const result = await generate().catch((err: unknown) => rememberIfRepeatable(cacheFile, err));
         if (result === null) return null;
-        await writeCacheFile(path.join(previewsDir, cacheName), serialize(result));
+        await writeCacheFile(cacheFile, serialize(result));
         pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         return result;
     })().finally(() => inFlight.delete(cacheName));
@@ -135,31 +161,28 @@ function generateOnce<T>(
     return task;
 }
 
-// A body that is bytes, such as an image or a collab state, is written once per version and then sent from its file.
-function getOrCacheBytes(
-    previewsDir: string,
-    pathId: string,
-    cacheName: string,
-    generate: () => Promise<Buffer>,
-): Promise<BunFile>;
-function getOrCacheBytes(
-    previewsDir: string,
-    pathId: string,
-    cacheName: string,
-    generate: () => Promise<Buffer | null>,
-): Promise<BunFile | null>;
+// A body that is bytes, such as an image or a collab state, is written once per version and then streamed from its
+// file. Another version's write may prune the file at any moment, so it is opened before it answers, and an open file
+// reads to its end. A version just built answers the bytes in hand.
 async function getOrCacheBytes(
     previewsDir: string,
     pathId: string,
     cacheName: string,
     generate: () => Promise<Buffer | null>,
-): Promise<BunFile | null> {
+): Promise<Readable | null> {
     const cacheFile = path.join(previewsDir, cacheName);
-    if (!fs.existsSync(cacheFile)) {
-        const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
-        if (data === null) return null;
-    }
-    return Bun.file(cacheFile);
+    const cached = fs.createReadStream(cacheFile);
+    const opened = await once(cached, 'ready').then(
+        () => true,
+        (err: unknown) => {
+            if (!isEnoent(err)) throw err;
+            return false;
+        },
+    );
+    if (opened) return cached;
+    if (failedRecently(cacheFile)) return null;
+    const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
+    return data && Readable.from([data]);
 }
 
 async function getOrCacheImage(
@@ -169,8 +192,8 @@ async function getOrCacheImage(
     contentType: string,
     generate: () => Promise<Buffer | null>,
 ): Promise<ImagePreview | null> {
-    const file = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
-    return file && { type: 'image', data: Buffer.from(await file.arrayBuffer()), contentType };
+    const body = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
+    return body && { type: 'image', data: await buffer(body), contentType };
 }
 
 // A stale value is an earlier version's, served while the current one regenerates.
@@ -229,24 +252,14 @@ async function getOrCacheText<T>(
     if (current !== null) return fresh(current);
     const failed = failedRecently(cacheFile);
     const generateText = (priority: TransformPriority) =>
-        generateOnce(
-            inFlightTexts,
-            previewsDir,
-            pathId,
-            cacheName,
-            async () => {
-                try {
-                    return await generate(priority);
-                } catch (err) {
-                    // Overload is not "no preview", and neither is a file the renderer refused: a controlled
-                    // status reaches the client instead of being cached as a 404.
-                    if (err instanceof ApiError) throw err;
-                    console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
-                    await rememberIfRepeatable(cacheFile, err);
-                    return null;
-                }
+        generateOnce(inFlightTexts, previewsDir, pathId, cacheName, () => generate(priority), JSON.stringify).catch(
+            (err: unknown) => {
+                // Overload is not "no preview", and neither is a file the renderer refused: a controlled status
+                // reaches the client instead of a 404.
+                if (err instanceof ApiError) throw err;
+                console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
+                return null;
             },
-            JSON.stringify,
         );
 
     // A cached previous version is served while the current one regenerates in the background.
@@ -348,15 +361,16 @@ export async function getScreenPreview(
 }
 
 // A collab document's whole state for a reader who gets no socket, garbage-collected as a member's first sync is, so it
-// holds nothing an author deleted. `version` names the stored rows, and the state is cached under it.
+// holds nothing an author deleted. `version` names the stored rows, and the state is cached under it. A build that
+// ran out of time or memory is a document too large, as for an export, and the version is not built again for a while.
 export async function getCollabState(
     mount: Mount,
     drivePath: DrivePath,
     documentType: DriveCollabType,
     version: string,
     firstMiss: MissPriority,
-): Promise<BunFile> {
-    return getOrCacheBytes(mount.previewsDir, drivePath.id, `${drivePath.id}-${version}.yjs`, async () =>
+): Promise<ReadableStream<Uint8Array>> {
+    const state = await getOrCacheBytes(mount.previewsDir, drivePath.id, `${drivePath.id}-${version}.yjs`, async () =>
         runTransformToCollabState(
             mount,
             drivePath,
@@ -364,6 +378,17 @@ export async function getCollabState(
             { priority: await firstMiss() },
         ),
     );
+    if (state === null) throw new ApiError(413, TOO_LARGE_TO_SHOW);
+    // A response body is a web stream, so the bytes go over chunk by chunk, and a reader who hangs up closes the file.
+    const chunks = state[Symbol.asyncIterator]();
+    return new ReadableStream({
+        async pull(controller) {
+            const next = await chunks.next();
+            if (next.done) controller.close();
+            else controller.enqueue(next.value);
+        },
+        cancel: () => void state.destroy(),
+    });
 }
 
 // The container type decides, never the mime: an uploader picks the mime, and a plain file wearing an Eigen mime
