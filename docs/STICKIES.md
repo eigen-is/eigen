@@ -30,7 +30,7 @@ Stickies follow the format policy in [ROADMAP.md](ROADMAP.md) like every other d
 - A column is read by `readBoard` (`hooks/use-board.ts`). A `title` that isn't a string reads as '', and a `taskIds` that isn't a list as an empty one. A new card has no list to land in on such a column, so it stays off the board until the ref repair places it.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
 - An entry of `tasks` or `columns` that isn't a map is skipped by every reader and by the ref repair (`normalizeParentChildRefs`).
-- `readBoard` drops an id from `columnOrder` or a column's `taskIds` when it names no map, as the server's in-use rule (`boardCardIds`) does. A peer's concurrent delete leaves such an id normally. The board shows a column's ids joined with the cards `readCards` holds, so an id whose card that read skips drops out there, one test of what a card is. So `readBoard` observes the tasks shallowly: a card's own edits, its `chatName` included, change no id it lists.
+- `readBoard` drops an id from `columnOrder` or a column's `taskIds` when it names no map, as the server's in-use rule (`boardCardIds`) does. A peer's concurrent delete leaves such an id normally. The board shows a column's ids joined with the cards `readCards` holds, so an id whose card that read skips drops out there, one test of what a card is. So `useBoard` observes the tasks shallowly: a card's own edits, its `chatName` included, change no id it lists.
 
 The server's search reader keeps the map check and takes each field as stored. A wrong type can't crash it: at worst the board's search text stops early.
 
