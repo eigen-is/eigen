@@ -19,11 +19,11 @@ function encodeEmptyAwarenessMessage(): Uint8Array {
 
 const EMPTY_AWARENESS_MESSAGE = encodeEmptyAwarenessMessage();
 
-export function startLoadingHeartbeat(conn: ServerWebSocket<unknown>, intervalMs = LOADING_HEARTBEAT_MS): () => void {
+export function startLoadingHeartbeat(conn: ServerWebSocket<unknown>): () => void {
     const send = () => {
         if (conn.readyState === WebSocket.OPEN) conn.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
     };
     send();
-    const timer = setInterval(send, intervalMs);
+    const timer = setInterval(send, LOADING_HEARTBEAT_MS);
     return () => clearInterval(timer);
 }

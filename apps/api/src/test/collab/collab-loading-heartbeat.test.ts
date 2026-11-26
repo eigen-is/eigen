@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as decoding from 'lib0/decoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
@@ -10,7 +11,8 @@ import { startLoadingHeartbeat } from '../../lib/collab/loading-heartbeat';
 // so a cold load that stays silent past 30s becomes a self-sustaining reconnect
 // spiral — every retry re-pays the full load (2026-08-04 prod incident). The
 // heartbeat is the unit the route wires in open(); the upgrade itself can't
-// complete under app.handle(), so it is pinned here at its seam.
+// complete under app.handle(), so it is pinned here at its seam. A test runs
+// the interval's callback by hand, with no wait.
 
 type SpyConn = ServerWebSocket<undefined> & { readyState: number; sent: Uint8Array[] };
 
@@ -26,23 +28,38 @@ function makeSpyConn(): SpyConn {
 }
 
 describe('startLoadingHeartbeat', () => {
-    test('sends a first frame immediately and repeats until stopped', async () => {
-        const conn = makeSpyConn();
-        const stop = startLoadingHeartbeat(conn, 20);
-        expect(conn.sent.length).toBe(1);
+    let intervals: Mock<typeof setInterval>;
+    let clears: Mock<typeof clearInterval>;
 
-        // Wait on the frames, not a clock: a stalled loop fires missed interval ticks once.
-        while (conn.sent.length < 3) await Bun.sleep(5);
+    beforeEach(() => {
+        intervals = spyOn(globalThis, 'setInterval');
+        clears = spyOn(globalThis, 'clearInterval');
+    });
+
+    afterEach(() => {
+        intervals.mockRestore();
+        clears.mockRestore();
+    });
+
+    function tick(): void {
+        for (const [send, ms] of intervals.mock.calls) if (ms === 10_000) send();
+    }
+
+    test('sends a first frame immediately, one on each tick, and its stop clears the timer', () => {
+        const conn = makeSpyConn();
+        const stop = startLoadingHeartbeat(conn);
+        expect(conn.sent.length).toBe(1);
+        tick();
+        tick();
+        expect(conn.sent.length).toBe(3);
 
         stop();
-        const after = conn.sent.length;
-        await Bun.sleep(50);
-        expect(conn.sent.length).toBe(after);
+        expect(clears).toHaveBeenCalledWith(intervals.mock.results[0]?.value);
     });
 
     test('the frame is a protocol-valid empty awareness update — a no-op for the client', () => {
         const conn = makeSpyConn();
-        startLoadingHeartbeat(conn, 60_000)();
+        startLoadingHeartbeat(conn)();
 
         const decoder = decoding.createDecoder(conn.sent[0]);
         expect(decoding.readVarUint(decoder)).toBe(1); // MESSAGE_AWARENESS
@@ -57,12 +74,11 @@ describe('startLoadingHeartbeat', () => {
         awareness.destroy();
     });
 
-    test('stops sending once the socket is no longer open', async () => {
+    test('stops sending once the socket is no longer open', () => {
         const conn = makeSpyConn();
-        const stop = startLoadingHeartbeat(conn, 20);
+        const stop = startLoadingHeartbeat(conn);
         conn.readyState = 3; // CLOSED
-
-        await Bun.sleep(70);
+        tick();
         expect(conn.sent.length).toBe(1);
         stop();
     });
