@@ -1,7 +1,7 @@
 // The bar across the top of every app: the app switcher and the app's logo on the left, the command palette
 // in the middle, and the notification bell and the account menu on the right. The account menu links to
 // Space's pages, picks the theme and logs out; a guest gets a shorter one. A visitor who is signed out gets the
-// logo and a quiet login icon instead, which goes to the demo on a demo server.
+// logo, the open document's name and a quiet login icon instead, which goes to the demo on a demo server.
 
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
@@ -277,6 +277,9 @@ export function Topbar({ rootRoute }: TopbarProps) {
 
                 <div className="flex justify-center min-w-0">
                     {!isMobile && auth.isAuthenticated && <CommandPaletteTrigger documentTitle={documentTitle} />}
+                    {!auth.isAuthenticated && documentTitle && (
+                        <span className="truncate text-sm text-[var(--topbar-pill-fg)]">{documentTitle}</span>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-end gap-1 app-gutter-x">

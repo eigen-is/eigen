@@ -3,6 +3,7 @@
 // code does to the tab: reconnect, wait and retry, stop for good, or reload.
 
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
@@ -72,6 +73,7 @@ export type CollabDoc = {
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const { ownerId, mountId, pathId } = options;
+    const signedIn = !!useAuth().user;
 
     const [doc, setDoc] = useState<Y.Doc | null>(null);
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
@@ -105,6 +107,9 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const nextProvider = new WebsocketProvider(wsUrl, '', nextDoc, WS_PROVIDER_OPTIONS);
+        // A visitor without a login shares no presence: with no local state y-websocket sends none, and every
+        // setLocalStateField, such as a cursor's, does nothing.
+        if (!signedIn) nextProvider.awareness.setLocalState(null);
 
         // Every reconnect names the epoch this doc loaded under, so a tab that outlived a whole-server restore reloads
         // instead of merging back. The channel carries it too, so that tab can't hand its state to a reloaded one.
@@ -218,7 +223,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setProvider(null);
             setUndoManager(null);
         };
-    }, [ownerId, mountId, pathId]);
+    }, [ownerId, mountId, pathId, signedIn]);
 
     // After the commit that disarmed UnsyncedEditsGuard: a reload inside the close handler would still meet its prompt.
     useEffect(() => {

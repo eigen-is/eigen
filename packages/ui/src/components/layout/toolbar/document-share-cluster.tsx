@@ -1,7 +1,9 @@
 // The right end of a document app's bar: the offline badge, the share, comments and activity buttons, and a kebab
 // menu. On a phone the buttons fold into the kebab, with the rows a host has no room for in its own menus, such as
 // Docs' Word count. The kebab opens without blocking the page, as the bar's menus do, so one press moves on from it.
+// A visitor without a login gets no activity, since it lists the history.
 
+import { useAuth } from '@workspace/lib/auth';
 import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -34,8 +36,9 @@ type DocumentShareClusterProps = {
     mobileMenuItems?: ReactNode;
 };
 
-export function DocumentShareCluster(props: DocumentShareClusterProps) {
+export function DocumentShareCluster(clusterProps: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
+    const props = useAuth().user ? clusterProps : { ...clusterProps, onToggleActivityPanel: undefined };
     // One icon for both ways edits can be stuck in the tab; the outage explains itself, so it wins.
     const label = props.storageUnavailable ? 'Storage unavailable' : 'Offline';
     const offlineBadge = (props.offline || props.storageUnavailable) && (

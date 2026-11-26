@@ -1,12 +1,20 @@
 // The one rule every comment surface reads: a card is deleted when the host no longer uses it, or when its thread is
 // gone from the chat folder. Neither half may decide before it knows: the host's active set before it is ready, and
-// a missing thread before the listing's refetch settled.
-import { describe, expect, spyOn, test } from 'bun:test';
+// a missing thread before the listing's refetch settled. A visitor without a login sees no chat folder, so for them
+// only the host's use counts.
+import { afterAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { CommentCard } from '../../../../types/comments';
 import { installHappyDom } from '../../../happy-dom';
 
 // react-dom needs a DOM to render the provider into.
 installHappyDom();
+
+const session: { user: { id: string } | null } = { user: { id: 'owner-1' } };
+const realAuthContextModule = { ...(await import('../../../../core/auth/auth-context')) };
+mock.module('../../../../core/auth/auth-context', () => ({ ...realAuthContextModule, useAuth: () => session }));
+afterAll(() => {
+    mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
+});
 
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -34,7 +42,7 @@ const card: CommentCard = { id: 'card-1', title: 'Check this', description: '', 
 
 // Mounts the predicate under a resolver whose chat folder is already listed, and reads it for `card` on every render.
 // Only a name the listing lacks fetches, through the refetch that miss asks for.
-async function mountPredicate(active: boolean, ready: boolean) {
+async function mountPredicate(active: boolean, ready: boolean, chatFolderId: string | null = 'chat-1') {
     const seen: { deleted: boolean | null } = { deleted: null };
     const state = { active, ready };
     function Harness() {
@@ -51,7 +59,12 @@ async function mountPredicate(active: boolean, ready: boolean) {
         act(async () => {
             root.render(
                 <QueryClientProvider client={queryClient}>
-                    <MediaResolverProvider ownerId="owner-1" mountId="m1" mediaFolderId={null} chatFolderId="chat-1">
+                    <MediaResolverProvider
+                        ownerId="owner-1"
+                        mountId="m1"
+                        mediaFolderId={null}
+                        chatFolderId={chatFolderId}
+                    >
                         <Harness />
                     </MediaResolverProvider>
                 </QueryClientProvider>,
@@ -115,6 +128,23 @@ describe('useIsCardDeleted', () => {
         await predicate.flush();
         expect(predicate.deleted()).toBe(true);
         chatFolder.gate = Promise.resolve();
+        await predicate.unmount();
+    });
+
+    test("a visitor's card is live while the host uses it, though they see no chat folder", async () => {
+        session.user = null;
+        const used = await mountPredicate(true, true, null);
+        expect(used.deleted()).toBe(false);
+        await used.unmount();
+        const unused = await mountPredicate(false, true, null);
+        expect(unused.deleted()).toBe(true);
+        await unused.unmount();
+        session.user = { id: 'owner-1' };
+    });
+
+    test('for a signed-in user, a document with no chat folder has no thread to keep a card live', async () => {
+        const predicate = await mountPredicate(true, true, null);
+        expect(predicate.deleted()).toBe(true);
         await predicate.unmount();
     });
 });

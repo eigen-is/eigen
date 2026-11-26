@@ -11,7 +11,11 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 const realAuth = await import('@workspace/lib/auth');
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ user: { id: 'me', email: 'me@test.eigen.is' } }),
+    useIsGuest: () => false,
+}));
 // The document's history holds one row, a resolve of the comment of a sticky since deleted from its board.
 const resolvedRow: FileEvent = {
     id: 'event-1',

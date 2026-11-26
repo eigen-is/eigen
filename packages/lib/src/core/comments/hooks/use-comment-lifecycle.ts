@@ -84,10 +84,12 @@ export function useCommentLifecycle({
     const [deleteCardId, requestDelete] = useState<string | null>(null);
 
     const { user } = useAuth();
-    const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, pathId);
+    // A visitor, with no login, reads the cards in the document and not the server's index rows or members.
+    const indexPathId = user ? pathId : '';
+    const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, indexPathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
     const assignComment = useAssignComment(ownerId, mountId, pathId);
-    const { data: members = [] } = useEffectiveMembers(ownerId, mountId, pathId);
+    const { data: members = [] } = useEffectiveMembers(ownerId, mountId, indexPathId);
     const cards = useCommentCards(doc, mapName);
     const createCard = useCreateCommentCard(ownerId, mountId, pathId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
@@ -118,9 +120,12 @@ export function useCommentLifecycle({
         if (known) setOpen({ cardId });
         return known;
     };
-    // A chat landing waits for the index rows too, or a comment whose card is gone would read as not found. A card id
-    // names only a card, so its landing needs only the cards.
-    useOpenOnLanding(initialChatName, openChat, { ready: ready && !commentsPending, onNotFound: onChatNotFound });
+    // A chat landing waits for the index rows too, where there are rows to read, or a comment whose card is gone would
+    // read as not found. A card id names only a card, so its landing needs only the cards.
+    useOpenOnLanding(initialChatName, openChat, {
+        ready: ready && !(indexPathId && commentsPending),
+        onNotFound: onChatNotFound,
+    });
     useOpenOnLanding(initialCardId, openCardById, { ready, onNotFound: onCardNotFound });
 
     return {

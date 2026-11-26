@@ -1,9 +1,9 @@
-// The body every eigendoc editor route shares: resolve the document, show the status screen while it
-// is still resolving or has failed, hand a denied reader the request-access screen, and otherwise
-// render the app's editor beside the share dialog. The editor sits inside the document's media
-// resolver and remounts for another document. The routes then differ only in which editor they
-// mount and what extra search params they thread into it.
+// The body every eigendoc editor route shares: resolve the document, show the status screen while it is still
+// resolving or has failed, hand a denied reader the request-access screen, and otherwise render the app's editor
+// beside the share dialog, which a visitor without a login does not get. The editor sits inside the document's media
+// resolver and remounts for another document. The routes differ only in the editor and the search params they pass.
 
+import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ReactNode } from 'react';
@@ -33,6 +33,7 @@ export function EigenDocEditorRoute({
     pathId: string;
     children: (props: EigenDocEditorProps) => ReactNode;
 }) {
+    const { user } = useAuth();
     const {
         docInfo,
         isError,
@@ -69,7 +70,7 @@ export function EigenDocEditorRoute({
                     })}
                 </Fragment>
             </MediaResolverProvider>
-            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
+            {user && <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />}
         </>
     );
 }

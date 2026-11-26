@@ -1,5 +1,5 @@
 // One comment thread stays mounted when its dialog moves to another card, and what waits to be sent belongs to the
-// thread it was typed in.
+// thread it was typed in. A visitor without a login reads the card and gets no thread and no reply box.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 
@@ -23,7 +23,8 @@ const room = {
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realChat = { ...(await import('@workspace/lib/chat')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
+const session: { user: { id: string; email: string } | null } = { user: { id: 'me', email: 'me@test.eigen.is' } };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 mock.module('@workspace/lib/chat', () => ({ ...realChat, useChatRoom: () => room }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
@@ -74,4 +75,26 @@ test('a draft stays behind when the thread moves to another card', async () => {
     await act(async () => root.render(thread('second')));
     expect(document.querySelector('textarea')?.value).toBe('');
     await act(async () => root.unmount());
+});
+
+test('a visitor reads the card above the thread, and gets no reply box', async () => {
+    session.user = null;
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+        root.render(
+            createElement(CommentThread, {
+                ownerId: 'u1',
+                mountId: 'm1',
+                pathId: 'doc',
+                chatName: 'first',
+                lead: createElement('p', null, 'The card'),
+            }),
+        ),
+    );
+    expect(container.textContent).toBe('The card');
+    expect(container.querySelector('textarea')).toBeNull();
+    await act(async () => root.unmount());
+    session.user = { id: 'me', email: 'me@test.eigen.is' };
 });

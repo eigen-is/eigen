@@ -443,7 +443,7 @@ export function SheetEditor({
                             </div>
                         </DocSearchProvider>
                     </div>
-                    {panel && auth.user && (
+                    {panel && (
                         <PanelColumn
                             activePanel={panel}
                             onClose={closePanels}
@@ -451,7 +451,7 @@ export function SheetEditor({
                             cards={cards}
                             entries={allComments}
                             members={members}
-                            currentUserEmail={auth.user.email}
+                            currentUserEmail={auth.user?.email ?? ''}
                             filter={commentFilter}
                             activeComments={activeComments}
                             isCardDeleted={isCardDeleted}
