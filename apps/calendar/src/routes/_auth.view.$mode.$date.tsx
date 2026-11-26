@@ -1,8 +1,8 @@
 // The calendar's main page: the signed-in user's own and shared events over the days one view shows, such as a week
 // or a month. The URL names the view's mode and its focused local day, so switching mode keeps the day, and an
-// unknown mode or day is the not-found page. A click on an event opens its detail column at the right, which
-// `?eventId=` and, for an occurrence of a series, `?occurrence=` name; on a phone it covers the grid. A click on a month
-// day or a time grid slot opens New event there, or only closes an open event, and a drawn range opens it either way.
+// unknown mode or day is the not-found page. A click on an event opens its detail column, which `?eventId=` and, for
+// an occurrence of a series, `?occurrence=` name; on a phone it covers the grid. A click on empty time opens New event
+// there, or only closes an open event, and a drawn range opens it either way.
 
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import {
@@ -114,7 +114,7 @@ function CalendarView() {
             void navigate({ search: (prev) => ({ ...prev, occurrence: keylessDate }), replace: true, state: true });
     }, [keylessDate, navigate]);
 
-    // While an event is open the grid is its list: a click on it only closes the event, and a drawn range still creates.
+    // While an event is open the grid is its list: a click on it closes the event, and a drawn range still creates.
     const pickNew = (picked: { date?: Date; times?: NewEventTimes }, drawn: boolean) => {
         if (openEvent) detailHistory.close();
         if (!openEvent || drawn) setCreating(picked);

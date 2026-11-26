@@ -1,8 +1,8 @@
 // The Calendar app's day, 3-day and week views: a column per day under its date, an all-day lane of bars across their
 // days, and a scrolling day of hours with each timed event as a block at its minutes, side by side where they overlap.
-// A click on an event asks the route to open its detail, and a click or a mouse or pen drag on empty time asks it to
-// open New event there, saying which, since a click while an event is open only closes it. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a
-// bar to other days, and the drop saves it; the route picks the days, the events and the one it has open.
+// A click on an event asks the route to open it, and a click or a drag on empty time asks for New event there, saying
+// which it was. A mouse or pen drags a block to other days and minutes, its bottom edge to another end and a bar to
+// other days, and the drop saves it; the route picks the days, the events and the one it has open.
 
 import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';

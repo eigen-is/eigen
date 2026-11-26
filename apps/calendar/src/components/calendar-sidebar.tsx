@@ -1,7 +1,7 @@
-// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day and the open event
-// (a computer picks the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
-// checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
-// so the month stays in view however many calendars there are.
+// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day and the open
+// event, the calendar lists, such as the user's own and those shared with them, each with a checkbox that shows or
+// hides its events, and at its foot the mini month above the storage meter. The lists scroll, so the month stays in
+// view however many calendars there are.
 
 import { useMatch } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -85,7 +85,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
 }
 
 // No onExport means the calendar cannot be downloaded here: it lives in another user's home, or the viewer is a guest.
-// No onImport means nothing can be brought in either: the same two cases, plus a team calendar the viewer may only read.
+// No onImport means nothing can be brought in either: those two cases, plus a team calendar the viewer may only read.
 function CalendarRow({
     color,
     label,

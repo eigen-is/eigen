@@ -61,9 +61,14 @@ export function useEventDetailState({
     const [save, setSave] = useState<EventSave | null>(null);
 
     let found: CalendarEventOccurrence | null = null;
+    let nearest = Number.POSITIVE_INFINITY;
     for (const e of events) {
         if (!open || isFreeBusyEvent(e) || !isNamedBy(e, open)) continue;
-        if (!found || distance(e, focus) < distance(found, focus)) found = e;
+        const distance = Math.abs(e.startTime.getTime() - focus.getTime());
+        if (distance < nearest) {
+            found = e;
+            nearest = distance;
+        }
     }
     if (found && found !== kept) setKept(found);
     if (!open && kept) setKept(null);
@@ -107,8 +112,4 @@ function isNamedBy(event: CalendarEventOccurrence, { eventId, occurrence }: Even
         event.uid === eventId ||
         event.data?.organizerEventId === eventId;
     return named && (!occurrence || !isSeriesOccurrence(event) || event.occurrenceDate === occurrence);
-}
-
-function distance(event: CalendarEventOccurrence, focus: Date): number {
-    return Math.abs(event.startTime.getTime() - focus.getTime());
 }
