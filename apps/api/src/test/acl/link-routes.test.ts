@@ -259,9 +259,9 @@ describe('files and folders without a login', () => {
             }
         });
 
-        // The preview cache is one copy for every caller, so the visitor gets the member's: the sibling it names inlined.
+        // The preview cache is one copy for every caller, so the visitor gets the owner's. A loose svg inlines no file
+        // beside it, so the private sibling it names stays out of both.
         test('a public svg previews as its owner sees it, whoever asks first', async () => {
-            const png = `data:image/png;base64,${Buffer.from(TEST_PNG_BYTES).toString('base64')}`;
             for (const [index, { id }] of svgs.entries()) {
                 const url = urlOf(LINK_ROUTES[5].route, id);
                 const ownerFirst = index === 0;
@@ -270,7 +270,8 @@ describe('files and folders without a login', () => {
                 const [visitor, owner] = ownerFirst ? [second, first] : [first, second];
                 const body = await visitor.text();
                 expect(body).toBe(await owner.text());
-                expect(body).toContain(png);
+                expect(body).toContain(eigenMediaHref('sibling.png'));
+                expect(body).not.toContain('data:');
             }
         });
 
