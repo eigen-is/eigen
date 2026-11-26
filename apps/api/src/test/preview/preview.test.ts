@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { promises as fsPromises, mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import * as nodeFs from 'node:fs';
+import { promises as fsPromises, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -686,7 +687,36 @@ describe('a written preview', () => {
             'the prune of the untagged copy',
         );
     });
+
+    // Another version's write prunes this one's file at any moment, such as between a look at the file and its read.
+    test('a screen preview whose file goes as it is read is made again', async () => {
+        const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="2" height="2"/></svg>');
+        const { mount, path } = await previewMount('svg-pruned-at-read', 'drawing.svg', 'image/svg+xml', svg);
+        expect((await getScreenPreview(mount, path, ''))?.type).toBe('image');
+        const cached = readdirSync(mount.previewsDir).find((name) => name.endsWith('.svg'));
+        if (!cached) throw new Error('no cached svg');
+        const reads = spyOn(mount, 'readBytes');
+        const open = pruneAtOpen(join(mount.previewsDir, cached));
+        try {
+            const served = await getScreenPreview(mount, path, '');
+            if (served?.type !== 'image') throw new Error('no svg screen preview');
+            expect(served.data.toString()).toBe(svg.toString());
+            expect(reads).toHaveBeenCalledTimes(1);
+        } finally {
+            open.mockRestore();
+            reads.mockRestore();
+        }
+    });
 });
+
+// The cache file is removed just before it is opened, as a prune running beside the request would.
+function pruneAtOpen(cacheFile: string) {
+    const createReadStream = nodeFs.createReadStream;
+    return spyOn(nodeFs, 'createReadStream').mockImplementation((file, options) => {
+        if (file === cacheFile) rmSync(cacheFile, { force: true });
+        return createReadStream(file, options);
+    });
+}
 
 function createGetLocalDatabase(baseDir: string) {
     return async <S extends SchemaType>(

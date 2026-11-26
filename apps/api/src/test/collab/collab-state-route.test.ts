@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { collabStateEpoch } from '@workspace/lib/collab/collab-state';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
@@ -302,6 +304,31 @@ describe('one version is built once and then served from its file', () => {
             run.mockRestore();
             capture.mockRestore();
         }
+    });
+
+    // Another version's write prunes this one's file at any moment, such as between a look at the file and its send.
+    test('a state file that goes as it is read is built again, and the request answers it', async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('kept');
+        expect((await visit(doc.id)).status).toBe(200);
+        const [cached] = (await cachedFiles(doc.id)).filter((name) => name.endsWith('.yjs'));
+        const cacheFile = join((await mountOf(doc.id)).previewsDir, cached);
+        const createReadStream = fs.createReadStream;
+        const open = spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+            if (file === cacheFile) fs.rmSync(cacheFile, { force: true });
+            return createReadStream(file, options);
+        });
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            const res = await visit(doc.id);
+            expect((await docOf(res)).getText('probe').toString()).toBe('kept');
+            expect(stateJobs(run).length).toBe(1);
+        } finally {
+            open.mockRestore();
+            run.mockRestore();
+        }
+        expect(await cachedFiles(doc.id)).toContain(cached);
     });
 
     test("a miss runs in the background for whoever reads only through the link, and a named reader's in the foreground", async () => {

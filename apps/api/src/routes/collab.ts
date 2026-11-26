@@ -17,7 +17,6 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { isCollabType } from '@workspace/lib/types/drive';
-import type { BunFile } from 'bun';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -77,7 +76,7 @@ export const collabRouter = new Elysia({
     // alone, so a 304 and a cached state read no blob.
     .get(
         '/collab/:ownerId/:mountId/:pathId/state',
-        async ({ params, request, user, set }): Promise<BunFile | ElysiaCustomStatusResponse<304>> => {
+        async ({ params, request, user, set }): Promise<Response | ElysiaCustomStatusResponse<304>> => {
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const { type } = path;
@@ -85,8 +84,14 @@ export const collabRouter = new Elysia({
             const { snapshotId, lastUpdateId } = await readCollabStateVersion(mount, path);
             const epoch = getDataEpoch(params.ownerId);
             const version = collabStateVersion(epoch, snapshotId, lastUpdateId, COLLAB_STATE_FORMAT);
-            const body = await answerRevalidated(request, set, `"${version}"`, () =>
-                getCollabState(mount, path, type, version, () => transformPriorityFor(drive, user, path)),
+            const body = await answerRevalidated(
+                request,
+                set,
+                `"${version}"`,
+                async () =>
+                    new Response(
+                        await getCollabState(mount, path, type, version, () => transformPriorityFor(drive, user, path)),
+                    ),
             );
             set.headers['Content-Type'] = 'application/octet-stream';
             return body;

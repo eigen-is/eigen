@@ -4,8 +4,11 @@
 // stamped with the version and the format lets a new version or renderer write a new file, so a response can be
 // cached long.
 
+import { once } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { Readable } from 'node:stream';
+import { buffer } from 'node:stream/consumers';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -14,8 +17,8 @@ import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
-import type { BunFile } from 'bun';
 import { ApiError } from '../core/errors';
+import { isEnoent } from '../core/local-filesystem';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { EmlPreviewJob, IcsPreviewJob, PreviewResult, VCardPreviewJob } from '../document/transform/protocol';
@@ -141,20 +144,28 @@ function generateOnce<T>(
     return task;
 }
 
-// A body that is bytes, such as an image or a collab state, is written once per version and then sent from its file.
+// A body that is bytes, such as an image or a collab state, is written once per version and then streamed from its
+// file. Another version's write may prune the file at any moment, so it is opened before it answers, and an open file
+// reads to its end. A version just built answers the bytes in hand.
 async function getOrCacheBytes(
     previewsDir: string,
     pathId: string,
     cacheName: string,
     generate: () => Promise<Buffer | null>,
-): Promise<BunFile | null> {
+): Promise<Readable | null> {
     const cacheFile = path.join(previewsDir, cacheName);
-    if (!fs.existsSync(cacheFile)) {
-        if (failedRecently(cacheFile)) return null;
-        const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
-        if (data === null) return null;
-    }
-    return Bun.file(cacheFile);
+    const cached = fs.createReadStream(cacheFile);
+    const opened = await once(cached, 'ready').then(
+        () => true,
+        (err: unknown) => {
+            if (!isEnoent(err)) throw err;
+            return false;
+        },
+    );
+    if (opened) return cached;
+    if (failedRecently(cacheFile)) return null;
+    const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
+    return data && Readable.from([data]);
 }
 
 async function getOrCacheImage(
@@ -164,8 +175,8 @@ async function getOrCacheImage(
     contentType: string,
     generate: () => Promise<Buffer | null>,
 ): Promise<ImagePreview | null> {
-    const file = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
-    return file && { type: 'image', data: Buffer.from(await file.arrayBuffer()), contentType };
+    const body = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
+    return body && { type: 'image', data: await buffer(body), contentType };
 }
 
 // A stale value is an earlier version's, served while the current one regenerates.
@@ -341,7 +352,7 @@ export async function getCollabState(
     documentType: DriveCollabType,
     version: string,
     firstMiss: MissPriority,
-): Promise<BunFile> {
+): Promise<ReadableStream<Uint8Array>> {
     const state = await getOrCacheBytes(mount.previewsDir, drivePath.id, `${drivePath.id}-${version}.yjs`, async () =>
         runTransformToCollabState(
             mount,
@@ -351,7 +362,16 @@ export async function getCollabState(
         ),
     );
     if (state === null) throw new ApiError(413, TOO_LARGE_TO_SHOW);
-    return state;
+    // A response body is a web stream, so the bytes go over chunk by chunk, and a reader who hangs up closes the file.
+    const chunks = state[Symbol.asyncIterator]();
+    return new ReadableStream({
+        async pull(controller) {
+            const next = await chunks.next();
+            if (next.done) controller.close();
+            else controller.enqueue(next.value);
+        },
+        cancel: () => void state.destroy(),
+    });
 }
 
 // The container type decides, never the mime: an uploader picks the mime, and a plain file wearing an Eigen mime
