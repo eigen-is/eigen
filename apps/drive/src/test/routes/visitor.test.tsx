@@ -213,6 +213,24 @@ test('a visitor on a lone public file sees one read-only row, the file open besi
     expect(outsideTheLink()).toEqual([]);
 });
 
+test('a visitor gets no Share button on a row, in a public folder or on a lone file', async () => {
+    const rowShares = () => document.querySelectorAll('[role="row"].eigen-list-item [aria-label="Share"]');
+    await open(`/fs/${OWNER}/default/pub`);
+    expect(rowNames()).toHaveLength(3);
+    expect(rowShares()).toHaveLength(0);
+    await unmount();
+
+    await open(`/shared/with-me?pid=report&uid=${OWNER}&mid=default`);
+    expect(rowNames()).toHaveLength(1);
+    expect(rowShares()).toHaveLength(0);
+    await unmount();
+
+    // A member on the same folder gets one, which shows the folder is drawn with them.
+    session.user = { id: OWNER, email: 'alice@x.is', name: 'Alice' };
+    await open(`/fs/${OWNER}/default/pub`);
+    expect(rowShares().length).toBeGreaterThan(0);
+});
+
 test('a signed-in user on the same page can close the file back to the list', async () => {
     session.user = { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' };
     await open(`/shared/with-me?pid=report&uid=${OWNER}&mid=default`);

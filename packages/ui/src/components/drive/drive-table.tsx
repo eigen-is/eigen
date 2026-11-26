@@ -237,6 +237,9 @@ export function DriveTable({
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                     const item = items[virtualRow.index];
+                    // Only where Share runs, so a visitor, or a viewer of a read-only folder, gets no button that does
+                    // nothing.
+                    const offersShare = actions?.actionsFor([item]).some((action) => action.id === 'share') ?? false;
                     return (
                         <div
                             key={item.id}
@@ -264,7 +267,7 @@ export function DriveTable({
                                 hideOwner={hideOwner}
                                 hideShared={hideShared}
                                 hideModified={hideModified}
-                                hideShareClick={hideShareClick}
+                                hideShareClick={hideShareClick || !offersShare}
                                 hideActions={hideActions}
                                 getItemDate={date?.of}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
