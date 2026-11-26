@@ -1,9 +1,12 @@
-// The two stills of the Calendar page: the festival week as the production lead sees it, with the build day, the
-// go/no-go and the festival weekend, in light; and the build day opened on its guests, in dark.
+// The stills of the Calendar page, each as the production lead sees it, their themes alternating in the carousel: this
+// week, her own runs and appointments beside the crew's meetings, in light; the build day opened on its guests, in
+// dark; the festival week with the build day, the go/no-go and the festival weekend, in light; the schedule from the
+// build day through the festival, in dark; and the festival's month, in light. Each picks its view, since Calendar
+// opens on the view picked last.
 
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
-import { openFestivalMonth, openFestivalWeek } from './festival-week';
+import { moreOnDayOf, openFestivalMonth, openFestivalWeek, openView, pickView } from './festival-week';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
@@ -11,6 +14,23 @@ const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     apps: ['calendar'],
     personas: ['saar'],
 };
+
+export const calendarStillToday = {
+    ...still,
+    name: 'calendar-still-today',
+    theme: 'light',
+    run: async ({ pages: [page], stack }) => {
+        await openView(page, stack, 'Week');
+        await page.getByText('Weekly production meeting').first().waitFor();
+        // The week opens an hour before the current time, so an evening take would show the night. From half past eight
+        // the window holds the morning's dentist and the crew's production meeting at 17:00, and no hour label is cut.
+        await page.getByText('08:00', { exact: true }).evaluate((label) => {
+            const scroller = label.closest('.overflow-y-auto');
+            if (scroller && label instanceof HTMLElement) scroller.scrollTop = label.offsetTop + 24;
+        });
+        await Bun.sleep(1500);
+    },
+} satisfies Scene;
 
 export const calendarStillWeek = {
     ...still,
@@ -27,8 +47,44 @@ export const calendarStillBuild = {
     name: 'calendar-still-build',
     theme: 'dark',
     run: async ({ pages: [page], stack }) => {
-        await (await openFestivalMonth(page, stack, 'Build day')).click();
-        await page.getByRole('dialog').getByText('Fencing, stages, power.').waitFor();
+        // Coffee on the way opens the build day, whose own event a short month row folds into "N more".
+        await openFestivalMonth(page, stack, 'Coffee on the way');
+        const build = page.getByText('Build day');
+        if ((await build.count()) === 0) {
+            await (await moreOnDayOf(page, 'Coffee on the way')).click();
+            await page.getByRole('dialog').getByText('Build day').click();
+        } else {
+            await build.first().click();
+        }
+        await page.locator('[data-slot="detail-column"]').getByText('Fencing, stages, power.').waitFor();
+        await Bun.sleep(1500);
+    },
+} satisfies Scene;
+
+// The schedule starts on the day the last view was on, so the still opens the festival week's Wednesday, the build day,
+// on its own and switches from there: the build, the eve and the festival follow it down the list.
+export const calendarStillSchedule = {
+    ...still,
+    name: 'calendar-still-schedule',
+    theme: 'dark',
+    run: async ({ pages: [page], stack }) => {
+        await openFestivalWeek(page, stack);
+        // The week's column headers link to their days, Monday first.
+        await page.locator('a[href*="/view/day/"]').nth(2).click();
+        await pickView(page, 'Schedule');
+        await page.getByText('Build day').first().waitFor();
+        // Off the list, so no row shows the pointer's hover.
+        await page.mouse.move(VIEWPORT.width / 2, 10);
+        await Bun.sleep(1500);
+    },
+} satisfies Scene;
+
+export const calendarStillMonth = {
+    ...still,
+    name: 'calendar-still-month',
+    theme: 'light',
+    run: async ({ pages: [page], stack }) => {
+        await openFestivalMonth(page, stack, 'Tuimel Festival weekend');
         await Bun.sleep(1500);
     },
 } satisfies Scene;

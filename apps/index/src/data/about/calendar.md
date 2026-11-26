@@ -3,14 +3,14 @@ title: Calendar
 description: Your calendars, your team's and the invitations between them, on your own server and synced to your phone.
 ---
 
-eigen|calendar⟩ is [where you keep your schedule](/support/calendar/get-started) in Eigen. It opens on the month, with a week view one click away, and your own calendars sit beside your team's in the sidebar.
+eigen|calendar⟩ is [where you keep your schedule](/support/calendar/get-started) in Eigen. On a computer it opens on the week, with day, month and a schedule list one click away, and next time on the view you picked last. Your own calendars sit beside your team's in the sidebar.
 
-::: video src="/data/about/media/calendar-hero" caption="Saar opens the go/no-go meeting and its guests, then hides and shows the crew's calendar."
+::: video src="/data/about/media/calendar-hero" caption="Saar opens the go/no-go meeting beside the month and unfolds its guests, then hides the crew's calendar down to her own and shows it again."
 :::
 
 ## More than one calendar
 
-Everyone has a calendar of their own, and a team has one its members share. The festival crew's calendar holds the build day, load-in and soundchecks, the go/no-go meeting, the volunteer briefing, the weekend itself and the strike. Saar's site walk and her meeting with the fencing hire are in her own.
+Everyone has a calendar of their own, and a team has one its members share. The festival crew's calendar holds the build day, load-in and soundchecks, the go/no-go meeting, the volunteer briefing, the weekend itself and the strike. Saar's own holds the rest of her life around it: her runs, the dentist, a birthday dinner, the radios to pick up and the van to pack.
 
 Each calendar has a colored box in the sidebar that [shows or hides its events](/support/calendar/show-hide-calendars), so you can look at the festival without your own shifts, or the other way round.
 
@@ -25,8 +25,11 @@ An event [repeats](/support/calendar/recurring-events), such as daily, weekly or
 Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
 
 ::: carousel
-![The festival week: a production meeting, the build day, load-in and soundchecks, the go/no-go and the weekend itself](/data/about/media/calendar-still-week.webp)
+![This week: Saar's own appointments beside the crew's production meeting](/data/about/media/calendar-still-today.webp)
 ![The build day opened on its three guests](/data/about/media/calendar-still-build.webp)
+![The festival week: the build day, load-in and soundchecks, the volunteer briefing and the weekend itself, between Saar's own errands](/data/about/media/calendar-still-week.webp)
+![The schedule: the build day, the eve and the festival as a list, day by day](/data/about/media/calendar-still-schedule.webp)
+![The festival's month, the weekend a bar across two days](/data/about/media/calendar-still-month.webp)
 :::
 
 ## People outside Eigen
