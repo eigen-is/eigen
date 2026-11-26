@@ -37,13 +37,12 @@ import { parseVCardPreview } from './vcard-preview';
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
 
-function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
-    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.screen.${ext}`;
-}
-
 // A format names the shape of its renderer's output and is part of the cache name. Bump it whenever that shape or a
 // typed payload's type changes: a parser refuses only a body it can't read, so the old shape would be served.
 export const TEXT_FORMAT = 'f8';
+// The screen previews' formats. The SVG's is bumped whenever what the inliner takes in changes.
+const WEBP_SCREEN_FORMAT = 'screen';
+const SVG_SCREEN_FORMAT = 'screen-f2';
 export const VCARD_FORMAT = 'vcard-f1';
 // Bumped on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
 export const EML_FORMAT = 'eml-f6';
@@ -54,6 +53,10 @@ const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
+}
+
+function screenCacheName(drivePath: DrivePath, format: string, ext: 'webp' | 'svg'): string {
+    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.${ext}`;
 }
 
 // A job that ran out of time or memory will again, holding the only transform slot, so an empty marker beside its
@@ -282,7 +285,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, 'svg'),
+            screenCacheName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
             'image/svg+xml',
             async () => {
                 const bytes = await mount.readBytes(drivePath.id);
@@ -297,7 +300,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, 'webp'),
+            screenCacheName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
             'image/webp',
             async () => {
                 const file = await mount.readFile(drivePath.id);

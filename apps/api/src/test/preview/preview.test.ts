@@ -539,6 +539,22 @@ describe('a written preview', () => {
         expect(kept).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
         expect(readdirSync(mount.previewsDir)).toContain(other);
     });
+
+    // A copy cached before the inliner changed what it may take in holds what it took then, under the same stamp.
+    test('an svg screen preview cached under the untagged name is not served, and the new one prunes it', async () => {
+        const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>');
+        const { mount, path } = await previewMount('svg-untagged-name', 'drawing.svg', 'image/svg+xml', svg);
+        const untagged = `${path.id}-${path.updatedAt.getTime()}.screen.svg`;
+        writeFileSync(join(mount.previewsDir, untagged), '<svg>a neighbour inlined by the old renderer</svg>');
+
+        const served = await getScreenPreview(mount, path, '');
+        if (served?.type !== 'image') throw new Error('no svg screen preview');
+        expect(served.data.toString()).toBe(svg.toString());
+        await eventually(
+            async () => (readdirSync(mount.previewsDir).includes(untagged) ? undefined : true),
+            'the prune of the untagged copy',
+        );
+    });
 });
 
 function createGetLocalDatabase(baseDir: string) {
