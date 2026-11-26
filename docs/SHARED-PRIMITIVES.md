@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2463 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2466 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -721,7 +721,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (478)
+## Types (480)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1163,6 +1163,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocAppConfig` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `EigenDocListRoute` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-list-view.tsx |
 | `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
+| `DriveSearchNavigate` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
@@ -1197,6 +1198,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CanvasHandle` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
+| `DetailHistory` | `@workspace/ui/hooks/use-detail-history` | packages/ui/src/hooks/use-detail-history.ts |
 | `DetailHistoryOptions` | `@workspace/ui/hooks/use-detail-history` | packages/ui/src/hooks/use-detail-history.ts |
 | `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
@@ -1204,7 +1206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1295)
+## Utilities & constants (1296)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2435,6 +2437,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `browseCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `selectInSearch` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `focusFirstField` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `STRETCHED_TRIGGER_CLASS` | `@workspace/ui/components/info-block` | packages/ui/src/components/info-block.tsx |
 | `columnWidthPx` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-widths.ts |

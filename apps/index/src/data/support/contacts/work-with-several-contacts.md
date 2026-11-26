@@ -17,9 +17,9 @@ You can act on more than one contact at a time. Pick a group in the list, then d
 3. Hold Cmd (Ctrl on Windows) and click each of the others. Cmd-click a selected contact again to drop it from the selection.
 4. To take a whole run at once, click the first contact, hold Shift, and click the last one. Everything between the two is selected.
 
-Selected rows stay highlighted. Clicking with Cmd, Ctrl, or Shift only changes the selection, so the details panel stays where it is.
+Selected rows stay highlighted. Clicking with Cmd, Ctrl, or Shift only changes the selection, so the detail panel stays where it is.
 
-The list also works from the keyboard. Press Cmd+A (Ctrl+A on Windows) to select everything currently listed, use the arrow keys to move through the list, hold Shift with an arrow key to extend the selection, and press Escape to clear a selection of two or more. With only the open contact selected, Escape closes its details instead.
+The list also works from the keyboard. Press Cmd+A (Ctrl+A on Windows) to select everything currently listed, use the arrow keys to move through the list, hold Shift with an arrow key to extend the selection, and press **Esc** to clear a selection of two or more. With only the open contact selected, **Esc** closes its detail panel instead.
 
 ## Open the menu on your selection
 

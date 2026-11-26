@@ -36,7 +36,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Searching comments in Sheets, Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its cell, slide or shape
 - **Back buttons** — the back at the top left is a "‹" in every app on a phone, and Drive's text editor goes back with **‹ Files**
 - **Calendar's toolbar** — the previous and next arrows sit at the right, beside the view choice (the ⋮ menu on a phone), away from the back at the top left
-- **Messages in Mail** — an open message or draft has a **Close** (X) at the right of its toolbar, and Esc closes it too. Closing keeps your search, and back after closing doesn't open the message again
+- **Messages in Mail** — an open message, draft or new message has a **Close** (X) at the right of its toolbar, and Esc closes it too. Closing keeps your search, and back after closing doesn't open the message again. A new message or reply started over an open message closes back to the list
 - **Details in Contacts and Admin** — Esc closes an open contact, user, team or waitlist entry, and back after closing one doesn't open it again. A contact's details sit under small headings, in Drive's preview of a contact file too
 - **Details in Drive** — Share, the watch bell and the ⋮ menu sit at the top of a file's details, beside **Close** (X). Esc closes the details, and the arrow keys no longer fill your back history
 - **Waitlist in Admin** — **Reject** has its own button instead of an X, which now only closes the entry. With no entry open the list fills the page
@@ -57,6 +57,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
 - **Message box in Chat and comments** — a new message or coming back to the window no longer pulls the focus into the box, so it stays in a search field or on the slide you were editing
+- **Share links in Drive** — closing the Share dialog a link opened no longer opens it again when you go back
+- **Open in Drive's details** — the button shows its label again
 - **Saving a contact twice** — pressing Enter twice on New contact or Edit contact no longer creates the contact twice
 - **Change password in Space** — it can't be sent twice, a refused change leaves no error behind, and the "at least 8 characters" message clears once the password is long enough
 - **Drafts in Mail** — closing or reloading the tab before the last change of a draft is saved asks first

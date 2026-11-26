@@ -21,7 +21,7 @@ The message list in the middle column is where you choose messages. The way you 
 
 Selected messages are highlighted, so you can see at a glance what's in the set.
 
-To select every message in the list, press **Cmd+A** (Mac) or **Ctrl+A** (Windows). Press **Escape** to clear a selection of two or more and start over. With only the open message selected, Escape closes the message instead. These keys work while the message list has focus, so click a message first if nothing happens.
+To select every message in the list, press **Cmd+A** (Mac) or **Ctrl+A** (Windows). Press **Esc** to clear a selection of two or more and start over. With only the open message selected, **Esc** closes the message instead. These keys work while the message list has focus, so click a message first if nothing happens.
 
 ## Act on the selection
 
