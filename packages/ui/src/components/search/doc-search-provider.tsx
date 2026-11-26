@@ -175,7 +175,7 @@ export function DocSearchProvider({
     // A ?q= term opens the bar with it and reveals the first match, with the focus left in the document. It runs once,
     // as the route latches the term and runSearch is stable.
     useEffect(() => {
-        if (initialSearchTerm && initialSearchTerm !== '') {
+        if (initialSearchTerm) {
             setQuery(initialSearchTerm);
             setOpen(true);
             runSearch(initialSearchTerm, DEFAULT_OPTIONS, 0);
@@ -186,7 +186,6 @@ export function DocSearchProvider({
     // clamps the active index without a reveal, which would scroll the page away from the reader.
     const republishTickRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     useEffect(() => {
-        void controller;
         if (republishTickRef.current !== undefined) return;
         republishTickRef.current = setTimeout(() => {
             republishTickRef.current = undefined;
@@ -260,7 +259,7 @@ export function DocSearchProvider({
         setMatches(fresh);
         setActiveIndex(nextIndex ?? -1);
         controllerRef.current.highlightAll(fresh);
-        if (nextIndex != null && fresh[nextIndex]) controllerRef.current.reveal(fresh[nextIndex].id);
+        if (nextIndex != null) controllerRef.current.reveal(fresh[nextIndex].id);
     }, []);
 
     const flashReplaced = useCallback((n: number) => {
@@ -271,7 +270,7 @@ export function DocSearchProvider({
 
     const onReplace = useCallback(() => {
         const c = controllerRef.current;
-        if (!c.replace || activeIndex < 0 || !matches[activeIndex]) return;
+        if (!c.replace || activeIndex < 0) return;
         const fresh = c.replace(matches[activeIndex].id, query, replacement, options, preserveCase);
         // When the replace removed a match, the next one moved into its index, which stays. When the count held,
         // such as cat replaced by cats, the index steps forward, or Replace would loop on the same match.
