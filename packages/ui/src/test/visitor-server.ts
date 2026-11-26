@@ -53,7 +53,7 @@ export function withSession(auth: typeof Auth): typeof Auth {
 }
 
 // The editor's own providers, kept so open() can mark them synced and a test can read the awareness they would send.
-export const providers = new Set<WebsocketProvider>();
+const providers = new Set<WebsocketProvider>();
 
 // The collab module with every provider an editor opens kept in `providers`.
 export function withProviders(collab: typeof Collab): typeof Collab {

@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2464 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2465 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1194,7 +1194,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1306)
+## Utilities & constants (1307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2432,6 +2432,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `guardLinkRoute` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
+| `loginLocation` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `FILTER_LABELS` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `readImageSize` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
@@ -2495,10 +2496,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `loadReact` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `unmountAllRoots` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
+| `editorVisitorTests` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `isVisitorRoute` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `labelled` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `OWNER` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
-| `providers` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `session` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `sessionAuth` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
 | `visitorServer` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
