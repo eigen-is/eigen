@@ -39,6 +39,9 @@ const MAX_AWARENESS_CLIENT_IDS = 8;
 // A real awareness state is a name, a color, a user id and a cursor. That is a few hundred bytes, or a
 // few KiB for a large canvas selection. The cap bounds what one state costs every peer.
 const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
+// A step 1 is a state vector, a few bytes per client id that ever edited, so 1 MiB is over a hundred thousand
+// editors. Decoding and answering a larger, forged one would hold the event loop.
+export const MAX_SYNC_STEP_1_BYTES = 1024 * 1024;
 
 // Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
@@ -216,6 +219,7 @@ export class CollabDocument {
             // send and how the frame is applied. A reader still gets the handshake; a step 2 counts as an update.
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
+                if (message.byteLength > MAX_SYNC_STEP_1_BYTES) return;
                 sendFrame(
                     conn,
                     encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
