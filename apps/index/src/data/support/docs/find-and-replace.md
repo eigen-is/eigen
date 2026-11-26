@@ -66,7 +66,7 @@ In Sheets, a replace rewrites the contents of a cell. Cells holding a formula ar
 
 The find bar looks at the text of the document itself. Comments aren't part of that.
 
-To search the discussion on a document, presentation, drawing or board, open the command palette with **⌘K** (**Ctrl+K**) while the file is open, then type `doc:` followed by your term. Matches in the text appear under **In document**, and matches in comment threads under **In comments**. Press **Enter** on one to jump to it. See [Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for the rest of what the palette can do.
+To search the discussion on a document, spreadsheet, presentation, drawing or board, open the command palette with **⌘K** (**Ctrl+K**) while the file is open, then type `doc:` followed by your term. Matches in the text appear under **In document**, and matches in comment threads under **In comments**. Press **Enter** on one to jump to it. See [Find anything with search and the command palette](/support/getting-started/search-and-command-palette) for the rest of what the palette can do.
 
 ## Close the find bar
 

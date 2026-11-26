@@ -1,10 +1,11 @@
 // The sheet editor's side of a comment: the grid's hover report drives the hover card, a card opened from the hover
 // opens where the pointer already is, and one opened from the pane first jumps to its cell and gives the grid the keys,
 // except on a phone, where the pane hides the grid. The open thread is the route's ?chat=, which the comments open and
-// close. The grid, the pane and the card render as probes that keep their props, since they are tested
-// where they live.
+// close. A palette hit in comments opens the pane and goes the way of a pane row's chat. The grid, the pane, the card
+// and the find bar's provider render as probes that keep their props, since they are tested where they live.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentHoverTarget } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { Sheet } from '@workspace/sheet';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -29,6 +30,7 @@ const seen: {
     hoverCard?: HoverCardProps;
     panel?: PanelProps;
     toggleComments?: () => void;
+    commentSearch?: DocCommentSearch;
 } = {};
 const opened: unknown[] = [];
 const workbook = {
@@ -46,7 +48,11 @@ const lifecycle = {
     members: [],
     assignedCount: 0,
     isCardDeleted: () => false,
-    setOpenCardId: (cardId: string | null) => opened.push(['open', cardId]),
+    // As the real one, a card with a thread is opened by writing its chat to the URL.
+    setOpenCardId: (cardId: string | null) => {
+        opened.push(['open', cardId]);
+        if (cardId === 'c1') seen.lifecycleArgs?.onOpenChat(cards.c1.chatName);
+    },
     openChat: (_chatName: string, openCard?: (cardId: string) => void) => {
         if (openCard) openCard('c1');
         else opened.push(['open', 'c1']);
@@ -136,7 +142,10 @@ mock.module('@workspace/ui/components/comments', () => ({
 }));
 mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
     ...realSearch,
-    DocSearchProvider: Children,
+    DocSearchProvider: ({ commentSearch, children }: { commentSearch?: DocCommentSearch; children?: ReactNode }) => {
+        seen.commentSearch = commentSearch;
+        return children;
+    },
 }));
 mock.module('@workspace/ui/components/cards', () => ({ ...realCards, CardFormDialog: Nothing }));
 mock.module('../../../components/sheets/hooks/use-sheet', () => ({ useSheet: () => sheet }));
@@ -233,20 +242,20 @@ test('the hover card floats beside the cell and reads the cards the pane reads',
 
 test('a click on the hover card opens the card and moves nothing', async () => {
     const { hoverCard } = await renderEditor();
-    hoverCard.onOpenCard('c1');
+    await act(async () => hoverCard.onOpenCard('c1'));
     expect(opened).toEqual([['open', 'c1']]);
 });
 
 // The row took the focus, so the grid takes it back before the thread opens, which hands it back there as it closes.
 test("a click on a pane row jumps to the card's first cell, gives the grid the keys, then opens the card", async () => {
     const { panel } = await renderEditor();
-    panel.onOpenCard('c1');
+    await act(async () => panel.onOpenCard('c1'));
     expect(opened).toEqual([['reveal', FIRST_CELL], ['focus grid'], ['open', 'c1']]);
 });
 
 test("a comment named by its chat, such as an activity row's, jumps too", async () => {
     const { panel } = await renderEditor();
-    panel.onOpenChat('chat-1');
+    await act(async () => panel.onOpenChat('chat-1'));
     expect(opened).toEqual([['reveal', FIRST_CELL], ['focus grid'], ['open', 'c1']]);
 });
 
@@ -259,8 +268,8 @@ test('a card on no cell opens with nowhere to jump, and the grid still gets the 
 test('on a phone, where the pane hides the grid, a row and a chat name only open the card', async () => {
     layout.isMobile = true;
     const { panel } = await renderEditor();
-    panel.onOpenCard('c1');
-    panel.onOpenChat('chat-1');
+    await act(async () => panel.onOpenCard('c1'));
+    await act(async () => panel.onOpenChat('chat-1'));
     expect(opened).toEqual([
         ['open', 'c1'],
         ['open', 'c1'],
@@ -282,4 +291,16 @@ test("the route's ?chat= is the open thread, which an open writes and a close ta
     await settle();
     expect(chatParam()).toBe('chat-1');
     expect(seen.lifecycleArgs?.chat).toBe('chat-1');
+});
+
+test('a palette hit in comments opens the closed pane, jumps to the cell, opens the card and writes ?chat=', async () => {
+    await renderEditor();
+    await act(async () => seen.toggleComments?.());
+    seen.panel = undefined;
+    expect(seen.commentSearch?.docKey).toBe('owner-1:m1:x1');
+    await act(async () => seen.commentSearch?.reveal('chat-1'));
+    await settle();
+    expect(seen.panel).toBeDefined();
+    expect(opened).toEqual([['reveal', FIRST_CELL], ['focus grid'], ['open', 'c1']]);
+    expect(chatParam()).toBe('chat-1');
 });

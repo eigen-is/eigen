@@ -12,10 +12,12 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { ImageSize } from '@workspace/lib/vector';
@@ -114,6 +116,7 @@ export function SheetEditor({
         mobilePanelOpen,
         toggleComments,
         toggleActivity,
+        openComments,
         closePanels,
         onSearchOpenChange,
     } = useDocumentPanels(isMobile);
@@ -158,6 +161,7 @@ export function SheetEditor({
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const commentHover = useCommentHover();
+    const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
 
     // A pane row takes the focus from the grid, and the thread hands it back to whatever held it as it closes.
     const openCard = (cardId: string) => {
@@ -165,6 +169,18 @@ export function SheetEditor({
         if (cell) workbookRef.current?.revealSearchMatch(cell);
         workbookRef.current?.focusGrid();
         setOpenCardId(cardId);
+    };
+    // The mobile pane hides the workbook, so a jump would go unseen there.
+    const openChat = isMobile ? openLifecycleChat : (chatName: string) => openLifecycleChat(chatName, openCard);
+
+    // A new object on each render, which the palette's publisher stabilizes, so reveal sees the current cards. A hit
+    // comes from the palette, not the pane, so it opens the pane first.
+    const commentSearch: DocCommentSearch = {
+        ...commentSearchHalf,
+        reveal: (chatName) => {
+            openComments();
+            openChat(chatName);
+        },
     };
 
     const deleteCard = useCallback((cardId: string) => {
@@ -389,6 +405,7 @@ export function SheetEditor({
                     <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
                         <DocSearchProvider
                             controller={searchController}
+                            commentSearch={commentSearch}
                             initialSearchTerm={initialSearchTerm}
                             onOpenChange={onSearchOpenChange}
                             barClassName="top-20"
@@ -462,11 +479,8 @@ export function SheetEditor({
                             activeComments={activeComments}
                             isCardDeleted={isCardDeleted}
                             commentContextMenu={commentContextMenu}
-                            // The mobile pane hides the workbook, so a jump would go unseen there.
                             onOpenCard={isMobile ? setOpenCardId : openCard}
-                            onOpenChat={
-                                isMobile ? openLifecycleChat : (chatName) => openLifecycleChat(chatName, openCard)
-                            }
+                            onOpenChat={openChat}
                         />
                     )}
                     {/* The comment and activity panels take the place of the properties panel, as in Slides. A
