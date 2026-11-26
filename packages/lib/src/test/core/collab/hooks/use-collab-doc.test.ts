@@ -107,22 +107,18 @@ class FakeProvider {
 // module is restored in afterAll so later files in the same run see the package they imported.
 const realWebsocketModule = await import('y-websocket');
 mock.module('y-websocket', () => ({ WebsocketProvider: FakeProvider }));
-// Signed in unless a case says otherwise; a visitor is no user.
-const session: { user: { id: string } | null } = { user: { id: 'u1' } };
-const realAuthContextModule = { ...(await import('../../../../core/auth/auth-context')) };
-mock.module('../../../../core/auth/auth-context', () => ({ ...realAuthContextModule, useAuth: () => session }));
 
 // react-dom needs a DOM to render the hook harness into; the window itself is the one whose
 // `location.reload` the offline path calls.
 const window = installHappyDom();
 afterAll(() => {
     mock.module('y-websocket', () => realWebsocketModule);
-    mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
 });
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { collabKeys } = await import('../../../../core/collab/hooks/keys');
 const { useCollabDoc } = await import('../../../../core/collab/hooks/use-collab-doc');
 type UseCollabDocOptions = Parameters<typeof UseCollabDoc>[0];
 
@@ -131,11 +127,22 @@ function Harness({ options, onRender }: { options: UseCollabDocOptions; onRender
     return null;
 }
 
-function mount(options: UseCollabDocOptions) {
+// The document's info as the editor route has loaded it before the editor mounts. `live` says whether the reader syncs
+// over the socket.
+function mount(options: UseCollabDocOptions, live: boolean | 'unloaded' = true) {
     let latest: CollabDoc | null = null;
     const container = document.createElement('div');
     const root = createRoot(container);
     const client = new QueryClient();
+    const setLive = (pathId: string, next: boolean) =>
+        client.setQueryData(collabKeys.document(options.ownerId, options.mountId, pathId), {
+            canRead: true,
+            canWrite: next,
+            live: next,
+            path: null,
+            folderContents: null,
+        });
+    if (live !== 'unloaded') for (const pathId of ['doc-1', 'doc-2']) setLive(pathId, live);
     const render = (next: UseCollabDocOptions) =>
         act(() => {
             root.render(
@@ -163,6 +170,12 @@ function mount(options: UseCollabDocOptions) {
             return provider;
         },
         rerender: render,
+        // TanStack Query tells its observers on a timer.
+        setLive: (next: boolean) =>
+            act(async () => {
+                setLive(options.pathId, next);
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }),
         unmount: () => act(() => root.unmount()),
     };
 }
@@ -540,6 +553,8 @@ function stateServer() {
     const answer = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
         const ifNoneMatch = new Headers(init?.headers).get('if-none-match');
         asked.push({ url: String(input), ifNoneMatch });
+        // Only the state route answers: an info the test did not load stays loading.
+        if (!String(input).endsWith('/state')) return new Promise(() => {});
         if (server.refuse) return new Response('No read permission', { status: server.refuse });
         const etag = `"${stored.getText('probe').length}"`;
         if (ifNoneMatch === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
@@ -563,20 +578,18 @@ describe('useCollabDoc for a reader who gets no socket', () => {
 
     beforeEach(() => {
         FakeProvider.instances = [];
-        session.user = null;
         server = stateServer();
     });
     afterEach(() => {
         active?.unmount();
         active = null;
-        session.user = { id: 'u1' };
         server.restore();
     });
 
     test('it opens no socket, loads the stored state over HTTP and runs onSync once', async () => {
         server.write('stored');
         const syncs: boolean[] = [];
-        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) });
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
         const h = active;
         expect(h.state.loaded).toBe(false);
         await settle();
@@ -596,7 +609,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
     test('a focus asks again with the ETag: a newer state updates the held document, an unchanged one does nothing', async () => {
         server.write('one');
         const syncs: boolean[] = [];
-        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) });
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
         const h = active;
         await settle();
         const doc = h.doc;
@@ -617,7 +630,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
     });
 
     test("the reader's own change to the document arms no unsynced-edits guard", async () => {
-        active = mount(OPTIONS);
+        active = mount(OPTIONS, false);
         const h = active;
         await settle();
         act(() => h.doc.getMap('items').set('local', 1));
@@ -628,7 +641,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         const reload = jest.fn();
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
         server.refuse = 403;
-        active = mount(OPTIONS);
+        active = mount(OPTIONS, false);
         await settle();
         expect(reload).toHaveBeenCalledTimes(1);
         expect(active.state.loaded).toBe(false);
@@ -637,7 +650,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
     test('a link closed while the document is open reloads at the next focus', async () => {
         const reload = jest.fn();
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
-        active = mount(OPTIONS);
+        active = mount(OPTIONS, false);
         await settle();
         expect(reload).not.toHaveBeenCalled();
 
@@ -646,9 +659,44 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    test('until the info says who the reader is, there is no doc, no socket and no fetch', async () => {
+        active = mount(OPTIONS, 'unloaded');
+        const h = active;
+        await settle();
+        expect(h.state.doc).toBeNull();
+        expect(FakeProvider.instances).toEqual([]);
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state'))).toEqual([]);
+    });
+
+    test('a reader who becomes live gets a new doc on a socket, and one who stops being live loads over HTTP', async () => {
+        server.write('stored');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        const overHttp = h.doc;
+
+        await h.setLive(true);
+        expect(h.doc).not.toBe(overHttp);
+        expect(h.state.loaded).toBe(false);
+        expect(h.provider.doc).toBe(h.doc);
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+        expect(h.state.loaded).toBe(true);
+
+        const socket = h.provider;
+        await h.setLive(false);
+        await settle();
+        expect(socket.destroyed).toBe(true);
+        expect(h.state.provider).toBeNull();
+        expect(h.doc.getText('probe').toString()).toBe('stored');
+        expect(h.state.loaded).toBe(true);
+    });
+
     test('a document switch loads the other document into a new doc', async () => {
         server.write('first');
-        active = mount(OPTIONS);
+        active = mount(OPTIONS, false);
         const h = active;
         await settle();
         const first = h.doc;

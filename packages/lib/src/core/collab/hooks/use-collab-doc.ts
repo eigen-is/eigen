@@ -1,10 +1,10 @@
 // The Y.Doc behind every collab editor, such as a doc, a sheet or a board. A host calls useCollabDoc for one document
-// and gets the doc and its connection state. Someone signed in syncs it over a y-websocket provider, and the hook
-// decides what each close code does to the tab: reconnect, wait and retry, stop for good, or reload. A visitor without
-// a login gets no socket: the hook loads the stored state over HTTP and asks again when the tab shows again.
+// and gets the doc and its connection state. A live reader, as the document's info names them, syncs it over a
+// y-websocket provider, and the hook decides what each close code does to the tab: reconnect, wait and retry, stop for
+// good, or reload. Any other reader, such as a visitor without a login, gets no socket: the hook loads the stored state
+// over HTTP and asks again when the tab shows again.
 
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
@@ -20,7 +20,7 @@ import * as Y from 'yjs';
 import { AppError } from '../../api-error';
 import { reloadReplacedHome } from '../../home/reload-replaced-home';
 import { applyCollabState } from '../collab-state';
-import { useCollabStoredState } from './use-collab';
+import { useCollabDocumentInfo, useCollabStoredState } from './use-collab';
 
 // Sibling tabs sync over BroadcastChannel only once the server named its data epoch, on a channel of that epoch.
 const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, disableBc: true } as const;
@@ -59,7 +59,7 @@ type UseCollabDocOptions = {
 };
 
 export type CollabDoc = {
-    // Null until the effect creates the doc, and again across a pathId switch.
+    // Null until the document's info has loaded and the effect creates the doc, and again across a pathId switch.
     doc: Y.Doc | null;
     // The live doc for `[]`-deps callbacks: the doc identity changes on a pathId switch, this ref never does.
     docRef: RefObject<Y.Doc | null>;
@@ -86,8 +86,9 @@ export type CollabDoc = {
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const { ownerId, mountId, pathId } = options;
-    const live = !!useAuth().user;
-    const stored = useCollabStoredState(ownerId, mountId, pathId, !live);
+    // Undefined until the info, which the editor's route loads first, says how this reader syncs.
+    const live = useCollabDocumentInfo(ownerId, mountId, pathId).data?.live;
+    const stored = useCollabStoredState(ownerId, mountId, pathId, live === false);
 
     const [ctx, setCtx] = useState<CollabDocContext | null>(null);
     const [synced, setSynced] = useState(false);
@@ -113,6 +114,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     onSyncRef.current = options.onSync;
 
     useEffect(() => {
+        if (live === undefined) return;
         const doc = new Y.Doc();
         docRef.current = doc;
 
@@ -271,7 +273,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         provider: ctx?.provider ?? null,
         undoManager: ctx?.undoManager ?? null,
         synced,
-        offline: live && loaded && !connected && !storageUnavailable,
+        offline: live === true && loaded && !connected && !storageUnavailable,
         loaded,
         // A stored state that failed is asked again for as long as the failure count stands.
         storageUnavailable: storageUnavailable || (stored.isFetching && stored.failureCount > 0),
