@@ -121,7 +121,7 @@ A socket that opens with a user is untouched, a signed-in reader of a public doc
 - **The upgrade is refused unless the rule admits the path.** The route's `beforeHandle` asks `LinkDrive.canRead` for a connection without a user and answers 403, so an unauthenticated upgrade to a path no link opens never reaches `open`. The open asks again, since the access can change while the document loads.
 - **The server greets it with nothing.** `CollabDocument.greetMember` sends a connection without a user neither the server's sync step 1 nor the awareness states. A visitor's answer to that step 1 would be its whole state, which a reader's socket drops unread. So the visitor syncs from its own step 1.
 - **No awareness, either way.** `CollabDocument.subscribe` takes `User | null`. Inbound awareness is dropped by the check that is there (`if (!user) return`), and `broadcastMessage` sends awareness only to connections with a user. Edits reach a visitor as they reach anyone.
-- **What it sends is dropped, except its sync step 1.** A sync step 2, an update and an awareness frame are dropped unread, as a reader's step 2 and updates are. A sync step 1 is answered every time, as for any reader: the client sends one every 5 s (`resyncInterval` in `use-collab-doc.ts`), and on a quiet document that answer is the only frame that keeps y-websocket from closing the socket after 30 s. There is no frame-size cap of its own: `maxPayloadLength` in `app.ts` is 128 MB for every socket.
+- **What it sends is dropped, except its sync step 1.** A sync step 2, an update and an awareness frame are dropped unread, as a reader's step 2 and updates are. A sync step 1 is answered every time, as for any reader, unless the frame is over 1 MiB: `CollabDocument.handleMessage` drops such a step 1 unread for every connection, member, guest or visitor, and the socket stays open. The client sends one every 5 s (`resyncInterval` in `use-collab-doc.ts`), and on a quiet document that answer is the only frame that keeps y-websocket from closing the socket after 30 s. There is no other frame-size cap for a visitor: `maxPayloadLength` in `app.ts` is 128 MB for every socket.
 - **`recordOpened` is skipped.**
 - **The keepalive asks the rule.** `checkAccess` in `routes/collab.ts` is built on `ws.data.session.id` and `getSessionUser`, which a visitor does not have. For a socket without a user it asks only `LinkDrive.canRead` for its path, every 15 s:
 
@@ -132,7 +132,7 @@ A socket that opens with a user is untouched, a signed-in reader of a public doc
 | The path or a folder above it is trashed | `isTrashedChain`: close 4403. The trash itself closes the document first ([SOFT-DELETE.md](../SOFT-DELETE.md)) |
 | The path is moved out of a public folder | Its chain no longer holds the folder: close 4403 |
 
-A socket keeps the kind it opened with. Someone who signs in, or is given access, while a visitor tab is open stays a visitor there until a reload. A visitor whose link was closed while their tab was offline sees a connection that keeps retrying, since every new upgrade is refused, until they reload. Both are accepted.
+A socket keeps the kind it opened with. Someone who signs in, or is given access, while a visitor tab is open stays a visitor there until a reload. A visitor whose link was closed while their tab was offline, or between the page load and the socket, sees a connection that retries every 2.5 s, since every new upgrade is refused, and never reaches the login page until they reload. Both are accepted.
 
 ## The frontend
 
@@ -172,7 +172,7 @@ Visitors see the item as it is stored. In a document that includes its comment c
 
 Each choice has its icon and one short line under it, from `GENERAL_ACCESS` in `drive-access-list.tsx`: "Only people with access", "They sign in to open it" and "No sign-in needed". In the dialog the third choice's line is "Anyone on the internet with the link can view", and while public links are off "Public links are turned off on this server, so this link opens nothing."
 
-The read-only `DriveAccessList` and `DriveShareSummary` read the same `GENERAL_ACCESS`, so every place names the three states alike; the summary shows the choice's icon with its name as the tooltip.
+The read-only `DriveAccessList` and `DriveShareSummary` read the same `GENERAL_ACCESS`, so every place names the three states alike; the summary shows the choice's icon with its name as the tooltip. The read-only list names the stored value without reading the switch, so it says "No sign-in needed" for a public item while public links are off; that is accepted (§ Risks).
 
 **The Admin setting** is one switch, **Allow public links**, in a section of its own, **Public links**, on the **Guest access** page (`apps/admin/src/components/admin/guest-settings.tsx`), between **Open signup** and **Inactivity cleanup**. It saves with the page through `useUpdateServerSettings`. Both settings answer "who from outside gets in", and one switch does not earn a page.
 
@@ -198,7 +198,7 @@ No sweep and no cleanup: a link is one value in one row.
 ## Where the design bends
 
 1. **Not an option on `auth`, a second macro, and a third under it.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`. `linkAuth` needs `optionalAuth` below it to read the user in its header hook.
-2. **A visitor's frames are dropped, not a reason to close, its sync step 1 is not counted, and the server sends it no step 1.** The review asked to close on any update, and the plan then allowed one step 1 per connection. y-websocket answers the server's sync step 1 with a step 2 of its own, and Eigen's client sends a step 1 every 5 s, so either rule would close every visitor. The server's step 1 would only ask for that step 2, the visitor's whole state, which is dropped unread, so a visitor never gets one. There is no frame cap for a visitor: one that reconnects holding a large document stays open (`collab-link-visitor.test.ts`). Nothing bounds what a visitor sends beyond what bounds every socket ([ROADMAP.md](../ROADMAP.md)).
+2. **A visitor's frames are dropped, not a reason to close, its sync step 1 is not counted, and the server sends it no step 1.** The review asked to close on any update, and the plan then allowed one step 1 per connection. y-websocket answers the server's sync step 1 with a step 2 of its own, and Eigen's client sends a step 1 every 5 s, so either rule would close every visitor. The server's step 1 would only ask for that step 2, the visitor's whole state, which is dropped unread, so a visitor never gets one. No frame cap of its own applies to a visitor, beyond the 1 MiB step 1 limit every socket has: one that reconnects holding a large document stays open (`collab-link-visitor.test.ts`). Nothing bounds what a visitor sends beyond what bounds every socket ([ROADMAP.md](../ROADMAP.md)).
 3. **Print for a visitor is the editor's own print**, which only Docs has today ([ROADMAP.md](../ROADMAP.md), P2).
 
 ## Risks, and what is accepted
@@ -216,6 +216,7 @@ No sweep and no cleanup: a link is one value in one row.
 - **Every socket's text frames are parsed before the route.** Elysia JSON-parses a text frame on any socket, a visitor's included, before the `message` handler runs ([ROADMAP.md](../ROADMAP.md)).
 - **Old copy events keep their source.** A `copied` history row written before this change still holds the original's owner, mount and path id; new rows hold none.
 - **Shared by me leaves out an item that is only public.** It lists items with an ACL entry, and a link is none.
+- **The read-only access list says "No sign-in needed" while public links are off.** `DriveAccessList`, in the details pane and a viewer's Share dialog, names the stored value and does not read the switch.
 - **A child of a public folder says Restricted in its own dialog.** General access shows the path's own value, and the link sits on the folder above.
 
 **What breaks.** No existing data changes. `'link'` is a new stored value. On a rollback to an older build a public path is closed, since that build's check does not know the value, and its share dialog shows the path as signed-in view and can't save it until another General access is chosen.

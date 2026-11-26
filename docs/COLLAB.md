@@ -91,11 +91,11 @@ The check at open is why a change during a cold load isn't left to the first tic
 A socket that opens without a user keeps that kind until it closes, whoever signs in meanwhile, and the route holds it as a visitor's access with a `LinkDrive` (`CollabAccess` in `routes/collab.ts`). `CollabDocument` stores `null` as its user.
 
 - **It gets edits and nothing else.** `CollabDocument.greetMember` sends a connection without a user neither the server's sync step 1 nor the awareness states, and `broadcastMessage` passes edits to it but never awareness. The server's step 1 would only ask for the visitor's whole state as a step 2, which is dropped unread, so the visitor syncs from its own step 1.
-- **What it sends is dropped, except its sync step 1.** Its step 2, its updates and its awareness are dropped unread, since it never has write and has no user for an awareness state. Its sync step 1 is answered every time, as any reader's: the client sends one every 5 s, and on a quiet document that answer is what keeps y-websocket from closing the socket after 30 s. There is no frame-size cap of its own, so a visitor that reconnects holding a large document stays open (`collab-link-visitor.test.ts`).
+- **What it sends is dropped, except its sync step 1.** Its step 2, its updates and its awareness are dropped unread, since it never has write and has no user for an awareness state. Its sync step 1 is answered every time, as any reader's, unless the frame is over 1 MiB, which `CollabDocument.handleMessage` drops unread for every connection, member, guest or visitor alike, leaving the socket open: the client sends one every 5 s, and on a quiet document that answer is what keeps y-websocket from closing the socket after 30 s. There is no other frame cap for a visitor, so one that reconnects holding a large document stays open (`collab-link-visitor.test.ts`).
 - **The keepalive asks the link rule.** A visitor has no session, so its `checkAccess` asks only `LinkDrive.canRead` for the path. Another General access, public links turned off, a trash and a move out of a public folder all close it with 4403 at the next tick.
 - **No Recent row.** `recordOpened` needs a user, so an open without one records nothing.
 
-A visitor whose link closed while their tab was offline gets a 403 on every new upgrade, so the tab shows a connection that keeps retrying until a reload. That is accepted.
+A visitor whose link closed while their tab was offline gets a 403 on every new upgrade, and so does one whose link closed between the page load and the socket. The tab retries on y-websocket's 2.5 s backoff and never reaches the login page until a reload. That is accepted.
 
 ## A document lingers after the last unsubscribe
 
