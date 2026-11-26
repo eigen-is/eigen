@@ -407,6 +407,52 @@ describe("a visitor's preview miss", () => {
             run.mockRestore();
         }
     }, 60_000);
+
+    test('an export runs in the background for whoever reads only through the link', async () => {
+        const readers = [
+            ['a guest', guestToken, 'background'],
+            ['a member', memberToken, 'foreground'],
+            ['the owner', token, 'foreground'],
+        ] as const;
+        const docs = await Promise.all(readers.map(() => seed(PREVIEWED[0])));
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (const [i, [who, reader, expected]] of readers.entries()) {
+                const res = await authedRequest(reader, previewUrl('export/html', docs[i].id));
+                expect([who, res.status]).toEqual([who, 200]);
+                const exports = run.mock.calls.splice(0).filter(([request]) => request.kind === 'export');
+                expect([who, exports.map(([, opts]) => opts.priority)]).toEqual([who, [expected]]);
+            }
+        } finally {
+            run.mockRestore();
+        }
+    }, 30_000);
+
+    test("a member's export and preview are served while a signed-in guest's exports fill the queue", async () => {
+        const docs: DrivePath[] = [];
+        for (let i = 0; i < 12; i++) docs.push(await seed(PREVIEWED[0]));
+        const [memberDoc, memberPreview] = [await seed(PREVIEWED[0]), await seed(PREVIEWED[0])];
+        const run = spyOn(documentTransformRunner, 'run');
+        let refused = 0;
+        try {
+            const guests = docs.map(async (doc) => {
+                const res = await authedRequest(guestToken, previewUrl('export/html', doc.id));
+                if (res.status === 503) refused += 1;
+            });
+            await eventually(async () => (run.mock.calls.length + refused >= docs.length ? true : undefined));
+            const members = await Promise.all([
+                ...Array.from({ length: 3 }, () => authedRequest(memberToken, previewUrl('export/html', memberDoc.id))),
+                ...Array.from({ length: 2 }, () =>
+                    authedRequest(memberToken, previewUrl('text-preview', memberPreview.id)),
+                ),
+            ]);
+            // An empty document has no text preview, so its answer is a 404 rather than the queue's 503.
+            expect(members.map((res) => res.status)).toEqual([200, 200, 200, 404, 404]);
+            await Promise.all(guests);
+        } finally {
+            run.mockRestore();
+        }
+    }, 60_000);
 });
 
 describe('generateImagePreview', () => {

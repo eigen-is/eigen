@@ -80,7 +80,7 @@ describe('deck export — assembled HTML surface', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
-        const html = (await exportDocument(mount, path, 'html')).data.toString('utf-8');
+        const html = (await exportDocument(mount, path, 'html', 'foreground')).data.toString('utf-8');
 
         // No live script tag and no attribute breakout survive into the download.
         expect(html).not.toMatch(/<script/i);
@@ -137,7 +137,7 @@ describe('deck export — assembled HTML surface', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
-        const html = (await exportDocument(mount, path, 'html')).data.toString('utf-8');
+        const html = (await exportDocument(mount, path, 'html', 'foreground')).data.toString('utf-8');
 
         const backdrop = html.match(/<g stroke-linecap="round">(.*?)<\/g>/)?.[1] ?? '';
         // The fill is the box corner to corner, where a sketched one starts off the corner.
@@ -161,7 +161,7 @@ describe('deck export — assembled HTML surface', () => {
         );
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
-        await expect(exportDocument(mount, path, 'html')).rejects.toThrow('The deck is empty');
+        await expect(exportDocument(mount, path, 'html', 'foreground')).rejects.toThrow('The deck is empty');
     });
 });
 
@@ -218,7 +218,7 @@ describe('deck export — pptx', () => {
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
         await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
 
-        const result = await exportDocument(mount, path, 'pptx');
+        const result = await exportDocument(mount, path, 'pptx', 'foreground');
         expect([result.contentType, result.fileName]).toEqual([PPTX_MIME, 'Office deck.pptx']);
 
         const zip = openZip(result.data);
