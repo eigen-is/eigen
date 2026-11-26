@@ -7,7 +7,7 @@ import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { EigenDocRoot, VECTOR_CONFIG } from '@workspace/ui/components/drive';
 
 function VectorRoot() {
-    const isEditorRoute = useMatch({ from: '/_auth/vector/$ownerId/$mountId/$pathId', shouldThrow: false });
+    const isEditorRoute = useMatch({ from: '/vector/$ownerId/$mountId/$pathId', shouldThrow: false });
     const teamDriveMatch = useMatch({ from: '/_auth/_sidebar/drive/$ownerId/$mountId', shouldThrow: false });
     return (
         <EigenDocRoot

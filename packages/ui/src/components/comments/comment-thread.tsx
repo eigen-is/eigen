@@ -26,16 +26,16 @@ type CommentThreadProps = {
 };
 
 export function CommentThread({ ownerId, mountId, pathId, chatName, lead, className }: CommentThreadProps) {
-    const { resolveChatId } = useMediaResolver();
+    const { resolveChatId, isChatMissing } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
-    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. If the
-    // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
+    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. A thread
+    // known to be gone shows the card alone, such as a visitor's, whose listing has no chat folder.
     if (!chatId) {
         return (
             <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', className)}>
                 {lead}
-                <LoadingState />
+                {!isChatMissing(chatName) && <LoadingState />}
             </div>
         );
     }

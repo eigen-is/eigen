@@ -1,6 +1,7 @@
 // One rule opens a comment wherever it is reached, in every host. A landing, a search hit or an activity row that names
 // a thread whose card is gone from the map, such as a sticky deleted from its board, opens the comment as deleted: no
 // card, only the index row and the title it keeps. A name that neither a card nor a row knows is reported, so the host can drop it.
+// A visitor without a login reads only the cards in the document, never the server's index rows or members.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
@@ -9,9 +10,10 @@ import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
 
+const session: { user: { id: string; email: string } | null } = { user: { id: 'owner-1', email: 'ada@example.com' } };
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
 mock.module('../../../../core/auth/auth-context', () => ({
-    useAuth: () => ({ user: { id: 'owner-1', email: 'ada@example.com' } }),
+    useAuth: () => session,
 }));
 afterAll(() => {
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
@@ -182,4 +184,26 @@ test('a card link opens its card before the rows arrive, and reports an id no ca
 
     const unknown = await mountBoard({ initialCardId: 'card-9' });
     expect(unknown.onCardNotFound).toHaveBeenCalledTimes(1);
+});
+
+test('a visitor lands on a card by its chat name and asks for no index row or member', async () => {
+    session.user = null;
+    fetchSpy.mockClear();
+    try {
+        const { lifecycle } = await mountBoard({ initialChatName: 'kept.eigenchat' });
+        expect(lifecycle().openCard?.id).toBe('card-1');
+        expect(lifecycle().allComments).toEqual([]);
+        expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+        session.user = { id: 'owner-1', email: 'ada@example.com' };
+    }
+});
+
+test('a signed-in reader still reads the index rows and the members', async () => {
+    fetchSpy.mockClear();
+    await mountBoard({});
+    const asked = fetchSpy.mock.calls.map(
+        ([input]) => new URL(String(input instanceof Request ? input.url : input)).pathname,
+    );
+    expect(asked.some((pathname) => pathname.endsWith('/board-1/comments'))).toBe(true);
 });

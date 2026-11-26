@@ -1,7 +1,9 @@
 // File › Print from the server's PDF, which Docs' print menu calls. The PDF opens in a tab of its own to print from,
-// and when it can't be had the editor falls back to browser print and says what that leaves out.
+// and when it can't be had the editor falls back to browser print and says what that leaves out. A visitor without a
+// login may not export, so they get browser print alone.
 
 import { getDriveExportUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { AppError, getErrorMessage } from '../../api-error';
@@ -21,8 +23,10 @@ function printWithoutBands(fallback: () => void, reason: string): void {
 export function usePrintPdf(fallback: () => void): {
     printPdf: (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => Promise<void>;
 } {
+    const { user } = useAuth();
     const printPdf = useCallback(
         async (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => {
+            if (!user) return fallback();
             if (!canUsePdf) return printWithoutBands(fallback, 'Your latest edits have not reached the server yet.');
             const tab = window.open('', '_blank');
             if (!tab) return printWithoutBands(fallback, 'The browser blocked the tab for the PDF.');
@@ -49,7 +53,7 @@ export function usePrintPdf(fallback: () => void): {
                 printWithoutBands(fallback, getErrorMessage(error));
             }
         },
-        [fallback],
+        [fallback, user],
     );
 
     return { printPdf };

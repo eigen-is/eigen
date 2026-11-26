@@ -29,6 +29,14 @@ class FakeProvider {
     public bcChannel: string;
     public disableBc = true;
     public bcConnects = 0;
+    // y-websocket sends the local state on open, and y-protocols' setLocalStateField writes only while it is set.
+    private localState: Record<string, unknown> | null = {};
+    public awareness = {
+        getLocalState: () => this.localState,
+        setLocalState: (state: Record<string, unknown> | null) => {
+            this.localState = state;
+        },
+    };
     public connectBc() {
         this.bcConnects++;
     }
@@ -98,12 +106,17 @@ class FakeProvider {
 // module is restored in afterAll so later files in the same run see the package they imported.
 const realWebsocketModule = await import('y-websocket');
 mock.module('y-websocket', () => ({ WebsocketProvider: FakeProvider }));
+// Signed in unless a case says otherwise; a visitor is no user.
+const session: { user: { id: string } | null } = { user: { id: 'u1' } };
+const realAuthContextModule = { ...(await import('../../../../core/auth/auth-context')) };
+mock.module('../../../../core/auth/auth-context', () => ({ ...realAuthContextModule, useAuth: () => session }));
 
 // react-dom needs a DOM to render the hook harness into; the window itself is the one whose
 // `location.reload` the offline path calls.
 const window = installHappyDom();
 afterAll(() => {
     mock.module('y-websocket', () => realWebsocketModule);
+    mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
 });
 
 const { act, createElement } = await import('react');
@@ -495,5 +508,20 @@ describe('useCollabDoc connection state', () => {
         h.unmount();
         active = null;
         expect(h.provider.destroyed).toBe(true);
+    });
+
+    test('a signed-in tab keeps its awareness state, so y-websocket sends its presence', () => {
+        active = mount(OPTIONS);
+        expect(active.provider.awareness.getLocalState()).toEqual({});
+    });
+
+    test('a visitor has no awareness state, so no cursor or presence of theirs reaches the socket', () => {
+        session.user = null;
+        try {
+            active = mount(OPTIONS);
+            expect(active.provider.awareness.getLocalState()).toBeNull();
+        } finally {
+            session.user = { id: 'u1' };
+        }
     });
 });

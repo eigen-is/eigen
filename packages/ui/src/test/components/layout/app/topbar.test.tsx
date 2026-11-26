@@ -1,5 +1,6 @@
 // A visitor who is signed out sees a login icon in the top bar, named Enter demo on a demo server. It waits for
 // the session check, so a signed-in visitor never sees it flash, and an empty app name gives the bare "eigen" wordmark.
+// A signed-out visitor of a public document reads its name in the bar's middle, where a user has the palette.
 // A signed-in user's avatar opens the account menu, which a guest gets without the rows only a user has.
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -60,9 +61,9 @@ const layout = {
     isTablet: false,
 };
 
-async function renderBar(appName = 'blog'): Promise<HTMLElement> {
+async function renderBar(appName = 'blog', documentTitle = ''): Promise<HTMLElement> {
     const { container } = await renderInDocument(
-        <LayoutContext.Provider value={{ ...layout, appName }}>
+        <LayoutContext.Provider value={{ ...layout, appName, documentTitle }}>
             <Topbar rootRoute={{ useNavigate: () => () => {} }} />
         </LayoutContext.Provider>,
     );
@@ -106,6 +107,13 @@ describe('the signed-out top bar', () => {
     test('shows no button to a signed-in visitor', async () => {
         session = { isAuthenticated: true, isLoading: false, user: null };
         expect(loginLink(await renderBar())).toBeUndefined();
+    });
+
+    test("shows an open document's name, which nothing edits", async () => {
+        const bar = await renderBar('docs', 'Holiday plan');
+        const title = [...bar.querySelectorAll('header span')].find((span) => span.textContent === 'Holiday plan');
+        expect(title).toBeDefined();
+        expect(bar.querySelector('header input')).toBeNull();
     });
 
     test('draws the bare wordmark and titles the page eigen when the app name is empty', async () => {

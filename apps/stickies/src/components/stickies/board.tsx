@@ -301,7 +301,7 @@ export function StickiesBoard({
                                     members={members}
                                     currentUserEmail={currentUserEmail}
                                     onToggleActivityPanel={
-                                        !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
+                                        user && !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
                                     }
                                     activityPanelOpen={activityPanelOpen}
                                 />

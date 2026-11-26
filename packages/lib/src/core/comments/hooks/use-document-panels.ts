@@ -1,7 +1,8 @@
 // Which side panel a document shows, comments or activity. The two can't be open at once, so one slot holds that
 // rule instead of two booleans every host keeps in sync. The host owns it, as it owns useCommentFilter, and its
-// toolbar, side panel and pane read it.
+// toolbar, side panel and pane read it. A visitor without a login gets no activity, since it lists the history.
 
+import { useAuth } from '@workspace/lib/auth';
 import { useCallback, useState } from 'react';
 import type { DocumentPanel } from '../../../types/comments';
 
@@ -11,11 +12,12 @@ export function useDocumentPanels(isMobile: boolean): {
     activityPanelOpen: boolean;
     mobilePanelOpen: boolean;
     toggleComments: () => void;
-    toggleActivity: () => void;
+    toggleActivity?: () => void;
     openComments: () => void;
     closePanels: () => void;
     onSearchOpenChange: (open: boolean) => void;
 } {
+    const { user } = useAuth();
     const [panel, setPanel] = useState<DocumentPanel | null>(null);
 
     const toggleComments = useCallback(() => setPanel((p) => (p === 'comments' ? null : 'comments')), []);
@@ -39,7 +41,7 @@ export function useDocumentPanels(isMobile: boolean): {
         // Below the breakpoint the side panel has no room; mobile hosts the same panels in a Column.
         mobilePanelOpen: isMobile && panel !== null,
         toggleComments,
-        toggleActivity,
+        toggleActivity: user ? toggleActivity : undefined,
         openComments,
         closePanels,
         onSearchOpenChange,

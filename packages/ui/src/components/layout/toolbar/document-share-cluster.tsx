@@ -53,8 +53,7 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         </Popover>
     );
 
-    // Mobile: collapse the icon row into a kebab. Its own useFindBarRefocus keeps the find-bar
-    // keystroke subscription off the desktop cluster (which would otherwise churn the Watch queries).
+    // Mobile: the icon row folds into a kebab.
     if (isMobile) {
         return (
             <>
@@ -113,8 +112,8 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
     );
 }
 
-// Mobile kebab, split out so its DocSearchBar subscription (via useFindBarRefocus) stays off the
-// desktop cluster. No Eye marker and no open-state cue: an open panel takes the viewport (settled).
+// Mobile kebab, split out so its find-bar keystroke subscription (via useFindBarRefocus) stays off the desktop
+// cluster, where it would churn the Watch queries. No open-state cue: an open panel takes the viewport.
 function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,

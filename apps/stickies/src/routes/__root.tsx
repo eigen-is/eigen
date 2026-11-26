@@ -7,7 +7,7 @@ import type { RouterAppContext } from '@workspace/lib/types/auth';
 import { EigenDocRoot, STICKIES_CONFIG } from '@workspace/ui/components/drive';
 
 function StickiesRoot() {
-    const isEditorRoute = useMatch({ from: '/_auth/board/$ownerId/$mountId/$pathId', shouldThrow: false });
+    const isEditorRoute = useMatch({ from: '/board/$ownerId/$mountId/$pathId', shouldThrow: false });
     const teamDriveMatch = useMatch({ from: '/_auth/_sidebar/drive/$ownerId/$mountId', shouldThrow: false });
     return (
         <EigenDocRoot
