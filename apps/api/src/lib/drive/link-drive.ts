@@ -5,6 +5,7 @@
 // the code that serves it stays whole, so a visitor gets the same preview as a member.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { CollabDocument } from '../collab/collab-document';
 import { arePublicLinksEnabled } from '../config/server-settings';
 import { ApiError } from '../core';
 import type { Home } from '../home';
@@ -22,6 +23,11 @@ export class LinkDrive {
 
     public constructor(home: Home) {
         this.drive = home.drive;
+    }
+
+    // Holding the owner's home has no rule of its own: the caller asks canRead before it holds.
+    public holdHome(onClosing?: () => void): () => void {
+        return this.drive.holdHome(onClosing);
     }
 
     public async canRead(mountId: string, pathId: string): Promise<boolean> {
@@ -50,6 +56,11 @@ export class LinkDrive {
         return children
             .filter((child) => canReadByLink([...crumbs, child], arePublicLinksEnabled()) !== null)
             .map((child) => trimmed(child, false));
+    }
+
+    public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
+        await this.breadCrumb(mountId, pathId);
+        return this.drive.getCollabDocument(mountId, pathId);
     }
 
     // The chain from the public path down, or null where the link rule refuses the path.

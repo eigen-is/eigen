@@ -46,16 +46,23 @@ const LINK_ROUTES = [
     { route: '/drive/:ownerId/:mountId/file/:pathId/ics-preview', reads: 'ics', bytes: false },
     { route: '/drive/:ownerId/:mountId/thumb/:fileName', reads: 'image', bytes: true },
     { route: '/drive/:ownerId/:mountId/path/:pathId/permissions', reads: 'text', bytes: false },
+    { route: '/collab/:ownerId/:mountId/:pathId/info', reads: 'doc', bytes: false },
 ] as const;
+
+// The collab socket answers without a login too. No request here can open one, so its own test file covers it.
+const LINK_SOCKET = '/ws/collab/:ownerId/:mountId/:pathId';
 
 type Reads = (typeof LINK_ROUTES)[number]['reads'];
 
-// The one link route that answers what a visitor may do, so it refuses with a 200 that says no.
+// The two link routes that answer what a visitor may do, so they refuse with a 200 that says no.
 const PERMISSIONS_ROUTE = LINK_ROUTES[11].route;
+const INFO_ROUTE = LINK_ROUTES[12].route;
 
 async function expectRefused(route: string, res: Response): Promise<void> {
     if (route === PERMISSIONS_ROUTE) {
         expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false });
+    } else if (route === INFO_ROUTE) {
+        expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false, path: null, folderContents: null });
     } else {
         expect(res.status).toBe(403);
     }
@@ -126,6 +133,7 @@ describe('files and folders without a login', () => {
         });
         inFolder = {
             folder,
+            doc,
             text: await upload(folder.id, 'inside.txt', 'text/plain', 'hello visitor'),
             image: await upload(folder.id, 'pic.png', 'image/png', TEST_PNG_BYTES),
             vcard: await upload(folder.id, 'card.vcf', 'text/vcard', VCARD),
@@ -436,7 +444,7 @@ describe('files and folders without a login', () => {
                     if (route !== undefined && /linkAuth:\s*true/.test(chunk)) linkAuth.push(route);
                 }
             }
-            expect(linkAuth.sort()).toEqual(LINK_ROUTES.map(({ route }) => route).sort());
+            expect(linkAuth.sort()).toEqual([...LINK_ROUTES.map(({ route }) => route), LINK_SOCKET].sort());
         });
     });
 
