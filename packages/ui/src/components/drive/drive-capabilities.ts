@@ -45,6 +45,8 @@ export const DRIVE_CAPABILITIES = {
 } as const satisfies Record<string, DriveCapabilities>;
 
 // The fs browser follows the viewer's access to the folder: a read-only share still browses, but offers no writes.
-export function browseCapabilities(canWrite: boolean): DriveCapabilities {
-    return canWrite ? DRIVE_CAPABILITIES.browse : { ...DRIVE_CAPABILITIES.readOnly, showBreadcrumb: true };
+// Write that isn't held by name, such as from "Anyone signed in can edit", edits what is there but moves nothing.
+export function browseCapabilities(canWrite: boolean, writesByName: boolean): DriveCapabilities {
+    if (!canWrite) return { ...DRIVE_CAPABILITIES.readOnly, showBreadcrumb: true };
+    return writesByName ? DRIVE_CAPABILITIES.browse : { ...DRIVE_CAPABILITIES.browse, canMove: false };
 }

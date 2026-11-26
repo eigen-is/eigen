@@ -11,6 +11,7 @@ import {
     createTeam,
     driveGet,
     drivePost,
+    driveUpload,
     firstMountId,
     getTestContext,
 } from '../setup';
@@ -20,8 +21,9 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const READER = { id: 'reader-by-name@example.com', read: true, write: false };
 const OTHER = { id: 'other-by-name@example.com', read: true, write: false };
 
-// Write that comes only from "Anyone signed in can edit" lets a person change the content, never who has access.
-describe('changing sharing needs write held by name', () => {
+// Write that comes only from "Anyone signed in can edit" lets a person change the content, never who has access or
+// where the item lives.
+describe('changing sharing and moving need write held by name', () => {
     let ctx: TestCtx;
     let mountId: string;
     let rootId: string;
@@ -36,6 +38,14 @@ describe('changing sharing needs write held by name', () => {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
+        });
+    }
+
+    function move(token: string, pathId: string, targetParentId: string): Promise<Response> {
+        return authedRequest(token, `/drive/${ctx.alice.user.id}/${mountId}/path/${pathId}/move`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetParentId }),
         });
     }
 
@@ -164,6 +174,35 @@ describe('changing sharing needs write held by name', () => {
             );
             expect(renamed.status).toBe(200);
             expect((await stored(child.id)).name).toBe('Bob Renamed');
+            const uploaded = await driveUpload(
+                ctx.bob.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                open.id,
+                new File(['bob'], 'bob.txt', { type: 'text/plain' }),
+            );
+            expect((await stored(uploaded.id)).parentId).toBe(open.id);
+        });
+
+        // Moved into a folder he holds by name, the item would be his to share, so the move is sharing too.
+        test('cannot move an item into a folder he holds by name, and so cannot publish it', async () => {
+            const open = await openFolder('Move Out');
+            const item = await drivePost(aliceToken(), ctx.alice.user.id, mountId, `folder/${open.id}/create/doc`, {
+                fileName: 'kept',
+            });
+            const mine = await drivePost(aliceToken(), ctx.alice.user.id, mountId, `folder/${rootId}`, {
+                folderName: 'Bob Holds This',
+            });
+            await putACL(aliceToken(), mine.id, { add: [{ id: ctx.bob.user.email, read: true, write: true }] });
+
+            const moved = await move(ctx.bob.user.sessionToken, item.id, mine.id);
+            expect(moved.status).toBe(403);
+            expect((await stored(item.id)).parentId).toBe(open.id);
+            expect((await putACL(ctx.bob.user.sessionToken, item.id, { visibility: 'link' })).status).toBe(403);
+            const visit = await app.handle(
+                new Request(`http://localhost/drive/${ctx.alice.user.id}/${mountId}/path/${item.id}`),
+            );
+            expect(visit.status).toBe(403);
         });
     });
 
@@ -197,6 +236,17 @@ describe('changing sharing needs write held by name', () => {
                 }
             });
         }
+
+        test('may move an item out', async () => {
+            const target = await openFolder('By Name Move Target');
+            for (const [token, path] of await sharers('Moves')) {
+                const item = await drivePost(aliceToken(), ctx.alice.user.id, mountId, `folder/${path.id}/create/doc`, {
+                    fileName: path.name,
+                });
+                expect((await move(token, item.id, target.id)).status).toBe(200);
+                expect((await stored(item.id)).parentId).toBe(target.id);
+            }
+        });
 
         test('is refused once the owner restricts sharing, unless it is the owner', async () => {
             const restricted = await openFolder('Restricted', rootId, [READER, editor()]);
