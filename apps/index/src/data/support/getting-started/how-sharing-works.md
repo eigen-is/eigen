@@ -40,7 +40,7 @@ You can give access to specific people, to a whole team, or to anyone with the l
 
 A file's general access starts as **Restricted**, which means only the people you've added can open it. The dropdown under **General access** offers two wider choices:
 
-- **Anyone signed in with the link**: whoever has the link and signs in to Eigen gets in, as a viewer or an editor, whichever you pick.
+- **Anyone signed in with the link**: whoever has the link and signs in to Eigen gets in, as a viewer or an editor, whichever you pick. An editor who gets in through the link can change the file, but not who has access. Only the owner and people added by name, or through a team, can do that.
 - **Anyone with the link**: whoever has the link can view it without signing in, even with no account ([Share with a public link](/support/drive/share-with-a-public-link)).
 
 ## Signing in to open a share

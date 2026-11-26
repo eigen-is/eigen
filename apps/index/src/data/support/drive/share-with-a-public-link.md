@@ -20,6 +20,8 @@ A public link lets anyone who has it view a file, a folder or a document, withou
 
 You can do this on a file, a folder or a document in Docs, Sheets, Slides, Vector or Stickies. A chat room can't have a public link.
 
+To change **General access** you need to own the item or be added to it by name as an editor, yourself or through a team. Someone who can edit only through **Anyone signed in with the link** can't turn on a public link.
+
 ## The link is the item's address
 
 The link is the same address you see in the browser when you open the item. It doesn't change, and there is no separate secret link. Anyone who has ever seen the address can open the item for as long as it is public. Search engines are asked not to list it.
