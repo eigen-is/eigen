@@ -2,7 +2,8 @@
 // properties panel, and a thread at ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll
 // kept. The toolbar's toggle pushes, close goes back on that push, and X and Esc close the whole column from a thread
 // too. A ?chat= landing opens at once at 400 and loads; one that names nothing lands on the list, a deleted one opens
-// as deleted. The editor beside it never remounts, on a desktop or a phone, and the find bar keeps clear of the column.
+// as deleted. The column eases between the list and a thread, each laid out at its own width. The editor beside it
+// never remounts, on a desktop or a phone, and the find bar keeps clear of the column.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -325,7 +326,7 @@ test('"‹ Comments" goes back to the list by replace, with its scroll kept', as
     expect(historyIndex()).toBe(1);
     // Under the thread the list keeps the list's width, so its rows don't wrap again.
     expect(list.classList.contains('invisible')).toBe(true);
-    expect(list.style.right).toBe('144px');
+    expect(list.style.width).toBe('256px');
     await click(button('Comments'));
     expect(search().get('chat')).toBeNull();
     expect(search().get('panel')).toBe('comments');
@@ -335,6 +336,31 @@ test('"‹ Comments" goes back to the list by replace, with its scroll kept', as
     expect(after).toBe(list);
     expect(after?.scrollTop).toBe(120);
     expect(after?.classList.contains('invisible')).toBe(false);
+});
+
+test('the column eases between the list and a thread, each laid out at its own width, and mounts at its width', async () => {
+    await openCanvas(['/']);
+    await act(async () => openCard('card-1'));
+    await settle();
+    // A fresh column at 400, so there is no width to ease from.
+    const opened = column();
+    expect(opened?.style.width).toBe('400px');
+    await click(button('Close'));
+    await act(async () => toggleComments());
+    await settle();
+    const list = column();
+    expect(list).not.toBe(opened);
+    expect(list?.className).toContain('transition-[width]');
+    expect(list?.className).toContain('motion-reduce:transition-none');
+    await click(listRow());
+    // The same element grows, so the transition runs, and the thread is laid out at 400 from its first frame.
+    expect(column()).toBe(list);
+    expect(columnWidth()).toBe('400px');
+    const body = document.querySelector<HTMLElement>('[data-slot="detail-column"] .absolute.flex-col');
+    expect(body?.style.width).toBe('400px');
+    await click(button('Comments'));
+    expect(column()).toBe(list);
+    expect(columnWidth()).toBe('256px');
 });
 
 test('X on a thread closes the whole column, back over the toggle that opened it', async () => {
@@ -421,6 +447,7 @@ test('on a phone the column covers the editor, which stays mounted', async () =>
     // The list's bar: a lone "‹" back to the document, then its title.
     expect(button('Back')).toBeDefined();
     expect(button('Comments')).toBeUndefined();
+    expect(column()?.className).not.toContain('transition-[width]');
     await click(listRow());
     expect(button('Comments')).toBeDefined();
     await click(button('Comments'));

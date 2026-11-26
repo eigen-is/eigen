@@ -2,6 +2,7 @@
 // comments. Its bar names a list, never an item: a list's title, a "‹" back once it drilled into one item, the
 // item's actions, and the X that closes it, which a phone swaps for a lone "‹" at the left. Esc closes it too, unless
 // a dialog, a menu or a field has the key, or a handler that heard it first used it, such as a canvas canceling a drag.
+// It mounts at its width and eases to a new one, such as the comments list drilling into a thread.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
@@ -50,7 +51,10 @@ export function DetailColumn({ width, title, onBack, actions, onClose, fill, chi
             <Column
                 id="detail"
                 width={width}
-                className={cn('bg-background', !isMobile && 'border-l')}
+                className={cn(
+                    'bg-background',
+                    !isMobile && 'border-l transition-[width] duration-200 ease-out motion-reduce:transition-none',
+                )}
                 toolbar={
                     <>
                         {onBack ? (

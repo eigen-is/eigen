@@ -1,6 +1,6 @@
 // A document's comments column: the comments or activity list, which drills into one comment's thread in the same
-// column, with "‹ Comments" back to the list. The column grows as a thread opens, and the list stays mounted under it
-// at its own width, so back finds it scrolled where it was. The thread's actions sit in the bar, and Edit opens the
+// column, with "‹ Comments" back to the list. The column eases wider as a thread opens, and the list stays mounted
+// under it, so back finds it scrolled where it was. The thread's actions sit in the bar, and Edit opens the
 // card's form in a dialog. useCommentsColumn holds what it shows; a shell puts it at the right, or over a phone.
 
 import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
@@ -16,7 +16,9 @@ import type { CardDetailParts } from '../cards/card-detail';
 import { CardDetail } from '../cards/card-detail';
 import type { useContextMenu } from '../context-menu';
 import { Dialog, DialogContent } from '../dialog';
+import { columnWidthPx } from '../layout/app/column-widths';
 import { DetailColumn } from '../layout/app/detail-column';
+import { useLayout } from '../layout/app/layout-context';
 import { LeaveGuard } from '../layout/app/leave-guard';
 import { LoadingState } from '../layout/app/loading-state';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -56,6 +58,11 @@ export function CommentsColumn({
 }: CommentsColumnProps) {
     const showComments = column.listPanel === 'comments';
     const { threadOpen } = column;
+    const { isMobile, isTablet } = useLayout();
+    // Each level is laid out at its own width from the first frame, so the column clips it while it eases between them
+    // and no text rewraps. A phone's column is the screen.
+    const levelStyle = (width: 'small' | 'large') =>
+        isMobile ? { right: 0 } : { width: columnWidthPx(width, isTablet) };
 
     const listActions = showComments && (
         <>
@@ -96,16 +103,18 @@ export function CommentsColumn({
                     fill
                 >
                     <div className="relative h-full">
-                        {/* Invisible, not unmounted or display: none, and as wide as at the list level, so its rows
-                            don't wrap again and back finds its scroll. */}
+                        {/* Invisible, not unmounted or display: none, so back finds its scroll. */}
                         <div
                             className={cn('absolute inset-y-0 left-0 overflow-y-auto', threadOpen && 'invisible')}
-                            style={{ right: threadOpen ? column.growPx : 0 }}
+                            style={levelStyle('small')}
                         >
                             {list}
                         </div>
                         {threadOpen && (
-                            <div className="absolute inset-0 flex flex-col bg-background">
+                            <div
+                                className="absolute inset-y-0 left-0 flex flex-col bg-background"
+                                style={levelStyle('large')}
+                            >
                                 {!thread ? (
                                     <LoadingState />
                                 ) : thread.deleted ? (

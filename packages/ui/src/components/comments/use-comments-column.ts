@@ -32,8 +32,6 @@ export type CommentsColumnState = {
     listPanel: DocumentPanel;
     threadOpen: boolean;
     width: 'small' | 'large';
-    // How much wider a thread is than the list.
-    growPx: number;
     commentPanelOpen: boolean;
     activityPanelOpen: boolean;
     toggleComments: () => void;
@@ -84,6 +82,7 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
     const open = !!url || unlinked;
     const threadOpen = !!chat || unlinked;
     const width = threadOpen ? 'large' : 'small';
+    // How much wider a thread is than the list.
     const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('small');
 
     const closeUnlinked = () => {
@@ -111,7 +110,6 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
             listPanel,
             threadOpen,
             width,
-            growPx,
             commentPanelOpen: open && listPanel === 'comments',
             activityPanelOpen: open && listPanel === 'activity',
             toggleComments: () => toggle('comments'),
