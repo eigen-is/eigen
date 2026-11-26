@@ -1,6 +1,6 @@
-// The detail column of a Drive view: the selected item's preview, its Open, Download, Share and Watch
-// buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. A layout such
-// as DriveLayout draws it beside the list.
+// The detail column of a Drive view, such as a folder or Recent: Share, Watch and a ⋮ with the item's whole menu in
+// its bar; the item's preview, name, Open and Download, its details, sharing and recent activity in its body. A
+// layout such as DriveLayout draws it beside the list and says how it closes.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
@@ -16,9 +16,8 @@ import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/drop
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useLayout } from '../layout/app/layout-context';
+import { DetailColumn } from '../layout/app/detail-column';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveAccessList } from './drive-access-list';
 import type { DriveActionRunner } from './drive-action-runner';
@@ -29,31 +28,24 @@ import { getFilePresentation } from './file-presentation';
 import { RecentActivity } from './recent-activity';
 import { useDriveFileActionRunner } from './use-drive-file-action-runner';
 
-type DriveDetailToolbarProps = {
-    onClose: () => void;
-};
-
-export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
-    const { isMobile } = useLayout();
-
-    return (
-        <div className="flex items-center w-full justify-end">
-            {!isMobile && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
-        </div>
-    );
-}
-
 type DriveDetailProps = {
     path: DrivePath | null;
     // The listing this item sits in, in its display order: Quick preview pages through it.
     siblings: readonly DrivePath[];
     actions: DriveActionRunner;
+    onClose: () => void;
 };
 
-export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
+export function DriveDetail({ path, siblings, actions, onClose }: DriveDetailProps) {
     const runner = useDriveFileActionRunner(path, siblings, actions.capabilities.canWrite);
 
-    if (!path) return null;
+    // The item is still loading, such as on an arrow key's next row.
+    if (!path)
+        return (
+            <DetailColumn width="large" onClose={onClose}>
+                {null}
+            </DetailColumn>
+        );
 
     // The buttons draw the rows the view offers for this item, with the rows' own labels and icons.
     const driveAction = (id: DriveActionId) => actions.actionsFor([path]).find((action) => action.id === id);
@@ -69,52 +61,54 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
         else if (quickLook) runner.run(quickLook);
     };
 
+    const bar = (
+        <>
+            {share && (
+                <TooltipButton
+                    icon={share.icon}
+                    tooltipText={share.label}
+                    onClick={() => actions.run(share.id, [path])}
+                />
+            )}
+            <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
+            <DropdownMenu>
+                <KebabTrigger />
+                <DropdownMenuContent className="w-48">
+                    <DriveItemMenuItems items={[path]} actions={actions} runner={runner} />
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </>
+    );
+
     return (
-        <div className="flex flex-col h-full bg-background">
-            <div className="app-gutter flex-1 overflow-auto">
-                <DrivePreview path={path} onActivate={onHeroClick} className="mb-4" />
-                <h2 className="text-xl font-medium truncate overflow-hidden mb-3">{stripEigenExtension(path.name)}</h2>
-                <div className="flex items-center gap-2 mb-4">
-                    {open && (
-                        <Button
-                            size="sm"
-                            onClick={() => actions.run(open.id, [path])}
-                            className="flex-1 h-8 bg-app text-white hover:bg-app hover:opacity-90"
-                        >
-                            {open.label}
-                        </Button>
-                    )}
-                    <div className="flex items-center gap-2 ml-auto">
-                        {download && (
-                            <TooltipButton
-                                icon={download.icon}
-                                tooltipText={download.label}
-                                onClick={() => runner.run(download)}
-                            />
-                        )}
-                        {share && (
-                            <TooltipButton
-                                icon={share.icon}
-                                tooltipText={share.label}
-                                onClick={() => actions.run(share.id, [path])}
-                            />
-                        )}
-                        <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
-                        <DropdownMenu>
-                            <KebabTrigger />
-                            <DropdownMenuContent className="w-48">
-                                <DriveItemMenuItems items={[path]} actions={actions} runner={runner} />
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
-                <DetailsSection path={path} actions={actions} />
-                <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
-                <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
-                <RecentActivity path={path} />
+        <DetailColumn width="large" actions={bar} onClose={onClose}>
+            <DrivePreview path={path} onActivate={onHeroClick} className="mb-4" />
+            <h2 className="text-xl font-medium truncate overflow-hidden mb-3">{stripEigenExtension(path.name)}</h2>
+            <div className="flex items-center gap-2 mb-4">
+                {open && (
+                    <Button
+                        size="sm"
+                        onClick={() => actions.run(open.id, [path])}
+                        className="flex-1 h-8 bg-app text-white hover:bg-app hover:opacity-90"
+                    >
+                        {open.label}
+                    </Button>
+                )}
+                {download && (
+                    <TooltipButton
+                        icon={download.icon}
+                        tooltipText={download.label}
+                        className="ml-auto"
+                        onClick={() => runner.run(download)}
+                    />
+                )}
             </div>
+            <DetailsSection path={path} actions={actions} />
+            <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
+            <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
+            <RecentActivity path={path} />
             {runner.dialogs}
-        </div>
+        </DetailColumn>
     );
 }
 

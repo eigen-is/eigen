@@ -31,7 +31,7 @@ function RecentRoute() {
         [recentPaths],
     );
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: recentPaths,
         capabilities: DRIVE_CAPABILITIES.readOnly,
         onOpenFolder: (path: DrivePath) =>
@@ -39,16 +39,15 @@ function RecentRoute() {
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
-        onSelectItem: (path: DrivePath) =>
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
             navigate({
                 to: Route.fullPath,
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+                replace,
+                state,
             }),
     });
-
-    const handleBack = () => {
-        navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
-    };
 
     return (
         <DriveLayout
@@ -61,7 +60,7 @@ function RecentRoute() {
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBack}
+            onClose={onClose}
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Recent files"
             onQuickLook={onQuickLook}

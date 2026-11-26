@@ -38,7 +38,7 @@ function SharedRoute() {
         canWrite: to === 'by-me',
     };
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: (path: DrivePath) =>
@@ -46,17 +46,16 @@ function SharedRoute() {
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
-        onSelectItem: (path: DrivePath) =>
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
             navigate({
                 to: Route.fullPath,
                 params: { to },
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+                replace,
+                state,
             }),
     });
-
-    const handleBackToList = () => {
-        navigate({ to: Route.fullPath, params: { to } });
-    };
 
     return (
         <DriveLayout
@@ -69,7 +68,7 @@ function SharedRoute() {
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
+            onClose={onClose}
             capabilities={capabilities}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}

@@ -27,7 +27,7 @@ function MimeRoute() {
 
     const { data: folderContents = [], isLoading, error } = useAggregateMimeContent(mimeType);
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: folderContents,
         capabilities: DRIVE_CAPABILITIES.listing,
         onOpenFolder: (path: DrivePath) =>
@@ -35,17 +35,16 @@ function MimeRoute() {
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
-        onSelectItem: (path: DrivePath) =>
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
             navigate({
                 to: Route.fullPath,
                 params: { mimeType },
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+                replace,
+                state,
             }),
     });
-
-    const handleBackToList = () => {
-        navigate({ to: Route.fullPath, params: { mimeType } });
-    };
 
     // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it
     // back to the matching EigenDocType so create is offered only for that kind.
@@ -63,7 +62,7 @@ function MimeRoute() {
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
+            onClose={onClose}
             capabilities={{ ...DRIVE_CAPABILITIES.listing, createTypes }}
             title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}

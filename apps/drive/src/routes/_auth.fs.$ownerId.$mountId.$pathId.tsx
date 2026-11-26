@@ -66,7 +66,7 @@ function FolderRoute() {
     // One capability set for menus, detail column and quick look.
     const capabilities = browseCapabilities(useCanWriteFolder(ownerId, mountId, pathId));
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: (path: DrivePath) =>
@@ -75,21 +75,15 @@ function FolderRoute() {
                 params: { ownerId, mountId, pathId: path.id },
                 search: { pid: undefined },
             }),
-        onSelectItem: (path: DrivePath) => {
-            if (currentPath?.parentId === path.id) {
-                navigate({
-                    to: Route.fullPath,
-                    params: { ownerId, mountId, pathId: path.id },
-                    search: { pid: undefined },
-                });
-            } else {
-                navigate({
-                    to: Route.fullPath,
-                    params: { ownerId, mountId, pathId },
-                    search: { pid: path.id },
-                });
-            }
-        },
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
+            navigate({
+                to: Route.fullPath,
+                params: { ownerId, mountId, pathId },
+                search: (prev) => ({ ...prev, pid: path?.id }),
+                replace,
+                state,
+            }),
     });
 
     const handleShareDialogClose = (open: boolean) => {
@@ -102,24 +96,9 @@ function FolderRoute() {
         }
     };
 
-    // The back button a narrow screen shows over an open item.
-    const handleBackToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { ownerId, mountId, pathId },
-            search: { pid: undefined },
-        });
-    };
-
     // A deleted item that was open closes with it.
     const handleAfterAction = (actionType: string, data: Record<string, unknown>) => {
-        if (actionType === 'delete' && pid === data.id) {
-            navigate({
-                to: Route.fullPath,
-                params: { ownerId, mountId, pathId },
-                search: { pid: undefined },
-            });
-        }
+        if (actionType === 'delete' && pid === data.id) onClose();
     };
 
     if (pathId === 'root' && !rootPath) {
@@ -145,7 +124,7 @@ function FolderRoute() {
                 onRowSelect={onRowSelect}
                 onRowActivate={onRowActivate}
                 onOpenSharedWithMe={() => navigate({ to: '/shared/$to', params: { to: 'with-me' } })}
-                onBackToList={handleBackToList}
+                onClose={onClose}
                 onAfterAction={handleAfterAction}
                 capabilities={capabilities}
                 onQuickLook={onQuickLook}

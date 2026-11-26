@@ -23,7 +23,7 @@ function WatchedRoute() {
     const { data: watches = [], isLoading, error } = useAllWatches();
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: watches,
         capabilities: DRIVE_CAPABILITIES.readOnly,
         onOpenFolder: (path: DrivePath) =>
@@ -31,16 +31,15 @@ function WatchedRoute() {
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
-        onSelectItem: (path: DrivePath) =>
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
             navigate({
                 to: Route.fullPath,
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+                replace,
+                state,
             }),
     });
-
-    const handleBack = () => {
-        navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
-    };
 
     return (
         <DriveLayout
@@ -53,7 +52,7 @@ function WatchedRoute() {
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBack}
+            onClose={onClose}
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Watched"
             onQuickLook={onQuickLook}

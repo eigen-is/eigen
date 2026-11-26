@@ -5,7 +5,6 @@
 
 import { openDocument } from '@workspace/lib/api';
 import { usePathInfo, useSharedPaths } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
@@ -26,7 +25,6 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
     const { pid, uid, mid } = route.useSearch();
     const viewerId = route.useRouteContext().user.id;
     const navigate = route.useNavigate();
-    const clearSelection = () => navigate({});
     const { rootPath } = useContext(EigenDocDriveContext);
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
     // As in Drive's shared view, a row shared with the viewer belongs to someone else, and this listing
@@ -42,11 +40,17 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
     const { data: shared = [], isLoading, error } = useSharedPaths(viewerId, byMe ? 'by-me' : 'with-me');
     const folderContents = shared.filter((path) => path.type === config.type);
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: openDocument,
-        onSelectItem: (path: DrivePath) => navigate({ search: { pid: path.id, uid: path.ownerId, mid: path.mountId } }),
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
+            navigate({
+                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+                replace,
+                state,
+            }),
     });
 
     return (
@@ -61,8 +65,8 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
-            onBackToList={clearSelection}
-            onAfterAction={clearSelection}
+            onClose={onClose}
+            onAfterAction={onClose}
             capabilities={capabilities}
             title={eigenDocSharedTitle(byMe ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}
