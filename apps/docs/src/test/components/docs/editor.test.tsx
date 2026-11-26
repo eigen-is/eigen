@@ -83,15 +83,16 @@ const { MediaResolverProvider } = await import('@workspace/lib/drive');
 
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
-// Every request answers empty, but the chat folder, which lists one thread, and an upload, which answers when the test
-// lets it.
+// Every request answers empty, but the chat folder, which lists one thread, the thread's own path, which an open card
+// reads for its name, and an upload, which answers when the test lets it.
 const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
 const finishUpload = answerUploads(path);
 let commentRows: object[] = [];
 spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
         async (input: RequestInfo | URL) => {
-            if (String(input).includes('/folder/chat')) return Response.json([thread]);
+            if (String(input).endsWith('/folder/chat')) return Response.json([thread]);
+            if (String(input).endsWith('/path/chat-a')) return Response.json(thread);
             if (String(input).endsWith('/comments')) return Response.json(commentRows);
             return Response.json([]);
         },
