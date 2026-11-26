@@ -7,7 +7,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DocumentPanel } from '@workspace/lib/types/comments';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDetailHistory } from '../../hooks/use-detail-history';
 import { columnWidthPx } from '../layout/app/column-widths';
 import { useLayout } from '../layout/app/layout-context';
@@ -21,9 +21,9 @@ type CommentsColumnArgs = Omit<
     // The route's ?panel= and ?chat=.
     panel: DocumentPanel | undefined;
     chat: string | undefined;
-    // Brings a card's anchor into view as a list or activity row opens its thread. It hears how far the column grows
-    // over what is beside it as the thread opens.
-    reveal?: (cardId: string, growPx: number) => void;
+    // Brings a card's anchor into view, and says whether it had one to bring. It hears how far the column is about to
+    // grow over what is beside it: a list or activity row reveals before the thread widens it, a landing after.
+    reveal?: (cardId: string, growPx: number) => boolean;
 };
 
 export type CommentsColumnState = {
@@ -102,6 +102,14 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
         if (!isMobile) reveal?.(cardId, growPx);
         setOpenCardId(cardId);
     };
+
+    // A thread the URL opened without a click here, such as a link or a reload, reveals its anchor once the anchor
+    // has loaded, which can be after the card. The column is at its thread width by then.
+    const revealedChat = useRef<string | undefined>(undefined);
+    const landedCardId = chat && chat !== clickedChat && !isMobile ? openCard?.id : undefined;
+    useEffect(() => {
+        if (landedCardId && revealedChat.current !== chat && reveal?.(landedCardId, 0)) revealedChat.current = chat;
+    });
 
     return {
         lifecycle,

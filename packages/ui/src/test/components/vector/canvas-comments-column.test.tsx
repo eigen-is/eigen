@@ -315,6 +315,19 @@ test("a list row reveals its anchor with the room the thread grows into, and the
     expect(reveal).not.toHaveBeenCalled();
 });
 
+test('a ?chat= landing reveals its anchor once the shape has loaded, with the column already at its width', async () => {
+    await openCanvas(['/?chat=thread-1.eigenchat']);
+    expect(reveal).not.toHaveBeenCalled();
+    const [key] = generateNKeysBetween(null, null, 1);
+    const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
+    await act(async () => writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box'));
+    await settle();
+    expect(reveal.mock.calls).toEqual([['box', 0]]);
+    await act(async () => writeElementInDoc(doc, { ...box, x: 10 }, key, VECTOR_STYLE_DEFAULTS, 'box'));
+    await settle();
+    expect(reveal).toHaveBeenCalledTimes(1);
+});
+
 test('"‹ Comments" goes back to the list by replace, with its scroll kept', async () => {
     await openCanvas(['/', '/?panel=comments']);
     const list = listRow()?.closest<HTMLElement>('.overflow-y-auto');

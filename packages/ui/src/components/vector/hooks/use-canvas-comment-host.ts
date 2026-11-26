@@ -29,8 +29,8 @@ type CanvasCommentHostArgs = {
     panel: DocumentPanel | undefined;
     chat: string | undefined;
     doc: CanvasDoc;
-    // Bring an element into view as a list row opens its thread, clear of the `growPx` the column grows by over the
-    // canvas.
+    // Bring an element into view as a thread opens from a list row or a link, clear of the `growPx` the column is about
+    // to grow by over the canvas.
     onReveal: (el: VectorElement, growPx: number) => void;
 };
 
@@ -88,6 +88,7 @@ export function useCanvasCommentHost({
         reveal: (cardId, growPx) => {
             const el = elementForCommentCard(doc.elements, cardId);
             if (el) onReveal(el, growPx);
+            return !!el;
         },
     });
     const { allComments, cards: lifecycleCards, createCard, assignComment, members, assignedCount } = lifecycle;
