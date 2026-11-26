@@ -14,8 +14,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthSidebarRouteImport } from './routes/_auth._sidebar'
 import { Route as AuthSidebarIndexRouteImport } from './routes/_auth._sidebar.index'
 import { Route as AuthSidebarSharedToRouteImport } from './routes/_auth._sidebar.shared.$to'
+import { Route as SheetOwnerIdMountIdPathIdRouteImport } from './routes/sheet.$ownerId.$mountId.$pathId'
 import { Route as AuthSidebarDriveOwnerIdMountIdRouteImport } from './routes/_auth._sidebar.drive.$ownerId.$mountId'
-import { Route as AuthSheetOwnerIdMountIdPathIdRouteImport } from './routes/_auth.sheet.$ownerId.$mountId.$pathId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -40,32 +40,32 @@ const AuthSidebarSharedToRoute = AuthSidebarSharedToRouteImport.update({
   path: '/shared/$to',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
+const SheetOwnerIdMountIdPathIdRoute =
+  SheetOwnerIdMountIdPathIdRouteImport.update({
+    id: '/sheet/$ownerId/$mountId/$pathId',
+    path: '/sheet/$ownerId/$mountId/$pathId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthSidebarDriveOwnerIdMountIdRoute =
   AuthSidebarDriveOwnerIdMountIdRouteImport.update({
     id: '/drive/$ownerId/$mountId',
     path: '/drive/$ownerId/$mountId',
     getParentRoute: () => AuthSidebarRoute,
   } as any)
-const AuthSheetOwnerIdMountIdPathIdRoute =
-  AuthSheetOwnerIdMountIdPathIdRouteImport.update({
-    id: '/sheet/$ownerId/$mountId/$pathId',
-    path: '/sheet/$ownerId/$mountId/$pathId',
-    getParentRoute: () => AuthRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthSidebarIndexRoute
   '/login': typeof LoginRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/sheet/$ownerId/$mountId/$pathId': typeof SheetOwnerIdMountIdPathIdRoute
   '/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/sheet/$ownerId/$mountId/$pathId': typeof AuthSheetOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthSidebarIndexRoute
   '/login': typeof LoginRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/sheet/$ownerId/$mountId/$pathId': typeof SheetOwnerIdMountIdPathIdRoute
   '/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/sheet/$ownerId/$mountId/$pathId': typeof AuthSheetOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -74,8 +74,8 @@ export interface FileRoutesById {
   '/_auth/_sidebar': typeof AuthSidebarRouteWithChildren
   '/_auth/_sidebar/': typeof AuthSidebarIndexRoute
   '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
+  '/sheet/$ownerId/$mountId/$pathId': typeof SheetOwnerIdMountIdPathIdRoute
   '/_auth/_sidebar/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/_auth/sheet/$ownerId/$mountId/$pathId': typeof AuthSheetOwnerIdMountIdPathIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -83,15 +83,15 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/shared/$to'
-    | '/drive/$ownerId/$mountId'
     | '/sheet/$ownerId/$mountId/$pathId'
+    | '/drive/$ownerId/$mountId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/shared/$to'
-    | '/drive/$ownerId/$mountId'
     | '/sheet/$ownerId/$mountId/$pathId'
+    | '/drive/$ownerId/$mountId'
   id:
     | '__root__'
     | '/_auth'
@@ -99,13 +99,14 @@ export interface FileRouteTypes {
     | '/_auth/_sidebar'
     | '/_auth/_sidebar/'
     | '/_auth/_sidebar/shared/$to'
+    | '/sheet/$ownerId/$mountId/$pathId'
     | '/_auth/_sidebar/drive/$ownerId/$mountId'
-    | '/_auth/sheet/$ownerId/$mountId/$pathId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
+  SheetOwnerIdMountIdPathIdRoute: typeof SheetOwnerIdMountIdPathIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -145,19 +146,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSidebarSharedToRouteImport
       parentRoute: typeof AuthSidebarRoute
     }
+    '/sheet/$ownerId/$mountId/$pathId': {
+      id: '/sheet/$ownerId/$mountId/$pathId'
+      path: '/sheet/$ownerId/$mountId/$pathId'
+      fullPath: '/sheet/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof SheetOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/_sidebar/drive/$ownerId/$mountId': {
       id: '/_auth/_sidebar/drive/$ownerId/$mountId'
       path: '/drive/$ownerId/$mountId'
       fullPath: '/drive/$ownerId/$mountId'
       preLoaderRoute: typeof AuthSidebarDriveOwnerIdMountIdRouteImport
       parentRoute: typeof AuthSidebarRoute
-    }
-    '/_auth/sheet/$ownerId/$mountId/$pathId': {
-      id: '/_auth/sheet/$ownerId/$mountId/$pathId'
-      path: '/sheet/$ownerId/$mountId/$pathId'
-      fullPath: '/sheet/$ownerId/$mountId/$pathId'
-      preLoaderRoute: typeof AuthSheetOwnerIdMountIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
     }
   }
 }
@@ -180,12 +181,10 @@ const AuthSidebarRouteWithChildren = AuthSidebarRoute._addFileChildren(
 
 interface AuthRouteChildren {
   AuthSidebarRoute: typeof AuthSidebarRouteWithChildren
-  AuthSheetOwnerIdMountIdPathIdRoute: typeof AuthSheetOwnerIdMountIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthSidebarRoute: AuthSidebarRouteWithChildren,
-  AuthSheetOwnerIdMountIdPathIdRoute: AuthSheetOwnerIdMountIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -193,6 +192,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
+  SheetOwnerIdMountIdPathIdRoute: SheetOwnerIdMountIdPathIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
