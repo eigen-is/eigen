@@ -19,7 +19,6 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { AppError } from '../../api-error';
 import { reloadReplacedHome } from '../../home/reload-replaced-home';
-import { applyCollabState } from '../collab-state';
 import { useCollabDocumentInfo, useCollabStoredState } from './use-collab';
 
 // Sibling tabs sync over BroadcastChannel only once the server named its data epoch, on a channel of that epoch.
@@ -31,9 +30,6 @@ const STORAGE_RETRY_MS = 5_000;
 // A dropped socket normally reconnects at once, and the storage retry cycle reports 'connected' for a tick. Hold the
 // offline verdict this long so neither flashes the icon.
 const OFFLINE_GRACE_MS = 1_500;
-
-// The origin of the stored state's updates. It is not null, so no UndoManager tracks them.
-const STORED_STATE_ORIGIN = 'stored-state';
 
 type CollabDocContext = {
     doc: Y.Doc;
@@ -88,9 +84,9 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const { ownerId, mountId, pathId } = options;
     // Undefined until the info, which the editor's route loads first, says how this reader syncs.
     const live = useCollabDocumentInfo(ownerId, mountId, pathId).data?.live;
-    const stored = useCollabStoredState(ownerId, mountId, pathId, live === false);
 
     const [ctx, setCtx] = useState<CollabDocContext | null>(null);
+    const stored = useCollabStoredState(ownerId, mountId, pathId, ctx && !ctx.provider ? ctx.doc : null);
     const [synced, setSynced] = useState(false);
     const [connected, setConnected] = useState(false);
     const [loaded, setLoaded] = useState(false);
@@ -241,12 +237,14 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         }
     }, [ownerId, mountId, pathId, live]);
 
-    // A newer state applied on top of the held doc brings it up to date. This render's doc may be one the lifecycle
-    // effect has just replaced, which must take nothing more.
+    // The stored state is in the doc once its query has data. A replaced home reloads, as its socket close does.
     const storedState = stored.data;
     useEffect(() => {
-        if (!ctx || ctx.provider || !storedState || ctx.doc !== docRef.current) return;
-        applyCollabState(ctx.doc, storedState.body, STORED_STATE_ORIGIN);
+        if (!ctx || ctx.provider || !storedState) return;
+        if (storedState.homeReplaced) {
+            setReloadNow(() => reloadReplacedHome);
+            return;
+        }
         setSynced(true);
         setLoaded(true);
         if (storedSyncDocRef.current === ctx.doc) return;

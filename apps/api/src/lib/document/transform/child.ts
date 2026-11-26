@@ -27,7 +27,7 @@ import type {
     TransformResult,
     TransformWarning,
 } from './protocol';
-import { toTransferableText, toTransformError } from './protocol';
+import { toTransferableBuffer, toTransferableText, toTransformError } from './protocol';
 
 async function renderPreview(
     request: CollabPreviewJob,
@@ -156,8 +156,8 @@ async function buildBytesPreviewJson(request: BytesPreviewJob & { data: ArrayBuf
     }
 }
 
-// The three document-sourced kinds dispatch off one materialized doc, so the
-// skipped-blob warning is appended once by the caller rather than in every arm.
+// The document-sourced kinds dispatch off one materialized doc, so the skipped-blob warning is appended once by the
+// caller rather than in every arm.
 async function renderCollabRequest(
     request: CollabTransformJob,
     doc: Y.Doc,
@@ -176,6 +176,10 @@ async function renderCollabRequest(
             const { extractCollabText } = await import('../../search/extract-render');
             const { text, warnings } = await extractCollabText(request.documentType, doc);
             return { result: { text }, warnings };
+        }
+        case 'collab-state': {
+            const { encodeStateAsUpdate } = await import('yjs');
+            return { result: { data: toTransferableBuffer(encodeStateAsUpdate(doc)) }, warnings: [] };
         }
     }
 }

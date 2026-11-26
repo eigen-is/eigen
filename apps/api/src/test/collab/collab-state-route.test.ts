@@ -1,25 +1,35 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { applyCollabState } from '@workspace/lib/collab/collab-state';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
+import { collabStateEpoch } from '@workspace/lib/collab/collab-state';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
+import * as schema from '../../lib/collab/schema';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import { ApiError } from '../../lib/core/errors';
+import * as collabSource from '../../lib/document/transform/collab-source';
+import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
+import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
+import { CONTAINER_DATA_DB } from '../../lib/mount/container-dbs';
 import type { TestUser } from '../setup';
 import {
     app,
     authedRequest,
+    driveDelete,
     driveGet,
     driveGetList,
     drivePost,
     driveUpload,
+    eventually,
     firstMountId,
     getTestContext,
 } from '../setup';
 
-// The state route: a document's stored rows over HTTP, for a reader who gets no socket. A member's edits arrive over a
-// real socket, so the tests need a listening server. A visitor is a request with no cookie.
+// The state route: a document's state as one Yjs update, for a reader who gets no socket. A member's edits arrive over
+// a real socket, so the tests need a listening server. A visitor is a request with no cookie.
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let alice: TestUser;
@@ -72,6 +82,12 @@ async function newPublicDoc(): Promise<DrivePath> {
     return doc;
 }
 
+function newFolder(): Promise<DrivePath> {
+    return drivePost<DrivePath>(alice.sessionToken, aliceId, mountId, `folder/${root.id}`, {
+        folderName: `State folder ${crypto.randomUUID()}`,
+    });
+}
+
 const stateUrl = (pathId: string) => `/collab/${aliceId}/${mountId}/${pathId}/state`;
 
 function visit(pathId: string, etag?: string): Promise<Response> {
@@ -84,7 +100,7 @@ function visit(pathId: string, etag?: string): Promise<Response> {
 async function docOf(res: Response): Promise<Y.Doc> {
     expect(res.status).toBe(200);
     const doc = new Y.Doc();
-    applyCollabState(doc, await res.bytes(), null);
+    Y.applyUpdate(doc, await res.bytes());
     return doc;
 }
 
@@ -96,8 +112,16 @@ async function isOpen(pathId: string): Promise<boolean> {
     return (await getHome(aliceId)).drive.hasCollabDocument(mountId, pathId);
 }
 
-// Alice's socket on the document. write() sends one update per call and resolves once the server's document holds it,
-// which is when its row is stored too: the store runs in the same update event.
+async function mountOf(pathId: string) {
+    return (await (await getHome(aliceId)).drive.resolveFile(mountId, pathId)).mount;
+}
+
+async function cachedFiles(pathId: string): Promise<string[]> {
+    return readdirSync((await mountOf(pathId)).previewsDir).filter((name) => name.startsWith(`${pathId}-`));
+}
+
+// Alice's socket on the document. Each edit is one update, and resolves once the server's document holds it, which is
+// when its row is stored too: the store runs in the same update event.
 async function member(pathId: string) {
     // Bun's WebSocket takes headers, which the DOM type the compiler sees does not know.
     const ws: WebSocket = Reflect.construct(WebSocket, [
@@ -113,34 +137,63 @@ async function member(pathId: string) {
         syncProtocol.writeUpdate(encoder, update);
         ws.send(new Uint8Array(encoding.toUint8Array(encoder)));
     });
-    return async (text: string) => {
-        doc.getText('probe').insert(doc.getText('probe').length, text);
-        const stored = (await serverDoc(pathId)).getText('probe');
-        while (stored.toString() !== doc.getText('probe').toString()) await Bun.sleep(5);
+    const edit = async (change: (held: Y.Doc) => void) => {
+        change(doc);
+        const stored = await serverDoc(pathId);
+        const behind = () =>
+            stored.getText('probe').toString() !== doc.getText('probe').toString() ||
+            !Buffer.from(Y.encodeStateVector(stored)).equals(Buffer.from(Y.encodeStateVector(doc)));
+        while (behind()) await Bun.sleep(5);
     };
+    const write = (text: string) => edit((held) => held.getText('probe').insert(held.getText('probe').length, text));
+    return { edit, write };
 }
 
-describe('the stored rows rebuild the document', () => {
-    test("a visitor's body gives the server's state, edits after the last snapshot and behind an open socket included", async () => {
+// The transform jobs the route enqueued, read off the runner's calls.
+function stateJobs(run: ReturnType<typeof spyOn<typeof documentTransformRunner, 'run'>>) {
+    return run.mock.calls.filter(([request]) => request.kind === 'collab-state');
+}
+
+describe('the body is the merged state', () => {
+    test("a visitor's body is what a member's first sync carries, edits after the last snapshot and behind an open socket included", async () => {
         const doc = await newPublicDoc();
-        const write = await member(doc.id);
+        const { write } = await member(doc.id);
         // The hundredth update folds the rows into a snapshot, so five updates follow it.
         for (let i = 0; i < 105; i++) await write(`${i},`);
 
+        // A member's first sync is sync step 2 for an empty state vector: the server document's whole state.
         const held = await docOf(await visit(doc.id));
-        const server = await serverDoc(doc.id);
-        expect(held.getText('probe').toString()).toBe(server.getText('probe').toString());
-        expect(Y.encodeStateAsUpdate(held)).toEqual(Y.encodeStateAsUpdate(server));
+        const synced = new Y.Doc();
+        Y.applyUpdate(synced, Y.encodeStateAsUpdate(await serverDoc(doc.id)));
+        expect(held.getText('probe').toString()).toBe(synced.getText('probe').toString());
+        expect(Y.encodeStateAsUpdate(held)).toEqual(Y.encodeStateAsUpdate(synced));
 
         // A newer body on top of the document a tab already holds brings it up to date.
         await write('later');
-        applyCollabState(held, await (await visit(doc.id)).bytes(), null);
-        expect(Y.encodeStateAsUpdate(held)).toEqual(Y.encodeStateAsUpdate(server));
+        Y.applyUpdate(held, await (await visit(doc.id)).bytes());
+        expect(Y.encodeStateAsUpdate(held)).toEqual(Y.encodeStateAsUpdate(await serverDoc(doc.id)));
+    });
+
+    test('text the author deleted is not in the body, while a member holds the document open and before any snapshot', async () => {
+        const doc = await newPublicDoc();
+        const { edit } = await member(doc.id);
+        await edit((held) => held.getText('probe').insert(0, 'hello SECRETPASSWORD world'));
+        await edit((held) => held.getText('probe').delete('hello '.length, 'SECRETPASSWORD '.length));
+
+        const res = await visit(doc.id);
+        const body = Buffer.from(await res.bytes());
+        expect(body.includes('SECRETPASSWORD')).toBe(false);
+        expect(await isOpen(doc.id)).toBe(true);
+        // No snapshot yet: the version's snapshot part is 0.
+        expect(res.headers.get('etag')).toMatch(/\.0\.\d+\.[^.]+"$/);
+        const held = new Y.Doc();
+        Y.applyUpdate(held, body);
+        expect(held.getText('probe').toString()).toBe('hello world');
     });
 
     test('a document nobody has open is answered from its rows and stays closed', async () => {
         const doc = await newPublicDoc();
-        const write = await member(doc.id);
+        const { write } = await member(doc.id);
         await write('stored');
         for (const ws of sockets) ws.close();
         await (await getHome(aliceId)).drive.closeCollabDocument(mountId, doc.id);
@@ -157,17 +210,40 @@ describe('the stored rows rebuild the document', () => {
         expect(held.getText('probe').toString()).toBe('');
         expect(await isOpen(doc.id)).toBe(false);
     });
+
+    test("a corrupt stored row is skipped, as a member's load skips it", async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('kept');
+        for (const ws of sockets) ws.close();
+        const { drive } = await getHome(aliceId);
+        await drive.closeCollabDocument(mountId, doc.id);
+        const mount = await mountOf(doc.id);
+        const dataDb = await mount.getChildByName(doc.id, CONTAINER_DATA_DB);
+        if (!dataDb) throw new Error('the container lacks its data.db');
+        // The zstd magic and then nothing a decoder reads.
+        await mount.withDatabase(COLLAB_DB_CONFIG, dataDb.id, async ({ db }) => {
+            db.insert(schema.docUpdates)
+                .values({ updateData: Buffer.from([0x28, 0xb5, 0x2f, 0xfd, 1, 2, 3]) })
+                .run();
+        });
+
+        expect((await docOf(await visit(doc.id))).getText('probe').toString()).toBe('kept');
+        expect((await serverDoc(doc.id)).getText('probe').toString()).toBe('kept');
+        await drive.closeCollabDocument(mountId, doc.id);
+    });
 });
 
-describe('the ETag names the stored rows', () => {
+describe('the ETag names the stored version', () => {
     test('the same ETag answers 304 with no body, and one edit later 200 with another', async () => {
         const doc = await newPublicDoc();
-        const write = await member(doc.id);
+        const { write } = await member(doc.id);
         await write('one');
 
         const first = await visit(doc.id);
         const etag = first.headers.get('etag') ?? '';
         expect(etag).toMatch(/^"[^"]+"$/);
+        expect(collabStateEpoch(etag)).toBe(getDataEpoch(aliceId));
 
         const unchanged = await visit(doc.id, etag);
         expect(unchanged.status).toBe(304);
@@ -183,7 +259,7 @@ describe('the ETag names the stored rows', () => {
 
     test('a snapshot that replaces the updates changes it, and a close with nothing new does not', async () => {
         const doc = await newPublicDoc();
-        const write = await member(doc.id);
+        const { write } = await member(doc.id);
         await write('one');
         const before = (await visit(doc.id)).headers.get('etag') ?? '';
 
@@ -199,6 +275,115 @@ describe('the ETag names the stored rows', () => {
         await drive.getCollabDocument(mountId, doc.id);
         await drive.closeCollabDocument(mountId, doc.id);
         expect((await visit(doc.id, folded)).status).toBe(304);
+    });
+});
+
+describe('one version is built once and then served from its file', () => {
+    test('two requests for one version run one transform, and a later request or a 304 reads no blob', async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('once');
+        const run = spyOn(documentTransformRunner, 'run');
+        const capture = spyOn(collabSource, 'captureCollabSource');
+        const captures = () => capture.mock.calls.filter(([, path]) => path.id === doc.id).length;
+        try {
+            const [first, second] = await Promise.all([visit(doc.id), visit(doc.id)]);
+            expect([first.status, second.status]).toEqual([200, 200]);
+            expect(await first.bytes()).toEqual(await second.bytes());
+            expect(stateJobs(run).length).toBe(1);
+            expect(captures()).toBe(1);
+
+            const hit = await visit(doc.id);
+            expect((await docOf(hit)).getText('probe').toString()).toBe('once');
+            expect((await visit(doc.id, hit.headers.get('etag') ?? '')).status).toBe(304);
+            expect(stateJobs(run).length).toBe(1);
+            expect(captures()).toBe(1);
+        } finally {
+            run.mockRestore();
+            capture.mockRestore();
+        }
+    });
+
+    test("a miss runs in the background for whoever reads only through the link, and a named reader's in the foreground", async () => {
+        const readers = [
+            ['a visitor', null, 'background'],
+            ['a signed-in non-member', bob.sessionToken, 'background'],
+            ['a named reader', charlie.sessionToken, 'foreground'],
+            ['the owner', alice.sessionToken, 'foreground'],
+        ] as const;
+        const docs = await Promise.all(
+            readers.map(async () => {
+                const doc = await newDoc();
+                await putACL(doc.id, { visibility: 'link', add: [{ id: charlie.email, read: true, write: false }] });
+                return doc;
+            }),
+        );
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (const [i, [who, token, expected]] of readers.entries()) {
+                const res = token ? await authedRequest(token, stateUrl(docs[i].id)) : await visit(docs[i].id);
+                expect([who, res.status]).toEqual([who, 200]);
+                const priorities = stateJobs(run)
+                    .splice(0)
+                    .map(([, opts]) => opts.priority);
+                run.mockClear();
+                expect([who, priorities]).toEqual([who, [expected]]);
+            }
+        } finally {
+            run.mockRestore();
+        }
+    });
+
+    test('with the queue full a miss answers what a preview route answers', async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('busy');
+        const admit = spyOn(documentTransformRunner, 'assertAdmissible').mockImplementation(() => {
+            throw new ApiError(503, BUSY_MESSAGE);
+        });
+        try {
+            const state = await visit(doc.id);
+            const preview = await app.handle(
+                new Request(`http://localhost/drive/${aliceId}/${mountId}/file/${doc.id}/text-preview`),
+            );
+            expect(state.status).toBe(503);
+            expect(state.headers.get('etag')).toBeNull();
+            expect([state.status, await state.text()]).toEqual([preview.status, await preview.text()]);
+        } finally {
+            admit.mockRestore();
+        }
+        expect((await visit(doc.id)).status).toBe(200);
+    });
+
+    test('a state file and a text preview of one document keep each other, and a newer state prunes the older', async () => {
+        const doc = await newPublicDoc();
+        const { edit, write } = await member(doc.id);
+        // A doc's preview renders its body, so a paragraph gives it one.
+        await edit((held) => {
+            const paragraph = new Y.XmlElement('paragraph');
+            paragraph.insert(0, [new Y.XmlText('first')]);
+            held.getXmlFragment('default').insert(0, [paragraph]);
+        });
+        const older = await visit(doc.id);
+        expect(older.status).toBe(200);
+        const preview = await authedRequest(
+            alice.sessionToken,
+            `/drive/${aliceId}/${mountId}/file/${doc.id}/text-preview`,
+        );
+        expect(preview.status).toBe(200);
+        const both = await eventually(async () => {
+            const files = await cachedFiles(doc.id);
+            return files.length === 2 ? files : undefined;
+        }, 'a state file beside the text preview');
+        expect(both.map((name) => name.split('.').at(-1)).sort()).toEqual(['json', 'yjs']);
+
+        await write(' second');
+        expect((await visit(doc.id)).status).toBe(200);
+        const kept = await eventually(async () => {
+            const files = await cachedFiles(doc.id);
+            return files.length === 2 && !files.every((name) => both.includes(name)) ? files : undefined;
+        }, 'the prune of the older state file');
+        expect(kept.filter((name) => name.endsWith('.json'))).toEqual(both.filter((name) => name.endsWith('.json')));
     });
 });
 
@@ -221,7 +406,7 @@ describe('who is served', () => {
         await putACL(signedIn.id, { visibility: 'public-read' });
         const named = await newDoc();
         await putACL(named.id, { add: [{ id: charlie.email, read: true, write: false }] });
-        const write = await member(named.id);
+        const { write } = await member(named.id);
         await write('for charlie');
 
         expect((await authedRequest(bob.sessionToken, stateUrl(signedIn.id))).status).toBe(200);
@@ -244,9 +429,7 @@ describe('what is refused, as the routes beside it refuse', () => {
     });
 
     test('a chat in a public folder: 403 for a visitor, and no document for its owner', async () => {
-        const folder = await drivePost<DrivePath>(alice.sessionToken, aliceId, mountId, `folder/${root.id}`, {
-            folderName: `State folder ${crypto.randomUUID()}`,
-        });
+        const folder = await newFolder();
         await putACL(folder.id, { visibility: 'link' });
         const chat = await drivePost<DrivePath>(
             alice.sessionToken,
@@ -260,9 +443,7 @@ describe('what is refused, as the routes beside it refuse', () => {
     });
 
     test('a public plain file and a public folder are no document: 404, for a visitor and the owner', async () => {
-        const folder = await drivePost<DrivePath>(alice.sessionToken, aliceId, mountId, `folder/${root.id}`, {
-            folderName: `State folder ${crypto.randomUUID()}`,
-        });
+        const folder = await newFolder();
         await putACL(folder.id, { visibility: 'link' });
         const file = await driveUpload(
             alice.sessionToken,
@@ -298,6 +479,32 @@ describe('what is refused, as the routes beside it refuse', () => {
             expect((await visit(doc.id)).status).toBe(403);
         } finally {
             await updateServerSettings({ sharing: { publicLinks: true } });
+        }
+    });
+
+    test('on a demo server a public document is refused', async () => {
+        const doc = await newPublicDoc();
+        process.env['EIGEN_DEMO'] = '1';
+        try {
+            expect((await visit(doc.id)).status).toBe(403);
+        } finally {
+            delete process.env['EIGEN_DEMO'];
+        }
+        expect((await visit(doc.id)).status).toBe(200);
+    });
+
+    test('a public document in the trash, or under a trashed folder, is refused', async () => {
+        const trashed = await newPublicDoc();
+        const folder = await newFolder();
+        await putACL(folder.id, { visibility: 'link' });
+        const below = await newDoc(folder.id);
+        for (const doc of [trashed, below]) expect((await visit(doc.id)).status).toBe(200);
+
+        await driveDelete(alice.sessionToken, aliceId, mountId, `path/${trashed.id}`);
+        await driveDelete(alice.sessionToken, aliceId, mountId, `path/${folder.id}`);
+        for (const doc of [trashed, below]) {
+            expect((await visit(doc.id)).status).toBe(403);
+            expect((await authedRequest(bob.sessionToken, stateUrl(doc.id))).status).toBe(403);
         }
     });
 });

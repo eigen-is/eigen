@@ -15,6 +15,7 @@ import { captureCollabSource } from './collab-source';
 import type {
     BytesPreviewJob,
     CollabPreviewJob,
+    CollabStateJob,
     DocImportJob,
     DocImportResult,
     DocumentTransformRequest,
@@ -128,8 +129,8 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
     }
 }
 
-// These return a job's text, such as a preview body or the text to index, or its bytes, such as an export. An export
-// keeps its warnings, for the summary it answers with.
+// These return a job's text, such as a preview body or the text to index, or its bytes, such as an export or a reader's
+// whole document. An export keeps its warnings, for the summary it answers with.
 export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
@@ -158,6 +159,16 @@ export async function runTransformToBytes(
 ): Promise<{ data: Buffer; zoom?: number; warnings: TransformWarning[] }> {
     const { result, warnings } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
     return { data: Buffer.from(result.data), zoom: result.zoom, warnings };
+}
+
+export async function runTransformToCollabState(
+    mount: Mount,
+    drivePath: DrivePath,
+    job: CollabStateJob,
+    opts: TransformOptions,
+): Promise<Buffer> {
+    const { result } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return Buffer.from(result.data);
 }
 
 // Like runDocumentTransform, but the input is the file itself, read from the Mount after admission. It returns null

@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
 import type { AnyRoute } from '@tanstack/react-router';
 import type * as Auth from '@workspace/lib/auth';
 import type * as Collab from '@workspace/lib/collab';
-import { encodeCollabState } from '@workspace/lib/collab/collab-state';
+import { collabStateVersion } from '@workspace/lib/collab/collab-state';
 import { CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { AuthContextType, AuthUser } from '@workspace/lib/types/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -114,7 +114,9 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
             return Response.json({ canRead: true, canWrite, live, path: doc, folderContents: [media] });
         }
         if (/^\/collab\/[^/]+\/[^/]+\/pub\/state$/.test(pathname)) {
-            return new Response(encodeCollabState([Y.encodeStateAsUpdate(stored)]), { headers: { ETag: '"stored"' } });
+            return new Response(new Uint8Array(Y.encodeStateAsUpdate(stored)), {
+                headers: { ETag: `"${collabStateVersion('epoch', 0, 0, 'state-f1')}"` },
+            });
         }
         if (pathname.startsWith('/p/')) return Response.json({});
         if (pathname.endsWith('/unread-count')) return Response.json({ count: 0 });
