@@ -210,19 +210,19 @@ export class CollabDocument {
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            // A reader still gets the handshake. Only a step 2 or an update changes the document.
-            const syncType = decoding.peekUint8(decoder);
-            if (
-                !canWrite &&
-                (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate)
-            ) {
-                return;
+            // A type has more than one varuint spelling, so it is read once, and that read decides both what a reader may
+            // send and how the frame is applied. A reader still gets the handshake; a step 2 is applied like an update.
+            const syncType = decoding.readVarUint(decoder);
+            if (syncType === syncProtocol.messageYjsSyncStep1) {
+                sendFrame(
+                    conn,
+                    encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
+                );
+            } else if (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate) {
+                if (canWrite) syncProtocol.readUpdate(decoder, this.doc, conn);
+            } else {
+                console.warn(`Unknown sync message type: ${syncType}`);
             }
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_SYNC);
-            syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn);
-            // Only a step 1 has a reply.
-            if (encoding.length(encoder) > 1) sendFrame(conn, encoding.toUint8Array(encoder));
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             const user = this.connections.get(conn);
