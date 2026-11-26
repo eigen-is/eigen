@@ -75,7 +75,7 @@ Which kind is allowed where:
 | Place | person | team | email |
 |---|---|---|---|
 | Drive share, calendar share | yes | yes | yes |
-| Chat author, whisper target, comment author, assignee | yes | no | yes |
+| Chat author, whisper target, comment author, card or column creator, assignee | yes | no | yes |
 | Mention token | yes | later | yes |
 | Calendar attendee (the id stamp) | yes | no | no stamp |
 | Owner of a Home (`:ownerId`) | yes | yes | never |
@@ -126,7 +126,9 @@ A container is a file that can travel: a document, a chat.
 - Authors, whisper targets, comment creators, resolvers, assignees and mentions are references.
 - **The name card.** A small table `people` in the chat `data.db` and in `comments.db`: `id`, `name`, `address when last seen`. The server writes a row when a member is first named there, and refreshes it when they act again. It is used for a deleted person ("Anna Jansen (deleted)") and on another server ("Anna Jansen (not on this server)").
 - **Hard rule: the name card is for showing names, never for access.** Anyone can edit a downloaded file.
-- The `creator` on a comment card and on a stickies column (inside the collaborative document) is only shown. It stores a reference.
+- **The address is never part of the reference.** A form like `7OEw…#anna@acme.com` would keep a moved file readable too, but the name card already does that, in one row. Inside the reference, an address change makes two strings for one person, the address is copied into every message and token, and it invites matching on the address when the id is unknown. That is old Anna and new Anna again.
+- The `creator` on a comment card and on a stickies column lives inside the collaborative document, and the browser writes it. It stores a reference and is only shown. The server decides nothing with it.
+- **A member who edits a document gets a name card row too.** The server does not see who made a card or a column, but it knows whose connection an edit comes from. At a member's first edit of a document, the collab server writes their row in the document's `comments.db`. Every collaborative document has one. The name card is not kept inside the collaborative document itself: any browser could write it there, and an erase request would have to blank it in every stored version.
 - This reverses the September rule in [STORAGE.md](../STORAGE.md) ("Containers name users by email, never by id"). The name card is what keeps a moved file readable. That section must be rewritten.
 
 **Mentions are tokens.** Today a mention is "any address found in the text" (`extractMentionedEmails`). That is replaced by a token the picker inserts: `<@7OEw…>` for a member, `<@jan@other.org>` for a guest. It is shown with today's name. Copied as plain text it becomes "@Anna Jansen". A built-in emote stores `$key:<reference>` the same way. An address someone just types ("mail me at jan@x.nl") is plain text and notifies nobody.
@@ -211,14 +213,18 @@ SSO means: sign in with your company account (authentik, Keycloak).
 | Share registry (`eigen.db`) | rows for addresses on a member domain are removed. |
 | Chat `data.db`, and its stored versions | `authorEmail`, `whisperTo` → references. Mentions and emotes in `content` → tokens. Name card. |
 | `comments.db` | `createdBy`, `resolvedBy`, `lastAuthorEmail`, `assignee`, `comment_mentions.email` → references. Name card. |
+| Collaborative document `data.db`, and its stored versions | `creator` on comment cards and stickies columns → reference. The name card rows go in the document's `comments.db`. |
 
-It also brings each database to the new layout, so 0.5.0 can open it. Not touched: `users3.db`, `contacts.db`, `mail.db`, `file_events`, the collaborative documents and their versions (they hold no person data), and the attendee addresses themselves.
+It also brings each database to the new layout, so 0.5.0 can open it. Not touched: `users3.db`, `contacts.db`, `mail.db`, `file_events`, the content of a collaborative document (only the `creator` values change), and the attendee addresses themselves.
+
+The script changes a `creator` as a normal edit on the loaded document. It does not build the document again. So a browser tab that still holds the document merges cleanly after the run.
 
 How the script decides, per address:
 
 - **An outside address** stays a plain email. It is a guest.
 - **An address on our own domain, in a share:** it becomes the id of the member who holds it today. No member holds it: it is a leftover of a deleted user, and the entry is removed.
 - **An address on our own domain, in a message, comment, assignee or mention:** it becomes the id of today's holder, but only when that account is older than the message (for an assignee or a mention: older than its comment). Nobody wrote a message before their account existed. This check is kept because it matters in this one run: if an address already changed hands on eigen.is, the new holder does not get the old messages. Otherwise the address stays as it is and belongs to nobody.
+- **An address on our own domain, in a `creator`:** the same check, against the card's own date. A stickies column has no date, and a card can lack one. Then the document's date is used: an account older than the document is older than everything in it.
 - **Text:** only an address that passes the same check becomes a token. Every other address stays text.
 
 A share has no date. If an address already changed hands before the run, the new holder keeps the old shares, as today. The dry run lists what it will do, so these can be removed by hand.
@@ -229,9 +235,9 @@ A share has no date. If an address already changed hands before the run, the new
 2. **Read the lists.** If a member has an outside address, give that member an own-domain address or delete the account, before the run.
 3. **Announce a window.** Take a **Full + S3** backup and copy it off the server. A plain Full backup does **not** hold the container databases of an `s3` mount ([BACKUP.md](../BACKUP.md)).
 4. **`./eigen stop`.** A clean stop also empties the upload queue.
-5. **Run the script** against the data folder and the bucket. It reads `users3.db`, then converts every Home, then downloads, converts and uploads every chat and comment database.
+5. **Run the script** against the data folder and the bucket. It reads `users3.db`, then converts every Home, then downloads, converts and uploads every chat, document and comment database.
 6. **`./eigen update`** to 0.5.0 and start.
-7. **Verify.** No own-domain address left in a reference column unless it is on a dry-run list. Row counts equal. Then by hand: open one chat, one document with comments, one shared calendar, and sign in as a guest.
+7. **Verify.** No own-domain address left in a reference column unless it is on a dry-run list. Row counts equal. Then by hand: open one chat, one document with comments, one stickies board, one shared calendar, and sign in as a guest.
 8. **Take a new Full + S3 backup.** Every older backup of eigen.is is now only good for a rollback.
 9. **Delete the script.**
 
@@ -264,6 +270,7 @@ None.
 
 - **Changing an address in the Admin app:** future; Part B shows the table that makes it one step, plus the three fixes named under Sara in section 4.
 - **A domain move:** future; now possible, the same step for everyone.
+- **Uploading a file that came from another server:** future; the upload is a border, and the name card gives it the address to ask "Anna Jansen (anna@acme.com): which member here?". A person confirms each match.
 - **Federation** (Eigen servers sharing with each other): future; the ids are random and global, so it adds a "home server" hint on the name card and a proof, and the reference does not change.
 
 ## 8. What needs the owner's yes
@@ -283,6 +290,7 @@ Stored formats:
 
 - [ ] The reference as the stored form of a person (id, `team_<id>`, or email).
 - [ ] Chats and comments store ids, with a name card. This reverses the September rule in STORAGE.md.
+- [ ] A member who edits a document gets a name card row in its `comments.db`, so a card or column creator still has a name after a delete or a move.
 - [ ] Mention tokens `<@…>` in message text.
 - [ ] The attendee stamp `X-EIGEN-USER` in the iCalendar bytes.
 - [ ] A guest stays an email. No dormant guest rows.
