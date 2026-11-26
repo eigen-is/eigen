@@ -36,7 +36,7 @@ Under **General access**, a drawing starts as **Restricted**: only the people yo
 
 To share more widely, pick another choice from the dropdown under **General access**:
 
-- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the drawing. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the drawing, but not who has access. Only the owner and people added by name, or through a team, can do that.
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the drawing. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the drawing, but not who has access. Only the owner and people added by name, or through a team, can do that. With **Can view**, they see the drawing as it was when they opened it, and get changes when they come back to the tab or reload. With **Can edit**, and for people added by name, changes show up live.
 - **Anyone with the link**: anyone who has the link can view the drawing, with no account and no sign-in ([Share with a public link](/support/drive/share-with-a-public-link)).
 
 Use the **Copy link** button in the **People with access** header to copy the link. Then click **Save**, and send the link to whoever you like.

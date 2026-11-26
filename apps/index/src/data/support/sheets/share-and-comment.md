@@ -42,7 +42,7 @@ Under **General access**, the spreadsheet starts as **Restricted**, meaning only
 
 To share more widely, pick another choice from the dropdown under **General access**:
 
-- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the spreadsheet. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the spreadsheet, but not who has access. Only the owner and people added by name, or through a team, can do that.
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the spreadsheet. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the spreadsheet, but not who has access. Only the owner and people added by name, or through a team, can do that. With **Can view**, they see the spreadsheet as it was when they opened it, and get changes when they come back to the tab or reload. With **Can edit**, and for people added by name, changes show up live.
 - **Anyone with the link**: anyone who has the link can view the spreadsheet, with no account and no sign-in ([Share with a public link](/support/drive/share-with-a-public-link)).
 
 To copy the link, click the link icon next to **People with access**. Then click **Save**, which closes the dialog.
