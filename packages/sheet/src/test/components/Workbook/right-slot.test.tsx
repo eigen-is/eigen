@@ -162,3 +162,21 @@ test.each(['copy', 'cut'])('a %s of text selected in the slot leaves the selecte
     expect(event.defaultPrevented).toBe(false);
     expect(chartCount()).toBe(1);
 });
+
+test('a cut after a press on the chart cuts the chart, though text in the slot is still selected', async () => {
+    const { container, chartCount } = await mount();
+    const frame = container.querySelector<HTMLElement>('[data-floating-id="c1"]');
+    const text = container.querySelector('[data-testid="pane"] p')?.firstChild;
+    if (!frame || !text) throw new Error('no chart or pane text');
+    document.getSelection()?.selectAllChildren(text.parentNode ?? text);
+    // Selecting the chart focuses its frame by script, which leaves the document's selection in the slot.
+    await act(async () => {
+        frame.firstElementChild?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        frame.firstElementChild?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        frame.focus();
+    });
+    const event = new ClipboardEvent('cut', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    await act(async () => document.body.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    expect(chartCount()).toBe(0);
+});
