@@ -13,10 +13,10 @@ import type {
     EigenDocType,
 } from '@workspace/lib/types/drive';
 import {
+    canHaveLink,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
-    isCollabType,
     isContainerType,
     isDocumentType,
     withEigenExtension,
@@ -873,9 +873,7 @@ export class Drive {
                 if (!arePublicLinksEnabled()) {
                     throw new ApiError(403, 'Public links are turned off on this server');
                 }
-                const linkable =
-                    item.type === DRIVE_TYPE_FOLDER || item.type === DRIVE_TYPE_FILE || isCollabType(item.type);
-                if (!linkable || isInsideDocument(ancestors)) {
+                if (!canHaveLink(item.type) || isInsideDocument(ancestors)) {
                     throw new ApiError(400, 'This item cannot have a public link');
                 }
             }

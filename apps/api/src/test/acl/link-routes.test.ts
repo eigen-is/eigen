@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -158,16 +158,11 @@ describe('files and folders without a login', () => {
             return res.status === 200 ? true : undefined;
         }, 'the thumbnail');
 
-        await withPublicLinks(true);
         // An entry beside the link, so a member's answer has an ACL to show.
         const charlie = { id: ctx.charlie.user.email, read: true, write: false };
         await putACL(folder.id, { visibility: 'link', add: [charlie] });
         await putACL(loneFile.id, { visibility: 'link', add: [charlie] });
         for (const { id } of svgs) await putACL(id, { visibility: 'link' });
-    });
-
-    afterAll(async () => {
-        await withPublicLinks(false);
     });
 
     describe('each route', () => {
@@ -225,6 +220,22 @@ describe('files and folders without a login', () => {
             const download = await visit(urlOf(LINK_ROUTES[3].route, loneFile.id));
             expect(download.status).toBe(200);
             expect(await download.text()).toBe('lone');
+        });
+
+        test("the owner's Save opens a file's bytes to a request with no cookie, and the next Save closes them", async () => {
+            const token = ctx.alice.user.sessionToken;
+            const root = await driveGet(token, aliceId, mountId, 'root');
+            const file = await driveUpload(token, aliceId, mountId, root.id, new File(['saved'], 'saved.txt'));
+            const download = urlOf(LINK_ROUTES[3].route, file.id);
+            expect((await visit(download)).status).toBe(403);
+
+            await putACL(file.id, { visibility: 'link' });
+            const opened = await visit(download);
+            expect(opened.status).toBe(200);
+            expect(await opened.text()).toBe('saved');
+
+            await putACL(file.id, { visibility: 'private' });
+            expect((await visit(download)).status).toBe(403);
         });
 
         test('a byte range of a public file is served', async () => {

@@ -1,7 +1,8 @@
-// The owner's Guest access settings: whether anyone may ask for a guest sign-in code, even with nothing shared to
-// them yet, and after how many idle days a guest account is deleted. Changes collect in a draft on a PageForm and save
-// together through the server-settings hooks, once the days are a whole number in the range the server takes. The
-// Guest access route shows it.
+// The owner's Guest access settings, who from outside gets in: whether anyone may ask for a guest sign-in code, even
+// with nothing shared to them yet, whether members may share an item with anyone who has its link, and after how many
+// idle days a guest account is deleted. Changes collect in a draft on a PageForm and save together through the
+// server-settings hooks, once the days are a whole number in the range the server takes. The Guest access route
+// shows it.
 
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
@@ -24,26 +25,29 @@ export function GuestSettingsPage() {
     if (isLoading || !settings) {
         return <LoadingState />;
     }
-    return <GuestSettingsForm guests={settings.guests} />;
+    return <GuestSettingsForm guests={settings.guests} sharing={settings.sharing} />;
 }
 
+type GuestAccessSettings = Pick<ServerSettings, 'guests' | 'sharing'>;
+
 // Mounted once the settings have loaded, so the draft starts from them.
-function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
+function GuestSettingsForm(loaded: GuestAccessSettings) {
     const updateSettings = useUpdateServerSettings();
-    const { draft, setDraft, current, changed, reset } = usePageDraft(guests, (loaded, patch) => ({
-        ...loaded,
-        ...patch,
+    const { draft, setDraft, current, changed, reset } = usePageDraft(loaded, (settings, patch) => ({
+        guests: { ...settings.guests, ...patch.guests },
+        sharing: { ...settings.sharing, ...patch.sharing },
     }));
     const fieldId = useId();
 
-    const update = (patch: Partial<ServerSettings['guests']>) => setDraft((prev) => ({ ...prev, ...patch }));
-    const days = current.inactivityDays;
+    const update = (patch: Partial<ServerSettings['guests']>) =>
+        setDraft((prev) => ({ ...prev, guests: { ...prev.guests, ...patch } }));
+    const days = current.guests.inactivityDays;
     // An emptied field reads as NaN, which is no whole number either.
     const daysOutOfRange = !Number.isInteger(days) || days < MIN_DAYS || days > MAX_DAYS;
 
     const handleSave = async () => {
         if (daysOutOfRange) return false;
-        await updateSettings.mutateAsync({ guests: draft });
+        await updateSettings.mutateAsync(draft);
         reset();
     };
 
@@ -56,10 +60,26 @@ function GuestSettingsForm({ guests }: { guests: ServerSettings['guests'] }) {
                 <div className="flex items-center gap-3">
                     <Switch
                         id={`${fieldId}-open-signup`}
-                        checked={current.openSignup}
+                        checked={current.guests.openSignup}
                         onCheckedChange={(openSignup) => update({ openSignup })}
                     />
                     <Label htmlFor={`${fieldId}-open-signup`}>Allow open guest signup</Label>
+                </div>
+            </SettingsSection>
+
+            <Separator />
+
+            <SettingsSection
+                title="Public links"
+                description="Members can share a file, folder or document with anyone who has its link. No account needed."
+            >
+                <div className="flex items-center gap-3">
+                    <Switch
+                        id={`${fieldId}-public-links`}
+                        checked={current.sharing.publicLinks}
+                        onCheckedChange={(publicLinks) => setDraft((prev) => ({ ...prev, sharing: { publicLinks } }))}
+                    />
+                    <Label htmlFor={`${fieldId}-public-links`}>Allow public links</Label>
                 </div>
             </SettingsSection>
 

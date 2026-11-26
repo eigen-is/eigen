@@ -1,16 +1,17 @@
 // The Share dialog keeps the dialog contract. It lists who has access and saves only what changed, then closes; with
 // nothing changed Save closes like Cancel. Enter in the people field adds that person and saves nothing, and Save adds
 // a person still typed there first. A person already listed, or yourself, is refused under the field, and a person set
-// to Remove, yourself included, may be added back. A save that fails stays open with the edits kept. The lock and the read-only list's
-// header are buttons the keyboard reaches. The owner gets the Share with team menu, and a viewer who may only look
-// gets Close alone.
+// to Remove, yourself included, may be added back. A save that fails stays open with the edits kept. General access
+// is one picker of three choices, the third offered on a file, folder or document while the server allows public
+// links, and a stored link shows whatever the server says. The read-only list's header is a button the keyboard
+// reaches. The owner gets the Share with team menu, and a viewer who may only look gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
-import { expectFormContract, type } from '../../form-contract';
+import { expectFormContract, field, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
 import { pressKey } from '../../press-key';
@@ -35,6 +36,7 @@ let isGuest = false;
 let isEffectiveOwner = true;
 let canWrite = true;
 let myTeams: { id: string; name: string }[] = [];
+let publicLinks = true;
 
 const updateACL = mock(async (_variables: unknown) => {});
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
@@ -72,6 +74,7 @@ mock.module('@workspace/lib/contacts', () => ({
 // Each row shows the person's email as their name.
 mock.module('@workspace/lib/public', () => ({
     ...realPublic,
+    usePublicConfig: () => ({ data: { publicLinks } }),
     useResolvedUser: ({ email }: { email?: string }) => ({
         displayName: email ?? '',
         resolvedEmail: email,
@@ -107,6 +110,7 @@ beforeEach(() => {
     canWrite = true;
     sharedPath = notes;
     myTeams = [];
+    publicLinks = true;
 });
 
 // The dialog under a parent that owns `open`, as Drive's item menu does.
@@ -197,15 +201,29 @@ const people = () =>
         return `${row?.querySelector('p')?.textContent}: ${access?.textContent}`;
     });
 
-// The General access lock, by the action its name says it takes.
-const OPEN_LINK = 'Let anyone signed in with the link view it';
-const RESTRICT = 'Restrict to people with access';
-const lock = (name: string) => {
-    const found = dialog()?.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
-    if (!found) throw new Error(`the dialog has no lock named ${name}`);
-    return found;
-};
-const generalAccess = () => (dialog()?.textContent?.includes('Unrestricted') ? 'Unrestricted' : 'Restricted');
+const RESTRICTED = 'Restricted';
+const SIGNED_IN = 'Anyone signed in with the link';
+const ANYONE = 'Anyone with the link';
+const PUBLIC_LINK_NOTE =
+    "Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access.";
+
+// Every picker in the dialog: each person's role, General access and the role a signed-in link gives.
+const triggers = () => [...(dialog()?.querySelectorAll('[data-slot="select-trigger"]') ?? [])];
+// The General access picker, what it shows, and the choices its open list offers, which Radix portals to the body.
+const generalAccess = () => field('General access');
+const options = () => [...document.querySelectorAll('[data-slot="select-content"] [role="option"]')];
+// Picking what is shown already closes the list and changes nothing.
+async function generalAccessChoices() {
+    const shown = generalAccess().textContent;
+    await click(generalAccess());
+    const offered = options();
+    await click(offered.find((option) => option.textContent === shown));
+    return offered.map((option) => option.textContent);
+}
+async function chooseGeneralAccess(label: string) {
+    await click(generalAccess());
+    await click(options().find((option) => option.textContent === label));
+}
 
 async function chooseAccess(email: string, label: string) {
     const row = rows().find((r) => r?.querySelector('p')?.textContent === email);
@@ -225,7 +243,7 @@ test('Share keeps the dialog contract', async () => {
         submitLabel: 'Save',
         firstField: 'Add people',
         onSubmit: updateACL,
-        makeChanged: () => click(lock(OPEN_LINK)),
+        makeChanged: () => chooseGeneralAccess(SIGNED_IN),
         makeInvalid: () => type('Add people', 'not-an-email'),
         invalidField: 'Add people',
         except: { enter: 'Enter in the people field adds the person typed, and never saves' },
@@ -341,7 +359,7 @@ test('Save sends exactly what changed and closes once it is saved', async () => 
     await addByEnter('dan@example.com');
     await chooseAccess('ada@example.com', 'Remove');
     await chooseAccess('bob@example.com', 'Editor');
-    await click(lock(OPEN_LINK));
+    await chooseGeneralAccess(SIGNED_IN);
     await click(dialog()?.querySelector('[role="checkbox"]'));
     await click(button('Save'));
     await settle();
@@ -362,20 +380,61 @@ test('Save sends exactly what changed and closes once it is saved', async () => 
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('the lock is a button that says what it does, and Enter, Space or a click flips it', async () => {
+test('General access offers three choices, and the signed-in one lets people view or edit', async () => {
     await open();
-    expect(generalAccess()).toBe('Restricted');
-    await act(async () => pressKey(lock(OPEN_LINK), 'Enter'));
-    expect(generalAccess()).toBe('Unrestricted');
-    await act(async () => pressKey(lock(RESTRICT), ' '));
-    expect(generalAccess()).toBe('Restricted');
-    await click(lock(OPEN_LINK));
-    expect(generalAccess()).toBe('Unrestricted');
+    expect(generalAccess().textContent).toBe(RESTRICTED);
+    expect(await generalAccessChoices()).toEqual([RESTRICTED, SIGNED_IN, ANYONE]);
+    await chooseGeneralAccess(SIGNED_IN);
+    expect(generalAccess().textContent).toBe(SIGNED_IN);
+    await click(triggers().find((trigger) => trigger.textContent === 'Can view'));
+    await click(options().find((option) => option.textContent === 'Can edit'));
     await click(button('Save'));
     await settle();
     expect(updateACL.mock.calls).toEqual([
-        [expect.objectContaining({ add: [], remove: [], visibility: 'public-read' })],
+        [expect.objectContaining({ add: [], remove: [], visibility: 'public-write' })],
     ]);
+});
+
+test('Anyone with the link waits for Save, with the sentence under it and no role to pick', async () => {
+    await open();
+    expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
+    await chooseGeneralAccess(SIGNED_IN);
+    expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
+
+    await chooseGeneralAccess(ANYONE);
+    expect(updateACL).not.toHaveBeenCalled();
+    expect(dialog()?.textContent).toContain(PUBLIC_LINK_NOTE);
+    expect(triggers().map((trigger) => trigger.textContent)).toEqual(['Editor', 'Viewer', ANYONE]);
+    expect(dialog()?.textContent).toContain(`${PUBLIC_LINK_NOTE}Can view`);
+
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([[expect.objectContaining({ add: [], remove: [], visibility: 'link' })]]);
+});
+
+test('Anyone with the link is not offered while public links are off, nor on a chat', async () => {
+    publicLinks = false;
+    await open();
+    expect(await generalAccessChoices()).toEqual([RESTRICTED, SIGNED_IN]);
+    await unmount();
+
+    publicLinks = true;
+    sharedPath = drivePath({ id: 'room', name: 'room', type: 'chat', mimeType: '' });
+    await open();
+    expect(await generalAccessChoices()).toEqual([RESTRICTED, SIGNED_IN]);
+});
+
+test('a stored link shows as it is while public links are off, says it opens nothing, and can be changed away', async () => {
+    publicLinks = false;
+    sharedPath = { ...notes, visibility: 'link' };
+    await open();
+    expect(generalAccess().textContent).toBe(ANYONE);
+    expect(dialog()?.textContent).toContain('Public links are turned off on this server, so this link opens nothing.');
+    expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
+    await chooseGeneralAccess(RESTRICTED);
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([[expect.objectContaining({ visibility: 'private' })]]);
 });
 
 test('a save that fails stays open with the edits kept, and Cancel waits while a save runs', async () => {
@@ -503,18 +562,23 @@ test('an editor edits the list, unless the owner restricted sharing', async () =
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
 });
 
-// Who may edit and who may only look see one general access block, in the same words as the lock's name.
+// Who may edit and who may only look see the same name for the general access, with the role it gives beside it.
 test('an open link reads the same to whoever opens Share, with the role it gives beside it', async () => {
     sharedPath = { ...notes, visibility: 'public-read' };
     await open();
-    expect(dialog()?.textContent).toContain('UnrestrictedAnyone signed in with the link');
+    expect(generalAccess().textContent).toBe(SIGNED_IN);
     expect(dialog()?.textContent).toContain('Can view');
     await unmount();
 
     isGuest = true;
     sharedPath = { ...notes, visibility: 'public-write' };
     await open();
-    expect(dialog()?.textContent).toContain('UnrestrictedAnyone signed in with the link');
-    expect(dialog()?.textContent).toContain('Can edit');
+    expect(dialog()?.textContent).toContain(`${SIGNED_IN}Anyone who signs inCan edit`);
     expect(dialog()?.textContent).not.toContain('authenticated');
+    await unmount();
+
+    sharedPath = { ...notes, visibility: 'link' };
+    await open();
+    expect(dialog()?.textContent).toContain(`${ANYONE}No sign-in neededCan view`);
+    expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
 });

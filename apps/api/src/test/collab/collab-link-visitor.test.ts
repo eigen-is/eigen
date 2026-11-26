@@ -63,7 +63,6 @@ beforeAll(async () => {
     mountId = await firstMountId(alice.sessionToken, aliceId);
     root = await driveGet(alice.sessionToken, aliceId, mountId, 'root');
     port = ctx.app.listen(0).server?.port;
-    await withPublicLinks(true);
 });
 
 afterEach(() => {
@@ -72,8 +71,7 @@ afterEach(() => {
     intervals.mockClear();
 });
 
-afterAll(async () => {
-    await withPublicLinks(false);
+afterAll(() => {
     ctx.app.stop();
     intervals.mockRestore();
 });

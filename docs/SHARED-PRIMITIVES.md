@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2462 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2464 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1194,7 +1194,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1304)
+## Utilities & constants (1306)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1958,6 +1958,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CALENDAR_SHARE_PERMISSIONS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `canHaveLink` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CARD_TITLE_MAX_LENGTH` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `celebrationsOn` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -2417,6 +2418,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_APP_CONFIGS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocSharedTitle` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `GENERAL_ACCESS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `getFileIcon` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |

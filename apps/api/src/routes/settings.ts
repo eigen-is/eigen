@@ -203,6 +203,11 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     }),
                 ),
                 backups: t.Optional(backupSettingsBody),
+                sharing: t.Optional(
+                    t.Object({
+                        publicLinks: t.Optional(t.Boolean()),
+                    }),
+                ),
             }),
             auth: true,
         },

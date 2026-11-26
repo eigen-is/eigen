@@ -206,6 +206,10 @@ export function isCollabType(type: DrivePathType): type is DriveCollabType {
     );
 }
 
+export function canHaveLink(type: DrivePathType) {
+    return type === DRIVE_TYPE_FOLDER || type === DRIVE_TYPE_FILE || isCollabType(type);
+}
+
 export function isChatType(type: DrivePathType): type is DriveChatType {
     return type === DRIVE_TYPE_CHAT;
 }

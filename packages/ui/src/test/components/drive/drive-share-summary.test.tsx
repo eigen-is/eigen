@@ -2,10 +2,10 @@
 // the keyboard reaches, and its click stays off the row. In a Drive row Tab skips it, since the row's menu key reaches
 // Share. Elsewhere it is no control at all. On an item nobody else
 // has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared
-// link says who the link lets in, in the Share dialog's words.
+// link says who the link lets in, in the Share dialog's words, for a signed-in link and a public one alike.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
-import type { DirectAccessItem } from '@workspace/lib/types/drive-access';
+import type { DirectAccessItem, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { expectKeyboardReveal } from '../../hover-reveal';
@@ -58,7 +58,7 @@ beforeEach(() => {
 async function renderSummary(props: {
     onClick?: () => void;
     showIconOnHover?: boolean;
-    visibility?: 'private' | 'public-read';
+    visibility?: DriveVisibility;
     tabIndex?: number;
 }) {
     const onRowClick = mock(() => {});
@@ -125,12 +125,21 @@ test('on an item nobody else has, the add-person icon shows on hover only, and w
 });
 
 test('the lock on a shared link says who the link lets in, as the Share dialog does', async () => {
-    const { container } = await renderSummary({ visibility: 'public-read' });
-    // The lock comes before the people.
-    const lock = container.querySelector('[data-slot="tooltip-trigger"]');
-    await act(async () => {
-        lock?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
-        await new Promise((resolve) => setTimeout(resolve, 350));
+    const said: Record<string, string | undefined> = {};
+    for (const visibility of ['public-read', 'public-write', 'link'] as const) {
+        const { container } = await renderSummary({ visibility });
+        // The lock comes before the people.
+        const lock = container.querySelector('[data-slot="tooltip-trigger"]');
+        await act(async () => {
+            lock?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+            await new Promise((resolve) => setTimeout(resolve, 350));
+        });
+        said[visibility] = document.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+        await unmount();
+    }
+    expect(said).toEqual({
+        'public-read': 'Anyone signed in with the link',
+        'public-write': 'Anyone signed in with the link',
+        link: 'Anyone with the link',
     });
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Anyone signed in with the link');
 });

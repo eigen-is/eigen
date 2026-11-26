@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import type { DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
-import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { arePublicLinksEnabled, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { canReadByLink } from '../../lib/drive/acl';
 import { getHome } from '../../lib/home';
 import {
@@ -222,41 +222,38 @@ describe("visibility 'link'", () => {
         docChatFolder = findOrFail(docContents, (p) => p.name === 'chat');
     });
 
-    afterAll(async () => {
-        await withPublicLinks(false);
-    });
-
-    test('public links are off by default', () => {
-        expect(getServerSettings().sharing.publicLinks).toBe(false);
+    test('public links are on by default, and never on a demo server', () => {
+        expect(getServerSettings().sharing.publicLinks).toBe(true);
+        expect(arePublicLinksEnabled()).toBe(true);
+        process.env['EIGEN_DEMO'] = '1';
+        try {
+            expect(arePublicLinksEnabled()).toBe(false);
+        } finally {
+            delete process.env['EIGEN_DEMO'];
+        }
     });
 
     test('while public links are off a save answers 403 and keeps the value', async () => {
-        const res = await alicePuts(file.id, 'link');
-        expect(res.status).toBe(403);
-        const stored = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${file.id}`);
-        expect(stored.visibility).toBe('private');
+        await withPublicLinks(false);
+        try {
+            const res = await alicePuts(file.id, 'link');
+            expect(res.status).toBe(403);
+            expect(await storedVisibility(file.id)).toBe('private');
+        } finally {
+            await withPublicLinks(true);
+        }
     });
 
-    test('on a demo server a save answers 403 with public links on', async () => {
-        await withPublicLinks(true);
+    test('on a demo server a save answers 403', async () => {
         process.env['EIGEN_DEMO'] = '1';
         try {
             expect((await alicePuts(file.id, 'link')).status).toBe(403);
         } finally {
             delete process.env['EIGEN_DEMO'];
-            await withPublicLinks(false);
         }
     });
 
     describe('with public links on', () => {
-        beforeAll(async () => {
-            await withPublicLinks(true);
-        });
-
-        afterAll(async () => {
-            await withPublicLinks(false);
-        });
-
         test('a chat answers 400', async () => {
             expect((await alicePuts(chat.id, 'link')).status).toBe(400);
         });
@@ -282,6 +279,24 @@ describe("visibility 'link'", () => {
                 );
                 expect(stored.visibility).toBe('link');
             }
+        });
+
+        test('an editor saves it, unless the owner restricted sharing', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const aliceId = ctx.alice.user.id;
+            const root = await driveGet(token, aliceId, mountId, 'root');
+            const shared = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: 'Edited' });
+            const editor = { id: ctx.bob.user.email, read: true, write: true };
+            expect((await putACL(token, shared.id, { add: [editor] })).status).toBe(200);
+
+            expect((await putVisibility(ctx.bob.user.sessionToken, shared.id, 'link')).status).toBe(200);
+            expect(await storedVisibility(shared.id)).toBe('link');
+
+            expect((await putACL(token, shared.id, { visibility: 'private', sharingRestricted: true })).status).toBe(
+                200,
+            );
+            expect((await putVisibility(ctx.bob.user.sessionToken, shared.id, 'link')).status).toBe(403);
+            expect(await storedVisibility(shared.id)).toBe('private');
         });
 
         test('an address without an ACL entry can read a public path', async () => {
@@ -339,9 +354,12 @@ describe("visibility 'link'", () => {
             const root = await driveGet(token, aliceId, mountId, 'root');
             kept = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: 'Kept Link' });
             other = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: 'Never Linked' });
-            await withPublicLinks(true);
             expect((await alicePuts(kept.id, 'link')).status).toBe(200);
             await withPublicLinks(false);
+        });
+
+        afterAll(async () => {
+            await withPublicLinks(true);
         });
 
         test('the owner still shares a stored link, with or without sending it again', async () => {

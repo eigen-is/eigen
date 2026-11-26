@@ -2,17 +2,19 @@
 // general access and, for the owner, whether editors may share. It is the dialog's form, and mounts with it, so each
 // opening starts from the item as it is. Save adds a person still typed in the field first, then sends only what
 // changed, so a dialog opened a while ago can't undo what another sharer added since; with nothing changed it closes.
-// Adding a person set to Remove, yourself included, takes the Remove back.
+// Adding a person set to Remove, yourself included, takes the Remove back. Anyone with the link is offered where the
+// server takes it, and always on an item that has it, so it can be closed.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { useDriveAccess, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
+import { usePublicConfig } from '@workspace/lib/public';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { canHaveLink } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, DriveACL, DriveVisibility } from '@workspace/lib/types/drive-access';
-import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     DropdownMenu,
@@ -30,14 +32,19 @@ import {
     SelectValue,
 } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
+import { ClipboardCopy, Link, Mail, Users } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserItem } from '../user/user-item';
-import { GeneralAccess } from './drive-access-list';
+import { GENERAL_ACCESS, GeneralAccess } from './drive-access-list';
+
+const GENERAL_ACCESS_CHOICES: readonly DriveVisibility[] = ['private', 'public-read', 'link'];
+
+const PUBLIC_LINK_NOTE =
+    "Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access.";
+const PUBLIC_LINKS_OFF_NOTE = 'Public links are turned off on this server, so this link opens nothing.';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
@@ -67,6 +74,12 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     }, [directList, inheritedList, user?.email]);
 
     const contactFieldId = useId();
+    const generalAccessId = useId();
+
+    const { data: publicConfig } = usePublicConfig();
+    const offersLink = path.visibility === 'link' || (publicConfig?.publicLinks === true && canHaveLink(path.type));
+    const choices = GENERAL_ACCESS_CHOICES.filter((choice) => choice !== 'link' || offersLink);
+    const linkNote = publicConfig?.publicLinks === false ? PUBLIC_LINKS_OFF_NOTE : PUBLIC_LINK_NOTE;
 
     // A person set to Remove comes back with the access they had, your own entry included.
     const withPerson = (email: string): DirectAccessItem[] => {
@@ -149,11 +162,6 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
             sharingRestricted: isEffectiveOwner ? sharingRestricted : undefined,
         });
     };
-
-    // The lock's name says what a click does, since Restricted or Unrestricted beside it already says the state.
-    const lockLabel =
-        visibility === 'private' ? 'Let anyone signed in with the link view it' : 'Restrict to people with access';
-    const LockIcon = visibility === 'private' ? Lock : Unlock;
 
     return (
         <FormDialogForm
@@ -277,29 +285,39 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
             <Separator />
 
             <div>
-                <h4 className="text-sm font-medium mb-2">General access</h4>
+                <h4 id={generalAccessId} className="text-sm font-medium mb-2">
+                    General access
+                </h4>
                 <GeneralAccess
                     visibility={visibility}
-                    icon={
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="rounded-full"
-                                    aria-label={lockLabel}
-                                    onClick={() =>
-                                        handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')
-                                    }
-                                >
-                                    <LockIcon className="size-6" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{lockLabel}</TooltipContent>
-                        </Tooltip>
+                    choice={
+                        <Select
+                            // A signed-in link that lets people edit is the same choice; the picker on the right says.
+                            value={visibility === 'public-write' ? 'public-read' : visibility}
+                            onValueChange={(value) => {
+                                const choice = choices.find((c) => c === value);
+                                if (choice) handleVisibilityChange(choice);
+                            }}
+                        >
+                            <SelectTrigger
+                                aria-labelledby={generalAccessId}
+                                className="-ml-2 h-7 border-transparent px-2 font-medium shadow-none hover:bg-accent"
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {choices.map((choice) => (
+                                    <SelectItem key={choice} value={choice}>
+                                        {GENERAL_ACCESS[choice].label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     }
+                    description={visibility === 'link' ? linkNote : undefined}
                 >
-                    {visibility !== 'private' && (
+                    {visibility === 'link' && <span className="text-xs text-muted-foreground shrink-0">Can view</span>}
+                    {(visibility === 'public-read' || visibility === 'public-write') && (
                         <Select
                             value={visibility === 'public-write' ? 'editor' : 'viewer'}
                             onValueChange={(v) =>
