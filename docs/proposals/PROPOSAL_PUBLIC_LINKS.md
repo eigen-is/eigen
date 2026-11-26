@@ -22,7 +22,7 @@ The whole design in one table:
 
 - **Sharing outside the server needs an email address.** A link on a website, in a newsletter or in a chat group can't name its readers.
 - **Every sign-in is a mail round trip.** For "have a look at this PDF" a six-digit code is too much, and a code that lands in spam loses the reader.
-- **"Unrestricted" is not public.** The share dialog's **General access** lets "anyone signed in with the link" view. `canFromAncestors` (`apps/api/src/lib/drive/acl.ts`) grants `public-read` and `public-write` to a signed-in user only, and every drive route asks for a session.
+- **"Unrestricted" is not public.** The share dialog's **General access** lets "anyone signed in with the link" view. `canReadFromAncestors` (`apps/api/src/lib/drive/acl.ts`) grants `public-read` and `public-write` to a signed-in user only, and every drive route asks for a session.
 
 ## Why not a guest account
 
@@ -48,7 +48,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 | Anyone with the link | `link` | Reads, exactly as under `public-read` | The visitor view |
 | Anyone with the link, public links off | `link` | No access | No access |
 
-**For a signed-in user `'link'` is `public-read` while public links are on.** `grantsPublicRead` (`acl.ts`) answers true for it only while `arePublicLinksEnabled()`, and that is the whole change: `canFromAncestors` then reads it as `public-read` does, and `checkAccessForEmails` (`lib/drive/sharing.ts`) too. Write is untouched. With public links off a link is closed for everyone: a signed-in non-member or a guest loses the read too, and only people with an ACL entry, the owner and the team keep their access.
+**For a signed-in user `'link'` is `public-read` while public links are on.** `grantsPublicRead` (`acl.ts`) answers true for it only while its caller says public links are on (`arePublicLinksEnabled()`), and that is the whole change: `canReadFromAncestors` then reads it as `public-read` does, and `checkAccessForEmails` (`lib/drive/sharing.ts`) too. Write is untouched. With public links off a link is closed for everyone: a signed-in non-member or a guest loses the read too, and only people with an ACL entry, the owner and the team keep their access.
 
 **It travels on the existing ACL route.** `PUT /drive/:ownerId/:mountId/path/:pathId/acl` already takes `visibility`, the dialog already sends it on Save through `useUpdateACL`, and `SharedDrive.updateACLDelta` checks write held by name and `sharingRestricted` (`requireShare`). So an editor by name, an owner, a team member or someone an ACL entry lets write, may publish under the same rule as any sharing change, and no new route or hook is needed. Someone who edits only through "Anyone signed in with the link" may not. Nor may they move the item to another folder, where it could be theirs to publish, or email its collaborators: both need write held by name too (`requireWriteByName`, [ACL.md § Re-Share Prevention](../ACL.md#re-share-prevention)). The copy-link icon copies `getDriveShareUrl(path)` as it does today.
 
@@ -58,7 +58,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 ## What a link opens
 
-`canReadByLink(chain)` sits beside `canFromAncestors` in `acl.ts` and is the whole visitor rule for a chain. It is pure. The switch is not its business: `LinkDrive` checks it once, before it asks the rule. It takes the path's breadcrumb and answers the index of the highest public path in the chain, or nothing:
+`canReadByLink(chain)` sits beside `canReadFromAncestors` in `acl.ts` and is the whole visitor rule for a chain. It is pure. The switch is not its business: `LinkDrive` checks it once, before it asks the rule. It takes the path's breadcrumb and answers the index of the highest public path in the chain, or nothing:
 
 1. No path in the chain is in the trash (`isTrashedChain`).
 2. Some path in the chain has `visibility: 'link'`. So a folder's link covers everything below it, a private subfolder included, and nothing beside or above it.
@@ -66,7 +66,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 There is no write variant: a visitor can't write because no code asks.
 
-`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with only the reads its routes call: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile` and `canRead`. Each read runs the rule first, so `getPath` refuses a chat row too. `canRead(mountId, pathId)` takes no user and answers a boolean, and there is no `canWrite`: a visitor never writes. `readPermissions` (`lib/drive/get-drive.ts`) is the one place that answers a member's or a visitor's rights, `canWrite: false` for a visitor, and the permissions route and the collab info route both ask it. The read methods share their signatures with the other two drives, so a route needs no `instanceof`. `resolveFile` hands the route the owner's own row, because it feeds the preview cache, which every caller shares, and never an answer. What a visitor is handed is trimmed in one place:
+`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with only the reads its routes call: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile` and `canRead`. Each read runs the rule first, so `getPath` refuses a chat row too. `canRead(mountId, pathId)` takes no user and answers a boolean, and there is no `canWrite`: a visitor never writes. `getReaderAccess` (`lib/drive/get-drive.ts`) is the one place that answers a member's or a visitor's rights, `canWrite: false` for a visitor, and the permissions route and the collab info route both ask it. The read methods share their signatures with the other two drives, so a route needs no `instanceof`. `resolveFile` hands the route the owner's own row, because it feeds the preview cache, which every caller shares, and never an answer. What a visitor is handed is trimmed in one place:
 
 - Every `DrivePath` has `acl: null`.
 - A breadcrumb starts at the public path. That path keeps its `parentId`, as it does for a signed-in sharee: the id names the folder above, never its name or contents.
@@ -87,7 +87,7 @@ A visitor is not a `User`: a stand-in like `makeSyntheticUser` would flow into `
 | `auth: true`, unchanged | `user: User`, `session` | 401 |
 | `linkAuth: true`, new | `user: User \| null`, `session` or null | Goes on |
 
-A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it calls `getReadDrive(ownerId, user)` (`lib/drive/get-drive.ts`), which hands a user a `SharedDrive` and a visitor a `LinkDrive`, and can call only the methods all three drives have. The routes that report rights (4 and 13) ask `readPermissions` instead, because a member's `canRead` takes a `User`. The socket keeps `auth: true`. There is no per-path choice between the two: a login decides.
+A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it calls `getReadDrive(ownerId, user)` (`lib/drive/get-drive.ts`), which hands a user a `SharedDrive` and a visitor a `LinkDrive`, and can call only the methods all three drives have. The routes that report rights (4 and 13) ask `getReaderAccess` instead, because a member's `canRead` takes a `User`. The socket keeps `auth: true`. There is no per-path choice between the two: a login decides.
 
 For a request without a user the macro also sets two headers after the handler, on `set.headers` and on a returned `Response`: `X-Robots-Tag: noindex` and `Cache-Control: no-store`. Today previews and thumbnails answer `private, max-age=86400`, `serveFile` answers `private, no-cache`, and the JSON routes set nothing.
 
@@ -116,7 +116,7 @@ A document refers to its pictures by name in its own `media/` folder ([MEDIA-REF
 
 ## A document without the socket
 
-The collab socket is for a live reader: someone signed in who reads the document by name, as its owner, a team member or through an ACL entry, or who may write it, "Anyone signed in with the link, can edit" included (`Drive.isLiveReader`). The route is `auth: true`, so an upgrade without a login is a 401, and a signed-in reader who is not live is closed with 4403 at open and on the 15 s keepalive. The info route answers the same rule as `live`.
+The collab socket is for a live reader: someone signed in who reads the document by name, as its owner, a team member or through an ACL entry, or who may write it, "Anyone signed in with the link, can edit" included (`live` in `getReaderAccess`). The route is `auth: true`, so an upgrade without a login is a 401, and a signed-in reader who is not live is closed with 4403 at open and on the 15 s keepalive. The info route answers the same rule as `live`.
 
 Everyone else who may read loads the stored state: a visitor, and someone signed in who reads only through a link or "Anyone signed in, can view". `GET /collab/:ownerId/:mountId/:pathId/state` answers the document's current state as one garbage-collected Yjs update, what a member's first sync carries, so a link reader never receives text an author deleted. It answers with an ETag and a 304 on `If-None-Match`, and opens no `CollabDocument`. The transform process builds the state once per version, in the background for a link reader, and the preview cache keeps it, so a later request is a file send. `useCollabDoc` makes no socket for such a reader. It asks again when the tab is shown, and reloads the page on a 401 or 403, so a visitor whose link closed lands on the login page. [COLLAB.md](../COLLAB.md#a-reader-who-is-not-live-loads-the-stored-state-over-http) has the route and the client.
 

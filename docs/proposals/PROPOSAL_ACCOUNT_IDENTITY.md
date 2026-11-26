@@ -26,7 +26,7 @@ What new Anna gets today:
 
 | Where | What goes wrong today | Harm |
 |---|---|---|
-| Files, folders and calendars shared with old Anna | She can open them by link (`matchesACL` compares only the address). In some cases Eigen also puts them in her "Shared with me", for example when the owner changes the sharing later. | Real |
+| Files, folders and calendars shared with old Anna | She can open them by link (`aclGrants` compares only the address). In some cases Eigen also puts them in her "Shared with me", for example when the owner changes the sharing later. | Real |
 | Team chats (she joins the default team on day one) | Old Anna's messages are "hers". She can edit and delete them (`ChatRoom.editMessage`, `deleteMessage`). | Real |
 | Whispers (private messages inside a chat) | She reads what old Anna sent and got (`ChatRoom.getMessagesForUser`). | Real |
 | Bob clicks "Start chat" with Anna | Eigen opens Bob's old private chat with old Anna (`findChatsByMembers`). | Real |
