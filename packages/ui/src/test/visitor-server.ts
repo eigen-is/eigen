@@ -23,7 +23,7 @@ const VISITOR_ROUTES = [
     /^\/drive\/[^/]+\/[^/]+\/folder\/[^/]+$/,
     /^\/drive\/[^/]+\/[^/]+\/file\/[^/]+\/(download|embed\/.+|preview|text-preview|vcard-preview|eml-preview|ics-preview)$/,
     /^\/drive\/[^/]+\/[^/]+\/thumb\/.+$/,
-    /^\/collab\/[^/]+\/[^/]+\/[^/]+\/info$/,
+    /^\/collab\/[^/]+\/[^/]+\/[^/]+\/(info|state)$/,
     /^\/p\//,
 ];
 

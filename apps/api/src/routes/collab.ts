@@ -1,9 +1,10 @@
-// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each editor opens to sync
-// a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
+// The collab routes: a document's access info, stored state and comment index over HTTP, and the WebSocket each editor
+// opens to sync a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
 // and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that succeeds counts on
 // the user's Recent page. A visitor without a login gets the info, and the socket where a public link opens the path,
 // and never writes.
 
+import { encodeCollabState } from '@workspace/lib/collab/collab-state';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_ACCESS_LOST_REASON,
@@ -15,13 +16,16 @@ import {
     COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
+import { isCollabType } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { withCommentIndex } from '../lib/chat';
+import { decompressBlobAsync } from '../lib/collab/blob-codec';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { EMPTY_AWARENESS_MESSAGE, startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
+import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { getLinkDrive, getReadDrive, getSharedDrive, readPermissions } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import type { LinkDrive } from '../lib/drive/link-drive';
@@ -62,6 +66,31 @@ export const collabRouter = new Elysia({
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
             return { ...permissions, path, folderContents };
+        },
+        { linkAuth: true },
+    )
+
+    // The rows as they are stored, read without opening the document. The ETag names them: a row id is never used
+    // twice in one data.db, and the epoch tells a restored data.db from the one it replaced.
+    .get(
+        '/collab/:ownerId/:mountId/:pathId/state',
+        async ({ params, request, user }): Promise<Response> => {
+            const drive = await getReadDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            if (!isCollabType(path.type)) throw new ApiError(404, 'Document not found');
+            const { snapshot, updates } = await captureCollabSource(mount, path);
+            const lastUpdateId = updates.at(-1)?.id ?? snapshot?.lastUpdateId ?? 0;
+            const headers = {
+                ETag: `"${getDataEpoch(params.ownerId)}-${snapshot?.id ?? 0}-${lastUpdateId}"`,
+                'Cache-Control': 'private, no-cache',
+            };
+            if (request.headers.get('if-none-match') === headers.ETag)
+                return new Response(null, { status: 304, headers });
+            const rows = snapshot ? [snapshot, ...updates] : updates;
+            const state = await Promise.all(rows.map((row) => decompressBlobAsync(new Uint8Array(row.data))));
+            return new Response(encodeCollabState(state), {
+                headers: { ...headers, 'Content-Type': 'application/octet-stream' },
+            });
         },
         { linkAuth: true },
     )

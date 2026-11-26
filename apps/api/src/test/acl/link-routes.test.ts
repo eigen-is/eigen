@@ -50,6 +50,7 @@ const LINK_ROUTES = [
     { route: '/drive/:ownerId/:mountId/thumb/:fileName', reads: 'image', bytes: true },
     { route: '/drive/:ownerId/:mountId/path/:pathId/permissions', reads: 'text', bytes: false },
     { route: '/collab/:ownerId/:mountId/:pathId/info', reads: 'doc', bytes: false },
+    { route: '/collab/:ownerId/:mountId/:pathId/state', reads: 'doc', bytes: true },
 ] as const;
 
 // The collab socket answers without a login too. No request here can open one, so its own test file covers it.
