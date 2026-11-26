@@ -188,7 +188,7 @@ async function openCanvas(
             doc: canvas,
             onReveal: (el, growPx) => reveal(el.id, growPx),
         });
-        openCard = comments.openCard;
+        openCard = comments.lifecycle.setOpenCardId;
         toggleComments = comments.column.toggleComments;
         return createElement(CanvasDocumentShell, {
             doc: canvas,

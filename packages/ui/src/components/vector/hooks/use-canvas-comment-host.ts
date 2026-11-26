@@ -10,7 +10,6 @@ import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
 import type { ComponentProps } from 'react';
@@ -43,14 +42,11 @@ export type CanvasCommentHost = {
     column: CommentsColumnState;
     assignedCount: number;
     lifecycle: CommentLifecycleBundle;
-    members: EffectiveMember[];
     currentUserEmail: string | undefined;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     addOpen: boolean;
     closeAdd: (open: boolean) => void;
     addCommentTo: (elementId: string) => void;
-    // An anchor's own open, such as its corner mark: the element is in view already, so nothing moves.
-    openCard: (cardId: string) => void;
     handleSaveNew: (
         patch: CardFormPatch,
         attachments?: CardAttachmentDraft[],
@@ -92,7 +88,7 @@ export function useCanvasCommentHost({
             if (el) onReveal(el, growPx);
         },
     });
-    const { allComments, cards: lifecycleCards, createCard, assignComment, members, assignedCount } = lifecycle;
+    const { allComments, cards: lifecycleCards, createCard, assignComment, assignedCount } = lifecycle;
 
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentFilter = useCommentFilter();
@@ -140,13 +136,11 @@ export function useCanvasCommentHost({
         column,
         assignedCount,
         lifecycle,
-        members,
         currentUserEmail: user?.email,
         commentContextMenu,
         addOpen,
         closeAdd,
         addCommentTo,
-        openCard: lifecycle.setOpenCardId,
         handleSaveNew,
         deleteCard: doc.deleteCommentCard,
         onCommentHover: hover.report,

@@ -443,7 +443,7 @@ export function SlideEditor({
                             publishCursor={publishCursor}
                             canvasRef={canvasRef}
                             onTextEditingChange={setTextEditing}
-                            onOpenCard={comments.openCard}
+                            onOpenCard={comments.lifecycle.setOpenCardId}
                             commentCards={comments.lifecycle.cards}
                             onAddComment={addComment}
                             onCommentHover={comments.onCommentHover}

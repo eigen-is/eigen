@@ -204,7 +204,7 @@ async function renderShell({
             children: createElement(CanvasEditor, {
                 ...canvasProps,
                 doc: canvas,
-                onOpenCard: comments.openCard,
+                onOpenCard: comments.lifecycle.setOpenCardId,
                 onCommentHover: comments.onCommentHover,
             }),
         });

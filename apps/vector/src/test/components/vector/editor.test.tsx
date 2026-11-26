@@ -47,8 +47,7 @@ const comments = {
         activityOpen: false,
     },
     assignedCount: 0,
-    openCard: () => {},
-    lifecycle: { cards: [] },
+    lifecycle: { cards: [], setOpenCardId: () => {} },
     addCommentTo: () => {},
 };
 const search = { controller: null, matchedIds: [], activeId: null };

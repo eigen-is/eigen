@@ -16,7 +16,6 @@ export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | 
 type CommentMenuItemsProps = {
     item: CommentContextMenuItem | null;
     // Noun in user-visible labels: "Edit {noun}", "{Noun} color", "Delete {noun}".
-    // Defaults to "comment"; a Stickies board passes "card".
     noun?: string;
     onAddComment?: () => void;
     onOpen?: (cardId: string) => void;

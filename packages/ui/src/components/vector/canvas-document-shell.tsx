@@ -120,7 +120,7 @@ export function CanvasDocumentShell({
                     onOpenChange={comments.closeAdd}
                     onSave={comments.handleSaveNew}
                     allowAttachments={!!mediaFolderId}
-                    members={comments.members}
+                    members={comments.lifecycle.members}
                     currentUserEmail={comments.currentUserEmail}
                     dialogTitle="New comment"
                     submitLabel="Add comment"
