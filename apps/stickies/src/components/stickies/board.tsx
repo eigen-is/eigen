@@ -1,8 +1,10 @@
-// A Stickies board: its columns of cards, dragging cards and columns into a new order, and the dialogs that add,
-// edit and delete cards and columns. The board route shows it for one board file.
+// A Stickies board: its columns of cards, dragging cards and columns into a new order, the dialogs that add, edit and
+// delete cards and columns, and the activity column under the toolbar, which the URL names as ?panel=activity. A card
+// opens in the board's dialog, from the board and the activity alike. The board route shows it for one board file.
 
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
+import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
@@ -10,7 +12,7 @@ import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@wo
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
-import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -18,23 +20,28 @@ import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
+    ActivityPanel,
     CommentCardDialog,
     CommentCardTile,
     CommentLifecycleDialogs,
-    PanelColumn,
     useCommentChatParam,
 } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     CollabDocumentGate,
     ColumnLayout,
+    DetailColumn,
     Column as LayoutColumn,
+    PhoneDetail,
     UnsyncedEditsGuard,
+    useColumnWidthPx,
     useLayout,
 } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
+import { useFocusInDetail } from '@workspace/ui/hooks/use-focus-in-detail';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AddColumnDialog } from './add-column-dialog';
 import { Column } from './column';
@@ -54,6 +61,7 @@ type StickiesBoardProps = {
     chatFolderId: string | null;
     mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
+    panel: DocumentPanel | undefined;
     chat: string | undefined;
     initialSearchTerm?: string;
     initialCardId?: string;
@@ -67,6 +75,7 @@ export function StickiesBoard({
     chatFolderId,
     mediaFolderId,
     onAccessDialogOpen,
+    panel,
     chat,
     initialSearchTerm,
     initialCardId,
@@ -141,9 +150,11 @@ export function StickiesBoard({
     useStickiesPresence(provider, user, presenceCardIds);
     const cardPresence = useCardPresence(provider);
 
-    // The undo keys are off while a dialog is open, such as the card editor, so ⌘Z there never undoes the board.
+    // The undo keys are off while a dialog, such as the card editor, or the activity column has the focus, so ⌘Z there
+    // never undoes the board.
     const dialogOpen = useDialogOpen();
-    useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen);
+    const focusInDetail = useFocusInDetail();
+    useYjsUndoHotkeys(undoManager, canWrite && !dialogOpen && !focusInDetail);
 
     const { isMobile } = useLayout();
     const columnSettings = useDialogValue<string>();
@@ -155,7 +166,20 @@ export function StickiesBoard({
         (card: CommentCard) => matchesCommentFilter(card, entryOf(card), commentFilter.filter, currentUserEmail),
         [entryOf, commentFilter.filter, currentUserEmail],
     );
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    const navigate = useNavigate();
+    const activityOpen = panel === 'activity';
+    const activity = useDetailHistory<'activity'>(activityOpen ? 'activity' : undefined, (next, { replace, state }) =>
+        navigate({ to: '.', search: (prev: { panel?: DocumentPanel }) => ({ ...prev, panel: next }), replace, state }),
+    );
+    const activityColumn = activityOpen ? (
+        <DetailColumn width="small" title="Activity" onClose={activity.close} fill>
+            <div className="h-full overflow-y-auto">
+                <ActivityPanel path={path} onOpenCard={setOpenCardId} onOpenChat={openChat} />
+            </div>
+        </DetailColumn>
+    ) : null;
+    // The find bar floats clear of the column, plus its own 16px gutter. A phone's spans the screen.
+    const columnPx = useColumnWidthPx('small');
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const boardScrollRef = useRef<HTMLDivElement>(null);
@@ -275,178 +299,172 @@ export function StickiesBoard({
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <UnsyncedEditsGuard active={unsyncedEdits} />
             <ColumnLayout>
-                <div className="flex-1 min-w-0 h-full">
-                    <DocSearchProvider
-                        controller={docSearchController}
-                        commentSearch={commentSearch}
-                        initialSearchTerm={initialSearchTerm}
-                        barClassName="top-14"
-                    >
-                        <LayoutColumn
-                            id="board"
-                            width="flex"
-                            toolbarBorder="always"
-                            toolbar={
-                                <Toolbar
-                                    path={path}
-                                    canWrite={canWrite}
-                                    offline={offline}
-                                    storageUnavailable={storageUnavailable}
-                                    undoManager={undoManager}
-                                    onAccessDialogOpen={onAccessDialogOpen}
-                                    onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                                    filter={commentFilter}
-                                    members={members}
-                                    currentUserEmail={currentUserEmail}
-                                    onToggleActivityPanel={
-                                        !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
-                                    }
-                                    activityPanelOpen={activityPanelOpen}
-                                />
-                            }
+                <PhoneDetail detail={activityColumn}>
+                    <div className="flex-1 min-w-0 h-full">
+                        <DocSearchProvider
+                            controller={docSearchController}
+                            commentSearch={commentSearch}
+                            initialSearchTerm={initialSearchTerm}
+                            onOpenChange={(open) => {
+                                if (open && isMobile && activityOpen) activity.close();
+                            }}
+                            barClassName="top-14"
+                            barStyle={activityOpen && !isMobile ? { right: columnPx + 16 } : undefined}
                         >
-                            <div className="h-full w-full flex overflow-hidden">
-                                <div
-                                    ref={boardScrollRef}
-                                    className="overflow-x-auto overflow-y-hidden flex-1"
-                                    style={
-                                        board.columnOrder.length > 0
-                                            ? {
-                                                  padding: 0,
-                                                  scrollSnapType: 'x mandatory',
-                                                  scrollBehavior: 'smooth',
-                                              }
-                                            : {
-                                                  visibility: 'hidden',
-                                              }
-                                    }
-                                >
-                                    <DndContext
-                                        sensors={canWrite ? sensors : []}
-                                        onDragStart={handleDragStart}
-                                        onDragEnd={handleDragEnd}
-                                        autoScroll={{
-                                            enabled: true,
-                                            threshold: { x: 0.2, y: 0.2 },
-                                            acceleration: 10,
-                                            interval: 10,
-                                            layoutShiftCompensation: false,
-                                        }}
-                                    >
-                                        <div className="flex gap-0 h-full bg-muted">
-                                            <SortableContext
-                                                items={board.columnOrder}
-                                                strategy={horizontalListSortingStrategy}
-                                            >
-                                                {board.columnOrder.map((columnId) => {
-                                                    const column = board.columns[columnId];
-                                                    return (
-                                                        <Column
-                                                            key={column.id}
-                                                            column={column}
-                                                            cards={columnCards[columnId]}
-                                                            entryByChatName={entryByChatName}
-                                                            unreadChatNames={unreadChatNames}
-                                                            canWrite={canWrite}
-                                                            onAddCard={handleAddCard}
-                                                            onEditColumn={columnSettings.openDialog}
-                                                            onCardOpen={setOpenCardId}
-                                                            onCardContextMenu={
-                                                                canWrite ? handleCardContextMenu : undefined
-                                                            }
-                                                            onCardLongPress={canWrite ? handleCardLongPress : undefined}
-                                                            highlighted={highlightedColumnIds.has(column.id)}
-                                                            highlightedCardIds={highlightedCardIds}
-                                                            cardPresence={cardPresence}
-                                                            isMobile={isMobile}
-                                                            scrollToTopSignal={
-                                                                scrollToTopOf?.columnId === column.id
-                                                                    ? scrollToTopOf.n
-                                                                    : undefined
-                                                            }
-                                                        />
-                                                    );
-                                                })}
-                                            </SortableContext>
-                                        </div>
-
-                                        <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
-                                    </DndContext>
-
-                                    <CardFormDialog
-                                        open={addOpen}
-                                        onOpenChange={(open) => {
-                                            setAddOpen(open);
-                                            if (!open) setAddTargetColumn(null);
-                                        }}
-                                        onSave={onSaveNew}
-                                        allowAttachments={!!mediaFolderId}
-                                        members={members}
-                                        currentUserEmail={user?.email}
-                                        dialogTitle="Add card"
-                                        submitLabel="Add card"
-                                    />
-
-                                    <AddColumnDialog
-                                        open={isAddColumnDialogOpen}
-                                        onOpenChange={setIsAddColumnDialogOpen}
-                                        onAddColumn={handleAddColumn}
-                                    />
-
-                                    {editColumnId && (
-                                        <ColumnSettingsDialog
-                                            key={editColumnId}
-                                            open={columnSettings.open}
-                                            onOpenChange={columnSettings.setOpen}
-                                            columnId={editColumnId}
-                                            columnTitle={board.columns[editColumnId]?.title ?? ''}
-                                            cardCount={board.columns[editColumnId]?.taskIds.length ?? 0}
-                                            yjsDoc={yjsDoc}
-                                            undoManager={undoManager}
-                                        />
-                                    )}
-
-                                    <CommentCardDialog
-                                        lifecycle={lifecycle}
+                            <LayoutColumn
+                                id="board"
+                                width="flex"
+                                toolbarBorder="always"
+                                toolbar={
+                                    <Toolbar
                                         path={path}
                                         canWrite={canWrite}
-                                        onClose={initialCardId ? onClearInitialCard : undefined}
-                                    />
-
-                                    <CommentLifecycleDialogs
-                                        lifecycle={lifecycle}
-                                        canWrite={canWrite}
-                                        commentContextMenu={cardContextMenu}
-                                        onDelete={(cardId) => {
-                                            const removed = cards[cardId];
-                                            deleteCardFromBoard(cardId);
-                                            recordHistory.mutate({
-                                                eventType: 'card-removed',
-                                                details: { card: removed?.title ?? '', cardId },
-                                            });
-                                        }}
-                                        noun="card"
-                                    />
-                                </div>
-                                {!isMobile && activityPanelOpen && (
-                                    <PanelColumn
-                                        activePanel="activity"
-                                        onClose={() => setActivityPanelOpen(false)}
-                                        path={path}
-                                        cards={cards}
-                                        entries={allComments}
+                                        offline={offline}
+                                        storageUnavailable={storageUnavailable}
+                                        undoManager={undoManager}
+                                        onAccessDialogOpen={onAccessDialogOpen}
+                                        onAddColumn={() => setIsAddColumnDialogOpen(true)}
+                                        filter={commentFilter}
                                         members={members}
                                         currentUserEmail={currentUserEmail}
-                                        filter={commentFilter}
-                                        commentContextMenu={cardContextMenu}
-                                        onOpenCard={setOpenCardId}
-                                        onOpenChat={openChat}
+                                        onToggleActivityPanel={() =>
+                                            activityOpen ? activity.close() : activity.open('activity')
+                                        }
+                                        activityPanelOpen={activityOpen}
                                     />
-                                )}
-                            </div>
-                        </LayoutColumn>
-                    </DocSearchProvider>
-                </div>
+                                }
+                            >
+                                <div className="h-full w-full flex overflow-hidden">
+                                    <div
+                                        ref={boardScrollRef}
+                                        className="overflow-x-auto overflow-y-hidden flex-1"
+                                        style={
+                                            board.columnOrder.length > 0
+                                                ? {
+                                                      padding: 0,
+                                                      scrollSnapType: 'x mandatory',
+                                                      scrollBehavior: 'smooth',
+                                                  }
+                                                : {
+                                                      visibility: 'hidden',
+                                                  }
+                                        }
+                                    >
+                                        <DndContext
+                                            sensors={canWrite ? sensors : []}
+                                            onDragStart={handleDragStart}
+                                            onDragEnd={handleDragEnd}
+                                            autoScroll={{
+                                                enabled: true,
+                                                threshold: { x: 0.2, y: 0.2 },
+                                                acceleration: 10,
+                                                interval: 10,
+                                                layoutShiftCompensation: false,
+                                            }}
+                                        >
+                                            <div className="flex gap-0 h-full bg-muted">
+                                                <SortableContext
+                                                    items={board.columnOrder}
+                                                    strategy={horizontalListSortingStrategy}
+                                                >
+                                                    {board.columnOrder.map((columnId) => {
+                                                        const column = board.columns[columnId];
+                                                        return (
+                                                            <Column
+                                                                key={column.id}
+                                                                column={column}
+                                                                cards={columnCards[columnId]}
+                                                                entryByChatName={entryByChatName}
+                                                                unreadChatNames={unreadChatNames}
+                                                                canWrite={canWrite}
+                                                                onAddCard={handleAddCard}
+                                                                onEditColumn={columnSettings.openDialog}
+                                                                onCardOpen={setOpenCardId}
+                                                                onCardContextMenu={
+                                                                    canWrite ? handleCardContextMenu : undefined
+                                                                }
+                                                                onCardLongPress={
+                                                                    canWrite ? handleCardLongPress : undefined
+                                                                }
+                                                                highlighted={highlightedColumnIds.has(column.id)}
+                                                                highlightedCardIds={highlightedCardIds}
+                                                                cardPresence={cardPresence}
+                                                                isMobile={isMobile}
+                                                                scrollToTopSignal={
+                                                                    scrollToTopOf?.columnId === column.id
+                                                                        ? scrollToTopOf.n
+                                                                        : undefined
+                                                                }
+                                                            />
+                                                        );
+                                                    })}
+                                                </SortableContext>
+                                            </div>
+
+                                            <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
+                                        </DndContext>
+
+                                        <CardFormDialog
+                                            open={addOpen}
+                                            onOpenChange={(open) => {
+                                                setAddOpen(open);
+                                                if (!open) setAddTargetColumn(null);
+                                            }}
+                                            onSave={onSaveNew}
+                                            allowAttachments={!!mediaFolderId}
+                                            members={members}
+                                            currentUserEmail={user?.email}
+                                            dialogTitle="Add card"
+                                            submitLabel="Add card"
+                                        />
+
+                                        <AddColumnDialog
+                                            open={isAddColumnDialogOpen}
+                                            onOpenChange={setIsAddColumnDialogOpen}
+                                            onAddColumn={handleAddColumn}
+                                        />
+
+                                        {editColumnId && (
+                                            <ColumnSettingsDialog
+                                                key={editColumnId}
+                                                open={columnSettings.open}
+                                                onOpenChange={columnSettings.setOpen}
+                                                columnId={editColumnId}
+                                                columnTitle={board.columns[editColumnId]?.title ?? ''}
+                                                cardCount={board.columns[editColumnId]?.taskIds.length ?? 0}
+                                                yjsDoc={yjsDoc}
+                                                undoManager={undoManager}
+                                            />
+                                        )}
+
+                                        <CommentCardDialog
+                                            lifecycle={lifecycle}
+                                            path={path}
+                                            canWrite={canWrite}
+                                            onClose={initialCardId ? onClearInitialCard : undefined}
+                                        />
+
+                                        <CommentLifecycleDialogs
+                                            lifecycle={lifecycle}
+                                            canWrite={canWrite}
+                                            commentContextMenu={cardContextMenu}
+                                            onDelete={(cardId) => {
+                                                const removed = cards[cardId];
+                                                deleteCardFromBoard(cardId);
+                                                recordHistory.mutate({
+                                                    eventType: 'card-removed',
+                                                    details: { card: removed?.title ?? '', cardId },
+                                                });
+                                            }}
+                                            noun="card"
+                                        />
+                                    </div>
+                                    {!isMobile && activityColumn}
+                                </div>
+                            </LayoutColumn>
+                        </DocSearchProvider>
+                    </div>
+                </PhoneDetail>
             </ColumnLayout>
         </CollabDocumentGate>
     );

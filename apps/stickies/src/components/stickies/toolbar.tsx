@@ -35,8 +35,8 @@ type ToolbarProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
-    onToggleActivityPanel?: () => void;
-    activityPanelOpen?: boolean;
+    onToggleActivityPanel: () => void;
+    activityPanelOpen: boolean;
 };
 
 export function Toolbar({

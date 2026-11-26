@@ -368,6 +368,7 @@ test.each([
 // The thread's reply box takes the focus on a click, so the jump leaves the focus where it is.
 test("a list row jumps to the card's first cell and opens its thread, and ‹ Comments goes back", async () => {
     await renderEditor(['/', '/?panel=comments']);
+    expect(listRow()?.textContent).toContain('Two · One');
     await click(listRow());
     expect(calls).toEqual([['reveal', FIRST_CELL]]);
     expect(search().get('chat')).toBe('chat-1.eigenchat');

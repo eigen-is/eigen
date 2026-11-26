@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2461 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2460 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (339)
+## Components (338)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -101,7 +101,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FilterSummary` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-summary.tsx |
 | `MemberAvatar` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-avatar.tsx |
 | `MemberCommandList` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-command-list.tsx |
-| `PanelColumn` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/panel-column.tsx |
 | `ConfirmDialog` | `@workspace/ui/components/confirm-dialog` | packages/ui/src/components/confirm-dialog.tsx |
 | `ContactAddRow` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-add-row.tsx |
 | `ContactAutosuggest` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-autosuggest.tsx |

@@ -17,6 +17,5 @@ export { CommentsColumn } from './comments-column';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
-export { PanelColumn } from './panel-column';
 export { useCommentChatParam } from './use-comment-chat-param';
 export { type CommentsColumnState, useCommentsColumn } from './use-comments-column';
