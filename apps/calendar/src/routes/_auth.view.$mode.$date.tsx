@@ -128,7 +128,7 @@ function CalendarView() {
             onClose={detailHistory.close}
         />
     ) : (
-        <DetailColumn width="medium" actions={null} onClose={detailHistory.close}>
+        <DetailColumn width="medium" onClose={detailHistory.close}>
             {listsLoading ? <LoadingState /> : <EmptyState message="This event isn't in this view" />}
         </DetailColumn>
     );

@@ -23,7 +23,7 @@ type DetailColumnProps = {
     title?: string;
     // Back from an item to the list it was opened from inside the column.
     onBack?: () => void;
-    actions: ReactNode;
+    actions?: ReactNode;
     onClose: () => void;
     // The body fills the column and scrolls itself, such as a comment thread over its pinned composer.
     fill?: boolean;
