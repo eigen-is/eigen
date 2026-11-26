@@ -57,7 +57,6 @@ import { useSheet } from './hooks/use-sheet';
 import { ToolbarLeftItems } from './toolbar';
 
 type SheetEditorProps = {
-    ownerId: string;
     path: DrivePath;
     canWrite: boolean;
     mediaFolderId: string | null;
@@ -70,7 +69,6 @@ type SheetEditorProps = {
 };
 
 export function SheetEditor({
-    ownerId,
     path,
     canWrite,
     mediaFolderId,
@@ -80,6 +78,7 @@ export function SheetEditor({
     chat,
     initialSearchTerm,
 }: SheetEditorProps) {
+    const { ownerId } = path;
     const workbookRef = useRef<WorkbookInstance>(null);
     // The pane's box is the space a new image is fitted into. Sheets has no zoom, so a pixel of the pane
     // is a pixel of the sheet.

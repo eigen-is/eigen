@@ -32,7 +32,6 @@ function StickiesRoute() {
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
             {(props) => (
                 <StickiesBoard
-                    ownerId={ownerId}
                     {...props}
                     panel={panel}
                     chat={chat}

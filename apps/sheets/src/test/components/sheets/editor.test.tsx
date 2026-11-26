@@ -221,7 +221,6 @@ async function renderEditor(entries = ['/'], { isMobile = false, rows = [] as Co
     function Page() {
         const { chat, panel } = router.useSearch({ strict: false });
         return createElement(SheetEditor, {
-            ownerId: 'owner-1',
             path,
             canWrite: true,
             mediaFolderId: null,

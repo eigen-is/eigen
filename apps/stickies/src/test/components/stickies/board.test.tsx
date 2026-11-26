@@ -184,7 +184,6 @@ async function openBoard(entries: string[], { browser = false, isMobile = false 
         const { chat, card, panel } = router.useSearch({ strict: false });
         const navigate = router.useNavigate();
         return createElement(StickiesBoard, {
-            ownerId: 'owner-1',
             path,
             canWrite: true,
             chatFolderId: 'chat-1',

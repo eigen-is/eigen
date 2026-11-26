@@ -18,15 +18,7 @@ function SheetView() {
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     return (
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
-            {(props) => (
-                <SheetEditor
-                    ownerId={ownerId}
-                    {...props}
-                    panel={panel}
-                    chat={chat}
-                    initialSearchTerm={initialSearchTerm}
-                />
-            )}
+            {(props) => <SheetEditor {...props} panel={panel} chat={chat} initialSearchTerm={initialSearchTerm} />}
         </EigenDocEditorRoute>
     );
 }

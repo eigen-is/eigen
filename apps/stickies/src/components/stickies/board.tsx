@@ -55,7 +55,6 @@ import { Toolbar } from './toolbar';
 const NO_CARDS: ReadonlySet<string> = new Set();
 
 type StickiesBoardProps = {
-    ownerId: string;
     path: DrivePath;
     canWrite: boolean;
     chatFolderId: string | null;
@@ -69,7 +68,6 @@ type StickiesBoardProps = {
 };
 
 export function StickiesBoard({
-    ownerId,
     path,
     canWrite,
     chatFolderId,
@@ -81,6 +79,7 @@ export function StickiesBoard({
     initialCardId,
     onClearInitialCard,
 }: StickiesBoardProps) {
+    const { ownerId } = path;
     const {
         board,
         isAddColumnDialogOpen,
