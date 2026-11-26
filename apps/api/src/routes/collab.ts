@@ -1,8 +1,8 @@
-// The collab routes: a document's access info, stored state and comment index over HTTP, and the WebSocket each editor
-// opens to sync a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
-// and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that succeeds counts on
-// the user's Recent page. A visitor without a login gets the info and the stored state where a public link opens the
-// path, and no socket.
+// The collab routes: a document's access info, stored state and comment index over HTTP, and the WebSocket a live
+// reader's editor opens to sync a document. The socket checks its session and that its user is a live reader when it
+// opens and on its keepalive, and write on every message, and it hands the frames to the CollabDocument the Drive keeps
+// open for that document. An open that succeeds counts on the user's Recent page. Any other reader, such as a visitor
+// on a public link, gets the info and the stored state, and no socket.
 
 import { encodeCollabState } from '@workspace/lib/collab/collab-state';
 import {
@@ -26,7 +26,7 @@ import { collabEpochMessage } from '../lib/collab/epoch';
 import { EMPTY_AWARENESS_MESSAGE, startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
-import { getReadDrive, getSharedDrive, readPermissions } from '../lib/drive';
+import { getReadDrive, getSharedDrive, isLiveReader, readPermissions } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { recordOpened } from '../lib/drive/recent';
 import { getDataEpoch } from '../lib/home/data-epoch';
@@ -35,7 +35,7 @@ import { getSessionUser } from '../lib/user';
 import { betterAuth } from './auth';
 
 // Who a socket opened as, with the drive that checks them.
-type CollabAccess = { user: User; sessionId: string; drive: DriveLike };
+type CollabAccess = { user: User; drive: DriveLike };
 
 type CollabSession = {
     opened: Promise<void>;
@@ -60,11 +60,12 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/info',
         async ({ params, user }): Promise<CollabDocumentInfo> => {
             const permissions = await readPermissions(params.ownerId, params.mountId, params.pathId, user);
-            if (!permissions.canRead) return { ...permissions, path: null, folderContents: null };
+            if (!permissions.canRead) return { ...permissions, live: false, path: null, folderContents: null };
             const drive = await getReadDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-            return { ...permissions, path, folderContents };
+            const live = await isLiveReader(params.ownerId, params.mountId, params.pathId, user);
+            return { ...permissions, live, path, folderContents };
         },
         { linkAuth: true },
     )
@@ -171,7 +172,7 @@ export const collabRouter = new Elysia({
                 const { ownerId, mountId, pathId } = ws.data.params;
                 const { user } = ws.data;
                 const drive = await getSharedDrive(ownerId, user);
-                const access: CollabAccess = { user, sessionId: ws.data.session.id, drive };
+                const sessionId = ws.data.session.id;
                 // A stale epoch's sync would bring back what a restore undid. This comes after getSharedDrive's 503 for
                 // a running restore, so no tab reloads onto that 503.
                 const { epoch } = ws.data.query;
@@ -183,14 +184,14 @@ export const collabRouter = new Elysia({
                 const checkAccess = async (): Promise<boolean> => {
                     // The row, not the user the socket opened with: an ACL entry outlives its user, and matches on the
                     // email.
-                    const current = await getSessionUser(access.sessionId);
-                    if (current !== null && (await drive.canRead(mountId, pathId, current))) return true;
+                    const current = await getSessionUser(sessionId);
+                    if (current !== null && (await drive.isLiveReader(mountId, pathId, current))) return true;
                     rawWs.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
                     cleanupSession(session, rawWs);
                     return false;
                 };
                 if (!(await checkAccess())) return;
-                // Only a caller who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
+                // Only a live reader holds the Home, until cleanupSession lets go. A Home that closes anyway,
                 // such as for a restore, closes the socket with the retry close.
                 session.releaseHome = drive.holdHome(() =>
                     rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
@@ -204,7 +205,7 @@ export const collabRouter = new Elysia({
                         `connections=${document.connectionCount}`,
                 );
 
-                session.access = access;
+                session.access = { user, drive };
                 session.collabDocument = document;
                 // The heartbeat keeps a proxy from dropping the connection, and y-websocket from closing a quiet one,
                 // which a protocol ping does not. A check that throws says nothing about the access, so the socket

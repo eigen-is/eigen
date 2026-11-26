@@ -63,7 +63,13 @@ async function expectRefused(route: string, res: Response): Promise<void> {
     if (route === PERMISSIONS_ROUTE) {
         expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false });
     } else if (route === INFO_ROUTE) {
-        expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false, path: null, folderContents: null });
+        expect(await assertJson(res)).toEqual({
+            canRead: false,
+            canWrite: false,
+            live: false,
+            path: null,
+            folderContents: null,
+        });
     } else {
         expect(res.status).toBe(403);
     }

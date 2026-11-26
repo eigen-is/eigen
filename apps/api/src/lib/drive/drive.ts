@@ -64,6 +64,7 @@ import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
 import {
+    canReadByNameFromAncestors,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
@@ -848,6 +849,18 @@ export class Drive {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
+    }
+
+    // Whether the user syncs the path over the collab socket: they read it by name, as an owner, a team member or
+    // someone an ACL names, or they may write it. Whoever reads only through a link or "Anyone signed in" loads the
+    // stored state over HTTP instead, so the socket's work stays with the people the document is shared with.
+    public async isLiveReader(mountId: string, pathId: string, user: User): Promise<boolean> {
+        const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
+        const memberships = await getMemberships(user.id);
+        return (
+            canReadByNameFromAncestors(ancestors, user, memberships) ||
+            (canWriteFromAncestors(ancestors, user, memberships) && canReadFromAncestors(ancestors, user, memberships))
+        );
     }
 
     // Merged onto the ACL as it is now, one change per path at a time, or the later write would drop the other's

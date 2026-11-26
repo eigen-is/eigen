@@ -33,8 +33,12 @@ export const isVisitorRoute = (pathname: string) => VISITOR_ROUTES.some((route) 
 
 export const OWNER = 'alice'.padEnd(32, '0');
 
-// The signed-in user of a test, or null for a visitor; a guest is a user with that role.
-export const session: { user: (Pick<AuthUser, 'id' | 'email' | 'name'> & { role?: string }) | null } = { user: null };
+// The signed-in user of a test, or null for a visitor; a guest is a user with that role. `viaLink` says the user reads
+// the document only through its link, as someone no ACL names.
+export const session: {
+    user: (Pick<AuthUser, 'id' | 'email' | 'name'> & { role?: string }) | null;
+    viaLink: boolean;
+} = { user: null, viaLink: false };
 
 export function sessionAuth(): AuthContextType {
     const user = session.user && { ...session.user, emailVerified: true, createdAt: new Date(), updatedAt: new Date() };
@@ -96,10 +100,18 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
         const info = pathname.match(/^\/collab\/[^/]+\/[^/]+\/([^/]+)\/info$/);
         if (info) {
             if (info[1] !== 'pub')
-                return Response.json({ canRead: false, canWrite: false, path: null, folderContents: null });
-            // A visitor and a guest read; the owner's colleague, the test's other user, writes.
-            const canWrite = !!session.user && session.user.role !== 'guest';
-            return Response.json({ canRead: true, canWrite, path: doc, folderContents: [media] });
+                return Response.json({
+                    canRead: false,
+                    canWrite: false,
+                    live: false,
+                    path: null,
+                    folderContents: null,
+                });
+            // A visitor, a guest and a reader through the link read; the owner's colleague, the test's other user,
+            // writes. The guest is named on the document, so only the visitor and the link's reader are not live.
+            const live = !!session.user && !session.viaLink;
+            const canWrite = live && session.user?.role !== 'guest';
+            return Response.json({ canRead: true, canWrite, live, path: doc, folderContents: [media] });
         }
         if (/^\/collab\/[^/]+\/[^/]+\/pub\/state$/.test(pathname)) {
             return new Response(encodeCollabState([Y.encodeStateAsUpdate(stored)]), { headers: { ETag: '"stored"' } });
@@ -126,6 +138,7 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
     afterEach(() => {
         providers.clear();
         session.user = null;
+        session.viaLink = false;
     });
     afterAll(() => {
         g.fetch = realFetch;
@@ -230,6 +243,16 @@ export function editorVisitorTests({
         expect(labelled('Activity')).not.toBeNull();
         expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
         expect([...providers].every((provider) => provider.awareness.getLocalState() !== null)).toBe(true);
+    });
+
+    test(`someone signed in who reads a ${noun} only through its link loads it over HTTP, with no socket`, async () => {
+        session.user = { id: 'carol', email: 'carol@test.eigen.is', name: 'Carol' };
+        session.viaLink = true;
+        await open(urlOf('pub'));
+        expect(labelled(READ_ONLY)).not.toBeNull();
+        expect(providers.size).toBe(0);
+        expect(server.requested).toContain(`/collab/${OWNER}/default/pub/state`);
+        expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
     });
 
     test(`a guest's ${noun} still reads the comment index and the members`, async () => {

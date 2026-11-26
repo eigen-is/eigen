@@ -8,7 +8,13 @@ import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import { AppError, appErrorFrom } from '../../api-error';
 import { collabKeys } from './keys';
 
-const NO_ACCESS: CollabDocumentInfo = { canRead: false, canWrite: false, path: null, folderContents: null };
+const NO_ACCESS: CollabDocumentInfo = {
+    canRead: false,
+    canWrite: false,
+    live: false,
+    path: null,
+    folderContents: null,
+};
 
 export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: string) {
     return useQuery({

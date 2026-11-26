@@ -1,45 +1,69 @@
+import type { Mock } from 'bun:test';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { applyCollabState } from '@workspace/lib/collab/collab-state';
+import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveVisibility } from '@workspace/lib/types/drive-access';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { MAX_SYNC_STEP_1_BYTES } from '../../lib/collab/collab-document';
+import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
 import type { TestUser } from '../setup';
-import { app, assertJson, authedRequest, driveGet, drivePost, firstMountId, getTestContext } from '../setup';
+import {
+    addMember,
+    app,
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestGuest,
+    driveGet,
+    drivePost,
+    firstMountId,
+    getTestContext,
+} from '../setup';
 
-// A collab document behind a public link: a request with no login gets its info and no socket, and a member's socket
-// on it is as on any document. Needs a real listening server. A visitor is a request with no cookie. Each client here
-// speaks y-websocket's handshake with y-protocols' own reader, as the browser does.
+// Who gets the collab socket: someone signed in who reads the document by name or may write it. A request with no
+// login and a signed-in reader through a link or "Anyone signed in" get the document's info and no socket. Needs a real
+// listening server. A visitor is a request with no cookie. Each client here speaks y-websocket's handshake with
+// y-protocols' own reader, as the browser does. The tests run a keepalive tick by hand: the callback each socket gave
+// setInterval, the real one, with no wait.
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const STEP_1 = syncProtocol.messageYjsSyncStep1;
 const STEP_2 = syncProtocol.messageYjsSyncStep2;
 
-const NO_INFO = { canRead: false, canWrite: false, path: null, folderContents: null };
+const ACCESS_LOST = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
+const NO_INFO = { canRead: false, canWrite: false, live: false, path: null, folderContents: null };
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let alice: TestUser;
 let bob: TestUser;
+let charlie: TestUser;
 let aliceId: string;
 let mountId: string;
 let root: DrivePath;
 let port: number | undefined;
 const sockets = new Set<WebSocket>();
+let intervals: Mock<typeof setInterval>;
 
 function withPublicLinks(on: boolean): Promise<void> {
     return updateServerSettings({ sharing: { publicLinks: on } });
 }
 
 beforeAll(async () => {
+    intervals = spyOn(globalThis, 'setInterval');
     ctx = await getTestContext();
     alice = ctx.alice.user;
     bob = ctx.bob.user;
+    charlie = ctx.charlie.user;
     aliceId = alice.id;
     mountId = await firstMountId(alice.sessionToken, aliceId);
     root = await driveGet(alice.sessionToken, aliceId, mountId, 'root');
@@ -49,19 +73,68 @@ beforeAll(async () => {
 afterEach(() => {
     for (const ws of sockets) ws.close();
     sockets.clear();
+    intervals.mockClear();
 });
 
 afterAll(() => {
     ctx.app.stop();
+    intervals.mockRestore();
 });
 
-async function setVisibility(pathId: string, visibility: 'link' | 'private'): Promise<void> {
+// Runs every keepalive once and waits for its checks.
+async function tick(): Promise<void> {
+    await Promise.all(intervals.mock.calls.filter(([, ms]) => ms === 15_000).map(([keepalive]) => keepalive()));
+}
+
+async function putACL(pathId: string, body: { visibility?: DriveVisibility; add?: DriveACL[]; remove?: string[] }) {
     const res = await authedRequest(alice.sessionToken, `/drive/${aliceId}/${mountId}/path/${pathId}/acl`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visibility }),
+        body: JSON.stringify(body),
     });
     expect(res.status).toBe(200);
+}
+
+function setVisibility(pathId: string, visibility: DriveVisibility): Promise<void> {
+    return putACL(pathId, { visibility });
+}
+
+const viewer = (user: TestUser): DriveACL => ({ id: user.email, read: true, write: false });
+
+async function newDocWith(body: Parameters<typeof putACL>[1]): Promise<DrivePath> {
+    const doc = await newDoc();
+    await putACL(doc.id, body);
+    return doc;
+}
+
+// A team with bob in it, for a document shared with a team.
+async function newTeamWithBob(): Promise<DriveACL> {
+    const config = getServerConfig();
+    if (!config) throw new Error('the server has no org');
+    await authedRequest(alice.sessionToken, '/auth/organization/set-active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: config.orgId }),
+    });
+    const teamId = await createTeam(ctx, config.orgId, `Live ${crypto.randomUUID()}`);
+    await addMember(ctx, teamId, bob.id);
+    return { id: teamOwnerId(teamId), read: true, write: false };
+}
+
+const infoUrl = (pathId: string) => `/collab/${aliceId}/${mountId}/${pathId}/info`;
+const stateUrl = (pathId: string) => `/collab/${aliceId}/${mountId}/${pathId}/state`;
+
+async function infoOf(user: TestUser, pathId: string): Promise<CollabDocumentInfo> {
+    return assertJson<CollabDocumentInfo>(await authedRequest(user.sessionToken, infoUrl(pathId)));
+}
+
+// What the stored state gives a reader who gets no socket.
+async function textOverHttp(user: TestUser, pathId: string): Promise<string> {
+    const res = await authedRequest(user.sessionToken, stateUrl(pathId));
+    expect(res.status).toBe(200);
+    const doc = new Y.Doc();
+    applyCollabState(doc, await res.bytes(), null);
+    return doc.getText('probe').toString();
 }
 
 function newFolder(parentId = root.id): Promise<DrivePath> {
@@ -80,23 +153,6 @@ async function newPublicDoc(): Promise<DrivePath> {
     const doc = await newDoc();
     await setVisibility(doc.id, 'link');
     return doc;
-}
-
-// The monotonic clock the server's step 1 budget reads: each call moves it a fixed step, and a jump moves it on. Timers
-// still run on the real one.
-function steppedClock(stepMs: number) {
-    let now = performance.now();
-    const spy = spyOn(performance, 'now').mockImplementation(() => {
-        now += stepMs;
-        return now;
-    });
-    return {
-        calls: () => spy.mock.calls.length,
-        jump: (ms: number) => {
-            now += ms;
-        },
-        restore: () => spy.mockRestore(),
-    };
 }
 
 // A copy on a plain ArrayBuffer, which is what WebSocket.send takes.
@@ -219,6 +275,14 @@ function presence(user: TestUser): unknown {
     return { user: { userId: user.id, name: user.name, color: '#123456' } };
 }
 
+// A socket the server closes as access lost, with no document content sent.
+async function expectNoSocket(user: TestUser, pathId: string): Promise<void> {
+    const client = connect(user, pathId);
+    expect(await client.closed).toEqual(ACCESS_LOST);
+    expect(client.count(STEP_2)).toBe(0);
+    expect(client.text()).toBe('');
+}
+
 async function storedText(pathId: string): Promise<string> {
     const document = await (await getHome(aliceId)).drive.getCollabDocument(mountId, pathId);
     return document.doc.getText('probe').toString();
@@ -252,60 +316,131 @@ describe('a socket needs a login', () => {
     });
 });
 
-describe("a member's socket on a public document is as on any other", () => {
-    test("it gets the server's step 1, and edits and awareness pass both ways", async () => {
-        const doc = await newPublicDoc();
-        const writer = await open(alice, doc.id);
-        await roundTrip(writer);
-        expect(writer.count(STEP_1)).toBe(1);
-        writer.ws.send(awarenessFrame(301, 1, presence(alice)));
-        await roundTrip(writer);
+describe('who is live: signed in, and reading by name or allowed to write', () => {
+    test('info answers live for an owner, a named reader, a team reader and "can edit", not for a link or "can view"', async () => {
+        const view = await newDocWith({ visibility: 'public-read' });
+        const edit = await newDocWith({ visibility: 'public-write' });
+        const link = await newDocWith({ visibility: 'link' });
+        const named = await newDocWith({ add: [viewer(charlie)] });
+        const team = await newDocWith({ add: [await newTeamWithBob()] });
+        const both = await newDocWith({ visibility: 'public-read', add: [viewer(charlie)] });
 
-        // Bob is signed in and no member, so the link lets him read, as under signed-in view.
-        const reader = await open(bob, doc.id);
-        await waitFor(() => reader.awareness.some((entry) => entry.clientId === 301), 5_000);
-        reader.ws.send(awarenessFrame(302, 1, presence(bob)));
-        await waitFor(() => writer.awareness.some((entry) => entry.clientId === 302), 5_000);
+        const live = async (user: TestUser, doc: DrivePath) => {
+            const info = await infoOf(user, doc.id);
+            return info.canRead ? info.live : 'no read';
+        };
+        expect(await live(alice, view)).toBe(true);
+        expect(await live(bob, view)).toBe(false);
+        expect(await live(bob, edit)).toBe(true);
+        expect(await live(bob, link)).toBe(false);
+        expect(await live(charlie, named)).toBe(true);
+        expect(await live(bob, named)).toBe('no read');
+        expect(await live(bob, team)).toBe(true);
+        expect(await live(charlie, team)).toBe('no read');
+        expect(await live(charlie, both)).toBe(true);
+        expect(await live(bob, both)).toBe(false);
 
-        write(writer, 'by the writer');
-        await waitFor(() => reader.text() === 'by the writer', 5_000);
-        write(reader, 'by the reader');
-        await roundTrip(reader);
-        await roundTrip(writer);
-        expect(writer.text()).toBe('by the writer');
-        expect(await storedText(doc.id)).toBe('by the writer');
+        const res = await app.handle(new Request(`http://localhost${infoUrl(link.id)}`));
+        const visitor = await assertJson<CollabDocumentInfo>(res);
+        expect([visitor.canRead, visitor.live]).toEqual([true, false]);
     });
 
-    // An answer to an empty state vector is the whole document, so a document spends only a share of the event loop on
-    // them. At 100 ms a clock call, an answer adds 1 s of debt and moves the clock 200 ms, so the fourth answer passes
-    // the 2.5 s allowance and the six frames after it are dropped. The count of clock calls says all ten were handled.
-    test('ten step 1 frames on two sockets get four answers, a later one is answered, another document is not held', async () => {
-        const doc = await newPublicDoc();
-        const other = await newPublicDoc();
-        const clients = [await open(alice, doc.id), await open(alice, doc.id)];
-        const answers = () => clients[0].count(STEP_2) + clients[1].count(STEP_2);
-        const before = answers();
-        const clock = steppedClock(100);
-        try {
-            for (let i = 0; i < 5; i++) {
-                for (const client of clients) client.ws.send(emptyStep1());
-            }
-            await waitFor(() => clock.calls() === 4 * 2 + 6, 5_000);
-            await waitFor(() => answers() === before + 4, 5_000);
+    test('a signed-in reader through "Anyone signed in, can view" or a link is refused the socket and loads over HTTP', async () => {
+        for (const visibility of ['public-read', 'link'] as const) {
+            const doc = await newDocWith({ visibility });
+            const member = await open(alice, doc.id);
+            write(member, 'hello');
+            await roundTrip(member);
 
-            const stranger = await open(alice, other.id);
-            expect(stranger.count(STEP_2)).toBe(1);
-
-            clock.jump(10_000);
-            for (const client of clients) await roundTrip(client);
-            expect(answers()).toBe(before + 6);
-            for (const client of clients) expect(client.ws.readyState).toBe(WebSocket.OPEN);
-        } finally {
-            clock.restore();
+            await expectNoSocket(bob, doc.id);
+            expect(await textOverHttp(bob, doc.id)).toBe('hello');
+            expect(member.ws.readyState).toBe(WebSocket.OPEN);
         }
     });
 
-    test('a step 1 over the cap gets no answer, and the next one does', async () => {
+    test('a named reader, a team reader and a signed-in person on "can edit" get the socket and sync', async () => {
+        const named = await newDocWith({ add: [viewer(charlie)] });
+        const team = await newDocWith({ add: [await newTeamWithBob()] });
+        const edit = await newDocWith({ visibility: 'public-write' });
+
+        for (const [user, doc, writes] of [
+            [charlie, named, false],
+            [bob, team, false],
+            [bob, edit, true],
+        ] as const) {
+            const member = await open(alice, doc.id);
+            write(member, 'hello');
+            await roundTrip(member);
+
+            const reader = await open(user, doc.id);
+            expect(reader.text()).toBe('hello');
+            write(member, ' world');
+            await waitFor(() => reader.text() === 'hello world', 5_000);
+
+            write(reader, '!');
+            await roundTrip(reader);
+            expect(await storedText(doc.id)).toBe(writes ? 'hello world!' : 'hello world');
+        }
+    });
+
+    // An answer to an empty state vector is the whole document, and each is answered: the people on the socket are the
+    // ones the document is shared with.
+    test('a burst of step 1 frames from a named reader is all answered', async () => {
+        const doc = await newDocWith({ add: [viewer(charlie)] });
+        const reader = await open(charlie, doc.id);
+        const before = reader.count(STEP_2);
+        for (let i = 0; i < 10; i++) reader.ws.send(emptyStep1());
+        await waitFor(() => reader.count(STEP_2) === before + 10, 5_000);
+        expect(reader.ws.readyState).toBe(WebSocket.OPEN);
+    });
+
+    test('a guest named as a viewer is live, with presence both ways, and the same guest on "can view" is not', async () => {
+        const guest = await createTestGuest('Live Guest');
+        const named = await newDocWith({ add: [viewer(guest)] });
+        const view = await newDocWith({ visibility: 'public-read' });
+
+        expect((await infoOf(guest, named.id)).live).toBe(true);
+        const member = await open(alice, named.id);
+        write(member, 'hello');
+        member.ws.send(awarenessFrame(501, 1, presence(alice)));
+        await roundTrip(member);
+
+        const reader = await open(guest, named.id);
+        expect(reader.text()).toBe('hello');
+        await waitFor(() => reader.awareness.some((entry) => entry.clientId === 501), 5_000);
+        reader.ws.send(awarenessFrame(502, 1, presence(guest)));
+        await waitFor(() => member.awareness.some((entry) => entry.clientId === 502), 5_000);
+        write(reader, 'by the guest');
+        await roundTrip(reader);
+        expect(await storedText(named.id)).toBe('hello');
+
+        const info = await infoOf(guest, view.id);
+        expect([info.canRead, info.live]).toEqual([true, false]);
+        await expectNoSocket(guest, view.id);
+        expect(await textOverHttp(guest, view.id)).toBe('');
+    });
+
+    test('a reader removed by name, whom "Anyone signed in" still lets read, loses the socket at the next tick', async () => {
+        const doc = await newDocWith({ visibility: 'public-read', add: [viewer(charlie)] });
+        const member = await open(alice, doc.id);
+        write(member, 'kept');
+        const reader = await open(charlie, doc.id);
+        await tick();
+        await roundTrip(reader);
+        expect(reader.ws.readyState).toBe(WebSocket.OPEN);
+
+        await putACL(doc.id, { remove: [charlie.email] });
+        await tick();
+        expect(await reader.closed).toEqual(ACCESS_LOST);
+
+        const info = await infoOf(charlie, doc.id);
+        expect([info.canRead, info.live]).toEqual([true, false]);
+        expect(await textOverHttp(charlie, doc.id)).toBe('kept');
+        await roundTrip(member);
+        expect(member.ws.readyState).toBe(WebSocket.OPEN);
+    });
+
+    test("the server's step 1 is sent, and a step 1 over the cap gets no answer while the next one does", async () => {
         const doc = await newPublicDoc();
         // A well-formed state vector: client ids of five varuint bytes, each with a clock of 1.
         const entries = Math.ceil(MAX_SYNC_STEP_1_BYTES / 6) + 1;
@@ -322,6 +457,7 @@ describe("a member's socket on a public document is as on any other", () => {
         expect(huge.byteLength).toBeGreaterThan(MAX_SYNC_STEP_1_BYTES);
 
         const client = await open(alice, doc.id);
+        expect(client.count(STEP_1)).toBe(1);
         const before = client.count(STEP_2);
         client.ws.send(huge);
         // Frames are answered in order, so after this round trip an answer to the big one would have arrived.
@@ -395,6 +531,7 @@ describe('the info route without a login', () => {
         const reader = await assertJson<CollabDocumentInfo>(await authedRequest(bob.sessionToken, url));
         expect(reader.canRead).toBe(true);
         expect(reader.canWrite).toBe(false);
+        expect(reader.live).toBe(false);
         expect(reader.path?.parentId).toBe(folder.id);
     });
 });

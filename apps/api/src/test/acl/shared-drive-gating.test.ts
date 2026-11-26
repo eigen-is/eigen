@@ -101,6 +101,11 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'permission predicate',
             call: (sd) => sd.canWrite(mountId, fileId, charlie),
         },
+        isLiveReader: {
+            gate: 'returns-false',
+            reason: 'permission predicate',
+            call: (sd) => sd.isLiveReader(mountId, fileId, charlie),
+        },
 
         // Deny-by-shape rather than throw — routes treat the result as absent/filtered.
         getRootFolder: {
