@@ -55,66 +55,62 @@ const COLLAB_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'vector'] as const;
 
 describe('canReadByLink', () => {
     test('the public path itself answers its own index', () => {
-        expect(canReadByLink(chainOf({ type: 'folder' }, { type: 'file', ...LINK }), true)).toBe(2);
+        expect(canReadByLink(chainOf({ type: 'folder' }, { type: 'file', ...LINK }))).toBe(2);
     });
 
     test('a descendant answers the index of the public folder', () => {
         const chain = chainOf({ type: 'folder', ...LINK }, { type: 'folder' }, { type: 'file' });
-        expect(canReadByLink(chain, true)).toBe(1);
+        expect(canReadByLink(chain)).toBe(1);
     });
 
     test('a private subfolder under a public folder is admitted', () => {
         const chain = chainOf({ type: 'folder', ...LINK }, { type: 'folder', visibility: 'private' });
-        expect(canReadByLink(chain, true)).toBe(1);
+        expect(canReadByLink(chain)).toBe(1);
     });
 
     test('the highest public path wins', () => {
         const chain = chainOf({ type: 'folder', ...LINK }, { type: 'folder', ...LINK }, { type: 'file' });
-        expect(canReadByLink(chain, true)).toBe(1);
+        expect(canReadByLink(chain)).toBe(1);
     });
 
     test('a sibling and the parent of a public path are refused', () => {
         // Neither chain reaches the public path, so neither holds a link.
-        expect(canReadByLink(chainOf({ type: 'folder' }, { type: 'file' }), true)).toBeNull();
-        expect(canReadByLink(chainOf({ type: 'folder' }), true)).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'folder' }, { type: 'file' }))).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'folder' }))).toBeNull();
     });
 
     test('signed-in visibility is not a link', () => {
-        expect(canReadByLink(chainOf({ type: 'file', visibility: 'public-read' }), true)).toBeNull();
-        expect(canReadByLink(chainOf({ type: 'file', visibility: 'public-write' }), true)).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'file', visibility: 'public-read' }))).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'file', visibility: 'public-write' }))).toBeNull();
     });
 
     test('anything trashed in the chain refuses', () => {
-        expect(canReadByLink(chainOf({ type: 'file', ...LINK, trashed: true }), true)).toBeNull();
-        expect(canReadByLink(chainOf({ type: 'folder', trashed: true }, { type: 'file', ...LINK }), true)).toBeNull();
-        expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type: 'file', trashed: true }), true)).toBeNull();
-    });
-
-    test('the switch off refuses', () => {
-        expect(canReadByLink(chainOf({ type: 'file', ...LINK }), false)).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'file', ...LINK, trashed: true }))).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'folder', trashed: true }, { type: 'file', ...LINK }))).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type: 'file', trashed: true }))).toBeNull();
     });
 
     test('a folder, a file and every collab document are admitted, as the public path and below it', () => {
         for (const type of ['folder', 'file', ...COLLAB_TYPES] as const) {
-            expect(canReadByLink(chainOf({ type, ...LINK }), true)).toBe(1);
-            expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type }), true)).toBe(1);
+            expect(canReadByLink(chainOf({ type, ...LINK }))).toBe(1);
+            expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type }))).toBe(1);
         }
     });
 
     test('a chat is refused, as the public path and below it', () => {
-        expect(canReadByLink(chainOf({ type: 'chat', ...LINK }), true)).toBeNull();
-        expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type: 'chat' }), true)).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'chat', ...LINK }))).toBeNull();
+        expect(canReadByLink(chainOf({ type: 'folder', ...LINK }, { type: 'chat' }))).toBeNull();
     });
 
     test('nothing goes on below a file', () => {
         const chain = chainOf({ type: 'folder', ...LINK }, { type: 'file' }, { type: 'file' });
-        expect(canReadByLink(chain, true)).toBeNull();
+        expect(canReadByLink(chain)).toBeNull();
     });
 
     test('nothing at all goes on below a file under a public folder', () => {
         for (const type of ['folder', 'file', 'chat', ...COLLAB_TYPES] as const) {
             const chain = chainOf({ type: 'folder', ...LINK }, { type: 'file' }, { type });
-            expect(canReadByLink(chain, true)).toBeNull();
+            expect(canReadByLink(chain)).toBeNull();
         }
     });
 
@@ -122,14 +118,14 @@ describe('canReadByLink', () => {
         for (const document of COLLAB_TYPES) {
             test(`${document}: its media/ folder and a file in it are admitted`, () => {
                 const open = { type: document, ...LINK };
-                expect(canReadByLink(chainOf(open, { type: 'folder', name: 'media' }), true)).toBe(1);
-                expect(canReadByLink(chainOf(open, { type: 'folder', name: 'media' }, { type: 'file' }), true)).toBe(1);
+                expect(canReadByLink(chainOf(open, { type: 'folder', name: 'media' }))).toBe(1);
+                expect(canReadByLink(chainOf(open, { type: 'folder', name: 'media' }, { type: 'file' }))).toBe(1);
             });
         }
 
         test('media/ of a document under a public folder is admitted', () => {
             const chain = chainOf({ type: 'folder', ...LINK }, { type: 'doc' }, { type: 'folder', name: 'media' });
-            expect(canReadByLink(chain, true)).toBe(1);
+            expect(canReadByLink(chain)).toBe(1);
         });
 
         test('data.db, comments.db, the chat/ folder, a thread and anything deeper in media/ are refused', () => {
@@ -148,7 +144,7 @@ describe('canReadByLink', () => {
                 chainOf(doc, media, { type: 'chat' }),
                 chainOf(doc, media, { type: 'file' }, { type: 'file' }),
             ];
-            for (const chain of refused) expect(canReadByLink(chain, true)).toBeNull();
+            for (const chain of refused) expect(canReadByLink(chain)).toBeNull();
         });
 
         test('a link on a part of a private document opens nothing', () => {
@@ -159,13 +155,13 @@ describe('canReadByLink', () => {
                 chainOf(doc, { type: 'folder', name: 'chat', ...LINK }, { type: 'chat' }),
                 chainOf({ type: 'folder' }, doc, { type: 'folder', name: 'versions', ...LINK }, { type: 'file' }),
             ];
-            for (const chain of refused) expect(canReadByLink(chain, true)).toBeNull();
+            for (const chain of refused) expect(canReadByLink(chain)).toBeNull();
         });
 
         test("a link on a private document's media/ folder alone opens nothing", () => {
             const media = { type: 'folder', name: 'media', ...LINK } as const;
-            expect(canReadByLink(chainOf({ type: 'doc' }, media), true)).toBeNull();
-            expect(canReadByLink(chainOf({ type: 'doc' }, media, { type: 'file' }), true)).toBeNull();
+            expect(canReadByLink(chainOf({ type: 'doc' }, media))).toBeNull();
+            expect(canReadByLink(chainOf({ type: 'doc' }, media, { type: 'file' }))).toBeNull();
         });
     });
 });
@@ -305,7 +301,7 @@ describe("visibility 'link'", () => {
         test('the stored chain of a child admits it under the public folder', async () => {
             const home = await getHome(ctx.alice.user.id);
             const chain = await home.drive.breadCrumb(mountId, child.id);
-            expect(chain[canReadByLink(chain, true) ?? -1]?.id).toBe(folder.id);
+            expect(chain[canReadByLink(chain) ?? -1]?.id).toBe(folder.id);
         });
 
         test('a signed-in non-member reads a public path and what is below it, and cannot write', async () => {

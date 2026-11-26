@@ -1,8 +1,8 @@
 // The Drive HTTP routes that read or rewrite what is inside a file, such as its previews and thumbnail,
 // an export to another format, a conversion into an Eigen document and an import into an open document.
-// Each resolves the file through getSharedDrive, which checks the access, and the previews, the thumbnail and
-// an embedded file through getLinkDrive for a visitor without a login. The long jobs among them switch off the
-// server's idle timeout, because they send nothing while they wait and run.
+// Each resolves the file through getSharedDrive, which checks the access, and a few reads also answer a visitor
+// without a login. The long jobs among them switch off the server's idle timeout, because they send nothing while
+// they wait and run.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DocumentImportOptions, DriveImportSource, ImportResult } from '@workspace/lib/types/drive-convert';
@@ -20,7 +20,7 @@ import {
     scriptableInlineHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
-import { getLinkDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
+import { getReadDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -176,7 +176,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, request, user }): Promise<Response> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return serveFile(mount, path, 'inline', request.headers.get('range'), request.headers.get('if-none-match'));
         },
@@ -185,7 +185,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/preview',
         async ({ params, user, set }): Promise<Buffer | undefined> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
             const result = await getScreenPreview(mount, path, embedUrl);
@@ -206,7 +206,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return answerPreview(request, set, path, TEXT_FORMAT, () => getTextPreview(mount, path));
         },
@@ -218,7 +218,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, request, user, set }): Promise<VCardPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, VCARD_FORMAT, () => getVCardPreview(mount, path));
@@ -229,7 +229,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
         async ({ params, request, user, set }): Promise<EmlPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, EML_FORMAT, () => getEmlPreview(mount, path));
@@ -240,7 +240,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
         async ({ params, request, user, set }): Promise<IcsPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, ICS_FORMAT, () => getIcsPreview(mount, path));
@@ -250,7 +250,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }): Promise<BunFile> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const pathId = params.fileName.split('.')[0];
             const { mount } = await drive.resolveFile(params.mountId, pathId);
             const file = await getThumbnail(mount.thumbsDir, pathId);
