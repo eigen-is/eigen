@@ -8,7 +8,13 @@ import { adminStillBackups } from './admin-still-backups';
 import { adminStillGuests } from './admin-still-guests';
 import { adminStillSettings } from './admin-still-settings';
 import { calendarHero } from './calendar-hero';
-import { calendarStillBuild, calendarStillWeek } from './calendar-stills';
+import {
+    calendarStillBuild,
+    calendarStillMonth,
+    calendarStillSchedule,
+    calendarStillToday,
+    calendarStillWeek,
+} from './calendar-stills';
 import { CARDS } from './cards';
 import { chatHero } from './chat-hero';
 import { chatPair } from './chat-pair';
@@ -63,8 +69,11 @@ export const SCENES: Scene[] = [
     mailSearch,
     mailStillInvite,
     calendarHero,
+    calendarStillToday,
     calendarStillWeek,
     calendarStillBuild,
+    calendarStillSchedule,
+    calendarStillMonth,
     contactsHero,
     contactsStillCard,
     contactsStillVCard,

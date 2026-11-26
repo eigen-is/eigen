@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2469 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2470 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -391,7 +391,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (325)
+## Hooks (326)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -454,6 +454,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCalendarOptions` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarShortcuts` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar-shortcuts.ts |
+| `useCalendarViewPreference` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar-view-preference.ts |
 | `useCanReschedule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-can-reschedule.ts |
 | `useCreateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCreateEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -721,7 +722,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (482)
+## Types (483)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -739,7 +740,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Span` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
-| `CalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `EventTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `LaneBar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `TimedBlock` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
@@ -834,6 +834,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CalendarItem` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarOption` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarShare` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `CalendarViewLayout` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `CalendarViewMode` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ChatAttachment` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -1208,7 +1210,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1297)
+## Utilities & constants (1296)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1372,7 +1374,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `addDays` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `allocateLanes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `CALENDAR_VIEW_LABELS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
-| `CALENDAR_VIEW_MODES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `calendarEventLink` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `dayEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `defaultCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1869,7 +1870,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripRemoteRefs` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
-| `MOBILE_MEDIA_QUERY` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `accessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarInviteTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
@@ -1972,6 +1972,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CALENDAR_SHARE_PERMISSIONS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `CALENDAR_VIEW_MODES` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CARD_TITLE_MAX_LENGTH` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `celebrationsOn` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |

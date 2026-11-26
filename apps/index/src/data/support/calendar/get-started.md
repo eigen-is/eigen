@@ -7,7 +7,7 @@ tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
 Calendar is where you keep your schedule in Eigen. You create events, invite other people, and see your team's calendars and the ones others share with you beside your own.
@@ -19,7 +19,7 @@ The screen has two parts: the sidebar on the left, with **Create event** at the 
 
 ## The views
 
-Calendar opens in the **Week** view on a computer and in the **3 days** view on a phone. The week view shows seven columns, Monday to Sunday, with the hours of the day running down the side. Each event is a block as long as it lasts, and all-day events sit in a strip above the hours. Today's date is highlighted with a filled circle.
+Calendar first opens in the **Week** view on a computer and in the **3 days** view on a phone, and after that on the view you last picked, a computer and a phone each keeping their own. The week view shows seven columns, Monday to Sunday, with the hours of the day running down the side. Each event is a block as long as it lasts, and all-day events sit in a strip above the hours. Today's date is highlighted with a filled circle.
 
 To switch on a computer, pick **Day**, **3 days**, **Week**, **Month** or **Schedule** from the dropdown in the top-right corner of the toolbar. On a phone, tap one in the sidebar. In the **Month** view each cell in the grid is a day, and your events appear inside it. See [Switch views and navigate dates](/support/calendar/views) for more.
 

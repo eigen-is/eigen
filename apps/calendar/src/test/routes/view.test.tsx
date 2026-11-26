@@ -1,16 +1,17 @@
-// The month view draws the visible calendars' events and the shared ones, as many to a day as its row fits with a
-// count of the rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
-// cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for
-// the view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day:
-// a computer picks the view in the toolbar and a phone in the sidebar, both keeping the day, an unknown view or day is
-// not found, and the start page picks the view for the device. The schedule lists only the days with events, opens an
-// event's detail on a click, and says when the days are empty. The time grid draws a column per day under a link to that day, timed events as blocks at their minutes,
-// multi-day all-day events as one bar, and the current time only while today is in view. Google's keys switch the
-// view on the same day, go to today and open New event, and do nothing while a dialog is open. The sidebar's mini
-// month sits under the calendar lists at full width, marks the view's days, browses months on its own, and opens a
-// clicked day in the current view. With an event open, a click on empty grid only closes it and a drag still creates,
-// a save that re-keys it moves the URL with it or closes it when nothing is left, every view navigation keeps it, and
-// the view keys stand down while the focus is in its column.
+// The month view draws the visible calendars' events and the shared ones, as many to a day as its row fits with a count
+// of the rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
+// cancels that day alone, and a click on a day creates an event there. The previous and next buttons are named for the
+// view, and a calendar's options button in the sidebar shows on hover only. The URL names the view and its day: a
+// computer picks the view in the toolbar and a phone in the sidebar, both keeping the day, an unknown view or day is
+// not found, and the start page opens the view last picked on that kind of device. The schedule lists only the days
+// with events, opens an event's detail on a click, and says when the days are empty. The time grid draws a column per
+// day under a link to that day, timed events as blocks at their minutes, multi-day all-day events as one bar, and the
+// current time only while today is in view. Google's keys switch the view on the same day, go to today and open New
+// event, and do nothing while a dialog is open. The sidebar's mini month sits under the calendar lists at full width,
+// marks the view's days, browses months on its own, and opens a clicked day in the current view. With an event open, a
+// click on empty grid only closes it and a drag still creates, a save that re-keys it moves the URL with it or closes
+// it when nothing is left, every view navigation keeps it, and the view keys stand down while the focus is in its
+// column.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -19,6 +20,7 @@ import type {
     SharedCalendar,
     UpdateEventInput,
 } from '@workspace/lib/types/calendar';
+import type { UserSettings } from '@workspace/lib/types/settings';
 import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
@@ -123,7 +125,22 @@ const deleteEvent = { mutateAsync: mock(async (_input: { id: string; calendarId:
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realCalendar = { ...(await import('@workspace/lib/calendar')) };
+const realApi = { ...(await import('@workspace/lib/api')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
+// The user's settings hold nothing, and a view switch saves into them.
+const savedSettings: UserSettings[] = [];
+mock.module('@workspace/lib/api', () => ({
+    ...realApi,
+    spaceApi: () => ({
+        settings: {
+            get: async () => ({ data: {}, error: null, status: 200 }),
+            put: async (body: UserSettings) => {
+                savedSettings.push(body);
+                return { data: body, error: null, status: 200 };
+            },
+        },
+    }),
+}));
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendar,
     useCalendars: () => calendars,
@@ -141,11 +158,13 @@ mock.module('@workspace/lib/calendar', () => ({
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/calendar', () => realCalendar);
+    mock.module('@workspace/lib/api', () => realApi);
 });
 
 const { act, createElement, useSyncExternalStore } = await import('react');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { routeTree } = await import('../../routeTree.gen');
+const { HOUR_HEIGHT } = await import('../../components/time-grid-block');
 
 const auth = {
     isAuthenticated: true,
@@ -158,6 +177,9 @@ const auth = {
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
+    // A view switch saves itself, so each test starts on the defaults.
+    window.localStorage.clear();
+    savedSettings.length = 0;
     ownEvents = { data: [], isLoading: false };
     sharedEvents = { data: [teamSync], isLoading: false };
     createEvent.mutateAsync.mockClear();
@@ -453,6 +475,43 @@ test("on a phone the sidebar's views keep the focused day and mark the view, and
         expect(viewLink('Month')?.getAttribute('data-status')).toBeNull();
     }));
 
+test('the start page opens the view last picked on a computer, and a phone keeps its own', async () => {
+    setSystemTime(new Date(2026, 10, 24, 9));
+    await open('/view/week/2026-11-24');
+    await click(document.querySelector('[data-slot="select-trigger"]'));
+    await click([...document.querySelectorAll('[role="option"]')].find((option) => option.textContent === 'Month'));
+    expect(savedSettings).toEqual([{ calendarView: { desktop: 'month' } }]);
+    await unmount();
+
+    expect((await open('/')).path()).toBe('/view/month/2026-11-24');
+    await unmount();
+    await onPhone(async () => {
+        expect((await open('/')).path()).toBe('/view/3day/2026-11-24');
+    });
+});
+
+test('the arrows on a deep-linked view save nothing, so the start page keeps the view last picked', async () => {
+    setSystemTime(new Date(2026, 10, 24, 9));
+    await open('/view/month/2026-11-24');
+    await click(document.querySelector('button[aria-label="Next month"]'));
+    expect(savedSettings).toEqual([]);
+    await unmount();
+    expect((await open('/')).path()).toBe('/view/week/2026-11-24');
+});
+
+test("a phone's view link is the view its start page opens next, and the arrows save nothing", () =>
+    onPhone(async () => {
+        setSystemTime(new Date(2026, 10, 24, 9));
+        await open('/view/3day/2026-11-24');
+        await click(document.querySelector('button[aria-label="Next 3 days"]'));
+        expect(savedSettings).toEqual([]);
+        await click(viewLink('Schedule'));
+        expect(savedSettings).toEqual([{ calendarView: { phone: 'schedule' } }]);
+        await unmount();
+
+        expect((await open('/')).path()).toBe('/view/schedule/2026-11-24');
+    }));
+
 // The sidebar's mini month: its caption, and its day cells by day key.
 const miniCaption = () => document.querySelector('.rdp-caption_label')?.textContent;
 const miniDays = () => [...document.querySelectorAll<HTMLElement>('td[data-day]')];
@@ -639,6 +698,16 @@ test('a week is seven day columns, each date linking to its day view', async () 
         ['/view/day/2026-10-17', 'SAT17'],
         ['/view/day/2026-10-18', 'SUN18'],
     ]);
+});
+
+test('a week opens a quarter hour above 07:00, or above the hour before now on this week, so that hour shows its label whole', async () => {
+    const scroller = () => document.querySelector<HTMLElement>('.overflow-y-auto.flex-1');
+    await open('/view/week/2026-10-14');
+    expect(scroller()?.scrollTop).toBe(6.75 * HOUR_HEIGHT);
+    await unmount();
+    setSystemTime(new Date(2026, 9, 14, 11, 20));
+    await open('/view/week/2026-10-14');
+    expect(scroller()?.scrollTop).toBe(9.75 * HOUR_HEIGHT);
 });
 
 test('a day is one column and 3 days are three', async () => {
@@ -857,7 +926,6 @@ test('the current time shows only while today is in view', async () => {
 });
 
 // A day column of the grid's hours. happy-dom has no layout, so a column's top is at 0 and clientY is its pixel.
-const HOUR = 48;
 const dayColumn = (container: HTMLElement, index = 0) => {
     const column = container.querySelectorAll('.overflow-y-auto .border-l')[index];
     if (!column) throw new Error(`the grid has no column ${index}`);
@@ -891,7 +959,7 @@ async function savedTimes() {
 
 test('a click on an empty slot opens New event at its quarter hour, an hour long', async () => {
     const { container } = await open('/view/day/2026-10-13');
-    await press(dayColumn(container), 10 * HOUR + 10, 10 * HOUR + 10);
+    await press(dayColumn(container), 10 * HOUR_HEIGHT + 10, 10 * HOUR_HEIGHT + 10);
     expect(await savedTimes()).toEqual({ startTime: at(13, 10), endTime: at(13, 11), allDay: false });
 });
 
@@ -899,7 +967,7 @@ test('a drag over a day column draws the range and opens New event with it', asy
     const { container } = await open('/view/week/2026-10-14');
     const column = dayColumn(container, 2);
     let drawn = '';
-    await press(column, 10 * HOUR, 11.5 * HOUR, 'mouse', () => {
+    await press(column, 10 * HOUR_HEIGHT, 11.5 * HOUR_HEIGHT, 'mouse', () => {
         drawn = column.textContent ?? '';
     });
     expect(drawn).toContain('(No title)10:00 – 11:30');
@@ -914,7 +982,7 @@ test('a drag over a day column draws the range and opens New event with it', asy
 test('Escape during a drag drops the range and opens nothing', async () => {
     const { container } = await open('/view/day/2026-10-13');
     const column = dayColumn(container);
-    await press(column, 10 * HOUR, 12 * HOUR, 'mouse', () => {
+    await press(column, 10 * HOUR_HEIGHT, 12 * HOUR_HEIGHT, 'mouse', () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(column.textContent).not.toContain('(No title)');
@@ -929,12 +997,12 @@ test('a right-button press draws no range', async () => {
             new PointerEvent('pointerdown', {
                 bubbles: true,
                 button: 2,
-                clientY: 9 * HOUR,
+                clientY: 9 * HOUR_HEIGHT,
                 pointerType: 'mouse',
                 pointerId: 1,
             }),
         );
-        pointer(document, 'pointermove', 12 * HOUR);
+        pointer(document, 'pointermove', 12 * HOUR_HEIGHT);
     });
     expect(column.textContent).not.toContain('(No title)');
 });
@@ -943,13 +1011,13 @@ test('a finger does not drag: its tap opens the slot it pressed', async () => {
     const { container } = await open('/view/day/2026-10-13');
     const column = dayColumn(container);
     await act(async () => {
-        pointer(column, 'pointerdown', 9 * HOUR, 'touch');
-        pointer(document, 'pointermove', 12 * HOUR, 'touch');
+        pointer(column, 'pointerdown', 9 * HOUR_HEIGHT, 'touch');
+        pointer(document, 'pointermove', 12 * HOUR_HEIGHT, 'touch');
     });
     const drawn = column.textContent;
     await act(async () => {
-        pointer(column, 'pointerup', 9 * HOUR, 'touch');
-        column.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 9 * HOUR }));
+        pointer(column, 'pointerup', 9 * HOUR_HEIGHT, 'touch');
+        column.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 9 * HOUR_HEIGHT }));
     });
     expect(drawn).not.toContain('(No title)');
     expect(await savedTimes()).toEqual({ startTime: at(13, 9), endTime: at(13, 10), allDay: false });
@@ -1017,7 +1085,7 @@ test('in dark mode a block, a bar and a drawn range leave room after their color
     expect(pill(container, 'Retreat')?.classList).toContain('dark:pl-2');
     const column = dayColumn(container, 2);
     let draftClasses = '';
-    await press(column, 10 * HOUR, 11 * HOUR, 'mouse', () => {
+    await press(column, 10 * HOUR_HEIGHT, 11 * HOUR_HEIGHT, 'mouse', () => {
         draftClasses = column.querySelector('.pointer-events-none')?.className ?? '';
     });
     expect(draftClasses.split(' ')).toContain('dark:pl-2');
@@ -1075,7 +1143,7 @@ test('with an event open, a click on an empty slot only closes it and creates no
     ownEvents.data = [review()];
     const { container, search } = await open(REVIEW_OPEN);
     const column = dayColumn(container, 2);
-    await press(column, 10 * HOUR + 10, 10 * HOUR + 10);
+    await press(column, 10 * HOUR_HEIGHT + 10, 10 * HOUR_HEIGHT + 10);
     expect(detail()).toBeNull();
     expect(search()).toEqual({});
     expect(dialogTitle()).toBeUndefined();
@@ -1085,7 +1153,7 @@ test('with an event open, a click on an empty slot only closes it and creates no
 test('with an event open, a drag over empty time closes it and opens New event over the range', async () => {
     ownEvents.data = [review()];
     const { container } = await open(REVIEW_OPEN);
-    await press(dayColumn(container, 2), 10 * HOUR, 11.5 * HOUR);
+    await press(dayColumn(container, 2), 10 * HOUR_HEIGHT, 11.5 * HOUR_HEIGHT);
     expect(detail()).toBeNull();
     expect(await savedTimes()).toEqual({
         startTime: at(14, 10),

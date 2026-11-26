@@ -11,6 +11,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
+import { localToUtc, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
@@ -48,6 +49,7 @@ import type {
     MailAttachment,
     SeededInvite,
     SeededMail,
+    SeededSlot,
     SeededTime,
     SeededVCardFile,
     VCardSpec,
@@ -61,7 +63,9 @@ import {
     CHATS,
     CONTACTS,
     DEMO_MAIL_DOMAIN,
+    DEMO_TIME_ZONE,
     DOCS,
+    demoTime,
     EVENTS,
     emailFor,
     HEIN_KLARENBEEK,
@@ -69,6 +73,7 @@ import {
     MAILS,
     NOTES,
     ORG_NAME,
+    PERSONAL_EVENTS,
     PERSONAL_SHARES,
     PERSONAS,
     PHOTOS,
@@ -793,31 +798,36 @@ async function main(): Promise<void> {
     // --- Calendar: team events. The team calendar is shared, so an event sends no invitations. ---
     const defaultCalendar = (await teamHome.calendar.getCalendars()).find((calendar) => calendar.isDefault);
     if (!defaultCalendar) throw new Error('Team default calendar missing');
-    // The festival is the first Saturday at least 20 days out. Every event is placed from it, so the weekdays hold
-    // whatever day the hourly reseed runs on.
-    const festivalSaturday = new Date(now);
-    festivalSaturday.setDate(festivalSaturday.getDate() + 20);
-    while (festivalSaturday.getDay() !== 6) festivalSaturday.setDate(festivalSaturday.getDate() + 1);
-    festivalSaturday.setHours(0, 0, 0, 0);
-    // A timed slot of a seeded event, shift or invitation: its day walked from the festival Saturday, at local hours.
-    const timedSlot = (slot: { daysFromFestival: number; startHour: number; durationHours: number }) => {
-        const start = new Date(festivalSaturday);
-        start.setDate(start.getDate() + slot.daysFromFestival);
-        start.setHours(slot.startHour, 0, 0, 0);
-        const end = new Date(start);
-        end.setHours(end.getHours() + slot.durationHours);
-        return { start, end };
+    // The festival is the first Saturday at least 20 days out on the demo's clock, held as the UTC midnight of its
+    // date. Every event is placed from it, so the weekdays hold whatever day the hourly reseed runs on.
+    const today = utcToLocal(now, DEMO_TIME_ZONE);
+    const festivalSaturday = new Date(Date.UTC(today.year, today.month - 1, today.day + 20));
+    festivalSaturday.setUTCDate(festivalSaturday.getUTCDate() + 6 - festivalSaturday.getUTCDay());
+    // A seeded line as createEvent takes it. An all-day one is UTC midnight with an exclusive end and no zone, as the
+    // create-event dialog stores it, because the calendar groups all-day lines by their UTC date.
+    const eventSlot = (slot: SeededSlot) => {
+        const day = new Date(festivalSaturday);
+        day.setUTCDate(day.getUTCDate() + slot.daysFromFestival);
+        const fields = {
+            title: slot.title,
+            allDay: !!slot.allDay,
+            description: slot.description ?? null,
+            location: slot.location ?? null,
+            rrule: slot.rrule ?? null,
+        };
+        if (slot.allDay) {
+            const endTime = new Date(day);
+            endTime.setUTCDate(endTime.getUTCDate() + (slot.days ?? 1));
+            return { ...fields, startTime: day, endTime, timezone: null };
+        }
+        const [year, month, date] = [day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate()];
+        const hour = Math.trunc(slot.startHour);
+        const startTime = localToUtc(DEMO_TIME_ZONE, year, month, date, hour, (slot.startHour - hour) * 60, 0);
+        const endTime = new Date(startTime.getTime() + slot.durationHours * 3_600_000);
+        return { ...fields, startTime, endTime, timezone: DEMO_TIME_ZONE };
     };
     const resolvePersona = (ref: string) => PERSONAS.find((persona) => persona.role === ref) ?? personaByKey(ref);
     for (const event of EVENTS) {
-        let { start, end } = timedSlot(event);
-        if (event.allDay) {
-            // An all-day event is stored as UTC midnight with an exclusive end, as the create-event dialog stores
-            // it. The calendar groups them by UTC date, so local midnight would move the festival a day early.
-            start = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()));
-            end = new Date(start);
-            end.setUTCDate(end.getUTCDate() + 2); // the festival Saturday and Sunday
-        }
         const organizer = userForRole(event.organizer);
         const attendees: Attendee[] = event.attendees.map((ref) => {
             const persona = resolvePersona(ref);
@@ -833,32 +843,22 @@ async function main(): Promise<void> {
             organizer: { userId: organizer.id, email: organizer.email, name: organizer.name },
         };
         await teamHome.calendar.createEvent(defaultCalendar.id, {
-            title: event.title,
-            startTime: start,
-            endTime: end,
-            allDay: !!event.allDay,
-            description: event.description ?? null,
-            location: event.location ?? null,
-            rrule: event.rrule ?? null,
+            ...eventSlot(event),
             data,
             createByUserId: organizer.id,
         });
     }
 
-    // --- Shifts: personal lines in each persona's own calendar, which their home makes on first open. ---
-    for (const shift of SHIFTS) {
-        const owner = lookup(userByKey, shift.persona);
+    // --- Personal calendars: a persona's shifts and the shared pool, in the calendar their home makes. ---
+    for (const persona of PERSONAS) {
+        const owner = lookup(userByKey, persona.key);
         const { calendar } = await getHome(owner.id);
         const personal = (await calendar.getCalendars()).find((candidate) => candidate.isDefault);
         if (!personal) throw new Error(`Default calendar missing for ${owner.email}`);
-        const { start, end } = timedSlot(shift);
-        await calendar.createEvent(personal.id, {
-            title: shift.title,
-            startTime: start,
-            endTime: end,
-            allDay: false,
-            createByUserId: owner.id,
-        });
+        const lines = [...SHIFTS.filter((shift) => shift.persona === persona.key), ...PERSONAL_EVENTS];
+        for (const line of lines) {
+            await calendar.createEvent(personal.id, { ...eventSlot(line), createByUserId: owner.id });
+        }
     }
 
     // --- Mail: raw RFC822 delivered into persona inboxes (indexed into mail.db on delivery). ---
@@ -892,20 +892,12 @@ async function main(): Promise<void> {
     };
     // An invitation as an outside calendar sends one: the shipped iMIP writer over the event its organizer holds.
     const inviteIcs = (invite: SeededInvite, organizer: { name: string; email: string }, attendee: User): string => {
-        const { start, end } = timedSlot(invite);
         const event: CalendarEvent = {
+            ...eventSlot(invite),
             id: crypto.randomUUID(),
             calendarId: '',
             uid: `${crypto.randomUUID()}@${organizer.email.split('@')[1]}`,
             uri: '',
-            title: invite.title,
-            description: invite.description ?? null,
-            location: invite.location ?? null,
-            startTime: start,
-            endTime: end,
-            allDay: false,
-            rrule: null,
-            timezone: null,
             parentEventId: null,
             recurrenceDate: null,
             status: 'confirmed',
@@ -942,8 +934,7 @@ async function main(): Promise<void> {
                 headers?: Record<string, string>;
             },
         ): Promise<Buffer> => {
-            const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
-            date.setHours(message.hour, 0, 0, 0);
+            const date = demoTime(now, { daysAgo: message.daysAgo, hour: message.hour, minute: 0 });
             const messageId = `${crypto.randomUUID()}@${MAIL_DOMAIN}`;
             const from = senderOf(message);
             const ownHtml = parts.html ?? textToHtml(message.text);

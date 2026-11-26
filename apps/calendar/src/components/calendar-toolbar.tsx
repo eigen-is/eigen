@@ -4,15 +4,15 @@
 // keeps the day. It also binds Google's keys for the same moves, and c for New event, while no dialog or menu is open
 // and the focus is not in the event's column.
 
-import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
     CALENDAR_VIEW_LABELS,
-    CALENDAR_VIEW_MODES,
     isCalendarViewMode,
     stepFocus,
     useCalendarShortcuts,
     viewTitle,
 } from '@workspace/lib/calendar';
+import type { CalendarViewMode } from '@workspace/lib/types/calendar';
+import { CALENDAR_VIEW_MODES } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app';

@@ -4,8 +4,8 @@
 // page, which picks the view for the device.
 
 import { useNavigate } from '@tanstack/react-router';
-import type { CalendarViewMode } from '@workspace/lib/calendar';
 import { toLocalDateString, viewDays } from '@workspace/lib/calendar';
+import type { CalendarViewMode } from '@workspace/lib/types/calendar';
 import { DateCalendar } from '@workspace/ui/components/date-calendar';
 import { useLayout } from '@workspace/ui/components/layout/app';
 import { useShowView } from './hooks/use-show-view';
@@ -18,7 +18,7 @@ export function MiniMonth({ mode, focus }: { mode?: CalendarViewMode; focus: Dat
 
     const openDay = (day: Date) => {
         if (mode) showView(mode, day);
-        else navigate({ to: '/', search: { date: toLocalDateString(day) } });
+        else void navigate({ to: '/', search: { date: toLocalDateString(day) } });
         setSidebarOpen(false);
     };
 

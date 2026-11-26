@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { CALENDAR_VIEW_MODES } from '@workspace/lib/types/calendar';
 import { toLocalDateString } from '../../../core/calendar/calendar-utils';
 import {
-    CALENDAR_VIEW_MODES,
     calendarEventLink,
     isCalendarViewMode,
     parseDayKey,

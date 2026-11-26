@@ -5,10 +5,10 @@ type: how-to
 tags: [calendar, navigation, day, week, month, schedule]
 related: [calendar/get-started, calendar/create-event, calendar/keyboard-shortcuts]
 order: 20
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
-Calendar opens in the week view on a computer and in the 3-day view on a phone. You can switch to a single day, 3 days, a week, a whole month or a schedule list, and use the navigation controls in the toolbar to move between periods.
+Calendar first opens in the week view on a computer and in the 3-day view on a phone. After that it opens on the view you last picked, and a computer and a phone each keep their own. You can switch to a single day, 3 days, a week, a whole month or a schedule list, and use the navigation controls in the toolbar to move between periods.
 
 ## Switch views
 
@@ -17,6 +17,10 @@ On a computer, pick **Day**, **3 days**, **Week**, **Month** or **Schedule** fro
 The view changes immediately and stays on the day you were looking at. If you are looking at 18 June in the month view, switching to the week view shows the week of 18 June. The 3-day view starts on that day and shows the two days after it.
 
 The schedule view starts on that day too and shows the next four weeks as a list. Only days with events appear, each with its events in time order: the time, or **All day**, the title and the place. Click an event to see its details. With nothing in those four weeks, the schedule says **Nothing planned**.
+
+::: grid columns="1"
+![The schedule view, a list of the days that have events](/data/about/media/calendar-still-schedule.webp)
+:::
 
 ::: grid columns="1"
 ![A week in the week view](/data/about/media/calendar-still-week.webp)
@@ -37,6 +41,10 @@ The month view shows every week of the month as a row, with each day's events un
 Each day shows as many events as fit, so a larger window shows more. When a day has more events than fit, its last line counts the rest, such as **3 more**. Click it to see all of that day's events in a list, and click an event in the list to see its details. Click anywhere else to close the list.
 
 Click a date number to open that day in the day view.
+
+::: grid columns="1"
+![A month in the month view, with an event of two days as one bar](/data/about/media/calendar-still-month.webp)
+:::
 
 ## Move to the next or previous period
 
