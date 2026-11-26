@@ -30,7 +30,9 @@ The server renders every body, so the frontend stays a plain container and every
 
 ## The cache key is the file version and the format tag
 
-Every preview is a file in `mount.previewsDir`, named `{pathId}-{updatedAt}.{format}.json` (images: `.screen.webp`, and `.screen-f2.svg` for an SVG). A new version writes a new file rather than overwriting the old one, which is what lets a versioned URL be cached for long. After each write, `pruneOldVersions` deletes the path's other versions fire-and-forget. A sweep at `mount.init()` removes anything older than seven days, for paths written once and never again.
+Every preview is a file in `mount.previewsDir`, named `{pathId}-{updatedAt}.{format}.json` (images: `.screen.webp`, and `.screen-f2.svg` for an SVG). A new version writes a new file rather than overwriting the old one, which is what lets a versioned URL be cached for long. After each write, `pruneOldVersions` deletes the path's other files of the same kind fire-and-forget. The kind is the extension, and a `.failed` marker counts as the kind of its file. So a path keeps one file per kind, and a format bump still prunes the earlier format of its kind. A sweep at `mount.init()` removes anything older than seven days, for paths written once and never again.
+
+The collab state a reader without a socket loads is cached the same way, through `getOrCacheBytes`: `{pathId}-{version}.yjs`, where the version names the stored state and ends in `COLLAB_STATE_FORMAT` (`state-f1`) ([COLLAB.md § The state route](COLLAB.md#a-reader-who-is-not-live-loads-the-stored-state-over-http)). Its own extension keeps it beside the path's text preview. It serves no older version while a new one builds, and a failed build writes no marker.
 
 The format tag (`TEXT_FORMAT` and its siblings in `preview-cache.ts`) names the shape of the renderer's output. **Bump it whenever the output changes shape.** A bump makes every cached body a miss even though `updatedAt` did not move. A cached typed payload is JSON this process wrote, and reading it back is a typed assignment nothing checks, so a payload type change without a bump makes a restored `previewsDir` serve the old shape. Bump `EML_FORMAT` on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered. An SVG's screen preview has a tag of its own, `SVG_SCREEN_FORMAT`, bumped whenever what the inliner takes in changes, because a sibling's edit leaves the SVG's `updatedAt` alone ([§ An SVG builds in only the images beside it in a document's media](#an-svg-builds-in-only-the-images-beside-it-in-a-documents-media)).
 
@@ -113,7 +115,7 @@ The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points besi
 
 ## A `.vcf`, an `.eml` and an `.ics` preview as what they hold
 
-A `.vcf` is mostly base64 photo, an `.ics` is folded property lines, and an `.eml` is headers, boundaries and base64. None of them reads well as text. So `getBytesTextPreviewMode` answers `null` for all three, and `getPreviewMode` gives each its own mode before it reaches the text rule. That also keeps each path at one cached artifact, which matters because `pruneOldVersions` is not format-scoped. The builders live in `preview/{vcard,eml,ics}-preview.ts` and run in the transform process.
+A `.vcf` is mostly base64 photo, an `.ics` is folded property lines, and an `.eml` is headers, boundaries and base64. None of them reads well as text. So `getBytesTextPreviewMode` answers `null` for all three, and `getPreviewMode` gives each its own mode before it reaches the text rule. That also keeps each path at one cached `.json`, which matters because `pruneOldVersions` keeps one file per extension, and a text body and a typed payload share `.json`. The builders live in `preview/{vcard,eml,ics}-preview.ts` and run in the transform process.
 
 | Format | Mode and predicate | Ceiling | Payload | Cache tag |
 |---|---|---|---|---|
