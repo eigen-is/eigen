@@ -31,8 +31,7 @@ type CommentLifecycle = {
     openCard: CommentCard | null;
     openEntry: CommentEntry | undefined;
     openCardDeleted: boolean;
-    // The chat names neither a card nor a row.
-    missing: boolean;
+    chatMissing: boolean;
     isCardDeleted: (card: CommentCard) => boolean;
     deleteCardId: string | null;
     requestDelete: (cardId: string | null) => void;
@@ -95,7 +94,7 @@ export function useCommentLifecycle({
         openCard,
         openEntry,
         openCardDeleted: openCard ? isCardDeleted(openCard) : !!openEntry,
-        missing: !!shown && !openCard && !openEntry,
+        chatMissing: !!shown && !openCard && !openEntry,
         isCardDeleted,
         deleteCardId,
         requestDelete,

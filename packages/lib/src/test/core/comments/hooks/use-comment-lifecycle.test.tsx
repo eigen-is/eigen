@@ -102,14 +102,14 @@ test('a chat a card holds opens that card', async () => {
     const { lifecycle } = await mountBoard({ chat: 'kept.eigenchat', rows });
     expect(lifecycle().openCard?.id).toBe('card-1');
     expect(lifecycle().openEntry?.title).toBe('Kept');
-    expect([lifecycle().openCardDeleted, lifecycle().missing]).toEqual([false, false]);
+    expect([lifecycle().openCardDeleted, lifecycle().chatMissing]).toEqual([false, false]);
 });
 
 test('a chat whose card is gone opens as deleted, with the title of its row', async () => {
     const { lifecycle } = await mountBoard({ chat: 'removed.eigenchat', rows });
     expect(lifecycle().openCard).toBeNull();
     expect(lifecycle().openEntry?.title).toBe('Ship it');
-    expect([lifecycle().openCardDeleted, lifecycle().missing]).toEqual([true, false]);
+    expect([lifecycle().openCardDeleted, lifecycle().chatMissing]).toEqual([true, false]);
 });
 
 test('a chat waits for the host and the rows, and then a chat nothing names is missing', async () => {
@@ -117,7 +117,7 @@ test('a chat waits for the host and the rows, and then a chat nothing names is m
     await act(async () => {
         queryClient.setQueryData(listKey, rows);
     });
-    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().missing]).toEqual([null, undefined, false]);
+    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().chatMissing]).toEqual([null, undefined, false]);
     await setReady(true);
     // React Query tells its observers a task later.
     for (let i = 0; i < 10; i++) {
@@ -125,10 +125,10 @@ test('a chat waits for the host and the rows, and then a chat nothing names is m
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
     }
-    expect(lifecycle().missing).toBe(true);
+    expect(lifecycle().chatMissing).toBe(true);
 });
 
 test('no chat opens nothing and misses nothing', async () => {
     const { lifecycle } = await mountBoard({ rows });
-    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().missing]).toEqual([null, undefined, false]);
+    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().chatMissing]).toEqual([null, undefined, false]);
 });

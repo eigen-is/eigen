@@ -48,7 +48,7 @@ export function useCommentHost({ listPanel, ...lifecycleArgs }: CommentHostArgs)
         }),
     );
     const lifecycle = useCommentLifecycle({ ...lifecycleArgs, chat });
-    const { cards, allComments, openCard, missing } = lifecycle;
+    const { cards, allComments, openCard, chatMissing } = lifecycle;
     const [clickedChat, setClickedChat] = useState<string | null>(null);
     // A click marks its thread until the thread closes, so forward to it again is a landing.
     const [shownChat, setShownChat] = useState(chat);
@@ -75,8 +75,8 @@ export function useCommentHost({ listPanel, ...lifecycleArgs }: CommentHostArgs)
     // A chat that names nothing closes as its thread would, so back never lands on it.
     const closeMissing = useEffectEvent(closeThread);
     useEffect(() => {
-        if (missing) closeMissing();
-    }, [missing]);
+        if (chatMissing) closeMissing();
+    }, [chatMissing]);
 
     // A card id names only a card, so it waits for the cards alone.
     const resolveCard = useEffectEvent((cardId: string) =>
