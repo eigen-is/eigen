@@ -6,7 +6,6 @@
 import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -37,7 +36,6 @@ type CommentsColumnProps = {
     lifecycle: ReturnType<typeof useCommentLifecycle>;
     path: DrivePath;
     canWrite: boolean;
-    members: EffectiveMember[];
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     activeComments: ActiveComments;
@@ -52,7 +50,6 @@ export function CommentsColumn({
     lifecycle,
     path,
     canWrite,
-    members,
     currentUserEmail,
     filter,
     activeComments,
@@ -70,7 +67,7 @@ export function CommentsColumn({
     const listActions = showComments && (
         <>
             {onAddComment && <TooltipButton icon={Plus} tooltipText="New comment" onClick={onAddComment} />}
-            <CommentFilterButton filter={filter} members={members} currentUserEmail={currentUserEmail} />
+            <CommentFilterButton filter={filter} members={lifecycle.members} currentUserEmail={currentUserEmail} />
         </>
     );
 

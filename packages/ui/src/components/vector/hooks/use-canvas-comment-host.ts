@@ -158,7 +158,6 @@ export function useCanvasCommentHost({
             lifecycle,
             path,
             canWrite,
-            members,
             currentUserEmail: user?.email ?? '',
             filter: commentFilter,
             activeComments,

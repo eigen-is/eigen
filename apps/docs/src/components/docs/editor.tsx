@@ -698,7 +698,6 @@ const TiptapEditor = ({
             lifecycle={lifecycle}
             path={path}
             canWrite={canWrite}
-            members={members}
             currentUserEmail={auth.user?.email ?? ''}
             filter={commentFilter}
             activeComments={activeComments}
