@@ -646,10 +646,11 @@ export function CanvasEditor({
         [selectedIds, buildSnapTargets, viewportRef],
     );
 
-    // Mounting is the ready signal (the doc has synced); this tab's own uploads start later. Each id is checked again
-    // at removal, since another tab may have finished it, and the delete is untracked so a sweep is never undoable.
+    // Mounting is the ready signal (the doc has synced); this tab's own uploads start later. Only a tab that may edit
+    // sweeps, since the server drops a reader's delete. Each id is checked again at removal, since another tab may have
+    // finished it, and the delete is untracked so a sweep is never undoable.
     useZombieMediaSweep({
-        ready: true,
+        ready: canEdit,
         scan: () =>
             elementsRef.current
                 .filter((el) => el.type === 'image' && isPendingMediaName(el.mediaName))

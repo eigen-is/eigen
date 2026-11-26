@@ -1,6 +1,6 @@
 // A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and the
-// hook opens the doc, seeds a new board for someone who may write it, runs the shared ref repair on sync, and adds a
-// column. The board component calls it; the cards themselves go through the shared comment-card code.
+// hook opens the doc, seeds a new board and runs the shared ref repair on sync, both for someone who may write it, and
+// adds a column. The board component calls it; the cards themselves go through the shared comment-card code.
 
 import { useAuth } from '@workspace/lib/auth';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
@@ -180,9 +180,11 @@ export const useBoard = (
         onSync: ({ doc }, synced) => {
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
+            // The server drops a reader's writes, so a reader repairs nothing, seeds nothing and creates no thread in
+            // the sharer's drive.
+            if (!canWriteRef.current) return;
             normalizeBoard(doc);
-            // A reader can't write the seed or create its thread in the sharer's drive.
-            if (canWriteRef.current && doc.getMap('columns').size === 0) {
+            if (doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
             }
         },

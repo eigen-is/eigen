@@ -1,6 +1,6 @@
-// The slide rail: one FrameThumbnail per frame, in stored order, reordered by a drag that rewrites a
-// single fractional index. A phone gets SlideStrip instead: the same thumbnails in one row under the
-// deck, which only jumps to a slide, since a phone never edits a deck.
+// The slide rail: one FrameThumbnail per frame, in stored order, which someone who may edit reorders by a drag that
+// rewrites a single fractional index. A phone gets SlideStrip instead: the same thumbnails in one row under the deck,
+// which only jumps to a slide, since a phone never edits a deck.
 
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -27,11 +27,11 @@ const scrollIntoStrip = (row: HTMLDivElement | null) => {
 
 type SlidePanelProps = {
     frames: VectorFrame[];
-    // The whole scene's elements. The rail slices them ONCE below and hands each thumbnail its own
-    // frame's list — per-thumbnail filtering would be O(slides x elements) on every render, and the
-    // thumbnail's memo needs a value that only changes when that slide does.
+    // The whole scene's elements. The rail slices them once and hands each thumbnail its own frame's list, since
+    // the thumbnail's memo needs a value that only changes when that slide does.
     elements: VectorElement[];
     activeFrameId: string;
+    canEdit: boolean;
     onSelectFrame: (frameId: string) => void;
     onDragStart: (event: DragStartEvent) => void;
     onDragEnd: (event: DragEndEvent) => void;
@@ -45,6 +45,7 @@ export function SlidePanel({
     frames,
     elements,
     activeFrameId,
+    canEdit,
     onSelectFrame,
     onDragStart,
     onDragEnd,
@@ -54,7 +55,7 @@ export function SlidePanel({
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
     const { resolveMediaUrl } = useMediaResolver();
-    // dragActiveId cancels an armed press the moment a drag starts (the stickies-card mechanism).
+    // dragActiveId cancels an armed press the moment a drag starts.
     const slideLongPress = useLongPress(slideMenu?.openAt ?? noop, { disabled: !!dragActiveId || !slideMenu });
 
     const dragged = frames.find((frame) => frame.id === dragActiveId);
@@ -69,7 +70,11 @@ export function SlidePanel({
                     onDragStart={onDragStart}
                     onDragEnd={onDragEnd}
                 >
-                    <SortableContext items={frames.map((frame) => frame.id)} strategy={verticalListSortingStrategy}>
+                    <SortableContext
+                        items={frames.map((frame) => frame.id)}
+                        strategy={verticalListSortingStrategy}
+                        disabled={!canEdit}
+                    >
                         {frames.map((frame, index) => (
                             <SortableSlide key={frame.id} frameId={frame.id} longPressBind={slideLongPress.bind}>
                                 <div
