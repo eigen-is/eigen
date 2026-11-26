@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { compressBlob, decompressBlob } from '../../lib/collab/blob-codec';
+import { compressBlob, decompressBlob, decompressBlobAsync } from '../../lib/collab/blob-codec';
 
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
 
@@ -32,6 +32,13 @@ describe('blob-codec', () => {
     test('decompressBlob tolerates buffers shorter than the magic', () => {
         const tiny = Buffer.from([0, 0]);
         expect(Buffer.from(decompressBlob(tiny))).toEqual(tiny);
+    });
+
+    test('the async read gives what the sync one gives, for a compressed and a raw blob', async () => {
+        for (const blob of [Buffer.from('row,'.repeat(5000)), Buffer.from([1, 2, 3])]) {
+            const stored = compressBlob(blob);
+            expect(Buffer.from(await decompressBlobAsync(stored))).toEqual(Buffer.from(decompressBlob(stored)));
+        }
     });
 
     test('real Yjs update survives compress -> decompress -> applyUpdate', () => {
