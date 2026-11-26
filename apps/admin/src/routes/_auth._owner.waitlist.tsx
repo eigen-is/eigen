@@ -1,5 +1,6 @@
-// The admin's waitlist: the people who asked to join from the landing page, in tabs by status. The admin accepts
-// and invites, rejects, resends an invite or deletes an entry from the toolbar of the selected one.
+// The admin's waitlist: the people who asked to join from the landing page, in tabs by status. The entry the URL's
+// entryId names opens its detail beside the list, from whose bar the admin accepts and invites, rejects, resends an
+// invite or deletes it. An accept or a reject moves the entry to another tab, so it closes the detail.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import {
@@ -13,15 +14,16 @@ import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { Badge } from '@workspace/ui/components/badge';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/components/layout/app';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { UserItem } from '@workspace/ui/components/user';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, RefreshCw, Trash2, X } from 'lucide-react';
+import { Ban, Check, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 type WaitlistSearch = {
@@ -65,30 +67,28 @@ function WaitlistRoute() {
         navigate({ to: '/waitlist', search: { tab: value } });
     };
 
-    const handleRowClick = (id: string) => {
-        navigate({ to: '/waitlist', search: { tab: activeTab, entryId: id } });
-    };
-
-    const handleBack = () => navigate({ to: '/waitlist', search: { tab: activeTab } });
+    const detail = useDetailHistory(entryId, (next, { replace, state }) =>
+        navigate({ to: '/waitlist', search: (prev) => ({ ...prev, entryId: next }), replace, state }),
+    );
 
     const handleDelete = async (entry: WaitlistEntry) => {
         await remove.mutateAsync(entry.id);
-        handleBack();
+        detail.close();
     };
 
     if (isLoading) return <LoadingState />;
 
     const listToolbar = (
         <div className="flex items-center w-full gap-2">
-            <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Filter by email..." />
+            <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search waitlist..." />
         </div>
     );
 
     const detailToolbar = selected ? (
         <WaitlistDetailToolbar
             entry={selected}
-            onAccept={() => accept.mutate(selected.id)}
-            onReject={() => reject.mutate(selected.id)}
+            onAccept={() => accept.mutate(selected.id, { onSuccess: detail.close })}
+            onReject={() => reject.mutate(selected.id, { onSuccess: detail.close })}
             onResend={() => resend.mutate(selected.id)}
             onDelete={() => deleteDialog.openDialog(selected)}
             isPending={isPending}
@@ -96,55 +96,51 @@ function WaitlistRoute() {
     ) : null;
 
     return (
-        <ColumnLayout mobileColumn={entryId ? 'detail' : 'list'}>
-            <Column id="list" width="large" onBack="sidebar" toolbar={listToolbar}>
-                <div className="flex h-full flex-col border-r overflow-y-auto">
-                    <div className="app-gutter-x py-2">
-                        <Tabs value={activeTab} onValueChange={handleTabChange}>
-                            <TabsList className="w-full">
-                                {TABS.map((t) => (
-                                    <TabsTrigger key={t} value={t} className="flex-1 capitalize text-xs">
-                                        {t}
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </Tabs>
-                    </div>
-                    {filtered.length === 0 ? (
-                        <EmptyState message={`No ${activeTab} entries`} />
-                    ) : (
-                        <div className="flex flex-col">
-                            {filtered.map((entry) => (
-                                <button
-                                    key={entry.id}
-                                    type="button"
-                                    className={cn(
-                                        'flex flex-col gap-0.5 app-gutter-x py-3 text-left hover:bg-muted/50 border-b',
-                                        entry.id === entryId && 'bg-muted',
-                                    )}
-                                    onClick={() => handleRowClick(entry.id)}
-                                >
-                                    <UserItem email={entry.email} />
-                                    {entry.notes && (
-                                        <span className="text-xs text-muted-foreground truncate">{entry.notes}</span>
-                                    )}
-                                    <span className="text-xs text-muted-foreground">
-                                        {formatTimeAgo(entry.createdAt)}
-                                    </span>
-                                </button>
+        <>
+            <ListDetailLayout
+                listToolbar={listToolbar}
+                detail={
+                    entryId &&
+                    (selected ? <WaitlistDetail entry={selected} /> : <EmptyState message="Entry not found" />)
+                }
+                detailToolbar={detailToolbar}
+                onClose={detail.close}
+            >
+                <div className="app-gutter-x py-2">
+                    <Tabs value={activeTab} onValueChange={handleTabChange}>
+                        <TabsList className="w-full">
+                            {TABS.map((t) => (
+                                <TabsTrigger key={t} value={t} className="flex-1 capitalize text-xs">
+                                    {t}
+                                </TabsTrigger>
                             ))}
-                        </div>
-                    )}
+                        </TabsList>
+                    </Tabs>
                 </div>
-            </Column>
-            <Column id="detail" width="flex" onBack={handleBack} toolbar={detailToolbar}>
-                {selected ? (
-                    <WaitlistDetail entry={selected} />
+                {filtered.length === 0 ? (
+                    <EmptyState message={`No ${activeTab} entries`} />
                 ) : (
-                    <EmptyState message="Select an entry to view details" />
+                    <div className="flex flex-col">
+                        {filtered.map((entry) => (
+                            <button
+                                key={entry.id}
+                                type="button"
+                                className={cn(
+                                    'flex flex-col gap-0.5 app-gutter-x py-3 text-left hover:bg-muted/50 border-b',
+                                    entry.id === entryId && 'bg-muted',
+                                )}
+                                onClick={() => detail.open(entry.id)}
+                            >
+                                <UserItem email={entry.email} />
+                                {entry.notes && (
+                                    <span className="text-xs text-muted-foreground truncate">{entry.notes}</span>
+                                )}
+                                <span className="text-xs text-muted-foreground">{formatTimeAgo(entry.createdAt)}</span>
+                            </button>
+                        ))}
+                    </div>
                 )}
-            </Column>
-
+            </ListDetailLayout>
             {deleting && (
                 <ConfirmDialog
                     open={deleteDialog.open}
@@ -160,7 +156,7 @@ function WaitlistRoute() {
                     destructive
                 />
             )}
-        </ColumnLayout>
+        </>
     );
 }
 
@@ -180,11 +176,16 @@ function WaitlistDetailToolbar({
     isPending: boolean;
 }) {
     return (
-        <div className="flex items-center gap-1 ml-auto">
+        <>
             {entry.status === 'pending' && (
                 <>
-                    <TooltipButton icon={Check} tooltipText="Accept & invite" onClick={onAccept} disabled={isPending} />
-                    <TooltipButton icon={X} tooltipText="Reject" onClick={onReject} disabled={isPending} />
+                    <TooltipButton
+                        icon={Check}
+                        tooltipText="Accept and invite"
+                        onClick={onAccept}
+                        disabled={isPending}
+                    />
+                    <TooltipButton icon={Ban} tooltipText="Reject" onClick={onReject} disabled={isPending} />
                 </>
             )}
             {entry.status === 'invited' && (
@@ -195,14 +196,19 @@ function WaitlistDetailToolbar({
                         onClick={onResend}
                         disabled={isPending}
                     />
-                    <TooltipButton icon={X} tooltipText="Reject" onClick={onReject} disabled={isPending} />
+                    <TooltipButton icon={Ban} tooltipText="Reject" onClick={onReject} disabled={isPending} />
                 </>
             )}
             {entry.status === 'rejected' && (
-                <TooltipButton icon={Check} tooltipText="Re-accept & invite" onClick={onAccept} disabled={isPending} />
+                <TooltipButton
+                    icon={Check}
+                    tooltipText="Re-accept and invite"
+                    onClick={onAccept}
+                    disabled={isPending}
+                />
             )}
             <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isPending} />
-        </div>
+        </>
     );
 }
 
@@ -215,7 +221,7 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
               : 'destructive';
 
     return (
-        <div className="app-gutter space-y-6">
+        <div className="app-gutter space-y-6 h-full overflow-y-auto">
             <div className="flex items-center gap-3">
                 <h2 className="text-lg font-medium">{entry.email}</h2>
                 <Badge variant={statusVariant} className="capitalize">
