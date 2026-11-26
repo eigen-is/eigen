@@ -93,8 +93,8 @@ export function eigenDocEditorValidateSearch(search: Record<string, unknown>): E
     };
 }
 
-// The editor search for a hook inside an editor, such as the comment host, so no route has to hand it down.
+// The editor search for a hook inside an editor, such as the comment host, so no route has to hand it down. This file
+// compiles in every app's router, where an app with no editor route types the search without these keys.
 export function useEigenDocEditorSearch(): EigenDocEditorSearch {
-    const search = useSearch({ strict: false });
-    return search;
+    return eigenDocEditorValidateSearch(useSearch({ strict: false }));
 }
