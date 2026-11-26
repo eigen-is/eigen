@@ -240,6 +240,9 @@ export class CollabDocument {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             const user = this.connections.get(conn);
             if (!user) return;
+            // The largest honest frame holds every state a connection may own, so a larger one is dropped before the
+            // loop below reads its entries one by one.
+            if (awarenessUpdate.byteLength > MAX_AWARENESS_CLIENT_IDS * MAX_AWARENESS_STATE_BYTES) return;
 
             // A reader may send awareness too, so the update is checked before it is applied. Any entry
             // that breaks a rule drops the whole frame.
