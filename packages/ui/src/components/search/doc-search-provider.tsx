@@ -22,6 +22,8 @@ export const FIND_REPLACE_HOTKEY = 'Mod+Shift+H';
 
 const DEFAULT_OPTIONS: DocSearchOptions = { matchCase: false, wholeWord: false, regex: false };
 const DEBOUNCE_MS = 150;
+// The bar's own gap from the right edge, its right-4, which an inset adds to.
+const BAR_GUTTER_PX = 16;
 
 type DocSearchBarContextValue = {
     // Opens the bar, or focuses and selects its field when it is open, as ⌘F, a toolbar button or Edit › Find do.
@@ -51,8 +53,8 @@ export type DocSearchProviderProps = {
     children: React.ReactNode;
     // Offsets merged over the bar's top-right default, to clear a surface's own chrome such as Docs' toolbar.
     barClassName?: string;
-    // An offset that follows a live width, which a class can't, such as the right inset that clears an open column.
-    barStyle?: React.CSSProperties;
+    // The width of what holds the right slot beside the content, such as an open column, which the bar floats clear of.
+    rightInsetPx?: number;
     // Such as a phone pane closing as the bar opens, so a find session never opens inside a hidden editor.
     onOpenChange?: (open: boolean) => void;
     // ⌘Z and ⇧⌘Z in the bar's fields, so a Replace can be undone without leaving the bar; else the browser's own.
@@ -68,7 +70,7 @@ export function DocSearchProvider({
     initialSearchTerm,
     children,
     barClassName,
-    barStyle,
+    rightInsetPx,
     onOpenChange,
     onUndo,
     onRedo,
@@ -395,7 +397,10 @@ export function DocSearchProvider({
                     30, never share a stacking context with the bar. */}
                 <div className="isolate flex-1 min-h-0">{children}</div>
                 {open && (
-                    <div className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)} style={barStyle}>
+                    <div
+                        className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)}
+                        style={rightInsetPx ? { right: rightInsetPx + BAR_GUTTER_PX } : undefined}
+                    >
                         <FindReplaceBar
                             query={query}
                             options={options}

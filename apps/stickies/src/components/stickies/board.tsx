@@ -178,7 +178,7 @@ export function StickiesBoard({
             </div>
         </DetailColumn>
     ) : null;
-    // The find bar floats clear of the column, plus its own 16px gutter. A phone's spans the screen.
+    // The find bar floats clear of the column. A phone's spans the screen.
     const columnPx = useColumnWidthPx('small');
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
 
@@ -309,7 +309,7 @@ export function StickiesBoard({
                                 if (open && isMobile && activityOpen) activity.close();
                             }}
                             barClassName="top-14"
-                            barStyle={activityOpen && !isMobile ? { right: columnPx + 16 } : undefined}
+                            rightInsetPx={activityOpen && !isMobile ? columnPx : undefined}
                         >
                             <LayoutColumn
                                 id="board"

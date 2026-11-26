@@ -413,7 +413,7 @@ export function SheetEditor({
                                 initialSearchTerm={initialSearchTerm}
                                 onOpenChange={column.onSearchOpenChange}
                                 barClassName="top-20"
-                                barStyle={rightSlot ? { right: slotPx + 16 } : undefined}
+                                rightInsetPx={rightSlot ? slotPx : undefined}
                                 onUndo={() => workbookRef.current?.undo()}
                                 onRedo={() => workbookRef.current?.redo()}
                             >

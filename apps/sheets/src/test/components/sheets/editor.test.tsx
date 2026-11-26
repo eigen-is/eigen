@@ -14,7 +14,7 @@ import type { Sheet } from '@workspace/sheet';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 installHappyDom();
 
@@ -35,7 +35,7 @@ type GridProps = {
     };
 };
 type HoverCardProps = { onOpenCard: (cardId: string) => void } & Record<string, unknown>;
-type SearchProps = { commentSearch?: DocCommentSearch; barStyle?: CSSProperties; children?: ReactNode };
+type SearchProps = { commentSearch?: DocCommentSearch; rightInsetPx?: number; children?: ReactNode };
 
 const seen: {
     grid?: GridProps;
@@ -462,20 +462,20 @@ test('a phone shows no image panel', async () => {
 
 test("the find bar's inset follows the slot: none empty, the panel's or the list's 256, a thread's 400", async () => {
     const grid = await renderEditor();
-    expect(seen.search?.barStyle).toBeUndefined();
+    expect(seen.search?.rightInsetPx).toBeUndefined();
     await run(() => grid.hooks.onActiveObjectChange(image));
-    expect(seen.search?.barStyle).toEqual({ right: 272 });
+    expect(seen.search?.rightInsetPx).toBe(256);
     await run(() => grid.hooks.onActiveObjectChange(null));
     await run(seen.toggleComments);
-    expect(seen.search?.barStyle).toEqual({ right: 272 });
+    expect(seen.search?.rightInsetPx).toBe(256);
     await click(listRow());
-    expect(seen.search?.barStyle).toEqual({ right: 416 });
+    expect(seen.search?.rightInsetPx).toBe(400);
     await click(button('Close'));
-    expect(seen.search?.barStyle).toBeUndefined();
+    expect(seen.search?.rightInsetPx).toBeUndefined();
 });
 
 test('on a phone the find bar spans the screen', async () => {
     await renderEditor(['/'], { isMobile: true });
     await run(seen.toggleComments);
-    expect(seen.search?.barStyle).toBeUndefined();
+    expect(seen.search?.rightInsetPx).toBeUndefined();
 });

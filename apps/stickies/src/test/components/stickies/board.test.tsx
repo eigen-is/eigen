@@ -10,7 +10,7 @@ import { drivePath } from '@workspace/ui/test/drive-path';
 import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import * as Y from 'yjs';
 
 installHappyDom();
@@ -21,7 +21,7 @@ type ToolbarProps = { onToggleActivityPanel?: () => void; activityPanelOpen?: bo
 const seen: {
     onCardOpen?: (id: string) => void;
     toolbar?: ToolbarProps;
-    barStyle?: CSSProperties;
+    rightInsetPx?: number;
     onSearchOpenChange?: (open: boolean) => void;
 } = {};
 let doc = new Y.Doc();
@@ -63,11 +63,11 @@ mock.module('@workspace/ui/components/layout/app', () => ({
 mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
     ...realSearch,
     DocSearchProvider: (props: {
-        barStyle?: CSSProperties;
+        rightInsetPx?: number;
         onOpenChange?: (open: boolean) => void;
         children?: ReactNode;
     }) => {
-        seen.barStyle = props.barStyle;
+        seen.rightInsetPx = props.rightInsetPx;
         seen.onSearchOpenChange = props.onOpenChange;
         return props.children;
     },
@@ -395,14 +395,14 @@ test("the toolbar's Activity pushes ?panel=activity and shows the list at 256 un
     expect(column()?.querySelector('.eigen-toolbar-title')?.textContent).toBe('Activity');
     expect(slotRow()?.querySelector('[data-testid="board-column"]')).not.toBeNull();
     expect(slotRow()?.querySelector('[data-testid="toolbar"]')).toBeNull();
-    expect(seen.barStyle).toEqual({ right: 272 });
+    expect(seen.rightInsetPx).toBe(256);
 
     await act(async () => columnButton('Close')?.click());
     await settle();
     expect(param('panel')).toBeNull();
     expect(history.location.state.__TSR_index).toBe(0);
     expect(column()).toBeNull();
-    expect(seen.barStyle).toBeUndefined();
+    expect(seen.rightInsetPx).toBeUndefined();
 });
 
 test('on a link Esc closes the activity by replace, and the toggle closes it too', async () => {
@@ -469,7 +469,7 @@ test('on a phone the activity covers the board, which never remounts, and ‹ cl
     await toggleActivity();
     expect(boardHidden()).toBe(true);
     expect(column()?.closest('.hidden')).toBeNull();
-    expect(seen.barStyle).toBeUndefined();
+    expect(seen.rightInsetPx).toBeUndefined();
     await act(async () => columnButton('Back')?.click());
     await settle();
     expect(param('panel')).toBeNull();

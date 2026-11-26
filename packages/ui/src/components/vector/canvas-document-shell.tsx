@@ -61,9 +61,8 @@ export function CanvasDocumentShell({
     const { isMobile } = useLayout();
     const { column } = comments;
     const commentsColumn = column.open ? <CommentsColumn {...comments.columnProps} /> : null;
-    // The find bar floats clear of whatever holds the right slot, plus its own 16px gutter. A phone's spans the screen.
+    // The find bar floats clear of whatever holds the right slot. A phone's spans the screen.
     const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
-    const rightPx = !isMobile && (column.open || canEdit) ? slotPx : 0;
 
     return (
         // Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence.
@@ -80,7 +79,7 @@ export function CanvasDocumentShell({
                             initialSearchTerm={initialSearchTerm}
                             onOpenChange={column.onSearchOpenChange}
                             barClassName="top-14"
-                            barStyle={rightPx ? { right: rightPx + 16 } : undefined}
+                            rightInsetPx={!isMobile && (column.open || canEdit) ? slotPx : undefined}
                         >
                             <Column
                                 id="editor"

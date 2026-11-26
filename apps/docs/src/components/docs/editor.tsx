@@ -780,9 +780,8 @@ const TiptapEditor = ({
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
                         onOpenChange={handleSearchOpenChange}
-                        // Beside an open panel the find bar moves left by the panel's width and the bar's own gutter.
                         barClassName="top-14"
-                        barStyle={showSidebar ? { right: slotPx + 16 } : undefined}
+                        rightInsetPx={showSidebar ? slotPx : undefined}
                         // These don't focus the editor, so the focus stays in the bar and the user can keep replacing
                         // after ⌘Z.
                         onUndo={() => editor.commands.undo()}
