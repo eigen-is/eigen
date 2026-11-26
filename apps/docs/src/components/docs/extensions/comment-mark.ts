@@ -129,12 +129,13 @@ export function removeCommentAnchors(editor: Editor, cardId: string): void {
     editor.view.dispatch(tr);
 }
 
-// Says whether the card had an anchor to select. It scrolls nothing: the caller places the anchor in the view.
+// Says whether the card had an anchor to select. It scrolls nothing: the caller places the anchor in the view. It takes
+// no focus, because Tiptap's focus lands a frame later and would take it from the thread's reply box.
 export function selectCommentAnchor(editor: Editor, cardId: string): boolean {
     const anchors = findCommentAnchors(editor.state.doc, cardId);
     if (anchors.length === 0) return false;
     const { node, pos } = anchors[0];
-    const chain = editor.chain().focus(null, { scrollIntoView: false });
+    const chain = editor.chain();
     (anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos)).run();
     return true;
 }

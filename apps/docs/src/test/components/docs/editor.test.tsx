@@ -2013,6 +2013,19 @@ test("a click on a comment's text opens its thread and leaves the caret; a list 
     expect(bodyEditor().state.selection.from).toBe(8);
 });
 
+// The row's press takes the focus off the page, so a reveal that focused the editor would take it back from the box.
+test("a list row's click leaves the focus in the thread's reply box", async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await act(async () => button('Comments')?.click());
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    (document.activeElement as HTMLElement | null)?.blur();
+    await inBrowserFrames(() => listRow()?.click());
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(document.activeElement === threadLayer()?.querySelector('textarea')).toBe(true);
+});
+
 // The scroller's top is 100 and the anchor's 700, so the anchor lands level with the comment's block in the column.
 test.each([
     ['no-preference', 'smooth'],
