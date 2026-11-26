@@ -18,14 +18,13 @@ type ListDetailLayoutProps = {
 
 export function ListDetailLayout({ listToolbar, children, detail, detailToolbar, onClose }: ListDetailLayoutProps) {
     const open = !!detail;
-    // Each detail scrolls and pads itself, so the column draws no body of its own.
     return (
         <ColumnLayout mobileColumn={open ? 'detail' : 'list'}>
             <Column id="list" width={open ? 'large' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
                 <div className="flex h-full flex-col overflow-y-auto">{children}</div>
             </Column>
             {open && (
-                <DetailColumn width="flex" actions={detailToolbar} onClose={onClose} fill>
+                <DetailColumn width="flex" actions={detailToolbar} onClose={onClose}>
                     {detail}
                 </DetailColumn>
             )}

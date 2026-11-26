@@ -80,7 +80,7 @@ function CommentThreadInner({
                     <>
                         {lead}
                         {chat.messages.some((message) => !message.deletedAt) && (
-                            <div className="app-gutter-x">
+                            <div className="app-gutter-x mt-6">
                                 <DetailSection label="Activity" />
                             </div>
                         )}

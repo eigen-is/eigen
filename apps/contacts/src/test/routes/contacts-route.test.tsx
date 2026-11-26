@@ -1,7 +1,8 @@
 // The contacts page lists the book, or a label's cards alone, sorted by first or last name, and a label that is gone
 // goes back to the book. A contact URL opens that contact beside the list; one whose contact is gone, deleted or never
 // there, says so in the detail, as Admin's users and teams do. The detail's Delete confirms first, keeps naming the card while its
-// dialog closes and sends the card's etag, and your own card offers no Delete at all.
+// dialog closes and sends the card's etag, and your own card offers no Delete at all. A delete of other cards leaves
+// the open one open.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
@@ -207,6 +208,34 @@ test('Delete asks first, then deletes the card with the etag it was read with an
     } finally {
         release();
     }
+});
+
+test('deleting other cards from the list leaves the open contact open', async () => {
+    const linus: Contact = { id: 'c4', firstName: 'Linus', lastName: 'Pauling', email: [], phone: [], etag: 'e4' };
+    contacts.data = [grace, ada, me, linus];
+    const page = await open('/book/all');
+    const row = (name: string) =>
+        [...document.querySelectorAll('.eigen-list-item')].find((r) => r.textContent === name);
+    const metaClick = (name: string) =>
+        act(async () => {
+            row(name)?.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+        });
+    await click(row('Ada Lovelace'));
+    expect(page.search()).toEqual({ contactId: 'c1' });
+    await metaClick('Ada Lovelace');
+    await metaClick('Grace Hopper');
+    await metaClick('Linus Pauling');
+    await act(async () => {
+        document
+            .querySelector('[tabindex="0"]')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Delete');
+    await settle(() => confirm?.click());
+    expect(deleteContact.mutateAsync.mock.calls).toEqual([[{ id: 'c2', etag: 'e2' }], [{ id: 'c4', etag: 'e4' }]]);
+    expect(page.search()).toEqual({ contactId: 'c1' });
+    expect(page.index()).toBe(1);
 });
 
 test('your own card offers no Delete', async () => {

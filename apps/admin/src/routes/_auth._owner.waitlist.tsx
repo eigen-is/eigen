@@ -14,10 +14,15 @@ import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { Badge } from '@workspace/ui/components/badge';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import {
+    DetailMeta,
+    DetailSection,
+    EmptyState,
+    ListDetailLayout,
+    LoadingState,
+} from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
-import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { UserItem } from '@workspace/ui/components/user';
 import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
@@ -26,20 +31,23 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Ban, Check, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+const TABS = ['pending', 'invited', 'registered', 'rejected'] as const;
+
+// An unknown tab is none, so the page opens on Pending.
+const toTab = (value: unknown) => TABS.find((tab) => tab === value);
+
 type WaitlistSearch = {
     entryId?: string;
-    tab?: string;
+    tab?: (typeof TABS)[number];
 };
 
 export const Route = createFileRoute('/_auth/_owner/waitlist')({
     component: WaitlistRoute,
     validateSearch: (search: Record<string, unknown>): WaitlistSearch => ({
         entryId: typeof search.entryId === 'string' ? search.entryId : undefined,
-        tab: typeof search.tab === 'string' ? search.tab : undefined,
+        tab: toTab(search.tab),
     }),
 });
-
-const TABS = ['pending', 'invited', 'registered', 'rejected'] as const;
 
 function WaitlistRoute() {
     const { entryId, tab } = Route.useSearch();
@@ -64,7 +72,7 @@ function WaitlistRoute() {
     const isPending = accept.isPending || reject.isPending || resend.isPending || remove.isPending;
 
     const handleTabChange = (value: string) => {
-        navigate({ to: '/waitlist', search: { tab: value } });
+        navigate({ to: '/waitlist', search: { tab: toTab(value) } });
     };
 
     const detail = useDetailHistory<string>(entryId !== undefined, (next, { replace, state }) =>
@@ -221,39 +229,40 @@ function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
               : 'destructive';
 
     return (
-        <div className="app-gutter space-y-6 h-full overflow-y-auto">
+        <>
             <div className="flex items-center gap-3">
                 <h2 className="text-lg font-medium">{entry.email}</h2>
                 <Badge variant={statusVariant} className="capitalize">
                     {entry.status}
                 </Badge>
             </div>
+            <DetailMeta>Submitted {formatDateTime(entry.createdAt)}</DetailMeta>
 
             {entry.notes && (
-                <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Notes</h3>
-                    <p className="text-sm whitespace-pre-wrap">{entry.notes}</p>
-                </div>
+                <DetailSection label="Notes">
+                    <p className="whitespace-pre-wrap">{entry.notes}</p>
+                </DetailSection>
             )}
 
-            <Separator />
-
-            <div className="text-sm text-muted-foreground space-y-1">
-                <p>Submitted: {formatDateTime(entry.createdAt)}</p>
-                {entry.invitedAt && <p>Invited: {formatDateTime(entry.invitedAt)}</p>}
-                {entry.inviteExpiresAt && (
-                    <p>
-                        Invite expires: {formatDateTime(entry.inviteExpiresAt)}
-                        {entry.inviteExpiresAt < new Date() && (
-                            <Badge variant="destructive" className="ml-2 text-xs">
-                                Expired
-                            </Badge>
+            {(entry.invitedAt || entry.registeredAt) && (
+                <DetailSection label="Invite">
+                    <div className="space-y-1 text-muted-foreground">
+                        {entry.invitedAt && <p>Invited {formatDateTime(entry.invitedAt)}</p>}
+                        {entry.inviteExpiresAt && (
+                            <p>
+                                Expires {formatDateTime(entry.inviteExpiresAt)}
+                                {entry.inviteExpiresAt < new Date() && (
+                                    <Badge variant="destructive" className="ml-2 text-xs">
+                                        Expired
+                                    </Badge>
+                                )}
+                            </p>
                         )}
-                    </p>
-                )}
-                {entry.registeredAt && <p>Registered: {formatDateTime(entry.registeredAt)}</p>}
-                {entry.userId && <p>User ID: {entry.userId}</p>}
-            </div>
-        </div>
+                        {entry.registeredAt && <p>Registered {formatDateTime(entry.registeredAt)}</p>}
+                        {entry.userId && <p>User ID {entry.userId}</p>}
+                    </div>
+                </DetailSection>
+            )}
+        </>
     );
 }

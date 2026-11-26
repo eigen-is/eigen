@@ -462,9 +462,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
-                // Text selected in the right slot, such as a comment thread, copies itself. A press on a chart or the
-                // grid afterwards takes the focus but can leave that selection behind, so it counts only while the
-                // focus is outside the workbook.
+                // Text selected in the right slot, such as a comment thread, copies itself, but only while the focus
+                // is outside the workbook: a press on a chart or the grid can leave that selection behind.
                 const inSlot = (node: Node | null | undefined) => !!node && !!slot.current?.contains(node);
                 const { activeElement } = document;
                 const selection = document.getSelection();

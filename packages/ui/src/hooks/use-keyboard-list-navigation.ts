@@ -1,9 +1,7 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
-// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu,
-// ⌘A selects every row and Esc clears a selection of two or more. Cmd or Ctrl+Enter is left to a form around the
-// list. The list spreads the returned handleKeyDown on its focusable container.
-// The hook keeps the focus on that container while nothing else holds it and no dialog is open, and takes it back from
-// a row's own button when a key moves the cursor.
+// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu, ⌘A
+// selects every row and Esc clears a selection of two or more. The list spreads the returned handleKeyDown on its
+// focusable container, and the hook keeps the focus there while nothing else holds it and no dialog is open.
 
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -91,12 +89,8 @@ export function useKeyboardListNavigation<T>({
         }
     }, [lifted, activeId, items]);
 
-    // The list owns the keyboard, so it takes the focus on mount, and takes it back whenever the focus falls to <body>.
-    // A click on something that can't take focus, such as the detail panel or a toolbar, leaves nothing focused, and
-    // so does a page restored from the back/forward cache. Every key here would then do nothing until the user
-    // clicked a row again. Turning reclaimFocus back on starts the timer again. That also covers a closed composer
-    // that held the focus: its focusout fires as it unmounts, before this effect listens again. An open dialog owns the
-    // focus, such as a Rename whose question just went and whose field gets the focus back a moment later.
+    // The list owns the keyboard, so it takes the focus on mount and whenever the focus falls to <body>, as after a
+    // click on the detail column or a page restored from the back/forward cache.
     useEffect(() => {
         if (!reclaimFocus) return;
         const focusList = () => {
@@ -303,14 +297,8 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
-    // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
-    // the keydown, and on Windows only once the key comes up. A keydown's preventDefault doesn't stop it. When the
-    // row's menu holds the focus by then, DropdownMenuContent cancels it. When the list or a row's button still does, it
-    // lands here and opens the same row's menu, so neither the browser's menu nor the menu of the page behind the list,
-    // such as Drive's New menu, opens. A screen reader's contextmenu with no key before it opens the row's menu here
-    // too. The listener sits on the list itself, so it stops the event before React's handlers on the rows and around
-    // the list see it, and a pointer's contextmenu passes on to them. It is bound again on every render, so it reads
-    // this render's cursor, and finds a list that mounts late, such as mail's after its loading state.
+    // The browser follows the menu key with a contextmenu event a keydown can't stop, so it opens the row's menu here,
+    // before React's handlers. Bound on every render, so it reads this render's cursor and finds a late list.
     useEffect(() => {
         const list = containerRef.current;
         if (!list || !onMenu) return;

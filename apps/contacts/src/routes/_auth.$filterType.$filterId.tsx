@@ -1,7 +1,6 @@
-// The contacts page: the address book, a label or a team's members as a list, filtered by the URL's
-// filterType and filterId. The contact the URL's contactId names opens its detail beside the list, and
-// one that is gone says so there.
-// The page also hosts the delete confirmation and the import picker its list and detail share.
+// The contacts page: the address book, a label or a team's members as a list, filtered by the URL's filterType and
+// filterId. The contact the URL's contactId names opens its detail beside the list, and one that is gone says so
+// there. The page also hosts the delete confirmation and the import picker its list and detail share.
 
 import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router';
 import {
@@ -72,10 +71,9 @@ function ContactsRoute() {
     );
 
     const handleConfirmDelete = async (targets: Contact[]) => {
-        // allSettled, not all: one 412 mid-batch must not reject the whole run and
-        // skip the close, leaving the dialog stuck open.
+        // allSettled, not all: one 412 mid-batch must not reject the run and leave the dialog stuck open.
         await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
-        detail.close();
+        if (targets.some((c) => c.id === contactId)) detail.close();
     };
 
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {

@@ -31,10 +31,11 @@ export function DetailMeta({ children }: { children: ReactNode }) {
     return <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">{children}</div>;
 }
 
-// With no children it is a caption alone, over a list its host draws below, such as a thread's messages.
+// With no children it is a caption alone, over a list its host draws below, such as a thread's messages. The first
+// in its parent has no gap above it, so it lines up with what sits beside it, such as a contact's photo.
 export function DetailSection({ label, children }: { label: string; children?: ReactNode }) {
     return (
-        <section className="mt-6 text-sm">
+        <section className="mt-6 first:mt-0 text-sm">
             <h3 className="eigen-section-label mb-2">{label}</h3>
             {children}
         </section>

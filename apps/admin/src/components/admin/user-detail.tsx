@@ -94,7 +94,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
     };
 
     return (
-        <div className="app-gutter space-y-6 h-full overflow-y-auto">
+        <div className="space-y-6">
             <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
 
             <div className="space-y-4">
