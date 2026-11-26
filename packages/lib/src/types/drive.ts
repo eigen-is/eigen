@@ -3,6 +3,7 @@
 // import them alike, so a new kind of path or document is added here once. Sibling modules hold the other
 // Drive names, such as access, file kinds and views.
 
+import { CONTAINER_MEDIA_FOLDER } from '../constants/container';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
 import { PAGE_ROOT } from '../docs/eigendoc/page';
@@ -203,6 +204,16 @@ export function isCollabType(type: DrivePathType): type is DriveCollabType {
         type === DRIVE_TYPE_SLIDES ||
         type === DRIVE_TYPE_SHEETS ||
         type === DRIVE_TYPE_VECTOR
+    );
+}
+
+// Whether the folder is a collab document's own media/ folder, the part of a document its media is read from.
+export function isDocumentMediaFolder(document: DrivePath | undefined, folder: DrivePath | undefined): boolean {
+    return (
+        document !== undefined &&
+        isCollabType(document.type) &&
+        folder?.type === DRIVE_TYPE_FOLDER &&
+        folder.name === CONTAINER_MEDIA_FOLDER
     );
 }
 

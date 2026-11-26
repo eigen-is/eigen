@@ -61,11 +61,8 @@ const TOO_LARGE_TO_SHOW = 'Document too large to show';
 // The largest side of an image's screen preview.
 const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
-function textCacheName(drivePath: DrivePath, format: string): string {
-    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
-}
-
-function screenCacheName(drivePath: DrivePath, format: string, ext: 'webp' | 'svg'): string {
+// A cache file is named by the path's version, so an edit misses the old file.
+function versionedName(drivePath: DrivePath, format: string, ext: 'json' | 'webp' | 'svg'): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.${ext}`;
 }
 
@@ -246,7 +243,7 @@ async function getOrCacheText<T>(
     firstMiss: MissPriority,
 ): Promise<Served<T> | null> {
     const pathId = drivePath.id;
-    const cacheName = textCacheName(drivePath, format);
+    const cacheName = versionedName(drivePath, format, 'json');
     const cacheFile = path.join(previewsDir, cacheName);
     const current = await readCachedText(cacheFile, parse);
     if (current !== null) return fresh(current);
@@ -328,7 +325,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
+            versionedName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
             'image/svg+xml',
             async () => {
                 const bytes = await mount.readBytes(drivePath.id);
@@ -343,7 +340,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
+            versionedName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
             'image/webp',
             async () => {
                 const file = await mount.readFile(drivePath.id);

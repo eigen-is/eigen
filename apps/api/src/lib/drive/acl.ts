@@ -10,6 +10,7 @@ import {
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
     isCollabType,
+    isDocumentMediaFolder,
     isDocumentType,
 } from '@workspace/lib/types/drive';
 import type { DriveACL, DriveACLDelta, DrivePathPermissions, DriveVisibility } from '@workspace/lib/types/drive-access';
@@ -73,13 +74,12 @@ export function canReadByLink(chain: readonly DrivePath[]): number | null {
     if (head > end) return null;
     const [item, media, file, ...deeper] = chain.slice(end);
     const endsInFile = item?.type === DRIVE_TYPE_FILE && media === undefined;
-    const endsInDocument =
-        item !== undefined &&
-        isCollabType(item.type) &&
-        (media === undefined || (media.type === DRIVE_TYPE_FOLDER && media.name === CONTAINER_MEDIA_FOLDER)) &&
+    const endsInDocument = item !== undefined && isCollabType(item.type) && media === undefined;
+    const endsInMedia =
+        isDocumentMediaFolder(item, media) &&
         (file === undefined || file.type === DRIVE_TYPE_FILE) &&
         deeper.length === 0;
-    return endsInFile || endsInDocument ? head : null;
+    return endsInFile || endsInDocument || endsInMedia ? head : null;
 }
 
 // Held by name, or outside the trash a visibility that lets everyone signed in read, or a public link while they are on.

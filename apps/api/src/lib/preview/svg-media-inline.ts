@@ -4,9 +4,8 @@
 // image's bytes, and the font slices its text draws with are embedded too, in any SVG. Callers include the screen
 // preview cache, and a sweep keeps what the inliner would read.
 
-import { CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_FOLDER, isCollabType } from '@workspace/lib/types/drive';
+import { isDocumentMediaFolder } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
@@ -106,12 +105,7 @@ export async function withSvgSiblings(
 
 async function isDocumentMedia(mount: Mount, folderId: string): Promise<boolean> {
     const [document, media] = (await mount.getBreadcrumb(folderId)).slice(-2);
-    return (
-        document !== undefined &&
-        isCollabType(document.type) &&
-        media?.type === DRIVE_TYPE_FOLDER &&
-        media.name === CONTAINER_MEDIA_FOLDER
-    );
+    return isDocumentMediaFolder(document, media);
 }
 
 async function resolveSvgRefs(

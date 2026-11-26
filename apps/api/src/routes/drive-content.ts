@@ -210,7 +210,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return answerPreview(request, set, path, TEXT_FORMAT, async () =>
+            return answerPreview(request, set, path, TEXT_FORMAT, () =>
                 getTextPreview(
                     mount,
                     path,
@@ -229,7 +229,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, VCARD_FORMAT, async () =>
+            return answerPreview(request, set, path, VCARD_FORMAT, () =>
                 getVCardPreview(
                     mount,
                     path,
@@ -246,7 +246,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, EML_FORMAT, async () =>
+            return answerPreview(request, set, path, EML_FORMAT, () =>
                 getEmlPreview(
                     mount,
                     path,
@@ -263,7 +263,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, ICS_FORMAT, async () =>
+            return answerPreview(request, set, path, ICS_FORMAT, () =>
                 getIcsPreview(
                     mount,
                     path,

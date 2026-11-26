@@ -46,7 +46,7 @@ const PUBLIC_LINKS_OFF_NOTE = 'Public links are turned off on this server, so th
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
-    onEmailClick?: () => void;
+    onEmailClick: () => void;
     prefillEmail?: string;
 };
 
@@ -227,16 +227,14 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                             className="h-7 w-7"
                             onClick={() => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard')}
                         />
-                        {onEmailClick && (
-                            <TooltipButton
-                                icon={Mail}
-                                tooltipText={hasChanges ? 'Save changes first' : 'Email collaborators'}
-                                variant="ghost"
-                                className="h-7 w-7"
-                                disabled={hasChanges}
-                                onClick={onEmailClick}
-                            />
-                        )}
+                        <TooltipButton
+                            icon={Mail}
+                            tooltipText={hasChanges ? 'Save changes first' : 'Email collaborators'}
+                            variant="ghost"
+                            className="h-7 w-7"
+                            disabled={hasChanges}
+                            onClick={onEmailClick}
+                        />
                     </div>
                 </div>
 
