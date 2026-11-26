@@ -117,10 +117,11 @@ export function useCommentLifecycle({
         if (shownCardId === editCardId) setEditCardId(null);
     }
 
-    // The opens are stable, because hosts hand them to memoized components such as a board's columns and to editor
-    // extensions that keep the closures they were built with. So they read this render's values here.
-    const latest = useRef({ cards, chat, onOpenChat, onCloseChat, onClearChat });
-    latest.current = { cards, chat, onOpenChat, onCloseChat, onClearChat };
+    // The two opens are stable, because hosts hand them to memoized components such as a board's columns and to editor
+    // extensions that keep the closures they were built with. So they read every value through here; the rest of the
+    // bundle is made each render and reads the render.
+    const latest = useRef({ cards, allComments, chat, onOpenChat, onCloseChat, onClearChat });
+    latest.current = { cards, allComments, chat, onOpenChat, onCloseChat, onClearChat };
     const setOpenCardId = useCallback((cardId: string | null) => {
         const { cards, chat, onOpenChat, onCloseChat } = latest.current;
         const chatName = cardId ? cards[cardId]?.chatName : undefined;
@@ -131,6 +132,7 @@ export function useCommentLifecycle({
     // A chat name no card holds opens while the index has its row, and then it opens as deleted.
     const openChat = useCallback(
         (chatName: string, openCard?: (cardId: string) => void) => {
+            const { cards, allComments, onOpenChat } = latest.current;
             const cardId = findCardIdByChatName(cards, chatName);
             if (cardId) {
                 (openCard ?? setOpenCardId)(cardId);
@@ -139,11 +141,11 @@ export function useCommentLifecycle({
             const known = allComments.some((e) => e.chatName === chatName);
             if (known) {
                 setOpen(null);
-                latest.current.onOpenChat(chatName);
+                onOpenChat(chatName);
             }
             return known;
         },
-        [cards, allComments, setOpenCardId],
+        [setOpenCardId],
     );
 
     // Runs once per chat that names nothing, as the host's clear takes it out of the URL.
