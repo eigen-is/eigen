@@ -193,7 +193,7 @@ export class CollabDocument {
         clearTimeout(this.closeTimer);
         this.releaseLingerHold();
         this.connections.set(conn, user);
-        this.sendSyncStep1(user, conn);
+        this.greetMember(conn);
     }
 
     public unsubscribe(conn: ServerWebSocket<unknown>): void {
@@ -368,14 +368,17 @@ export class CollabDocument {
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
     }
 
-    private sendSyncStep1(user: User | null, conn: ServerWebSocket<unknown>): void {
+    // The server's sync step 1 and the cursors. A visitor's answer to the step 1 would be its whole state, which a
+    // reader's socket drops unread, so a visitor gets neither and syncs from its own step 1.
+    private greetMember(conn: ServerWebSocket<unknown>): void {
+        if (!this.connections.get(conn)) return;
         try {
             sendFrame(
                 conn,
                 encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeSyncStep1(encoder, this.doc)),
             );
             const awarenessStates = this.awareness.getStates();
-            if (user && awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
+            if (awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
         } catch (err) {
             console.error('Error sending sync step 1:', err);
         }
