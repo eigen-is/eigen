@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2461 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2462 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -392,7 +392,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (325)
+## Hooks (326)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -677,6 +677,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `useFormSubmitted` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `useApp` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `useColumnWidthPx` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-widths.ts |
 | `useLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |

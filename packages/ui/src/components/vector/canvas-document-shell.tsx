@@ -13,7 +13,7 @@ import { CommentHoverCard, CommentLifecycleDialogs, CommentsColumn } from '../co
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { CollabDocumentGate } from '../layout/app/collab-document-gate';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
-import { columnWidthPx } from '../layout/app/column-widths';
+import { useColumnWidthPx } from '../layout/app/column-widths';
 import { useLayout } from '../layout/app/layout-context';
 import { PhoneDetail } from '../layout/app/phone-detail';
 import { UnsyncedEditsGuard } from '../layout/app/unsynced-edits-guard';
@@ -58,17 +58,12 @@ export function CanvasDocumentShell({
     propertiesPanel,
     children,
 }: CanvasDocumentShellProps) {
-    const { isMobile, isTablet } = useLayout();
+    const { isMobile } = useLayout();
     const { column } = comments;
     const commentsColumn = column.open ? <CommentsColumn {...comments.columnProps} /> : null;
     // The find bar floats clear of whatever holds the right slot, plus its own 16px gutter. A phone's spans the screen.
-    const rightPx = isMobile
-        ? 0
-        : column.open
-          ? columnWidthPx(column.width, isTablet)
-          : canEdit
-            ? columnWidthPx('small')
-            : 0;
+    const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
+    const rightPx = !isMobile && (column.open || canEdit) ? slotPx : 0;
 
     return (
         // Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence.

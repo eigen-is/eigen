@@ -4,7 +4,7 @@ export { AppShell } from './app-shell';
 export { CollabDocumentGate } from './collab-document-gate';
 export type { ColumnProps } from './column-layout';
 export { Column, ColumnLayout } from './column-layout';
-export { columnWidthPx } from './column-widths';
+export { columnWidthPx, useColumnWidthPx } from './column-widths';
 export { CommandPaletteProvider } from './command-palette/command-palette-provider';
 export { DetailColumn } from './detail-column';
 export { DetailItemBlock, DetailMeta, DetailSection } from './detail-item';
